@@ -168,3 +168,7 @@ AcceptanceMatrix.md对F1-T01—08、AT-01—08及后续AT归属逐项映射原V5
 ## 2026-10-05 / 正式执行器网络审批与恢复回归
 
 require_escalated正式审批允许同一origin读取/fetch，远端确认df31fe9。未更改保存环境或代理身份，默认执行器restricted导致此前网络失败，不能据此判保存配置失效。锁依赖及setuptools82.0.1安装通过，pip check/ruff/mypy14模块通过；默认沙箱TestClient停滞终止后，经本机socket/IPC正式审批，SQLite123PASS/2PG-only SKIP/1旧警告（7.47秒），真实模型0。本机无PG工具；正常push和精确commit ServerCI为下一步，未预写成功。原c1702a7保留。
+
+## 2026-10-05 / 恢复后首轮Windows失败与有界诊断
+
+920527e成功普通push，run37314684783/job111778335745终态FAIL：Setup PASS，Doctor调用在Common.ps1报告子命令失败，Stop同样失败；smoke FAIL，工程回归SKIPPED，Report/Cleanup PASS。现有日志缺Python实际退出码，暂不推断环境隔离根因。新增仅固定print的运行时Python启动探针，失败仅输出退出码/环境变量名及固定探针诊断，不输出配置值；PowerShell失败附退出码。ruff/mypy/diff通过，提交后继续精确版本CI。未放宽白名单/隔离或删除失败证据。

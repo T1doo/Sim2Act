@@ -40,7 +40,9 @@ def main():
         )
         if result.returncode:
             # The runner masks generated DB credentials; never print full environment or config.
-            raise RuntimeError(script + " failed: " + result.stdout + result.stderr)
+            raise RuntimeError(
+                script + f" failed (exit {result.returncode}): " + result.stdout + result.stderr
+            )
         return result.stdout
 
     # Load only the job-created explicit file; no user dotenv discovery.
@@ -51,6 +53,17 @@ def main():
     settings = Settings.from_env()
     assert settings.mode == "mock" and not settings.live_enabled and not settings.token
     child_env = application_environment(settings)
+    # Diagnose launcher/OS failures without disclosing configuration values.
+    probe = subprocess.run(
+        [str(root / ".venv" / "Scripts" / "python.exe"), "-c", "print('runtime-python-ready')"],
+        cwd=root, env=child_env, capture_output=True, text=True, encoding="utf-8", timeout=15,
+    )
+    if probe.returncode or probe.stdout.strip() != "runtime-python-ready":
+        raise RuntimeError(
+            f"Runtime Python probe failed (exit {probe.returncode}); "
+            f"environment names={sorted(child_env)}; "
+            f"diagnostic={probe.stdout}{probe.stderr}"
+        )
     os.environ.clear()
     os.environ.update(child_env)
     store = Store(settings.database_url)
