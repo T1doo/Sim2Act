@@ -37,3 +37,5 @@
 第三增量工程提交：[a38b98d](https://github.com/T1doo/Sim2Act/commit/a38b98d4d39712afcbf256fe7b697ce8ed16db8f)。
 
 接入兼容修复：[模型身份规则](F1/ModelIdentity.md)、[111项回归证据](evidence/F1-model-identity-TestReport.md)。保留原返回Intern-S2并规范化为canonical，真实接入复测待独立验证者，不消耗其剩余预算。
+
+返回模型身份修复工程提交：[3707ef6](https://github.com/T1doo/Sim2Act/commit/3707ef63e249095d9ffabbb8a3671bd3099a0fc0)。

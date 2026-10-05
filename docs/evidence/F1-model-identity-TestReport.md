@@ -1,6 +1,6 @@
 # 返回模型标识兼容修复实测
 
-记录 2026-10-05T04:32:56.377335+00:00；基线 04335528cdce3febec03273fe9446695aa7b11d5；dev/f1-foundation。工程提交 SHA 在后续日志追记。
+记录 2026-10-05T04:32:56.377335+00:00；基线 04335528cdce3febec03273fe9446695aa7b11d5；dev/f1-foundation。工程提交：[3707ef63e249095d9ffabbb8a3671bd3099a0fc0](https://github.com/T1doo/Sim2Act/commit/3707ef63e249095d9ffabbb8a3671bd3099a0fc0)；后续只作文档追记。
 
 触发：独立真实接入验证报告发现模型 ID intern-s2，但成功文本/工具响应为 Intern-S2；旧 Worker 小写严格比较拒绝。使用既有证据建立 [明确兼容规则](../F1/ModelIdentity.md)，本次只作零网络修复和验证，不消耗独立验证任务保留的3次真实预算。
 
