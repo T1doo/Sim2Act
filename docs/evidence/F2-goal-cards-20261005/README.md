@@ -10,4 +10,4 @@
 
 真实LinuxChromium/agent-browser、临时SQLite/合成身份7检查点PASS：通用文本目标分项创建、明确修订并绑定材料、旧硬条件回看、第二本地客户端新版本、旧浏览器窗口409且未保存文字保留、最新版本重新打开、页面重载后持久版本与人类可读历史。两客户端之一由固定合成认证的正常HTTP请求模拟，非模型/假响应。最初CLI参数/表达式错误纠正后完整断言通过，无产品绕过；browser-results.json及人工查看截图保留。浏览器与本任务localhost fixture已停止；非Win11/其他引擎通过证明。
 
-正常开发分支push/精确WindowsServerPG CI为下一步，结果待终态。真实模型预算0；AT02核心LIVE证据有效，历史脚本仅一owner/一项目，完整初态不能补证，额外预算尚未批，不调用。F1未签收/F2正式准入不变。
+正常开发分支push已成功，精确源码6bf5e0558e8436eb9a12adbc9d188d4b84878abb的[WindowsServerCI37322479923](https://github.com/T1doo/Sim2Act/actions/runs/37322479923)/job111804777471 completed/success（1m39s）。PG150PASS/0FAIL/0SKIP/1旧警告33.71秒，首次Setup/显式迁移/完整锁/pip check、现有F1应用角色API-worker原生smoke、ruff/mypy15模块、Report/Cleanup全通过，PG server stopped。14个目标卡工程API/事务检查使用隔离test-owner schema（含两writer）；不冒充Win11 UI或独立应用角色目标卡原生实测。windows-run.json/windows-results.json由开发方现有身份实际读取run/job/log，非独立复跑；文档追记不重复CI。真实模型预算0；AT02核心LIVE证据有效，历史脚本仅一owner/一项目，完整初态不能补证，额外预算尚未批，不调用。F1未签收/F2正式准入不变。
