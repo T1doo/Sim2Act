@@ -78,10 +78,13 @@ if ($Phase -eq 'Setup') {
     Set-JobVariable 'SIM2ACT_CI_CONFIG' $Config
     $MigrationConfig = Join-Path $JobRoot 'migration.env'
     Write-Config $MigrationConfig $AdminUrl
-    & python -m venv .venv
-    if ($LASTEXITCODE -ne 0) { throw 'Selected Python venv creation failed.' }
-    # Use the product wrapper for lock installation and explicit migration.
+    if (Test-Path '.venv') { throw 'Fresh checkout must have no venv; first-install branch required.' }
+    & py -3.12 -c "import sys,os,struct; assert os.name=='nt' and sys.version_info[:3]==(3,12,10) and struct.calcsize('P')==8; print('PASS: real py -3.12 launcher selects '+sys.version.split()[0]+' x64 at '+sys.executable)"
+    if ($LASTEXITCODE -ne 0) { throw 'Native Python launcher 3.12.10 x64 prerequisite failed.' }
+    # Setup itself must create the missing venv via its unchanged py-launcher branch.
     & ./scripts/Setup.ps1 -Config $MigrationConfig -InitializeDatabase
+    & ./.venv/Scripts/python.exe scripts/windows_ci_dependencies.py
+    if ($LASTEXITCODE -ne 0) { throw 'Windows lock or first-created interpreter verification failed.' }
     $SQLFile = Join-Path $JobRoot 'runtime-role.sql'
     [IO.File]::WriteAllText($SQLFile, @"
 CREATE ROLE $RuntimeUser LOGIN PASSWORD '$RuntimePassword' NOSUPERUSER NOCREATEDB NOCREATEROLE;

@@ -120,3 +120,11 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 三轮脱敏摘录、jobs/steps、精确提交与源码hash见../evidence/WindowsCI-20261005。前两FAIL保留，没有放宽原文哈希或API契约。Linux完整110PASS/1SKIP及静态通过；原文专项1PASS。文档收尾不触发额外CI。无模型网络请求/cache或artifact上传/公开部署/main合并/Secret/OAuth/UAC/防火墙/预装服务改动；仅临时本机随机测试身份。
 
 边界：Win11普通用户/真实安装组合及首次py-launcher创建分支NOT_RUN；完整Windows依赖锁尚待冻结（本次额外解析tzdata2026.5/colorama0.4.6），Node20 action强制Node24警告与已有Starlette警告保留。Windows Server工程成功不代表AT-01/27或F1/R0签收，F2继续PLANNED；真实模型预算仍0。此处终态完成本轮云CI接入，停止扩展。
+
+## F1-WCI005 / 2026-10-05 / Codex / Windows版本锁及首次Setup覆盖准备
+
+基线10d3b3a。保持requirements.lock原字节，独立requirements-windows.lock固定33项运行/测试依赖（含上轮观察的tzdata2026.5/colorama0.4.6）及setuptools82.0.1/pip25.0.1安装构建工具。Setup改用Windows锁、仅二进制/不自动追加依赖、锁内backend构建editable（no-build-isolation）、pip check；CI额外精确比对实际安装清单（仅允许editable sim2act0.1.0）并输出锁SHA，防未锁transitive漂移。锁强制LF保证跨checkout哈希稳定。此为完整版本锁，不声称wheel字节hash锁或索引离线可用。
+
+CI Python固定已测3.12.10 x64；拒绝checkout已有.venv，实际py -3.12预检后直接运行产品Setup创建venv，移除harness提前python -m venv。真实Server执行待push，未预写PASS。保持原文-text与哈希校验，零模型/Secret/cache上传/部署/main合并，窄push加入Windows锁路径。
+
+Linuxruff/mypy12模块/diff PASS，SQLite110PASS/1SKIP/1已有警告（5.58s）；独立临时venv以固定setuptools82.0.1/packaging26.3完成no-build-isolation editable构建，未重装原Linux开发venv。本地不伪造Windows/py-launcher执行。未新增用例计数：新增覆盖在真实CI setup/dependency检查阶段。后续同提交CI终态独立追加。
