@@ -178,3 +178,7 @@ require_escalated正式审批允许同一origin读取/fetch，远端确认df31fe
 ## 2026-10-05 / Windows PowerShell PATHEXT缺口修复
 
 run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探针PASS，Doctor/Stop的native LASTEXITCODE为空而非数字；Setup/Report/Cleanup成功。白名单缺PATHEXT，与Microsoft PowerShell about_Environment_Variables中未列扩展会新控制台启动的行为一致（https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables?view=powershell-7.6）。仅补必要系统变量PATHEXT，不转发owner/test/CI凭据。两配置子进程断言保留PATHEXT；新增实际Windows PowerShell启动Python、同步stdout/退出码专项，Linux明确SKIP。ruff/mypy14模块/diff通过；Server复跑结果待定，不预写成功。
+
+## 2026-10-05 / 恢复与PATHEXT修复Windows终态通过
+
+055559344430cfbfdc5eaa9aca09a22db6bdf8c8已正常push；run37315778872/job111782032859 completed/success/1m43s。实际读取日志：Server2025Datacenter10.0.26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1；首次Setup/完整Windows锁/pip check、原生应用角色与环境隔离/六脚本/重启、ruff/mypy14模块、PG126PASS/0FAIL/0SKIP/1旧警告28.11秒、Report/Cleanup成功且server stopped。PATHEXT修复与真正Windows原生专项通过，前三失败保留。Linux123PASS/3平台专项SKIP7.33秒。精确run/steps/脱敏结果及源码指纹见../evidence/recovery-20261005；默认执行器restricted与正式审批成功区分报告，原身份正常push已验证，不改变保存网络设置。未读token/登录/模型请求/force/main merge/deploy。文档追记仅普通push，不重复CI；Win11/完整AT-02/独立签收、多平台最新浏览器验收仍未完成，F1/F2正式门不变。

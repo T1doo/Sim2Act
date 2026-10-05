@@ -1,5 +1,11 @@
 # 有界 Windows Server 云 CI
 
+## 恢复后最新终态：2026-10-05
+
+[37315778872](https://github.com/T1doo/Sim2Act/actions/runs/37315778872)，源码055559344430cfbfdc5eaa9aca09a22db6bdf8c8，job111782032859终态SUCCESS（1m43s）。Server2025 Datacenter/build26100、镜像20260925.250.1、PowerShell7.6.6、Python3.12.10，admin=true/UAC EnableLUA=1。首次Setup/完整Windows安装集合与lock SHA/pip check、原生应用角色smoke及环境隔离、Doctor/Start/Status/Stop/重启、ruff/mypy14模块、PG126PASS/0FAIL/0SKIP（28.11s/1旧警告）、Report/Cleanup均PASS，PG server stopped。来源为现有身份实际读取同提交job/log，不称独立审计复跑。[迁移与证据](../evidence/recovery-20261005/README.md)。
+
+恢复后前三轮37314684783/37315070121/37315380735保留FAIL，Setup/Report/Cleanup成功，smoke失败、工程回归跳过。Python本体和同应用角色SELECT1探针通过；原生LASTEXITCODE为空定位为系统白名单漏PATHEXT。仅补该Windows系统变量并加入真正Windows PowerShell同步输出/退出码专项；没有恢复owner/test/CI凭据继承或修改OS身份/保护。此前“修复后Windows NOT_RUN/认证未恢复”描述为历史状态，现已更新，Win11及完整F1签收仍未通过。
+
 2026-10-05审计修正：[子进程环境隔离本地修复](../evidence/F1-env-isolation-20261005/README.md)。旧df31fe9成功运行不证明owner凭据隔离：owner URL曾经GITHUB_ENV进入API/worker环境，现已本地移除并对白名单环境加真实子进程回归；PG114PASS、修复后Windows NOT_RUN。认证尚未恢复，不重试push。下面111项为旧版本开发方归档计数；审计只独立确认远端commit及公开run成功，未独立重跑或读取需登录的日志。
 
 范围：公共仓库dev/f1-foundation窄路径push；标准GitHub-hosted windows-2025，单job、15分钟上限、同分支并发取消；contents:read，无缓存/构建产物上传，无模型请求，API只绑定localhost。依赖安装与临时测试资源仅存当次job；不合并main、不创建Secret、不改Actions设置、OAuth、UAC、防火墙或预装服务。
