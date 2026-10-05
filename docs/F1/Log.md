@@ -108,3 +108,7 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 实际首次云运行37280680166，源码067b6ddfb302717f92ca6420d721e98a0422d049，标准windows-2025。原生PG17.11临时集群、SCRAM、Setup/迁移成功；smoke到资源创建时错误断言200，现有API契约是201。工程回归SKIPPED，Report说明NOT_RUN，Cleanup成功。只修正smoke为精确201，不放宽产品契约。实际Server2025 Datacenter/build26100、镜像20260925.250.1、Python3.12.10 x64、PS7.6.6、管理员true/EnableLUA=1；纠正文档的UACoff假设。
 
 本次现有GitHub连接读取jobs与logs成功；没有重试已被代理拒绝的shell API，也没有请求新权限/Secret。Linux静态ruff/mypy12模块/diff PASS，SQLite110PASS/1SKIP/1已有警告（5.68s）。修复推送后监测新CI，结果未预写；真实模型请求0，Win11 AT-01仍BLOCKED。
+
+## F1-WCI003 / 2026-10-05 / Codex / 第二轮原生回归暴露换行转换
+
+7ab4cfe607580057c60c385c60520cf4e57d1fcc / https://github.com/T1doo/Sim2Act/actions/runs/37281551463 终态FAIL。Setup、原生smoke、Report与Cleanup均PASS；ruff/mypy通过，PG回归110PASS/1FAIL/0SKIP/1已有警告（24.98s）。唯一失败test_sources_and_frozen_cases：Windows checkout自动LF→CRLF，原文47389字节变47936。保持原文与manifest哈希不变，新增V5原始md路径的-text属性，禁止checkout换行转换；该属性也加入窄CI触发路径。第三轮待真实运行，不预写PASS。
