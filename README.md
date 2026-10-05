@@ -11,6 +11,7 @@
 
 - 目标：Windows 11 x64 原生、Python 3.12 x64、PowerShell 7、PostgreSQL。Windows 精确 OS/依赖组合及脚本实测 **BLOCKED**。
 - 已测：云端 Linux、Python 3.12.14、临时 PostgreSQL 17.9；SQLite 仅用于工程夹具，应用启动拒绝 SQLite。
+- 云端Windows Server2025工程已测：Python3.12.10 x64、临时PG17.11、六PowerShell接口及111项回归通过；[CI结果与限制](docs/F1/WindowsCI.md)。目标Win11原生验收仍待实测。
 - 前端是随 Python 包分发的静态 HTML/CSS/JS，无 Node 构建依赖；默认本机 API 提供资源，不启动每应用服务器。
 - API 仅绑定 `127.0.0.1`。关闭网页不会取消任务；停止 worker 或关机会停止处理；未完成模型请求的结果/用量可能未知。
 - R0 不执行模型生成的 Python、JS、Shell、SQL，不安装模型指定依赖，不读取任意路径，不支持真实外部写入。

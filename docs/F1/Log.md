@@ -112,3 +112,11 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 ## F1-WCI003 / 2026-10-05 / Codex / 第二轮原生回归暴露换行转换
 
 7ab4cfe607580057c60c385c60520cf4e57d1fcc / https://github.com/T1doo/Sim2Act/actions/runs/37281551463 终态FAIL。Setup、原生smoke、Report与Cleanup均PASS；ruff/mypy通过，PG回归110PASS/1FAIL/0SKIP/1已有警告（24.98s）。唯一失败test_sources_and_frozen_cases：Windows checkout自动LF→CRLF，原文47389字节变47936。保持原文与manifest哈希不变，新增V5原始md路径的-text属性，禁止checkout换行转换；该属性也加入窄CI触发路径。第三轮待真实运行，不预写PASS。
+
+## F1-WCI004 / 2026-10-05 / Codex / 第三轮Windows云工程终态成功
+
+已测源码04e7b1d178c93f1b0e7b33f8555cd1ed7a6c6225，https://github.com/T1doo/Sim2Act/actions/runs/37281883663 ，job111671615176 completed/success；现有GitHub连接实际读取jobs/logs，未新申请权限。Server2025 Datacenter10.0.26100、镜像20260925.250.1、PS7.6.6、Python3.12.10 x64、PG17.11、管理员true/EnableLUA=1。Setup/Doctor/Start/Status/Stop/Test原生执行、独立API-worker、运行角色DDL拒绝、幂等/VERIFIED42、中文空格路径、重启回读PASS。ruff/mypy12模块、PG111PASS/0FAIL/0SKIP/1已有警告（34.48s），JUnit111/0/0/0；Report/Cleanup成功、PG日志server stopped。
+
+三轮脱敏摘录、jobs/steps、精确提交与源码hash见../evidence/WindowsCI-20261005。前两FAIL保留，没有放宽原文哈希或API契约。Linux完整110PASS/1SKIP及静态通过；原文专项1PASS。文档收尾不触发额外CI。无模型网络请求/cache或artifact上传/公开部署/main合并/Secret/OAuth/UAC/防火墙/预装服务改动；仅临时本机随机测试身份。
+
+边界：Win11普通用户/真实安装组合及首次py-launcher创建分支NOT_RUN；完整Windows依赖锁尚待冻结（本次额外解析tzdata2026.5/colorama0.4.6），Node20 action强制Node24警告与已有Starlette警告保留。Windows Server工程成功不代表AT-01/27或F1/R0签收，F2继续PLANNED；真实模型预算仍0。此处终态完成本轮云CI接入，停止扩展。
