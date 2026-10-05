@@ -38,7 +38,7 @@
 
 已实现通用字段分离、显式材料授权/hash绑定、不可变版本历史/指纹、PG行锁+版本条件更新与旧窗口冲突。新两表由显式migrate建立并需应用角色CRUD，不赋DDL；近50版历史逐一重新授权/hash验证，旧版本存储保留。14项专项，SQLite147PASS/3平台SKIP/1旧警告9.27秒，ruff/mypy15模块/JS语法/diff通过；LinuxChromium7真实检查点（一般文本目标、修订、旧条件、第二客户端、旧窗口保留文字/拒绝、最新与重载历史）通过，本地fixture已关闭。已普通push，精确源码6bf5e05的ServerPG CI37322479923终态SUCCESS：PG150PASS/0FAIL/0SKIP/1旧警告33.71秒，现有原生smoke/迁移/锁/静态/清理通过；[证据](../evidence/F2-goal-cards-20261005/README.md)。未声称模型理解/目标生成/正式验收或完整F2-T01完成。
 
-## 下一纵向闭环：目标卡 → MOCK声明式候选 → CSV应用预览（实施前计划）
+## 目标卡 → MOCK声明式候选 → CSV应用预览：已交付（以下为实施前冻结计划）
 
 演示路径：项目里保存带CSV授权材料的目标卡，明确选择可信目录的“数值列求和”能力；指定目标卡版本及材料，创建标MOCK_DETERMINISTIC的声明式候选；校验ActionSpec/AppManifest、依赖版本/权限/预算，建立仅所选CSV的preview应用身份；转到应用页选数值列运行新预览，查看成果/历史，返回目标卡或刷新后仍能回读候选与来源。
 
@@ -63,3 +63,7 @@
 ## 2026-10-05 / MOCK候选纵向切片本地闭环
 
 按事前Plan完成已保存目标版本/授权CSV/可信csv.sum目录→固定声明式候选编译→preview身份限定Grant→数值列新预览/历史/返回/刷新。完整人工条件及材料快照保留NOT_RUN，旧候选不会随目标修订改变，闭合输入/权限/来源篡改/幂等并发保护。取消提交前无写入；已接受事务返回编辑不冒充撤销，迟到响应不能跨项目打开。新增24工程检查含待PG应用角色专项；SQLite170PASS/4平台SKIP/1旧警告11.31秒，ruff/mypy16模块/JS/diff通过。Chromium实际正常UI链路、14候选交错/失败、3刷新回读、E9原11竞态回归PASS；旧fixture模块及截图CLI路径问题修正后最终复核，合成server/browser关闭。证据见../evidence/F2-goal-candidate-20261005。普通push后监督精确ServerCI，不预写PASS；P-A工程子集/P-B未实现/真实0/F1未签收不变。
+
+## 2026-10-05 / MOCK候选纵向切片精确Server终态交付
+
+源码e6b3e2c803f1a4dd2fe999e7645472ec0ff29343已普通push；run37329527816/job111828777592 completed/success（2m01s），PG174PASS/0FAIL/0SKIP/1旧警告43.18秒，24新增候选项含临时PG应用角色业务CRUD下目标/options/候选/幂等/预览/历史API路径通过，其余PG工程使用隔离test-owner schema。实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1；Setup/显式新表迁移/完整锁、已有F1原生角色API-worker smoke、ruff/mypy16模块、Report/Cleanup全通过，server stopped。Linux170PASS/4平台SKIP、实际正常ChromiumUI+14候选交错+3冷页回读+E9原11竞态保持PASS；不是ServerCI浏览器/Win11/独立复跑。E10精确run/results/source hashes及人工复核截图归档；文档收尾普通push不重复CI。明确P-A人工目标+固定模板工程子集、P-B未实现、目标条件NOT_RUN、PREVIEW_ONLY/无Release，真实模型0/F1未签收/正式发布门不变。
