@@ -20,3 +20,9 @@
 正常阶段push已授权；当前远端复核阻塞，push及精确commit Windows Server CI未执行。后续先正常fetch、比较远端及恢复分支；未知变化先核对，禁止force/reset用户内容；再正常push并监督同提交CI终态。新环境公开GitHub/API成功仅代表此前检查时状态，不证明当前写权限。
 
 静态复核：CSV仍为固定可信模板的PREVIEW/不可发布，候选/材料/输入验证、用户/项目/应用授权交集与历史幂等逻辑保留；application_environment仍显式白名单，LIVE明确开启才传应用token。此核对不替代专项执行。真实模型请求0、预算0；Win11/完整AT-02/独立审计、F1签收及F2正式准入未通过。本轮仅恢复既有并行工程。
+
+## 正式执行器审批后续验证
+
+上述默认模式阻塞已通过正式require_escalated审批核对：同一origin的ls-remote与fetch均批准并成功，远端仍df31fe9，与恢复分支保持祖先关系。未改变保存环境、代理或身份；默认执行器网络restricted与保存环境连接能力需分别报告。依赖安装审批成功，按requirements.lock精确安装，pyproject固定setuptools82.0.1，no-index/no-deps/no-build-isolation editable安装及pip check通过。
+
+默认沙箱TestClient执行停滞，已终止本任务该测试进程；经正式审批本机socket/IPC回归后，SQLite123PASS/2PG-only SKIP/1已有Starlette警告，7.47秒；JUnit见sqlite.xml。ruff通过，mypy14模块无问题，CSV11专项和两个真实配置子进程用例包含在该工程回归。无本机PG工具，不虚报PG权限/生命周期两项通过；Windows将按正式CI验证。真实模型请求仍0。下一动作：正常push恢复开发分支并监督精确commit Windows Server CI。

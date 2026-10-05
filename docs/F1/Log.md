@@ -164,3 +164,7 @@ AcceptanceMatrix.md对F1-T01—08、AT-01—08及后续AT归属逐项映射原V5
 ## 2026-10-05 / 新任务迁移与阻塞记录
 
 上传备份SHA256与交接值一致，四补丁及157文件哈希通过；独立dev/f1-foundation工作副本按顺序check/apply/commit，恢复源码HEAD 42b377897c1fe501772a5b0a12973c8845c6361c，157文件字节/Git mode匹配。原work分支未动；原SHA不复现。30个Python语法及JS语法/diff检查通过，当前无pytest/项目venv，回归NOT_RUN。重新fetch因代理8080无法连接失败，未返回HTTP状态；不改网络/身份/凭据，远端当前状态未复核，授权push/Windows CI尚未执行。真实模型0，F1签收/F2正式门不变。[完整迁移证据](../evidence/recovery-20261005/README.md)。
+
+## 2026-10-05 / 正式执行器网络审批与恢复回归
+
+require_escalated正式审批允许同一origin读取/fetch，远端确认df31fe9。未更改保存环境或代理身份，默认执行器restricted导致此前网络失败，不能据此判保存配置失效。锁依赖及setuptools82.0.1安装通过，pip check/ruff/mypy14模块通过；默认沙箱TestClient停滞终止后，经本机socket/IPC正式审批，SQLite123PASS/2PG-only SKIP/1旧警告（7.47秒），真实模型0。本机无PG工具；正常push和精确commit ServerCI为下一步，未预写成功。原c1702a7保留。
