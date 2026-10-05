@@ -107,3 +107,7 @@
 修复范围：从候选来源版本、所选resource和capability重建原始请求指纹，与持久goal_candidate_requests.request_fingerprint独立锚点比对；不靠重算被篡改对象自己的hash，也不将合法旧版本强制变成最新。direct/preview已接受POST后GET失败明确显示已创建/已执行及读取失败，提供只GET回读重试，不再POST；showApp开始选择的generation需被调用方跟踪，外部切换项目/草案/目标卡使迟到响应失效。新表/迁移/模型/新功能均无。
 
 验证：协调降版/撤权负例、合法旧版本仍冻结、能力/材料绑定；DOM确认接受后失败/失败重试/仅GET恢复/不重复创建或执行/导航隔离；原20DOM与全回归、普通push精确ServerCI。真实浏览器0/BLOCKED，绝不称视觉PASS。NextSteps补明来源每次重开旧文件的运行依赖及后续来源退休权限策略/合成已完成任务fixture，不拿冷页面回读替代AT10旧文件独立。预算0/F1/Win11/P-B/发布门保持。
+
+## 2026-10-05 / E13本地闭合，Server终态待核实
+
+5专项PASS，全SQLite219PASS/5平台SKIP/1旧Starlette警告25.22秒；ruff/mypy17模块/JS syntax/diff通过。33 Node/jsdom实际HTTP检查PASS，含重复回读失败/仅GET恢复/创建执行各一次/三类导航隔离，非浏览器。实现独立已接受请求锚点及direct/preview恢复状态，NextSteps明示运行时旧来源文件依赖、来源退休策略及完成task fixture未实施。无新表/迁移/模型请求，普通push后监督精确ServerCI；未预写终态。

@@ -9,6 +9,7 @@ const candidateRequestKeys = new Map();
 const extractionRequestKeys = new Map();
 let extractionSource = null, extractionBusy = false;
 let appCreateBusy = false;
+let appReadRecovery = null, appReadBusy = false;
 const appPreviewRequests = new Set();
 const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
@@ -88,6 +89,7 @@ document.querySelector("#projects .grid > section:last-child").append($("reconci
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun);}}catch(e){$("health").textContent="后台不可用";}},2500);
 
 function clearApp() {
+  appReadRecovery=null;$("app-read-retry").hidden=true;
   $("app-create-status").textContent="";$("app-create-status").dataset.state="";
   extractionSource=null;$("extraction-form").hidden=true;$("extraction-status").textContent="";
   appSelectionGeneration++;activeAppProject=null;
@@ -109,9 +111,10 @@ function showPreviewResult(r,history=false){
   $("app-output").dataset.state=r.status === "FAILED" ? "error" : "success";
   $("app-output").replaceChildren(row(`${history ? "历史记录 · " : ""}${previewText(r)} · ${r.id.slice(0,16)}`));
 }
-async function showApp(id,pid=$("project-select").value) {
+async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   if(pid !== $("project-select").value)return false;
   clearApp();const generation=appSelectionGeneration;
+  onSelectionStart?.(generation);
   const a=await api(`/api/apps/${id}`);
   if(generation !== appSelectionGeneration || pid !== $("project-select").value)return false;
   if(a.project_id !== pid)throw Error("候选不属于当前项目，请重新选择");
@@ -177,31 +180,62 @@ $("extraction-form").onsubmit=safe(async()=>{
   finally{extractionBusy=false;if(extractionSource && extractionSource.id === activeApp && extractionSource.project_id === $("project-select").value)$("extraction-create").disabled=!$("extraction-resource").value;}
 });
 $("app-form").onsubmit=safe(async()=>{
-  if(appCreateBusy)return;
+  if(appCreateBusy || appReadBusy)return;
+  if(appReadRecovery?.kind === "created"){await retryAppRead();return;}
   const pid=$("project-select").value,rid=$("app-resource").value;
   if(!pid || !rid)throw new Error("先为当前项目保存并授权 CSV 材料");
-  const generation=appSelectionGeneration,current=()=>generation === appSelectionGeneration && pid === $("project-select").value;
+  let generation=appSelectionGeneration,created=null;
+  const goalGeneration=goalSelectionGeneration;
+  const current=()=>generation === appSelectionGeneration && goalGeneration === goalSelectionGeneration && pid === $("project-select").value;
   appCreateBusy=true;$("app-create-submit").disabled=true;
   $("app-create-status").dataset.state="loading";$("app-create-status").textContent="正在保存草案；离开选择不会撤销已接受的创建。";
   try{
-    const a=await api(`/api/projects/${pid}/apps/csv-preview`,"POST",{name:$("app-name").value,goal:$("app-goal").value,resource_id:rid});
+    created=await api(`/api/projects/${pid}/apps/csv-preview`,"POST",{name:$("app-name").value,goal:$("app-goal").value,resource_id:rid});
     if(!current())return;
     await refreshApps();if(!current())return;
-    if(await showApp(a.id,pid) && activeApp === a.id){$("app-create-status").dataset.state="success";$("app-create-status").textContent="草案已保存，请选择数值列运行新预览。";}
-  }catch(e){if(current()){$("app-create-status").dataset.state="error";$("app-create-status").textContent=`创建未打开：${e.message}；可刷新草案列表核对后重试。`;}}
+    if(await showApp(created.id,pid,g=>{generation=g;}) && current() && activeApp === created.id){$("app-create-status").dataset.state="success";$("app-create-status").textContent="草案已保存，请选择数值列运行新预览。";}
+  }catch(e){if(current()){
+    if(created)setAppReadFailure({id:created.id,pid,kind:"created",goalGeneration},e);
+    else{$("app-create-status").dataset.state="error";$("app-create-status").textContent=`创建未打开：${e.message}；可刷新草案列表核对后重试。`;}
+  }}
   finally{appCreateBusy=false;$("app-create-submit").disabled=false;}
 });
+function setAppReadFailure(recovery,error){
+  appReadRecovery=recovery;$("app-read-retry").hidden=false;
+  const status=$(recovery.kind === "created" ? "app-create-status" : "app-output");
+  status.dataset.state="error";
+  status.textContent=`${recovery.kind === "created" ? "草案已创建" : "预览已执行"}；后续读取失败：${error.message}。重新读取只回读已保存记录，不会再次创建或执行。`;
+}
+async function retryAppRead(){
+  const recovery=appReadRecovery;
+  if(!recovery || appReadBusy || appCreateBusy || recovery.pid !== $("project-select").value || recovery.goalGeneration !== goalSelectionGeneration)return;
+  let generation=appSelectionGeneration;
+  const current=()=>generation === appSelectionGeneration && recovery.pid === $("project-select").value && recovery.goalGeneration === goalSelectionGeneration;
+  appReadBusy=true;$("app-read-retry").disabled=true;$("app-create-submit").disabled=true;
+  try{
+    if(await showApp(recovery.id,recovery.pid,g=>{generation=g;}) && current()){
+      if(recovery.kind === "created"){$("app-create-status").dataset.state="success";$("app-create-status").textContent="已创建草案重新读取成功；没有重复创建。";}
+      else showPreviewResult(recovery.result);
+    }
+  }catch(e){if(current())setAppReadFailure(recovery,e);}
+  finally{appReadBusy=false;$("app-read-retry").disabled=false;$("app-create-submit").disabled=appCreateBusy;}
+}
+$("app-read-retry").onclick=safe(retryAppRead);
 $("app-preview-form").onsubmit=safe(async()=>{
   if(!activeApp || activeAppProject !== $("project-select").value)throw new Error("先打开当前项目的草案");
-  const id=activeApp,pid=activeAppProject,generation=appSelectionGeneration;
+  const id=activeApp,pid=activeAppProject,goalGeneration=goalSelectionGeneration;
+  let generation=appSelectionGeneration,result=null;
   if(appPreviewRequests.has(id))return;
-  const current=()=>activeApp === id && generation === appSelectionGeneration && pid === $("project-select").value;
+  const current=()=>generation === appSelectionGeneration && pid === $("project-select").value && goalGeneration === goalSelectionGeneration;
   appPreviewRequests.add(id);$("app-preview-submit").disabled=true;
   $("app-output").dataset.state="loading";$("app-output").textContent="正在读取授权材料并运行新预览…";
   try {
-    const r=await api(`/api/apps/${id}/previews`,"POST",{input:{column:$("app-column").value},request_key:crypto.randomUUID()});
-    if(current() && await showApp(id,pid)){if(activeApp===id)showPreviewResult(r);}
-  }catch(e){if(current()){$("app-output").dataset.state="error";$("app-output").textContent=`预览未打开：${e.message}；可重新打开草案核对历史。`;}}
+    result=await api(`/api/apps/${id}/previews`,"POST",{input:{column:$("app-column").value},request_key:crypto.randomUUID()});
+    if(current() && await showApp(id,pid,g=>{generation=g;})){if(current() && activeApp===id)showPreviewResult(result);}
+  }catch(e){if(current()){
+    if(result)setAppReadFailure({id,pid,kind:"preview",result,goalGeneration},e);
+    else{$("app-output").dataset.state="error";$("app-output").textContent=`预览未打开：${e.message}；可重新打开草案核对历史。`;}
+  }}
   finally{appPreviewRequests.delete(id);$("app-preview-submit").disabled=appPreviewRequests.has(activeApp) || !$("app-column").value;}
 });
 
@@ -212,6 +246,7 @@ function updateGoalCardSave() {
   updateCandidateCreate();
 }
 function clearGoalCard() {
+  clearApp(); // A goal selection also invalidates in-flight app readback/recovery.
   goalSelectionGeneration++;candidateSelectionGeneration++;candidatePanelReady=false;
   $("goal-candidate-form").hidden=true;$("goal-candidate-list").replaceChildren();
   $("goal-candidate-status").textContent="先打开已保存目标卡。";

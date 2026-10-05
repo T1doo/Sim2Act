@@ -225,6 +225,16 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
                       or generated["card_id"] != candidate["generation"].get("goal_card_id")
                       or generated["principal_id"] != user):
         raise DomainError("VERSION_CONFLICT", "目标候选来源记录不可移除或替换")
+    if generated:
+        origin = candidate["generation"]
+        accepted_request = fingerprint({
+            "card_id": generated["card_id"], "expected_version": origin.get("goal_version"),
+            "resource_id": manifest.data_bindings[0].resource_ref,
+            "capability": origin.get("capability"),
+        })
+        # Compare to the independent accepted-request record, not the rewritten candidate hash.
+        if accepted_request != generated["request_fingerprint"]:
+            raise DomainError("VERSION_CONFLICT", "候选来源版本、材料或能力与已接受请求不一致")
     extracted = c.execute(select(preview_extractions.c.app_id).where(preview_extractions.c.app_id == aid)).first()
     if extracted and "extraction" not in candidate:
         raise DomainError("VERSION_CONFLICT", "提取来源记录不可移除")
