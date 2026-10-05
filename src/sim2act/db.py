@@ -597,3 +597,197 @@ class Store:
             )
             self.event(c, run_id, "COMMAND", {"command": command, "status": state})
             return state
+
+    def unresolved_attempts(self, principal, run_id):
+        with self.engine.connect() as c:
+            if not c.execute(
+                select(runs.c.id).where(runs.c.id == run_id, runs.c.principal_id == principal)
+            ).first():
+                raise DomainError("PERMISSION_DENIED")
+            rows = (
+                c.execute(
+                    select(attempts).where(
+                        attempts.c.run_id == run_id, attempts.c.status == "STARTED"
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [
+            {
+                "attempt_id": a["id"],
+                "mode": a["mode"],
+                "request_model": a["request_model"],
+                "request_fingerprint": (a["parameters"] or {}).get("request_fingerprint"),
+                "usage": a["usage"],
+                "state": "OUTCOME_UNKNOWN",
+            }
+            for a in rows
+        ]
+
+    def reconcile_attempt(
+        self,
+        principal,
+        run_id,
+        attempt_id,
+        version,
+        decision,
+        expected_fingerprint,
+        evidence,
+        acknowledge_unknown_cost,
+        response=None,
+    ):
+        from .model import parse_response
+
+        with self.tx() as c:
+            run = (
+                c.execute(
+                    select(runs)
+                    .where(runs.c.id == run_id, runs.c.principal_id == principal)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if not run:
+                raise DomainError("PERMISSION_DENIED")
+            if run["version"] != version or run["status"] not in {
+                "WAITING_RESOURCE",
+                "RECONCILING",
+            }:
+                raise DomainError(
+                    "VERSION_CONFLICT", "Reconciliation requires the current waiting version"
+                )
+            self.own_project(c, principal, run["project_id"])
+            if decision == "record_response":
+                for rid in run["resource_refs"]:
+                    self.authorize(
+                        c, principal, run["runtime_id"], run["project_id"], rid, "resource.read"
+                    )
+                self.authorize_receipts(c, run)
+            attempt = (
+                c.execute(
+                    select(attempts)
+                    .where(attempts.c.id == attempt_id, attempts.c.run_id == run_id)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if not attempt or attempt["status"] != "STARTED":
+                raise DomainError("VERSION_CONFLICT", "Attempt is not unresolved")
+            stored_fp = (attempt["parameters"] or {}).get("request_fingerprint")
+            if (
+                not acknowledge_unknown_cost
+                or not evidence.strip()
+                or expected_fingerprint != stored_fp
+            ):
+                raise DomainError(
+                    "INVALID_INPUT",
+                    "Exact request binding and explicit unknown-cost acknowledgement required",
+                )
+            unresolved = c.execute(
+                select(attempts.c.id).where(
+                    attempts.c.run_id == run_id, attempts.c.status == "STARTED"
+                )
+            ).all()
+            unknown_ops = c.execute(
+                select(operations.c.id).where(
+                    operations.c.run_id == run_id,
+                    operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN"]),
+                )
+            ).first()
+            if unknown_ops:
+                raise DomainError(
+                    "OUTCOME_UNKNOWN", "Model reconciliation cannot resolve unknown tool effects"
+                )
+            ctx = dict(run["context"])
+            result = {
+                "decision": decision,
+                "evidence_note": evidence,
+                "principal_id": principal,
+                "attempt_id": attempt_id,
+                "request_fingerprint": stored_fp,
+                "unknown_cost_acknowledged": True,
+                "provenance": "USER_SUPPLIED",
+            }
+            if decision == "record_response":
+                if len(unresolved) != 1 or not stored_fp or not isinstance(response, dict):
+                    raise DomainError(
+                        "INVALID_INPUT", "A uniquely bound complete response is required"
+                    )
+                # Recover only the exact recorded request. Changed context is never silently accepted.
+                from .tools import definitions
+
+                current_fp = fingerprint(
+                    {
+                        "messages": ctx["messages"],
+                        "tools": definitions(),
+                        "model": attempt["request_model"],
+                    }
+                )
+                if current_fp != stored_fp:
+                    raise DomainError("VERSION_CONFLICT", "Request context has changed")
+                expected_model = (
+                    "MOCK-intern-contract" if attempt["mode"] == "MOCK" else "intern-s2"
+                )
+                if response.get("model") != expected_model:
+                    raise DomainError(
+                        "MODEL_OUTPUT_INVALID",
+                        "Recovered response model does not match attempt mode",
+                    )
+                message, calls = parse_response(response)
+                if len(calls) + ctx["tools"] > 4:
+                    raise DomainError("BUDGET_EXHAUSTED")
+                ctx["messages"] = [*ctx["messages"], message]
+                c.execute(
+                    update(attempts)
+                    .where(attempts.c.id == attempt_id)
+                    .values(
+                        status="RECONCILED_RESPONSE",
+                        response_model=expected_model,
+                        response=message,
+                    )
+                )
+                state = "CANCELLED" if run["cancel_intent"] else "PAUSED"
+                result["response_fingerprint"] = fingerprint(message)
+                result["tools_dispatched"] = 0
+            elif decision == "close_unknown":
+                if response is not None:
+                    raise DomainError(
+                        "INVALID_INPUT", "Closing unknown attempts does not import a response"
+                    )
+                c.execute(
+                    update(attempts)
+                    .where(attempts.c.id == attempt_id)
+                    .values(status="CLOSED_UNKNOWN", error="OUTCOME_UNKNOWN")
+                )
+                state = "WAITING_RESOURCE" if len(unresolved) > 1 else "CANCELLED"
+            else:
+                raise DomainError("INVALID_INPUT", "Unsupported reconciliation decision")
+            # Original usage and reservations are never erased or set to zero by an operator.
+            c.execute(
+                update(runs)
+                .where(runs.c.id == run_id)
+                .values(
+                    context=ctx,
+                    status=state,
+                    fence=run["fence"] + 1,
+                    lease_until=0,
+                    version=version + 1,
+                    cancel_intent=run["cancel_intent"] or decision == "close_unknown",
+                    error={
+                        "code": "OUTCOME_UNKNOWN",
+                        "message": "已结束任务；模型用量仍未知，已发生的效果保留",
+                    }
+                    if decision == "close_unknown"
+                    else None,
+                )
+            )
+            self.event(c, run_id, "ATTEMPT_RECONCILED", result)
+            return {
+                "status": state,
+                "version": version + 1,
+                "tools_dispatched": 0,
+                "usage": attempt["usage"],
+            }

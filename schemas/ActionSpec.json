@@ -1,5 +1,38 @@
 {
   "$defs": {
+    "Dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "tool",
+            "resource",
+            "check",
+            "prompt"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Ref",
+          "type": "string"
+        },
+        "version": {
+          "const": "1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref",
+        "version"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
     "Executor": {
       "additionalProperties": false,
       "properties": {
@@ -79,6 +112,60 @@
       ],
       "title": "Limits",
       "type": "object"
+    },
+    "PermissionRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_ref": {
+          "enum": [
+            "resource.read",
+            "data.aggregate_csv",
+            "artifact.save_text"
+          ],
+          "title": "Tool Ref",
+          "type": "string"
+        },
+        "resource_ref": {
+          "pattern": "^(res|proj)_[a-f0-9]{32}$",
+          "title": "Resource Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_ref",
+        "resource_ref"
+      ],
+      "title": "PermissionRequirement",
+      "type": "object"
+    },
+    "Precondition": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "enum": [
+            "exists",
+            "eq",
+            "in"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "op",
+        "field"
+      ],
+      "title": "Precondition",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -120,17 +207,17 @@
     },
     "dependencies": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/Dependency"
       },
+      "maxItems": 32,
       "title": "Dependencies",
       "type": "array"
     },
     "permission_requirements": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/PermissionRequirement"
       },
+      "maxItems": 32,
       "title": "Permission Requirements",
       "type": "array"
     },
@@ -145,9 +232,9 @@
     },
     "preconditions": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/Precondition"
       },
+      "maxItems": 16,
       "title": "Preconditions",
       "type": "array"
     },

@@ -36,3 +36,17 @@
 工程源码提交：[f496f225ae109e4415cff3a1fa8117451a82fda3](https://github.com/T1doo/Sim2Act/commit/f496f225ae109e4415cff3a1fa8117451a82fda3)，dev/f1-foundation，已push。最终实际结果：PostgreSQL 35PASS/1条弃用警告（6.88秒）；SQLite 34PASS/1SKIPPED/1条警告（0.76秒）；ruff/mypy/JS检查PASS。源码指纹与提交中的文件一致；此追记只改文档，不改已测代码。
 API/worker在独立跨执行命令Stop后已停止，health=OFFLINE；临时PostgreSQL测试容器保留供后续工程核查，不是公开部署或Windows验收。浏览器已关闭。
 下一步按F1 Plan补齐契约/恢复/探针工程接口；LIVE、Windows、真实材料及C0规则仍BLOCKED或待核实。F1未签收，未合并main，未启动F2发布。
+
+## F1-L004 / 2026-10-05T03:28:49.450701+00:00 / Codex / F1-2 独立工程增量
+
+基线：已推送 5c930bc3e668294f1f55f3fc60a5d13a485c4c20，沿用 dev/f1-foundation、既有依赖和 PostgreSQL 测试容器。检查未提交 diff 与先前产出一致，保留继续；协调恢复时曾误回复早期只读检查，收到当前目标纠正后恢复本增量，没有覆盖改动。
+
+实际：闭合嵌套 ActionSpec/AppManifest、JSON Schema 类型/边界、注册依赖/效果/权限申请和有限前置条件、纯候选校验 API；离线 probe 不读取配置、固定 MockTransport；严格响应与失败用量保留、修复计数原子保存；未知请求指纹绑定、人工导入暂停/另行继续或明确结束、版本/主体/撤权/取消意图/未知效果保护；现有成果画布核对入口与布局修复。完整编译/发布未实施，原始 V5 来源未改。
+
+实际测试：SQLite 63 PASS/1 SKIPPED/1 warning（2.90s），PostgreSQL 64 PASS/1 warning（9.88s）；ruff、mypy 11 模块、JS语法、Schema生成、离线probe、git diff --check PASS。新增29项覆盖契约、核对、独立心跳/并发、失败用量和离线隔离；Starlette/httpx警告保留。新增测试局部 import 顺序曾被ruff拒绝，修复后通过；之前契约类型标注在mypy提示后补set[str]。
+
+实际浏览器：合成失联请求 close_unknown -> CANCELLED；record_response -> PAUSED 且数据库0个工具效果；用户明确继续后独立worker --once -> PARTIAL、回执可读。原用量仍unknown/null。长指纹select早期列溢出，短标签/title+弹性列修复；最终宽1280、scrollWidth1265，错误列表为空，截图已目视检查。截图相对路径首次失败，绝对路径成功。Run/Attempt/Operation与USER_SUPPLIED审计见 ../evidence/F1-2-browser-audit.json。
+
+收尾：自身 API/worker 停止，另次Status为OFFLINE，浏览器关闭；临时数据库保留，不是公开部署。未读取真实密钥、未真实调用书生；合成证据明确MOCK/FAULT_INJECTION，模型列表非账号实测。源码/测试/Schema指纹与JUnit见 ../evidence/F1-2-TestReport.md。
+
+剩余：LIVE安全注入/批准预算、Windows原生仍BLOCKED；GoalSpec/Run完整冻结、Manifest编译/节点类型连通、文件跨事务恢复、通用未知工具效果核对待后续。F1整体IN_PROGRESS，未进入F2，AT-09—28保持NOT_RUN。代码提交SHA在下一条追加。

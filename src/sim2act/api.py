@@ -7,7 +7,7 @@ from pydantic import Field
 from sqlalchemy import select, update
 
 from .config import Settings
-from .contracts import Strict, resource_id, strict_json
+from .contracts import Strict, resource_id, strict_json, validate_action, validate_action_input
 from .db import Store, grants, heartbeats, projects, resources, runs
 from .errors import DomainError
 
@@ -31,6 +31,22 @@ class RunInput(Strict):
 class CommandInput(Strict):
     command: str
     version: int = Field(ge=1)
+
+
+class ReconcileInput(Strict):
+    attempt_id: str = Field(pattern=r"^attempt_[a-f0-9]{32}$")
+    version: int = Field(ge=1)
+    decision: str
+    expected_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    evidence: str = Field(min_length=1, max_length=1000)
+    acknowledge_unknown_cost: bool
+    response: dict | None = None
+    response_json: str | None = Field(default=None, max_length=32768)
+
+
+class ContractInput(Strict):
+    action: dict
+    input: dict | None = None
 
 
 def create_app(store=None, settings=None):
@@ -176,6 +192,50 @@ def create_app(store=None, settings=None):
     @app.post("/api/runs/{rid}/commands")
     def command(rid: str, body: CommandInput, user=user_dependency):
         return {"status": db.command(user, rid, body.command, body.version)}
+
+    @app.get("/api/runs/{rid}/unresolved-attempts")
+    def unresolved(rid: str, user=user_dependency):
+        return db.unresolved_attempts(user, rid)
+
+    @app.post("/api/runs/{rid}/reconcile")
+    def reconcile(rid: str, body: ReconcileInput, user=user_dependency):
+        values = body.model_dump()
+        raw = values.pop("response_json")
+        if raw is not None:
+            if values["response"] is not None:
+                raise DomainError("INVALID_INPUT", "Supply one response representation")
+            values["response"] = strict_json(raw)
+        return db.reconcile_attempt(user, rid, **values)
+
+    @app.post("/api/projects/{pid}/contracts/validate")
+    def validate_contract(pid: str, body: ContractInput, user=user_dependency):
+        import json
+
+        action = validate_action(json.dumps(body.action))
+        with db.tx() as c:
+            project = db.own_project(c, user, pid)
+            for dependency in action.dependencies:
+                if dependency.kind == "resource":
+                    db.authorize(
+                        c, user, project["runtime_id"], pid, dependency.ref, "resource.read"
+                    )
+            for requirement in action.permission_requirements:
+                db.authorize(
+                    c,
+                    user,
+                    project["runtime_id"],
+                    pid,
+                    requirement.resource_ref,
+                    requirement.tool_ref,
+                )
+        if body.input is not None:
+            validate_action_input(action, body.input)
+        return {
+            "state": "VALIDATED_DRAFT",
+            "publishable": False,
+            "execution_performed": False,
+            "action": action.model_dump(),
+        }
 
     @app.get("/api/projects/{pid}/grants")
     def list_grants(pid: str, user=user_dependency):

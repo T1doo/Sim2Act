@@ -1,5 +1,86 @@
 {
   "$defs": {
+    "ActionBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_id": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "action_id": {
+          "pattern": "^action_[a-f0-9]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "binding_id",
+        "action_id",
+        "revision"
+      ],
+      "title": "ActionBinding",
+      "type": "object"
+    },
+    "DataBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_id": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "resource_ref": {
+          "pattern": "^res_[a-f0-9]{32}$",
+          "title": "Resource Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding_id",
+        "resource_ref"
+      ],
+      "title": "DataBinding",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "tool",
+            "resource",
+            "check",
+            "prompt"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Ref",
+          "type": "string"
+        },
+        "version": {
+          "const": "1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref",
+        "version"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
     "Limits": {
       "additionalProperties": false,
       "properties": {
@@ -49,6 +130,101 @@
         "run_seconds"
       ],
       "title": "Limits",
+      "type": "object"
+    },
+    "PermissionRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_ref": {
+          "enum": [
+            "resource.read",
+            "data.aggregate_csv",
+            "artifact.save_text"
+          ],
+          "title": "Tool Ref",
+          "type": "string"
+        },
+        "resource_ref": {
+          "pattern": "^(res|proj)_[a-f0-9]{32}$",
+          "title": "Resource Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_ref",
+        "resource_ref"
+      ],
+      "title": "PermissionRequirement",
+      "type": "object"
+    },
+    "RuntimeIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "user_and_app_intersection",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "RuntimeIdentity",
+      "type": "object"
+    },
+    "View": {
+      "additionalProperties": false,
+      "properties": {
+        "component_ref": {
+          "enum": [
+            "text",
+            "table",
+            "chart"
+          ],
+          "title": "Component Ref",
+          "type": "string"
+        },
+        "output_field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Output Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component_ref",
+        "output_field"
+      ],
+      "title": "View",
+      "type": "object"
+    },
+    "WorkflowStep": {
+      "additionalProperties": false,
+      "properties": {
+        "step_id": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Step Id",
+          "type": "string"
+        },
+        "binding_id": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Depends On",
+          "type": "array"
+        }
+      },
+      "required": [
+        "step_id",
+        "binding_id",
+        "depends_on"
+      ],
+      "title": "WorkflowStep",
       "type": "object"
     }
   },
@@ -107,54 +283,52 @@
     },
     "views": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/View"
       },
+      "maxItems": 16,
       "title": "Views",
       "type": "array"
     },
     "workflow": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/WorkflowStep"
       },
+      "maxItems": 16,
       "title": "Workflow",
       "type": "array"
     },
     "action_bindings": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/ActionBinding"
       },
+      "maxItems": 16,
       "title": "Action Bindings",
       "type": "array"
     },
     "data_bindings": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/DataBinding"
       },
+      "maxItems": 16,
       "title": "Data Bindings",
       "type": "array"
     },
     "runtime_identity_requirements": {
-      "additionalProperties": true,
-      "title": "Runtime Identity Requirements",
-      "type": "object"
+      "$ref": "#/$defs/RuntimeIdentity"
     },
     "permission_requirements": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/PermissionRequirement"
       },
+      "maxItems": 32,
       "title": "Permission Requirements",
       "type": "array"
     },
     "dependency_lock": {
       "items": {
-        "additionalProperties": true,
-        "type": "object"
+        "$ref": "#/$defs/Dependency"
       },
+      "maxItems": 32,
       "title": "Dependency Lock",
       "type": "array"
     },

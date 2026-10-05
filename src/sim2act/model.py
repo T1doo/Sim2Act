@@ -11,6 +11,12 @@ from .tools import validate_call
 
 def parse_response(raw):
     try:
+        if (
+            not isinstance(raw, dict)
+            or not isinstance(raw.get("choices"), list)
+            or len(raw["choices"]) != 1
+        ):
+            raise ValueError("single choice object required")
         if "error" in raw:
             raise DomainError("MODEL_OUTPUT_INVALID", "Upstream returned a business error")
         choice = raw["choices"][0]
@@ -20,8 +26,12 @@ def parse_response(raw):
                 "MODEL_TIMEOUT_OR_TRUNCATED", "Output incomplete or finish reason unknown"
             )
         msg = choice["message"]
-        if msg.get("role") != "assistant":
+        if not isinstance(msg, dict) or msg.get("role") != "assistant":
             raise ValueError("role")
+        if msg.get("content") is not None and (
+            not isinstance(msg["content"], str) or len(msg["content"].encode()) > 32768
+        ):
+            raise ValueError("content shape or size")
         calls = msg.get("tool_calls", [])
         if (
             not isinstance(calls, list)
@@ -38,6 +48,8 @@ def parse_response(raw):
             ):
                 raise ValueError("tool type")
             fn = call["function"]
+            if not isinstance(fn, dict) or set(fn) != {"name", "arguments"}:
+                raise ValueError("function fields")
             args = strict_json(fn["arguments"], 32768)
             validate_call(fn["name"], args)
             parsed.append({"id": call["id"], "function": fn, "args": args})
@@ -50,6 +62,8 @@ def parse_response(raw):
         # Do not store private reasoning_content or unknown upstream fields.
         safe = {"role": "assistant", "content": msg.get("content") or ""}
         if calls:
+            if reason != "tool_calls":
+                raise ValueError("tool finish reason inconsistent")
             safe["tool_calls"] = [
                 {"id": x["id"], "type": "function", "function": x["function"]} for x in parsed
             ]
@@ -60,6 +74,23 @@ def parse_response(raw):
         raise DomainError(
             "MODEL_OUTPUT_INVALID", "Invalid model response; no tool dispatched"
         ) from e
+
+
+def normalize_usage(raw):
+    usage = raw.get("usage") if isinstance(raw, dict) else None
+    known = {
+        key: usage[key]
+        for key in ["prompt_tokens", "completion_tokens", "total_tokens"]
+        if isinstance(usage, dict) and type(usage.get(key)) is int and usage[key] >= 0
+    }
+    complete = (
+        len(known) == 3
+        and known["total_tokens"] == known["prompt_tokens"] + known["completion_tokens"]
+    )
+    return {
+        "status": "known" if complete else "partial" if known else "unknown",
+        "tokens": known or None,
+    }
 
 
 class InternModel:

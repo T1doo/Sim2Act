@@ -79,3 +79,9 @@ python3.12 -m venv .venv
 上游约束与参数来自 [书生官方 API 文档](https://internlm.intern-ai.org.cn/doc/docs/Chat/) 和 [模型列表](https://internlm.intern-ai.org.cn/doc/docs/模型列表/)，账号能力仍需实际探针确认。能力报告当前保留 LIVE BLOCKED；未知 usage 保留 null，不记为零、不估算费用。
 
 遇到未核对的在途模型请求，恢复进入 `WAITING_RESOURCE / OUTCOME_UNKNOWN`，不会盲目重发。此增量尚未提供人工核对与重新批准该请求的完整界面，属于下一步工作。
+
+## F1-2 离线检查与人工核对
+
+安装既有锁定依赖后，可运行 `python -m sim2act.cli probe --output offline-report.json`。命令在读取环境配置之前执行，用临时工程库及固定 MockTransport 检查适配器/工具反馈和错误分支，不读取账号、不产生外部请求；模型列表明确 SYNTHETIC，LIVE 仍 BLOCKED。请将报告输出到本地数据目录，避免提交运行数据。
+
+未知模型请求在项目成果画布提供人工核对：记录已有完整响应后保持暂停，需另点“继续”；无法确认时结束任务，保留未知用量和已有效果。依据必须对应原请求指纹；不会靠自动重试抹掉未知请求。详见 [核对规则](docs/F1/Reconciliation.md)、[候选契约校验](docs/F1/Contracts.md) 和 [实测证据](docs/evidence/F1-2-TestReport.md)。

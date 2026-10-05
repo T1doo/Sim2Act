@@ -9,9 +9,21 @@ from .db import Store
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["migrate", "init-user", "schemas"])
+    parser.add_argument("command", choices=["migrate", "init-user", "schemas", "probe"])
     parser.add_argument("--name", default="Local user")
+    parser.add_argument("--output")
     args = parser.parse_args()
+    if args.command == "probe":
+        from pathlib import Path
+
+        from .probe import offline_probe
+
+        report = json.dumps(offline_probe(), ensure_ascii=False, indent=2) + "\n"
+        if args.output:
+            Path(args.output).write_text(report, encoding="utf-8")
+        else:
+            print(report)
+        return
     if args.command == "schemas":
         from pathlib import Path
 

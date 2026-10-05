@@ -7,9 +7,9 @@ import time
 from sqlalchemy import insert, select, update
 
 from .config import Settings
-from .db import Store, attempts, new_id, operations, quotas, reservations, runs
+from .db import Store, attempts, fingerprint, new_id, operations, quotas, reservations, runs
 from .errors import DomainError
-from .model import InternModel, MockModel, parse_response
+from .model import InternModel, MockModel, normalize_usage, parse_response
 from .tools import definitions, dispatch
 
 
@@ -93,6 +93,13 @@ class Worker:
                         "max_tokens": s.max_output_tokens,
                         "adapter_version": "1",
                         "weight_version": "unknown",
+                        "request_fingerprint": fingerprint(
+                            {
+                                "messages": context["messages"],
+                                "tools": definitions(),
+                                "model": s.model,
+                            }
+                        ),
                     },
                 )
             )
@@ -197,9 +204,13 @@ class Worker:
                     fake = {"choices": [{"message": assistant, "finish_reason": "tool_calls"}]}
                     _, all_calls = parse_response(fake)
                     pending = [x for x in all_calls if x["id"] not in completed]
+                elif ctx["messages"][-1]["role"] == "assistant":
+                    # A validated final response imported by reconciliation is already complete.
+                    pending = []
                 else:
                     aid = self.reserve(rid, fence, ctx)
                     start = time.monotonic()
+                    raw = None
                     try:
                         raw = self.model.request(ctx["messages"], definitions())
                         msg, pending = parse_response(raw)
@@ -208,7 +219,6 @@ class Worker:
                                 "MODEL_OUTPUT_INVALID",
                                 "Returned model does not match approved model",
                             )
-                        usage = raw.get("usage")
                         ctx["messages"].append(msg)
                         with self.store.tx() as c:
                             current = self.store.guard(c, rid, fence)
@@ -220,43 +230,13 @@ class Worker:
                                 .values(
                                     status="RECEIVED",
                                     response_model=raw.get("model"),
-                                    usage={
-                                        "status": "known"
-                                        if isinstance(usage, dict)
-                                        and all(
-                                            k in usage
-                                            for k in [
-                                                "prompt_tokens",
-                                                "completion_tokens",
-                                                "total_tokens",
-                                            ]
-                                        )
-                                        else "partial"
-                                        if usage
-                                        else "unknown",
-                                        "tokens": usage,
-                                    },
+                                    usage=normalize_usage(raw),
                                     response=msg,
                                     elapsed=time.monotonic() - start,
                                 )
                             )
                     except DomainError as e:
-                        with self.store.tx() as c:
-                            self.store.guard(c, rid, fence)
-                            c.execute(
-                                update(attempts)
-                                .where(attempts.c.id == aid)
-                                .values(
-                                    status="FAILED", error=e.code, elapsed=time.monotonic() - start
-                                )
-                            )
-                            if e.code == "RATE_LIMITED":
-                                c.execute(
-                                    update(quotas)
-                                    .where(quotas.c.subject == self.s.quota_subject)
-                                    .values(blocked_until=time.time() + 60)
-                                )
-                        if (
+                        repair = (
                             e.code
                             in {
                                 "MODEL_OUTPUT_INVALID",
@@ -264,7 +244,8 @@ class Worker:
                                 "INVALID_INPUT",
                             }
                             and ctx["repairs"] < self.s.max_repairs
-                        ):
+                        )
+                        if repair:
                             ctx["repairs"] += 1
                             ctx["messages"].append(
                                 {
@@ -274,7 +255,30 @@ class Worker:
                                     + ". Return complete valid parameters; no partial tool was executed.",
                                 }
                             )
-                            self.checkpoint(rid, fence, ctx)
+                        with self.store.tx() as c:
+                            self.store.guard(c, rid, fence)
+                            c.execute(
+                                update(attempts)
+                                .where(attempts.c.id == aid)
+                                .values(
+                                    status="FAILED",
+                                    error=e.code,
+                                    elapsed=time.monotonic() - start,
+                                    usage=normalize_usage(raw),
+                                    response_model=raw.get("model")
+                                    if isinstance(raw, dict) and isinstance(raw.get("model"), str)
+                                    else None,
+                                )
+                            )
+                            if repair:
+                                c.execute(update(runs).where(runs.c.id == rid).values(context=ctx))
+                            if e.code == "RATE_LIMITED":
+                                c.execute(
+                                    update(quotas)
+                                    .where(quotas.c.subject == self.s.quota_subject)
+                                    .values(blocked_until=time.time() + 60)
+                                )
+                        if repair:
                             continue
                         raise
                 if time.time() - run["created_at"] > self.s.run_seconds:

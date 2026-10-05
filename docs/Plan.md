@@ -1,6 +1,6 @@
 # Sim2Act 动态总入口
 
-当前基线：V5；F1 IN_PROGRESS，首个 MOCK 工程增量已验证，尚未通过阶段门。仓库开发分支：dev/f1-foundation。
+当前基线：V5；F1 IN_PROGRESS，两个 MOCK 工程增量已验证，尚未通过阶段门。仓库开发分支：dev/f1-foundation。
 
 规范：[平台产品设计](平台产品设计.md)、[分阶段开发计划](分阶段开发计划.md)。
 来源：[V5 原始文本与校验](sources/V5/manifest.json)。原始正文完整保留；修订见 [DocumentReview](DocumentReview.md)。
@@ -27,3 +27,5 @@
 当前工程证据：[F1 TestReport](evidence/F1-TestReport.md)、[架构与限制](F1/Architecture.md)、[LIVE能力缺口](F1/capability-report.json)。Windows、LIVE、完整AppManifest编译和R0目标验收尚未通过。
 
 工程源码提交：[f496f22](https://github.com/T1doo/Sim2Act/commit/f496f225ae109e4415cff3a1fa8117451a82fda3)（MOCK底座，F1未验收）。
+
+第二工程增量：[契约语义](F1/Contracts.md)、[人工核对](F1/Reconciliation.md)、[实际检查与离线探针](evidence/F1-2-TestReport.md)。64 项 PostgreSQL 工程检查通过；LIVE/Windows 和完整发布门仍未通过。
