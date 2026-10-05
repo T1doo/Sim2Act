@@ -1,5 +1,15 @@
 # F2 并行工程 Plan：权威当前状态
 
+## 2026-10-05 / P-B 可信预览回执提取（实施前冻结）
+
+基线9bd4bac，独立/workspace/Sim2Act-pb、dev/f1-foundation；原work树和旧任务不改。V5产品§4 P-B/F2-T03/AT-10要求从已完成任务的输入输出、工具与检查形成新输入应用；现F1 Run终态PARTIAL不可作成功来源。本轮只接受本地合成PREVIEW命名空间SUCCEEDED回执，不接受F1 Run，不改AT02。源声明式模板、输入指纹、输出、实际材料hash和独立Decimal oracle必须可重核；FAILED/UNKNOWN/PARTIAL、存储篡改、撤权、非可信模板拒绝。
+
+范围：从单节点可信CSV求和预览提取稳定工具/版本与输出schema，明确column是运行参数、新CSV是创建时显式绑定参数，同项目新材料且hash不同；冻结源app/preview/候选/回执hash、原目标条件及NOT_RUN，绑定新材料版本和最小应用Grant。仅一层提取，不生成模型节点/代码/复杂DAG/Release，不承诺通用归纳。Manifest task_run来源明确指向PREVIEW回执ID，绝不冒充F1 Run。冷页面运行读取新CSV，不能返回旧输出；当前旧来源仍需可授权重核，撤权保守拒绝，是明确工程限制。
+
+新增preview_extractions只由显式migrate建表、应用角色业务CRUD；API不DDL。源应用行锁串行幂等创建；expected_source_fingerprint防旧窗口、request_key绑定源回执与新材料，冲突不新增身份/Grant。每次回读/预览重核源回执与权限、新材料hash、提取声明及版本。UI从成功历史独立入口提取，明确来源类型、范围、授权与未发布，迟到响应不能跨项目或覆盖新选择。
+
+验收：正常可信源→新资料候选→冷页新结果/失败历史；跨主体/同主体跨项目、源状态/回执/模板/资源篡改、撤权、旧版本、同键异参及并发、无额外Run/Operation/attempt；SQLite回归、PG应用角色CRUD/精确WindowsServerCI终态、真实Chromium正常/失败/导航/刷新检查。真实模型预算0，Win11/F1签收/完整AT10/P-B与发布仍未完成；失败和未测边界保留。
+
 2026-10-05。F1 IN_PROGRESS/未签收；用户已授权隔离并行工程，F2正式准入及发布BLOCKED，真实模型预算0。V5 F2-T01—09/AT-09—22全部保留，不改变source设计或冻结用例。
 
 ## 已完成切片：固定CSV草案预览
