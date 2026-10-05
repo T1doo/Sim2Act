@@ -1,6 +1,6 @@
 # F1 第一个工程增量：实际验证
 
-2026-10-05，云端Linux，Python 3.12.14、PostgreSQL 17.9临时测试容器、MOCK/FAULT_INJECTION。精确源码文件hash见 [F1-source-hashes.json](F1-source-hashes.json)，提交引用在F1 Log追记。
+2026-10-05，云端Linux，Python 3.12.14、PostgreSQL 17.9临时测试容器、MOCK/FAULT_INJECTION。精确源码文件hash见 [F1-source-hashes.json](F1-source-hashes.json)，源码提交：[f496f225ae109e4415cff3a1fa8117451a82fda3](https://github.com/T1doo/Sim2Act/commit/f496f225ae109e4415cff3a1fa8117451a82fda3)；实际证据追记在F1 Log。
 
 | 检查 | 实际结果 | 证据 |
 | --- | --- | --- |

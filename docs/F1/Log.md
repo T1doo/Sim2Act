@@ -30,3 +30,9 @@
 提交：本条由工程增量commit承载；其准确SHA在F1-L003追记。F1整体IN_PROGRESS，未进入F2发布门。
 
 提交前权限复核补充：聚合工具额外授权不能绕过材料resource.read撤回；历史成果/模型后续请求/最终输出重新检查已生成成果授权。新增两项回归，最终PG35PASS、SQLite34PASS/1SKIPPED。源码hash按最终文件重新生成。
+
+## F1-L003 / 2026-10-05T03:00:27.559576+00:00 / Codex / 工程增量提交证据
+
+工程源码提交：[f496f225ae109e4415cff3a1fa8117451a82fda3](https://github.com/T1doo/Sim2Act/commit/f496f225ae109e4415cff3a1fa8117451a82fda3)，dev/f1-foundation，已push。最终实际结果：PostgreSQL 35PASS/1条弃用警告（6.88秒）；SQLite 34PASS/1SKIPPED/1条警告（0.76秒）；ruff/mypy/JS检查PASS。源码指纹与提交中的文件一致；此追记只改文档，不改已测代码。
+API/worker在独立跨执行命令Stop后已停止，health=OFFLINE；临时PostgreSQL测试容器保留供后续工程核查，不是公开部署或Windows验收。浏览器已关闭。
+下一步按F1 Plan补齐契约/恢复/探针工程接口；LIVE、Windows、真实材料及C0规则仍BLOCKED或待核实。F1未签收，未合并main，未启动F2发布。
