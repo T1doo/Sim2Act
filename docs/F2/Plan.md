@@ -41,3 +41,7 @@
 ## 2026-10-05 / 优先修复目标卡异步选择竞态（实施前范围）
 
 独立审查0382b91发现showGoalCard迟到响应能跨项目或覆盖New草稿；合成双项目/实际延迟GET已复现，项目B显示A卡并PUT修改A，New文字被旧卡覆盖。仅合成记录，无真实数据事故证据。以选择generation使导航/New/重复选择失效，读取结果校验project_id，保存前核对活动卡项目，保存完成不恢复已离开的选择；保持后端CAS。先单独提交本修复，不夹带下一MOCK候选后端改动。浏览器覆盖延迟导航/New/重复打开/保存中导航与New/提交项目校验/正常保存及旧窗口冲突，再精确源码ServerCI到终态；预算0。
+
+## 2026-10-05 / 目标卡竞态修复精确终态交付
+
+已在0382b91真实Chromium/双合成项目复现跨项目PUT及New文字覆盖，无真实数据事故证据；22f352b4f2868c924834eecb546242c5246b8291单独修复并普通push。11交错浏览器PASS，SQLite147PASS/3平台SKIP/1旧警告9.19秒；精确ServerCI37325580965/job111815358944 completed/success（2m03s），PG150PASS/0FAIL/0SKIP/1旧警告40.98秒，ruff/mypy15模块、Setup/F1原生应用角色smoke/Report/Cleanup全PASS，server stopped。E9记录可复跑fixture/浏览器脚本及来源hash；Linux浏览器不冒充Win11/CI浏览器/独立复跑。下一MOCK候选后端及Plan在工作树保留未提交，未混入本修复；原work分支不变，真实模型0/F1未签收不变。

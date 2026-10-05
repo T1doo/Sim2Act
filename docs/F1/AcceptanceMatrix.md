@@ -1,10 +1,10 @@
 # F1 权威当前验收状态
 
-2026-10-05；当前工程源码6bf5e0558e8436eb9a12adbc9d188d4b84878abb（通用目标卡/验收草案及不可变版本）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
+2026-10-05；当前工程源码22f352b4f2868c924834eecb546242c5246b8291（目标卡异步导航/New/保存竞态修复）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
 
 F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程，CSV固定模板PREVIEW_ONLY已实现，F2正式准入与发布仍BLOCKED。原身份正常push已验证，正式执行器审批允许项目网络操作，不改变保存环境策略。独立只读审核已完成并报告未发现新安全阻塞，核对了源码及精确Actions run/job；不是独立复跑，也不自动完成阶段签收。
 
-最新E8：通用目标卡/人工验收草案已实现，14专项及两个并发writer版本冲突，LinuxChromium7检查点、SQLite147PASS/3平台专项SKIP、ServerPG150PASS/0FAIL/0SKIP；E7的CSV输入提示保留。仅F2共同前置工程，不声称模型P-A/P-B生成、完整F2-T01或Win11/多引擎通过。
+最新E9：目标卡迟到响应与保存完成不再跨项目恢复或覆盖New草稿，真实LinuxChromium11交错回归PASS、精确ServerCI37325580965成功。E8通用目标卡/人工验收草案已实现，14专项及两个并发writer版本冲突，LinuxChromium7检查点、SQLite147PASS/3平台专项SKIP、ServerPG150PASS/0FAIL/0SKIP；E7的CSV输入提示保留。仅F2共同前置工程，不声称模型P-A/P-B生成、完整F2-T01或Win11/多引擎通过。
 
 ## 当前证据索引
 
@@ -17,6 +17,8 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 - E7：[CSV输入提示证据](../evidence/F2-csv-guidance-20261005/README.md)，07969cd/[CI37318927260](https://github.com/T1doo/Sim2Act/actions/runs/37318927260)SUCCESS，PG136PASS/0FAIL/0SKIP、原生/静态/锁/清理通过；开发方实际读取日志，非独立复跑。
 
 - E8：[通用目标卡证据](../evidence/F2-goal-cards-20261005/README.md)，6bf5e05/[CI37322479923](https://github.com/T1doo/Sim2Act/actions/runs/37322479923)SUCCESS、PG150PASS/0FAIL/0SKIP，原生/迁移/锁/静态/清理通过。目标卡工程用隔离test-owner schema；非独立复跑或Win11 UI实测。
+
+- E9：[目标卡竞态修复证据](../evidence/F2-goal-card-race-20261005/README.md)，22f352b/[CI37325580965](https://github.com/T1doo/Sim2Act/actions/runs/37325580965)SUCCESS，PG150PASS/0FAIL/0SKIP，LinuxChromium11交错检查PASS，SQLite147PASS/3平台SKIP。合成数据复现并修复0382b91审查问题；下一MOCK候选改动仍未提交，不称P-A/P-B交付。
 
 | F1任务 | 已实现/证据 | 当前缺口与边界 |
 | --- | --- | --- |
