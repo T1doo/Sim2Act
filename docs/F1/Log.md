@@ -207,6 +207,10 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 
 6bf5e0558e8436eb9a12adbc9d188d4b84878abb已普通push；run37322479923/job111804777471 completed/success（1m39s）。Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1，PG150PASS/0FAIL/0SKIP/1旧Starlette警告33.71秒，首次Setup/显式新表迁移/完整锁、现有F1应用角色/API-worker原生smoke/重启、ruff/mypy15模块、Report/Cleanup成功，PG server stopped。目标卡14项API/事务工程使用隔离test-owner schema，包括两并发writer，不能称Win11目标卡UI/独立应用角色原生专项；Linux147PASS/3平台SKIP及Chromium7检查点保留。E8结果/精确source hash归档，开发方真实读取同commit run/job/log，非独立复跑。当前权威矩阵与F2Plan已更新；文档收尾仅正常push，不重复CI。F1签收/Win11/AT02完整初态/Release/P-A/P-B生成仍未完成；追加LIVE预算尚未批，真实请求0。下一工作需独立审核新草案存储/版本/权限及规划链依赖，不能把这次人工目标卡视作全F2-T01完成。
 
+## 2026-10-05 / 目标到候选纵向路径选择
+
+依据V5原P-A/P-B及F2任务，选择“已版本化目标卡+授权CSV+显式可信能力 → 标MOCK的声明式候选 → 原预览运行/成果/返回/刷新”工程闭环，事前覆盖/限制/风险/回归门已写F2Plan。完整目标语义/模型规划不支持，全部人工条件保留NOT_RUN；P-B不拿PARTIAL任务冒充完成来源。真实预算0、正式发布/外部写入/任意代码禁用，用户显式选择模板不写成自主模型生成。
+
 ## 2026-10-05 / 优先修复目标卡异步选择竞态（实施前范围）
 
 独立审查0382b91发现showGoalCard迟到响应能跨项目或覆盖New草稿；合成双项目/实际延迟GET已复现，项目B显示A卡并PUT修改A，New文字被旧卡覆盖。仅合成记录，无真实数据事故证据。以选择generation使导航/New/重复选择失效，读取结果校验project_id，保存前核对活动卡项目，保存完成不恢复已离开的选择；保持后端CAS。先单独提交本修复，不夹带下一MOCK候选后端改动。浏览器覆盖延迟导航/New/重复打开/保存中导航与New/提交项目校验/正常保存及旧窗口冲突，再精确源码ServerCI到终态；预算0。
@@ -214,3 +218,11 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 ## 2026-10-05 / 目标卡竞态修复精确终态交付
 
 已在0382b91真实Chromium/双合成项目复现跨项目PUT及New文字覆盖，无真实数据事故证据；22f352b4f2868c924834eecb546242c5246b8291单独修复并普通push。11交错浏览器PASS，SQLite147PASS/3平台SKIP/1旧警告9.19秒；精确ServerCI37325580965/job111815358944 completed/success（2m03s），PG150PASS/0FAIL/0SKIP/1旧警告40.98秒，ruff/mypy15模块、Setup/F1原生应用角色smoke/Report/Cleanup全PASS，server stopped。E9记录可复跑fixture/浏览器脚本及来源hash；Linux浏览器不冒充Win11/CI浏览器/独立复跑。下一MOCK候选后端及Plan在工作树保留未提交，未混入本修复；原work分支不变，真实模型0/F1未签收不变。
+
+## 2026-10-05 / 候选纵向切片续作与取消边界（实施前）
+
+基线1a2be0d，核对保留planning/API/goal_candidate_requests及apps来源复核改动属于既定切片。补授权目标卡版本的候选选项（已绑定CSV+仅csv.sum可信能力）、保存候选及回读入口、来源/全部条件NOT_RUN、预览成果/返回/刷新。选项只读不授权；显式创建才增仅一个材料24小时preview身份Grant。用户未保存编辑不进入候选，界面说明冻结已保存版本。取消提交前无写入；同步事务已接受后不能假称撤销，取消/导航只停止页面转入，候选仍在列表；网络不确定后同request_key可重试，重复提交保护。API闭合输入/权限/版本/旧来源/篡改/可信执行器/幂等并发/失败回滚测试及真实Chromium正常、无CSV、取消、版本失败保留编辑、重复、预览失败后返回/重载；精确ServerCI终态。MOCK固定模板不等于任意生成，P-A工程子集、P-B未实现；F1未签收/Win11未测/LIVE0不变。
+
+## 2026-10-05 / MOCK候选纵向切片本地闭环
+
+按事前Plan完成已保存目标版本/授权CSV/可信csv.sum目录→固定声明式候选编译→preview身份限定Grant→数值列新预览/历史/返回/刷新。完整人工条件及材料快照保留NOT_RUN，旧候选不会随目标修订改变，闭合输入/权限/来源篡改/幂等并发保护。取消提交前无写入；已接受事务返回编辑不冒充撤销，迟到响应不能跨项目打开。新增24工程检查含待PG应用角色专项；SQLite170PASS/4平台SKIP/1旧警告11.31秒，ruff/mypy16模块/JS/diff通过。Chromium实际正常UI链路、14候选交错/失败、3刷新回读、E9原11竞态回归PASS；旧fixture模块及截图CLI路径问题修正后最终复核，合成server/browser关闭。证据见../evidence/F2-goal-candidate-20261005。普通push后监督精确ServerCI，不预写PASS；P-A工程子集/P-B未实现/真实0/F1未签收不变。

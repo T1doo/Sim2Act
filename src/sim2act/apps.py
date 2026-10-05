@@ -8,6 +8,7 @@ from sqlalchemy import insert, select
 from .contracts import Limits, validate_action, validate_action_input, validate_value
 from .db import app_drafts, app_previews, fingerprint, grants, new_id, principals, resources
 from .errors import DomainError
+from .goals import validate_card_version
 from .preflight import preflight
 from .tools import authorized_read, csv_column_options, validate_call
 
@@ -129,35 +130,39 @@ def create_csv_draft(store, user, pid, name, rid, goal, platform_limits):
         if source["format"] != "csv":
             raise DomainError("INVALID_INPUT", "请选择已授权的 CSV 材料")
         candidate = csv_candidate(rid, source["hash"], goal, limits)
-        compile_preview(candidate, platform_limits)
-        aid = candidate["manifest"]["app_id"]
-        runtime = new_id("appruntime")
-        c.execute(insert(principals).values(id=runtime, name="read-only app preview"))
-        # User explicitly selects this one resource in the create-and-authorize UI/API command.
-        for tool in ("resource.read", "data.aggregate_csv"):
-            c.execute(
-                insert(grants).values(
-                    id=new_id("grant"),
-                    principal_id=runtime,
-                    project_id=pid,
-                    resource_id=rid,
-                    tool_ref=tool,
-                    expires_at=time.time() + 86400,
-                    revision=1,
-                    revoked=False,
-                )
-            )
+        return persist_csv_candidate(c, project, name, rid, candidate, platform_limits)
+
+
+def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
+    compile_preview(candidate, platform_limits)
+    aid = candidate["manifest"]["app_id"]
+    runtime = new_id("appruntime")
+    c.execute(insert(principals).values(id=runtime, name="read-only app preview"))
+    # User explicitly selects this one resource in the create-and-authorize UI/API command.
+    for tool in ("resource.read", "data.aggregate_csv"):
         c.execute(
-            insert(app_drafts).values(
-                id=aid,
-                project_id=pid,
-                runtime_id=runtime,
-                name=name,
-                candidate=candidate,
-                fingerprint=fingerprint(candidate),
-                created_at=time.time(),
+            insert(grants).values(
+                id=new_id("grant"),
+                principal_id=runtime,
+                project_id=project["id"],
+                resource_id=rid,
+                tool_ref=tool,
+                expires_at=time.time() + 86400,
+                revision=1,
+                revoked=False,
             )
         )
+    c.execute(
+        insert(app_drafts).values(
+            id=aid,
+            project_id=project["id"],
+            runtime_id=runtime,
+            name=name,
+            candidate=candidate,
+            fingerprint=fingerprint(candidate),
+            created_at=time.time(),
+        )
+    )
     return {"id": aid, "state": "PREVIEW_ONLY", "publishable": False}
 
 
@@ -187,7 +192,19 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
     if fingerprint(candidate) != draft["fingerprint"]:
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     manifest, action, report = compile_preview(candidate, platform_limits)
+    if "generation" in candidate:
+        origin = candidate["generation"]
+        old = validate_card_version(store, c, user, origin["goal_card_id"], origin["goal_version"])
+        if (old["snapshot"] != origin["goal_snapshot"] or old["fingerprint"] != origin["goal_fingerprint"]
+                or candidate["goal"] != old["snapshot"]["content"]):
+            raise DomainError("VERSION_CONFLICT", "候选目标来源不一致")
+        if manifest.goal_ref != origin["goal_card_id"]:
+            raise DomainError("VERSION_CONFLICT")
     rid = manifest.data_bindings[0].resource_ref
+    if "generation" in candidate:
+        frozen = next((r for r in old["snapshot"]["resource_snapshots"] if r["resource_id"] == rid), None)
+        if not frozen or frozen["format"] != "csv" or frozen["hash"] != candidate["source_hash"]:
+            raise DomainError("VERSION_CONFLICT", "候选所选材料与来源不一致")
     authorize_source(store, c, user, project, rid, draft["runtime_id"])
     source = c.execute(select(resources).where(resources.c.id == rid)).mappings().one()
     if source["hash"] != candidate["source_hash"]:
@@ -268,7 +285,7 @@ def public_preview(row):
 
 def inspect_draft(store, user, aid, platform_limits):
     with store.tx() as c:
-        draft, manifest, _, _ = load_draft(store, c, user, aid, platform_limits)
+        draft, manifest, _, report = load_draft(store, c, user, aid, platform_limits)
         source = authorized_read(
             store, c, user, draft["runtime_id"], draft["project_id"], "resource.read",
             {"resource_id": manifest.data_bindings[0].resource_ref},
@@ -288,6 +305,7 @@ def inspect_draft(store, user, aid, platform_limits):
             "state": "PREVIEW_ONLY",
             "publishable": False,
             "input_schema": manifest.input_schema,
+            "validation": {k: report[k] for k in ("state", "execution_performed", "publishable", "topological_order")},
             "history": [public_preview(r) for r in history],
             "input_guidance": csv_column_options(source["content"]),
         }

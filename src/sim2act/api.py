@@ -19,6 +19,7 @@ from .contracts import (
 from .db import Store, app_drafts, fingerprint, grants, heartbeats, projects, resources, runs
 from .errors import DomainError
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
+from .planning import GoalCandidateInput, candidate_options, generate_candidate
 from .preflight import preflight
 
 
@@ -357,6 +358,14 @@ def create_app(store=None, settings=None):
     @app.put("/api/goal-cards/{cid}")
     def update_goal_card(cid: str, body: GoalCardUpdate, user=user_dependency):
         return revise_card(db, user, cid, body.model_dump(exclude={"expected_version"}), body.expected_version)
+
+    @app.get("/api/goal-cards/{cid}/candidate-options")
+    def goal_candidate_options(cid: str, user=user_dependency):
+        return candidate_options(db, user, cid)
+
+    @app.post("/api/goal-cards/{cid}/candidates", status_code=201)
+    def goal_to_candidate(cid: str, body: GoalCandidateInput, user=user_dependency):
+        return generate_candidate(db, user, cid, body.model_dump(), platform_limits)
 
     @app.get("/api/apps")
     def apps(user=user_dependency):

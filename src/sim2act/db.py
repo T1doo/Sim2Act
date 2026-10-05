@@ -172,6 +172,14 @@ goal_cards = Table(
     Column("fingerprint", String, nullable=False),
     Column("created_at", Float, nullable=False),
 )
+goal_candidate_requests = Table(
+    "goal_candidate_requests", meta,
+    Column("card_id", String, primary_key=True),
+    Column("principal_id", String, primary_key=True),
+    Column("request_key", String, primary_key=True),
+    Column("request_fingerprint", String, nullable=False),
+    Column("app_id", String, nullable=False),
+)
 goal_card_versions = Table(
     "goal_card_versions", meta,
     Column("card_id", String, primary_key=True),

@@ -80,6 +80,21 @@ def load_card(store, c, user, cid, *, lock=False):
     return card, project, history
 
 
+def validate_card_version(store, c, user, cid, version):
+    card = c.execute(select(goal_cards).where(goal_cards.c.id == cid)).mappings().first()
+    if not card:
+        raise DomainError("PERMISSION_DENIED")
+    project = store.own_project(c, user, card["project_id"])
+    old = c.execute(select(goal_card_versions).where(
+        goal_card_versions.c.card_id == cid, goal_card_versions.c.version == version,
+    )).mappings().first()
+    if not old or fingerprint(old["snapshot"]) != old["fingerprint"]:
+        raise DomainError("VERSION_CONFLICT", "候选来源目标版本不一致")
+    if snapshot(store, c, user, project, old["snapshot"]["content"]) != old["snapshot"]:
+        raise DomainError("VERSION_CONFLICT", "候选来源材料已变化")
+    return old
+
+
 def inspect_card(store, user, cid):
     with store.tx() as c:
         card, _, history = load_card(store, c, user, cid)

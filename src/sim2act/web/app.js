@@ -3,6 +3,9 @@ let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
 let activeApp = null, activeGoalCard = null;
 let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false;
+let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
+let appSelectionGeneration = 0, activeAppProject = null;
+const candidateRequestKeys = new Map();
 const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
@@ -81,6 +84,8 @@ document.querySelector("#projects .grid > section:last-child").append($("reconci
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun);}}catch(e){$("health").textContent="后台不可用";}},2500);
 
 function clearApp() {
+  appSelectionGeneration++;activeAppProject=null;
+  $("app-origin").textContent="";$("app-back-goal").hidden=true;$("app-frozen-goal").hidden=true;$("app-frozen-goal-text").textContent="";
   activeApp=null;$("app-title").textContent="选择草案";$("app-preview-form").hidden=true;
   $("app-output").replaceChildren();$("app-history").replaceChildren();$("app-manifest").textContent="";
 }
@@ -94,8 +99,25 @@ function previewText(r) {
   if(r.status === "FAILED")return `预览失败（FAILED）：${r.error?.message || r.error?.code} · 已保留这次历史`;
   return `预览成功（SUCCEEDED） · ${r.output.column} 合计 ${r.output.sum}，共 ${r.output.count} 条 · 0 模型请求 · 仅预览`;
 }
-async function showApp(id) {
-  const a=await api(`/api/apps/${id}`);if(activeApp!==id)$("app-output").replaceChildren();activeApp=id;
+async function showApp(id,pid=$("project-select").value) {
+  if(pid !== $("project-select").value)return false;
+  clearApp();const generation=appSelectionGeneration;
+  const a=await api(`/api/apps/${id}`);
+  if(generation !== appSelectionGeneration || pid !== $("project-select").value)return false;
+  if(a.project_id !== pid)throw Error("候选不属于当前项目，请重新选择");
+  activeApp=id;activeAppProject=pid;
+  const origin=a.candidate.generation;
+  if(origin){
+    $("app-origin").textContent=`来源：${a.candidate.goal.title} · 目标 v${origin.goal_version} · MOCK固定CSV能力 · 0模型请求 · 结构/依赖校验通过 · 目标条件尚未验收 · 未发布`;
+    const labels={title:"名称",goal:"目标",known:"已知",assumptions:"假设",unresolved:"未决项",constraints:"硬条件",acceptance_checks:"验收检查"};
+    $("app-frozen-goal").hidden=false;
+    $("app-frozen-goal-text").textContent=`冻结来源 v${origin.goal_version}，目标修订不改变此快照。\n\n`+goalCardFields.map(f=>`${labels[f]}：\n${Array.isArray(a.candidate.goal[f]) ? a.candidate.goal[f].join("\n") : a.candidate.goal[f]}`).join("\n\n");
+    $("app-back-goal").hidden=false;
+    $("app-back-goal").onclick=safe(async()=>{
+      if(pid !== $("project-select").value)return;
+      clearApp();selectWorkspace("projects");await showGoalCard(origin.goal_card_id,pid);
+    });
+  }
   $("app-title").textContent=`${a.name} · 未发布`;
   $("app-preview-form").hidden=false;
   const previous=$("app-column").value, guidance=a.input_guidance;
@@ -110,6 +132,7 @@ async function showApp(id) {
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
   $("app-history").replaceChildren(...a.history.map(r=>row(`${new Date(r.created_at*1000).toLocaleString()} · ${r.input.column || "无效输入"} · ${r.status} · ${r.id.slice(0,16)}`,()=>{$("app-output").replaceChildren(row(`历史记录 · ${previewText(r)}`));},"回读历史")));
   if(!a.history.length)$("app-history").textContent="尚无预览。请选择 CSV 中的数值列。";
+  return true;
 }
 $("app-form").onsubmit=safe(async()=>{
   const pid=$("project-select").value,rid=$("app-resource").value;
@@ -118,11 +141,11 @@ $("app-form").onsubmit=safe(async()=>{
   await refresh();await showApp(a.id);$("app-output").replaceChildren(row("草案已保存，请选择可用数值列运行新预览。"));
 });
 $("app-preview-form").onsubmit=safe(async()=>{
-  if(!activeApp)throw new Error("先打开一个草案");
+  if(!activeApp || activeAppProject !== $("project-select").value)throw new Error("先打开当前项目的草案");
   const id=activeApp;$("app-preview-submit").disabled=true;
   try {
     const r=await api(`/api/apps/${id}/previews`,"POST",{input:{column:$("app-column").value},request_key:crypto.randomUUID()});
-    if(activeApp===id){await showApp(id);$("app-output").replaceChildren(row(`${previewText(r)} · ${r.id.slice(0,16)}`));}
+    if(activeApp===id && await showApp(id)){if(activeApp===id)$("app-output").replaceChildren(row(`${previewText(r)} · ${r.id.slice(0,16)}`));}
   } finally {$("app-preview-submit").disabled=!$("app-column").value;}
 });
 
@@ -130,9 +153,13 @@ $("app-preview-form").onsubmit=safe(async()=>{
 const goalCardFields=["title","goal","known","assumptions","unresolved","constraints","acceptance_checks"];
 function updateGoalCardSave() {
   $("goal-card-save").disabled=goalCardLoading || goalCardSaving;
+  updateCandidateCreate();
 }
 function clearGoalCard() {
-  goalSelectionGeneration++;goalCardLoading=false;updateGoalCardSave();
+  goalSelectionGeneration++;candidateSelectionGeneration++;candidatePanelReady=false;
+  $("goal-candidate-form").hidden=true;$("goal-candidate-list").replaceChildren();
+  $("goal-candidate-status").textContent="先打开已保存目标卡。";
+  goalCardLoading=false;updateGoalCardSave();
   activeGoalCard=null;$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
   $("goal-card-history").replaceChildren();$("goal-card-history-detail").textContent="";
 }
@@ -166,6 +193,7 @@ async function showGoalCard(id, pid=$("project-select").value) {
   $("goal-card-status").textContent=`草案 v${card.version} · 未验收/不可执行 · 保存将建立新版本`;
   $("goal-card-history-detail").textContent="";
   $("goal-card-history").replaceChildren(...card.history.map(v=>row(`v${v.version} · ${v.snapshot.content.title}`,()=>{const labels={title:"名称",goal:"目标",known:"已知",assumptions:"假设",unresolved:"未决项",constraints:"硬条件",acceptance_checks:"验收检查"};$("goal-card-history-detail").textContent=goalCardFields.map(f=>`${labels[f]}：\n${Array.isArray(v.snapshot.content[f]) ? v.snapshot.content[f].join("\n") : v.snapshot.content[f]}`).join("\n\n")+`\n\n绑定材料 ${v.snapshot.resource_snapshots.length} 份 · 只读历史版本 v${v.version}`;},"回看版本")));
+  await refreshGoalCandidates(id,pid,generation);
 }
 $("goal-card-new").onclick=clearGoalCard;
 $("goal-card-form").onsubmit=safe(async()=>{
@@ -183,4 +211,63 @@ $("goal-card-form").onsubmit=safe(async()=>{
     if(generation !== goalSelectionGeneration || pid !== $("project-select").value)return;
     await showGoalCard(result.id,pid);
   } finally {goalCardSaving=false;updateGoalCardSave();}
+});
+
+
+function selectWorkspace(id) {
+  ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
+}
+function updateCandidateCreate() {
+  $("goal-candidate-create").disabled=candidateBusy || !candidatePanelReady || goalCardLoading || goalCardSaving;
+}
+async function refreshGoalCandidates(id,pid,generation) {
+  const selection=candidateSelectionGeneration;
+  const current=()=>generation === goalSelectionGeneration && selection === candidateSelectionGeneration && activeGoalCard?.id === id && pid === $("project-select").value;
+  try {
+    const options=await api(`/api/goal-cards/${id}/candidate-options`);
+    if(!current())return;
+    $("goal-candidate-list").replaceChildren(...options.items.map(item=>row(`${item.name} · 来源 v${item.goal_version} · MOCK未发布候选`,async()=>{
+      if(pid === $("project-select").value && await showApp(item.id,pid))selectWorkspace("apps");
+    },"打开候选预览")));
+    if(options.goal_version !== activeGoalCard.version){$("goal-candidate-status").textContent="目标卡已更新，请重新打开后创建候选。";return;}
+    $("goal-candidate-resource").replaceChildren(...options.materials.map(m=>new Option(m.name,m.id)));
+    $("goal-candidate-capability").replaceChildren(...options.capabilities.map(c=>new Option(`${c.name}（MOCK固定能力）`,c.id)));
+    candidatePanelReady=!!options.materials.length && !!options.capabilities.length;
+    $("goal-candidate-form").hidden=!candidatePanelReady;
+    $("goal-candidate-status").textContent=candidatePanelReady ? `将使用已保存目标 v${activeGoalCard.version}；未保存编辑不纳入候选。` : "本切片仅支持数值列求和，请在目标卡绑定并保存CSV材料。";
+  } catch(e) {
+    if(current())$("goal-candidate-status").textContent=`候选选项不可用：${e.message}。保留目标编辑，可处理授权后重新打开。`;
+  } finally {updateCandidateCreate();}
+}
+$("goal-candidate-cancel").onclick=()=>{
+  candidateSelectionGeneration++;candidatePanelReady=false;$("goal-candidate-form").hidden=true;
+  $("goal-candidate-status").textContent=candidateBusy ? "已返回编辑。请求若已接受，候选仍保留在应用草案；不会自动打开。" : "已取消选择，未创建候选；可重新打开目标卡再选择。";
+  updateCandidateCreate();
+};
+$("goal-candidate-form").onsubmit=safe(async()=>{
+  if(candidateBusy || !candidatePanelReady || goalCardLoading || goalCardSaving)return;
+  const card=activeGoalCard,pid=$("project-select").value;
+  if(!card || card.project_id !== pid)throw Error("先打开当前项目的已保存目标卡");
+  const rid=$("goal-candidate-resource").value,capability=$("goal-candidate-capability").value;
+  if(!rid || capability !== "csv.sum")throw Error("请选择已绑定CSV和可信求和能力");
+  const binding=JSON.stringify([card.id,card.version,rid,capability]);
+  if(!candidateRequestKeys.has(binding))candidateRequestKeys.set(binding,crypto.randomUUID());
+  if(candidateRequestKeys.size>50)candidateRequestKeys.delete(candidateRequestKeys.keys().next().value);
+  const generation=goalSelectionGeneration,selection=candidateSelectionGeneration;
+  const current=()=>generation === goalSelectionGeneration && selection === candidateSelectionGeneration && activeGoalCard?.id === card.id && pid === $("project-select").value;
+  candidateBusy=true;updateCandidateCreate();$("goal-candidate-status").textContent="正在保存MOCK候选；不会调用真实模型。";
+  try {
+    const candidate=await api(`/api/goal-cards/${card.id}/candidates`,"POST",{expected_version:card.version,resource_id:rid,capability,request_key:candidateRequestKeys.get(binding)});
+    if(!current())return;
+    await refreshGoalCandidates(card.id,pid,generation);
+    if(!current())return;
+    await refreshApps();
+    if(!current())return;
+    if(await showApp(candidate.id,pid)){
+      if(!current()){clearApp();return;}
+      selectWorkspace("apps");$("app-output").replaceChildren(row("MOCK候选已保存。选择数值列运行预览；目标条件尚未验收，未发布。"));
+    }
+  } catch(e) {
+    if(current())$("goal-candidate-status").textContent=`候选未打开：${e.message}。已保留编辑；可重试同一请求，或重新打开目标卡核对版本/候选列表。`;
+  } finally {candidateBusy=false;updateCandidateCreate();}
 });
