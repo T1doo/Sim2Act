@@ -55,14 +55,21 @@ def main():
     child_env = application_environment(settings)
     # Diagnose launcher/OS failures without disclosing configuration values.
     probe = subprocess.run(
-        [str(root / ".venv" / "Scripts" / "python.exe"), "-c", "print('runtime-python-ready')"],
+        [
+            str(root / ".venv" / "Scripts" / "python.exe"), "-c",
+            "from sim2act.config import Settings; from sim2act.db import Store; "
+            "from sqlalchemy import text; "
+            "s=Settings.from_env(); engine=Store(s.database_url).engine; "
+            "c=engine.connect(); c.execute(text('SELECT 1')); c.close(); engine.dispose(); "
+            "print('runtime-python-ready')",
+        ],
         cwd=root, env=child_env, capture_output=True, text=True, encoding="utf-8", timeout=15,
     )
     if probe.returncode or probe.stdout.strip() != "runtime-python-ready":
         raise RuntimeError(
             f"Runtime Python probe failed (exit {probe.returncode}); "
             f"environment names={sorted(child_env)}; "
-            f"diagnostic={probe.stdout}{probe.stderr}"
+            "diagnostic values suppressed"
         )
     os.environ.clear()
     os.environ.update(child_env)

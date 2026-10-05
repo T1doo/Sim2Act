@@ -17,5 +17,5 @@ function Get-Sim2ActPython {
 function Invoke-Sim2ActPython([string[]] $Arguments) {
     $python = Get-Sim2ActPython
     & $python @Arguments
-    if ($LASTEXITCODE -ne 0) { throw 'Command failed; inspect local diagnostics.' }
+    if ($LASTEXITCODE -ne 0) { throw "Command failed (exit $LASTEXITCODE); inspect local diagnostics." }
 }
