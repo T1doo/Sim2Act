@@ -174,3 +174,7 @@ require_escalated正式审批允许同一origin读取/fetch，远端确认df31fe
 920527e成功普通push，run37314684783/job111778335745终态FAIL：Setup PASS，Doctor调用在Common.ps1报告子命令失败，Stop同样失败；smoke FAIL，工程回归SKIPPED，Report/Cleanup PASS。现有日志缺Python实际退出码，暂不推断环境隔离根因。新增仅固定print的运行时Python启动探针，失败仅输出退出码/环境变量名及固定探针诊断，不输出配置值；PowerShell失败附退出码。ruff/mypy/diff通过，提交后继续精确版本CI。未放宽白名单/隔离或删除失败证据。
 
 诊断run37315070121/e204187终态FAIL：隔离Python固定print探针已通过，故不能把故障归为Python本体不能启动；Doctor/Stop仍在Common失败，Setup/Report/Cleanup成功，pytest跳过。下一有界诊断扩展为同应用角色SELECT1且错误值抑制，Common只增加实际native退出码，不放宽环境或权限。
+
+## 2026-10-05 / Windows PowerShell PATHEXT缺口修复
+
+run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探针PASS，Doctor/Stop的native LASTEXITCODE为空而非数字；Setup/Report/Cleanup成功。白名单缺PATHEXT，与Microsoft PowerShell about_Environment_Variables中未列扩展会新控制台启动的行为一致（https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables?view=powershell-7.6）。仅补必要系统变量PATHEXT，不转发owner/test/CI凭据。两配置子进程断言保留PATHEXT；新增实际Windows PowerShell启动Python、同步stdout/退出码专项，Linux明确SKIP。ruff/mypy14模块/diff通过；Server复跑结果待定，不预写成功。

@@ -34,7 +34,7 @@ def test_actual_child_has_only_application_config_and_system_names(tmp_path, liv
         run_seconds=60,
     )
     source = {key: "SYNTHETIC private value" for key in FORBIDDEN}
-    source.update({"HTTPS_PROXY": "http://synthetic-proxy.invalid:8080", "NO_PROXY": "localhost,127.0.0.1"})
+    source.update({"HTTPS_PROXY": "http://synthetic-proxy.invalid:8080", "NO_PROXY": "localhost,127.0.0.1", "PATHEXT": ".COM;.EXE;.BAT;.CMD"})
     source.update(
         {
             key: os.environ[key]
@@ -54,6 +54,7 @@ assert s.quota_subject=='SYNTHETIC quota' and s.rpm==7
 assert (s.max_requests,s.max_tools,s.max_repairs,s.max_total_tokens,s.max_output_tokens,s.run_seconds)==(2,3,0,1000,100,60)
 assert bool(s.token)==s.live_enabled==(s.mode=='live')
 assert os.environ['HTTPS_PROXY']=='http://synthetic-proxy.invalid:8080' and os.environ['NO_PROXY']=='localhost,127.0.0.1'
+assert os.environ['PATHEXT']=='.COM;.EXE;.BAT;.CMD'
 print(json.dumps({'environment_names':sorted(os.environ),'configuration_valid':True}))
 """,
         ],
@@ -67,6 +68,26 @@ print(json.dumps({'environment_names':sorted(os.environ),'configuration_valid':T
     result = json.loads(child.stdout)
     assert result["configuration_valid"] and not FORBIDDEN & set(result["environment_names"])
     assert "INTERN_API_TOKEN" not in result["environment_names"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Actual Windows PowerShell native launch required")
+def test_isolated_powershell_waits_for_python_output_and_exit_code(tmp_path):
+    script = tmp_path / "native-launch.ps1"
+    script.write_text(
+        'param([string] $Python)\n'
+        '& $Python -c "print(\'native-ready\')"\n'
+        'if ($null -eq $LASTEXITCODE) { throw "Native exit code missing" }\n'
+        'exit $LASTEXITCODE\n',
+        encoding="utf-8",
+    )
+    settings = Settings("postgresql+psycopg://synthetic-app@127.0.0.1/fixture", tmp_path)
+    child = subprocess.run(
+        ["pwsh", "-NoProfile", "-File", str(script), "-Python", sys.executable],
+        env=application_environment(settings), capture_output=True, text=True, timeout=15,
+    )
+    assert child.returncode == 0 and child.stdout.strip() == "native-ready", (
+        "Isolated PowerShell did not capture the native Python result (values suppressed)"
+    )
 
 
 def test_actual_child_application_role_cannot_use_owner_permissions(env, runtime_role):

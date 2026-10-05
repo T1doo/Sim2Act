@@ -7,6 +7,8 @@ from sim2act.config import Settings
 
 SYSTEM_VARIABLES = (
     "PATH",
+    # PowerShell needs PATHEXT to run .exe in the current console and obtain its exit code.
+    "PATHEXT",
     "SystemRoot",
     "WINDIR",
     "COMSPEC",
