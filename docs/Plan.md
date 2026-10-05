@@ -31,3 +31,5 @@
 第二工程增量：[契约语义](F1/Contracts.md)、[人工核对](F1/Reconciliation.md)、[实际检查与离线探针](evidence/F1-2-TestReport.md)。64 项 PostgreSQL 工程检查通过；LIVE/Windows 和完整发布门仍未通过。
 
 第二增量工程源码提交：[637cca9](https://github.com/T1doo/Sim2Act/commit/637cca93aeb7022cb1062c73bb43ff40cab9c29d)。
+
+第三工程增量：[F1/F2边界与验证前置](F1/Scope.md)、[90项回归及账本证据](evidence/F1-3-TestReport.md)。最小候选预检、手动Run冻结、可信本地未知效果核对完成；F1整体仍IN_PROGRESS，等待真实账号/原生环境及相关验收，F2能力未提前实施。

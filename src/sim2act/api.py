@@ -7,9 +7,17 @@ from pydantic import Field
 from sqlalchemy import select, update
 
 from .config import Settings
-from .contracts import Strict, resource_id, strict_json, validate_action, validate_action_input
-from .db import Store, grants, heartbeats, projects, resources, runs
+from .contracts import (
+    Limits,
+    Strict,
+    resource_id,
+    strict_json,
+    validate_action,
+    validate_action_input,
+)
+from .db import Store, fingerprint, grants, heartbeats, projects, resources, runs
 from .errors import DomainError
+from .preflight import preflight
 
 
 class ProjectInput(Strict):
@@ -49,9 +57,22 @@ class ContractInput(Strict):
     input: dict | None = None
 
 
+class PreflightInput(Strict):
+    manifest: dict
+    actions: list[dict] = Field(max_length=16)
+
+
+class OperationReconcileInput(Strict):
+    operation_id: str = Field(pattern=r"^op_[a-f0-9]{32}$")
+    version: int = Field(ge=1)
+    expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    evidence: str = Field(min_length=1, max_length=1000)
+
+
 def create_app(store=None, settings=None):
     s = settings or Settings.from_env()
     db = store or Store(s.database_url)
+    platform_limits = Limits(**{key: getattr(s, key) for key in Limits.model_fields})
     app = FastAPI(title="Sim2Act F1", docs_url=None, redoc_url=None)
 
     @app.middleware("http")
@@ -181,7 +202,18 @@ def create_app(store=None, settings=None):
         for rid in body.resource_refs:
             resource_id(rid)
         return {
-            "run_id": db.submit(user, pid, body.goal, body.resource_refs, body.request_key),
+            "run_id": db.submit(
+                user,
+                pid,
+                body.goal,
+                body.resource_refs,
+                body.request_key,
+                policy={
+                    "limits": platform_limits.model_dump(),
+                    "mode": s.mode,
+                    "request_model": s.model,
+                },
+            ),
             "mode": s.mode.upper(),
         }
 
@@ -236,6 +268,37 @@ def create_app(store=None, settings=None):
             "execution_performed": False,
             "action": action.model_dump(),
         }
+
+    @app.post("/api/projects/{pid}/contracts/preflight")
+    def preflight_contract(pid: str, body: PreflightInput, user=user_dependency):
+        import json
+
+        manifest, report = preflight(json.dumps(body.manifest), body.actions, platform_limits)
+        with db.tx() as c:
+            project = db.own_project(c, user, pid)
+            for rid in report["resource_refs"]:
+                db.authorize(c, user, project["runtime_id"], pid, rid, "resource.read")
+            for requirement in manifest.permission_requirements:
+                db.authorize(
+                    c,
+                    user,
+                    project["runtime_id"],
+                    pid,
+                    requirement.resource_ref,
+                    requirement.tool_ref,
+                )
+        report["candidate_fingerprint"] = fingerprint(
+            {"manifest": report.pop("candidate_fingerprint_basis"), "actions": body.actions}
+        )
+        return report
+
+    @app.get("/api/runs/{rid}/unresolved-operations")
+    def unresolved_operations(rid: str, user=user_dependency):
+        return db.unresolved_operations(user, rid)
+
+    @app.post("/api/runs/{rid}/reconcile-operation")
+    def reconcile_operation(rid: str, body: OperationReconcileInput, user=user_dependency):
+        return db.reconcile_operation(user, rid, **body.model_dump())
 
     @app.get("/api/projects/{pid}/grants")
     def list_grants(pid: str, user=user_dependency):

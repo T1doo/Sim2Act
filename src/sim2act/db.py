@@ -23,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError
 
+from .contracts import FrozenRunContract, GoalSpec, Limits, ResourceSnapshot
 from .errors import DomainError
 
 meta = MetaData()
@@ -86,6 +87,27 @@ runs = Table(
     Column("version", Integer, default=1),
     UniqueConstraint("principal_id", "project_id", "request_key"),
 )
+run_contracts = Table(
+    "run_contracts",
+    meta,
+    Column("run_id", String, primary_key=True),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+)
+operation_intents = Table(
+    "operation_intents",
+    meta,
+    Column("operation_id", String, primary_key=True),
+    Column("request", JSON, nullable=False),
+)
+local_effects = Table(
+    "local_effects",
+    meta,
+    Column("operation_id", String, primary_key=True),
+    Column("resource_id", String, unique=True, nullable=False),
+    Column("content_hash", String, nullable=False),
+)
+
 events = Table(
     "events",
     meta,
@@ -320,8 +342,22 @@ class Store:
             )
         )
 
-    def submit(self, principal, project_id, goal, refs, key):
-        fp = fingerprint({"goal": goal, "resource_refs": refs})
+    def submit(self, principal, project_id, goal, refs, key, *, policy=None):
+        policy = policy or {
+            "limits": Limits(
+                max_requests=4,
+                max_tools=4,
+                max_repairs=1,
+                max_total_tokens=64000,
+                max_output_tokens=1024,
+                run_seconds=300,
+            ).model_dump(),
+            "mode": "mock",
+            "request_model": "intern-s2",
+        }
+        if len(set(refs)) != len(refs):
+            raise DomainError("INVALID_INPUT", "Duplicate input resource")
+        fp = fingerprint({"goal": goal, "resource_refs": refs, "policy": policy})
         try:
             with self.tx() as c:
                 p = self.own_project(c, principal, project_id)
@@ -345,6 +381,38 @@ class Store:
                         )
                     return old["id"]
                 rid = new_id("run")
+                snapshot = FrozenRunContract(
+                    run_id=rid,
+                    runtime_id=p["runtime_id"],
+                    contract_version="F1.3",
+                    goal=GoalSpec(
+                        goal_id=new_id("goal"),
+                        project_id=project_id,
+                        owner_id=principal,
+                        goal=goal,
+                        constraints=[],
+                        acceptance_version="F1-tool-chain.v1",
+                        resource_refs=refs,
+                        unresolved=["Semantic goal acceptance NOT_RUN"],
+                    ),
+                    resources=[
+                        ResourceSnapshot(
+                            resource_id=r["id"],
+                            revision=1,
+                            content_hash=r["hash"],
+                            format=r["format"],
+                        )
+                        for r in c.execute(
+                            select(resources).where(resources.c.id.in_(refs))
+                        ).mappings()
+                    ],
+                    **policy,
+                ).model_dump()
+                c.execute(
+                    insert(run_contracts).values(
+                        run_id=rid, snapshot=snapshot, fingerprint=fingerprint(snapshot)
+                    )
+                )
                 c.execute(
                     insert(runs).values(
                         id=rid,
@@ -374,7 +442,7 @@ class Store:
                 return rid
         except IntegrityError:
             # Concurrent duplicate submit: read winner; never create a second operation.
-            return self.submit(principal, project_id, goal, refs, key)
+            return self.submit(principal, project_id, goal, refs, key, policy=policy)
 
     def guard(self, c, run_id, fence):
         r = c.execute(select(runs).where(runs.c.id == run_id).with_for_update()).mappings().one()
@@ -384,7 +452,52 @@ class Store:
             or r["status"] not in {"RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"}
         ):
             raise DomainError("VERSION_CONFLICT", "Stale worker lease")
+        self.frozen_contract(c, r)
         return dict(r)
+
+    def frozen_contract(self, c, run):
+        saved = (
+            c.execute(select(run_contracts).where(run_contracts.c.run_id == run["id"]))
+            .mappings()
+            .first()
+        )
+        if not saved or fingerprint(saved["snapshot"]) != saved["fingerprint"]:
+            raise DomainError(
+                "VERSION_CONFLICT",
+                "Missing or modified frozen Run contract; legacy runs require explicit closure",
+            )
+        contract = FrozenRunContract.model_validate(saved["snapshot"])
+        goal = contract.goal
+        if (
+            contract.run_id != run["id"]
+            or contract.runtime_id != run["runtime_id"]
+            or goal.goal != run["goal"]
+            or goal.resource_refs != run["resource_refs"]
+            or goal.project_id != run["project_id"]
+            or goal.owner_id != run["principal_id"]
+        ):
+            raise DomainError("VERSION_CONFLICT", "Run no longer matches frozen goal")
+        for item in contract.resources:
+            current = (
+                c.execute(
+                    select(resources).where(
+                        resources.c.id == item.resource_id,
+                        resources.c.project_id == run["project_id"],
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                not current
+                or current["hash"] != item.content_hash
+                or current["format"] != item.format
+                or hashlib.sha256(current["content"].encode()).hexdigest() != item.content_hash
+            ):
+                raise DomainError(
+                    "VERSION_CONFLICT", "Input resource no longer matches frozen snapshot"
+                )
+        return contract
 
     def claim(self, worker_id, lease_seconds):
         now = time.time()
@@ -417,7 +530,7 @@ class Store:
                 op = c.execute(
                     select(operations.c.id).where(
                         operations.c.run_id == r["id"],
-                        operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN"]),
+                        operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN", "RECEIPT_KNOWN"]),
                     )
                 ).first()
                 state = (
@@ -509,7 +622,59 @@ class Store:
                 "result": r["result"],
                 "error": r["error"],
                 "events": [dict(x) for x in ev],
+                "contract": self.contract_metadata(c, r),
+                "known_effects": self.known_effects(c, run_id),
             }
+
+    def contract_metadata(self, c, run):
+        saved = (
+            c.execute(select(run_contracts).where(run_contracts.c.run_id == run["id"]))
+            .mappings()
+            .first()
+        )
+        return (
+            {"snapshot": saved["snapshot"], "fingerprint": saved["fingerprint"]}
+            if saved
+            else {"state": "LEGACY_UNFROZEN"}
+        )
+
+    def known_effects(self, c, run_id):
+        return [
+            dict(x)
+            for x in c.execute(
+                select(
+                    operations.c.id,
+                    operations.c.tool_ref,
+                    operations.c.status,
+                    local_effects.c.resource_id,
+                    local_effects.c.content_hash,
+                )
+                .select_from(
+                    operations.outerjoin(
+                        local_effects, operations.c.id == local_effects.c.operation_id
+                    )
+                )
+                .where(
+                    operations.c.run_id == run_id,
+                    operations.c.status.in_(["VERIFIED", "EFFECT_KNOWN_INVALID"]),
+                )
+            ).mappings()
+        ]
+
+    def has_unknown(self, c, run_id):
+        return bool(
+            c.execute(
+                select(attempts.c.id).where(
+                    attempts.c.run_id == run_id, attempts.c.status == "STARTED"
+                )
+            ).first()
+            or c.execute(
+                select(operations.c.id).where(
+                    operations.c.run_id == run_id,
+                    operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN", "RECEIPT_KNOWN"]),
+                )
+            ).first()
+        )
 
     def authorize_receipts(self, c, run):
         receipts = (
@@ -558,11 +723,7 @@ class Store:
                 "WAITING_RESOURCE",
                 "RECONCILING",
             }:
-                pending = c.execute(
-                    select(attempts.c.id).where(
-                        attempts.c.run_id == run_id, attempts.c.status == "STARTED"
-                    )
-                ).first()
+                pending = self.has_unknown(c, run_id)
                 state = (
                     "CANCEL_REQUESTED"
                     if state == "RUNNING"
@@ -575,11 +736,9 @@ class Store:
                     self.authorize(
                         c, principal, r["runtime_id"], r["project_id"], rid, "resource.read"
                     )
-                if c.execute(
-                    select(attempts.c.id).where(
-                        attempts.c.run_id == run_id, attempts.c.status == "STARTED"
-                    )
-                ).first():
+                self.frozen_contract(c, r)
+                self.authorize_receipts(c, r)
+                if self.has_unknown(c, run_id):
                     raise DomainError(
                         "OUTCOME_UNKNOWN", "Unresolved model attempt needs operator reconciliation"
                     )
@@ -694,7 +853,7 @@ class Store:
             unknown_ops = c.execute(
                 select(operations.c.id).where(
                     operations.c.run_id == run_id,
-                    operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN"]),
+                    operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN", "RECEIPT_KNOWN"]),
                 )
             ).first()
             if unknown_ops:
@@ -736,8 +895,9 @@ class Store:
                         "MODEL_OUTPUT_INVALID",
                         "Recovered response model does not match attempt mode",
                     )
+                contract = self.frozen_contract(c, run)
                 message, calls = parse_response(response)
-                if len(calls) + ctx["tools"] > 4:
+                if len(calls) + ctx["tools"] > contract.limits.max_tools:
                     raise DomainError("BUDGET_EXHAUSTED")
                 ctx["messages"] = [*ctx["messages"], message]
                 c.execute(
@@ -790,4 +950,187 @@ class Store:
                 "version": version + 1,
                 "tools_dispatched": 0,
                 "usage": attempt["usage"],
+            }
+
+    def unresolved_operations(self, principal, run_id):
+        with self.tx() as c:
+            run = (
+                c.execute(select(runs).where(runs.c.id == run_id, runs.c.principal_id == principal))
+                .mappings()
+                .first()
+            )
+            if not run:
+                raise DomainError("PERMISSION_DENIED")
+            return [
+                dict(x)
+                for x in c.execute(
+                    select(
+                        operations.c.id,
+                        operations.c.tool_ref,
+                        operations.c.status,
+                        operations.c.fingerprint,
+                    ).where(
+                        operations.c.run_id == run_id,
+                        operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN", "RECEIPT_KNOWN"]),
+                    )
+                ).mappings()
+            ]
+
+    def reconcile_operation(
+        self, principal, run_id, operation_id, version, expected_fingerprint, evidence
+    ):
+        from .tools import reconcile_readback
+
+        with self.tx() as c:
+            run = (
+                c.execute(
+                    select(runs)
+                    .where(runs.c.id == run_id, runs.c.principal_id == principal)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if not run:
+                raise DomainError("PERMISSION_DENIED")
+            self.own_project(c, principal, run["project_id"])
+            if run["version"] != version or run["status"] not in {
+                "WAITING_RESOURCE",
+                "RECONCILING",
+            }:
+                raise DomainError("VERSION_CONFLICT")
+            op = (
+                c.execute(
+                    select(operations)
+                    .where(operations.c.id == operation_id, operations.c.run_id == run_id)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if not op or op["status"] not in {"DISPATCHED", "OUTCOME_UNKNOWN", "RECEIPT_KNOWN"}:
+                raise DomainError("VERSION_CONFLICT")
+            if (
+                not evidence.strip()
+                or not op["fingerprint"]
+                or expected_fingerprint != op["fingerprint"]
+            ):
+                raise DomainError(
+                    "INVALID_INPUT", "Exact operation fingerprint and evidence note required"
+                )
+            status, receipt = reconcile_readback(self, c, run, op)
+            ctx = dict(run["context"])
+            if status == "VERIFIED":
+                # Recover feedback only to the original recorded assistant intent.
+                matching = [
+                    call
+                    for message in ctx["messages"]
+                    if message["role"] == "assistant"
+                    for call in message.get("tool_calls", [])
+                    if call["id"] == op["call_id"]
+                ]
+                if len(matching) != 1:
+                    raise DomainError("VERSION_CONFLICT", "No unique recorded tool call")
+                call = matching[0]
+                intent = {
+                    "tool": call["function"]["name"],
+                    "args": json.loads(call["function"]["arguments"]),
+                }
+                if fingerprint(intent) != op["fingerprint"]:
+                    raise DomainError("VERSION_CONFLICT", "Tool context changed")
+                feedback = {
+                    "role": "tool",
+                    "tool_call_id": op["call_id"],
+                    "content": json.dumps(receipt, ensure_ascii=False),
+                }
+                messages = list(ctx["messages"])
+                existing = [
+                    index
+                    for index, message in enumerate(messages)
+                    if message["role"] == "tool" and message.get("tool_call_id") == op["call_id"]
+                ]
+                if len(existing) > 1:
+                    raise DomainError("VERSION_CONFLICT", "Duplicate tool feedback")
+                if existing:
+                    messages[existing[0]] = feedback
+                else:
+                    position = (
+                        next(
+                            index
+                            for index, message in enumerate(messages)
+                            if message["role"] == "assistant"
+                            and any(
+                                call["id"] == op["call_id"]
+                                for call in message.get("tool_calls", [])
+                            )
+                        )
+                        + 1
+                    )
+                    while position < len(messages) and messages[position]["role"] == "tool":
+                        position += 1
+                    messages.insert(position, feedback)
+                ctx["messages"] = messages
+            c.execute(
+                update(operations)
+                .where(operations.c.id == operation_id)
+                .values(status=status, receipt=receipt if status == "VERIFIED" else op["receipt"])
+            )
+            known_count = len(
+                c.execute(
+                    select(operations.c.id).where(
+                        operations.c.run_id == run_id,
+                        operations.c.status.in_(["VERIFIED", "EFFECT_KNOWN_INVALID"]),
+                    )
+                ).all()
+            )
+            ctx["tools"] = max(ctx["tools"], known_count)
+            if self.has_unknown(c, run_id):
+                state = "RECONCILING" if run["cancel_intent"] else "WAITING_RESOURCE"
+            else:
+                invalid = c.execute(
+                    select(operations.c.id).where(
+                        operations.c.run_id == run_id, operations.c.status == "EFFECT_KNOWN_INVALID"
+                    )
+                ).first()
+                state = "CANCELLED" if run["cancel_intent"] else "FAILED" if invalid else "PAUSED"
+            c.execute(
+                update(runs)
+                .where(runs.c.id == run_id)
+                .values(
+                    status=state,
+                    context=ctx,
+                    fence=run["fence"] + 1,
+                    lease_until=0,
+                    version=version + 1,
+                    error={
+                        "code": "OUTCOME_UNKNOWN"
+                        if status == "OUTCOME_UNKNOWN"
+                        else "VERIFICATION_FAILED"
+                    }
+                    if status != "VERIFIED"
+                    else None,
+                )
+            )
+            self.event(
+                c,
+                run_id,
+                "OPERATION_RECONCILED",
+                {
+                    "operation_id": operation_id,
+                    "status": status,
+                    "request_fingerprint": expected_fingerprint,
+                    "principal_id": principal,
+                    "evidence_note": evidence,
+                    "provenance": "TRUSTED_LOCAL_READBACK"
+                    if status != "OUTCOME_UNKNOWN"
+                    else "UNCONFIRMED",
+                    "tools_dispatched": 0,
+                },
+            )
+            return {
+                "status": state,
+                "operation_status": status,
+                "version": version + 1,
+                "tools_dispatched": 0,
+                "known_effects": self.known_effects(c, run_id),
             }

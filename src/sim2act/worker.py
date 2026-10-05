@@ -3,6 +3,7 @@ import json
 import signal
 import threading
 import time
+from dataclasses import replace
 
 from sqlalchemy import insert, select, update
 
@@ -123,6 +124,8 @@ class Worker:
                 state = "CANCELLED"
             elif run["status"] == "PAUSE_REQUESTED":
                 state = "PAUSED"
+            if self.store.has_unknown(c, run_id):
+                state = "RECONCILING" if run["cancel_intent"] else "WAITING_RESOURCE"
             if state in {"SUCCEEDED", "PARTIAL"}:
                 for rid in run["resource_refs"]:
                     self.store.authorize(
@@ -149,6 +152,17 @@ class Worker:
 
     def process(self, run):
         rid, fence = run["id"], run["fence"]
+        with self.store.tx() as c:
+            contract = self.store.frozen_contract(c, run)
+        if contract.mode != self.s.mode or contract.request_model != self.s.model:
+            raise DomainError("VERSION_CONFLICT", "Worker model policy differs from frozen request")
+        self.s = replace(
+            self.s,
+            **{
+                key: min(getattr(self.s, key), value)
+                for key, value in contract.limits.model_dump().items()
+            },
+        )
         ctx = dict(run["context"])
         ctx["messages"] = list(ctx["messages"])
         if not ctx["messages"]:
@@ -334,7 +348,8 @@ class Worker:
         except DomainError as e:
             state = (
                 "WAITING_RESOURCE"
-                if e.code in {"GRANT_REVOKED", "RESOURCE_UNAVAILABLE", "RATE_LIMITED"}
+                if e.code
+                in {"GRANT_REVOKED", "RESOURCE_UNAVAILABLE", "RATE_LIMITED", "OUTCOME_UNKNOWN"}
                 else "FAILED"
             )
             try:
@@ -349,7 +364,21 @@ class Worker:
         self.store.heartbeat(self.id)
         run = self.store.claim(self.id, self.s.lease_seconds)
         if run:
-            self.process(run)
+            original = self.s
+            try:
+                self.process(run)
+            except DomainError as e:
+                with self.store.tx() as c:
+                    current = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
+                    if current["fence"] == run["fence"]:
+                        c.execute(
+                            update(runs)
+                            .where(runs.c.id == run["id"])
+                            .values(status="FAILED", error=e.public(), lease_until=0)
+                        )
+                        self.store.event(c, run["id"], "CONTRACT_REJECTED", e.public())
+            finally:
+                self.s = original
         return run is not None
 
 

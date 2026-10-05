@@ -85,3 +85,11 @@ python3.12 -m venv .venv
 安装既有锁定依赖后，可运行 `python -m sim2act.cli probe --output offline-report.json`。命令在读取环境配置之前执行，用临时工程库及固定 MockTransport 检查适配器/工具反馈和错误分支，不读取账号、不产生外部请求；模型列表明确 SYNTHETIC，LIVE 仍 BLOCKED。请将报告输出到本地数据目录，避免提交运行数据。
 
 未知模型请求在项目成果画布提供人工核对：记录已有完整响应后保持暂停，需另点“继续”；无法确认时结束任务，保留未知用量和已有效果。依据必须对应原请求指纹；不会靠自动重试抹掉未知请求。详见 [核对规则](docs/F1/Reconciliation.md)、[候选契约校验](docs/F1/Contracts.md) 和 [实测证据](docs/evidence/F1-2-TestReport.md)。
+
+## F1-3 升级与阶段边界
+
+升级既有数据库前先 Stop API/worker；通过已配置的**迁移角色**显式执行 migrate（沿用上文 migration.env / Setup -InitializeDatabase），仅创建新增 run_contracts、operation_intents、local_effects 三表。管理员给运行角色这些表的 SELECT/INSERT/UPDATE/DELETE，再 Doctor/Start；运行角色不做 DDL。没有新凭据发现或自动迁移。
+
+历史任务没有冻结快照时显示 LEGACY_UNFROZEN，不能悄悄按当前内容恢复执行；不要删除旧记录，可明确结束并提交新的授权任务。新任务冻结目标/输入哈希/模式/预算；旧配置或worker无法扩大原上限。
+
+候选清单预检和未知工具核对提供HTTP API，详见 [契约](docs/F1/Contracts.md)、[核对规则](docs/F1/Reconciliation.md)；这不是应用发布或F2运行器。[F1/F2边界及Windows/LIVE验证步骤](docs/F1/Scope.md)明确剩余条件，当前F1未验收。

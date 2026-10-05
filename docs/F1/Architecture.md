@@ -18,8 +18,12 @@ HTTP/候选 JSON 64 KiB、JSON 深度 20、文本资源 32 KiB、每任务最多
 
 ## 本轮限制
 
-Windows 原生/PowerShell 尚未运行；缺 LIVE 安全注入与批准预算；语义 oracle、应用 Principal/Release 权限交集、完整清单编译、文件落位恢复、通用未知工具效果核对尚未完成。当前项目运行身份与用户/资源授权交集已用于 F1 工具，但不能据此声称发布应用权限门已经通过。
+Windows 原生/PowerShell 尚未运行；缺 LIVE 安全注入与批准预算；语义 oracle、应用 Principal/Release 权限交集、完整清单编译、文件落位恢复、通用未知工具效果入口已实现（仅受信任本地回读，未知适配器保留未知）。当前项目运行身份与用户/资源授权交集已用于 F1 工具，但不能据此声称发布应用权限门已经通过。
 
 ## F1-2 补充决定
 
 候选校验不保存、授权或执行；AppManifest 仍为不能发布的草案。未知模型请求恢复只绑定原始指纹，人工证据标记 USER_SUPPLIED，不改写成本或取消意图。离线 probe 在加载环境配置之前执行，强制合成传输；真实能力保持 BLOCKED。详见 [Contracts](Contracts.md)、[Reconciliation](Reconciliation.md) 和 [F1-2 TestReport](../evidence/F1-2-TestReport.md)。
+
+## F1-3 收尾
+
+最小预检、运行级冻结和可信本地效果核对见 [Contracts](Contracts.md)、[Reconciliation](Reconciliation.md)，阶段划分及后续验证见 [Scope](Scope.md)。三张新账本表必须显式迁移并重新授予运行角色表权限；旧未冻结任务不能自动恢复执行。未新增服务/前端/外部执行路线。

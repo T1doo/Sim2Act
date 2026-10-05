@@ -10,6 +10,6 @@ class DomainError(Exception):
             "code": self.code,
             "message": self.message,
             "safe_retry": self.retryable,
-            "effect_known": True,
+            "effect_known": self.code != "OUTCOME_UNKNOWN",
             "user_action": "Check status, configuration and permissions",
         }

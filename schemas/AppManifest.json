@@ -81,6 +81,43 @@
       "title": "Dependency",
       "type": "object"
     },
+    "FieldSource": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "input",
+            "step",
+            "data"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "field"
+      ],
+      "title": "FieldSource",
+      "type": "object"
+    },
     "Limits": {
       "additionalProperties": false,
       "properties": {
@@ -217,6 +254,14 @@
           "maxItems": 16,
           "title": "Depends On",
           "type": "array"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/FieldSource"
+          },
+          "maxProperties": 32,
+          "title": "Inputs",
+          "type": "object"
         }
       },
       "required": [
@@ -279,6 +324,14 @@
     "output_schema": {
       "additionalProperties": true,
       "title": "Output Schema",
+      "type": "object"
+    },
+    "outputs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FieldSource"
+      },
+      "maxProperties": 32,
+      "title": "Outputs",
       "type": "object"
     },
     "views": {

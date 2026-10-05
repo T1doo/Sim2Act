@@ -78,10 +78,17 @@ class View(Strict):
     output_field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 
 
+class FieldSource(Strict):
+    source: Literal["input", "step", "data"]
+    ref: str | None = None
+    field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
 class WorkflowStep(Strict):
     step_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     binding_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     depends_on: list[str] = Field(max_length=16)
+    inputs: dict[str, FieldSource] = Field(default_factory=dict, max_length=32)
 
 
 class ActionBinding(Strict):
@@ -127,6 +134,7 @@ class AppManifest(Strict):
     source_run_ref: str | None = Field(default=None, pattern=ID)
     input_schema: dict
     output_schema: dict
+    outputs: dict[str, FieldSource] = Field(default_factory=dict, max_length=32)
     views: list[View] = Field(max_length=16)
     workflow: list[WorkflowStep] = Field(max_length=16)
     action_bindings: list[ActionBinding] = Field(max_length=16)
@@ -144,10 +152,28 @@ class GoalSpec(Strict):
     project_id: str = Field(pattern=ID)
     owner_id: str = Field(pattern=ID)
     goal: str = Field(min_length=1, max_length=4000)
-    constraints: list[str]
-    acceptance_version: str
-    resource_refs: list[str]
-    unresolved: list[str]
+    constraints: list[str] = Field(max_length=16)
+    acceptance_version: Literal["F1-tool-chain.v1"]
+    resource_refs: list[str] = Field(max_length=8)
+    unresolved: list[str] = Field(max_length=16)
+
+
+class ResourceSnapshot(Strict):
+    resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
+    revision: Literal[1]
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    format: Literal["txt", "md", "csv", "json"]
+
+
+class FrozenRunContract(Strict):
+    run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
+    runtime_id: str = Field(pattern=r"^runtime_[a-f0-9]{32}$")
+    contract_version: Literal["F1.3"]
+    goal: GoalSpec
+    resources: list[ResourceSnapshot] = Field(max_length=8)
+    limits: Limits
+    mode: Literal["mock", "live"]
+    request_model: Literal["intern-s2"]
 
 
 class Run(Strict):
@@ -156,7 +182,8 @@ class Run(Strict):
     principal_id: str = Field(pattern=ID)
     runtime_id: str = Field(pattern=ID)
     status: RunState
-    input_snapshot: dict
+    input_snapshot: FrozenRunContract
+    contract_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     fencing_token: int = Field(ge=0)
     cancel_intent: bool
 

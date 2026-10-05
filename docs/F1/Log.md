@@ -54,3 +54,15 @@ API/worker在独立跨执行命令Stop后已停止，health=OFFLINE；临时Post
 ## F1-L005 / 2026-10-05T03:29:36.214017+00:00 / Codex / 第二增量提交证据
 
 工程提交：[637cca93aeb7022cb1062c73bb43ff40cab9c29d](https://github.com/T1doo/Sim2Act/commit/637cca93aeb7022cb1062c73bb43ff40cab9c29d)，dev/f1-foundation。PostgreSQL 64 PASS/1 warning，SQLite 63 PASS/1 SKIPPED/1 warning；静态检查、合成离线探针及浏览器人工核对双路径通过，API/worker 收尾 OFFLINE。完整数据和源码指纹见 F1-2-TestReport。本次追记只更新文档；该工程提交及追记将一起正常 push，随后核对远端 SHA。LIVE/Windows 保持 BLOCKED，F1未签收，未进入F2。
+
+## F1-L006 / 2026-10-05T03:48:58.147384+00:00 / Codex / F1-3 独立缺口收尾
+
+基线2c3761e，沿用dev/f1-foundation。先对照V5产品§5/8、计划F1-T01/04/05/07及F2-T01—09，划分见Scope.md：本轮不执行/发布应用。实现最小清单引用/连接/依赖锁/静态权限/保守预算预检；新Run接受事务冻结Goal/输入哈希/运行身份/模式/模型/预算，旧版或变更快照拒绝执行；Operation意图与本地效果关联同事务，可信回读恢复、已知不符、未知等待、取消/恢复保护与已有效果列表。没有实现真实外部工具、文件执行或F2编译运行器。
+
+新增26项独立断言，含只读审查建议的跨项目拒绝后五类表计数不变、实际revoke所有权/版本/撤权效果，位置tests/test_f1_closure.py前两用例。SQLite89PASS/1SKIP/1warning（4.93s），PG90PASS/1warning（15.01s），ruff/mypy12模块/Schema/离线probe/diff检查PASS。真实PG独立schema的快照/预检/未知回执核对/取消意图/不重复效果引用保存在F1-3-ledger-audit.json，随后schema清理；未启动开发服务或改变页面，未新做AT-18应用并发。
+
+mypy预检变量报7项错误，明确类型及变量名后修复；新测试import排序修复。先88项回归通过，补2个重要断言及静态资源权限覆盖后最终90项，保留警告。历史哈希清单中的5个egg-info生成物独立移出，保留原哈希，最新源码清单排除构建生成物；V5原始字节未改。
+
+迁移为显式migrate新增三表（run_contracts/operation_intents/local_effects），不由API/worker建表、不删除旧数据；旧Run不伪造快照。Linux工程闭环已完成本轮列出的F1独立缺口，停止扩展；LIVE安全配置/批准预算、Windows原生、真实材料/赛方条件仍待核实，实际账号能力报告尚未验收。F1未通过，F2保持PLANNED。具体步骤见Scope.md，工程提交SHA下一条追记。
+
+提交前补充：恢复既有工具反馈改为原位置更新/按原助手步骤插入，保留对话顺序；已有完整最终响应时继续不增加Attempt，独立断言通过。最终仍90项PG/89项SQLite加1skip，最新时长已更新，源码指纹按最终文件生成。

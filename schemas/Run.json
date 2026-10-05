@@ -1,5 +1,220 @@
 {
   "$defs": {
+    "FrozenRunContract": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "pattern": "^run_[a-f0-9]{32}$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "runtime_id": {
+          "pattern": "^runtime_[a-f0-9]{32}$",
+          "title": "Runtime Id",
+          "type": "string"
+        },
+        "contract_version": {
+          "const": "F1.3",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "goal": {
+          "$ref": "#/$defs/GoalSpec"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ResourceSnapshot"
+          },
+          "maxItems": 8,
+          "title": "Resources",
+          "type": "array"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "mode": {
+          "enum": [
+            "mock",
+            "live"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "request_model": {
+          "const": "intern-s2",
+          "title": "Request Model",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "runtime_id",
+        "contract_version",
+        "goal",
+        "resources",
+        "limits",
+        "mode",
+        "request_model"
+      ],
+      "title": "FrozenRunContract",
+      "type": "object"
+    },
+    "GoalSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "goal_id": {
+          "pattern": "^[a-z]+_[a-f0-9]{32}$",
+          "title": "Goal Id",
+          "type": "string"
+        },
+        "project_id": {
+          "pattern": "^[a-z]+_[a-f0-9]{32}$",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "owner_id": {
+          "pattern": "^[a-z]+_[a-f0-9]{32}$",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "goal": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Goal",
+          "type": "string"
+        },
+        "constraints": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Constraints",
+          "type": "array"
+        },
+        "acceptance_version": {
+          "const": "F1-tool-chain.v1",
+          "title": "Acceptance Version",
+          "type": "string"
+        },
+        "resource_refs": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Resource Refs",
+          "type": "array"
+        },
+        "unresolved": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Unresolved",
+          "type": "array"
+        }
+      },
+      "required": [
+        "goal_id",
+        "project_id",
+        "owner_id",
+        "goal",
+        "constraints",
+        "acceptance_version",
+        "resource_refs",
+        "unresolved"
+      ],
+      "title": "GoalSpec",
+      "type": "object"
+    },
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_requests": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "max_tools": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Tools",
+          "type": "integer"
+        },
+        "max_repairs": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Repairs",
+          "type": "integer"
+        },
+        "max_total_tokens": {
+          "maximum": 64000,
+          "minimum": 1,
+          "title": "Max Total Tokens",
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "run_seconds": {
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Run Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_requests",
+        "max_tools",
+        "max_repairs",
+        "max_total_tokens",
+        "max_output_tokens",
+        "run_seconds"
+      ],
+      "title": "Limits",
+      "type": "object"
+    },
+    "ResourceSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "resource_id": {
+          "pattern": "^res_[a-f0-9]{32}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "revision": {
+          "const": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "txt",
+            "md",
+            "csv",
+            "json"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_id",
+        "revision",
+        "content_hash",
+        "format"
+      ],
+      "title": "ResourceSnapshot",
+      "type": "object"
+    },
     "RunState": {
       "enum": [
         "QUEUED",
@@ -46,9 +261,12 @@
       "$ref": "#/$defs/RunState"
     },
     "input_snapshot": {
-      "additionalProperties": true,
-      "title": "Input Snapshot",
-      "type": "object"
+      "$ref": "#/$defs/FrozenRunContract"
+    },
+    "contract_fingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Contract Fingerprint",
+      "type": "string"
     },
     "fencing_token": {
       "minimum": 0,
@@ -67,6 +285,7 @@
     "runtime_id",
     "status",
     "input_snapshot",
+    "contract_fingerprint",
     "fencing_token",
     "cancel_intent"
   ],
