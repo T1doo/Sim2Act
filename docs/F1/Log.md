@@ -138,3 +138,11 @@ Linuxruff/mypy12模块/diff PASS，SQLite110PASS/1SKIP/1已有警告（5.58s）�
 requirements.lock与V5源正文/manifest未改。Setup固定Windows完整版本集合、二进制安装、不追加依赖、非隔离锁内backend；不等于已锁wheel下载字节或拥有离线源。无模型调用/Secret/cache或artifact上传/main合并/部署/安全设置变更。文档追记不触发额外CI。剩余F1：目标Win11普通用户/UAC/真实安装组合原生验收、完整LIVE故障/语义门及授权真实材料/赛方条件；当前真实预算0，F1 IN_PROGRESS、F2 PLANNED，未宣称Win11/Mac/移动端通过。
 
 收尾同步阻塞：工程df31fe9已成功push且CI成功，但文档追记push报完整错误“fatal: could not read Username for 'https://github.com': No such device or address”。目标https://github.com/T1doo/Sim2Act.git，未返回HTTP状态，原因未知；没有重试push、查找凭据或改用其他发布路线。随后只把此错误记入本地证据和文档提交，工作区保持干净，待恢复既有Git认证后同步。详见本轮documentation-push-blocker.txt。
+
+## F1-WCI007 / 2026-10-05 / Codex / 本地验收矩阵和后续准备
+
+保留6145bb8b2bbeecd0bb263b6f6703a3da1f1b16e1为已有本地提交，不amend/reset。只读取既有失败错误与非敏感环境变量存在性/TTY/可执行路径：当前非交互、无askpass，不能确认失败发生时配置或根因；没有HTTP状态，不能判为GitHub403/写权限拒绝。GitPushDiagnosis.md给同一身份原认证流程的最小恢复建议，未执行；未读取凭据/helper存储、重试push/ls-remote、换身份/地址/通道或新增API调用。
+
+AcceptanceMatrix.md对F1-T01—08、AT-01—08及后续AT归属逐项映射原V5和已有精确提交/环境证据；NextPhasePlan.md只准备审计、旧能力报告一致性、Win11验收、AT-02子项签收与后续最小切片，均未执行。区分Win11主平台验收与平台无关算法的技术依赖：原§3.2允许缺账号时继续F1工程，§4.2仍要求F1通过/Windows/真实链等前置，没有自动跳门的F2并行授权。算法/界面可预先设计，不等于当前阶段启动。AT-07明确允许注入，不额外要求实际429压测；F2完整编译/应用Principal/Release/局部修改及F3广泛语义oracle未反向增加为F1实现条件。
+
+独立审计待结果，本轮不预判安全结论/签收、不修改原文/AT或源码、不启动服务/F2。只校验新增文档链接、覆盖项、原V5字节哈希和diff。文档新增提交只在本地；工程df31fe9成功CI和旧失败证据保持。

@@ -2,6 +2,8 @@
 
 基线 V5；状态 IN_PROGRESS，阶段门未通过。当前工程增量为可复现 MOCK 底座；合成 LIVE 只读子链已验证，Windows及完整 LIVE 验收仍未通过。
 
+本地收尾：[逐项验收矩阵](AcceptanceMatrix.md)、[下一阶段最小计划（未执行）](NextPhasePlan.md)、[文档推送只读诊断](GitPushDiagnosis.md)。6145bb8证据提交保留，本轮不重试网络同步、不启动F2；独立审计结论待交付。
+
 | task_id | 目标/契约/依赖 | 状态与当前产物 | 测试/证据 |
 | --- | --- | --- | --- |
 | F1-T01 | GoalSpec/ActionSpec/AppManifest/Run/Operation/Grant/Approval；先冻结契约 | IN_PROGRESS：七类 Schema 草案；闭合嵌套结构、输入/条件/效果语义和有限 DAG 校验；Goal/Run手动任务冻结及最小清单引用/连通/权限/预算预检已做；完整编译执行属F2 | AT-03 工程子集；Architecture.md |
