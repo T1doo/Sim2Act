@@ -139,7 +139,9 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False):
             if back != content:
                 raise DomainError("VERIFICATION_FAILED")
         else:
-            data = read_data(c, rid, name, args)
+            data = authorized_read(
+                store, c, run["principal_id"], run["runtime_id"], run["project_id"], name, args
+            )
         receipt = {
             "operation_id": oid,
             "status": "VERIFIED",
@@ -165,6 +167,16 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False):
         if crash_before_commit:
             raise RuntimeError("FAULT_INJECTION before local commit")
         return receipt
+
+
+def authorized_read(store, c, principal, runtime, project_id, name, args):
+    """Shared trusted read gateway for task tools and declarative preview inputs."""
+    if name not in {"resource.read", "data.aggregate_csv"}:
+        raise DomainError("UNSUPPORTED_CAPABILITY")
+    validate_call(name, args)
+    rid = args["resource_id"]
+    store.authorize(c, principal, runtime, project_id, rid, name)
+    return read_data(c, rid, name, args)
 
 
 def read_data(c, rid, name, args):

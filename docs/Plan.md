@@ -8,13 +8,14 @@
 | 阶段 | 状态 | 当前证据 |
 | --- | --- | --- |
 | F1 | IN_PROGRESS | [任务](F1/Plan.md)、[日志](F1/Log.md) |
-| F2 / F3 | PLANNED | P-A、P-B、增量验证全部保留，待 F1 门通过 |
+| F2 | PARALLEL_ENGINEERING / 正式准入 BLOCKED | 用户授权隔离并行 [CSV 草案预览切片](F2/Plan.md)；不是完整 F2 或发布签收 |
+| F3 | PLANNED | 独立真实评价等待原阶段前置 |
 | R0 | PLANNED | F1—F3 通过；禁止执行任意模型生成代码 |
 | C0 | BLOCKED | 截止、体验链接、托管模型文件要求从 F1 并行核实；R0 后最终验收 |
 | F4—F7 | PLANNED | 本轮不实施 |
 
 目标平台为 Windows 11 x64 原生 + PostgreSQL，尚无用户环境实测。Windows Server2025云原生工程已通过：六PowerShell接口、独立API/worker、PG111项及清理；[实际证据](F1/WindowsCI.md)。Server和云端Linux工程测试不等于 AT-01/27 通过。
-Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/精确包集合核验、真实首次py-launcher Setup通过；本轮一次CI成功（df31fe9），原Linux锁、V5来源哈希与历史失败保留。F1整体及Win11门仍未签收，F2继续PLANNED。
+Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/精确包集合核验、真实首次py-launcher Setup通过；本轮一次CI成功（df31fe9），原Linux锁、V5来源哈希与历史失败保留。F1整体及Win11门仍未签收；后续用户授权 F2 隔离并行预览工程，正式准入仍 BLOCKED。
 独立审计后：[owner环境继承缺陷的本地修复](evidence/F1-env-isolation-20261005/README.md)及PG114项回归已完成，修复后的Windows CI未运行；Git认证阻塞时不重复push。旧公开运行成功不替代这项隔离复验，111计数仍为开发方日志证据，F1安全准入待复核。
 运行后端仅书生；2026-10-05在已授权安全注入与有限预算下完成合成LIVE只读反馈子链，完整LIVE验收仍未通过。10次HTTP预算已耗尽，停止真实请求；缺新预算时真实调用BLOCKED，不发现隐藏凭据。
 保持项目、应用、资源三个工作区；应用发布与两条生成路径在 F2 实施。
@@ -43,3 +44,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 返回模型身份修复工程提交：[3707ef6](https://github.com/T1doo/Sim2Act/commit/3707ef63e249095d9ffabbb8a3671bd3099a0fc0)。
 
 独立真实接入归档：[LIVE-20261005](evidence/LIVE-20261005/README.md)。测试源码精确提交dd195681；正常API/独立worker/PG两轮反馈子链最终PARTIAL/LIVE、答案42、resource.read VERIFIED。旧失败记录保留；累计10次请求，已知usage3143 tokens，预算耗尽。AT-02仅合成子项已验证，Windows、语义、F1整体门仍未通过；本轮不开发F2。
+
+2026-10-05 后续用户决策：网络阻塞期间继续本地开发，开始 [F2 CSV 草案预览](F2/Plan.md)。固定可信模板、应用最小身份、声明式输入输出和持久预览历史；无 Release/业务写入、无模型请求。PG/Win11/完整 F2 验收保留，不以本地预览反向签收 F1。

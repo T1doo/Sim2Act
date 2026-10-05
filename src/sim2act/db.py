@@ -162,6 +162,34 @@ reservations = Table(
 )
 heartbeats = Table("heartbeats", meta, Column("id", String, primary_key=True), Column("at", Float))
 
+# F2 engineering preview namespace, separate from F1 tasks and release/instance data.
+app_drafts = Table(
+    "app_drafts",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("runtime_id", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("candidate", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+)
+app_previews = Table(
+    "app_previews",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("app_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("input", JSON, nullable=False),
+    Column("status", String, nullable=False),
+    Column("output", JSON),
+    Column("error", JSON),
+    Column("created_at", Float, nullable=False),
+    UniqueConstraint("app_id", "principal_id", "request_key"),
+)
+
 
 def new_id(prefix):
     return prefix + "_" + uuid.uuid4().hex

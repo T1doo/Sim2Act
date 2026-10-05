@@ -403,9 +403,12 @@ def validate_action(raw: str):
             raise ValueError("Independent receipt check required")
         check_dependencies(action.dependencies)
         for req in action.permission_requirements:
-            if req.tool_ref not in effective or req.resource_ref.startswith("proj_") != (
-                req.tool_ref == "artifact.save_text"
-            ):
+            prerequisite_read = (
+                req.tool_ref == "resource.read" and "data.aggregate_csv" in effective
+            )
+            if (
+                req.tool_ref not in effective and not prerequisite_read
+            ) or req.resource_ref.startswith("proj_") != (req.tool_ref == "artifact.save_text"):
                 raise ValueError("Permission request cannot broaden executor")
         schema_check(action.input_schema)
         schema_check(action.output_schema)

@@ -156,3 +156,7 @@ AcceptanceMatrix.md对F1-T01—08、AT-01—08及后续AT归属逐项映射原V5
 新增3项真实子进程断言（2配置/1PG权限），强化原生命周期为临时应用角色及实际API/worker变量键集合检查；只报告变量名与权限布尔值，失败不回显配置/URL/secret。PG角色NOSUPERUSER/NOCREATEDB/NOCREATEROLE，schema CREATE=false，实际DDL42501；API/worker以同样应用角色完成停启/读回。临时角色均清理（test_app_*计数0）。专项4PASS/1已有警告6.09s；LinuxSQLite112PASS/2SKIP/1warning5.57s，PG114PASS/0SKIP/1warning16.66s；ruff/mypy13模块/diff PASS。两SQLite跳过为真实PG生命周期/权限用例，不能算验收通过。JUnit/源码hash/修复边界及恢复后CI步骤见../evidence/F1-env-isolation-20261005/README.md。
 
 修复后的WindowsServer/PowerShell执行NOT_RUN，不预写114项WindowsPASS；Win11/F1整体仍未签收，不启动F2。Git认证未恢复，未重试push/ls-remote或改身份/地址/通道、未新增远端API或模型调用；只运行授权的本机PG/API回归。所有提交仅在本地。远端文档落后由未推送导致，本地Plan/矩阵/Architecture/WindowsCI/README均已同步真实状态，等待恢复原认证后正常同步及同源码CI终态监督。
+
+## 2026-10-05 后续：授权并行 F2 工程
+
+用户明确要求网络/验收阻塞期间继续本地推进，隔离实施 [CSV 草案预览](../F2/Plan.md)。F1 保持 IN_PROGRESS，Win11、完整真实子链/独立审计、e171182 的 Windows CI 复验缺口不变；F2正式准入 BLOCKED。工程回归/新浏览器证据见 [报告](../evidence/F2-csv-preview-20261005/README.md)。未请求 GitHub、调用模型或改变网络配置。

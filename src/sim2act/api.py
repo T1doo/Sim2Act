@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import Field
 from sqlalchemy import select, update
 
+from .apps import create_csv_draft, inspect_draft, preview
 from .config import Settings
 from .contracts import (
     Limits,
@@ -15,7 +16,7 @@ from .contracts import (
     validate_action,
     validate_action_input,
 )
-from .db import Store, fingerprint, grants, heartbeats, projects, resources, runs
+from .db import Store, app_drafts, fingerprint, grants, heartbeats, projects, resources, runs
 from .errors import DomainError
 from .preflight import preflight
 
@@ -67,6 +68,17 @@ class OperationReconcileInput(Strict):
     version: int = Field(ge=1)
     expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     evidence: str = Field(min_length=1, max_length=1000)
+
+
+class CsvDraftInput(Strict):
+    name: str = Field(min_length=1, max_length=200)
+    resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
+    goal: str = Field(min_length=1, max_length=4000)
+
+
+class PreviewInput(Strict):
+    input: dict
+    request_key: str = Field(min_length=1, max_length=100)
 
 
 def create_app(store=None, settings=None):
@@ -331,11 +343,32 @@ def create_app(store=None, settings=None):
 
     @app.get("/api/apps")
     def apps(user=user_dependency):
-        return {
-            "items": [],
-            "state": "PLANNED",
-            "reason": "F2 implements P-A, P-B and immutable releases",
-        }
+        with db.tx() as c:
+            rows = (
+                c.execute(
+                    select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id)
+                    .join(projects, projects.c.id == app_drafts.c.project_id)
+                    .where(projects.c.owner_id == user)
+                    .order_by(app_drafts.c.created_at.desc())
+                )
+                .mappings()
+                .all()
+            )
+        return {"items": [dict(r) for r in rows], "state": "PREVIEW_ONLY", "publishable": False}
+
+    @app.post("/api/projects/{pid}/apps/csv-preview", status_code=201)
+    def create_csv_preview(pid: str, body: CsvDraftInput, user=user_dependency):
+        return create_csv_draft(
+            db, user, pid, body.name, body.resource_id, body.goal, platform_limits
+        )
+
+    @app.get("/api/apps/{aid}")
+    def get_app_draft(aid: str, user=user_dependency):
+        return inspect_draft(db, user, aid, platform_limits)
+
+    @app.post("/api/apps/{aid}/previews")
+    def run_preview(aid: str, body: PreviewInput, user=user_dependency):
+        return preview(db, user, aid, body.input, body.request_key, platform_limits)
 
     @app.get("/api/capabilities")
     def capabilities(user=user_dependency):

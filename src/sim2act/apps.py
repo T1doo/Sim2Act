@@ -1,0 +1,288 @@
+"""Bounded read-only declarative previews. No release, model or generated code executor."""
+
+import json
+import time
+
+from sqlalchemy import insert, select
+
+from .contracts import Limits, validate_action, validate_action_input, validate_value
+from .db import app_drafts, app_previews, fingerprint, grants, new_id, principals, resources
+from .errors import DomainError
+from .preflight import preflight
+from .tools import authorized_read, validate_call
+
+
+def object_schema(properties):
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
+
+
+def csv_candidate(rid, source_hash, goal, limits):
+    """Fixed trusted template; caller supplies a goal label, never an executable prompt."""
+    app_id, action_id = new_id("app"), new_id("action")
+    text = {"type": "string"}
+    action_input = object_schema({"resource_id": text, "column": text})
+    output = object_schema(
+        {
+            "resource_id": text,
+            "column": text,
+            "count": {"type": "integer"},
+            "sum": text,
+            "source_hash": text,
+        }
+    )
+    permissions = [
+        {"tool_ref": tool, "resource_ref": rid} for tool in ("resource.read", "data.aggregate_csv")
+    ]
+    action = {
+        "schema_version": "1.0-draft",
+        "action_id": action_id,
+        "revision": 1,
+        "input_schema": action_input,
+        "output_schema": output,
+        "executor": {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": "1"},
+        "allowed_tool_refs": [],
+        "dependencies": [{"kind": "resource", "ref": rid, "version": "1"}],
+        "permission_requirements": permissions,
+        "effect": "read",
+        "preconditions": [],
+        "postcheck_refs": ["receipt.readback.v1"],
+        "limits": limits.model_dump(),
+        "idempotency": "read_only",
+        "reconcile_ref": "operation.lookup.v1",
+        "error_contract": ["INVALID_INPUT", "PERMISSION_DENIED", "GRANT_REVOKED"],
+    }
+    manifest = {
+        "schema_version": "1.0-draft",
+        "app_id": app_id,
+        "revision": 1,
+        "origin": "goal",
+        "goal_ref": new_id("goal"),
+        "source_run_ref": None,
+        "input_schema": object_schema({"column": text}),
+        "output_schema": output,
+        "outputs": {
+            key: {"source": "step", "ref": "aggregate", "field": key}
+            for key in output["properties"]
+        },
+        "views": [{"component_ref": "text", "output_field": "sum"}],
+        "workflow": [
+            {
+                "step_id": "aggregate",
+                "binding_id": "csv_sum",
+                "depends_on": [],
+                "inputs": {
+                    "resource_id": {"source": "data", "ref": "source", "field": "resource_id"},
+                    "column": {"source": "input", "field": "column"},
+                },
+            }
+        ],
+        "action_bindings": [{"binding_id": "csv_sum", "action_id": action_id, "revision": 1}],
+        "data_bindings": [{"binding_id": "source", "resource_ref": rid}],
+        "runtime_identity_requirements": {"mode": "user_and_app_intersection"},
+        "permission_requirements": permissions,
+        "dependency_lock": [
+            {"kind": "resource", "ref": rid, "version": "1"},
+            {"kind": "tool", "ref": "data.aggregate_csv", "version": "1"},
+            {"kind": "check", "ref": "receipt.readback.v1", "version": "1"},
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": limits.model_dump(),
+        "data_schema_version": 1,
+    }
+    return {
+        "manifest": manifest,
+        "actions": [action],
+        "source_hash": source_hash,
+        "goal": {
+            "known": goal,
+            "assumptions": ["所选列是有限十进制数"],
+            "unresolved": ["仅固定模板，不是模型自主生成或发布验收"],
+        },
+    }
+
+
+def authorize_source(store, c, user, project, rid, runtime):
+    for tool in ("resource.read", "data.aggregate_csv"):
+        store.authorize(c, user, project["runtime_id"], project["id"], rid, tool)
+        if runtime != project["runtime_id"]:
+            store.authorize(c, user, runtime, project["id"], rid, tool)
+
+
+def create_csv_draft(store, user, pid, name, rid, goal, platform_limits):
+    limits = Limits(
+        max_requests=1,
+        max_tools=1,
+        max_repairs=0,
+        max_total_tokens=1,
+        max_output_tokens=1,
+        run_seconds=1,
+    )
+    with store.tx() as c:
+        project = store.own_project(c, user, pid)
+        authorize_source(store, c, user, project, rid, project["runtime_id"])
+        source = c.execute(select(resources).where(resources.c.id == rid)).mappings().one()
+        if source["format"] != "csv":
+            raise DomainError("INVALID_INPUT", "请选择已授权的 CSV 材料")
+        candidate = csv_candidate(rid, source["hash"], goal, limits)
+        compile_preview(candidate, platform_limits)
+        aid = candidate["manifest"]["app_id"]
+        runtime = new_id("appruntime")
+        c.execute(insert(principals).values(id=runtime, name="read-only app preview"))
+        # User explicitly selects this one resource in the create-and-authorize UI/API command.
+        for tool in ("resource.read", "data.aggregate_csv"):
+            c.execute(
+                insert(grants).values(
+                    id=new_id("grant"),
+                    principal_id=runtime,
+                    project_id=pid,
+                    resource_id=rid,
+                    tool_ref=tool,
+                    expires_at=time.time() + 86400,
+                    revision=1,
+                    revoked=False,
+                )
+            )
+        c.execute(
+            insert(app_drafts).values(
+                id=aid,
+                project_id=pid,
+                runtime_id=runtime,
+                name=name,
+                candidate=candidate,
+                fingerprint=fingerprint(candidate),
+                created_at=time.time(),
+            )
+        )
+    return {"id": aid, "state": "PREVIEW_ONLY", "publishable": False}
+
+
+def compile_preview(candidate, platform_limits):
+    manifest, report = preflight(
+        json.dumps(candidate["manifest"]), candidate["actions"], platform_limits
+    )
+    actions = [validate_action(json.dumps(a)) for a in candidate["actions"]]
+    if (
+        len(manifest.workflow) != 1
+        or len(actions) != 1
+        or actions[0].executor.kind != "registered_tool"
+        or actions[0].executor.ref != "data.aggregate_csv"
+        or len(manifest.data_bindings) != 1
+    ):
+        raise DomainError("UNSUPPORTED_CAPABILITY", "本轮仅支持单节点 CSV 汇总预览")
+    return manifest, actions[0], report
+
+
+def load_draft(store, c, user, aid, platform_limits, *, lock=False):
+    query = select(app_drafts).where(app_drafts.c.id == aid)
+    draft = c.execute(query.with_for_update() if lock else query).mappings().first()
+    if not draft:
+        raise DomainError("PERMISSION_DENIED")
+    project = store.own_project(c, user, draft["project_id"])
+    candidate = draft["candidate"]
+    if fingerprint(candidate) != draft["fingerprint"]:
+        raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
+    manifest, action, report = compile_preview(candidate, platform_limits)
+    rid = manifest.data_bindings[0].resource_ref
+    authorize_source(store, c, user, project, rid, draft["runtime_id"])
+    source = c.execute(select(resources).where(resources.c.id == rid)).mappings().one()
+    if source["hash"] != candidate["source_hash"]:
+        raise DomainError("VERSION_CONFLICT", "材料版本已变化，请重新创建草案")
+    return draft, manifest, action, report
+
+
+def preview(store, user, aid, input_value, key, platform_limits):
+    with store.tx() as c:
+        draft, manifest, action, report = load_draft(
+            store, c, user, aid, platform_limits, lock=True
+        )
+        fp = fingerprint({"candidate": draft["fingerprint"], "input": input_value})
+        old = (
+            c.execute(
+                select(app_previews).where(
+                    app_previews.c.app_id == aid,
+                    app_previews.c.principal_id == user,
+                    app_previews.c.request_key == key,
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if old:
+            if old["fingerprint"] != fp:
+                raise DomainError("VERSION_CONFLICT", "请求键已绑定其他输入")
+            return public_preview(old)
+        output, error = None, None
+        try:
+            validate_value(manifest.input_schema, input_value)
+            step = manifest.workflow[0]
+            data = {d.binding_id: {"resource_id": d.resource_ref} for d in manifest.data_bindings}
+            args = {
+                field: (input_value if source.source == "input" else data[source.ref])[source.field]
+                for field, source in step.inputs.items()
+            }
+            validate_action_input(action, args)
+            validate_call(action.executor.ref, args)
+            # Dynamic argument must remain within the compiled declaration and app grants.
+            if args["resource_id"] != manifest.data_bindings[0].resource_ref:
+                raise DomainError("PERMISSION_DENIED")
+            value = authorized_read(
+                store, c, user, draft["runtime_id"], draft["project_id"], action.executor.ref, args
+            )
+            validate_value(action.output_schema, value, "action_output")
+            output = {field: value[source.field] for field, source in manifest.outputs.items()}
+            validate_value(manifest.output_schema, output, "output")
+        except DomainError as exc:
+            error = exc.public()
+        row = {
+            "id": new_id("preview"),
+            "app_id": aid,
+            "principal_id": user,
+            "request_key": key,
+            "fingerprint": fp,
+            "input": input_value,
+            "status": "FAILED" if error else "SUCCEEDED",
+            "output": output,
+            "error": error,
+            "created_at": time.time(),
+        }
+        c.execute(insert(app_previews).values(**row))
+        return public_preview(row)
+
+
+def public_preview(row):
+    return {
+        **dict(row),
+        "namespace": "PREVIEW",
+        "mode": "MOCK_ENGINEERING",
+        "model_requests": 0,
+        "business_writes": 0,
+        "release_id": None,
+        "check": "typed_output_and_source_hash" if row["status"] == "SUCCEEDED" else None,
+    }
+
+
+def inspect_draft(store, user, aid, platform_limits):
+    with store.tx() as c:
+        draft, manifest, _, _ = load_draft(store, c, user, aid, platform_limits)
+        history = (
+            c.execute(
+                select(app_previews)
+                .where(app_previews.c.app_id == aid, app_previews.c.principal_id == user)
+                .order_by(app_previews.c.created_at.desc())
+                .limit(50)
+            )
+            .mappings()
+            .all()
+        )
+        return {
+            **dict(draft),
+            "state": "PREVIEW_ONLY",
+            "publishable": False,
+            "input_schema": manifest.input_schema,
+            "history": [public_preview(r) for r in history],
+        }
