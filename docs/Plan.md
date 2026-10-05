@@ -14,14 +14,14 @@
 | F4—F7 | PLANNED | 本轮不实施 |
 
 目标平台为 Windows 11 x64 原生 + PostgreSQL，尚无用户环境实测。云端 Linux 工程测试不等于 AT-01/27 通过。
-运行后端仅书生；缺账号与预算时真实接入 BLOCKED，不读取隐藏凭据，不调用收费 API。
+运行后端仅书生；2026-10-05在已授权安全注入与有限预算下完成合成LIVE只读反馈子链，完整LIVE验收仍未通过。10次HTTP预算已耗尽，停止真实请求；缺新预算时真实调用BLOCKED，不发现隐藏凭据。
 保持项目、应用、资源三个工作区；应用发布与两条生成路径在 F2 实施。
 
 ## 最小待确认
 
 - 参赛主体/成员、准确截止时间与时区、体验链接接受形式、托管 API 模型文件要求（F1 并行；未核实 BLOCKED）。
 - 用户 Windows 环境及数据库安装条件（BLOCKED，仅影响原生验收）。
-- 书生账号、本地私有配置、批准的调用/Token/修复预算（BLOCKED，仅影响 LIVE）。
+- 后续书生调用需新的明确预算；已完成的合成LIVE子链不授权追加请求（当前剩余0）。
 - 授权真实材料与独立验证者（F1 收集条件，F3 评价）。
 
 当前工程证据：[F1 TestReport](evidence/F1-TestReport.md)、[架构与限制](F1/Architecture.md)、[LIVE能力缺口](F1/capability-report.json)。Windows、LIVE、完整AppManifest编译和R0目标验收尚未通过。
@@ -36,6 +36,8 @@
 
 第三增量工程提交：[a38b98d](https://github.com/T1doo/Sim2Act/commit/a38b98d4d39712afcbf256fe7b697ce8ed16db8f)。
 
-接入兼容修复：[模型身份规则](F1/ModelIdentity.md)、[111项回归证据](evidence/F1-model-identity-TestReport.md)。保留原返回Intern-S2并规范化为canonical，真实接入复测待独立验证者，不消耗其剩余预算。
+接入兼容修复：[模型身份规则](F1/ModelIdentity.md)、[111项回归证据](evidence/F1-model-identity-TestReport.md)。保留原返回Intern-S2并规范化为canonical；工程修复本身未消耗真实预算，随后独立复测结果见下方归档。
 
 返回模型身份修复工程提交：[3707ef6](https://github.com/T1doo/Sim2Act/commit/3707ef63e249095d9ffabbb8a3671bd3099a0fc0)。
+
+独立真实接入归档：[LIVE-20261005](evidence/LIVE-20261005/README.md)。测试源码精确提交dd195681；正常API/独立worker/PG两轮反馈子链最终PARTIAL/LIVE、答案42、resource.read VERIFIED。旧失败记录保留；累计10次请求，已知usage3143 tokens，预算耗尽。AT-02仅合成子项已验证，Windows、语义、F1整体门仍未通过；本轮不开发F2。

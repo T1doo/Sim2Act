@@ -88,3 +88,11 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 ## F1-L010 / 2026-10-05T04:34:26.229781+00:00 / Codex / 模型返回身份修复提交证据
 
 工程提交：[3707ef63e249095d9ffabbb8a3671bd3099a0fc0](https://github.com/T1doo/Sim2Act/commit/3707ef63e249095d9ffabbb8a3671bd3099a0fc0)，dev/f1-foundation。专项14PASS，最终PG111PASS/1warning（17.47s），SQLite110PASS/1SKIP/1warning（6.15s），ruff/mypy/离线probe/hash/diff PASS。只允许canonical请求intern-s2的两种明确返回名称，原返回和策略版本持久审计。未进行真实请求，保留验证者3次预算；推送后交独立验证者复测。此追记只改文档，不改已测代码。
+
+## F1-L011 / 2026-10-05T04:49:18+00:00 / Codex / 独立有界LIVE证据归档
+
+归档前取回远端dev/f1-foundation最新HEAD，确认为dd195681de8966f79cf9ba45188ea15a04704f75，无未知并发修改；只在独立副本添加docs/evidence/LIVE-20261005及更新对应Plan/Log，不改源码、不forcepush。完整[脱敏证据与范围](../evidence/LIVE-20261005/README.md)、[源码hash](../evidence/LIVE-20261005/source-hashes.json)、[证据hash](../evidence/LIVE-20261005/evidence-hashes.json)保留各阶段和失败成本。
+
+原04335528的模型返回名问题经零请求MockTransport/SQLite工程诊断确认FAILED、零工具；合成usage不计费。dd195681的第一项实际PG任务首轮HTTP200/Intern-S2接受/resource.read VERIFIED，但第二体2028>2000在发送前拒绝，Run保持FAILED，不覆盖。经用户明确授权缩短目标，新Run在正常loopbackAPI/独立worker/PG17.9/原InternModel两轮真实HTTP200，输入1170/1958，间隔6.100秒，max_tokens512/stream=false/修复0；反馈后答案42，Operation VERIFIED，Run为PARTIAL/LIVE，语义验收NOT_RUN。身份raw/canonical/policy、已知usage、冻结合同、上下文、回执和API/新连接持久回读均核验，14项零请求身份专项通过。
+
+真实HTTP总预算10已用尽：早期网络诊断3（未知/无返回，不记零费用）、独立API接入4（已知1155tokens）、项目第一任务1（576tokens）、短目标新任务2（1412tokens），已知总3143tokens，剩余0。本次归档不产生真实模型请求、不查询models；不保留请求头、配置环境值、token、私有reasoning、个人资料或原始tar/进程日志。真实输入仅合成文本42。API/worker/临时PG已关闭，原失败导出保留。Windows原生、真实材料、完整账号/故障矩阵和语义/F1整体门仍未通过，AT-02仅合成LIVE反馈子项已验证，F2继续PLANNED；停止测试与开发扩展。
