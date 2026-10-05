@@ -4,6 +4,8 @@
 
 本地收尾：[逐项验收矩阵](AcceptanceMatrix.md)、[下一阶段最小计划（未执行）](NextPhasePlan.md)、[文档推送只读诊断](GitPushDiagnosis.md)。6145bb8证据提交保留，本轮不重试网络同步、不启动F2；独立审计结论待交付。
 
+审计实际缺陷：owner URL随CI环境进入API/worker，本地已改为迁移/测试阶段配置隔离及应用子进程显式白名单；[PG114项/真实子进程证据](../evidence/F1-env-isolation-20261005/README.md)。修复后Windows未复跑，认证未恢复，当前仍不签收F1/不进入F2发布链。旧公开run成功获独立确认，旧111数字不是独立复跑。
+
 | task_id | 目标/契约/依赖 | 状态与当前产物 | 测试/证据 |
 | --- | --- | --- | --- |
 | F1-T01 | GoalSpec/ActionSpec/AppManifest/Run/Operation/Grant/Approval；先冻结契约 | IN_PROGRESS：七类 Schema 草案；闭合嵌套结构、输入/条件/效果语义和有限 DAG 校验；Goal/Run手动任务冻结及最小清单引用/连通/权限/预算预检已做；完整编译执行属F2 | AT-03 工程子集；Architecture.md |

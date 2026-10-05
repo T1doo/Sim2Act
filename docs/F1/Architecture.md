@@ -1,5 +1,7 @@
 # F1 工程增量决定
 
+2026-10-05审计修复补充：API/worker环境不再默认继承。process_env.application_environment只传验证后的应用设置及系统/编码/必要TLS代理白名单；迁移配置/test-owner URL不写GITHUB_ENV，测试阶段才加载并清理；smoke重建自身环境并显式传给PowerShell。无证据实际误用旧owner继承，但该缺陷不能由旧CI成功豁免。[本地真实子进程与PG114项回归](../evidence/F1-env-isolation-20261005/README.md)通过，修复后Windows未运行，F1待复核；这不是同一OS账户的宿主文件沙箱。
+
 基线：V5。以下实现不改变 R0/P-A/P-B/增量验证范围。
 
 1. Python 3.12、FastAPI、SQLAlchemy Core、psycopg 与 PostgreSQL；API/worker 独立进程。锁文件固定本轮实际依赖；Windows 版本组合未冻结为已验收。

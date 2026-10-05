@@ -9,11 +9,13 @@ import time
 from pathlib import Path
 
 import httpx
+import psutil
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from sim2act.config import Settings
 from sim2act.db import Store
+from sim2act.process_env import application_environment, system_environment
 
 
 def main():
@@ -21,6 +23,10 @@ def main():
         raise SystemExit("Actual native Windows runner required")
     root = Path(__file__).resolve().parents[1]
     config = os.environ["SIM2ACT_CI_CONFIG"]
+    summary_file = Path(os.environ["GITHUB_STEP_SUMMARY"])
+    system_env = system_environment()
+    os.environ.clear()
+    os.environ.update(system_env)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -30,7 +36,7 @@ def main():
         if with_port:
             args += ["-Port", str(port)]
         result = subprocess.run(
-            args, cwd=root, capture_output=True, text=True, encoding="utf-8", timeout=40
+            args, cwd=root, env=child_env, capture_output=True, text=True, encoding="utf-8", timeout=40
         )
         if result.returncode:
             # The runner masks generated DB credentials; never print full environment or config.
@@ -44,6 +50,9 @@ def main():
             os.environ[key] = value
     settings = Settings.from_env()
     assert settings.mode == "mock" and not settings.live_enabled and not settings.token
+    child_env = application_environment(settings)
+    os.environ.clear()
+    os.environ.update(child_env)
     store = Store(settings.database_url)
     with store.engine.connect() as c:
         row = c.execute(
@@ -67,6 +76,11 @@ def main():
         assert doctor["database"] == "UP" and doctor["mode"] == "MOCK"
         started = json.loads(powershell("Start.ps1", with_port=True))
         assert len({p["pid"] for p in started["processes"]}) == 2
+        for child in started["processes"]:
+            names = set(psutil.Process(child["pid"]).environ())
+            assert not names & {
+                "SIM2ACT_TEST_DATABASE_URL", "PGPASSWORD", "GH_TOKEN", "GITHUB_TOKEN"
+            }, "Privileged environment name visible to runtime child"
         status = json.loads(powershell("Status.ps1", with_port=True))
         assert status["health"]["worker"] == "UP"
         with httpx.Client(base_url=base, headers={"Authorization": "Bearer " + bearer}) as client:
@@ -103,7 +117,7 @@ def main():
             assert client.get(f"/api/runs/{rid}").json()["result"] == result["result"]
         summary = "PASS: native PowerShell Doctor/Start/Status/Stop; separate API-worker; runtime DDL denied; accepted/idempotent/verified42; restart persistence; Chinese spaced data directory. Win11 acceptance NOT_RUN."
         print(summary)
-        with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as f:
+        with summary_file.open("a", encoding="utf-8") as f:
             f.write("\n" + summary + "\n")
     finally:
         powershell("Stop.ps1")

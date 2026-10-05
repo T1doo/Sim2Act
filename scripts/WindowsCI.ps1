@@ -8,6 +8,7 @@ if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or -not $env:RUNNER_TEMP
 $JobRoot = Join-Path $env:RUNNER_TEMP "sim2act-native-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
 $Cluster = Join-Path $JobRoot 'pgdata'
 $Config = Join-Path $JobRoot 'runtime.env'
+$TestOwnerConfig = Join-Path $JobRoot 'test-owner.env'
 $PGBinary = $env:PGBIN
 if (-not $PGBinary -or -not (Test-Path (Join-Path $PGBinary 'pg_ctl.exe'))) {
     throw 'Runner PostgreSQL binaries unavailable; no fallback installer or container.'
@@ -74,7 +75,8 @@ if ($Phase -eq 'Setup') {
     $RuntimeUrl = "postgresql+psycopg://${RuntimeUser}:${RuntimePassword}@127.0.0.1:${Port}/sim2act_ci"
     Write-Output "::add-mask::$AdminUrl"
     Write-Output "::add-mask::$RuntimeUrl"
-    Set-JobVariable 'SIM2ACT_TEST_DATABASE_URL' $AdminUrl
+    # The owner URL must never enter GITHUB_ENV or later smoke/runtime environments.
+    [IO.File]::WriteAllText($TestOwnerConfig, "SIM2ACT_TEST_DATABASE_URL=$AdminUrl", [Text.UTF8Encoding]::new($false))
     Set-JobVariable 'SIM2ACT_CI_CONFIG' $Config
     $MigrationConfig = Join-Path $JobRoot 'migration.env'
     Write-Config $MigrationConfig $AdminUrl
@@ -100,7 +102,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $RuntimeU
 } elseif ($Phase -eq 'Test') {
     $Xml = Join-Path $JobRoot 'engineering.xml'
     $env:PYTEST_ADDOPTS = "--junitxml=`"$Xml`""
-    & ./scripts/Test.ps1 -Suite Engineering
+    try {
+        $env:SIM2ACT_TEST_DATABASE_URL = ([IO.File]::ReadAllText($TestOwnerConfig) -split '=', 2)[1]
+        & ./scripts/Test.ps1 -Suite Engineering
+    } finally {
+        Remove-Item Env:SIM2ACT_TEST_DATABASE_URL -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $TestOwnerConfig -Force -ErrorAction SilentlyContinue
+    }
 } elseif ($Phase -eq 'Report') {
     $Xml = Join-Path $JobRoot 'engineering.xml'
     $env:SIM2ACT_CI_JUNIT = $Xml

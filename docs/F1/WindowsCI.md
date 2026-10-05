@@ -1,5 +1,7 @@
 # 有界 Windows Server 云 CI
 
+2026-10-05审计修正：[子进程环境隔离本地修复](../evidence/F1-env-isolation-20261005/README.md)。旧df31fe9成功运行不证明owner凭据隔离：owner URL曾经GITHUB_ENV进入API/worker环境，现已本地移除并对白名单环境加真实子进程回归；PG114PASS、修复后Windows NOT_RUN。认证尚未恢复，不重试push。下面111项为旧版本开发方归档计数；审计只独立确认远端commit及公开run成功，未独立重跑或读取需登录的日志。
+
 范围：公共仓库dev/f1-foundation窄路径push；标准GitHub-hosted windows-2025，单job、15分钟上限、同分支并发取消；contents:read，无缓存/构建产物上传，无模型请求，API只绑定localhost。依赖安装与临时测试资源仅存当次job；不合并main、不创建Secret、不改Actions设置、OAuth、UAC、防火墙或预装服务。
 
 最新运行[37282999147](https://github.com/T1doo/Sim2Act/actions/runs/37282999147)（df31fe9b4d4b27db601581cf9763a18d5f0f6366）PASS：首次py-launcher Setup、完整Windows版本锁清单/pip check、原生smoke、ruff、mypy12模块、PG工程111PASS/0FAIL/0SKIP/1已有警告（30.70s），Report与Cleanup成功。[本轮脱敏结果](../evidence/WindowsCI-lock-20261005/results.json)、[精确源码指纹](../evidence/WindowsCI-lock-20261005/source-hashes.json)。Windows Server不是Win11，Win11产品AT-01仍NOT_RUN/BLOCKED。

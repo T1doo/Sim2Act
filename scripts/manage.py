@@ -1,4 +1,4 @@
-"""Local process lifecycle. Credentials stay in inherited environment, never PID files."""
+"""Local lifecycle. Children receive validated app settings, never owner/CI credentials."""
 
 import argparse
 import json
@@ -78,6 +78,7 @@ def main():
     args = parser.parse_args()
     from sim2act.config import Settings
     from sim2act.db import Store
+    from sim2act.process_env import application_environment
 
     settings = Settings.from_env()
     data = settings.data_dir
@@ -149,6 +150,7 @@ def main():
                         stdin=subprocess.DEVNULL,
                         stdout=log,
                         stderr=log,
+                        env=application_environment(settings),
                         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
                         start_new_session=os.name != "nt",
                     )

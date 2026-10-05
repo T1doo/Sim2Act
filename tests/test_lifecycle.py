@@ -16,25 +16,22 @@ import pytest
     not os.environ.get("SIM2ACT_TEST_DATABASE_URL"),
     reason="PostgreSQL subprocess check needs explicit test URL",
 )
-def test_AT05_real_process_stop_accept_restart_reopen(env, tmp_path):
-    from sqlalchemy.engine import make_url
-
+def test_AT05_real_process_stop_accept_restart_reopen(env, runtime_role, tmp_path):
     store, s, client, a, b, pid, res = env
-    schema = store.engine.get_execution_options()["schema_translate_map"][None]
-    url = (
-        make_url(s.database_url)
-        .update_query_dict({"options": "-csearch_path=" + schema})
-        .render_as_string(hide_password=False)
-    )
     root = Path(__file__).parents[1]
     data = tmp_path / "中文 空格数据"
     # Supply only synthetic configuration; do not read dotenv or pass a live token.
     child_env = {
         "PATH": str(Path(sys.executable).parent),
-        "SIM2ACT_DATABASE_URL": url,
+        "SIM2ACT_DATABASE_URL": runtime_role,
         "SIM2ACT_DATA_DIR": str(data),
         "SIM2ACT_MODEL_MODE": "mock",
         "SIM2ACT_LIVE_ENABLED": "false",
+        # Deliberately poison the launcher parent. These must never reach API/worker.
+        "SIM2ACT_TEST_DATABASE_URL": "SYNTHETIC owner sentinel",
+        "PGPASSWORD": "SYNTHETIC owner sentinel",
+        "GH_TOKEN": "SYNTHETIC CI sentinel",
+        "CI_PRIVATE_SENTINEL": "SYNTHETIC private sentinel",
     }
     if os.name == "nt":
         # Windows subprocesses require their system/temp paths; never inherit credentials.
@@ -59,12 +56,19 @@ def test_AT05_real_process_stop_accept_restart_reopen(env, tmp_path):
             text=True,
             timeout=30,
         )
-        assert p.returncode == 0, p.stdout + p.stderr
+        assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
         return p.stdout
 
     try:
         started = json.loads(manage("start"))
         assert len({p["pid"] for p in started["processes"]}) == 2
+        import psutil
+
+        for record in started["processes"]:
+            names = set(psutil.Process(record["pid"]).environ())
+            assert not names & {
+                "SIM2ACT_TEST_DATABASE_URL", "PGPASSWORD", "GH_TOKEN", "CI_PRIVATE_SENTINEL"
+            }, "Privileged environment name visible in actual API/worker"
         assert httpx.get(base + "/health").json()["worker"] == "UP"
         # Port conflict must not launch a second process pair.
         duplicate = subprocess.run(
@@ -76,8 +80,6 @@ def test_AT05_real_process_stop_accept_restart_reopen(env, tmp_path):
             timeout=10,
         )
         assert duplicate.returncode != 0
-        import psutil
-
         wp = next(x for x in started["processes"] if x["kind"] == "worker")
         psutil.Process(wp["pid"]).terminate()
         for _ in range(100):

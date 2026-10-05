@@ -146,3 +146,13 @@ requirements.lock与V5源正文/manifest未改。Setup固定Windows完整版本�
 AcceptanceMatrix.md对F1-T01—08、AT-01—08及后续AT归属逐项映射原V5和已有精确提交/环境证据；NextPhasePlan.md只准备审计、旧能力报告一致性、Win11验收、AT-02子项签收与后续最小切片，均未执行。区分Win11主平台验收与平台无关算法的技术依赖：原§3.2允许缺账号时继续F1工程，§4.2仍要求F1通过/Windows/真实链等前置，没有自动跳门的F2并行授权。算法/界面可预先设计，不等于当前阶段启动。AT-07明确允许注入，不额外要求实际429压测；F2完整编译/应用Principal/Release/局部修改及F3广泛语义oracle未反向增加为F1实现条件。
 
 独立审计待结果，本轮不预判安全结论/签收、不修改原文/AT或源码、不启动服务/F2。只校验新增文档链接、覆盖项、原V5字节哈希和diff。文档新增提交只在本地；工程df31fe9成功CI和旧失败证据保持。
+
+## F1-WCI008 / 2026-10-05 / Codex / owner环境继承实质缺陷本地修复
+
+基线8f7bbbed9d8b4d202a1fd14f7cf7f66fb3eba594；6145bb8/8f7保留。独立审计确认旧WindowsCI将owner URL写入GITHUB_ENV、smoke及manage.py默认继承，API/worker能读管理员URL；无证据实际误用，但隔离缺陷属实。原远端df31和公开run成功获独立确认，日志需要登录，旧111计数来自开发方读取/归档，不能称审计者独立复跑。
+
+实际改为job临时test-owner文件只在Test阶段加载/finally删除，不将owner URL放GITHUB_ENV；迁移配置仅Setup显式使用并删除。smoke重建自身环境及显式PowerShell child env；manage.py API/worker Popen统一application_environment：验证后应用配置/预算/配额，LIVE明确启用才传应用token，保留必要系统/编码/TLS/代理配置，不转发任意SIM2ACT_*或PGPASSWORD/GH_TOKEN等。仍为同一OS用户的环境隔离，不伪称宿主代码沙箱或改变用户/ACL。
+
+新增3项真实子进程断言（2配置/1PG权限），强化原生命周期为临时应用角色及实际API/worker变量键集合检查；只报告变量名与权限布尔值，失败不回显配置/URL/secret。PG角色NOSUPERUSER/NOCREATEDB/NOCREATEROLE，schema CREATE=false，实际DDL42501；API/worker以同样应用角色完成停启/读回。临时角色均清理（test_app_*计数0）。专项4PASS/1已有警告6.09s；LinuxSQLite112PASS/2SKIP/1warning5.57s，PG114PASS/0SKIP/1warning16.66s；ruff/mypy13模块/diff PASS。两SQLite跳过为真实PG生命周期/权限用例，不能算验收通过。JUnit/源码hash/修复边界及恢复后CI步骤见../evidence/F1-env-isolation-20261005/README.md。
+
+修复后的WindowsServer/PowerShell执行NOT_RUN，不预写114项WindowsPASS；Win11/F1整体仍未签收，不启动F2。Git认证未恢复，未重试push/ls-remote或改身份/地址/通道、未新增远端API或模型调用；只运行授权的本机PG/API回归。所有提交仅在本地。远端文档落后由未推送导致，本地Plan/矩阵/Architecture/WindowsCI/README均已同步真实状态，等待恢复原认证后正常同步及同源码CI终态监督。

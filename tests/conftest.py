@@ -1,9 +1,11 @@
 import os
+import secrets
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
 from sim2act.api import create_app
 from sim2act.config import Settings
@@ -38,3 +40,46 @@ def env(tmp_path):
         with store.engine.begin() as c:
             c.execute(text('DROP SCHEMA "' + schema + '" CASCADE'))
     store.engine.dispose()
+
+
+@pytest.fixture
+def runtime_role(env):
+    """A temporary PG application role; owner credentials stay in the test fixture only."""
+    store, settings, *_ = env
+    if store.sqlite:
+        pytest.skip("Application-role subprocess regression requires explicit isolated PostgreSQL")
+    schema = store.engine.get_execution_options()["schema_translate_map"][None]
+    role = new_id("test_app")
+    password = secrets.token_hex(32)
+    try:
+        with store.engine.begin() as c:
+            c.execute(
+                text(
+                    f"CREATE ROLE \"{role}\" LOGIN PASSWORD '{password}' NOSUPERUSER NOCREATEDB NOCREATEROLE"
+                )
+            )
+            c.execute(text(f'GRANT USAGE ON SCHEMA "{schema}" TO "{role}"'))
+            c.execute(
+                text(
+                    f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "{schema}" TO "{role}"'
+                )
+            )
+    except Exception:
+        raise RuntimeError(
+            "Isolated test application-role setup failed; values suppressed"
+        ) from None
+    url = (
+        make_url(settings.database_url)
+        .set(username=role, password=password)
+        .update_query_dict({"options": "-csearch_path=" + schema})
+        .render_as_string(hide_password=False)
+    )
+    try:
+        yield url
+    finally:
+        try:
+            with store.engine.begin() as c:
+                c.execute(text(f'DROP OWNED BY "{role}"'))
+                c.execute(text(f'DROP ROLE "{role}"'))
+        except Exception:
+            raise RuntimeError("Isolated test role cleanup failed; values suppressed") from None
