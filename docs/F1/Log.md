@@ -238,3 +238,5 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 32新专项含并发/回滚/跨主体跨项目/撤权/篡改/版本/独立oracle通过，另1应用角色PG专项待ServerCI。全SQLite202PASS/5SKIP/2警告19.86秒，ruff/mypy17模块/JS/diff通过。12项Node/jsdom产品DOM/实际HTTP交互PASS，绝不等于浏览器。默认/正式审批Chromium helper所有权错误，namespace沙箱路径No usable sandbox，真实浏览器0/BLOCKED；未关闭沙箱或修改系统安全策略。源码普通push/精确Server终态待核实。完整P-B/AT10、源资料解耦/通用逻辑归纳/发布、Win11/F1正式签收均保留未完成。
 
 E11补强：8334bc1普通push启动CI37340445433，随后源回执JSON null输入补闭合类型拒绝及负例；全SQLite203PASS/5平台SKIP/1旧Starlette警告20.30秒，33新专项本地通过+1PG角色待CI，静态通过。补强独立正常提交，最终源码CI待精确核实；DOM/原浏览器BLOCKED边界不变。
+
+E11精确Server终态：最终源码3d87f5eb6c8738b8dad4027260fb526a045ca3d5普通push；run37340717581/job111866785041 completed/success（2m38s），PG208PASS/0FAIL/0SKIP/1旧警告68.30秒。34新提取项含临时PG业务CRUD最小应用角色整条API链；其余fixture-owner工程含并发提取。Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1，Setup/显式表迁移/完整锁/现F1原生API-worker应用角色smoke/ruff/mypy17模块/Report/Cleanup均PASS，server stopped。初版8334bc1/run37340445433同样SUCCESS、207PASS/0SKIP/41.27秒，保留。E11精确run/results/88source hashes归档、当前矩阵更新；无独立新源码审核或复跑。Chromium沙箱BLOCKED/0检查，DOM12明确非浏览器，合成服务/失败daemon已停。预算0、F1/Win11/完整P-B/AT10/Release缺口保持，文档普通push收尾不再触发CI。

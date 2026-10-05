@@ -83,3 +83,7 @@
 实现成功合成PREVIEW回执/完整可信模板/独立整数sum oracle→版本化来源证据→同项目新CSV最小权限候选→新结果/失败历史与冷客户端。32新增工程检查PASS、1应用角色专项待PG；全SQLite202PASS/5平台SKIP/2警告19.86秒，ruff/mypy17模块/JS/diff通过。Node/jsdom实际HTTP/产品JS12交互PASS，明确非浏览器。真实Chromium正式审批仍无可用沙箱，0检查/BLOCKED，不关闭沙箱；保留fixture/错误。证据E11，完整P-B/AT10/F1签收/Win11/发布未完成；模型请求0。普通push精确源码并监督WindowsServerCI，尚不预写PG通过。
 
 源码8334bc1普通push已启动37340445433；提交后收尾核查补强源回执input被存储篡改为JSON null时的闭合拒绝（避免500），新增负例通过。最终源码全SQLite203PASS/5SKIP/1旧Starlette警告20.30秒，33新专项本地通过、1 PG角色专项待CI；DOM源码未改，12项原检查保持。补强单独普通commit/push，监督最终源码CI；早先200/202计数为阶段历史不覆盖。
+
+## 2026-10-05 / P-B受限工程精确Server终态交付
+
+最终源码3d87f5eb6c8738b8dad4027260fb526a045ca3d5普通push，run37340717581/job111866785041 completed/success（2m38s）。PG208PASS/0FAIL/0SKIP/1旧警告68.30秒，34新提取检查含临时PG最小业务CRUD角色源/提取/重试/回读/新输入整条API路径；其余工程隔离fixture-owner schema，包括两个并发提取writer。Setup/显式迁移/依赖锁/现F1原生API-worker应用角色smoke/ruff/mypy17模块/Report/Cleanup通过，server stopped。第一源码8334bc1/run37340445433也SUCCESS、PG207PASS/0SKIP/41.27秒，保留历史。E11源码hash/两run/最终平台结果归档；文档收尾仅普通push，不重复CI。真实Chromium0/BLOCKED、DOM12非浏览器、Linux203PASS/5SKIP不混写；模型0/F1未签收/Win11/完整P-B及AT10/发布未完成不变。
