@@ -18,6 +18,7 @@ from .contracts import (
 )
 from .db import Store, app_drafts, fingerprint, grants, heartbeats, projects, resources, runs
 from .errors import DomainError
+from .extraction import ExtractionInput, extract_preview
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
 from .planning import GoalCandidateInput, candidate_options, generate_candidate
 from .preflight import preflight
@@ -395,6 +396,10 @@ def create_app(store=None, settings=None):
     @app.post("/api/apps/{aid}/previews")
     def run_preview(aid: str, body: PreviewInput, user=user_dependency):
         return preview(db, user, aid, body.input, body.request_key, platform_limits)
+
+    @app.post("/api/previews/{pid}/extract", status_code=201)
+    def preview_to_candidate(pid: str, body: ExtractionInput, user=user_dependency):
+        return extract_preview(db, user, pid, body.model_dump(), platform_limits)
 
     @app.get("/api/capabilities")
     def capabilities(user=user_dependency):

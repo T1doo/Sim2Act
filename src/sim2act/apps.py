@@ -6,7 +6,16 @@ import time
 from sqlalchemy import insert, select
 
 from .contracts import Limits, validate_action, validate_action_input, validate_value
-from .db import app_drafts, app_previews, fingerprint, grants, new_id, principals, resources
+from .db import (
+    app_drafts,
+    app_previews,
+    fingerprint,
+    grants,
+    new_id,
+    preview_extractions,
+    principals,
+    resources,
+)
 from .errors import DomainError
 from .goals import validate_card_version
 from .preflight import preflight
@@ -192,6 +201,13 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
     if fingerprint(candidate) != draft["fingerprint"]:
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     manifest, action, report = compile_preview(candidate, platform_limits)
+    extracted = c.execute(select(preview_extractions.c.app_id).where(preview_extractions.c.app_id == aid)).first()
+    if extracted and "extraction" not in candidate:
+        raise DomainError("VERSION_CONFLICT", "提取来源记录不可移除")
+    if "extraction" in candidate:
+        from .extraction import validate_extraction
+
+        validate_extraction(store, c, user, draft, platform_limits)
     if "generation" in candidate:
         origin = candidate["generation"]
         old = validate_card_version(store, c, user, origin["goal_card_id"], origin["goal_version"])

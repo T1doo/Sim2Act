@@ -230,3 +230,9 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 ## 2026-10-05 / MOCK候选纵向切片精确Server终态交付
 
 源码e6b3e2c803f1a4dd2fe999e7645472ec0ff29343已普通push；run37329527816/job111828777592 completed/success（2m01s），PG174PASS/0FAIL/0SKIP/1旧警告43.18秒，24新增候选项含临时PG应用角色业务CRUD下目标/options/候选/幂等/预览/历史API路径通过，其余PG工程使用隔离test-owner schema。实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1；Setup/显式新表迁移/完整锁、已有F1原生角色API-worker smoke、ruff/mypy16模块、Report/Cleanup全通过，server stopped。Linux170PASS/4平台SKIP、实际正常ChromiumUI+14候选交错+3冷页回读+E9原11竞态保持PASS；不是ServerCI浏览器/Win11/独立复跑。E10精确run/results/source hashes及人工复核截图归档；文档收尾普通push不重复CI。明确P-A人工目标+固定模板工程子集、P-B未实现、目标条件NOT_RUN、PREVIEW_ONLY/无Release，真实模型0/F1未签收/正式发布门不变。
+
+## 2026-10-05 / P-B可信PREVIEW来源工程切片
+
+原origin正常fetch核对9bd4bac，独立/workspace/Sim2Act-pb、dev/f1-foundation；初始work树/旧主任务无改动。先提交24e5ba9范围再实现；F1 Run既有PARTIAL不作为成功源，AT02与原V5不改。仅本地合成PREVIEW成功回执，完整可信模板、动态权限/实际hash/回执指纹/工具回读及独立integer sum oracle核查；新CSV显式重绑定、column运行参数、来源/版本/原目标全量保留NOT_RUN。新表显式迁移、业务CRUD/事务幂等/一层提取、零模型及外发、无Release。
+
+32新专项含并发/回滚/跨主体跨项目/撤权/篡改/版本/独立oracle通过，另1应用角色PG专项待ServerCI。全SQLite202PASS/5SKIP/2警告19.86秒，ruff/mypy17模块/JS/diff通过。12项Node/jsdom产品DOM/实际HTTP交互PASS，绝不等于浏览器。默认/正式审批Chromium helper所有权错误，namespace沙箱路径No usable sandbox，真实浏览器0/BLOCKED；未关闭沙箱或修改系统安全策略。源码普通push/精确Server终态待核实。完整P-B/AT10、源资料解耦/通用逻辑归纳/发布、Win11/F1正式签收均保留未完成。

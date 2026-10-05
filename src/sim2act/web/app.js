@@ -6,6 +6,8 @@ let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
 let appSelectionGeneration = 0, activeAppProject = null;
 const candidateRequestKeys = new Map();
+const extractionRequestKeys = new Map();
+let extractionSource = null, extractionBusy = false;
 const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
@@ -84,6 +86,7 @@ document.querySelector("#projects .grid > section:last-child").append($("reconci
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun);}}catch(e){$("health").textContent="后台不可用";}},2500);
 
 function clearApp() {
+  extractionSource=null;$("extraction-form").hidden=true;$("extraction-status").textContent="";
   appSelectionGeneration++;activeAppProject=null;
   $("app-origin").textContent="";$("app-back-goal").hidden=true;$("app-frozen-goal").hidden=true;$("app-frozen-goal-text").textContent="";
   activeApp=null;$("app-title").textContent="选择草案";$("app-preview-form").hidden=true;
@@ -107,6 +110,12 @@ async function showApp(id,pid=$("project-select").value) {
   if(a.project_id !== pid)throw Error("候选不属于当前项目，请重新选择");
   activeApp=id;activeAppProject=pid;
   const origin=a.candidate.generation;
+  const extraction=a.candidate.extraction;
+  if(extraction){
+    $("app-origin").textContent=`来源：已成功本地合成PREVIEW回执 ${extraction.preview_id} · 独立数值核查通过 · 新CSV绑定 · 仅column运行参数 · 目标条件NOT_RUN · 未发布`;
+    $("app-frozen-goal").hidden=false;
+    $("app-frozen-goal-text").textContent=JSON.stringify({goal:a.candidate.goal,source:extraction},null,2);
+  }
   if(origin){
     $("app-origin").textContent=`来源：${a.candidate.goal.title} · 目标 v${origin.goal_version} · MOCK固定CSV能力 · 0模型请求 · 结构/依赖校验通过 · 目标条件尚未验收 · 未发布`;
     const labels={title:"名称",goal:"目标",known:"已知",assumptions:"假设",unresolved:"未决项",constraints:"硬条件",acceptance_checks:"验收检查"};
@@ -132,8 +141,34 @@ async function showApp(id,pid=$("project-select").value) {
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
   $("app-history").replaceChildren(...a.history.map(r=>row(`${new Date(r.created_at*1000).toLocaleString()} · ${r.input.column || "无效输入"} · ${r.status} · ${r.id.slice(0,16)}`,()=>{$("app-output").replaceChildren(row(`历史记录 · ${previewText(r)}`));},"回读历史")));
   if(!a.history.length)$("app-history").textContent="尚无预览。请选择 CSV 中的数值列。";
+  const succeeded=a.history.filter(r=>r.status === "SUCCEEDED");
+  if(!extraction && succeeded.length){
+    extractionSource={id,project_id:pid,fingerprint:a.fingerprint,generation};
+    $("extraction-preview").replaceChildren(...succeeded.map(r=>new Option(`${r.input.column} · ${r.output.sum} · ${r.id}`,r.id)));
+    const sourceRid=a.candidate.manifest.data_bindings[0].resource_ref;
+    $("extraction-resource").replaceChildren(...Array.from($("app-resource").options).filter(o=>o.value !== sourceRid).map(o=>new Option(o.textContent,o.value)));
+    $("extraction-form").hidden=false;$("extraction-create").disabled=extractionBusy || !$("extraction-resource").value;
+    $("extraction-status").textContent=$("extraction-resource").value ? "只接受成功回执；提取时重新核查来源与独立数值结果。" : "请先在同项目保存内容不同的新CSV，再打开来源草案。";
+  }
   return true;
 }
+$("extraction-form").onsubmit=safe(async()=>{
+  const source=extractionSource,pid=$("project-select").value;
+  if(extractionBusy || !source || source.id !== activeApp || source.project_id !== pid)return;
+  const previewId=$("extraction-preview").value,rid=$("extraction-resource").value;
+  const name=$("extraction-name").value;
+  const binding=JSON.stringify([previewId,source.fingerprint,rid,name]);
+  if(!extractionRequestKeys.has(binding))extractionRequestKeys.set(binding,crypto.randomUUID());
+  const current=()=>extractionSource === source && activeApp === source.id && pid === $("project-select").value && source.generation === appSelectionGeneration;
+  extractionBusy=true;$("extraction-create").disabled=true;
+  try{
+    const candidate=await api(`/api/previews/${previewId}/extract`,"POST",{expected_source_fingerprint:source.fingerprint,resource_id:rid,name,request_key:extractionRequestKeys.get(binding)});
+    if(!current())return;
+    await refreshApps();if(!current())return;
+    await showApp(candidate.id,pid);
+  }catch(e){if(current()){$("extraction-status").textContent=`提取失败：${e.message}；选择已保留，可核对后重试。`;}}
+  finally{extractionBusy=false;if(extractionSource && extractionSource.id === activeApp && extractionSource.project_id === $("project-select").value)$("extraction-create").disabled=!$("extraction-resource").value;}
+});
 $("app-form").onsubmit=safe(async()=>{
   const pid=$("project-select").value,rid=$("app-resource").value;
   if(!pid || !rid)throw new Error("先为当前项目保存并授权 CSV 材料");

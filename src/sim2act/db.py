@@ -216,6 +216,17 @@ app_previews = Table(
     UniqueConstraint("app_id", "principal_id", "request_key"),
 )
 
+# Explicit migration only; bounded P-B extraction from verified PREVIEW receipts.
+preview_extractions = Table(
+    "preview_extractions", meta,
+    Column("preview_id", String, primary_key=True),
+    Column("principal_id", String, primary_key=True),
+    Column("request_key", String, primary_key=True),
+    Column("request_fingerprint", String, nullable=False),
+    Column("app_id", String, unique=True, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+)
+
 
 def new_id(prefix):
     return prefix + "_" + uuid.uuid4().hex
