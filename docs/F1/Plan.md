@@ -1,5 +1,7 @@
 # F1 Plan
 
+2026-10-05新任务迁移：上传包校验通过，四个未推提交已在独立dev/f1-foundation工作副本恢复；157个包含文件字节/Git mode匹配，源码HEAD为42b377897c1fe501772a5b0a12973c8845c6361c。正常阶段push与同提交CI已获授权，但当前代理无法连接、pytest/项目venv缺失，push及回归/Windows复验未执行。[迁移证据](../evidence/recovery-20261005/README.md)。旧段落“不启动F2/不推送”为历史轮次状态；此前授权的隔离CSV并行工程保留，正式门不变。
+
 基线 V5；状态 IN_PROGRESS，阶段门未通过。当前工程增量为可复现 MOCK 底座；合成 LIVE 只读子链已验证，Windows及完整 LIVE 验收仍未通过。
 
 本地收尾：[逐项验收矩阵](AcceptanceMatrix.md)、[下一阶段最小计划（未执行）](NextPhasePlan.md)、[文档推送只读诊断](GitPushDiagnosis.md)。6145bb8证据提交保留，本轮不重试网络同步、不启动F2；独立审计结论待交付。

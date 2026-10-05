@@ -160,3 +160,7 @@ AcceptanceMatrix.md对F1-T01—08、AT-01—08及后续AT归属逐项映射原V5
 ## 2026-10-05 后续：授权并行 F2 工程
 
 用户明确要求网络/验收阻塞期间继续本地推进，隔离实施 [CSV 草案预览](../F2/Plan.md)。F1 保持 IN_PROGRESS，Win11、完整真实子链/独立审计、e171182 的 Windows CI 复验缺口不变；F2正式准入 BLOCKED。工程回归/新浏览器证据见 [报告](../evidence/F2-csv-preview-20261005/README.md)。未请求 GitHub、调用模型或改变网络配置。
+
+## 2026-10-05 / 新任务迁移与阻塞记录
+
+上传备份SHA256与交接值一致，四补丁及157文件哈希通过；独立dev/f1-foundation工作副本按顺序check/apply/commit，恢复源码HEAD 42b377897c1fe501772a5b0a12973c8845c6361c，157文件字节/Git mode匹配。原work分支未动；原SHA不复现。30个Python语法及JS语法/diff检查通过，当前无pytest/项目venv，回归NOT_RUN。重新fetch因代理8080无法连接失败，未返回HTTP状态；不改网络/身份/凭据，远端当前状态未复核，授权push/Windows CI尚未执行。真实模型0，F1签收/F2正式门不变。[完整迁移证据](../evidence/recovery-20261005/README.md)。
