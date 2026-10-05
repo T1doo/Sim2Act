@@ -87,3 +87,9 @@
 ## 2026-10-05 / P-B受限工程精确Server终态交付
 
 最终源码3d87f5eb6c8738b8dad4027260fb526a045ca3d5普通push，run37340717581/job111866785041 completed/success（2m38s）。PG208PASS/0FAIL/0SKIP/1旧警告68.30秒，34新提取检查含临时PG最小业务CRUD角色源/提取/重试/回读/新输入整条API路径；其余工程隔离fixture-owner schema，包括两个并发提取writer。Setup/显式迁移/依赖锁/现F1原生API-worker应用角色smoke/ruff/mypy17模块/Report/Cleanup通过，server stopped。第一源码8334bc1/run37340445433也SUCCESS、PG207PASS/0SKIP/41.27秒，保留历史。E11源码hash/两run/最终平台结果归档；文档收尾仅普通push，不重复CI。真实Chromium0/BLOCKED、DOM12非浏览器、Linux203PASS/5SKIP不混写；模型0/F1未签收/Win11/完整P-B及AT10/发布未完成不变。
+
+## 2026-10-05 / 已有两路径工程可用性与界面收敛（实施前）
+
+基线6b008b2，同一/workspace/Sim2Act-pb。用户要求前端好看，下一阶段路线见NextSteps.md，冻结颜色/字号/间距/层级/五类状态/手机一致性验收；不换框架或大改架构。启动同工作区独立只读代理，限定权限/来源/参数范围/过期撤权/状态冲突，具体缺陷优先。核查平台可调用工具无浏览器入口，官方runtime show退出1/无连接元数据；现Chromium保护仍不可用，不关闭sandbox或探查私有认证/管道。只可小范围CSS/语义状态改善，不预写实际视觉PASS。
+
+本轮验证：独立复核报告与可复现缺陷、针对修复的状态/导航/负例；源与目标Grant自然过期仍拒绝；SQLite/静态/DOM交互、普通push精确ServerCI。没有新增表/迁移或模型/代码生成/Release；PREVIEW来源子集不称完整P-B/AT10，预算0/F1和Win11未签收不变。浏览器/手机视觉未验证保留BLOCKED。
