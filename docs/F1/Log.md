@@ -50,3 +50,7 @@ API/worker在独立跨执行命令Stop后已停止，health=OFFLINE；临时Post
 收尾：自身 API/worker 停止，另次Status为OFFLINE，浏览器关闭；临时数据库保留，不是公开部署。未读取真实密钥、未真实调用书生；合成证据明确MOCK/FAULT_INJECTION，模型列表非账号实测。源码/测试/Schema指纹与JUnit见 ../evidence/F1-2-TestReport.md。
 
 剩余：LIVE安全注入/批准预算、Windows原生仍BLOCKED；GoalSpec/Run完整冻结、Manifest编译/节点类型连通、文件跨事务恢复、通用未知工具效果核对待后续。F1整体IN_PROGRESS，未进入F2，AT-09—28保持NOT_RUN。代码提交SHA在下一条追加。
+
+## F1-L005 / 2026-10-05T03:29:36.214017+00:00 / Codex / 第二增量提交证据
+
+工程提交：[637cca93aeb7022cb1062c73bb43ff40cab9c29d](https://github.com/T1doo/Sim2Act/commit/637cca93aeb7022cb1062c73bb43ff40cab9c29d)，dev/f1-foundation。PostgreSQL 64 PASS/1 warning，SQLite 63 PASS/1 SKIPPED/1 warning；静态检查、合成离线探针及浏览器人工核对双路径通过，API/worker 收尾 OFFLINE。完整数据和源码指纹见 F1-2-TestReport。本次追记只更新文档；该工程提交及追记将一起正常 push，随后核对远端 SHA。LIVE/Windows 保持 BLOCKED，F1未签收，未进入F2。

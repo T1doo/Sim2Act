@@ -1,6 +1,6 @@
 # F1-2 实际工程检查
 
-记录时间：2026-10-05T03:28:49.450701+00:00。基线 5c930bc3e668294f1f55f3fc60a5d13a485c4c20；分支 dev/f1-foundation；Linux / Python 3.12.14 / 临时 PostgreSQL 17.9。当前源码提交在 Log 下一条追记精确 SHA。
+记录时间：2026-10-05T03:28:49.450701+00:00。基线 5c930bc3e668294f1f55f3fc60a5d13a485c4c20；分支 dev/f1-foundation；Linux / Python 3.12.14 / 临时 PostgreSQL 17.9。工程源码提交：[637cca93aeb7022cb1062c73bb43ff40cab9c29d](https://github.com/T1doo/Sim2Act/commit/637cca93aeb7022cb1062c73bb43ff40cab9c29d)；后续仅文档追记。
 
 ## 实际命令与结果
 
