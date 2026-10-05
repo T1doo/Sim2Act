@@ -88,15 +88,24 @@ async function showApp(id) {
   const a=await api(`/api/apps/${id}`);if(activeApp!==id)$("app-output").replaceChildren();activeApp=id;
   $("app-title").textContent=`${a.name} · 未发布`;
   $("app-preview-form").hidden=false;
+  const previous=$("app-column").value, guidance=a.input_guidance;
+  $("app-column").replaceChildren(...guidance.columns.map(c=>{
+    const option=new Option(c.numeric ? c.name : `${c.name}（${c.reason}）`,c.name);
+    option.disabled=!c.numeric;return option;
+  }));
+  const selectable=guidance.columns.filter(c=>c.numeric);
+  $("app-column").value=selectable.some(c=>c.name===previous) ? previous : (selectable[0]?.name || "");
+  $("app-preview-submit").disabled=!selectable.length;
+  $("app-input-hint").textContent=guidance.error || (selectable.length ? `已核对 ${guidance.row_count} 条记录；请选择数值列。` : "没有可汇总的数值列，请保存修正后的材料并重建草案。");
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
   $("app-history").replaceChildren(...a.history.map(r=>row(`${new Date(r.created_at*1000).toLocaleString()} · ${r.input.column || "无效输入"} · ${r.status} · ${r.id.slice(0,16)}`,()=>{$("app-output").replaceChildren(row(`历史记录 · ${previewText(r)}`));},"回读历史")));
-  if(!a.history.length)$("app-history").textContent="尚无预览。请输入 CSV 中的数值列名称。";
+  if(!a.history.length)$("app-history").textContent="尚无预览。请选择 CSV 中的数值列。";
 }
 $("app-form").onsubmit=safe(async()=>{
   const pid=$("project-select").value,rid=$("app-resource").value;
   if(!pid || !rid)throw new Error("先为当前项目保存并授权 CSV 材料");
   const a=await api(`/api/projects/${pid}/apps/csv-preview`,"POST",{name:$("app-name").value,goal:$("app-goal").value,resource_id:rid});
-  await refresh();await showApp(a.id);$("app-output").replaceChildren(row("草案已保存，请输入数值列运行新预览。"));
+  await refresh();await showApp(a.id);$("app-output").replaceChildren(row("草案已保存，请选择可用数值列运行新预览。"));
 });
 $("app-preview-form").onsubmit=safe(async()=>{
   if(!activeApp)throw new Error("先打开一个草案");
@@ -104,5 +113,5 @@ $("app-preview-form").onsubmit=safe(async()=>{
   try {
     const r=await api(`/api/apps/${id}/previews`,"POST",{input:{column:$("app-column").value},request_key:crypto.randomUUID()});
     if(activeApp===id){await showApp(id);$("app-output").replaceChildren(row(`${previewText(r)} · ${r.id.slice(0,16)}`));}
-  } finally {$("app-preview-submit").disabled=false;}
+  } finally {$("app-preview-submit").disabled=!$("app-column").value;}
 });

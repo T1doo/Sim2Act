@@ -9,7 +9,7 @@ from .contracts import Limits, validate_action, validate_action_input, validate_
 from .db import app_drafts, app_previews, fingerprint, grants, new_id, principals, resources
 from .errors import DomainError
 from .preflight import preflight
-from .tools import authorized_read, validate_call
+from .tools import authorized_read, csv_column_options, validate_call
 
 
 def object_schema(properties):
@@ -269,6 +269,10 @@ def public_preview(row):
 def inspect_draft(store, user, aid, platform_limits):
     with store.tx() as c:
         draft, manifest, _, _ = load_draft(store, c, user, aid, platform_limits)
+        source = authorized_read(
+            store, c, user, draft["runtime_id"], draft["project_id"], "resource.read",
+            {"resource_id": manifest.data_bindings[0].resource_ref},
+        )
         history = (
             c.execute(
                 select(app_previews)
@@ -285,4 +289,5 @@ def inspect_draft(store, user, aid, platform_limits):
             "publishable": False,
             "input_schema": manifest.input_schema,
             "history": [public_preview(r) for r in history],
+            "input_guidance": csv_column_options(source["content"]),
         }

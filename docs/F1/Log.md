@@ -186,3 +186,7 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 ## 2026-10-05 / 当前状态收敛及下一切片选择
 
 独立只读审核27232c6报告无新安全阻塞，核对0555593精确Actions run/job，非独立复跑。AcceptanceMatrix改为权威当前状态与E6映射，旧完整文本保存history明确历史；F2Plan清除现时CI/PG/network blocked，preview身份已实现与Release身份未实现分开。AT02Review映射冻结操作，现有两轮LIVE已覆盖操作链；预算0仅离线核验/待签收，起始两主体/项目完整元信息未证明，不强加Win11/真实429/广泛语义。下一隔离F2切片选择CSV列选择/输入提示，实施前范围风险与工程/browser/Server回归门已写Plan，模型0/不可发布不变。
+
+## 2026-10-05 / F2 CSV输入提示本地验证
+
+按事前F2Plan选择实现，现有inspect后user-project-app交集/候选/材料hash再次授权读取，只返回列结构/有限数可用性/行数，实际执行不信任提示缓存；安全Option/textContent下拉，材料错误禁用UI但不更改API失败历史语义。10新增检查，SQLite133PASS/3平台SKIP/1旧警告7.86秒，ruff/mypy14模块/JS语法/diff通过。agent-browser技能实测LinuxChromium6检查点PASS（重复表头、列禁用、行数、两个不同结果及历史）；合成fixture/browser停用，截图已查看，无用户材料/凭据。真实模型0，未启动Release/任意代码/外部发布；普通push后监督精确提交ServerCI，不预写成功。AT02离线12归档hash及两真实响应/feedback链核验PASS，初始完整两主体/两项目元信息未证明，等待验收决定，不请求真实API。

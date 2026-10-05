@@ -180,3 +180,63 @@ def test_input_cannot_add_executor_or_cross_resource_argument(env):
     assert result["status"] == "FAILED" and result["error"]["code"] == "INVALID_INPUT"
     assert result["output"] is None
     assert count(store, attempts) == count(store, runs) == 0
+
+
+def test_input_guidance_lists_numeric_columns_without_cells_or_execution(env):
+    store, _, client, _, _, pid, _ = env
+    rid = client.post(
+        f"/api/projects/{pid}/resources",
+        json={"name": "choices.csv", "format": "csv", "content": "label,amount,quantity,bad\nprivate-cell,1.25,7,NaN\nother-cell,2.75,8,2\n"},
+    ).json()["id"]
+    aid = draft(env, rid)
+    before = {t.name: count(store, t) for t in [resources, runs, operations, attempts, app_previews]}
+    response = client.get(f"/api/apps/{aid}")
+    assert response.status_code == 200
+    guidance = response.json()["input_guidance"]
+    assert guidance["row_count"] == 2 and guidance["error"] is None
+    assert [(c["name"], c["numeric"]) for c in guidance["columns"]] == [
+        ("label", False), ("amount", True), ("quantity", True), ("bad", False)
+    ]
+    assert "private-cell" not in response.text and "other-cell" not in response.text
+    assert before == {t.name: count(store, t) for t in [resources, runs, operations, attempts, app_previews]}
+    assert execute(client, aid, "amount").json()["output"]["sum"] == "4.00"
+    assert execute(client, aid, "quantity", "next").json()["output"]["sum"] == "15"
+
+
+@pytest.mark.parametrize(
+    "content,error,columns,rows",
+    [
+        ("", True, [], None),
+        ("amount,amount\n1,2\n", True, [], None),
+        (",amount\nx,2\n", True, [], None),
+        ("amount\n1,2\n", True, [], None),
+        ("amount\n" + "1\n" * 1001, True, [], None),
+        ("amount,missing\n1\n", False, [("amount", True), ("missing", False)], 1),
+        ("amount\nInfinity\n", False, [("amount", False)], 1),
+        ("amount\n", False, [("amount", True)], 0),
+    ],
+)
+def test_input_guidance_handles_invalid_or_empty_csv_without_new_preview(env, content, error, columns, rows):
+    store, _, client, _, _, pid, _ = env
+    rid = client.post(
+        f"/api/projects/{pid}/resources",
+        json={"name": "edge.csv", "format": "csv", "content": content},
+    ).json()["id"]
+    aid = draft(env, rid)
+    response = client.get(f"/api/apps/{aid}")
+    assert response.status_code == 200
+    guidance = response.json()["input_guidance"]
+    assert bool(guidance["error"]) == error
+    assert [(c["name"], c["numeric"]) for c in guidance["columns"]] == columns
+    assert guidance["row_count"] == rows
+    assert count(store, app_previews) == 0
+
+
+def test_guidance_checks_actual_material_hash_before_exposing_headers(env):
+    store, _, client, _, _, _, rid = env
+    aid = draft(env)
+    with store.tx() as c:
+        c.execute(update(resources).where(resources.c.id == rid).values(content="private-header\n1\n"))
+    response = client.get(f"/api/apps/{aid}")
+    assert response.json()["error"]["code"] == "VERIFICATION_FAILED"
+    assert "private-header" not in response.text and count(store, app_previews) == 0

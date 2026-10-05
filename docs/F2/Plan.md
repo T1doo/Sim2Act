@@ -19,3 +19,7 @@
 验收：不同数值列产生不同新结果；文本/非有限数列不可选，空或畸形CSV有明确原因；跨主体/撤权/资源篡改不泄露列信息；元数据无模型请求/无preview写入；SQLite全回归、精确提交ServerPG CI及本地浏览器链路。Win11/多浏览器平台能力缺失如实报告，不能用Linux模拟认证通过。
 
 正常阶段commit/push与标准windows-2025有界CI已授权；网络仅用正式执行器审批，不改代理/身份/策略。任何真实模型/外部发布/Release/任意代码执行仍不在本切片范围。F1 Win11及AT-02/独立签收缺口保留。
+
+## CSV输入提示切片本地结果
+
+已实现列元数据及安全下拉；10项新增工程检查、SQLite133PASS/3平台专项SKIP/1旧警告，ruff/mypy14模块/JS语法/diff通过。本地LinuxChromium实际6检查点及截图复核PASS，临时SQLite/合成身份已关闭；非Win11或其他浏览器引擎验收。授权普通push及同提交ServerPG CI为下一步，[证据](../evidence/F2-csv-guidance-20261005/README.md)，结果未预写。模型0/不可发布/F1未签收不变。

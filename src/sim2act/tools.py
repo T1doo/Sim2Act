@@ -179,6 +179,39 @@ def authorized_read(store, c, principal, runtime, project_id, name, args):
     return read_data(c, rid, name, args)
 
 
+def csv_column_options(content):
+    """Bounded input guidance only; no cells, execution results or permissions returned."""
+    try:
+        reader = csv.DictReader(io.StringIO(content))
+        names = reader.fieldnames
+        if not names or any(not n for n in names) or len(names) != len(set(names)):
+            raise ValueError("CSV 表头为空或重复，请保存修正后的材料并重建草案。")
+        valid = dict.fromkeys(names, True)
+        count = 0
+        for row in reader:
+            count += 1
+            if count > 1000:
+                raise ValueError("CSV 超过 1000 条记录，请缩小材料范围。")
+            if None in row:
+                raise ValueError("CSV 行包含多余字段，请修正材料。")
+            for name in names:
+                try:
+                    valid[name] = valid[name] and Decimal(row[name]).is_finite()
+                except (InvalidOperation, TypeError, ValueError):
+                    valid[name] = False
+        return {
+            "row_count": count,
+            "columns": [
+                {"name": n, "numeric": valid[n], "reason": None if valid[n] else "存在缺值、文本或非有限数"}
+                for n in names
+            ],
+            "error": None,
+        }
+    except (ValueError, csv.Error) as exc:
+        message = str(exc) if isinstance(exc, ValueError) else "CSV 格式无效，请修正材料。"
+        return {"row_count": None, "columns": [], "error": message}
+
+
 def read_data(c, rid, name, args):
     res = c.execute(select(resources).where(resources.c.id == rid)).mappings().one()
     if hashlib.sha256(res["content"].encode()).hexdigest() != res["hash"]:
