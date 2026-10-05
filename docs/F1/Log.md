@@ -206,3 +206,7 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 ## 2026-10-05 / 通用目标卡精确Server终态成功
 
 6bf5e0558e8436eb9a12adbc9d188d4b84878abb已普通push；run37322479923/job111804777471 completed/success（1m39s）。Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1，PG150PASS/0FAIL/0SKIP/1旧Starlette警告33.71秒，首次Setup/显式新表迁移/完整锁、现有F1应用角色/API-worker原生smoke/重启、ruff/mypy15模块、Report/Cleanup成功，PG server stopped。目标卡14项API/事务工程使用隔离test-owner schema，包括两并发writer，不能称Win11目标卡UI/独立应用角色原生专项；Linux147PASS/3平台SKIP及Chromium7检查点保留。E8结果/精确source hash归档，开发方真实读取同commit run/job/log，非独立复跑。当前权威矩阵与F2Plan已更新；文档收尾仅正常push，不重复CI。F1签收/Win11/AT02完整初态/Release/P-A/P-B生成仍未完成；追加LIVE预算尚未批，真实请求0。下一工作需独立审核新草案存储/版本/权限及规划链依赖，不能把这次人工目标卡视作全F2-T01完成。
+
+## 2026-10-05 / 优先修复目标卡异步选择竞态（实施前范围）
+
+独立审查0382b91发现showGoalCard迟到响应能跨项目或覆盖New草稿；合成双项目/实际延迟GET已复现，项目B显示A卡并PUT修改A，New文字被旧卡覆盖。仅合成记录，无真实数据事故证据。以选择generation使导航/New/重复选择失效，读取结果校验project_id，保存前核对活动卡项目，保存完成不恢复已离开的选择；保持后端CAS。先单独提交本修复，不夹带下一MOCK候选后端改动。浏览器覆盖延迟导航/New/重复打开/保存中导航与New/提交项目校验/正常保存及旧窗口冲突，再精确源码ServerCI到终态；预算0。

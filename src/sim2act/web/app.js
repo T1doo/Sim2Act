@@ -2,6 +2,7 @@
 let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
 let activeApp = null, activeGoalCard = null;
+let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false;
 const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
@@ -17,18 +18,24 @@ function row(text, action, label) {
 }
 async function refresh() {
   const pid = $("project-select").value; if (!pid) return;
-  const materials = await api(`/api/projects/${pid}/resources`); refs = materials.map(x => x.id);
+  const materials = await api(`/api/projects/${pid}/resources`);
+  if (pid !== $("project-select").value) return;
+  refs = materials.map(x => x.id);
   const selectedGoals=Array.from($("goal-card-resources").selectedOptions).map(o=>o.value);
   $("goal-card-resources").replaceChildren(...materials.map(m=>{const o=new Option(m.name,m.id);o.selected=selectedGoals.includes(m.id);return o;}));
   await refreshGoalCards(pid);
+  if (pid !== $("project-select").value) return;
   $("materials").replaceChildren(...materials.map(x => row(`${x.name} · ${x.format} · ${x.hash.slice(0, 12)}`, async () => {const data=await api(`/api/resources/${x.id}`);$("resource-preview").hidden=false;$("resource-preview").textContent=data.content;}, "查看")));
   const oldResource = $("app-resource").value;
   $("app-resource").replaceChildren(...materials.filter(x => x.format === "csv").map(x => {const o=document.createElement("option");o.value=x.id;o.textContent=x.name;return o;}));
   if (materials.some(x => x.id === oldResource)) $("app-resource").value = oldResource;
   await refreshApps();
+  if (pid !== $("project-select").value) return;
   const runs = await api(`/api/projects/${pid}/runs`);
+  if (pid !== $("project-select").value) return;
   $("runs").replaceChildren(...runs.map(x => row(`${x.status} · ${x.id.slice(0, 16)}`, () => showRun(x.id), "查看任务")));
   const grants = await api(`/api/projects/${pid}/grants`);
+  if (pid !== $("project-select").value) return;
   $("grants").replaceChildren(...grants.map(g => row(`${g.tool_ref} · ${g.principal_id.startsWith("runtime_") ? "项目运行身份" : g.principal_id.startsWith("appruntime_") ? "应用预览身份" : "当前使用者"} · ${g.revoked ? "已撤回" : "有效至 " + new Date(g.expires_at * 1000).toLocaleString()}`, g.revoked ? null : async () => {await api(`/api/grants/${g.id}/revoke`, "POST", {command:"revoke",version:g.revision});activeRun=null;clearApp();$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();}, "撤回")));
 }
 async function showRun(id) {
@@ -121,17 +128,39 @@ $("app-preview-form").onsubmit=safe(async()=>{
 
 
 const goalCardFields=["title","goal","known","assumptions","unresolved","constraints","acceptance_checks"];
+function updateGoalCardSave() {
+  $("goal-card-save").disabled=goalCardLoading || goalCardSaving;
+}
 function clearGoalCard() {
+  goalSelectionGeneration++;goalCardLoading=false;updateGoalCardSave();
   activeGoalCard=null;$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
   $("goal-card-history").replaceChildren();$("goal-card-history-detail").textContent="";
 }
 async function refreshGoalCards(pid) {
   const cards=await api(`/api/projects/${pid}/goal-cards`);
-  $("goal-card-list").replaceChildren(...cards.items.map(c=>row(`${c.title} · 草案 v${c.version}`,()=>showGoalCard(c.id),"打开目标卡")));
+  if(pid !== $("project-select").value)return;
+  $("goal-card-list").replaceChildren(...cards.items.map(c=>row(`${c.title} · 草案 v${c.version}`,()=>showGoalCard(c.id,pid),"打开目标卡")));
   if(!cards.items.length)$("goal-card-list").textContent="尚无目标卡。可先整理任意目标及其检查要求。";
 }
-async function showGoalCard(id) {
-  const card=await api(`/api/goal-cards/${id}`);activeGoalCard={id,version:card.version};
+async function showGoalCard(id, pid=$("project-select").value) {
+  if(pid !== $("project-select").value)return;
+  clearGoalCard();
+  const generation=goalSelectionGeneration;
+  goalCardLoading=true;updateGoalCardSave();$("goal-card-status").textContent="正在读取目标卡";
+  const current=()=>generation === goalSelectionGeneration && pid === $("project-select").value;
+  let card;
+  try {
+    card=await api(`/api/goal-cards/${id}`);
+    if(!current())return;
+    if(card.project_id !== pid)throw Error("目标卡不属于当前项目，请重新选择");
+  } catch(e) {
+    if(!current())return;
+    $("goal-card-status").textContent="读取失败，请重新选择或新建";
+    throw e;
+  } finally {
+    if(current()){goalCardLoading=false;updateGoalCardSave();}
+  }
+  activeGoalCard={id,version:card.version,project_id:card.project_id};
   goalCardFields.forEach(f=>{$(`goal-card-${f}`).value=Array.isArray(card.content[f]) ? card.content[f].join("\n") : card.content[f];});
   Array.from($("goal-card-resources").options).forEach(o=>o.selected=card.content.resource_refs.includes(o.value));
   $("goal-card-status").textContent=`草案 v${card.version} · 未验收/不可执行 · 保存将建立新版本`;
@@ -141,11 +170,17 @@ async function showGoalCard(id) {
 $("goal-card-new").onclick=clearGoalCard;
 $("goal-card-form").onsubmit=safe(async()=>{
   const pid=$("project-select").value;if(!pid)throw Error("先选择项目");
+  if(goalCardLoading || goalCardSaving)return;
+  const selectedCard=activeGoalCard, generation=goalSelectionGeneration;
+  if(selectedCard && selectedCard.project_id !== pid)throw Error("目标卡不属于当前项目，请重新选择");
   const body={resource_refs:Array.from($("goal-card-resources").selectedOptions).map(o=>o.value)};
   goalCardFields.forEach(f=>{body[f]=["title","goal"].includes(f) ? $(`goal-card-${f}`).value : $(`goal-card-${f}`).value.split("\n").map(s=>s.trim()).filter(Boolean);});
-  $("goal-card-save").disabled=true;
+  goalCardSaving=true;updateGoalCardSave();
   try {
-    const result=activeGoalCard ? await api(`/api/goal-cards/${activeGoalCard.id}`,"PUT",{...body,expected_version:activeGoalCard.version}) : await api(`/api/projects/${pid}/goal-cards`,"POST",body);
-    await refreshGoalCards(pid);await showGoalCard(result.id);
-  } finally {$("goal-card-save").disabled=false;}
+    const result=selectedCard ? await api(`/api/goal-cards/${selectedCard.id}`,"PUT",{...body,expected_version:selectedCard.version}) : await api(`/api/projects/${pid}/goal-cards`,"POST",body);
+    if(generation !== goalSelectionGeneration || pid !== $("project-select").value)return;
+    await refreshGoalCards(pid);
+    if(generation !== goalSelectionGeneration || pid !== $("project-select").value)return;
+    await showGoalCard(result.id,pid);
+  } finally {goalCardSaving=false;updateGoalCardSave();}
 });
