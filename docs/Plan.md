@@ -14,6 +14,7 @@
 | F4—F7 | PLANNED | 本轮不实施 |
 
 目标平台为 Windows 11 x64 原生 + PostgreSQL，尚无用户环境实测。Windows Server2025云原生工程已通过：六PowerShell接口、独立API/worker、PG111项及清理；[实际证据](F1/WindowsCI.md)。Server和云端Linux工程测试不等于 AT-01/27 通过。
+Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/精确包集合核验、真实首次py-launcher Setup通过；本轮一次CI成功（df31fe9），原Linux锁、V5来源哈希与历史失败保留。F1整体及Win11门仍未签收，F2继续PLANNED。
 运行后端仅书生；2026-10-05在已授权安全注入与有限预算下完成合成LIVE只读反馈子链，完整LIVE验收仍未通过。10次HTTP预算已耗尽，停止真实请求；缺新预算时真实调用BLOCKED，不发现隐藏凭据。
 保持项目、应用、资源三个工作区；应用发布与两条生成路径在 F2 实施。
 

@@ -128,3 +128,13 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 CI Python固定已测3.12.10 x64；拒绝checkout已有.venv，实际py -3.12预检后直接运行产品Setup创建venv，移除harness提前python -m venv。真实Server执行待push，未预写PASS。保持原文-text与哈希校验，零模型/Secret/cache上传/部署/main合并，窄push加入Windows锁路径。
 
 Linuxruff/mypy12模块/diff PASS，SQLite110PASS/1SKIP/1已有警告（5.58s）；独立临时venv以固定setuptools82.0.1/packaging26.3完成no-build-isolation editable构建，未重装原Linux开发venv。本地不伪造Windows/py-launcher执行。未新增用例计数：新增覆盖在真实CI setup/dependency检查阶段。后续同提交CI终态独立追加。
+
+## F1-WCI006 / 2026-10-05 / Codex / 可复现性收敛同提交终态成功
+
+已测工程df31fe9b4d4b27db601581cf9763a18d5f0f6366，https://github.com/T1doo/Sim2Act/actions/runs/37282999147 ，job111675209272 completed/success；本轮一次新CI，没有重跑或新增runner。实际Server2025 Datacenter10.0.26100、镜像20260925.250.1、PS7.6.6、PG17.11、管理员true/EnableLUA1。真实py -3.12选中hostedtoolcache Python3.12.10 x64；checkout无venv，由产品Setup创建.venv。完整Windows35项版本锁加editable sim2act0.1.0，实际metadata精确一致；pip check No broken requirements found，锁SHA256 a47e5137193a935ba825b213627c962dd315a657d43d087d07a240da208a9f66与测试Git blob匹配。
+
+原生smoke/ruff/mypy12模块/六脚本链成功，PG111PASS/0FAIL/0SKIP/1已有警告（30.70s），JUnit111/0/0/0；Report与Cleanup成功，PG server stopped。新增覆盖是实际Setup/依赖检查阶段，不虚增pytest数；Linux110PASS/1SKIP/1警告及临时固定backend editable构建PASS。源码hash、实际包集合、精确run/commit及脱敏日志见../evidence/WindowsCI-lock-20261005；原三轮证据保留。
+
+requirements.lock与V5源正文/manifest未改。Setup固定Windows完整版本集合、二进制安装、不追加依赖、非隔离锁内backend；不等于已锁wheel下载字节或拥有离线源。无模型调用/Secret/cache或artifact上传/main合并/部署/安全设置变更。文档追记不触发额外CI。剩余F1：目标Win11普通用户/UAC/真实安装组合原生验收、完整LIVE故障/语义门及授权真实材料/赛方条件；当前真实预算0，F1 IN_PROGRESS、F2 PLANNED，未宣称Win11/Mac/移动端通过。
+
+收尾同步阻塞：工程df31fe9已成功push且CI成功，但文档追记push报完整错误“fatal: could not read Username for 'https://github.com': No such device or address”。目标https://github.com/T1doo/Sim2Act.git，未返回HTTP状态，原因未知；没有重试push、查找凭据或改用其他发布路线。随后只把此错误记入本地证据和文档提交，工作区保持干净，待恢复既有Git认证后同步。详见本轮documentation-push-blocker.txt。

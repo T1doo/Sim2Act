@@ -67,7 +67,7 @@ python3.12 -m venv .venv
 # SIM2ACT_TEST_DATABASE_URL='<隔离测试数据库>' .venv/bin/python -m pytest -q
 ```
 
-不要让测试 URL 指向用户数据数据库。完整依赖锁由本轮 Linux 安装生成；跨平台安装及 Windows 原生运行需独立验收。
+不要让测试 URL 指向用户数据数据库。Linux沿用requirements.lock；Windows Setup使用独立requirements-windows.lock，完整版本集合及首次py-launcher安装已在Server CI验证，详情见[Windows CI](docs/F1/WindowsCI.md)。目标Win11及其他平台仍需独立验收。
 
 用应用环境变量执行 `python scripts/manage.py doctor|start|status|stop`，用迁移角色显式执行 `python -m sim2act.cli migrate`。API/worker 不自动迁移，也不搜索 `.env`、隐藏凭据或系统文件。PowerShell 仅载入用户显式指定的本地配置。
 
