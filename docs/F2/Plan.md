@@ -99,3 +99,11 @@
 ## 2026-10-05 / E12精确Server终态与界面验收依赖
 
 源码d3de155ba23cd5ba824f10f398f34b25c76e1817普通push；run37343525441/job111876274963 completed/success（2m36s），PG219PASS/0FAIL/0SKIP/1旧警告70.78秒。Setup/现显式迁移/最小应用角色CRUD/原生API-worker smoke/ruff/mypy17模块/Report/Cleanup成功，server stopped。11新增专项与既有完整工程通过；独立复核只覆盖基线6b008b2，修复由主开发回归，未独立复验。E12终态/results/89源码hash归档，文档收尾普通push不重复CI。真实视觉0/BLOCKED、20DOM不是截图；后续保留保护的浏览器通道/桌面手机状态审阅仍依赖，NextSteps前端美观标准保持。源码不再扩大抽象/框架/生成能力，真实0/F1/Win11/完整P-B/AT10/Release边界不变。
+
+## 2026-10-05 / E13邻接锚点与已接受回读失败（实施前）
+
+基线5d58951/d3de155，读NextSteps，范围仅静态复核指向的两个缺陷及preview同类回读。已合成复现同卡v2候选协调替换为有效v1的goal_version/snapshot/fingerprint/goal并重算candidate指纹，GET200/preview SUCCEEDED，撤回v2新增条件材料后仍然通过；属于既定DB篡改/重算指纹防御范围，非已暴露API攻击/真实泄露。新负例修前两FAIL；direct创建POST成功/GET503的DOM回读状态断言修前FAIL（测试脚本同名变量语法问题先纠正，不是产品缺陷）。
+
+修复范围：从候选来源版本、所选resource和capability重建原始请求指纹，与持久goal_candidate_requests.request_fingerprint独立锚点比对；不靠重算被篡改对象自己的hash，也不将合法旧版本强制变成最新。direct/preview已接受POST后GET失败明确显示已创建/已执行及读取失败，提供只GET回读重试，不再POST；showApp开始选择的generation需被调用方跟踪，外部切换项目/草案/目标卡使迟到响应失效。新表/迁移/模型/新功能均无。
+
+验证：协调降版/撤权负例、合法旧版本仍冻结、能力/材料绑定；DOM确认接受后失败/失败重试/仅GET恢复/不重复创建或执行/导航隔离；原20DOM与全回归、普通push精确ServerCI。真实浏览器0/BLOCKED，绝不称视觉PASS。NextSteps补明来源每次重开旧文件的运行依赖及后续来源退休权限策略/合成已完成任务fixture，不拿冷页面回读替代AT10旧文件独立。预算0/F1/Win11/P-B/发布门保持。
