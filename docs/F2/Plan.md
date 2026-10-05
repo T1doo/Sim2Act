@@ -95,3 +95,7 @@
 本轮验证：独立复核报告与可复现缺陷、针对修复的状态/导航/负例；源与目标Grant自然过期仍拒绝；SQLite/静态/DOM交互、普通push精确ServerCI。没有新增表/迁移或模型/代码生成/Release；PREVIEW来源子集不称完整P-B/AT10，预算0/F1和Win11未签收不变。浏览器/手机视觉未验证保留BLOCKED。
 
 本轮独立代理基线6b008b2只读复核77PASS/2PG角色SKIP，并复现来源删除绕过额外撤权、P-A输出接线改写仍成功、direct创建迟到抢选择、Decimal溢出500/无失败历史4项；5组P-B自然过期仍403。主开发修复4项，CSV完整模板校验复用于P-A/P-B，goal_candidate_requests来源锚点；direct/preview选择世代与状态反馈，DecimalException失败历史/guidance一致性。11新增专项及全SQLite214PASS/5SKIP/2警告26.11秒、DOM20PASS；CSS可逆统一色彩/字号/间距/表单/焦点/禁用/状态/手机规则，不是实际视觉PASS。独立报告不覆盖修复，主开发实际回归；Server终态待精确核实，预算0。
+
+## 2026-10-05 / E12精确Server终态与界面验收依赖
+
+源码d3de155ba23cd5ba824f10f398f34b25c76e1817普通push；run37343525441/job111876274963 completed/success（2m36s），PG219PASS/0FAIL/0SKIP/1旧警告70.78秒。Setup/现显式迁移/最小应用角色CRUD/原生API-worker smoke/ruff/mypy17模块/Report/Cleanup成功，server stopped。11新增专项与既有完整工程通过；独立复核只覆盖基线6b008b2，修复由主开发回归，未独立复验。E12终态/results/89源码hash归档，文档收尾普通push不重复CI。真实视觉0/BLOCKED、20DOM不是截图；后续保留保护的浏览器通道/桌面手机状态审阅仍依赖，NextSteps前端美观标准保持。源码不再扩大抽象/框架/生成能力，真实0/F1/Win11/完整P-B/AT10/Release边界不变。

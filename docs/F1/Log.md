@@ -244,3 +244,5 @@ E11精确Server终态：最终源码3d87f5eb6c8738b8dad4027260fb526a045ca3d5普�
 ## 2026-10-05 / E12独立边界复核与可用性收敛
 
 基线6b008b2，路线1953564；用户“前端好看点”纳入NextSteps视觉/手机/状态验收，不换框架。独立只读代理限定现有来源/权限/参数/过期/选择，77PASS/2PGSKIP，复现4个具体问题，5身份过期403。主开发修来源声明删除/撤权绕过、固定输出接线篡改、direct创建迟到抢选择、Decimal溢出500不记失败；补preview同app重选迟到保护。11持久专项，全SQLite214PASS/5平台SKIP/2警告26.11秒；产品HTTP/JS Node/jsdom20交互PASS，静态通过。CSS小范围可逆改善，真实浏览器保护不可用/平台无可调用正常通道，视觉0/BLOCKED，不改系统安全策略。源码普通push及精确ServerCI待核实；独立报告仅基线，修复未独立复验。无新表/依赖/模型/Release，F1/Win11/完整P-B/AT10未签收不变。
+
+E12精确Server终态：d3de155ba23cd5ba824f10f398f34b25c76e1817已普通push；run37343525441/job111876274963 completed/success（2m36s），PG219PASS/0FAIL/0SKIP/1旧Starlette警告70.78秒。Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时PG；Setup/现显式迁移/最小应用角色CRUD/原生API-worker smoke/ruff/mypy17模块/Report/Cleanup全成功，server stopped。11新工程专项/完整回归、Linux214PASS/5平台SKIP/2警告、DOM20交互保留；独立旧基线报告不等于修复独立复验。E12 run/results/89source hashes已归档、当前矩阵与路线更新；UI样式已实现但实际视觉0/BLOCKED，绝不用DOM顶替截图。合成服务已停、文档普通push收尾不重复CI；模型0、F1/Win11/完整P-B/AT10/发布未签收不变。

@@ -1,12 +1,14 @@
 # F1 权威当前验收状态
 
-2026-10-05；当前工程源码3d87f5eb6c8738b8dad4027260fb526a045ca3d5（可信PREVIEW成功来源→新CSV受限候选→新输入结果）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
+2026-10-05；当前工程源码d3de155ba23cd5ba824f10f398f34b25c76e1817（来源锚/固定模板接线/状态与选择保护/溢出失败收敛）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
 
-F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程，CSV固定模板PREVIEW_ONLY已实现，F2正式准入与发布仍BLOCKED。原身份正常push已验证，正式执行器审批允许项目网络操作，不改变保存环境策略。独立只读审核已完成并报告未发现新安全阻塞，核对了源码及精确Actions run/job；不是独立复跑，也不自动完成阶段签收。
+F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程，CSV固定模板PREVIEW_ONLY已实现，F2正式准入与发布仍BLOCKED。原身份正常push已验证，正式执行器审批允许项目网络操作，不改变保存环境策略。旧E10只读审核曾核对源码/精确run且无新阻塞；E12对6b008b2的独立只读复核发现4项具体缺陷，主开发已修并回归，但未独立复验修复，不自动完成阶段签收。
 
 历史E10：人工目标卡/授权CSV/可信csv.sum→声明式校验/冻结条件候选→新预览/历史/返回/刷新已实现，PG174PASS/0SKIP（含临时应用角色候选整条API路径），Linux170PASS/4平台SKIP、Chromium14候选+3刷新检查PASS。P-A仅固定模板工程子集，P-B/Release未实现，真实请求0。E9目标卡迟到响应与保存完成不再跨项目恢复或覆盖New草稿，真实LinuxChromium11交错回归PASS、精确ServerCI37325580965成功。E8通用目标卡/人工验收草案已实现，14专项及两个并发writer版本冲突，LinuxChromium7检查点、SQLite147PASS/3平台专项SKIP、ServerPG150PASS/0FAIL/0SKIP；E7的CSV输入提示保留。仅F2共同前置工程，不声称模型P-A/P-B生成、完整F2-T01或Win11/多引擎通过。
 
-最新E11：可信本地合成PREVIEW成功回执经完整模板/实际hash/工具回读/独立整数sum oracle核查，提取一层稳定逻辑并显式绑定新CSV；原目标NOT_RUN，来源PREVIEW不是F1 Run。33新工程负例及1PG业务角色全链专项，精确ServerCI37340717581成功，PG208PASS/0FAIL/0SKIP/1旧警告68.30秒；Linux203PASS/5平台SKIP，Node/jsdom12交互PASS。真实Chromium无可用沙箱，0检查/BLOCKED，不以DOM或旧E10截图替代；E11未经独立审核/复跑。完整P-B/AT10/源资料解耦/通用归纳/Release仍未完成，真实请求0。
+历史E11：可信本地合成PREVIEW成功回执经完整模板/实际hash/工具回读/独立整数sum oracle核查，提取一层稳定逻辑并显式绑定新CSV；原目标NOT_RUN，来源PREVIEW不是F1 Run。33新工程负例及1PG业务角色全链专项，精确ServerCI37340717581成功，PG208PASS/0FAIL/0SKIP/1旧警告68.30秒；Linux203PASS/5平台SKIP，Node/jsdom12交互PASS。真实Chromium无可用沙箱，0检查/BLOCKED，不以DOM或旧E10截图替代；E11未经独立审核/复跑。完整P-B/AT10/源资料解耦/通用归纳/Release仍未完成，真实请求0。
+
+最新E12：修目标来源声明可移除/额外撤权绕过、固定输出接线篡改仍成功、direct创建迟到抢选择、CSV Decimal溢出500不存失败；preview同app重选保护与加载/错误/成功反馈、CSS小范围配色/字体/间距/表单/焦点/禁用/手机规则收敛。11新专项、精确ServerCI37343525441SUCCESS/PG219PASS/0FAIL/0SKIP/1旧警告70.78秒，Linux214PASS/5平台SKIP/2警告、20DOM交互PASS。独立只读报告覆盖旧基线与4缺陷，主开发修复回归不是独立复验。真实浏览器/截图/手机视觉仍0/BLOCKED，不关闭sandbox；完整P-B/AT10/Release/F1/Win11未签收、模型0不变。
 
 ## 当前证据索引
 
@@ -25,6 +27,8 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 - E10：[目标卡到MOCK候选及预览闭环](../evidence/F2-goal-candidate-20261005/README.md)，e6b3e2c/[CI37329527816](https://github.com/T1doo/Sim2Act/actions/runs/37329527816)SUCCESS，PG174PASS/0FAIL/0SKIP（24新项含应用角色API路径），原生/静态/显式迁移/锁/清理通过；真实LinuxChromium14候选交错+3刷新/正常UI路径、E9原11竞态保持PASS。不是Server浏览器/Win11/独立复跑或完整P-A/P-B验收。
 
 - E11：[可信PREVIEW来源提取证据](../evidence/F2-preview-extraction-20261005/README.md)，3d87f5e/[CI37340717581](https://github.com/T1doo/Sim2Act/actions/runs/37340717581)SUCCESS，PG208PASS/0FAIL/0SKIP；显式迁移/应用角色CRUD/原生/静态/锁/清理通过。真实浏览器BLOCKED，12 DOM交互非浏览器。仅受限P-B工程子集，不签收完整P-B或F1。
+
+- E12：[独立缺陷与可用性收敛](../evidence/F2-usability-20261005/README.md)，d3de155/[CI37343525441](https://github.com/T1doo/Sim2Act/actions/runs/37343525441)SUCCESS，PG219PASS/0SKIP；原生/静态/业务CRUD/清理通过，DOM20非浏览器。下一阶段视觉及完整两路径门见[F2路线](../F2/NextSteps.md)。
 
 | F1任务 | 已实现/证据 | 当前缺口与边界 |
 | --- | --- | --- |

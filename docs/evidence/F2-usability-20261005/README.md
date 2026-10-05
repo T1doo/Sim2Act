@@ -10,4 +10,6 @@
 
 CSS仅增量改善现有配色/字号/行距/间距/表单尺寸/焦点/禁用态/状态/手机单栏规则；保持三个工作区及静态架构，没有新框架。无实际渲染审阅，重大视觉重构未做。工具目录没有可调用平台浏览器，官方runtime show退出1且未返回结构化连接；原Chromium无可用sandbox仍BLOCKED，不使用--no-sandbox、不访问私有认证或管道、不改系统安全策略。真实桌面/手机视觉验收见NextSteps，仍为依赖。
 
-普通push精确源码与ServerCI终态待核实，未预写PASS。权限/来源证据不签收完整P-A/P-B、原资料解耦、目标语义/Release或F1。
+精确源码d3de155ba23cd5ba824f10f398f34b25c76e1817普通push，ServerCI37343525441/job111876274963 completed/success（2m36s），PG219PASS/0FAIL/0SKIP/1旧警告70.78秒。Setup/现显式迁移/最小应用角色业务CRUD/原生API-worker smoke/ruff/mypy17模块/Report/Cleanup均PASS，server stopped；[终态](windows-run.json)、[精确结果](windows-results.json)、[89源文件hash](source-hashes.json)。Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时localhost PostgreSQL。GitHub保留固定动作Node20被平台强制Node24的注释，工作流未改。权限/来源证据不签收完整P-A/P-B、原资料解耦、目标语义/Release或F1。
+
+主开发修复回归通过不替代独立修复复验。合成8071服务已停止；文档收尾只普通push，不重复CI。

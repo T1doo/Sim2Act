@@ -48,3 +48,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 2026-10-05 后续用户决策：网络阻塞期间继续本地开发，开始 [F2 CSV 草案预览](F2/Plan.md)。固定可信模板、应用最小身份、声明式输入输出和持久预览历史；无 Release/业务写入、无模型请求。PG/Win11/完整 F2 验收保留，不以本地预览反向签收 F1。
 
 2026-10-05 E11：[P-B可信PREVIEW来源受限提取](F2/PreviewExtraction.md)工程已交付；成功合成预览回执经独立oracle核查后绑定新CSV并冷客户端计算新结果。源码3d87f5e，ServerCI37340717581SUCCESS/PG208PASS/0SKIP，Linux203PASS/5SKIP。来源不是F1 Run签收；完整P-B/AT10/Release未完成。真实Chromium无可用沙箱而BLOCKED，Node/jsdom12项不替代浏览器验收；[精确证据](evidence/F2-preview-extraction-20261005/README.md)。原F1/Win11/AT02和真实预算0不变。
+
+2026-10-05 E12：[现有两路径可用性收敛](evidence/F2-usability-20261005/README.md)已交付：独立只读旧基线复核4项缺陷，主开发修来源/模板接线/迟到选择/数值溢出失败，精确d3de155的ServerCI37343525441SUCCESS/PG219PASS/0SKIP。前端小范围样式和状态已改善，美观与手机一致性标准见[F2下一路线](F2/NextSteps.md)；真实视觉0/BLOCKED、20DOM不能替代截图。修复未独立复验，完整P-B/AT10/Release及F1/Win11未签收，模型0。
