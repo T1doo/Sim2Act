@@ -102,3 +102,9 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 基线最新开发分支a5b79d12（已ff-only同步，独立LIVE验收文档保留），公共T1doo/Sim2Act、main仍不合并。已核查官方windows-2025镜像PG17二进制与默认停用服务，以及官方pg_ctl Windows restricted-process实现。只新增窄push/contents:read/15min/concurrency取消的标准runner workflow与临时原生PG工程harness，无cache/artifact上传/secret/OAuth/模型请求。
 
 本地ruff/mypy/diff检查通过，Windows实际运行待首次push后监督；不能预写PASS或Win11通过。小smoke调用现有Setup/Doctor/Start/Status/Stop，随后Test Engineering；临时随机账户/localhost集群、运行角色DDL拒绝，always清理。Windows fixture仅补必要系统路径。初期shell gh API读取被envoy CONNECT代理403拒绝，不是GitHub权限判定；已有GitHub连接工具可读取公共仓库和commit workflow runs，未申请新权限。范围/复现/Win11剩余见WindowsCI.md。
+
+## F1-WCI002 / 2026-10-05 / Codex / 首轮真实Windows失败与修复
+
+实际首次云运行37280680166，源码067b6ddfb302717f92ca6420d721e98a0422d049，标准windows-2025。原生PG17.11临时集群、SCRAM、Setup/迁移成功；smoke到资源创建时错误断言200，现有API契约是201。工程回归SKIPPED，Report说明NOT_RUN，Cleanup成功。只修正smoke为精确201，不放宽产品契约。实际Server2025 Datacenter/build26100、镜像20260925.250.1、Python3.12.10 x64、PS7.6.6、管理员true/EnableLUA=1；纠正文档的UACoff假设。
+
+本次现有GitHub连接读取jobs与logs成功；没有重试已被代理拒绝的shell API，也没有请求新权限/Secret。Linux静态ruff/mypy12模块/diff PASS，SQLite110PASS/1SKIP/1已有警告（5.68s）。修复推送后监测新CI，结果未预写；真实模型请求0，Win11 AT-01仍BLOCKED。

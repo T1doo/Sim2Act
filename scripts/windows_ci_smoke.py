@@ -77,7 +77,7 @@ def main():
                 f"/api/projects/{pid}/resources",
                 json={"name": "value.txt", "format": "txt", "content": "42"},
             )
-            assert resource.status_code == 200
+            assert resource.status_code == 201
             request = {
                 "goal": "read synthetic value",
                 "resource_refs": [resource.json()["id"]],
