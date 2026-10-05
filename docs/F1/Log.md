@@ -96,3 +96,9 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 原04335528的模型返回名问题经零请求MockTransport/SQLite工程诊断确认FAILED、零工具；合成usage不计费。dd195681的第一项实际PG任务首轮HTTP200/Intern-S2接受/resource.read VERIFIED，但第二体2028>2000在发送前拒绝，Run保持FAILED，不覆盖。经用户明确授权缩短目标，新Run在正常loopbackAPI/独立worker/PG17.9/原InternModel两轮真实HTTP200，输入1170/1958，间隔6.100秒，max_tokens512/stream=false/修复0；反馈后答案42，Operation VERIFIED，Run为PARTIAL/LIVE，语义验收NOT_RUN。身份raw/canonical/policy、已知usage、冻结合同、上下文、回执和API/新连接持久回读均核验，14项零请求身份专项通过。
 
 真实HTTP总预算10已用尽：早期网络诊断3（未知/无返回，不记零费用）、独立API接入4（已知1155tokens）、项目第一任务1（576tokens）、短目标新任务2（1412tokens），已知总3143tokens，剩余0。本次归档不产生真实模型请求、不查询models；不保留请求头、配置环境值、token、私有reasoning、个人资料或原始tar/进程日志。真实输入仅合成文本42。API/worker/临时PG已关闭，原失败导出保留。Windows原生、真实材料、完整账号/故障矩阵和语义/F1整体门仍未通过，AT-02仅合成LIVE反馈子项已验证，F2继续PLANNED；停止测试与开发扩展。
+
+## F1-WCI001 / 2026-10-05 / Codex / 有界Windows云工程验证准备
+
+基线最新开发分支a5b79d12（已ff-only同步，独立LIVE验收文档保留），公共T1doo/Sim2Act、main仍不合并。已核查官方windows-2025镜像PG17二进制与默认停用服务，以及官方pg_ctl Windows restricted-process实现。只新增窄push/contents:read/15min/concurrency取消的标准runner workflow与临时原生PG工程harness，无cache/artifact上传/secret/OAuth/模型请求。
+
+本地ruff/mypy/diff检查通过，Windows实际运行待首次push后监督；不能预写PASS或Win11通过。小smoke调用现有Setup/Doctor/Start/Status/Stop，随后Test Engineering；临时随机账户/localhost集群、运行角色DDL拒绝，always清理。Windows fixture仅补必要系统路径。初期shell gh API读取被envoy CONNECT代理403拒绝，不是GitHub权限判定；已有GitHub连接工具可读取公共仓库和commit workflow runs，未申请新权限。范围/复现/Win11剩余见WindowsCI.md。

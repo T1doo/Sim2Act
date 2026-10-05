@@ -36,6 +36,15 @@ def test_AT05_real_process_stop_accept_restart_reopen(env, tmp_path):
         "SIM2ACT_MODEL_MODE": "mock",
         "SIM2ACT_LIVE_ENABLED": "false",
     }
+    if os.name == "nt":
+        # Windows subprocesses require their system/temp paths; never inherit credentials.
+        child_env.update(
+            {
+                key: os.environ[key]
+                for key in ("SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP")
+                if key in os.environ
+            }
+        )
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]

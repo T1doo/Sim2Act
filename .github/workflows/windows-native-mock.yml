@@ -1,0 +1,58 @@
+name: Windows Server native MOCK engineering
+
+on:
+  push:
+    branches: [dev/f1-foundation]
+    paths:
+      - .github/workflows/windows-native-mock.yml
+      - src/**
+      - scripts/**
+      - tests/**
+      - requirements.lock
+      - pyproject.toml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sim2act-windows-mock-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-mock:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SIM2ACT_MODEL_MODE: mock
+      SIM2ACT_LIVE_ENABLED: 'false'
+      SIM2ACT_MODEL: intern-s2
+      SIM2ACT_INTERN_TOKEN: ''
+      INTERN_API_TOKEN: ''
+      PYTHONUTF8: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_CACHE_DIR: '1'
+    steps:
+      - name: Checkout authorized development commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select Python 3.12 x64 (no Actions cache)
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Native runner context, temporary PostgreSQL, existing Setup
+        run: ./scripts/WindowsCI.ps1 -Phase Setup
+      - name: Small native API-worker-PowerShell smoke with application role
+        run: ./.venv/Scripts/python.exe scripts/windows_ci_smoke.py
+      - name: Existing PowerShell engineering regression suite
+        run: ./scripts/WindowsCI.ps1 -Phase Test
+      - name: Report actual test counts (no artifact upload)
+        if: always()
+        run: ./scripts/WindowsCI.ps1 -Phase Report
+      - name: Stop owned API-worker and temporary PostgreSQL
+        if: always()
+        run: ./scripts/WindowsCI.ps1 -Phase Cleanup
