@@ -10,4 +10,4 @@
 
 新应用执行仍PREVIEW_ONLY，来源为实际LOCAL_DECLARATIVE_TASK成功固定数值任务。只移除这个合成来源旧内容依赖，源授权依赖保持。完整P-B/AT10需原始规格全部证据、真实任务族/通用生成/正式发布等；本轮不签收完整P-B/F1/Win11/Release，真实模型请求0，未导出备份/上传额外包。
 
-精确Server终态待本轮源码普通push后归档，不预写PASS。
+精确源码[c776fa2](https://github.com/T1doo/Sim2Act/commit/c776fa24dac957485a65337ed3d4b428848b584c)已普通push，[ServerCI37349609291](https://github.com/T1doo/Sim2Act/actions/runs/37349609291)SUCCESS/job111896821583/2m31s，PG260PASS/0FAIL/0SKIP/1旧警告69.05秒。36新专项含最小应用角色完成任务/提取/退休/新输入/FAILED历史/回读/重试；Setup三新表显式迁移、原生smoke、ruff/mypy18、Report/Cleanup通过、server stopped。实际平台/计数[results](windows-results.json)、完整步骤[run](windows-run.json)、[92源码指纹](source-hashes.json)。保留Node20动作被GitHub强制Node24警告；本地合成服务已停，未独立复跑/视觉签收。

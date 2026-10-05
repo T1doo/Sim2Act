@@ -52,3 +52,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 2026-10-05 E12：[现有两路径可用性收敛](evidence/F2-usability-20261005/README.md)已交付：独立只读旧基线复核4项缺陷，主开发修来源/模板接线/迟到选择/数值溢出失败，精确d3de155的ServerCI37343525441SUCCESS/PG219PASS/0SKIP。前端小范围样式和状态已改善，美观与手机一致性标准见[F2下一路线](F2/NextSteps.md)；真实视觉0/BLOCKED、20DOM不能替代截图。修复未独立复验，完整P-B/AT10/Release及F1/Win11未签收，模型0。
 
 2026-10-05 E13：[来源请求锚定与回读恢复](evidence/F2-origin-recovery-20261005/README.md)已交付，精确4d01fb7/ServerCI37346429353SUCCESS/PG224PASS/0SKIP。5新专项、本地219PASS/5SKIP、DOM33明确非浏览器。完整P-B需先明示旧来源文件运行依赖、制定来源退休权限策略及完成合成task fixture，见[路线](F2/NextSteps.md)；当前未实施，不以冷页替代AT10。真实视觉BLOCKED、模型0、F1/Win11/Release未签收不变。
+
+2026-10-05 E14：[合成完成任务来源与显式退休切片](evidence/F2-task-retirement-20261005/README.md)已交付，精确c776fa2/ServerCI37349609291SUCCESS/PG260PASS/0SKIP。36新专项及三表显式迁移/业务CRUD路径；本地254PASS/6平台SKIP，原33+新14DOM/HTTP不是视觉。owner显式清旧内容保留最小证明，当前source授权及target交集保持、撤权/过期拒绝，无grant恢复。仅LOCAL_DECLARATIVE_TASK固定合成来源/新内容冷会话子项，完整P-B/AT10/Release/F1/Win11未签收、模型0/真实视觉BLOCKED。

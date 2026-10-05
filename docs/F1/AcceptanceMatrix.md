@@ -1,6 +1,6 @@
 # F1 权威当前验收状态
 
-2026-10-05；当前工程源码4d01fb72990fb73687a46d902b574b53c583288d（已接受来源请求锚定与direct/preview回读恢复）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
+2026-10-05；当前工程源码c776fa24dac957485a65337ed3d4b428848b584c（合成完成任务最小证明与显式旧来源退休切片）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
 
 F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程，CSV固定模板PREVIEW_ONLY已实现，F2正式准入与发布仍BLOCKED。原身份正常push已验证，正式执行器审批允许项目网络操作，不改变保存环境策略。旧E10只读审核曾核对源码/精确run且无新阻塞；E12对6b008b2的独立只读复核发现4项具体缺陷，主开发已修并回归，但未独立复验修复，不自动完成阶段签收。
 
@@ -10,7 +10,9 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 
 历史E12：修目标来源声明可移除/额外撤权绕过、固定输出接线篡改仍成功、direct创建迟到抢选择、CSV Decimal溢出500不存失败；preview同app重选保护与加载/错误/成功反馈、CSS小范围配色/字体/间距/表单/焦点/禁用/手机规则收敛。11新专项、精确ServerCI37343525441SUCCESS/PG219PASS/0FAIL/0SKIP/1旧警告70.78秒，Linux214PASS/5平台SKIP/2警告、20DOM交互PASS。独立只读报告覆盖旧基线与4缺陷，主开发修复回归不是独立复验。真实浏览器/截图/手机视觉仍0/BLOCKED，不关闭sandbox；完整P-B/AT10/Release/F1/Win11未签收、模型0不变。
 
-最新E13：协调有效旧版本降版/重算候选hash不能替换已接受请求锚点，绑定card/version/resource/capability，合法旧版本保持冻结。direct/preview已接受后读取失败显示已创建/已执行，GET-only恢复及项目/草案/目标卡迟到隔离。5新专项，精确ServerCI37346429353SUCCESS/PG224PASS/0SKIP/1警告63.13秒，Linux219PASS/5SKIP/1警告、33DOM非浏览器，未独立复验。来源每次重开旧文件仍是运行依赖；来源退休权限策略与完成task fixture待实施，冷页面不替代AT10。真实浏览器0/BLOCKED、完整P-B/Release/F1/Win11及模型0边界不变。
+历史E13：协调有效旧版本降版/重算候选hash不能替换已接受请求锚点，绑定card/version/resource/capability，合法旧版本保持冻结。direct/preview已接受后读取失败显示已创建/已执行，GET-only恢复及项目/草案/目标卡迟到隔离。5新专项，精确ServerCI37346429353SUCCESS/PG224PASS/0SKIP/1警告63.13秒，Linux219PASS/5SKIP/1警告、33DOM非浏览器，未独立复验。来源每次重开旧文件仍是运行依赖；来源退休权限策略与完成task fixture待实施，冷页面不替代AT10。真实浏览器0/BLOCKED、完整P-B/Release/F1/Win11及模型0边界不变。
+
+最新E14：独立LOCAL_DECLARATIVE_TASK实际可信工具+精确oracle才SUCCEEDED、失败真实FAILED；最小证明不含旧单元格/答案/会话，显式owner匹配证明/hash及保留最小证明consent后清旧content和任务input/output。旧source GET/工具拒绝，新Store冷会话新CSV40/换quantity5及坏输入FAILED；source现授权仍必要，撤权/过期拒绝，不恢复grant；target用户/项目/app交集保持。既有F1/目标卡/应用共享源拒绝退休，PREVIEW原路径保持。36新专项，精确ServerCI37349609291SUCCESS/PG260PASS/0FAIL/0SKIP/1警告69.05秒；Linux254PASS/6SKIP/3警告，原33+新14DOM非浏览器、未独立复跑。只完成固定合成任务/退休旧内容子项，不签收完整AT10/P-B/F1/Win11/Release，真实视觉0/BLOCKED/模型0。
 
 ## 当前证据索引
 
@@ -33,6 +35,8 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 - E12：[独立缺陷与可用性收敛](../evidence/F2-usability-20261005/README.md)，d3de155/[CI37343525441](https://github.com/T1doo/Sim2Act/actions/runs/37343525441)SUCCESS，PG219PASS/0SKIP；原生/静态/业务CRUD/清理通过，DOM20非浏览器。下一阶段视觉及完整两路径门见[F2路线](../F2/NextSteps.md)。
 
 - E13：[来源请求锚定与回读恢复](../evidence/F2-origin-recovery-20261005/README.md)，4d01fb7/[CI37346429353](https://github.com/T1doo/Sim2Act/actions/runs/37346429353)SUCCESS，PG224PASS/0SKIP；33DOM非浏览器，源文件依赖未解除，完整P-B/AT10未完成。
+
+- E14：[合成完成任务与来源退休](../evidence/F2-task-retirement-20261005/README.md)，c776fa2/[CI37349609291](https://github.com/T1doo/Sim2Act/actions/runs/37349609291)SUCCESS，PG260PASS/0SKIP；36新检查及应用角色CRUD路径，原33+新14DOM非浏览器。固定合成子项可冷会话运行独立新内容，来源授权仍必要；完整P-B/AT10未完成。
 
 | F1任务 | 已实现/证据 | 当前缺口与边界 |
 | --- | --- | --- |
