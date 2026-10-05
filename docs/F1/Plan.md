@@ -2,6 +2,10 @@
 
 最新恢复验证：正式执行器审批后正常fetch/push已成功；PATHEXT系统变量缺口已修复。源码055559344430cfbfdc5eaa9aca09a22db6bdf8c8的[Windows Server CI 37315778872](https://github.com/T1doo/Sim2Act/actions/runs/37315778872)终态SUCCESS：原生六脚本链/运行角色隔离/重启、完整锁、PG126PASS/0FAIL/0SKIP、ruff/mypy14模块及清理通过。LinuxSQLite123PASS/3平台专项SKIP。此更新覆盖下方迁移初期网络/依赖阻塞及“修复后Windows未复跑”的历史状态；Win11/完整AT-02/独立签收门不变。详见[恢复记录](../evidence/recovery-20261005/README.md)。
 
+## 历史实施记录（不代表当前状态）
+
+当前权威状态与E6/E7证据以[AcceptanceMatrix](AcceptanceMatrix.md)为准；下面保留逐轮计划事实，包括已解除的网络/依赖/Server复跑阻塞。
+
 2026-10-05新任务迁移：上传包校验通过，四个未推提交已在独立dev/f1-foundation工作副本恢复；157个包含文件字节/Git mode匹配，源码HEAD为42b377897c1fe501772a5b0a12973c8845c6361c。正常阶段push与同提交CI已获授权，但当前代理无法连接、pytest/项目venv缺失，push及回归/Windows复验未执行。[迁移证据](../evidence/recovery-20261005/README.md)。旧段落“不启动F2/不推送”为历史轮次状态；此前授权的隔离CSV并行工程保留，正式门不变。
 
 基线 V5；状态 IN_PROGRESS，阶段门未通过。当前工程增量为可复现 MOCK 底座；合成 LIVE 只读子链已验证，Windows及完整 LIVE 验收仍未通过。

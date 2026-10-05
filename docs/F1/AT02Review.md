@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 真实书生理解目标并选工具 | dd195681-short-run.json冻结Read; echo.目标、第一attempt真实Intern-S2响应选resource.read；short-wire.json首轮HTTP200 | 验收方确认此合成只读目标属于AT-02操作覆盖；不扩大为F3广泛语义评价 |
 | 收到工具反馈并修订 | persisted_context依序system/user/assistant/tool/assistant；唯一resource.read Operation VERIFIED、tool反馈与receipt匹配；第二真实attempt最终答案trim=42 | “修订”在冻结用例指消费反馈后的后续模型响应，未要求先故意答错；若验收方有不同解释需指出冻结条款，不新增门槛 |
-| 请求/返回模型、工具及修订链可核查 | 两attempt RECEIVED、intern-s2/Intern-S2策略、usage、reservations、PG回读、source-hashes和evidence-hashes；short-run-validation.json独立导出检查PASS | 本轮再核验链/哈希并交给验收方离线签收；不声称当前源码又实际LIVE复跑 |
+| 请求/返回模型、工具及修订链可核查 | 两attempt RECEIVED、intern-s2/Intern-S2策略、usage、reservations、PG回读、source-hashes和evidence-hashes；short-run-validation.json独立导出检查PASS | 本轮链/哈希离线核验已通过，交给验收方签收；不声称当前源码又实际LIVE复跑 |
 | 未用开发模型替代/禁止效果 | 正常InternModel/独立API-worker/PG17.9，两个官方端点请求，注册只读工具，无任意代码/外部业务写入；第一FAILED保留 | 真实调用已发生于dd195681；后续MOCK工程测试只回归实现，不能替代该来源 |
 | 冻结资产起始/清理元信息 | LIVE明确授权、独立新临时数据库、运行/迁移角色分离、资源hash及实际停服务/导出清理记录 | 导出未显式枚举AT资产所写“两主体/两项目”的完整初态，需对既有证据标为未证明；不凭E6的合成两主体fixture填补历史LIVE记录 |
 

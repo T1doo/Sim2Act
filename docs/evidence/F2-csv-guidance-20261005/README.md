@@ -8,4 +8,4 @@ UI使用Option/textContent安全DOM，下拉保留已选数值列；文本/缺�
 
 实际LinuxChromium（agent-browser、已安装系统Chromium、临时SQLite test_only/合成身份）6检查点PASS：重复表头提示/禁用、文本与非有限列禁用、行数、amount=4.00、quantity新结果15、第一历史回读。browser-results.json与已人工查看的合成页面columns.png保留，不含用户材料或真实凭据；本地fixture/browser已停止。非Win11或其他浏览器引擎通过证明。
 
-正常阶段push/精确提交WindowsServerPG CI授权范围不变；CI结果待实际终态，不预写PASS。模型请求0，无新依赖/表/迁移、任意代码、外部写入/发布、Release/实例身份。F1签收/F2正式准入仍未通过。
+正常阶段push已成功；精确源码07969cd3f2add1c446e2e0ef2e7775805bbf1854的[WindowsServerCI37318927260](https://github.com/T1doo/Sim2Act/actions/runs/37318927260)/job111792702059终态SUCCESS（2m12s）。PG136PASS/0FAIL/0SKIP/1旧警告43.50秒，原生smoke、完整依赖锁/pip check、ruff/mypy14模块、Report/Cleanup成功，server stopped。实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1。windows-run.json及windows-results.json为开发方以现有身份读取真实run/job/log归档，非独立复跑。文档收尾不重复CI。模型请求0，无新依赖/表/迁移、任意代码、外部写入/发布、Release/实例身份。F1签收/F2正式准入仍未通过。

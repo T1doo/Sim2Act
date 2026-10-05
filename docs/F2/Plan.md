@@ -8,7 +8,7 @@
 
 [当前E6证据](../evidence/recovery-20261005/README.md)：WindowsServerCI37315778872成功，PG126PASS/0FAIL/0SKIP（CSV11专项含其中），Linux123PASS/3平台专项SKIP，正常push已成功。owner隔离/PATHEXT修复已Server复验；独立只读审核无新安全阻塞，非独立复跑。旧[首轮浏览器/SQLite证据](../evidence/F2-csv-preview-20261005/README.md)为历史：其中PG BLOCKED不代表当前CI，6浏览器检查点不代表最新多平台复测。
 
-## 下一独立切片：CSV数值列选择与输入提示（实施前计划）
+## CSV数值列选择与输入提示：已实现（以下边界于实施前冻结）
 
 用户价值：打开草案即可选择可汇总数值列，看到记录数及无效列/材料说明，不必手输列名试错。范围为F2-T04/T06已授权固定模板的一小部分；不宣称自然语言P-A或完整目标卡。
 
@@ -22,4 +22,4 @@
 
 ## CSV输入提示切片本地结果
 
-已实现列元数据及安全下拉；10项新增工程检查、SQLite133PASS/3平台专项SKIP/1旧警告，ruff/mypy14模块/JS语法/diff通过。本地LinuxChromium实际6检查点及截图复核PASS，临时SQLite/合成身份已关闭；非Win11或其他浏览器引擎验收。授权普通push及同提交ServerPG CI为下一步，[证据](../evidence/F2-csv-guidance-20261005/README.md)，结果未预写。模型0/不可发布/F1未签收不变。
+已实现列元数据及安全下拉；10项新增工程检查、SQLite133PASS/3平台专项SKIP/1旧警告，ruff/mypy14模块/JS语法/diff通过。本地LinuxChromium实际6检查点及截图复核PASS，临时SQLite/合成身份已关闭；非Win11或其他浏览器引擎验收。普通push及精确源码07969cd的ServerPG CI37318927260已SUCCESS，PG136PASS/0FAIL/0SKIP（43.50秒），原生/锁/静态/清理通过；[证据](../evidence/F2-csv-guidance-20261005/README.md)。模型0/不可发布/F1未签收不变。

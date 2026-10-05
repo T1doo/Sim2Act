@@ -190,3 +190,7 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 ## 2026-10-05 / F2 CSV输入提示本地验证
 
 按事前F2Plan选择实现，现有inspect后user-project-app交集/候选/材料hash再次授权读取，只返回列结构/有限数可用性/行数，实际执行不信任提示缓存；安全Option/textContent下拉，材料错误禁用UI但不更改API失败历史语义。10新增检查，SQLite133PASS/3平台SKIP/1旧警告7.86秒，ruff/mypy14模块/JS语法/diff通过。agent-browser技能实测LinuxChromium6检查点PASS（重复表头、列禁用、行数、两个不同结果及历史）；合成fixture/browser停用，截图已查看，无用户材料/凭据。真实模型0，未启动Release/任意代码/外部发布；普通push后监督精确提交ServerCI，不预写成功。AT02离线12归档hash及两真实响应/feedback链核验PASS，初始完整两主体/两项目元信息未证明，等待验收决定，不请求真实API。
+
+## 2026-10-05 / CSV输入提示精确Windows终态成功
+
+07969cd3f2add1c446e2e0ef2e7775805bbf1854已正常push，run37318927260/job111792702059 completed/success（2m12s）；Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1，PG136PASS/0FAIL/0SKIP/1旧Starlette警告43.50秒；首次Setup/完整锁/pip check、原生角色/环境隔离/API-worker/重启smoke、ruff/mypy14模块、Report/Cleanup成功，PG server stopped。包括新增10项列提示及旧权限/撤权回读回归。以既有GitHub身份实际读取精确run/job/log，非独立复跑；E7证据已归档。文档收尾正常push，不触发重复CI，用户冻结source/AT不改。F1 Win11、AT02签收（初态完整两主体/两项目未证）、F2正式准入/Release、多引擎浏览器仍待完成；真实API0/预算0，未扩大外部发布或任意代码权限。

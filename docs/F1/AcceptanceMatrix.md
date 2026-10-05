@@ -1,8 +1,10 @@
 # F1 权威当前验收状态
 
-2026-10-05；当前工程基线27232c6（文档）/055559344430cfbfdc5eaa9aca09a22db6bdf8c8（实际测试源码）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
+2026-10-05；当前工程源码07969cd3f2add1c446e2e0ef2e7775805bbf1854（新增CSV列输入提示）。本页取代逐轮记录中的当前时态结论；历史见[收敛前快照](history/AcceptanceMatrix-before-convergence-20261005.md)。V5源设计和冻结用例未修改。
 
 F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程，CSV固定模板PREVIEW_ONLY已实现，F2正式准入与发布仍BLOCKED。原身份正常push已验证，正式执行器审批允许项目网络操作，不改变保存环境策略。独立只读审核已完成并报告未发现新安全阻塞，核对了源码及精确Actions run/job；不是独立复跑，也不自动完成阶段签收。
+
+最新E7：CSV列选择/只读输入提示已实现，实际LinuxChromium6检查点、SQLite133PASS/3平台专项SKIP，ServerPG136PASS/0FAIL/0SKIP；只属并行预览工程，不扩大F1正式签收条件或证明Win11/多引擎通过。
 
 ## 当前证据索引
 
@@ -11,6 +13,8 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 - E4：[历史浏览器](../evidence/F2-csv-preview-20261005/README.md)，6检查点；不是最新Win11或多浏览器复测。
 - E5：[契约](Contracts.md)、七Schema及冻结AT资产。固定CSV候选可编译执行单节点可信预览；完整P-A/P-B、通用DAG及Release仍未实现。
 - E6：[ServerCI37315778872](https://github.com/T1doo/Sim2Act/actions/runs/37315778872)，0555593，PG126PASS/0FAIL/0SKIP；原生六脚本/运行角色DDL拒绝/真实子进程白名单/PATHEXT专项/重启/完整依赖锁/清理通过。[精确结果及源码指纹](../evidence/recovery-20261005/README.md)。Linux123PASS/3平台专项SKIP。开发方读取真实日志，审核者核对run/job成功，均不称独立复跑。
+
+- E7：[CSV输入提示证据](../evidence/F2-csv-guidance-20261005/README.md)，07969cd/[CI37318927260](https://github.com/T1doo/Sim2Act/actions/runs/37318927260)SUCCESS，PG136PASS/0FAIL/0SKIP、原生/静态/锁/清理通过；开发方实际读取日志，非独立复跑。
 
 | F1任务 | 已实现/证据 | 当前缺口与边界 |
 | --- | --- | --- |
