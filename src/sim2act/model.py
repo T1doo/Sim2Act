@@ -8,6 +8,38 @@ from .contracts import strict_json
 from .errors import DomainError
 from .tools import validate_call
 
+MODEL_IDENTITY_POLICY_VERSION = "intern-s2-returned-name.v1"
+# Explicit provider aliases confirmed by independent intake evidence. No blanket case folding.
+RETURNED_MODEL_ALIASES = {"intern-s2": "intern-s2", "Intern-S2": "intern-s2"}
+
+
+def returned_model_identity(requested_model, raw_returned_model, *, enforced=True):
+    normalized = (
+        RETURNED_MODEL_ALIASES.get(raw_returned_model)
+        if isinstance(raw_returned_model, str)
+        else None
+    )
+    accepted = requested_model == "intern-s2" and normalized == requested_model
+    return {
+        "requested_model": requested_model,
+        "raw_returned_model": raw_returned_model if isinstance(raw_returned_model, str) else None,
+        "normalized_returned_model": normalized,
+        "normalization_policy_version": MODEL_IDENTITY_POLICY_VERSION,
+        "enforced": enforced,
+        "verdict": "ACCEPTED"
+        if accepted and enforced
+        else "REJECTED"
+        if enforced
+        else "NOT_ENFORCED_SYNTHETIC",
+    }
+
+
+def require_returned_model(identity):
+    if identity["enforced"] and identity["verdict"] != "ACCEPTED":
+        raise DomainError(
+            "MODEL_OUTPUT_INVALID", "Returned model does not match approved model identity"
+        )
+
 
 def parse_response(raw):
     try:

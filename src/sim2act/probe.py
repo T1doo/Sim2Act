@@ -11,7 +11,14 @@ from sqlalchemy import select
 from .config import Settings
 from .db import Store, attempts, operations
 from .errors import DomainError
-from .model import InternModel, MockModel, parse_response
+from .model import (
+    MODEL_IDENTITY_POLICY_VERSION,
+    InternModel,
+    MockModel,
+    parse_response,
+    require_returned_model,
+    returned_model_identity,
+)
 from .worker import Worker
 
 
@@ -60,7 +67,10 @@ def offline_probe():
                 {"model": body["model"], "stream": body["stream"], "max_tokens": body["max_tokens"]}
             )
             raw = synthetic.request(body["messages"], body["tools"])
-            raw["model"] = "intern-s2"  # Synthetic wire fixture; not actual upstream metadata.
+            raw["model"] = (
+                "Intern-S2"  # Synthetic reproduction of independently observed wire name.
+            )
+            require_returned_model(returned_model_identity(body["model"], raw["model"]))
             return httpx.Response(200, json=raw)
 
         wire_settings = replace(s, mode="live", live_enabled=True, token="SYNTHETIC_OFFLINE_ONLY")
@@ -115,6 +125,10 @@ def offline_probe():
             "live_reason": "No confirmed safe injection or approved budget",
             "native_windows": "BLOCKED",
             "request_model": "intern-s2",
+            "model_identity_policy_version": MODEL_IDENTITY_POLICY_VERSION,
+            "returned_model_identities": [
+                (a["parameters"] or {}).get("model_identity") for a in audit
+            ],
             "weight_version": "unknown",
             "model_list": {"provenance": "SYNTHETIC", "entries": model_list},
             "wire_requests": calls,

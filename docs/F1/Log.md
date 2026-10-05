@@ -76,3 +76,11 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 基线f118b33，dev/f1-foundation。Settings增加INTERN_API_TOKEN别名，非空SIM2ACT_INTERN_TOKEN优先，专用为空/未设置才读取通用别名，两者缺失/空则无token；只改名称支持，不改变LIVE开关。Common.ps1显式配置载入只额外允许准确别名，.env.example两个字段都空，README记录用户私有输入与优先级。
 
 测试：tests/test_config_token_alias.py 7PASS（0.02s），ruff/mypy12模块/diff检查PASS；1条已有Starlette/httpx弃用警告保留。配置测试完整替换environ映射，6种合成值/优先级/缺失组合，不读取真实环境凭据并断言无输出、MOCK默认不变；PowerShell允许名及模板作静态检查，不宣称原生执行。JUnit见../evidence/F1-token-alias-tests.xml。没有读取/写入真实.env、没有设置真实token、没有模型或数据库调用、没有启用LIVE。提交引用见承载本条记录的Git提交，本轮只做该小修正后结束。
+
+## F1-L009 / 2026-10-05T04:32:56.377335+00:00 / Codex / 返回模型标识兼容修复
+
+基线04335528。独立真实接入验证向父任务报告canonical模型发现intern-s2，但成功返回model=Intern-S2；旧Worker严格小写比较可复现FAILED且零工具。接受已有证据，不发新的真实请求。新增明确白名单intern-s2/Intern-S2 -> intern-s2，版本intern-s2-returned-name.v1；不泛化大小写、不删身份校验，不接受异型号/缺失等。Worker和人工恢复共用规则，适配器原返回保留，离线probe增加同形合成和显式规则检查。请求model仍intern-s2；Attempt原始请求/返回名与规范化规则版本在parameters持久记录，未知成本/暂停不变。
+
+新增14项零网络专项，含项目API/适配器/Worker的resource.read→VERIFIED反馈→42闭环、7种错误模型零Operation、别名不能越权、人工恢复暂停/拒绝及原名/策略保存。专项14PASS（1.04s），SQLite110PASS/1SKIP/1warning（6.15s），PG111PASS/1warning（17.47s）；ruff/mypy12模块/离线probe/diff/sourcehash PASS。见../evidence/F1-model-identity-TestReport.md及ModelIdentity.md。实际mode=live的测试配置只由代码内合成Settings和固定MockTransport提供，是FAULT_INJECTION而非真实账号验收。未访问.env/凭据、未运行真实API、未消耗父任务留给验证者的3次预算。独立实际复测仍待本次push后进行。
+
+新用户偏好补记：两项目希望跨Windows/苹果/Android等；本仓库记录响应式网页客户端目标，Windows本地后端仍是主验收，Mac本地后端另行兼容验证，Android/iOS仅浏览器连接已运行后端，不承诺手机运行数据库/原生App。窄屏/触控及实际设备/浏览器待独立核查；历史Chromium桌面/视口证据不当作iOS/Android实机PASS。本轮不展开新平台工程、不部署公网、不改监听或防火墙。设计补充见平台产品设计及Scope.md。提交准确SHA下一条追加。

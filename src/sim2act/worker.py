@@ -10,7 +10,15 @@ from sqlalchemy import insert, select, update
 from .config import Settings
 from .db import Store, attempts, fingerprint, new_id, operations, quotas, reservations, runs
 from .errors import DomainError
-from .model import InternModel, MockModel, normalize_usage, parse_response
+from .model import (
+    MODEL_IDENTITY_POLICY_VERSION,
+    InternModel,
+    MockModel,
+    normalize_usage,
+    parse_response,
+    require_returned_model,
+    returned_model_identity,
+)
 from .tools import definitions, dispatch
 
 
@@ -93,6 +101,7 @@ class Worker:
                         "stream": False,
                         "max_tokens": s.max_output_tokens,
                         "adapter_version": "1",
+                        "model_identity_policy_version": MODEL_IDENTITY_POLICY_VERSION,
                         "weight_version": "unknown",
                         "request_fingerprint": fingerprint(
                             {
@@ -109,6 +118,17 @@ class Worker:
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
             self.store.event(c, run_id, "MODEL_RESERVED", {"attempt_id": aid, "mode": s.mode})
             return aid
+
+    def attempt_parameters(self, c, attempt_id, raw):
+        parameters = dict(
+            c.execute(select(attempts.c.parameters).where(attempts.c.id == attempt_id)).scalar_one()
+        )
+        parameters["model_identity"] = returned_model_identity(
+            self.s.model,
+            raw.get("model") if isinstance(raw, dict) else None,
+            enforced=self.s.mode == "live",
+        )
+        return parameters
 
     def checkpoint(self, run_id, fence, context):
         with self.store.tx() as c:
@@ -228,11 +248,10 @@ class Worker:
                     try:
                         raw = self.model.request(ctx["messages"], definitions())
                         msg, pending = parse_response(raw)
-                        if self.s.mode == "live" and raw.get("model") != self.s.model:
-                            raise DomainError(
-                                "MODEL_OUTPUT_INVALID",
-                                "Returned model does not match approved model",
-                            )
+                        identity = returned_model_identity(
+                            self.s.model, raw.get("model"), enforced=self.s.mode == "live"
+                        )
+                        require_returned_model(identity)
                         ctx["messages"].append(msg)
                         with self.store.tx() as c:
                             current = self.store.guard(c, rid, fence)
@@ -244,6 +263,7 @@ class Worker:
                                 .values(
                                     status="RECEIVED",
                                     response_model=raw.get("model"),
+                                    parameters=self.attempt_parameters(c, aid, raw),
                                     usage=normalize_usage(raw),
                                     response=msg,
                                     elapsed=time.monotonic() - start,
@@ -279,6 +299,7 @@ class Worker:
                                     error=e.code,
                                     elapsed=time.monotonic() - start,
                                     usage=normalize_usage(raw),
+                                    parameters=self.attempt_parameters(c, aid, raw),
                                     response_model=raw.get("model")
                                     if isinstance(raw, dict) and isinstance(raw.get("model"), str)
                                     else None,

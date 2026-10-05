@@ -796,7 +796,7 @@ class Store:
         acknowledge_unknown_cost,
         response=None,
     ):
-        from .model import parse_response
+        from .model import parse_response, require_returned_model, returned_model_identity
 
         with self.tx() as c:
             run = (
@@ -887,14 +887,20 @@ class Store:
                 )
                 if current_fp != stored_fp:
                     raise DomainError("VERSION_CONFLICT", "Request context has changed")
-                expected_model = (
-                    "MOCK-intern-contract" if attempt["mode"] == "MOCK" else "intern-s2"
+                raw_returned_model = response.get("model")
+                identity = returned_model_identity(
+                    attempt["request_model"], raw_returned_model, enforced=attempt["mode"] == "LIVE"
                 )
-                if response.get("model") != expected_model:
-                    raise DomainError(
-                        "MODEL_OUTPUT_INVALID",
-                        "Recovered response model does not match attempt mode",
-                    )
+                if attempt["mode"] == "MOCK":
+                    if raw_returned_model != "MOCK-intern-contract":
+                        raise DomainError(
+                            "MODEL_OUTPUT_INVALID",
+                            "Recovered response model does not match synthetic attempt",
+                        )
+                elif attempt["mode"] == "LIVE":
+                    require_returned_model(identity)
+                else:
+                    raise DomainError("MODEL_OUTPUT_INVALID", "Unknown attempt mode")
                 contract = self.frozen_contract(c, run)
                 message, calls = parse_response(response)
                 if len(calls) + ctx["tools"] > contract.limits.max_tools:
@@ -905,11 +911,13 @@ class Store:
                     .where(attempts.c.id == attempt_id)
                     .values(
                         status="RECONCILED_RESPONSE",
-                        response_model=expected_model,
+                        response_model=raw_returned_model,
+                        parameters={**(attempt["parameters"] or {}), "model_identity": identity},
                         response=message,
                     )
                 )
                 state = "CANCELLED" if run["cancel_intent"] else "PAUSED"
+                result["model_identity"] = identity
                 result["response_fingerprint"] = fingerprint(message)
                 result["tools_dispatched"] = 0
             elif decision == "close_unknown":
