@@ -1,6 +1,6 @@
 # Sim2Act 动态总入口
 
-当前基线：V5；F1 IN_PROGRESS，尚未通过阶段门。仓库开发分支：dev/f1-foundation。
+当前基线：V5；F1 IN_PROGRESS，首个 MOCK 工程增量已验证，尚未通过阶段门。仓库开发分支：dev/f1-foundation。
 
 规范：[平台产品设计](平台产品设计.md)、[分阶段开发计划](分阶段开发计划.md)。
 来源：[V5 原始文本与校验](sources/V5/manifest.json)。原始正文完整保留；修订见 [DocumentReview](DocumentReview.md)。
@@ -23,3 +23,5 @@
 - 用户 Windows 环境及数据库安装条件（BLOCKED，仅影响原生验收）。
 - 书生账号、本地私有配置、批准的调用/Token/修复预算（BLOCKED，仅影响 LIVE）。
 - 授权真实材料与独立验证者（F1 收集条件，F3 评价）。
+
+当前工程证据：[F1 TestReport](evidence/F1-TestReport.md)、[架构与限制](F1/Architecture.md)、[LIVE能力缺口](F1/capability-report.json)。Windows、LIVE、完整AppManifest编译和R0目标验收尚未通过。

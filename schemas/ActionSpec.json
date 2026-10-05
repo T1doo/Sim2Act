@@ -1,0 +1,205 @@
+{
+  "$defs": {
+    "Executor": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "registered_tool",
+            "bounded_agent"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        },
+        "version": {
+          "const": "1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref",
+        "version"
+      ],
+      "title": "Executor",
+      "type": "object"
+    },
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_requests": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "max_tools": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Tools",
+          "type": "integer"
+        },
+        "max_repairs": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Repairs",
+          "type": "integer"
+        },
+        "max_total_tokens": {
+          "maximum": 64000,
+          "minimum": 1,
+          "title": "Max Total Tokens",
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "run_seconds": {
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Run Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_requests",
+        "max_tools",
+        "max_repairs",
+        "max_total_tokens",
+        "max_output_tokens",
+        "run_seconds"
+      ],
+      "title": "Limits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0-draft",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "action_id": {
+      "pattern": "^[a-z]+_[a-f0-9]{32}$",
+      "title": "Action Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "input_schema": {
+      "additionalProperties": true,
+      "title": "Input Schema",
+      "type": "object"
+    },
+    "output_schema": {
+      "additionalProperties": true,
+      "title": "Output Schema",
+      "type": "object"
+    },
+    "executor": {
+      "$ref": "#/$defs/Executor"
+    },
+    "allowed_tool_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Tool Refs",
+      "type": "array"
+    },
+    "dependencies": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "permission_requirements": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Permission Requirements",
+      "type": "array"
+    },
+    "effect": {
+      "enum": [
+        "read",
+        "project_write",
+        "external_write"
+      ],
+      "title": "Effect",
+      "type": "string"
+    },
+    "preconditions": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Preconditions",
+      "type": "array"
+    },
+    "postcheck_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Postcheck Refs",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    },
+    "idempotency": {
+      "enum": [
+        "read_only",
+        "transactional"
+      ],
+      "title": "Idempotency",
+      "type": "string"
+    },
+    "reconcile_ref": {
+      "const": "operation.lookup.v1",
+      "title": "Reconcile Ref",
+      "type": "string"
+    },
+    "error_contract": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Error Contract",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "action_id",
+    "revision",
+    "input_schema",
+    "output_schema",
+    "executor",
+    "allowed_tool_refs",
+    "dependencies",
+    "permission_requirements",
+    "effect",
+    "preconditions",
+    "postcheck_refs",
+    "limits",
+    "idempotency",
+    "reconcile_ref",
+    "error_contract"
+  ],
+  "title": "ActionSpec",
+  "type": "object"
+}

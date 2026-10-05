@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "OperationState": {
+      "enum": [
+        "PREPARED",
+        "DISPATCHED",
+        "RECEIPT_KNOWN",
+        "VERIFIED",
+        "FAILED_SAFE",
+        "OUTCOME_UNKNOWN",
+        "EFFECT_KNOWN_INVALID"
+      ],
+      "title": "OperationState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "pattern": "^[a-z]+_[a-f0-9]{32}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^[a-z]+_[a-f0-9]{32}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "request_fingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Request Fingerprint",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/OperationState"
+    },
+    "receipt_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Receipt Ref"
+    }
+  },
+  "required": [
+    "operation_id",
+    "run_id",
+    "request_fingerprint",
+    "status",
+    "receipt_ref"
+  ],
+  "title": "Operation",
+  "type": "object"
+}

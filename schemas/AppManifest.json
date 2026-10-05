@@ -1,0 +1,195 @@
+{
+  "$defs": {
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_requests": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "max_tools": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Tools",
+          "type": "integer"
+        },
+        "max_repairs": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Repairs",
+          "type": "integer"
+        },
+        "max_total_tokens": {
+          "maximum": 64000,
+          "minimum": 1,
+          "title": "Max Total Tokens",
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "run_seconds": {
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Run Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_requests",
+        "max_tools",
+        "max_repairs",
+        "max_total_tokens",
+        "max_output_tokens",
+        "run_seconds"
+      ],
+      "title": "Limits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0-draft",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "app_id": {
+      "pattern": "^[a-z]+_[a-f0-9]{32}$",
+      "title": "App Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "origin": {
+      "enum": [
+        "goal",
+        "task_run"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "goal_ref": {
+      "pattern": "^[a-z]+_[a-f0-9]{32}$",
+      "title": "Goal Ref",
+      "type": "string"
+    },
+    "source_run_ref": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]+_[a-f0-9]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Run Ref"
+    },
+    "input_schema": {
+      "additionalProperties": true,
+      "title": "Input Schema",
+      "type": "object"
+    },
+    "output_schema": {
+      "additionalProperties": true,
+      "title": "Output Schema",
+      "type": "object"
+    },
+    "views": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Views",
+      "type": "array"
+    },
+    "workflow": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Workflow",
+      "type": "array"
+    },
+    "action_bindings": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Action Bindings",
+      "type": "array"
+    },
+    "data_bindings": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Data Bindings",
+      "type": "array"
+    },
+    "runtime_identity_requirements": {
+      "additionalProperties": true,
+      "title": "Runtime Identity Requirements",
+      "type": "object"
+    },
+    "permission_requirements": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Permission Requirements",
+      "type": "array"
+    },
+    "dependency_lock": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Dependency Lock",
+      "type": "array"
+    },
+    "validation_suite_ref": {
+      "title": "Validation Suite Ref",
+      "type": "string"
+    },
+    "runtime_limits": {
+      "$ref": "#/$defs/Limits"
+    },
+    "data_schema_version": {
+      "minimum": 1,
+      "title": "Data Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "app_id",
+    "revision",
+    "origin",
+    "goal_ref",
+    "input_schema",
+    "output_schema",
+    "views",
+    "workflow",
+    "action_bindings",
+    "data_bindings",
+    "runtime_identity_requirements",
+    "permission_requirements",
+    "dependency_lock",
+    "validation_suite_ref",
+    "runtime_limits",
+    "data_schema_version"
+  ],
+  "title": "AppManifest",
+  "type": "object"
+}
