@@ -163,22 +163,42 @@ def test_ineligible_source_never_creates_candidate_or_authority(env, status):
 
 @pytest.mark.parametrize(
     "tamper",
-    ["output", "input", "receipt_fp", "error", "source_hash", "source_content", "template"],
+    [
+        "output",
+        "input",
+        "null_input",
+        "receipt_fp",
+        "error",
+        "source_hash",
+        "source_content",
+        "template",
+    ],
 )
 def test_source_tampering_blocks_extraction_without_side_effect(env, tamper):
     aid, receipt, _, body, _ = setup_source(env)
     with env[0].tx() as c:
-        if tamper in {"output", "input", "receipt_fp", "error"}:
+        if tamper in {"output", "input", "null_input", "receipt_fp", "error"}:
             value = {
                 "output": {**receipt["output"], "sum": "999"},
                 "input": {"column": "quantity"},
+                "null_input": None,
                 "receipt_fp": "0" * 64,
                 "error": {"code": "INVALID_INPUT"},
             }[tamper]
             c.execute(
                 update(app_previews)
                 .where(app_previews.c.id == receipt["id"])
-                .values(**{("fingerprint" if tamper == "receipt_fp" else tamper): value})
+                .values(
+                    **{
+                        (
+                            "fingerprint"
+                            if tamper == "receipt_fp"
+                            else "input"
+                            if tamper == "null_input"
+                            else tamper
+                        ): value
+                    }
+                )
             )
         elif tamper.startswith("source_"):
             c.execute(

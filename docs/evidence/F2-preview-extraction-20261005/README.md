@@ -4,7 +4,7 @@
 
 可信单节点CSV合成预览成功回执→工具回读/独立整数sum oracle→来源/版本/原条件快照→新CSV明确授权/绑定→column参数化新预览。源旧4.00，新材料40/另一列5，失败输入保留FAILED历史。来源PREVIEW不是F1 Run；未把PARTIAL/UNKNOWN/FAILED标成功，原AT02/V5不改，目标语义NOT_RUN、PREVIEW_ONLY。模型0/无Release/无外部业务写入。
 
-32新增专项本地PASS、1 PG应用角色专项SKIP；源状态、权限撤回（含未选来源条件材料）、跨主体/同主体跨项目、完整模板/回执/候选/新材料篡改、请求键及版本冲突、并发一份身份与两条最小Grant、失败事务回滚、非目标卡直接模板源和独立oracle舍入/资源界限已测。[sqlite.xml](sqlite.xml)为最终全回归记录：202PASS/5平台SKIP/2警告，19.86秒。ruff/mypy17模块/JS语法/diff通过。
+33新增专项本地PASS、1 PG应用角色专项SKIP；源状态、权限撤回（含未选来源条件材料）、跨主体/同主体跨项目、完整模板/回执/候选/新材料篡改、请求键及版本冲突、并发一份身份与两条最小Grant、失败事务回滚、非目标卡直接模板源和独立oracle舍入/资源界限已测。[sqlite.xml](sqlite.xml)为最终全回归记录：203PASS/5平台SKIP/1旧警告，20.30秒。ruff/mypy17模块/JS语法/diff通过。
 
 [dom-results.json](dom-results.json)：12项Node/jsdom正常/失败/冷页/导航/重复交互检查PASS。使用本地真实HTTP API和产品JS，但**不是Chromium或真实浏览器验收**。复跑：独立mock测试环境安装包后运行browser-fixture.py（8071）及dom-regression.cjs（需测试工具jsdom）。测试工具在/workspace/browser-tools，产品依赖未增加。
 

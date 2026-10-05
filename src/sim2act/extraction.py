@@ -100,7 +100,8 @@ def verified_source(store, c, user, preview_id, platform_limits, *, lock=False):
         raise DomainError("VERIFICATION_FAILED", "只接受已成功且可核查的PREVIEW回执")
     validate_value(manifest.output_schema, row["output"], "source_output")
     if (
-        set(row["input"]) != {"column"}
+        not isinstance(row["input"], dict)
+        or set(row["input"]) != {"column"}
         or not isinstance(row["input"]["column"], str)
         or row["fingerprint"]
         != fingerprint({"candidate": draft["fingerprint"], "input": row["input"]})
