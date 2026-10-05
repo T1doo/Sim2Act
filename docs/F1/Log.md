@@ -66,3 +66,7 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 迁移为显式migrate新增三表（run_contracts/operation_intents/local_effects），不由API/worker建表、不删除旧数据；旧Run不伪造快照。Linux工程闭环已完成本轮列出的F1独立缺口，停止扩展；LIVE安全配置/批准预算、Windows原生、真实材料/赛方条件仍待核实，实际账号能力报告尚未验收。F1未通过，F2保持PLANNED。具体步骤见Scope.md，工程提交SHA下一条追记。
 
 提交前补充：恢复既有工具反馈改为原位置更新/按原助手步骤插入，保留对话顺序；已有完整最终响应时继续不增加Attempt，独立断言通过。最终仍90项PG/89项SQLite加1skip，最新时长已更新，源码指纹按最终文件生成。
+
+## F1-L007 / 2026-10-05T03:51:00.276565+00:00 / Codex / F1-3提交证据
+
+工程源码提交：[a38b98d4d39712afcbf256fe7b697ce8ed16db8f](https://github.com/T1doo/Sim2Act/commit/a38b98d4d39712afcbf256fe7b697ce8ed16db8f)，dev/f1-foundation。最终PG90PASS/1warning（15.01s）、SQLite89PASS/1SKIP/1warning（4.93s），ruff/mypy12模块/Schema/离线probe/hash/diff检查通过。新增三表需显式迁移，旧快照不补造，完整应用编译运行和发布属F2未实施。此追记只改文档，随工程提交正常push后核对远端SHA；F1仍IN_PROGRESS，LIVE/Windows等实际验收保持BLOCKED，停止扩展底座。

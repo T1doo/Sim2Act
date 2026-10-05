@@ -1,6 +1,6 @@
 # F1-3 工程实测报告
 
-时间 2026-10-05T03:48:58.147384+00:00；基线 2c3761eecbbf3aca4f220c9226c850ce8c524a91，dev/f1-foundation。Linux/Python3.12.14/临时PostgreSQL17.9；当前工程提交SHA下一条日志追记。
+时间 2026-10-05T03:48:58.147384+00:00；基线 2c3761eecbbf3aca4f220c9226c850ce8c524a91，dev/f1-foundation。Linux/Python3.12.14/临时PostgreSQL17.9；工程源码提交：[a38b98d4d39712afcbf256fe7b697ce8ed16db8f](https://github.com/T1doo/Sim2Act/commit/a38b98d4d39712afcbf256fe7b697ce8ed16db8f)；后续为文档追记。
 
 | 实际命令/证据 | 结果 |
 | --- | --- |
