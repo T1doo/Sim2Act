@@ -163,6 +163,24 @@ reservations = Table(
 heartbeats = Table("heartbeats", meta, Column("id", String, primary_key=True), Column("at", Float))
 
 # F2 engineering preview namespace, separate from F1 tasks and release/instance data.
+goal_cards = Table(
+    "goal_cards", meta,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("title", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+)
+goal_card_versions = Table(
+    "goal_card_versions", meta,
+    Column("card_id", String, primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+)
+
 app_drafts = Table(
     "app_drafts",
     meta,

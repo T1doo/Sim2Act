@@ -194,3 +194,11 @@ run37315380735/23c02c6终态FAIL：隔离Python导入/同应用角色SELECT1探�
 ## 2026-10-05 / CSV输入提示精确Windows终态成功
 
 07969cd3f2add1c446e2e0ef2e7775805bbf1854已正常push，run37318927260/job111792702059 completed/success（2m12s）；Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/PG17.11/admin=true/EnableLUA1，PG136PASS/0FAIL/0SKIP/1旧Starlette警告43.50秒；首次Setup/完整锁/pip check、原生角色/环境隔离/API-worker/重启smoke、ruff/mypy14模块、Report/Cleanup成功，PG server stopped。包括新增10项列提示及旧权限/撤权回读回归。以既有GitHub身份实际读取精确run/job/log，非独立复跑；E7证据已归档。文档收尾正常push，不触发重复CI，用户冻结source/AT不改。F1 Win11、AT02签收（初态完整两主体/两项目未证）、F2正式准入/Release、多引擎浏览器仍待完成；真实API0/预算0，未扩大外部发布或任意代码权限。
+
+## 2026-10-05 / 下一通用F2切片选择
+
+独立AT02审核已确认历史核心操作/oracle链一致，不需先答错、Win11/真实材料/429；完整初态两主体/两项目及隔离Grant仍缺证明，另任务只读取证。本开发保持PARTIAL/LIVE/预算0，不等待该依赖停止所有工程。核对V5 P-A/P-B后选择F2-T01通用结构化目标卡+版本化验收草案，共同前置而非继续CSV边角；P-B尚无完整已完成任务来源，不能伪称实现。实施前字段/权限/版本/迁移/回归边界已写F2Plan。
+
+## 2026-10-05 / 通用目标卡本地闭环
+
+原F2-T01切片按实施前Plan完成，一般目标字段分離/授权材料hash、不可变版本历史与旧窗口CAS冲突，新增两表显式迁移/运行角色CRUD，不改F1GoalSpec/source/AT或赋DDL。14专项，SQLite147PASS/3平台SKIP/1旧警告9.27秒，ruff/mypy15模块/JS语法/diff通过；Chromium7检查点通过，旧窗口冲突保留未保存文字，最新版本/原条件历史在reload后仍可回读。测试助手初期CLI参数/JS表达式纠正，最终断言全部通过，无产品绕过。合成localhost fixture/browser关闭，截图人工查看，真实API0/预算0。原LIVE任务历史查询已明确仅一owner/一项目且无完整DB导出，AT02完整初态无法补证；额外预算待批，本开发不调用。普通push后监督精确ServerCI至终态，当前不预写PASS。

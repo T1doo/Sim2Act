@@ -18,6 +18,7 @@ from .contracts import (
 )
 from .db import Store, app_drafts, fingerprint, grants, heartbeats, projects, resources, runs
 from .errors import DomainError
+from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
 from .preflight import preflight
 
 
@@ -340,6 +341,22 @@ def create_app(store=None, settings=None):
                 .values(revoked=True, revision=g["revision"] + 1)
             )
         return {"status": "REVOKED"}
+
+    @app.get("/api/projects/{pid}/goal-cards")
+    def project_goal_cards(pid: str, user=user_dependency):
+        return list_cards(db, user, pid)
+
+    @app.post("/api/projects/{pid}/goal-cards", status_code=201)
+    def new_goal_card(pid: str, body: GoalCardInput, user=user_dependency):
+        return create_card(db, user, pid, body.model_dump())
+
+    @app.get("/api/goal-cards/{cid}")
+    def get_goal_card(cid: str, user=user_dependency):
+        return inspect_card(db, user, cid)
+
+    @app.put("/api/goal-cards/{cid}")
+    def update_goal_card(cid: str, body: GoalCardUpdate, user=user_dependency):
+        return revise_card(db, user, cid, body.model_dump(exclude={"expected_version"}), body.expected_version)
 
     @app.get("/api/apps")
     def apps(user=user_dependency):

@@ -1,7 +1,7 @@
 "use strict";
 let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
-let activeApp = null;
+let activeApp = null, activeGoalCard = null;
 const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
@@ -18,6 +18,9 @@ function row(text, action, label) {
 async function refresh() {
   const pid = $("project-select").value; if (!pid) return;
   const materials = await api(`/api/projects/${pid}/resources`); refs = materials.map(x => x.id);
+  const selectedGoals=Array.from($("goal-card-resources").selectedOptions).map(o=>o.value);
+  $("goal-card-resources").replaceChildren(...materials.map(m=>{const o=new Option(m.name,m.id);o.selected=selectedGoals.includes(m.id);return o;}));
+  await refreshGoalCards(pid);
   $("materials").replaceChildren(...materials.map(x => row(`${x.name} · ${x.format} · ${x.hash.slice(0, 12)}`, async () => {const data=await api(`/api/resources/${x.id}`);$("resource-preview").hidden=false;$("resource-preview").textContent=data.content;}, "查看")));
   const oldResource = $("app-resource").value;
   $("app-resource").replaceChildren(...materials.filter(x => x.format === "csv").map(x => {const o=document.createElement("option");o.value=x.id;o.textContent=x.name;return o;}));
@@ -65,7 +68,7 @@ $("project-form").onsubmit = safe(async () => {await api("/api/projects","POST",
 $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").value;if(!pid)throw new Error("先选择项目");await api(`/api/projects/${pid}/resources`,"POST",{name:$("resource-name").value,format:$("format").value,content:$("content").value}); await refresh();});
 $("run-form").onsubmit = safe(async () => {const pid=$("project-select").value;if(!pid)throw new Error("先选择项目");const r=await api(`/api/projects/${pid}/runs`,"POST",{goal:$("goal").value,resource_refs:refs,request_key:crypto.randomUUID()});await refresh();await showRun(r.run_id);});
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {activeRun=null;clearApp();unresolvedAttempts=[];$("reconcile-panel").hidden=true;$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();});
+$("project-select").onchange = safe(async () => {activeRun=null;clearApp();clearGoalCard();unresolvedAttempts=[];$("reconcile-panel").hidden=true;$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();});
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => ["projects","apps","resources"].forEach(id => $(id).hidden=id!==b.dataset.tab));
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun);}}catch(e){$("health").textContent="后台不可用";}},2500);
@@ -114,4 +117,35 @@ $("app-preview-form").onsubmit=safe(async()=>{
     const r=await api(`/api/apps/${id}/previews`,"POST",{input:{column:$("app-column").value},request_key:crypto.randomUUID()});
     if(activeApp===id){await showApp(id);$("app-output").replaceChildren(row(`${previewText(r)} · ${r.id.slice(0,16)}`));}
   } finally {$("app-preview-submit").disabled=!$("app-column").value;}
+});
+
+
+const goalCardFields=["title","goal","known","assumptions","unresolved","constraints","acceptance_checks"];
+function clearGoalCard() {
+  activeGoalCard=null;$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
+  $("goal-card-history").replaceChildren();$("goal-card-history-detail").textContent="";
+}
+async function refreshGoalCards(pid) {
+  const cards=await api(`/api/projects/${pid}/goal-cards`);
+  $("goal-card-list").replaceChildren(...cards.items.map(c=>row(`${c.title} · 草案 v${c.version}`,()=>showGoalCard(c.id),"打开目标卡")));
+  if(!cards.items.length)$("goal-card-list").textContent="尚无目标卡。可先整理任意目标及其检查要求。";
+}
+async function showGoalCard(id) {
+  const card=await api(`/api/goal-cards/${id}`);activeGoalCard={id,version:card.version};
+  goalCardFields.forEach(f=>{$(`goal-card-${f}`).value=Array.isArray(card.content[f]) ? card.content[f].join("\n") : card.content[f];});
+  Array.from($("goal-card-resources").options).forEach(o=>o.selected=card.content.resource_refs.includes(o.value));
+  $("goal-card-status").textContent=`草案 v${card.version} · 未验收/不可执行 · 保存将建立新版本`;
+  $("goal-card-history-detail").textContent="";
+  $("goal-card-history").replaceChildren(...card.history.map(v=>row(`v${v.version} · ${v.snapshot.content.title}`,()=>{const labels={title:"名称",goal:"目标",known:"已知",assumptions:"假设",unresolved:"未决项",constraints:"硬条件",acceptance_checks:"验收检查"};$("goal-card-history-detail").textContent=goalCardFields.map(f=>`${labels[f]}：\n${Array.isArray(v.snapshot.content[f]) ? v.snapshot.content[f].join("\n") : v.snapshot.content[f]}`).join("\n\n")+`\n\n绑定材料 ${v.snapshot.resource_snapshots.length} 份 · 只读历史版本 v${v.version}`;},"回看版本")));
+}
+$("goal-card-new").onclick=clearGoalCard;
+$("goal-card-form").onsubmit=safe(async()=>{
+  const pid=$("project-select").value;if(!pid)throw Error("先选择项目");
+  const body={resource_refs:Array.from($("goal-card-resources").selectedOptions).map(o=>o.value)};
+  goalCardFields.forEach(f=>{body[f]=["title","goal"].includes(f) ? $(`goal-card-${f}`).value : $(`goal-card-${f}`).value.split("\n").map(s=>s.trim()).filter(Boolean);});
+  $("goal-card-save").disabled=true;
+  try {
+    const result=activeGoalCard ? await api(`/api/goal-cards/${activeGoalCard.id}`,"PUT",{...body,expected_version:activeGoalCard.version}) : await api(`/api/projects/${pid}/goal-cards`,"POST",body);
+    await refreshGoalCards(pid);await showGoalCard(result.id);
+  } finally {$("goal-card-save").disabled=false;}
 });
