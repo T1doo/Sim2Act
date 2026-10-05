@@ -10,6 +10,7 @@ from .db import (
     app_drafts,
     app_previews,
     fingerprint,
+    goal_candidate_requests,
     grants,
     new_id,
     preview_extractions,
@@ -188,6 +189,22 @@ def compile_preview(candidate, platform_limits):
         or len(manifest.data_bindings) != 1
     ):
         raise DomainError("UNSUPPORTED_CAPABILITY", "本轮仅支持单节点 CSV 汇总预览")
+    # The advertised fixed capability includes wiring and schemas, not just the tool name.
+    expected = csv_candidate(manifest.data_bindings[0].resource_ref, candidate["source_hash"],
+                             "", manifest.runtime_limits)
+    expected["manifest"]["app_id"] = manifest.app_id
+    expected["manifest"]["goal_ref"] = manifest.goal_ref
+    expected["actions"][0]["action_id"] = actions[0].action_id
+    expected["manifest"]["action_bindings"][0]["action_id"] = actions[0].action_id
+    expected["goal"] = candidate["goal"]
+    if "generation" in candidate:
+        expected["generation"] = candidate["generation"]
+    if "extraction" in candidate:
+        expected["extraction"] = candidate["extraction"]
+        expected["manifest"]["origin"] = "task_run"
+        expected["manifest"]["source_run_ref"] = manifest.source_run_ref
+    if candidate != expected:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "固定CSV能力的接线或声明已变化")
     return manifest, actions[0], report
 
 
@@ -201,6 +218,13 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
     if fingerprint(candidate) != draft["fingerprint"]:
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     manifest, action, report = compile_preview(candidate, platform_limits)
+    generated = c.execute(select(goal_candidate_requests).where(goal_candidate_requests.c.app_id == aid)).mappings().first()
+    if ("generation" in candidate) != bool(generated):
+        raise DomainError("VERSION_CONFLICT", "目标候选来源记录不可移除或添加")
+    if generated and (not isinstance(candidate["generation"], dict)
+                      or generated["card_id"] != candidate["generation"].get("goal_card_id")
+                      or generated["principal_id"] != user):
+        raise DomainError("VERSION_CONFLICT", "目标候选来源记录不可移除或替换")
     extracted = c.execute(select(preview_extractions.c.app_id).where(preview_extractions.c.app_id == aid)).first()
     if extracted and "extraction" not in candidate:
         raise DomainError("VERSION_CONFLICT", "提取来源记录不可移除")

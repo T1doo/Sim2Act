@@ -8,6 +8,8 @@ let appSelectionGeneration = 0, activeAppProject = null;
 const candidateRequestKeys = new Map();
 const extractionRequestKeys = new Map();
 let extractionSource = null, extractionBusy = false;
+let appCreateBusy = false;
+const appPreviewRequests = new Set();
 const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
@@ -86,11 +88,12 @@ document.querySelector("#projects .grid > section:last-child").append($("reconci
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun);}}catch(e){$("health").textContent="后台不可用";}},2500);
 
 function clearApp() {
+  $("app-create-status").textContent="";$("app-create-status").dataset.state="";
   extractionSource=null;$("extraction-form").hidden=true;$("extraction-status").textContent="";
   appSelectionGeneration++;activeAppProject=null;
   $("app-origin").textContent="";$("app-back-goal").hidden=true;$("app-frozen-goal").hidden=true;$("app-frozen-goal-text").textContent="";
   activeApp=null;$("app-title").textContent="选择草案";$("app-preview-form").hidden=true;
-  $("app-output").replaceChildren();$("app-history").replaceChildren();$("app-manifest").textContent="";
+  $("app-output").replaceChildren();$("app-output").dataset.state="";$("app-history").replaceChildren();$("app-manifest").textContent="";
 }
 async function refreshApps() {
   const list=await api("/api/apps");
@@ -101,6 +104,10 @@ async function refreshApps() {
 function previewText(r) {
   if(r.status === "FAILED")return `预览失败（FAILED）：${r.error?.message || r.error?.code} · 已保留这次历史`;
   return `预览成功（SUCCEEDED） · ${r.output.column} 合计 ${r.output.sum}，共 ${r.output.count} 条 · 0 模型请求 · 仅预览`;
+}
+function showPreviewResult(r,history=false){
+  $("app-output").dataset.state=r.status === "FAILED" ? "error" : "success";
+  $("app-output").replaceChildren(row(`${history ? "历史记录 · " : ""}${previewText(r)} · ${r.id.slice(0,16)}`));
 }
 async function showApp(id,pid=$("project-select").value) {
   if(pid !== $("project-select").value)return false;
@@ -136,10 +143,10 @@ async function showApp(id,pid=$("project-select").value) {
   }));
   const selectable=guidance.columns.filter(c=>c.numeric);
   $("app-column").value=selectable.some(c=>c.name===previous) ? previous : (selectable[0]?.name || "");
-  $("app-preview-submit").disabled=!selectable.length;
+  $("app-preview-submit").disabled=!selectable.length || appPreviewRequests.has(id);
   $("app-input-hint").textContent=guidance.error || (selectable.length ? `已核对 ${guidance.row_count} 条记录；请选择数值列。` : "没有可汇总的数值列，请保存修正后的材料并重建草案。");
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
-  $("app-history").replaceChildren(...a.history.map(r=>row(`${new Date(r.created_at*1000).toLocaleString()} · ${r.input.column || "无效输入"} · ${r.status} · ${r.id.slice(0,16)}`,()=>{$("app-output").replaceChildren(row(`历史记录 · ${previewText(r)}`));},"回读历史")));
+  $("app-history").replaceChildren(...a.history.map(r=>row(`${new Date(r.created_at*1000).toLocaleString()} · ${r.input.column || "无效输入"} · ${r.status} · ${r.id.slice(0,16)}`,()=>showPreviewResult(r,true),"回读历史")));
   if(!a.history.length)$("app-history").textContent="尚无预览。请选择 CSV 中的数值列。";
   const succeeded=a.history.filter(r=>r.status === "SUCCEEDED");
   if(!extraction && succeeded.length){
@@ -170,18 +177,32 @@ $("extraction-form").onsubmit=safe(async()=>{
   finally{extractionBusy=false;if(extractionSource && extractionSource.id === activeApp && extractionSource.project_id === $("project-select").value)$("extraction-create").disabled=!$("extraction-resource").value;}
 });
 $("app-form").onsubmit=safe(async()=>{
+  if(appCreateBusy)return;
   const pid=$("project-select").value,rid=$("app-resource").value;
   if(!pid || !rid)throw new Error("先为当前项目保存并授权 CSV 材料");
-  const a=await api(`/api/projects/${pid}/apps/csv-preview`,"POST",{name:$("app-name").value,goal:$("app-goal").value,resource_id:rid});
-  await refresh();await showApp(a.id);$("app-output").replaceChildren(row("草案已保存，请选择可用数值列运行新预览。"));
+  const generation=appSelectionGeneration,current=()=>generation === appSelectionGeneration && pid === $("project-select").value;
+  appCreateBusy=true;$("app-create-submit").disabled=true;
+  $("app-create-status").dataset.state="loading";$("app-create-status").textContent="正在保存草案；离开选择不会撤销已接受的创建。";
+  try{
+    const a=await api(`/api/projects/${pid}/apps/csv-preview`,"POST",{name:$("app-name").value,goal:$("app-goal").value,resource_id:rid});
+    if(!current())return;
+    await refreshApps();if(!current())return;
+    if(await showApp(a.id,pid) && activeApp === a.id){$("app-create-status").dataset.state="success";$("app-create-status").textContent="草案已保存，请选择数值列运行新预览。";}
+  }catch(e){if(current()){$("app-create-status").dataset.state="error";$("app-create-status").textContent=`创建未打开：${e.message}；可刷新草案列表核对后重试。`;}}
+  finally{appCreateBusy=false;$("app-create-submit").disabled=false;}
 });
 $("app-preview-form").onsubmit=safe(async()=>{
   if(!activeApp || activeAppProject !== $("project-select").value)throw new Error("先打开当前项目的草案");
-  const id=activeApp;$("app-preview-submit").disabled=true;
+  const id=activeApp,pid=activeAppProject,generation=appSelectionGeneration;
+  if(appPreviewRequests.has(id))return;
+  const current=()=>activeApp === id && generation === appSelectionGeneration && pid === $("project-select").value;
+  appPreviewRequests.add(id);$("app-preview-submit").disabled=true;
+  $("app-output").dataset.state="loading";$("app-output").textContent="正在读取授权材料并运行新预览…";
   try {
     const r=await api(`/api/apps/${id}/previews`,"POST",{input:{column:$("app-column").value},request_key:crypto.randomUUID()});
-    if(activeApp===id && await showApp(id)){if(activeApp===id)$("app-output").replaceChildren(row(`${previewText(r)} · ${r.id.slice(0,16)}`));}
-  } finally {$("app-preview-submit").disabled=!$("app-column").value;}
+    if(current() && await showApp(id,pid)){if(activeApp===id)showPreviewResult(r);}
+  }catch(e){if(current()){$("app-output").dataset.state="error";$("app-output").textContent=`预览未打开：${e.message}；可重新打开草案核对历史。`;}}
+  finally{appPreviewRequests.delete(id);$("app-preview-submit").disabled=appPreviewRequests.has(activeApp) || !$("app-column").value;}
 });
 
 

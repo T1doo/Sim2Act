@@ -2,7 +2,7 @@ import csv
 import hashlib
 import io
 import json
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, DecimalException
 from typing import Any
 
 from sqlalchemy import insert, select, update
@@ -187,6 +187,7 @@ def csv_column_options(content):
         if not names or any(not n for n in names) or len(names) != len(set(names)):
             raise ValueError("CSV 表头为空或重复，请保存修正后的材料并重建草案。")
         valid = dict.fromkeys(names, True)
+        totals = dict.fromkeys(names, Decimal(0))
         count = 0
         for row in reader:
             count += 1
@@ -196,13 +197,17 @@ def csv_column_options(content):
                 raise ValueError("CSV 行包含多余字段，请修正材料。")
             for name in names:
                 try:
-                    valid[name] = valid[name] and Decimal(row[name]).is_finite()
-                except (InvalidOperation, TypeError, ValueError):
+                    if valid[name]:
+                        number = Decimal(row[name])
+                        valid[name] = number.is_finite()
+                        if valid[name]:
+                            totals[name] += number
+                except (DecimalException, TypeError, ValueError):
                     valid[name] = False
         return {
             "row_count": count,
             "columns": [
-                {"name": n, "numeric": valid[n], "reason": None if valid[n] else "存在缺值、文本或非有限数"}
+                {"name": n, "numeric": valid[n], "reason": None if valid[n] else "存在缺值、文本、非有限数或合计超出十进制范围"}
                 for n in names
             ],
             "error": None,
@@ -251,7 +256,7 @@ def read_data(c, rid, name, args):
                 "sum": str(sum(vals, Decimal(0))),
                 "source_hash": res["hash"],
             }
-        except (InvalidOperation, ValueError, TypeError, csv.Error) as e:
+        except (DecimalException, ValueError, TypeError, csv.Error) as e:
             raise DomainError(
                 "INVALID_INPUT", "CSV column must contain finite decimal values"
             ) from e

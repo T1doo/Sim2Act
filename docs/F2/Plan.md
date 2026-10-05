@@ -93,3 +93,5 @@
 基线6b008b2，同一/workspace/Sim2Act-pb。用户要求前端好看，下一阶段路线见NextSteps.md，冻结颜色/字号/间距/层级/五类状态/手机一致性验收；不换框架或大改架构。启动同工作区独立只读代理，限定权限/来源/参数范围/过期撤权/状态冲突，具体缺陷优先。核查平台可调用工具无浏览器入口，官方runtime show退出1/无连接元数据；现Chromium保护仍不可用，不关闭sandbox或探查私有认证/管道。只可小范围CSS/语义状态改善，不预写实际视觉PASS。
 
 本轮验证：独立复核报告与可复现缺陷、针对修复的状态/导航/负例；源与目标Grant自然过期仍拒绝；SQLite/静态/DOM交互、普通push精确ServerCI。没有新增表/迁移或模型/代码生成/Release；PREVIEW来源子集不称完整P-B/AT10，预算0/F1和Win11未签收不变。浏览器/手机视觉未验证保留BLOCKED。
+
+本轮独立代理基线6b008b2只读复核77PASS/2PG角色SKIP，并复现来源删除绕过额外撤权、P-A输出接线改写仍成功、direct创建迟到抢选择、Decimal溢出500/无失败历史4项；5组P-B自然过期仍403。主开发修复4项，CSV完整模板校验复用于P-A/P-B，goal_candidate_requests来源锚点；direct/preview选择世代与状态反馈，DecimalException失败历史/guidance一致性。11新增专项及全SQLite214PASS/5SKIP/2警告26.11秒、DOM20PASS；CSS可逆统一色彩/字号/间距/表单/焦点/禁用/状态/手机规则，不是实际视觉PASS。独立报告不覆盖修复，主开发实际回归；Server终态待精确核实，预算0。

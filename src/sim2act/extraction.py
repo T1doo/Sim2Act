@@ -59,26 +59,6 @@ def exact_sum_oracle(content, column, output):
         raise DomainError("VERIFICATION_FAILED", "源回执未通过独立精确数值核查") from exc
 
 
-def require_fixed_source(candidate):
-    """Only the audited sum wiring, not merely a tool name or a SUCCEEDED label."""
-    manifest = candidate["manifest"]
-    expected = csv_candidate(
-        manifest["data_bindings"][0]["resource_ref"],
-        candidate["source_hash"],
-        "",
-        Limits(**manifest["runtime_limits"]),
-    )
-    expected["manifest"]["app_id"] = manifest["app_id"]
-    expected["manifest"]["goal_ref"] = manifest["goal_ref"]
-    expected["actions"][0]["action_id"] = candidate["actions"][0]["action_id"]
-    expected["manifest"]["action_bindings"][0]["action_id"] = candidate["actions"][0]["action_id"]
-    expected["goal"] = candidate["goal"]
-    if "generation" in candidate:
-        expected["generation"] = candidate["generation"]
-    if candidate != expected:
-        raise DomainError("UNSUPPORTED_CAPABILITY", "仅支持可信固定CSV求和来源，一层提取")
-
-
 def verified_source(store, c, user, preview_id, platform_limits, *, lock=False):
     row = (
         c.execute(
@@ -95,7 +75,7 @@ def verified_source(store, c, user, preview_id, platform_limits, *, lock=False):
     if raw and "extraction" in raw:
         raise DomainError("UNSUPPORTED_CAPABILITY", "仅支持一层提取，不递归归纳候选")
     draft, manifest, _, _ = load_draft(store, c, user, row["app_id"], platform_limits, lock=lock)
-    require_fixed_source(draft["candidate"])
+    # load_draft enforces the complete audited fixed wiring for both paths.
     if row["status"] != "SUCCEEDED" or row["error"] is not None or not row["output"]:
         raise DomainError("VERIFICATION_FAILED", "只接受已成功且可核查的PREVIEW回执")
     validate_value(manifest.output_schema, row["output"], "source_output")
