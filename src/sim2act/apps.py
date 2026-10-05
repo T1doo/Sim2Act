@@ -16,6 +16,7 @@ from .db import (
     preview_extractions,
     principals,
     resources,
+    task_extractions,
 )
 from .errors import DomainError
 from .goals import validate_card_version
@@ -203,6 +204,10 @@ def compile_preview(candidate, platform_limits):
         expected["extraction"] = candidate["extraction"]
         expected["manifest"]["origin"] = "task_run"
         expected["manifest"]["source_run_ref"] = manifest.source_run_ref
+    if "task_proof" in candidate:
+        expected["task_proof"] = candidate["task_proof"]
+        expected["manifest"]["origin"] = "task_run"
+        expected["manifest"]["source_run_ref"] = manifest.source_run_ref
     if candidate != expected:
         raise DomainError("UNSUPPORTED_CAPABILITY", "固定CSV能力的接线或声明已变化")
     return manifest, actions[0], report
@@ -242,6 +247,13 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
         from .extraction import validate_extraction
 
         validate_extraction(store, c, user, draft, platform_limits)
+    task_origin = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid)).first()
+    if bool(task_origin) != ("task_proof" in candidate):
+        raise DomainError("VERSION_CONFLICT", "完成任务来源不可添加或移除")
+    if task_origin:
+        from .local_tasks import validate_task_candidate
+
+        validate_task_candidate(store, c, user, draft)
     if "generation" in candidate:
         origin = candidate["generation"]
         old = validate_card_version(store, c, user, origin["goal_card_id"], origin["goal_version"])

@@ -72,7 +72,7 @@ def verified_source(store, c, user, preview_id, platform_limits, *, lock=False):
     if not row:
         raise DomainError("PERMISSION_DENIED")
     raw = c.execute(select(app_drafts.c.candidate).where(app_drafts.c.id == row["app_id"])).scalar()
-    if raw and "extraction" in raw:
+    if raw and ("extraction" in raw or "task_proof" in raw):
         raise DomainError("UNSUPPORTED_CAPABILITY", "仅支持一层提取，不递归归纳候选")
     draft, manifest, _, _ = load_draft(store, c, user, row["app_id"], platform_limits, lock=lock)
     # load_draft enforces the complete audited fixed wiring for both paths.

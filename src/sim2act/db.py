@@ -228,6 +228,41 @@ preview_extractions = Table(
 )
 
 
+# Explicit migration only: completed local fixed tasks, proof-bound candidates and retirement.
+local_csv_tasks = Table(
+    "local_csv_tasks", meta,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("resource_id", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("status", String, nullable=False),
+    Column("input", JSON), Column("output", JSON), Column("error", JSON),
+    Column("proof", JSON), Column("proof_fingerprint", String),
+    UniqueConstraint("project_id", "principal_id", "request_key"),
+)
+task_extractions = Table(
+    "task_extractions", meta,
+    Column("task_id", String, primary_key=True),
+    Column("principal_id", String, primary_key=True),
+    Column("request_key", String, primary_key=True),
+    Column("request_fingerprint", String, nullable=False),
+    Column("app_id", String, unique=True, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+)
+resource_retirements = Table(
+    "resource_retirements", meta,
+    Column("resource_id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("task_id", String, nullable=False),
+    Column("proof_fingerprint", String, nullable=False),
+    Column("source_hash", String, nullable=False),
+    Column("policy", String, nullable=False),
+)
+
+
 def new_id(prefix):
     return prefix + "_" + uuid.uuid4().hex
 

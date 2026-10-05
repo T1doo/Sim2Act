@@ -121,6 +121,12 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   activeApp=id;activeAppProject=pid;
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;
+  const taskProof=a.candidate.task_proof;
+  if(taskProof){
+    $("app-origin").textContent=`来源：已完成本地声明式合成任务 ${taskProof.proof.task_id} · LOCAL_DECLARATIVE_TASK · 精确求和核查通过 · 最小来源证明 v${taskProof.proof.version} · 新CSV/column参数 · 来源撤权或过期仍拒绝 · 未发布`;
+    $("app-frozen-goal").hidden=false;
+    $("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);
+  }
   if(extraction){
     $("app-origin").textContent=`来源：已成功本地合成PREVIEW回执 ${extraction.preview_id} · 独立数值核查通过 · 新CSV绑定 · 仅column运行参数 · 目标条件NOT_RUN · 未发布`;
     $("app-frozen-goal").hidden=false;
@@ -152,7 +158,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   $("app-history").replaceChildren(...a.history.map(r=>row(`${new Date(r.created_at*1000).toLocaleString()} · ${r.input.column || "无效输入"} · ${r.status} · ${r.id.slice(0,16)}`,()=>showPreviewResult(r,true),"回读历史")));
   if(!a.history.length)$("app-history").textContent="尚无预览。请选择 CSV 中的数值列。";
   const succeeded=a.history.filter(r=>r.status === "SUCCEEDED");
-  if(!extraction && succeeded.length){
+  if(!extraction && !taskProof && succeeded.length){
     extractionSource={id,project_id:pid,fingerprint:a.fingerprint,generation};
     $("extraction-preview").replaceChildren(...succeeded.map(r=>new Option(`${r.input.column} · ${r.output.sum} · ${r.id}`,r.id)));
     const sourceRid=a.candidate.manifest.data_bindings[0].resource_ref;

@@ -8,7 +8,15 @@ from typing import Any
 from sqlalchemy import insert, select, update
 
 from .contracts import resource_id
-from .db import fingerprint, local_effects, new_id, operation_intents, operations, resources
+from .db import (
+    fingerprint,
+    local_effects,
+    new_id,
+    operation_intents,
+    operations,
+    resource_retirements,
+    resources,
+)
 from .errors import DomainError
 
 TOOLS: dict[str, dict[str, Any]] = {
@@ -218,6 +226,8 @@ def csv_column_options(content):
 
 
 def read_data(c, rid, name, args):
+    if c.execute(select(resource_retirements.c.resource_id).where(resource_retirements.c.resource_id == rid)).first():
+        raise DomainError("RESOURCE_UNAVAILABLE", "来源已显式退休，旧内容不可读取")
     res = c.execute(select(resources).where(resources.c.id == rid)).mappings().one()
     if hashlib.sha256(res["content"].encode()).hexdigest() != res["hash"]:
         raise DomainError("VERIFICATION_FAILED")

@@ -123,3 +123,7 @@
 策略：任务实际可信工具读入/求和与独立整数oracle一致才SUCCEEDED，输入失败保留FAILED。来源证明只留owner/project/task/source定位与hash、输入输出指纹、可信工具/检查版本、完成状态和参数范围，不留CSV单元格/旧答案/原会话。提取必须在旧源可读且授权有效时复核完成回执，独立任务证明与候选锚点保持一致。显式owner退休命令只接受当前源hash/证明版本及retain_minimal_proof=true：原子清空旧文件内容及任务input/output，不保留可读备份；保存退休回执。退休不是撤权，不新增/恢复任何旧源grant，不设置真实账户安全策略。当前来源user/project-runtime读/求和grant仍需有效；撤权或过期继续拒绝候选。新输入依旧同项目固定新CSV，运行column参数，并遵守user/project/app三方当前授权交集。未知退休策略/证明缺失/篡改/源hash变动默认拒绝；未退休的来源仍实时回读。旧PREVIEW路线行为不改。
 
 验收：真实LOCAL_DECLARATIVE_TASK合成完成/失败状态及可信回执，不是Run或PREVIEW；退休后的全新Store/API客户端新结果（不是缓存）及坏输入失败历史；旧file GET/工具读拒绝且存储内容/input/output清空；最小证明无内容/旧答案；源/目标撤权、过期及跨owner/project/runtime/App授权负例；证明/候选hash重算/版本、幂等与退休重试；显式迁移应用角色业务CRUD、聚合回归及精确ServerCI。真实浏览器沿E13 BLOCKED/0，不绕sandbox；AT10只记固定合成子项，完整原规格/F1/Win11/Release均未签收，模型预算0。
+
+## 2026-10-05 / E14本地切片闭合，Server待核实
+
+完成独立LOCAL_DECLARATIVE_TASK固定CSV可信执行/oracle及成功证明，不提升F1/PREVIEW终态；显式退休清旧content及任务input/output、不改grant，最小证明保留，源授权撤权/过期仍拒绝。新CSV user/project/app交集及坏输入FAILED历史，三显式迁移表/业务CRUD，既有F1/目标卡/应用共享源拒绝退休；UI只补来源说明与禁止递归，无生成/框架/Release扩展。36新专项，本地35PASS/1PG待CI，全SQLite254PASS/6平台SKIP/3警告30.16秒、ruff/mypy18/JS/diff，原33DOM及新14HTTP/DOM PASS，均非浏览器。最初测试状态映射和projects脚本响应结构错误已纠正；产品拒绝契约未更改。普通push精确源码/监督ServerCI，真实浏览器0/BLOCKED/模型0；只合成固定切片，完整AT10/P-B/F1/Win11/Release未签收。

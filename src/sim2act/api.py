@@ -20,6 +20,16 @@ from .db import Store, app_drafts, fingerprint, grants, heartbeats, projects, re
 from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
+from .local_tasks import (
+    LocalTaskInput,
+    RetirementInput,
+    TaskExtractionInput,
+    complete_csv_task,
+    extract_task,
+    inspect_task,
+    retire_task_source,
+    retirement_row,
+)
 from .planning import GoalCandidateInput, candidate_options, generate_candidate
 from .preflight import preflight
 
@@ -197,6 +207,8 @@ def create_app(store=None, settings=None):
                 raise DomainError("PERMISSION_DENIED")
             p = db.own_project(c, user, r["project_id"])
             db.authorize(c, user, p["runtime_id"], p["id"], rid, "resource.read")
+            if retirement_row(c, rid):
+                raise DomainError("RESOURCE_UNAVAILABLE", "来源已显式退休，旧内容不可读取")
             return dict(r)
 
     @app.get("/api/projects/{pid}/runs")
@@ -400,6 +412,24 @@ def create_app(store=None, settings=None):
     @app.post("/api/previews/{pid}/extract", status_code=201)
     def preview_to_candidate(pid: str, body: ExtractionInput, user=user_dependency):
         return extract_preview(db, user, pid, body.model_dump(), platform_limits)
+
+    @app.post("/api/projects/{pid}/local-csv-tasks", status_code=201)
+    def local_csv_task(pid: str, body: LocalTaskInput, user=user_dependency):
+        if s.mode != "mock":
+            raise DomainError("UNSUPPORTED_CAPABILITY", "仅本地合成固定任务，不允许LIVE")
+        return complete_csv_task(db, user, pid, body.model_dump())
+
+    @app.get("/api/local-csv-tasks/{tid}")
+    def get_local_task(tid: str, user=user_dependency):
+        return inspect_task(db, user, tid)
+
+    @app.post("/api/local-csv-tasks/{tid}/extract", status_code=201)
+    def local_task_extract(tid: str, body: TaskExtractionInput, user=user_dependency):
+        return extract_task(db, user, tid, body.model_dump(), platform_limits)
+
+    @app.post("/api/local-csv-tasks/{tid}/retire-source")
+    def local_task_retire(tid: str, body: RetirementInput, user=user_dependency):
+        return retire_task_source(db, user, tid, body.model_dump())
 
     @app.get("/api/capabilities")
     def capabilities(user=user_dependency):
