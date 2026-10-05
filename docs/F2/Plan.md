@@ -115,3 +115,11 @@
 ## 2026-10-05 / E13精确Server终态交付
 
 源码4d01fb72990fb73687a46d902b574b53c583288d已普通push；run37346429353/job111886032367 completed/success（2m19s），PG224PASS/0FAIL/0SKIP/1旧Starlette警告63.13秒。5新锚点专项及完整工程，Setup/现显式迁移/业务CRUD最小应用角色/原生API-worker smoke/ruff/mypy17模块/Report/Cleanup全成功，server stopped。实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时PG。Linux219PASS/5SKIP/1警告25.22秒，DOM33明确非浏览器；修复未独立复验。E13终态/结果/90源码hash归档，合成服务已停，文档收尾普通push不重复CI。来源仍每次重开旧文件，来源退休授权策略及已完成合成task fixture待后续，冷页不替代AT10。真实浏览器0/BLOCKED，模型0，F1/Win11/完整P-B/AT10/Release未签收。
+
+## 2026-10-05 / E14实施前：合成完成任务与显式来源退休
+
+基线c40b752/4d01fb7，独立静态复核关闭E13两项（未独立执行/视觉）。范围仅固定CSV精确求和的本地声明式合成任务、最小不可变来源证明、显式退休及新输入冷会话。不是F1 worker PARTIAL改成功，不复用PREVIEW充当完成任务，不扩展生成/Release/账户安全设置。
+
+策略：任务实际可信工具读入/求和与独立整数oracle一致才SUCCEEDED，输入失败保留FAILED。来源证明只留owner/project/task/source定位与hash、输入输出指纹、可信工具/检查版本、完成状态和参数范围，不留CSV单元格/旧答案/原会话。提取必须在旧源可读且授权有效时复核完成回执，独立任务证明与候选锚点保持一致。显式owner退休命令只接受当前源hash/证明版本及retain_minimal_proof=true：原子清空旧文件内容及任务input/output，不保留可读备份；保存退休回执。退休不是撤权，不新增/恢复任何旧源grant，不设置真实账户安全策略。当前来源user/project-runtime读/求和grant仍需有效；撤权或过期继续拒绝候选。新输入依旧同项目固定新CSV，运行column参数，并遵守user/project/app三方当前授权交集。未知退休策略/证明缺失/篡改/源hash变动默认拒绝；未退休的来源仍实时回读。旧PREVIEW路线行为不改。
+
+验收：真实LOCAL_DECLARATIVE_TASK合成完成/失败状态及可信回执，不是Run或PREVIEW；退休后的全新Store/API客户端新结果（不是缓存）及坏输入失败历史；旧file GET/工具读拒绝且存储内容/input/output清空；最小证明无内容/旧答案；源/目标撤权、过期及跨owner/project/runtime/App授权负例；证明/候选hash重算/版本、幂等与退休重试；显式迁移应用角色业务CRUD、聚合回归及精确ServerCI。真实浏览器沿E13 BLOCKED/0，不绕sandbox；AT10只记固定合成子项，完整原规格/F1/Win11/Release均未签收，模型预算0。
