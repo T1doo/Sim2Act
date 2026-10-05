@@ -13,3 +13,5 @@
 当前来源读取仍重新打开旧CSV/源候选审计，并不满足AT10旧文件独立；[后续路线](../../F2/NextSteps.md)明确来源退休权限策略和已完成合成task fixture尚未实施。真实请求0，F1/Win11/完整P-B/AT10/Release未签收，历史AT02不改。
 
 本地完整回归219PASS/5平台SKIP/1旧Starlette警告25.22秒，[JUnit](sqlite.xml)；ruff、mypy17模块、JS语法、diff通过。[DOM脚本](dom-regression.cjs)与[33项结果](dom-results.json)可复跑，使用E11合成fixture，仅本地HTTP。
+
+精确源码[4d01fb7](https://github.com/T1doo/Sim2Act/commit/4d01fb72990fb73687a46d902b574b53c583288d)的[ServerCI37346429353](https://github.com/T1doo/Sim2Act/actions/runs/37346429353)SUCCESS，job111886032367/2m19s；PG224PASS/0FAIL/0SKIP/1旧警告63.13秒。Setup/现迁移/应用角色CRUD/原生smoke/ruff/mypy17模块/Report/Cleanup成功，server stopped。实际平台与计数见[results](windows-results.json)，完整步骤[run](windows-run.json)，[90源码指纹](source-hashes.json)。修复由主开发回归，未独立复验；本地合成服务已停。保留GitHub Node20动作强制Node24注释，未更改依赖/平台安全策略。

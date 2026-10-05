@@ -50,3 +50,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 2026-10-05 E11：[P-B可信PREVIEW来源受限提取](F2/PreviewExtraction.md)工程已交付；成功合成预览回执经独立oracle核查后绑定新CSV并冷客户端计算新结果。源码3d87f5e，ServerCI37340717581SUCCESS/PG208PASS/0SKIP，Linux203PASS/5SKIP。来源不是F1 Run签收；完整P-B/AT10/Release未完成。真实Chromium无可用沙箱而BLOCKED，Node/jsdom12项不替代浏览器验收；[精确证据](evidence/F2-preview-extraction-20261005/README.md)。原F1/Win11/AT02和真实预算0不变。
 
 2026-10-05 E12：[现有两路径可用性收敛](evidence/F2-usability-20261005/README.md)已交付：独立只读旧基线复核4项缺陷，主开发修来源/模板接线/迟到选择/数值溢出失败，精确d3de155的ServerCI37343525441SUCCESS/PG219PASS/0SKIP。前端小范围样式和状态已改善，美观与手机一致性标准见[F2下一路线](F2/NextSteps.md)；真实视觉0/BLOCKED、20DOM不能替代截图。修复未独立复验，完整P-B/AT10/Release及F1/Win11未签收，模型0。
+
+2026-10-05 E13：[来源请求锚定与回读恢复](evidence/F2-origin-recovery-20261005/README.md)已交付，精确4d01fb7/ServerCI37346429353SUCCESS/PG224PASS/0SKIP。5新专项、本地219PASS/5SKIP、DOM33明确非浏览器。完整P-B需先明示旧来源文件运行依赖、制定来源退休权限策略及完成合成task fixture，见[路线](F2/NextSteps.md)；当前未实施，不以冷页替代AT10。真实视觉BLOCKED、模型0、F1/Win11/Release未签收不变。
