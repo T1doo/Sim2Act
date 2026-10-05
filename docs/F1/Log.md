@@ -70,3 +70,9 @@ mypy预检变量报7项错误，明确类型及变量名后修复；新测试imp
 ## F1-L007 / 2026-10-05T03:51:00.276565+00:00 / Codex / F1-3提交证据
 
 工程源码提交：[a38b98d4d39712afcbf256fe7b697ce8ed16db8f](https://github.com/T1doo/Sim2Act/commit/a38b98d4d39712afcbf256fe7b697ce8ed16db8f)，dev/f1-foundation。最终PG90PASS/1warning（15.01s）、SQLite89PASS/1SKIP/1warning（4.93s），ruff/mypy12模块/Schema/离线probe/hash/diff检查通过。新增三表需显式迁移，旧快照不补造，完整应用编译运行和发布属F2未实施。此追记只改文档，随工程提交正常push后核对远端SHA；F1仍IN_PROGRESS，LIVE/Windows等实际验收保持BLOCKED，停止扩展底座。
+
+## F1-L008 / 2026-10-05T03:58:07.060630+00:00 / Codex / 有界token名称兼容修正
+
+基线f118b33，dev/f1-foundation。Settings增加INTERN_API_TOKEN别名，非空SIM2ACT_INTERN_TOKEN优先，专用为空/未设置才读取通用别名，两者缺失/空则无token；只改名称支持，不改变LIVE开关。Common.ps1显式配置载入只额外允许准确别名，.env.example两个字段都空，README记录用户私有输入与优先级。
+
+测试：tests/test_config_token_alias.py 7PASS（0.02s），ruff/mypy12模块/diff检查PASS；1条已有Starlette/httpx弃用警告保留。配置测试完整替换environ映射，6种合成值/优先级/缺失组合，不读取真实环境凭据并断言无输出、MOCK默认不变；PowerShell允许名及模板作静态检查，不宣称原生执行。JUnit见../evidence/F1-token-alias-tests.xml。没有读取/写入真实.env、没有设置真实token、没有模型或数据库调用、没有启用LIVE。提交引用见承载本条记录的Git提交，本轮只做该小修正后结束。

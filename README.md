@@ -74,7 +74,9 @@ python3.12 -m venv .venv
 
 运行模型限定 `intern-s2`，固定官方非流式 Chat Completions 端点；开发辅助模型不会进入运行链。适配器使用 HTTP 请求，关闭隐藏重试，严格校验工具参数、结构和结束原因；所有请求共用数据库配额主体。账号被其他程序共用时仍可能遭上游限流。
 
-本轮没有设置真实 token、没有调用收费 API。未来由用户在自己的安全环境设置 `SIM2ACT_INTERN_TOKEN`，确认有限请求/Token/工具/修复/时限预算，明确设定 `SIM2ACT_LIVE_ENABLED=true` 和 `SIM2ACT_MODEL_MODE=live` 后才能启用。默认工程上限不是用户已批准的 LIVE 预算。
+本轮没有设置真实 token、没有调用收费 API。未来由用户在自己的安全环境设置 `INTERN_API_TOKEN`（或原专用名称 `SIM2ACT_INTERN_TOKEN`），确认有限请求/Token/工具/修复/时限预算，明确设定 `SIM2ACT_LIVE_ENABLED=true` 和 `SIM2ACT_MODEL_MODE=live` 后才能启用。默认工程上限不是用户已批准的 LIVE 预算。
+
+名称优先级：非空 `SIM2ACT_INTERN_TOKEN` 优先；专用变量为空或未设置时读取 `INTERN_API_TOKEN`；两者都为空或未设置则无 token。`.env.example` 中的空专用变量不会遮蔽通用别名。PowerShell 显式配置载入接受这两个名称；Python 仍不自动搜索/读取 `.env`。由用户亲自在私有环境输入，不把值发到聊天、日志或提交；设置 token 本身不会打开 LIVE。
 
 上游约束与参数来自 [书生官方 API 文档](https://internlm.intern-ai.org.cn/doc/docs/Chat/) 和 [模型列表](https://internlm.intern-ai.org.cn/doc/docs/模型列表/)，账号能力仍需实际探针确认。能力报告当前保留 LIVE BLOCKED；未知 usage 保留 null，不记为零、不估算费用。
 

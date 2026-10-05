@@ -33,7 +33,9 @@ class Settings:
             mode=os.environ.get("SIM2ACT_MODEL_MODE", "mock"),
             live_enabled=os.environ.get("SIM2ACT_LIVE_ENABLED", "false").lower() == "true",
             model=os.environ.get("SIM2ACT_MODEL", "intern-s2"),
-            token=os.environ.get("SIM2ACT_INTERN_TOKEN", ""),
+            # A nonempty dedicated value wins; an empty template value permits the alias.
+            token=os.environ.get("SIM2ACT_INTERN_TOKEN", "")
+            or os.environ.get("INTERN_API_TOKEN", ""),
             quota_subject=os.environ.get("SIM2ACT_QUOTA_SUBJECT", "default-intern-account"),
             rpm=int(os.environ.get("SIM2ACT_RPM", "30")),
             **{

@@ -5,7 +5,7 @@ function Import-Sim2ActConfig([string] $Config) {
     if (-not (Test-Path -LiteralPath $Config)) { throw 'Create a local configuration from .env.example first.' }
     foreach ($line in Get-Content -LiteralPath $Config -Encoding utf8) {
         if ($line.Trim() -eq '' -or $line.TrimStart().StartsWith('#')) { continue }
-        if ($line -notmatch '^(SIM2ACT_[A-Z_]+)=(.*)$') { throw 'Invalid configuration line; values are not printed.' }
+        if ($line -notmatch '^(SIM2ACT_[A-Z_]+|INTERN_API_TOKEN)=(.*)$') { throw 'Invalid configuration line; values are not printed.' }
         [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
     }
 }
