@@ -141,3 +141,11 @@ E15本地结果：真实临时PG17.11，9 barrier/冷Store专项PASS（3.26秒�
 ## 2026-10-06 / E15精确Server终态交付
 
 源码53dc124ea8aeb554939ad79bbbb7d9526a66578f普通push；run37411714116/job112101374653 completed/success（2m51s），PG269PASS/0FAIL/0SKIP/1旧Starlette警告88.51秒。9新真PG barrier/冷Store子项及完整业务CRUD角色回归，原生API-worker smoke/ruff/mypy18模块/Report/Cleanup全部成功、server stopped；实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时PG。LinuxPG268PASS/1Windows平台SKIP/2警告82.16秒，SQLite254PASS/15平台/PGSKIP/2警告33.30秒，PG专项9PASS。基线退休200/direct400（grant锁挡住交错），未复现成功失效app；共享project锁缺失真实补强，统一project→entity→grant与写前当前内容/退休重验。93源码hash/实际run/results及冻结AT10合成子项映射归档；未独立执行复验，真实浏览器0/BLOCKED，不新增CSS/视觉签收。保存环境恢复ready/正确工作树54ac055与origin一致，初始work未改，本地合成PG容器已停并删除；文档收尾普通push不重复CI。0LIVE/无导出，完整P-B/AT10/Win11/F1/Release签收未提升，V5/历史AT02不变。
+
+## 2026-10-06 / E16实施前：F2-T08内部合成生命周期
+
+基线764a20f/53dc124，origin正常fetch一致。读V5阶段§4.3 F2-T08及产品§10：不可变Release绑定清单/动作/依赖/检查、批准指纹与数据兼容；AppInstance独立持久数据，指针CAS，升级/回退不删数据，新输入新AppRun/结果版本；发布回退不等于数据回退。原F1/真实P-A/P-B/Win11/保护浏览器阶段门不放行，E15仅锁序加固（未复现成功失效app）保持。
+
+本轮最小内部工程service，不接入HTTP发布入口/页面/实际部署。显式迁移internal_*表，内部批准payload一次写入绑定owner/project/source candidate及精确manifest/actions/dependencies、实际新可信验证/oracle证据、当前相关授权修订、到期时间和实例切换前置revision/data_version。提交时精确fingerprint/版本/当前授权重验，Release副本独立于可变草案、无编辑入口；instances复用该候选既有应用runtime/grant，不创建/恢复/扩大grant。实例数据限新AppRun计算出的类型化result记录及可选release_ref元数据，独立namespace/版本/历史；无任意业务写入/CSV新便利项。新AppRun实际走现权限网关/严格输入输出和独立数值检查，不复制PREVIEW历史，失败真实保留。只兼容字段保留/类型不变/不新增必填的声明升级，回退也按当前数据/schema校验；不自动迁移或删除记录。
+
+测试范围：批准前指纹/草案/资源/授权/到期改变拒绝；Release写后篡改/不可变旧快照/跨owner；两instance数据和幂等独立，fresh Store回读、失败历史与新结果版本；用户/project/app当前撤权/过期拒绝，Grant前后完全一致；升级/回退CAS及不兼容拒绝/历史保留；明确正式发布入口不存在。用户要求同工作区独立只读审查，完成源码后委派，修具体问题并aggregate/普通push精确ServerCI。0真实调用，无导出/备份/安全策略绕过，完整P-B/AT10/Release正式发布、Win11/F1仍未签收。
