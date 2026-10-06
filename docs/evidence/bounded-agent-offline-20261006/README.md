@@ -29,3 +29,5 @@
 候选和Replay回复由离线调用者显式提供；不是模型自动生成manifest。源只接受明确字面目标的初始INTERNAL_APPRUN，不能泛称F1已完成任务提取均支持。默认Worker拒绝agent的非Replay adapter；跨进程自动恢复Replay/中途回复持久化未实现，冷Store验收不代表这些恢复场景。没有新增浏览器入口。
 
 专用PG容器sim2act-agent-offline-pg-20261006已移除，127.0.0.1:32771实查关闭，pytest合成临时目录按托管保留。source-hashes.json最终只列106个受版本控制的源码/测试/配置文件，排除初步工作目录索引中的安装/临时产物；所有产品文件与精确本地源码commit一致。证据仅留本repo，未上传额外目的地。
+
+归档失败的原pytest日志含3行尾空白，保持原始字节；证据专属.gitAttributes规则冻结.log字节并禁其空白风格检查，代码/文档仍正常检查。此收尾仅证据配置，执行源码/测试/fixture与3e27ad9零差异。
