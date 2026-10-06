@@ -276,3 +276,7 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 离线接口实现阶段：MOCK-only POST/GET spec-checklist-tasks，synthetic_固定语法whole_resource≤4096UTF8/40行/1..16条规范，实际source hash/quote/span/顺序完整检查、客户端gold拒绝；仅既有read与project artifact.save_text交集。单JSONartifact+派生safeMD、独立命名空间receipt/proof/失败持久，幂等重放前再验source/权限/保存proof；新spec_checklist_tasks仅显式cli migrate及运行DB role该表CRUD，不在API建表。没有新tool ref/用户写Grant/模型/独立应用清单。独立找到初存储shape500/整数marker误收，修严格模型/原始boolean/输出指针形状+savepoint，永久负例及最终独立45PASS1PGSKIP、原F1 effect4PASS接受同hash。最小PG角色初41PASS，final fullPG/ServerCI实际终态待；旧全SQLite401PASS23SKIP记录为pre-hardening。能力只为语法引用/完整覆盖，semantic NOT_RUN，非CSV自然提取/P-A/P-B仍未实现。
 
 本地验证终态：final PG428PASS1WindowsSKIP2warning462.84秒，46新项含runtime-role无DDL与幂等并发；最终独立SQLite45PASS1PGSKIP13.01秒（byte-reader加强后的同产品hash）、旧F1 effect4PASS；ruff/mypy22成功。105源码/config/hash归档。最初规范两500及整数marker误收发现/复现/修复记录完整；前版聚合保留为pre-hardening，不充final。专用PG容器/port32770实查移除/关闭，pytest合成temp按托管保留不广泛删除。源e7eb39f，按授权普通push/精确ServerCI待。能力仍fixed syntactic citations+受控保存，未注册新AppManifest executor、无新增用户写Grant，0LIVE与后续真实自然MD/模型预算缺口明确。
+
+### 本切片关闭
+
+精确f78abca普通push，ServerCI37440684427成功5m18s/PG429PASS0SKIP189.24秒/ruff/mypy22/原保护Edge38PASS/Report/Cleanup全成功，final本地PG428PASS1WinSKIP及最终独立45PASS1PGSKIP，105source/hash与独立冻结fixture/gold及失败发现保留。只关闭fixed labeled citations+既有项目artifact保存工程slice；语义NOT_RUN、通用技术MD、独立原V5gold接受、真实3请求源任务、AppManifest执行器注册/P-A/P-B/Win11/正式F1/F2门仍未关闭。当前0LIVE/预算0/no新增toolref或用户writeGrant/no发布。[终态归档](../evidence/noncsv-offline-implementation-20261006/README.md)。
