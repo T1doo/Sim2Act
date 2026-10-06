@@ -27,3 +27,10 @@ API 统一沿用 Bearer 认证、同源限制、严格重复键 JSON/禁止额�
 [本轮证据](../evidence/F2-internal-entry-20261006/README.md)。[原 V5 阶段门](StageGateReview.md)仍保留：F1/Win11/完整两路径与任务族、通用DAG/局部修改、正式发布/数据writer/迁移、受控外部在途效果核对及真实浏览器。内部工程入口现可实际使用，不等于放行正式发布。
 
 最终aaf07f49/[精确CI37419363378](https://github.com/T1doo/Sim2Act/actions/runs/37419363378)SUCCESS/PG372PASS0SKIP，API19项含最小CRUD角色、DOM/HTTP29项及独立复验归档。此入口不包括内部兼容升级/回退switch页面，也不启用正式部署。真实浏览器/手机视觉仍BLOCKED，首次本地AT05启动失败仍保留未定位，不改历史。
+
+
+## E21后续真实浏览器验证（WindowsServer，非Win11）
+
+[E21证据](../evidence/F2-protected-server-browser-20261006/README.md)：精确2ead9b6/CI37423790107 SUCCESS，正常保护的预装Edge、25真实检查PASS。上述内部最小认证/快照确认/实例/排队暂停取消/返回重开/worker结果与独立历史/跨owner-instance-history-control拒绝实际运行；desktop1366x900/mobile390x844 PNG人工查看，两布局可读且无横向溢出，长实例ID标题已修换行。CSP/sandbox/系统策略不放宽，renderer token实际AppContainer/restricted true/integrity0。
+
+E19段的BLOCKED是当时Linux路径事实，本轮WindowsServer正常平台补上该最小流程视觉；Linux仍BLOCKED。仍无物理手机/Win11/其他browser/完整前端或正式发布签收；撤权stop UI及更多迟到响应未纳入本次25项。仅test_only合成SQLite浏览器fixture，原PG372PASS另外通过。三个真实失败及修复记录保留，不用先前DOM29冒充本轮浏览器。

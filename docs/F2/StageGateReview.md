@@ -38,3 +38,10 @@ E18最终精确源码925e560dc1a196c6c4747cb349d558156a721c0f/[CI37416936441](ht
 依据持续开发授权，原F2T05/T08/T09现有只读service接入[认证API/UI](InternalEntry.md)：精确冻结snapshot批准、内部Release、独立instance结果版本/历史、持久AppRun及pause/cancel/resume/reopen。既有注册只读action/gateway，0LIVE/无新Grant/表，正式发布部署仍false。当前T05/T08表中“内部service”工程证据增加实际页面/API入口；正式发布入口/独立instance身份政策、通用writer与迁移仍未完成。27 actualHTTP/jsdom不替代真实浏览器/Win11视觉，AT22只增加固定只读链路工程子项，不签收完整AT22/F2。其他原门不提升；最终aggregate/精确CI另记本轮证据。
 
 E19精确源码aaf07f49b3d32eeb360d8cd60a52a4fad22959fd/[CI37419363378](https://github.com/T1doo/Sim2Act/actions/runs/37419363378)SUCCESS：PG372PASS/0SKIP；LinuxPG371PASS/1WindowsSKIP、SQLite350PASS/22SKIP；HTTP/jsdom29PASS，独立18PASS/1PGSKIP与UI竞态/最终mainJS静态。内部入口切片交付结束，正式发布部署false；兼容switch service尚未接页面，通用writer/迁移仍无。首轮AT05启动失败未定位、原记录保留，单独及完整重跑通过；protected-browser仍BLOCKED、Win11仍NOT_RUN。下一必要原规格接入/决定保持上述列表，不借工程总数签收。
+
+
+## E21 WindowsServer受保护浏览器最小增量
+
+[E21完整证据与保留失败](../evidence/F2-protected-server-browser-20261006/README.md)：2ead9b6/[CI37423790107](https://github.com/T1doo/Sim2Act/actions/runs/37423790107)SUCCESS，原PG372PASS0SKIP、新增25真实浏览器检查PASS。既有Windows2025预装签名Edge正常sandbox，实际renderer AppContainer/restricted true/integrity0；CSP不弱化。认证内部只读快照批准/Release/独立instance/persistent Run排队暂停取消/返回重开/真实独立worker结果v1/跨owner-instance-history-control拒绝，在desktop1366x900与mobile viewport390x844实际渲染和PNG人工复核通过；修实际手机宽度长标题溢出，未扩业务feature。
+
+因此“当前所有保护浏览器均不可用”不再是本轮阻塞：**WindowsServer既有CI正常保护平台可用，内部最小入口工程视觉已验**；Linux执行器SUID路径仍BLOCKED，未修改安全。mobile仅viewport，不是物理设备；broker为admin High、Win11普通用户仍NOT_RUN。正式发布/部署仍false；撤权stop/更多迟到响应仅旧service/DOM证据，其真实浏览器未在25项签收。全界面/焦点/无障碍/其他browser、F1、完整F2/P-A/P-B/AT10/19/20及原AT02初态门保持，原AT05首因UNKNOWN不由绿色改为已修。上表是E18历史快照，新增证据以本节为准，仅提升上述内部工程子项。

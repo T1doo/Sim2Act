@@ -321,3 +321,12 @@ E19精确终态：aaf07f49b3d32eeb360d8cd60a52a4fad22959fd普通push，[CI374193
 
 
 E21执行中检查点：源码59f34817dd65201bd5ba204661d6787b19255fd3普通push，[CI37422476293](https://github.com/T1doo/Sim2Act/actions/runs/37422476293)实际运行，非整体排队；新shell查询成功。Cf0732e/CI37421853614 PG372PASS0FAIL0SKIP170.611s/cleanup成功，但浏览器诊断getBrowserCommandLine因缺enable-automation失败，匿名真实截图与失败JSON保持；未证实renderer-token/认证流程。修只读精确PID查询及新测试整数返回40期望，不加启动flag、不改OS或原AT05。首次8ee候选在浏览器前cancelled/skipped，去掉SDK弱化保护默认参数后才正常尝试。E21证据/checkpoint已保存；当前CI终态与desktop/mobile/auth流程仍待，0LIVE/正式发布关闭/Win11等门不变。
+
+
+## 2026-10-06 / E21受保护Server真实浏览器终态
+
+精确源码2ead9b615226a2be1bdc59ef745473b7589fd120普通push，[CI37423790107](https://github.com/T1doo/Sim2Act/actions/runs/37423790107)/job112138779536 completed/success3m55s：原PG372PASS0FAIL0SKIP1warning136.70s，新增25真实浏览器/布局/只读sandbox检查PASS，Setup/native最小角色smoke/ruff/mypy21/Report/Cleanup全部成功。既有同windows-2025 job/15min预算、browser步骤最多4min，预装签名Valid Edge153.0.4234.48，官方固定playwright-core1.63.0隔离依赖，无新runner/订阅/浏览器下载。正常chromiumSandbox:true，去掉SDK弱化保护默认参数，实际browser无这些参数；两实际renderer AppContainer/restricted true、integrity0。broker High/admin及EnableLUA1如实存档，不当Win11普通用户；CSP原样/bypassCSP false，不改系统安全/权限/SUID/代理或关闭sandbox。
+
+实际UI/API快照确认→Release→独立实例→QUEUED/pause/cancel→接受新任务后返回并重开→独立one-shot Worker真实sum40/resultv1→cold mobile读回→第二实例独立/跨owner-instance-history-control403均通过。显式test_only临时SQLite合成两owner各一project，非业务库、非原AT02完整初态；PG角色/native另有原工程结果。desktop1366x900/mobile390x844两真实完整PNG已回读验块序/长度/SHA256并人工查看，两列/单列无横向溢出、标题/按钮/状态/结果可读；四预期403 console完整保留，无pageerror/意外console。
+
+首候选browser前cancel/skipped；原诊断接口缺enable-automation失败、CSP字符串等待失败、真实mobile长标题溢出失败及对应PNG/JSON/run/receipt均保留。只修测试查询/函数等待与原整数契约40期待；产品仅一条标题overflow-wrap:anywhere，布局原断言不放宽。最终证据[README](../evidence/F2-protected-server-browser-20261006/README.md)，所有失败保留first/second/third-*；handoff状态另存旧checkpoint，新checkpoint记最小流完成。0LIVE/无Library或恢复包/额外artifact目的地，正式发布false，原work/V5/历史AT02/AT05不改。Win11/物理手机/其他browser/全界面焦点无障碍、撤权stop及更多迟到响应真实浏览器仍NOT_RUN；完整F1/F2/P-A/P-B/AT10/19/20门不提升，E20首次AT05根因UNKNOWN保持。
