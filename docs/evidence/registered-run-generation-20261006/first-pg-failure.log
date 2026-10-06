@@ -1,0 +1,86 @@
+........................................F............................... [ 59%]
+.................................................                        [100%]
+=================================== FAILURES ===================================
+_____________ test_real_http_dom_generation_entry_and_lost_receipt _____________
+
+env = (<sim2act.db.Store object at 0x7fdb285a1fd0>, Settings(database_url='postgresql+psycopg://postgres:synthetic-generatio...91882e1744495688eca09c81b3cea2', 'user_bb7ab11c4d624ca2b85578a7a4118ef9', 'proj_e8f100eedb654fb59f97a93a51ad45a4', ...)
+
+        assert env[2].get(url + "/extraction-options").status_code == 403
+        assert env[2].post(url + "/extract", json=body).status_code == 403
+    
+    
+    def test_http_stale_target_and_source_revocation_reject_cached_generation(env):
+        url, body, _ = source_and_target(env)
+        assert (
+            env[2]
+            .post(url + "/extract", json={**body, "expected_target_draft_fingerprint": "0" * 64})
+            .status_code
+            == 409
+        )
+        made = env[2].post(url + "/extract", json=body)
+        assert made.status_code == 201, made.text
+        before = counts(env)
+        with env[0].tx() as c:
+            c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+        assert env[2].get(url + "/extraction-options").status_code == 403
+        assert env[2].post(url + "/extract", json=body).status_code == 403
+        assert counts(env)["principals"] == before["principals"]
+    
+    
+    def test_real_http_dom_generation_entry_and_lost_receipt(env):
+        import json
+        import shutil
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        if not shutil.which("node"):
+            pytest.skip("Optional HTTP-backed DOM check requires Node; not a native browser check")
+>       dependency = subprocess.run(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+            ["node", "-e", "require.resolve('jsdom')"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+E       AssertionError: node:internal/modules/cjs/loader:1520
+E           throw err;
+E           ^
+E         
+E         Error: Cannot find module 'jsdom'
+E         Require stack:
+E         - /workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs
+E             at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E             at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E             at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E             at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E             at Module._load (node:internal/modules/cjs/loader:1294:5)
+E             at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E             at Module.require (node:internal/modules/cjs/loader:1617:12)
+E             at require (node:internal/modules/helpers:153:16)
+E             at Object.<anonymous> (/workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs:4:15)
+E             at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E           code: 'MODULE_NOT_FOUND',
+E           requireStack: [
+E             '/workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs'
+E           ]
+E         }
+E         
+E         Node.js v24.19.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', 'tests/registered_run_generation_dom.cjs', '{"base": "http://127.0.0.1:40319", "pid": "...reStack: [\n    '/workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs'\n  ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_registered_run_generation_http.py:161: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_registered_run_generation_http.py::test_real_http_dom_generation_entry_and_lost_receipt
+1 failed, 120 passed, 1 warning in 291.08s (0:04:51)

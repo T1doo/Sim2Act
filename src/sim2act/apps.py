@@ -260,6 +260,8 @@ def validate_source_family(c, user, draft):
                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
                 if isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
                     expected_field, expected_kind = "agent_provenance", "bounded_agent"
+                elif isinstance(snapshot, dict) and snapshot.get("kind") == "registered_csv_source.v1":
+                    expected_field, expected_kind = "task_proof", "registered_tool"
                 elif (
                     isinstance(snapshot, dict)
                     and "kind" not in snapshot
@@ -369,14 +371,19 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
 
         validate_extraction(store, c, user, draft, platform_limits)
     task_origin = c.execute(
-        select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid)
-    ).first()
+        select(task_extractions).where(task_extractions.c.app_id == aid)
+    ).mappings().first()
     if bool(task_origin) != ("task_proof" in candidate):
         raise DomainError("VERSION_CONFLICT", "完成任务来源不可添加或移除")
     if task_origin:
-        from .local_tasks import validate_task_candidate
+        if task_origin["snapshot"].get("kind") == "registered_csv_source.v1":
+            from .registered_run_extraction import validate_registered_candidate
 
-        validate_task_candidate(store, c, user, draft)
+            validate_registered_candidate(store, c, user, draft, platform_limits)
+        else:
+            from .local_tasks import validate_task_candidate
+
+            validate_task_candidate(store, c, user, draft)
     if "generation" in candidate:
         origin = candidate["generation"]
         old = validate_card_version(store, c, user, origin["goal_card_id"], origin["goal_version"])

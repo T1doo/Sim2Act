@@ -84,3 +84,9 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 用户允许最小导航修复、截图诊断和一次相同标准 CI。完整静态复审再收紧 open 等待真实内部历史完成、项目选择等待当前 grants GET200（refreshApps 后最终步骤），closed manifest/data 清空改 textContent，消除隐藏断言假阳性。e16 完整控件路径审核 APPROVE；普通 push 精确 `9104b2a9ba3ec18f062cf4596d55649c62219819`，唯一第三 run `37471361854` / job `112295392347` SUCCESS。Windows 518 PASS；原 protected Edge 38 checks 和独立 agent 33 checks PASS，实际三次 PID/token 审核、跨项目迟到、来源篡改、撤权、Grant 不变和无 pageerror 完成。原 workflow/helper/安全参数/超时/输出八文件范围不变。
 
 新 PNG 按原 stdout bytes/SHA 核验：desktop1280x3825 `73063cc4...336085`，narrow390x6095 `316a6558...927a20`。root 与 e16 均实际 original view，两图当前捕获范围 PASS；此前窄屏空白标题/source/JSON 可视段/输入提示/内部标题现真实可读，v1/v2 引用与 hash 换行正常，无可见横向裁切。截图前 fonts.ready/有界正常滚动+RAF 不覆盖像素、不 force 可见；旧空白根因仍 UNKNOWN，不能倒推为已证实 paint 修复。屏外滚动 JSON、所有状态、Win11/语义/自主生成未验。原 runtime results 的 NOT_REVIEWED 不篡改，独立人工像素结果单独存档。Report/Cleanup PASS，原 owned API/worker stopped 与 server stopped 回执。前两 FAIL/旧窄屏 NOT_ACCEPTED 保留；仅 JSON/安全摘要入 repo，无新增 PNG/rawlog 上传目的地。生成实现不在此 CI 源码中。
+
+### 2026-10-06 / 注册成功任务自动保存草案：独立实现与审核
+
+用户明确授权独立 RegisteredRunGenerationSlice 实施。在 `/workspace/Sim2Act-generation` / `registered-run-generation` 从 `a6f68e1` 完成后端来源回执/oracle、服务端声明式候选生成、严格 HTTP 和真实用户入口；不在已成功的 UI-only CI9104b2a 中混入它。用户可打开内部 CSV 的真实成功 Run，点“将这次任务保存为可复用草案”，选同项目已授权不同 CSV 应用与名称，保存后打开新草案；核对快照、确认内部版本、创建实例并以新 column 提交持久 AppRun，现有冷 worker 在新材料上产生新结果，不拷贝源答案。共享所选应用既有授权域并如实展示撤权影响，无新 Principal/Grant/表/DDL，无 LIVE/model。FAILED/UNKNOWN/PARTIAL、agent/递归/跨项目、不可信来源、客户端 candidate/gold/code/权限字段拒绝；源/目标当前权限与版本在缓存和冷运行重新核查，幂等只产生一个草案。
+
+真实 HTTP/冷 Store、新资料求和、权限与来源篡改/版本/幂等/跨主体跨项目/冷队列撤权、真实 HTTP-backed DOM 丢回执手动原 key及 accepted app GET恢复已测。名称清理补修防止来源/身份切换保留上一用户编辑，同来源同版轮询仍保留。独立审核 APPROVE；实际 PG 相关回归121 PASS，最终16-check HTTP-DOM与无DDL CRUD角色边界2 PASS。合并长回归期间测试依赖/数量曾调整，SQLite两次与PG首轮的唯一DOM失败保留，详见实施日志和 evidence；冻结后全SQLite仍运行，不把混合运行称全部绿色。生成真实浏览器/视觉、Windows生成入口、语义目标和全P-B未签收；UI-only CI不替代生成验收。

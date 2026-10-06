@@ -135,7 +135,10 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;
   const taskProof=a.candidate.task_proof;
-  if(taskProof){
+  if(taskProof?.proof?.kind === "completed_registered_csv_apprun.v1"){
+    $("app-origin").textContent=`来源：已成功内部 CSV AppRun ${taskProof.proof.source_run_id || a.candidate.manifest.source_run_ref} · 可信求和/独立精确数值核查 · 新 CSV 绑定 + column 运行参数 · 0 模型请求 · 目标语义条件 NOT_RUN · 未发布`;
+    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);
+  } else if(taskProof){
     $("app-origin").textContent=`来源：已完成本地声明式合成任务 ${taskProof.proof.task_id} · LOCAL_DECLARATIVE_TASK · 精确求和核查通过 · 最小来源证明 v${taskProof.proof.version} · 新CSV/column参数 · 来源撤权或过期仍拒绝 · 未发布`;
     $("app-frozen-goal").hidden=false;
     $("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);

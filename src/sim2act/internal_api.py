@@ -24,6 +24,14 @@ class PrepareInput(Strict):
     offline_replay: list[dict] | None = Field(default=None, min_length=2, max_length=2)
 
 
+class RegisteredExtractionInput(Strict):
+    expected_proof_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    target_app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
+    expected_target_draft_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    name: str = Field(min_length=1, max_length=200)
+    request_key: str = Field(min_length=1, max_length=100)
+
+
 class ApprovalInput(Strict):
     fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
@@ -229,6 +237,33 @@ def mount(app, store, limits, identity):
     def inspect_run(iid: str, rid: str, user=user_dependency):
         scope_run(user, iid, rid)
         return envelope(**app_jobs.inspect_job(store, user, rid))
+
+    @app.get("/api/internal/instances/{iid}/runs/{rid}/extraction-options")
+    def extraction_options(iid: str, rid: str, user=user_dependency):
+        from .registered_run_extraction import options
+
+        scope_run(user, iid, rid)
+        return envelope(**options(store, user, iid, rid, limits))
+
+    @app.post("/api/internal/instances/{iid}/runs/{rid}/extract", status_code=201)
+    def extract_run(iid: str, rid: str, body: RegisteredExtractionInput, user=user_dependency):
+        from .registered_run_extraction import extract
+
+        scope_run(user, iid, rid)
+        return envelope(
+            **extract(
+                store,
+                user,
+                iid,
+                rid,
+                body.expected_proof_fingerprint,
+                body.target_app_id,
+                body.expected_target_draft_fingerprint,
+                body.name,
+                body.request_key,
+                limits,
+            )
+        )
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/control-status")
     def control_status(iid: str, rid: str, user=user_dependency):

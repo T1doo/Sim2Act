@@ -1,0 +1,96 @@
+........................................................................ [ 12%]
+.s...................................................................... [ 25%]
+...........................................................s............ [ 38%]
+....................s..........................s.................s...... [ 51%]
+..........................s............................................. [ 64%]
+...............ssss....s.................................s.............. [ 77%]
+.ss.....................................................Fsssssssss...... [ 90%]
+......................................s................                  [100%]
+=================================== FAILURES ===================================
+_____________ test_real_http_dom_generation_entry_and_lost_receipt _____________
+
+env = (<sim2act.db.Store object at 0x7f69289a3fe0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-160/test_re...db710a096c41a4acac001f1424b1f2', 'user_000bfe1e038741f78e7d9622d9df4ff8', 'proj_54b49a4d62804ed58feafb3584014bf8', ...)
+
+        assert env[2].get(url + "/extraction-options").status_code == 403
+        assert env[2].post(url + "/extract", json=body).status_code == 403
+    
+    
+    def test_http_stale_target_and_source_revocation_reject_cached_generation(env):
+        url, body, _ = source_and_target(env)
+        assert (
+            env[2]
+            .post(url + "/extract", json={**body, "expected_target_draft_fingerprint": "0" * 64})
+            .status_code
+            == 409
+        )
+        made = env[2].post(url + "/extract", json=body)
+        assert made.status_code == 201, made.text
+        before = counts(env)
+        with env[0].tx() as c:
+            c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+        assert env[2].get(url + "/extraction-options").status_code == 403
+        assert env[2].post(url + "/extract", json=body).status_code == 403
+        assert counts(env)["principals"] == before["principals"]
+    
+    
+    def test_real_http_dom_generation_entry_and_lost_receipt(env):
+        import json
+        import shutil
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        if not shutil.which("node"):
+            pytest.skip("Optional HTTP-backed DOM check requires Node; not a native browser check")
+>       dependency = subprocess.run(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+            ["node", "-e", "require.resolve('jsdom')"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+E       AssertionError: node:internal/modules/cjs/loader:1520
+E           throw err;
+E           ^
+E         
+E         Error: Cannot find module 'jsdom'
+E         Require stack:
+E         - /workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs
+E             at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E             at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E             at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E             at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E             at Module._load (node:internal/modules/cjs/loader:1294:5)
+E             at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E             at Module.require (node:internal/modules/cjs/loader:1617:12)
+E             at require (node:internal/modules/helpers:153:16)
+E             at Object.<anonymous> (/workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs:4:15)
+E             at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E           code: 'MODULE_NOT_FOUND',
+E           requireStack: [
+E             '/workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs'
+E           ]
+E         }
+E         
+E         Node.js v24.19.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', 'tests/registered_run_generation_dom.cjs', '{"base": "http://127.0.0.1:49149", "pid": "...reStack: [\n    '/workspace/Sim2Act-generation/tests/registered_run_generation_dom.cjs'\n  ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_registered_run_generation_http.py:161: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_preview_extraction.py::test_idempotency_stale_version_and_concurrent_single_authority
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'alias' attribute with value 'rid' was provided to the `Field()` function, which has no effect in the context it was used. 'alias' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_registered_run_generation_http.py::test_real_http_dom_generation_entry_and_lost_receipt
+1 failed, 534 passed, 24 skipped, 2 warnings in 304.75s (0:05:04)

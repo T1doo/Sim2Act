@@ -3,6 +3,8 @@
 let engineering = null, engineeringGeneration = 0;
 const engineeringPending = new Map();
 const engineeringInstanceKeys = new Map();
+const registeredExtractionRequests = new Map();
+let registeredExtraction = null, registeredExtractionGeneration = 0;
 function engineeringCurrent(view) {
   return engineering === view && view.token === token && view.project === $("project-select").value && view.app === activeApp && view.appGeneration === appSelectionGeneration;
 }
@@ -11,6 +13,7 @@ function engineeringStatus(view,text,state="") {
   $("internal-status").textContent=text;$("internal-status").dataset.state=state;
 }
 function clearInternal() {
+  clearRegisteredExtraction();
   if(engineering)clearSwitch(engineering);
   $("internal-switch").hidden=true;$("internal-switch-history").replaceChildren();
   engineeringGeneration++;engineering=null;
@@ -82,6 +85,7 @@ async function refreshInternal(view=engineering) {
 }
 async function showInternalInstance(id,view=engineering) {
   if(!view || !engineeringCurrent(view))return;
+  clearRegisteredExtraction();
   clearSwitch(view);$("internal-switch").hidden=true;
   const selection=++view.instanceGeneration;view.runGeneration++;view.instance=null;view.run=null;
   $("internal-run-form").hidden=true;$("internal-controls").replaceChildren();$("internal-run-detail").textContent="";$("internal-run-status").textContent="正在读取实例…";$("internal-data").replaceChildren();$("internal-runs").replaceChildren();engineeringButtons(view);
@@ -120,6 +124,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
     }
     if(!current())return;
     if(run.instance_id!==instance.id)throw Error("运行绑定与实例不符");
+    renderRegisteredExtraction(view,instance,run);
     view.run=run;$("internal-run-status").textContent=`${run.status} · 取消意图 ${run.cancel_intent ? "已保留" : "无"} · ${run.result ? JSON.stringify(run.result) : run.error?.code || "等待后台状态"}`;
     $("internal-run-detail").textContent=JSON.stringify(run,null,2);
     const commands=["QUEUED","RUNNING"].includes(run.status)?["pause","cancel"]:["PAUSED","WAITING_RESOURCE"].includes(run.status)&&!run.cancel_intent?(run.content_access===false?["cancel"]:["resume","cancel"]):["PAUSE_REQUESTED","RECONCILING"].includes(run.status)?["cancel"]:[];
@@ -243,6 +248,7 @@ function clearReleaseApproval(view) {
   $("internal-approval-detail").textContent="";$("internal-approval-label").textContent="";
 }
 function invalidateInternalContent(view) {
+  clearRegisteredExtraction();
   clearReleaseApproval(view);clearSwitch(view);
   view.instanceGeneration++;view.runGeneration++;view.instance=null;view.run=null;view.offlineReplay=null;
   $("internal-replay-file").value="";$("internal-replay-status").textContent="当前内容不可访问，请重新打开候选核查授权与来源。";
@@ -286,3 +292,71 @@ $("internal-replay-file").onchange=async()=>{
   }catch(error){if(current())$("internal-replay-status").textContent=`离线文件未加载：${error.message}`;}
   finally{if(current())engineeringButtons(view);}
 };
+
+
+function clearRegisteredExtraction() {
+  registeredExtractionGeneration++;registeredExtraction=null;
+  $("registered-extraction").hidden=true;$("registered-extraction-form").hidden=true;
+  $("registered-extraction-proof").textContent="";$("registered-extraction-target-info").textContent="";
+  $("registered-extraction-target").replaceChildren();$("registered-extraction-status").textContent="";
+  $("registered-extraction-name").value="从成功任务保存的汇总";
+  $("registered-extraction-retry").hidden=true;
+  for(const id of ["registered-extraction-target","registered-extraction-name","registered-extraction-retry","registered-extraction-submit"])$(id).disabled=false;
+}
+function registeredCurrent(state) {
+  return registeredExtraction===state && engineeringCurrent(state.view) && state.token===token && state.project===$("project-select").value && state.view.instance?.id===state.iid && state.view.run?.id===state.rid && state.view.run.version===state.version;
+}
+function renderRegisteredExtraction(view,instance,run) {
+  if(view.agent || run.status!=="SUCCEEDED" || run.content_access===false || run.cancel_intent){clearRegisteredExtraction();return;}
+  if(registeredExtraction?.view===view && registeredExtraction.iid===instance.id && registeredExtraction.rid===run.id && registeredExtraction.version===run.version)return;
+  clearRegisteredExtraction();registeredExtraction={view,token,project:view.project,iid:instance.id,rid:run.id,version:run.version,generation:registeredExtractionGeneration,options:null,busy:false};
+  $("registered-extraction").hidden=false;$("registered-extraction-open").disabled=false;
+}
+function registeredBody(state) {
+  const target=state.options?.targets.find(t=>t.id===$("registered-extraction-target").value);
+  if(!target)return null;
+  return {expected_proof_fingerprint:state.options.source_proof_fingerprint || state.options.proof_fingerprint,target_app_id:target.id,expected_target_draft_fingerprint:target.fingerprint,name:$("registered-extraction-name").value};
+}
+function registeredKey(state,body) {return JSON.stringify([state.token,state.project,state.iid,state.rid,state.version,body]);}
+function registeredSelectionChanged() {
+  const state=registeredExtraction;if(!state || !registeredCurrent(state))return;
+  const body=registeredBody(state),target=state.options?.targets.find(t=>t.id===body?.target_app_id);
+  $("registered-extraction-target-info").textContent=target ? `材料 ${target.resource_id} · hash ${target.source_hash || target.hash} · 沿用授权域 ${target.runtime_id}；共享授权撤回同时影响此草案。` : "";
+  $("registered-extraction-retry").hidden=!body || !registeredExtractionRequests.has(registeredKey(state,body));
+  $("registered-extraction-submit").disabled=state.busy || !body || !body.name.trim();
+}
+$("registered-extraction-target").onchange=registeredSelectionChanged;
+$("registered-extraction-name").oninput=registeredSelectionChanged;
+$("registered-extraction-open").onclick=safe(async()=>{
+  const state=registeredExtraction;if(!state || !registeredCurrent(state) || state.busy)return;
+  state.busy=true;$("registered-extraction-open").disabled=true;$("registered-extraction-status").textContent="正在核查真实成功任务与已有授权…";
+  try {
+    const options=await api(`/api/internal/instances/${state.iid}/runs/${state.rid}/extraction-options`);
+    if(!registeredCurrent(state))return;
+    state.options=options;$("registered-extraction-proof").textContent=JSON.stringify({proof:options.proof,proof_fingerprint:options.source_proof_fingerprint || options.proof_fingerprint},null,2);
+    $("registered-extraction-target").replaceChildren(new Option("请选择已有授权的新 CSV 应用",""),...options.targets.map(t=>new Option(t.name,t.id)));
+    $("registered-extraction-form").hidden=false;$("registered-extraction-status").textContent="来源已核查。选择不同 CSV 的既有授权域；不会自动创建权限。";
+  }catch(error){if(registeredCurrent(state)){if(["GRANT_REVOKED","PERMISSION_DENIED","VERSION_CONFLICT"].includes(error.message)){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else $("registered-extraction-status").textContent=error.detail || error.message;}}
+  finally {state.busy=false;if(registeredCurrent(state)){$("registered-extraction-open").disabled=false;registeredSelectionChanged();}}
+});
+async function submitRegisteredExtraction(retry=false) {
+  const state=registeredExtraction;if(!state || !registeredCurrent(state) || state.busy)return;
+  const body=registeredBody(state);if(!body || !body.name.trim())return;
+  const key=registeredKey(state,body);let pending=registeredExtractionRequests.get(key);
+  if(!pending && !retry){pending={...body,request_key:crypto.randomUUID()};registeredExtractionRequests.set(key,pending);}
+  if(!pending)return;
+  const current=()=>registeredCurrent(state) && registeredKey(state,registeredBody(state))===key;
+  state.busy=true;$("registered-extraction-submit").disabled=true;$("registered-extraction-retry").disabled=true;$("registered-extraction-target").disabled=true;$("registered-extraction-name").disabled=true;
+  $("registered-extraction-status").textContent="正在由服务端生成可复用草案…";
+  let made=null,readGeneration=null;const readGoalGeneration=goalSelectionGeneration;
+  try {
+    made=await api(`/api/internal/instances/${state.iid}/runs/${state.rid}/extract`,"POST",pending);
+    if(!current())return;
+    $("registered-extraction-status").textContent=`已生成 ${made.id}；正在回读草案。`;
+    await refreshApps();if(!current())return;
+    if(await showApp(made.id,state.project,g=>{readGeneration=g;})){selectWorkspace("apps");registeredExtractionRequests.delete(key);}
+  }catch(error){if(made && readGeneration===appSelectionGeneration && state.token===token && state.project===$("project-select").value && readGoalGeneration===goalSelectionGeneration){selectWorkspace("apps");setAppReadFailure({id:made.id,pid:state.project,kind:"created",goalGeneration:readGoalGeneration},error);registeredExtractionRequests.delete(key);}else if(current()){if(["GRANT_REVOKED","PERMISSION_DENIED","VERSION_CONFLICT"].includes(error.message)){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else {$("registered-extraction-status").textContent=`生成回执或草案回读未确认：${error.detail || error.message}。可用原请求键手动恢复；不会自动重发。`;$("registered-extraction-retry").hidden=false;}}}
+  finally {state.busy=false;if(registeredCurrent(state)){$("registered-extraction-target").disabled=false;$("registered-extraction-name").disabled=false;$("registered-extraction-retry").disabled=false;registeredSelectionChanged();}}
+}
+$("registered-extraction-form").onsubmit=event=>{event.preventDefault();return safe(()=>submitRegisteredExtraction())();};
+$("registered-extraction-retry").onclick=safe(()=>submitRegisteredExtraction(true));

@@ -1,6 +1,6 @@
-# 下一最小生成主线切片（只读设计草稿）
+# 成功 registered CSV Run → 可复用草案：范围与验收
 
-基线：`518223f2c0493ecebd7237956ac3f6f1303c7c7c`，2026-10-06。工作区仅已有 `scripts/browser-ci/agent-ui.cjs` 未提交修改；本审查不改它，不执行 CI、网络、LIVE、provider、外部发布。本文是实施建议，未实施/未运行测试，不是 PB 完成证据。
+初始只读设计基线：`518223f2c0493ecebd7237956ac3f6f1303c7c7c`，2026-10-06。随后用户明确授权按本文有界范围实施；独立开发副本从 `a6f68e1` 开始，未混入 UI 诊断 CI。后端、真实 HTTP 与用户入口已实现，来源/权限独立审核通过；实施和真实验证记录见 [后端日志](RegisteredRunGenerationImplementationLog.md) 与 [HTTP/UI 日志](RegisteredRunGenerationHttpUiLog.md)。下面保留原设计与边界作为验收依据；实现状态不表示完整 P-B、语义目标或原生浏览器生成流程已签收。
 
 ## 结论和不能跨过的事实
 
