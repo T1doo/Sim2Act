@@ -24,3 +24,5 @@ E14事前有界策略：最小不可变来源证明是完成任务/owner/project
 E14本地实现及35专项/1PG待CI、完整254PASS/6SKIP、原33+新14 DOM/HTTP通过，实际合成LOCAL_DECLARATIVE_TASK成功后可显式清旧内容、冷客户端运行新输入。source当前授权仍必要，撤权/过期拒绝；不是权限独立。三表显式迁移，既有PREVIEW不适用退休豁免，共享F1/目标卡/应用来源拒绝退休。详见[接口与策略](TaskRetirement.md)。精确Server待核实；真实视觉、原规格完整AT10、通用生成/Release及F1/Win11仍未验收。
 
 E14精确终态：c776fa2/CI37349609291SUCCESS/PG260PASS/0SKIP，36新专项含三表最小业务CRUD角色路径已通过；合成固定任务证明/显式退休/旧内容独立新输入子项交付。source撤权后继续复用未实现、默认拒绝，通用P-B与原规格全部AT10证据/Release/真实视觉及F1/Win11仍后续独立门。
+
+2026-10-06 E15范围：恢复后真实PG两种顺序核查，共享project→card/app→grant锁和候选持久化前重验。基线grant锁已挡住观察到的direct交错，未复现成功插入失效app；project锁缺失按真实结果补强。9真PG专项已通过，完整聚合/精确CI待核实。仅映射[冻结AT10合成子项](AT10Subitems.md)，不改V5/不扩展CSV/不签收完整P-B，真实浏览器/Win11/F1/Release和预算0边界保持。

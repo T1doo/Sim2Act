@@ -46,7 +46,7 @@ def snapshot(store, c, user, project, content):
 
 def create_card(store, user, pid, content):
     with store.tx() as c:
-        project = store.own_project(c, user, pid)
+        project = store.lock_project(c, user, pid)
         value = snapshot(store, c, user, project, content)
         cid, fp, now = new_id("goal"), fingerprint(value), time.time()
         c.execute(insert(goal_cards).values(
@@ -60,6 +60,11 @@ def create_card(store, user, pid, content):
 
 def load_card(store, c, user, cid, *, lock=False):
     query = select(goal_cards).where(goal_cards.c.id == cid)
+    if lock:
+        location = c.execute(query).mappings().first()
+        if not location:
+            raise DomainError("PERMISSION_DENIED")
+        store.lock_project(c, user, location["project_id"])
     card = c.execute(query.with_for_update() if lock else query).mappings().first()
     if not card:
         raise DomainError("PERMISSION_DENIED")

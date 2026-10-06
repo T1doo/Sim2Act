@@ -135,3 +135,5 @@
 ## 2026-10-06 / E15实施前：PG来源退休与消费者创建交错
 
 恢复环境ready，/workspace/Sim2Act-pb干净dev/f1-foundation 54ac055，正常origin fetch同HEAD；旧初始work不改。范围仅E14来源退休与消费者创建竞态：用真实PG barrier控制事务两种顺序，核查grant现有锁是否足以闭合；对消费者统一project锁并在锁内重验当前内容/退休状态，锁顺序project→card/app→grant，避免退休扫描后出现新消费者及反向锁死。覆盖direct草案、F1提交、目标卡创建/修订、候选/提取共享持久化入口。保留旧来源授权/退休默认拒绝、无新表/权限/CSV能力/真实模型。实际复现结果据实记录，不将SQLite或假锁作为PG通过。聚合/普通push精确ServerCI；之后只映射冻结AT10的完成合成任务→提取→退休→fresh Store新/坏输入子项，完整P-B/Win11/F1/Release仍未签收，0LIVE/无导出/无sandbox绕过。
+
+E15本地结果：真实临时PG17.11，9 barrier/冷Store专项PASS（3.26秒）；全LinuxPG268PASS/1Windows平台SKIP/2警告82.16秒，SQLite254PASS/15PG/平台SKIP/2警告33.30秒；ruff/mypy18模块/JS/diff通过。基线grant锁挡住观察direct退休交错，未复现成功失效app；共同project锁缺失的负断言1FAIL/1PASS，补强后统一锁及重验。冻结AT10合成子项映射已保存，不改V5/历史AT02或签收门。普通push精确ServerCI待核实；本地测试容器随后清理，0LIVE/无导出。

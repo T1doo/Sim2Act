@@ -135,9 +135,9 @@ def create_csv_draft(store, user, pid, name, rid, goal, platform_limits):
         run_seconds=1,
     )
     with store.tx() as c:
-        project = store.own_project(c, user, pid)
+        project = store.lock_project(c, user, pid)
         authorize_source(store, c, user, project, rid, project["runtime_id"])
-        source = c.execute(select(resources).where(resources.c.id == rid)).mappings().one()
+        source = authorized_read(store, c, user, project["runtime_id"], pid, "resource.read", {"resource_id": rid})
         if source["format"] != "csv":
             raise DomainError("INVALID_INPUT", "请选择已授权的 CSV 材料")
         candidate = csv_candidate(rid, source["hash"], goal, limits)
@@ -145,6 +145,14 @@ def create_csv_draft(store, user, pid, name, rid, goal, platform_limits):
 
 
 def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
+    # All production callers acquire this project before card/app/grant locks.
+    from .db import projects
+    from .tools import read_data
+
+    c.execute(select(projects.c.id).where(projects.c.id == project["id"]).with_for_update()).one()
+    source = read_data(c, rid, "resource.read", {"resource_id": rid})
+    if source["format"] != "csv" or source["hash"] != candidate["source_hash"]:
+        raise DomainError("VERSION_CONFLICT", "持久化前材料版本或退休状态已变化")
     compile_preview(candidate, platform_limits)
     aid = candidate["manifest"]["app_id"]
     runtime = new_id("appruntime")

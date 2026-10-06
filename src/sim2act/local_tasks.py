@@ -17,7 +17,6 @@ from .db import (
     goal_card_versions,
     local_csv_tasks,
     new_id,
-    projects,
     resource_retirements,
     resources,
     runs,
@@ -54,9 +53,7 @@ class RetirementInput(Strict):
 
 
 def locked_project(store, c, user, pid):
-    project = store.own_project(c, user, pid)
-    c.execute(select(projects.c.id).where(projects.c.id == pid).with_for_update()).one()
-    return project
+    return store.lock_project(c, user, pid)
 
 
 def task_public(row):

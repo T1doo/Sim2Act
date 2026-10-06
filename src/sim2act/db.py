@@ -349,6 +349,15 @@ class Store:
             raise DomainError("PERMISSION_DENIED")
         return p
 
+    def lock_project(self, c, principal, project_id):
+        """Consumer creation and source retirement share project -> entity -> grant order."""
+        p = c.execute(select(projects).where(
+            projects.c.id == project_id, projects.c.owner_id == principal
+        ).with_for_update()).mappings().first()
+        if not p:
+            raise DomainError("PERMISSION_DENIED")
+        return p
+
     def authorize(self, c, principal, runtime, project_id, rid, tool):
         self.own_project(c, principal, project_id)
         if rid != project_id and tool != "resource.read":
@@ -460,9 +469,11 @@ class Store:
         fp = fingerprint({"goal": goal, "resource_refs": refs, "policy": policy})
         try:
             with self.tx() as c:
-                p = self.own_project(c, principal, project_id)
+                p = self.lock_project(c, principal, project_id)
                 for rid in refs:
                     self.authorize(c, principal, p["runtime_id"], project_id, rid, "resource.read")
+                    if c.execute(select(resource_retirements.c.resource_id).where(resource_retirements.c.resource_id == rid)).first():
+                        raise DomainError("RESOURCE_UNAVAILABLE", "退休来源不能成为新的任务输入")
                 old = (
                     c.execute(
                         select(runs).where(

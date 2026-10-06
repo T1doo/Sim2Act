@@ -150,6 +150,12 @@ def extracted_template(source_draft, source_manifest, evidence, rid, source_hash
 
 def extract_preview(store, user, pid, body, platform_limits):
     with store.tx() as c:
+        location = c.execute(select(app_drafts.c.project_id).join(
+            app_previews, app_previews.c.app_id == app_drafts.c.id
+        ).where(app_previews.c.id == pid, app_previews.c.principal_id == user)).first()
+        if not location:
+            raise DomainError("PERMISSION_DENIED")
+        store.lock_project(c, user, location[0])
         source_draft, manifest, evidence = verified_source(
             store, c, user, pid, platform_limits, lock=True
         )
