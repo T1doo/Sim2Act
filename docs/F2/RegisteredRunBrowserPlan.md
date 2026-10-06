@@ -27,3 +27,6 @@
 完整P-B、目标语义、Win11/F1/AT02、模型自主生成、发布保持未签收；此阶段只验真实registered CSV用户入口。
 
 第一阶段实际结束：fixture/API专项5PASS，新直接真实HTTP-DOM专项1PASS（functional source3→newquantity15/全部负例；不是native）；root合并fixture+新DOM+旧agentHTTP+现生成HTTP **43 PASS/0FAIL**，91.89秒。旧agent HTTP/jsdom22checks另实跑PASS。独立fixture审核5PASS，并在旧agent腐化/撤权后实复现CSV生成兼容；完整native导航/capture/安全/partialFAIL静态审核APPROVE。新DOM wrapper曾把实际id写成run造成一次KeyError，修复后实际专项与合并闭合，未运行任何CI。源码hash及证据在registered-run-browser-20261006；本地API/DOM不能替代下一真实Edge阶段。README现链接最短运行说明，原完整P-B门不提升。
+
+
+2026-10-06 本轮真实入口阶段闭合：普通push精确源码 `447b597fefd6c2a191ef4e9ff6d4bf2f0c06d3d5`，唯一原标准CI [37476996252](https://github.com/T1doo/Sim2Act/actions/runs/37476996252) 首次SUCCESS，无重试。Windows工程564PASS/2SKIP；原Edge38、旧agent33、新registeredGeneration29分别PASS。真实受保护浏览器完成源amount3→服务端草案→既有授权新CSV→人工确认版本→新实例冷worker quantity15/resultVersion1，并实测回执恢复、撤权、篡改、旧响应、跨主体/项目、空目标及窄屏。两次capture及最终实际保护审计PASS。两原PNG按stdout字节/SHA/尺寸与里程碑核验，主审及独立实际像素复审接受本次健康历史展示范围；runtime NOT_REVIEWED保留、人工审查另存。Report/Cleanup成功。最短说明补明预览列与新任务列分别设置，每次新任务需选quantity，历史刷新后amount默认不改变既有quantity15结果。见[证据](../evidence/registered-run-browser-20261006/README.md)及[使用说明](RegisteredRunQuickstart.md)。此有限原生入口缺口闭合，不提升Win11、完整AT02/F1、语义或完整P-B；旧空白根因UNKNOWN、失败历史保留、模型请求0。

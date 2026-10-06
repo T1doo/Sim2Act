@@ -312,3 +312,6 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 ## 2026-10-06 / 来源驱动 registered CSV 生成切片终态
 
 按用户授权实施 [RegisteredRunGenerationSlice](RegisteredRunGenerationSlice.md)。成功内部 CSV Run → 服务端可信声明式草案 → 已有授权新 CSV → 新 column 冷 worker 链路已实现并独立审查；用户无 candidate/wire/gold/权限字段。精确源码1413cbf，独立标准 Windows CI37472996465 SUCCESS（559 PASS / 1 SKIP）；最终冻结 SQLite全套、PG来源/权限/CRUD角色与真实HTTP-DOM16已测。没有新Principal/Grant/表/DDL/LIVE/正式发布；共享授权撤回影响明确。来源PARTIAL/FAILED/UNKNOWN拒绝，语义NOT_RUN/完整P-B未签收。新生成用户入口的原生浏览器/截图仍未验，现Edge38+agent33只证明此前回归链路，不能充生成UI验收。[日志与保留失败](../evidence/registered-run-generation-20261006/README.md)。独立UI切片9104b2a/CI37471361854成功、两张真实agent截图有限范围通过双审；旧窄屏空白根因UNKNOWN，失败证据保留。
+
+
+2026-10-06 本轮真实入口阶段闭合：普通push精确源码 `447b597fefd6c2a191ef4e9ff6d4bf2f0c06d3d5`，唯一原标准CI [37476996252](https://github.com/T1doo/Sim2Act/actions/runs/37476996252) 首次SUCCESS，无重试。Windows工程564PASS/2SKIP；原Edge38、旧agent33、新registeredGeneration29分别PASS。真实受保护浏览器完成源amount3→服务端草案→既有授权新CSV→人工确认版本→新实例冷worker quantity15/resultVersion1，并实测回执恢复、撤权、篡改、旧响应、跨主体/项目、空目标及窄屏。两次capture及最终实际保护审计PASS。两原PNG按stdout字节/SHA/尺寸与里程碑核验，主审及独立实际像素复审接受本次健康历史展示范围；runtime NOT_REVIEWED保留、人工审查另存。Report/Cleanup成功。最短说明补明预览列与新任务列分别设置，每次新任务需选quantity，历史刷新后amount默认不改变既有quantity15结果。见[证据](../evidence/registered-run-browser-20261006/README.md)及[使用说明](RegisteredRunQuickstart.md)。此有限原生入口缺口闭合，不提升Win11、完整AT02/F1、语义或完整P-B；旧空白根因UNKNOWN、失败历史保留、模型请求0。
