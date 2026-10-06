@@ -50,7 +50,10 @@ def is_app_job(store, rid):
         return bool(binding or (isinstance(context, dict) and context.get("kind") == KIND))
 
 
-def enqueue(store, user, iid, expected_revision, release_fp, input_value, key, limits):
+def enqueue(
+    store, user, iid, expected_revision, release_fp, input_value, key, limits,
+    *, offline_replay=None, require_offline_replay=False,
+):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
     with store.tx() as c:
@@ -59,12 +62,23 @@ def enqueue(store, user, iid, expected_revision, release_fp, input_value, key, l
         ).scalar()
         store.lock_project(c, user, pid)
         i, release = instance(store, c, user, iid, limits, lock=True)
+        from .agent_apps import is_agent, offline_replay_model
+
+        agent = is_agent(release["snapshot"]["draft"]["candidate"])
+        if (not agent and offline_replay is not None) or (
+            agent and require_offline_replay and offline_replay is None
+        ):
+            raise DomainError("INVALID_INPUT", "Explicit offline Replay required only for agent")
+        if offline_replay is not None:
+            offline_replay = offline_replay_model(offline_replay).responses
         request = {
             "instance_id": iid,
             "expected_revision": expected_revision,
             "expected_release_fp": release_fp,
             "input": input_value,
         }
+        if offline_replay is not None:
+            request["offline_replay"] = offline_replay
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -238,6 +252,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True):
     request = {
         k: s[k] for k in ["instance_id", "expected_revision", "expected_release_fp", "input"]
     }
+    if "offline_replay" in s:
+        request["offline_replay"] = s["offline_replay"]
     if (
         s["namespace"] != KIND
         or job["context"].get("kind") != KIND
@@ -261,6 +277,12 @@ def load_binding(store, c, user, job, limits, *, authorize=True):
         if contract.limits.model_dump() != s["limits"]:
             raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
         r = read_release(store, c, user, s["release_id"], limits)
+        if "offline_replay" in s:
+            from .agent_apps import is_agent, offline_replay_model
+
+            if not is_agent(r["snapshot"]["draft"]["candidate"]):
+                raise DomainError("VERSION_CONFLICT", "Offline Replay cannot change executor family")
+            offline_replay_model(s["offline_replay"])
         if (
             r["fingerprint"] != s["expected_release_fp"]
             or r["project_id"] != s["project_id"]
@@ -526,6 +548,7 @@ def prepare_dispatch(worker, run):
             "input": s["input"],
             "manifest": manifest.model_dump(),
             "action": action.model_dump(),
+            **({"offline_replay": copy.deepcopy(s["offline_replay"])} if "offline_replay" in s else {}),
         }
 
 
@@ -596,6 +619,7 @@ def commit_result(worker, run, plan, output):
             or plan["input"] != s["input"]
             or plan["manifest"] != manifest.model_dump()
             or plan["action"] != action.model_dump()
+            or fingerprint(plan.get("offline_replay")) != fingerprint(s.get("offline_replay"))
         ):
             raise DomainError(
                 "VERSION_CONFLICT", "Calculation plan no longer matches accepted source/specs"
@@ -631,7 +655,7 @@ def commit_result(worker, run, plan, output):
             release["snapshot"]["draft"]["candidate"]["manifest"]["output_schema"], output
         )
         if agent:
-            from .agent_apps import check_evidence, validate_protocol
+            from .agent_apps import check_evidence, validate_accepted_replay, validate_protocol
 
             check = check_evidence(source, args, output)
             protocol = plan.get("protocol")
@@ -644,6 +668,8 @@ def commit_result(worker, run, plan, output):
             ):
                 raise DomainError("VERIFICATION_FAILED", "Verified offline protocol required")
             validate_protocol(plan, protocol, output)
+            if "offline_replay" in s:
+                validate_accepted_replay(plan, s["offline_replay"], protocol, output)
             checks = [check]
             identities = {"resource_id": args["resource_id"], "source_hash": source["hash"]}
         else:
@@ -827,7 +853,13 @@ def process_job(worker, run):
                             args,
                         )
 
-                output = compute(plan, worker.model, read)
+                if "offline_replay" in plan:
+                    from .agent_apps import offline_replay_model
+
+                    model = offline_replay_model(plan["offline_replay"])
+                else:
+                    model = worker.model  # Legacy explicit in-memory Replay; exact type enforced.
+                output = compute(plan, model, read)
             else:
                 output = compute(plan)
             commit_result(worker, run, plan, output)

@@ -1,0 +1,61 @@
+........................................................................ [ 13%]
+........................................................................ [ 27%]
+........................................................................ [ 41%]
+........................................................................ [ 55%]
+........................................................................ [ 69%]
+..............F......................................................... [ 83%]
+s....................................................................... [ 97%]
+.............                                                            [100%]
+=================================== FAILURES ===================================
+_ test_real_pg_process_crash_reopen_recovers_without_duplicate_results[before_commit] _
+
+env = (<sim2act.db.Store object at 0x7f03014bfd40>, Settings(database_url='postgresql+psycopg://postgres:synthetic-agent-ui-...26de0ac027463986b4e24f49260eb5', 'user_05e6c1e82ff34e849ee4dd801464e9a1', 'proj_6e6741464d474e778a8957556cb4b3a4', ...)
+runtime_role = 'postgresql+psycopg://test_app_10826170ef8348da82502f7751087d36:05b9c90d026debc6ad8687627e01e50c7e96caf424b11bc080974a1973234e38@127.0.0.1:32773/postgres?options=-csearch_path%3Dtest_1620c231e56e472089f71a01d189134b'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-129/test_real_pg_process_crash_reo0')
+fault = 'before_commit'
+
+    @pytest.mark.parametrize("fault", ["before_commit", "after_commit"])
+    def test_real_pg_process_crash_reopen_recovers_without_duplicate_results(
+        env, runtime_role, tmp_path, fault
+    ):
+        r, i, _, _ = setup(env)
+        a = enqueue(env, i, r)
+        p = child(env, runtime_role, fault, tmp_path)
+        try:
+            p.communicate(timeout=20)
+            assert p.returncode == {"before_commit": 73, "after_commit": 74}[fault], (
+                "Synthetic child fault did not reach expected window; values suppressed"
+            )
+            assert (tmp_path / "entered").exists()
+            if fault == "before_commit":
+                assert row(env, a["run_id"])["status"] == "RUNNING"
+                assert quantities(env)["internal_instance_data"] == 0
+                time.sleep(1.2)
+            else:
+                assert row(env, a["run_id"])["status"] == "SUCCEEDED"
+            # Brand-new independent worker process, same owned synthetic minimum CRUD role.
+            second = child(env, runtime_role, "normal", tmp_path)
+            try:
+                second.communicate(timeout=20)
+                assert second.returncode == 0, "Synthetic recovery process failed; values suppressed"
+            finally:
+                if second.poll() is None:
+                    second.kill()
+                    second.communicate(timeout=5)
+            reopened = Store(runtime_role)
+            try:
+                result = reopened.inspect(env[3], a["run_id"])
+>               assert (
+                    result["status"] == "SUCCEEDED"
+                    and result["result"]["sum"] == "4.00"
+                    and result["result_version"] == 1
+                )
+E               AssertionError: assert ('RUNNING' == 'SUCCEEDED'
+E                 
+E                 - SUCCEEDED
+E                 + RUNNING)
+
+tests/test_persistent_app_runs.py:504: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_persistent_app_runs.py::test_real_pg_process_crash_reopen_recovers_without_duplicate_results[before_commit]
+1 failed, 515 passed, 1 skipped, 3 warnings in 868.82s (0:14:28)

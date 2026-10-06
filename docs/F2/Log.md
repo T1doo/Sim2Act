@@ -42,3 +42,15 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 ### 2026-10-06 / 来源家族修复普通push与唯一原WindowsCI终态
 
 父审后授权远端下一验证，原origin fetch远端96a6ae0并is-ancestor通过，普通push HEAD:dev/f1-foundation将精确133b1e8cd722744e4f4e42d364339b3b1dc656a2交付；ls-remote一致，无强推/main合并。既有push-trigger标准WindowsCI仅一次run37450622061/job112226027113完成success，源码/旧证据hash重核一致，workflow/scripts/runner/权限/upload scope不变。实测完整PG工程497PASS0FAIL0ERROR0SKIP2warnings249.67秒、ruff/mypy23PASS、原native Setup/最低CRUD应用角色API-worker烟测PASS、原保护Edge38PASS/无unexpectedConsoleErrors/真实sandbox验证，Report和Cleanup PASS。选取原日志确证owned API/worker stopped、temporary server stopped；无整log/PNG额外导出，只在既有GitHub分支提交CI安全摘要/metadata。原本地result.json与失败历史不改，本轮CI独立JSON追加。文档path不触发新CI，收尾普通push。模型0/LIVE0；不将合成SQL损坏来源绕过说成真实用户被攻击或跨用户泄露；原Edge38不是新agent UI验收，完整P-B、Win11/F1阶段仍开放。[CI结果](../evidence/executor-family-provenance-20261006/ci-summary.json)。
+
+### 2026-10-06 / agent UI范围冻结与真实浏览器前置阻塞
+
+基线4e7010b，查原V5和既有app.js/internal.js/internal_api/lifecycle/app_jobs：GET agent已支持但showApp读guidance.columns必错；HTTP审批/持久worker无离线响应入口。冻结最小界面及既有请求Replay扩展/既有JSON绑定存储，不造后台/工具授权/候选自主生成。Chromium via agent-browser CLI原命令正常与正式require_escalated均Chrome exited early；SUID sandbox helper not configured correctly，退出前无DevToolsActivePort。没有接受no-sandbox hint、没有改OS安全策略；真实浏览器/截图验收仍BLOCKED，后续只如实记录。先独立计划审查，之后本地实现测试commit、未获父检查不push/CI/LIVE。
+
+### 2026-10-06 / 内部 agent UI 与冻结 Replay 本地实现
+
+现有应用页接通term/显式离线响应、来源/资源/hash/revision、手工批准、内部Release/Instance/AppRun与新结果版本历史，明确字面PASS/semantic UNKNOWN及尚无真实模型自主生成。HTTP在现有请求增加bounded两条wire响应，保存在既有snapshot并纳入accepted指纹；默认冷Worker读取冻结Replay，不调用provider、不新建表/Grant/工具。独立内部合成篡改曾两次错误SUCCEEDED（不同tool_call.id协议、整数1→True），修复canonical指纹比较和acceptedReplay oracle后两项独立拒绝，无效果追加；cold成功收据校验同源，原失败保留。DOM也实测发现刷新未校验当前draft，已补当前来源授权和精确FP核查。
+
+实际HTTP20PASS、独立HTTP20PASS/旧internal18PASS1SKIP、最终DOM功能22PASS（真实本地HTTP，夹具文件/交付故障注入），SQLite493PASS24SKIP3warnings327.90秒，ruff/mypy23PASS。DOM中途v2 fetchfailed时后台已保存两版但UI清空，独立只读确认；夹具由同步改异步子进程+诊断后完整通过，无自动HTTP retry，历史传输根因未证实、不追认原失败。PG最终/源码hash/独立静态审查/清理见[证据](../evidence/bounded-agent-ui-offline-20261006/README.md)。原生保护启动三次均SUID helper配置退出，0原生检查/0截图与查看，窄屏未验收；不关闭sandbox或用未授权CI替代。父检查前本地commit、没有push/CI/LIVE；完整自主生成/自由语义/中断恢复/P-B/Win11/F1仍开放。
+
+最终PG17完整515PASS1FAIL1SKIP3warnings868.82秒，唯一旧before_commit崩溃恢复用例fault进程达73、恢复进程return0但Run仍RUNNING，保存full-pg.log，根因未确认。单独两crash2PASS1warning18.79秒只为复验，不覆盖完整失败、不称时序根因已证明；新HTTP20完整PG均PASS。未改旧lease/权限或跳过用例。仅自有API正常停止、PG容器移除，8073/8074/32773关闭、原work HEAD6f688e4干净。交付状态为本地可审查实现、验收未完成，原生视觉及完整PG失败留有明确阻塞。

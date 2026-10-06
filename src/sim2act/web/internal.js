@@ -15,7 +15,7 @@ function clearInternal() {
   $("internal-switch").hidden=true;$("internal-switch-history").replaceChildren();
   engineeringGeneration++;engineering=null;
   $("internal-panel").hidden=true;$("internal-approval").hidden=true;$("internal-approval-detail").textContent="";$("internal-approval-ack").checked=false;
-  $("internal-status").textContent="";
+  $("internal-status").textContent="";$("internal-agent").hidden=true;$("internal-replay-file").value="";$("internal-replay-status").textContent="";$("internal-term").value="";
   for(const id of ["internal-releases","internal-instances","internal-runs","internal-data","internal-controls"] )$(id).replaceChildren();
   $("internal-run-form").hidden=true;$("internal-retry").hidden=true;$("internal-new-intent").hidden=true;$("internal-run-detail").textContent="";$("internal-run-status").textContent="";$("internal-instance-info").textContent="";
 }
@@ -26,10 +26,13 @@ function engineeringButtons(view) {
   $("internal-switch-target").disabled=!!view.busy;
   $("internal-switch-commit").disabled=!!view.busy || !view.instance || !view.switchApproval || switchExpired || !$("internal-switch-ack").checked;
   if(switchExpired)$("internal-switch-status").textContent="批准已到期，请重新核查；不会自动重发确认。";
-  $("internal-prepare").disabled=!!view.busy;
+  const missingReplay=view.agent && (!view.offlineReplay || !$("app-agent-term").value.trim());
+  const approvalExpired=view.approval && view.approval.expires_at*1000<=Date.now();
+  $("internal-prepare").disabled=!!view.busy || missingReplay;
   $("internal-refresh").disabled=!!view.busy;
-  $("internal-commit").disabled=!!view.busy || !view.approval || !$("internal-approval-ack").checked;
-  $("internal-run-submit").disabled=!!view.busy || !view.instance || engineeringPending.has(view.instance.id);
+  $("internal-commit").disabled=!!view.busy || !view.approval || approvalExpired || !$("internal-approval-ack").checked;
+  if(approvalExpired)engineeringStatus(view,"批准已到期，请重新核查；不会自动确认。","error");
+  $("internal-run-submit").disabled=!!view.busy || !view.instance || engineeringPending.has(view.instance.id) || (view.agent && (!view.offlineReplay || !$("internal-term").value.trim()));
   $("internal-retry").hidden=!view.instance || !engineeringPending.has(view.instance.id);
   $("internal-retry").disabled=!!view.busy;
   $("internal-new-intent").hidden=$("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
@@ -39,18 +42,24 @@ async function engineeringAction(view,fn) {
   const selection=view.instanceGeneration;
   view.busy=true;engineeringButtons(view);
   try {await fn();}
-  catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration)engineeringStatus(view,error.message,"error");}
+  catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");}}
   finally {view.busy=false;engineeringButtons(view);}
 }
 async function openInternal(app,appGeneration) {
-  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null};
+  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",offlineReplay:null,inputGeneration:0};
   engineering=view;$("apps").append($("internal-panel"));$("internal-panel").hidden=false;
+  $("internal-agent").hidden=!view.agent;
+  $("internal-replay-status").textContent=view.agent ? "尚未加载离线响应；审批与新运行暂不可提交。" : "";
+  $("internal-prepare-hint").textContent=view.agent ? "使用上方样例字面检索词与已加载的离线响应核查当前材料。先查看精确快照，再手动确认保存内部版本；语义仍为 UNKNOWN。" : "使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。";
   engineeringButtons(view);engineeringStatus(view,"正在读取内部版本与实例…","loading");
   try {await refreshInternal(view);}
-  catch(error){if(engineeringCurrent(view)){engineeringStatus(view,error.message,"error");$("internal-releases").replaceChildren();$("internal-instances").replaceChildren();}}
+  catch(error){if(engineeringCurrent(view)){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");$("internal-releases").replaceChildren();$("internal-instances").replaceChildren();}}
 }
 async function refreshInternal(view=engineering) {
   if(!view || !engineeringCurrent(view))return;
+  const latest=await api(`/api/apps/${view.app}`);
+  if(!engineeringCurrent(view))return;
+  if(latest.project_id!==view.project || latest.fingerprint!==view.draft.fingerprint)throw Error("VERSION_CONFLICT");
   const [releases,instances]=await Promise.all([api(`/api/internal/apps/${view.app}/releases`),api(`/api/internal/apps/${view.app}/instances`)]);
   if(!engineeringCurrent(view))return;
   view.releases=releases.items;
@@ -82,12 +91,13 @@ async function showInternalInstance(id,view=engineering) {
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
     view.instance=instance;renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
+    $("internal-column-label").hidden=view.agent;$("internal-column").required=!view.agent;$("internal-term-label").hidden=!view.agent;$("internal-term").required=view.agent;
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
     $("internal-run-form").hidden=false;
-    $("internal-data").replaceChildren(...instance.data.map(record=>row(`结果 v${record.version} · ${record.release_id} · ${JSON.stringify(record.data.result)}`)));
+    $("internal-data").replaceChildren(...instance.data.map(record=>internalResult(record,view)));
     $("internal-runs").replaceChildren(...instance.runs.map(run=>row(`${run.status} · ${run.id} · 结果版本 ${run.result_version ?? "无"}`,()=>showInternalRun(run.id,view,instance),"读取后台任务")));
-    $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。";
-  } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
+    $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : (view.agent ? "加载对应离线响应并填写本次检索词；后台核查真实授权材料，不调用provider。关闭页面不会取消任务。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。");
+  } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
   engineeringButtons(view);
 }
 async function showInternalRun(id,view=engineering,instance=view?.instance) {
@@ -128,12 +138,12 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
       await showInternalInstance(instance.id,view);
       if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(id,view,view.instance);
     }
-  } catch(error){if(current()){engineeringStatus(view,error.message,"error");$("internal-run-status").textContent+=" · 无法读取当前详情";}}
+  } catch(error){if(current()){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");$("internal-run-status").textContent+=" · 无法读取当前详情";}}
 }
 async function submitInternal(view,retry=false) {
   const instance=view.instance;if(!instance)return;
   let pending=engineeringPending.get(instance.id);
-  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:{column:$("internal-column").value},request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
+  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.agent ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
   const generation=view.instanceGeneration;
   $("internal-run-status").textContent="正在提交持久任务…";
@@ -146,16 +156,20 @@ async function submitInternal(view,retry=false) {
 }
 $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
-  const prepared=await api(`/api/internal/apps/${view.app}/release-approvals`,"POST",{expected_draft_fingerprint:view.draft.fingerprint,sample_input:{column:$("app-column").value}});
+  const inputGeneration=view.inputGeneration;
+  const current=()=>engineeringCurrent(view) && inputGeneration===view.inputGeneration;
+  const sample=view.agent ? {term:$("app-agent-term").value} : {column:$("app-column").value};
+  const prepared=await api(`/api/internal/apps/${view.app}/release-approvals`,"POST",{expected_draft_fingerprint:view.draft.fingerprint,sample_input:sample,...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {})});
+  if(!current())return;
   const detail=await api(`/api/internal/approvals/${prepared.id}`);
-  if(!engineeringCurrent(view))return;
+  if(!current())return;
   if(detail.fingerprint!==prepared.fingerprint)throw Error("批准指纹不一致");
   view.approval=detail;$("internal-approval").hidden=false;$("internal-approval-label").textContent=`内部批准 ${detail.id} · 到期 ${new Date(detail.expires_at*1000).toLocaleString()} · ${detail.fingerprint}`;
   $("internal-approval-detail").textContent=JSON.stringify(detail.payload,null,2);engineeringStatus(view,"请检查精确冻结快照，勾选确认后保存内部 Release。");
 });
 $("internal-approval-ack").onchange=()=>{if(engineering)engineeringButtons(engineering);};
 $("internal-commit").onclick=()=>engineeringAction(engineering,async()=>{
-  const view=engineering,approval=view.approval;if(!approval || !$("internal-approval-ack").checked)return;
+  const view=engineering,approval=view.approval;if(!approval || approval.expires_at*1000<=Date.now() || !$("internal-approval-ack").checked)return;
   const saved=await api(`/api/internal/approvals/${approval.id}/commit`,"POST",{fingerprint:approval.fingerprint});
   if(!engineeringCurrent(view))return;
   view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;await refreshInternal(view);engineeringStatus(view,`已保存内部 Release ${saved.id}；正式发布关闭。`);
@@ -170,7 +184,7 @@ $("internal-new-intent").onclick=()=>{const view=engineering,id=view?.instance?.
 });};
 $("internal-retry").onclick=()=>{const view=engineering;return engineeringAction(view,()=>submitInternal(view,true));};
 setInterval(async()=>{
- const view=engineering;if(!view || !engineeringCurrent(view) || view.busy || !view.run || !view.instance)return;
+ const view=engineering;if(!view || !engineeringCurrent(view))return;engineeringButtons(view);if(view.busy || !view.run || !view.instance)return;
  if(!["SUCCEEDED","FAILED","CANCELLED"].includes(view.run.status))await showInternalRun(view.run.id,view,view.instance);
 },2500);
 
@@ -221,3 +235,54 @@ $("internal-switch-commit").onclick=()=>engineeringAction(engineering,async()=>{
   } catch(error){if(current())$("internal-switch-status").textContent=`确认结果待核对：${error.detail || error.message}。请重新读取历史；不自动重发批准。`;}
 });
 setInterval(()=>{if(engineering?.switchApproval)engineeringButtons(engineering);},500);
+
+
+function clearReleaseApproval(view) {
+  view.inputGeneration++;view.approval=null;
+  $("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
+  $("internal-approval-detail").textContent="";$("internal-approval-label").textContent="";
+}
+function invalidateInternalContent(view) {
+  clearReleaseApproval(view);clearSwitch(view);
+  view.instanceGeneration++;view.runGeneration++;view.instance=null;view.run=null;view.offlineReplay=null;
+  $("internal-replay-file").value="";$("internal-replay-status").textContent="当前内容不可访问，请重新打开候选核查授权与来源。";
+  for(const id of ["internal-data","internal-runs","internal-releases","internal-instances","internal-controls"])$(id).replaceChildren();
+  $("internal-run-detail").textContent="";$("internal-instance-info").textContent="";
+  $("internal-run-form").hidden=true;$("internal-switch").hidden=true;
+  $("app-frozen-goal-text").textContent="";$("app-frozen-goal").hidden=true;$("app-manifest").textContent="";
+}
+function internalResult(record,view) {
+  if(!view.agent)return row(`结果 v${record.version} · ${record.release_id} · ${JSON.stringify(record.data.result)}`);
+  const value=record.data.result,node=document.createElement("article");node.className="agent-result";
+  const title=document.createElement("p");title.textContent=`历史结果 v${record.version} · ${record.release_id} · 离线 Replay · 字面检查 PASS · 语义 ${value.semantic_status}`;
+  const scope=document.createElement("p");scope.textContent=`检索词：${value.term} · 材料 ${value.resource_id} · revision ${value.revision} · hash ${value.source_hash}`;
+  const quotes=document.createElement("ul");
+  for(const cite of value.citations){const line=document.createElement("li"),label=document.createElement("span"),quote=document.createElement("blockquote");label.textContent=`第 ${cite.start_line}—${cite.end_line} 行`;quote.textContent=cite.quote;line.append(label,quote);quotes.append(line);}
+  if(!value.citations.length)quotes.textContent="无字面命中；不代表语义不存在。";
+  node.append(title,scope,quotes);return node;
+}
+function changeAgentInput() {
+  const view=engineering;if(!view || !engineeringCurrent(view) || !view.agent)return;
+  clearReleaseApproval(view);view.offlineReplay=null;$("internal-replay-file").value="";
+  $("internal-replay-status").textContent="检索词已变化，请重新加载对应离线响应；未确认批准已清除。";
+  engineeringButtons(view);
+}
+$("app-agent-term").oninput=changeAgentInput;
+$("internal-term").oninput=changeAgentInput;
+$("internal-replay-file").onchange=async()=>{
+  const view=engineering;if(!view || !engineeringCurrent(view) || !view.agent)return;
+  clearReleaseApproval(view);view.offlineReplay=null;
+  const generation=view.inputGeneration,file=$("internal-replay-file").files[0];
+  const current=()=>engineeringCurrent(view) && generation===view.inputGeneration;
+  engineeringButtons(view);$("internal-replay-status").textContent="正在读取离线文件…";
+  try {
+    if(!file)throw Error("尚未选择离线响应文件");
+    if(file.size>32000)throw Error("离线文件超过32000字节");
+    const data=JSON.parse(await file.text());
+    if(!current())return;
+    if(!Array.isArray(data) || data.length!==2 || data.some(r=>!r || Array.isArray(r) || typeof r!=="object" || Object.keys(r).some(k=>!["choices","model","id","object","created","usage"].includes(k)) || !Array.isArray(r.choices) || r.choices.length!==1) || new TextEncoder().encode(JSON.stringify(data)).length>32000)throw Error("需要恰好两条有限的wire响应；不接受gold或provider选项");
+    view.offlineReplay=structuredClone(data);
+    $("internal-replay-status").textContent="已加载两条离线响应；尚未验证。服务端会实际读取当前授权材料并核查引用，0网络模型请求。";
+  }catch(error){if(current())$("internal-replay-status").textContent=`离线文件未加载：${error.message}`;}
+  finally{if(current())engineeringButtons(view);}
+};

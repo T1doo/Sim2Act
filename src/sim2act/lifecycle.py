@@ -194,6 +194,15 @@ def prepare_release(
         draft, _, action, report = load_draft(store, c, user, aid, limits, lock=True)
         if draft["fingerprint"] != expected_draft_fp:
             raise DomainError("VERSION_CONFLICT")
+        agent = action.executor.kind == "bounded_agent"
+        if (agent and replay is None) or (not agent and replay is not None):
+            raise DomainError("INVALID_INPUT", "Offline Replay required only for bounded agent")
+        if agent:
+            from .agent_apps import ReplayModel
+
+            if type(replay) is not ReplayModel:
+                raise DomainError("UNSUPPORTED_CAPABILITY", "Offline Replay only")
+        replay_fp = fingerprint(replay.responses) if agent else None
         output = execute(store, c, user, draft, limits, sample_input, replay)
         frozen = {
             k: copy.deepcopy(draft[k])
@@ -220,6 +229,12 @@ def prepare_release(
             "model_requests": 0,
             "formal_publication_enabled": False,
         }
+        if agent:
+            snapshot["check_evidence"].update(
+                execution_mode="OFFLINE_REPLAY_ONLY",
+                semantic_status="UNKNOWN",
+                offline_replay_fingerprint=replay_fp,
+            )
         return new_approval(
             c,
             user,

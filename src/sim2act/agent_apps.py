@@ -44,6 +44,30 @@ class ReplayModel:
         return self.responses.pop(0)
 
 
+def offline_replay_model(responses):
+    """Bound explicit HTTP/persisted offline data; never generate an answer or adapter."""
+    if (
+        type(responses) is not list
+        or len(responses) != 2
+        or any(
+            type(r) is not dict
+            or set(r) - {"choices", "model", "id", "object", "created", "usage"}
+            or type(r.get("choices")) is not list
+            or len(r["choices"]) != 1
+            or type(r["choices"][0]) is not dict
+            for r in responses
+        )
+    ):
+        raise DomainError("INVALID_INPUT", "Exactly two offline wire responses required")
+    try:
+        size = len(json.dumps(responses, ensure_ascii=False, allow_nan=False).encode("utf-8"))
+    except (TypeError, ValueError, RecursionError):
+        raise DomainError("INVALID_INPUT", "Invalid offline response JSON") from None
+    if size > 32000:
+        raise DomainError("BUDGET_EXHAUSTED", "Offline responses exceed 32000 UTF-8 bytes")
+    return ReplayModel(responses)
+
+
 def is_agent(candidate):
     return any(
         a.get("executor", {}).get("kind") == "bounded_agent"
@@ -368,6 +392,14 @@ def validate_protocol(plan, protocol, output):
         raise DomainError("VERSION_CONFLICT", "Protocol no longer matches frozen input/readback")
 
 
+def validate_accepted_replay(plan, responses, protocol, output):
+    """Trace reconstruction alone cannot prove correspondence to the accepted wire data."""
+    fresh = copy.deepcopy(plan)
+    actual = execute_protocol(fresh, offline_replay_model(responses), lambda _: plan["source"])
+    if fingerprint(actual) != fingerprint(output) or fingerprint(fresh["protocol"]) != fingerprint(protocol):
+        raise DomainError("VERSION_CONFLICT", "Protocol differs from accepted offline Replay")
+
+
 def verified_source(store, c, user, rid, limits, *, require_initial=True):
     from .app_jobs import load_binding
     from .lifecycle import data_rows, read_release
@@ -435,6 +467,11 @@ def verified_source(store, c, user, rid, limits, *, require_initial=True):
         receipt["protocol"],
         a["output"],
     )
+    if "offline_replay" in s:
+        validate_accepted_replay(
+            {"source": source, "args": args, "action": draft["candidate"]["actions"][0]},
+            s["offline_replay"], receipt["protocol"], a["output"],
+        )
     expected_receipt = {
         "operation_id": op["id"],
         "status": "VERIFIED",

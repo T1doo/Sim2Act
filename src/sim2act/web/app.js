@@ -127,8 +127,9 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   if(pid !== $("project-select").value)return false;
   clearApp();const generation=appSelectionGeneration;
   onSelectionStart?.(generation);
+  const identity=token;
   const a=await api(`/api/apps/${id}`);
-  if(generation !== appSelectionGeneration || pid !== $("project-select").value)return false;
+  if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token)return false;
   if(a.project_id !== pid)throw Error("候选不属于当前项目，请重新选择");
   activeApp=id;activeAppProject=pid;
   const origin=a.candidate.generation;
@@ -156,7 +157,21 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
     });
   }
   $("app-title").textContent=`${a.name} · 未发布`;
+  const agent=a.input_guidance.mode === "OFFLINE_REPLAY_ONLY";
   $("app-preview-form").hidden=false;
+  $("app-column-label").hidden=agent;$("app-column").required=!agent;
+  $("app-agent-term-label").hidden=!agent;$("app-agent-term").value="";
+  $("app-preview-submit").hidden=agent;$("csv-extraction-panel").hidden=agent;
+  $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
+  if(agent){
+    const manifest=a.candidate.manifest;
+    $("app-origin").textContent=`${a.candidate.agent_provenance ? "来源：已验证的本地合成 AppRun "+manifest.source_run_ref : "来源：离线调用者提供的初始候选"} · OFFLINE_REPLAY_ONLY · semantic UNKNOWN · 未发布`;
+    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify({goal:a.candidate.goal,resource:manifest.data_bindings[0].resource_ref,revision:a.candidate.source_revision,hash:a.candidate.source_hash,permissions:manifest.permission_requirements,source:a.candidate.agent_provenance || null},null,2);
+    $("app-input-hint").textContent="TXT/MD 字面检索，词长最多80字符；审批样例与运行都需对应的离线响应，界面不会生成答案。";
+    $("app-history").textContent="新运行与结果版本见下方内部实例历史；不将旧结果作为当前结果。";
+    if(typeof openInternal === "function")await openInternal(a,generation);
+    return true;
+  }
   const previous=$("app-column").value, guidance=a.input_guidance;
   $("app-column").replaceChildren(...guidance.columns.map(c=>{
     const option=new Option(c.numeric ? c.name : `${c.name}（${c.reason}）`,c.name);
@@ -241,6 +256,7 @@ async function retryAppRead(){
 }
 $("app-read-retry").onclick=safe(retryAppRead);
 $("app-preview-form").onsubmit=safe(async()=>{
+  if($("app-preview-submit").hidden)return; // Agent uses the same internal approval/Run path.
   if(!activeApp || activeAppProject !== $("project-select").value)throw new Error("先打开当前项目的草案");
   const id=activeApp,pid=activeAppProject,goalGeneration=goalSelectionGeneration;
   let generation=appSelectionGeneration,result=null;

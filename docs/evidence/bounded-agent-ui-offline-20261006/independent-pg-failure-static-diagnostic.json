@@ -1,0 +1,55 @@
+{
+  "status": "FULL_PG_FAILURE_PRESERVED_ROOT_CAUSE_UNCONFIRMED",
+  "review_mode": "Static source/diff and archived log review only; no new process or fixture interaction, no PG rerun.",
+  "archived_full_run": {
+    "log": "full-pg.log",
+    "failed": 1,
+    "passed": 515,
+    "skipped": 1,
+    "warnings": 3,
+    "seconds": 868.82,
+    "failure": "test_real_pg_process_crash_reopen_recovers_without_duplicate_results[before_commit] at line504, observed RUNNING instead of SUCCEEDED",
+    "observations": [
+      "Fault child reached exit73/entered marker and zero result before recovery.",
+      "Recovery child exit0, then inspect returns RUNNING.",
+      "No failure-run claim/lease/fence/event/heartbeat timeline in archived pytest failure."
+    ]
+  },
+  "archived_focused": {
+    "log": "pg-crash-focused.log",
+    "passed": 2,
+    "seconds": 18.79,
+    "qualification": "Developer execution reviewed, not reviewer rerun; does not replace full suite failure."
+  },
+  "diff_review": {
+    "baseline": "4e7010b3a5e2697fa3bf45a53e0b992f71f6f7c5",
+    "unchanged_files": [
+      "src/sim2act/db.py",
+      "src/sim2act/worker.py",
+      "tests/fixtures/internal_app_worker.py",
+      "tests/test_persistent_app_runs.py"
+    ],
+    "path": "Fixture uses fixed CSV and NoModel, lease_seconds1. No offline_replay field, new bounded-agent Replay reconstruction branch not taken. No concrete new lease/recovery regression identified statically."
+  },
+  "existing_failure_compatible_path": [
+    "Store.claim timestamps now before opening transaction and assigns now+1second in this fixture.",
+    "Heartbeat starts in process_job and wakes each lease_seconds/3; guard rejects already expired lease.",
+    "If prepare/commit guard raises after lease expires, fail_job also sees expired lease and returns without state mutation. process_job catches DomainError, Worker.once returns normally, fixture ignores its return; exit0 can coexist with RUNNING.",
+    "This path is compatible with observation but is NOT demonstrated as the actual cause. Absence of timeline prevents ruling out no claim or another fencing/control transition."
+  ],
+  "next_diagnostic": "Capture failing run accepted claim result/fence/worker/lease timestamp, WORKER_LOST/RECONCILED/CLAIMED/ACTION_PREPARED/RESULT_COMMITTED events, heartbeat failure stage and guard failure before changing behavior. Do not widen stale lease mutation permission to make test pass.",
+  "conclusion": "Full PostgreSQL aggregate is not passing. Keep recovery boundary open and both logs. Timing, load or infrastructure root cause cannot be claimed from current evidence.",
+  "source_sha256": {
+    "src/sim2act/db.py": "ad9aa1efcd191cf7f9766c01cd2e74c6865e84daa42ac0e2730db34732c0419e",
+    "src/sim2act/worker.py": "d6aca2164acbb77d716ef51d175227de064eea9df81a2379cfab40f7f022f902",
+    "src/sim2act/app_jobs.py": "5bfb3db805aa80fc5d49ad721f00a017e2812bee6d5df1edd1c42e70ecaf9807",
+    "tests/fixtures/internal_app_worker.py": "bce8a7ff23e81c2d005c409d62ca5fa7ab0fff223716e4944835963658c794d9",
+    "tests/test_persistent_app_runs.py": "c08de9921d4b5f439d440bd94bb650a69907c83eabbcf3e9cb241f5c056b78f9"
+  },
+  "log_sha256": {
+    "full-pg.log": "482cfbc5c87b66a1bb488816a971bdc7f823ae34d7d5e468c36aa88b389465c8",
+    "pg-crash-focused.log": "114fa6b0880848439736cb449bf7e84422758f8ac7db573bfe822f98c0b6c237"
+  },
+  "reviewer_external_requests": 0,
+  "product_edits": 0
+}

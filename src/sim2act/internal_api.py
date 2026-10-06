@@ -21,6 +21,7 @@ from .errors import DomainError
 class PrepareInput(Strict):
     expected_draft_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     sample_input: dict
+    offline_replay: list[dict] | None = Field(default=None, min_length=2, max_length=2)
 
 
 class ApprovalInput(Strict):
@@ -35,6 +36,7 @@ class InstanceInput(Strict):
 class AppRunInput(InstanceInput):
     expected_revision: int = Field(ge=1)
     input: dict
+    offline_replay: list[dict] | None = Field(default=None, min_length=2, max_length=2)
 
 
 class SwitchInput(Strict):
@@ -68,8 +70,11 @@ def mount(app, store, limits, identity):
 
     @app.post("/api/internal/apps/{aid}/release-approvals", status_code=201)
     def prepare(aid: str, body: PrepareInput, user=user_dependency):
+        from .agent_apps import offline_replay_model
+
         return lifecycle.prepare_release(
-            store, user, aid, body.expected_draft_fingerprint, limits, body.sample_input
+            store, user, aid, body.expected_draft_fingerprint, limits, body.sample_input,
+            replay=offline_replay_model(body.offline_replay) if body.offline_replay is not None else None,
         )
 
     @app.get("/api/internal/approvals/{aid}")
@@ -215,6 +220,8 @@ def mount(app, store, limits, identity):
                 body.input,
                 body.request_key,
                 limits,
+                offline_replay=body.offline_replay,
+                require_offline_replay=True,
             )
         )
 

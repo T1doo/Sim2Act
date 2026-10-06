@@ -300,3 +300,11 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 本轮本地终态：统一来源guard已实现，原goal/preview两例现在GET409/VERSION_CONFLICT、审批前Replay0、审批/Run未创建且业务/Grant计数不变。新增23负例PASS；完整SQLite473PASS24SKIP2warnings200.07秒，PG17完整496PASS1WinSKIP3warnings462.24秒，ruff/mypy23通过。独立23PASS12.56秒、相关旧回归135PASS4SKIP77.38秒，源码/测试hash一致、未发现具体新阻塞。扩展fixture曾有SQLite嵌套HTTP事务锁1FAIL，原日志保留，测试夹具已修；原2FAIL主/独立基线不抹。无新增权限/表/API/外部动作；专用PG容器移除、32772关闭、原work树干净。只本地提交不push/CI/LIVE，未跑新的Windows/浏览器，完整P-B/正式签收不提升。[本轮结果](../evidence/executor-family-provenance-20261006/result.json)。
 
 2026-10-06父检查后授权普通push与一次原标准CI：原origin正常fetch96a6ae0、祖先检查通过，普通fast-forward推送精确修复133b1e8cd722744e4f4e42d364339b3b1dc656a2至dev/f1-foundation，远端HEAD核对一致。唯一push运行37450622061/job112226027113终态SUCCESS，原windows-2025/contents-read/动作pins/上传范围无变化，0LIVE。实际PG工程497PASS0FAIL0ERROR0SKIP2warnings249.67秒，ruff/mypy23、原native最低角色API-worker smoke、原保护Edge38项、Report/Cleanup成功；日志owned API/worker stopped与server stopped。仅解析安全摘要，原log及图片载荷未另导出/提交；历史result.json为当时本地阶段状态，原hash保持不变，本次另见[CI终态](../evidence/executor-family-provenance-20261006/ci-summary.json)。仅docs收尾普通push不重复CI。来源完整性缺口是本地合成SQL协调篡改复现，不称真实用户被攻击或跨用户泄露；完整P-B、Win11/F1签收、新agent UI及semantic UNKNOWN边界不提升。
+
+## 2026-10-06 / 既有 bounded agent 内部界面实施前
+
+父授权下一最小主线：复用既有应用认证、当前权限、审批/实例/持久AppRun和历史，提供明确离线Replay/term界面，不宣称自主生成或semantic正确。已查原V5§2/§4/§5/§8；现界面CSV列假设及HTTP/worker Replay缺口实查。事前范围/验收见[BoundedAgentUIPlan](BoundedAgentUIPlan.md)，先独立审查；只本地实现/验证/commit，不push/CI/LIVE、不新增权限/表。原生Chromium正常及正式审批同命令都被SUID helper配置阻断，截图与真实浏览器未通过，继续实现可完成工作并保留阻塞。
+
+2026-10-06内部agent UI本地切片：既有应用界面现可对已验证来源的bounded_agent候选显示离线/UNKNOWN和适用term，复用审批/内部版本/实例/Run/结果历史；冻结显式两条Replay到既有绑定JSON，冷进程执行新Run，提交/成功冷读核对已接受响应，未新增表/权限/Grant/provider。新HTTP20PASS、DOM功能22PASS、完整SQLite493PASS24SKIP；PG最终见[证据](../evidence/bounded-agent-ui-offline-20261006/README.md)。独立两项篡改错误成功已修，失败和夹具问题原始日志保留。原生Chromium仍SUID helper阻塞、0实际原生检查/0截图，窄屏未验收；只本地提交，父检查前无push/CI，自主生成/完整恢复/原P-B及F1阶段不提升。
+
+本步最终PG17完整515PASS1FAIL1SKIP3warnings868.82秒；唯一旧提交前进程崩溃恢复用例恢复后仍RUNNING，根因未确认。两crash单独2PASS18.79秒不覆盖原失败；完整PG/恢复仍未签收。新HTTP20均在PG通过。原生视觉和PG遗留失败明确留待父检查，未push/CI、未改lease或安全策略；自有API/PG已清理。

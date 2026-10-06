@@ -1,0 +1,144 @@
+...................F................................s............        [100%]
+=================================== FAILURES ===================================
+___________ test_actual_expired_agent_approval_cannot_create_release ___________
+
+env = (<sim2act.db.Store object at 0x7f6274d0e840>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-125/test_ac...cad9a33bf34a5785a48626c09516c2', 'user_7a4cd5d76d304b1db88969319da01987', 'proj_56c1b7642f254eb39c93ce058f33071c', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f62745e3140>
+
+    def test_actual_expired_agent_approval_cannot_create_release(env, monkeypatch):
+        _, ids, _, aid, cand, _, _, value = setup(env)
+        approval = (
+            env[2]
+            .post(
+                f"/api/internal/apps/{aid}/release-approvals",
+                json={
+                    "expected_draft_fingerprint": fingerprint(cand),
+                    "sample_input": {"term": value["term"]},
+                    "offline_replay": replay(ids[0], value).responses,
+                },
+            )
+            .json()
+        )
+        before = effects(env[0])
+        monkeypatch.setattr("sim2act.lifecycle.time.time", lambda: approval["expires_at"] + 1)
+>       response = env[2].post(
+            f"/api/internal/approvals/{approval['id']}/commit",
+            json={"fingerprint": approval["fingerprint"]},
+        )
+
+tests/test_agent_ui_replay.py:347: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-pb-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:116: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-pb-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/internal_api.py:99: in commit
+    return envelope(**lifecycle.commit_release(store, user, aid, body.fingerprint, limits))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/lifecycle.py:253: in commit_release
+    a = approval(c, user, approval_id, exact_fp, "release", allow_consumed=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/lifecycle.py:166: in approval
+    row["consumed"] or row["expires_at"] <= time.time()
+                                            ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   monkeypatch.setattr("sim2act.lifecycle.time.time", lambda: approval["expires_at"] + 1)
+                                                               ^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'expires_at'
+
+tests/test_agent_ui_replay.py:346: KeyError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_agent_ui_replay.py::test_actual_expired_agent_approval_cannot_create_release
+1 failed, 63 passed, 1 skipped, 1 warning in 45.15s
