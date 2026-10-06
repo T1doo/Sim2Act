@@ -19,7 +19,7 @@ Starting worktree: `/workspace/Sim2Act-pb`, existing `dev/f1-foundation`, local 
 
 ## Acceptance limits
 
-This is a bounded AT02 dual-owner LIVE slice, not whole F1/F2/P-A/P-B/AT16 signoff. Win11 native ordinary-user/physical-device/browser/accessibility boundaries are not covered here. No arbitrary code, external business input, deployment or non-CSV contract transmission is authorized. Preserve failed/unknown outcomes and unused budget honestly. Exact final results and cleanup follow in `results.json`; independent review and manifest to be appended after execution.
+This is a bounded AT02 dual-owner LIVE slice, not whole F1/F2/P-A/P-B/AT16 signoff. Win11 native ordinary-user/physical-device/browser/accessibility boundaries are not covered here. No arbitrary code, external business input or deployment is authorized. The completed synthetic TXT42/84 transmission was explicitly authorized for this batch. Transmission of real Markdown technical specifications for the subsequent non-CSV application-generation or specification-extraction task is outside that authorization and requires separate approval. Preserve failed/unknown outcomes and unused budget honestly. Exact final results and cleanup follow in `results.json`; independent review and manifest to be appended after execution.
 
 ## Actual result and preserved boundaries
 

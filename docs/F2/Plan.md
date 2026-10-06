@@ -266,3 +266,9 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 2026-10-06预算等待的有限准备：无新feature/真实请求，新增[单项非CSV任务建议](NonCSVTaskProposal.md)：授权V5 MD§10.1→带来源JSON/MD检查清单，开发方4段gold草案和1正5负离线合同通过（owner/独立确认待），实际提取/生成/P-A/P-B/成果保存NOT_RUN。当前F1读→save→反馈final最少3模型调用，真实材料外发/完整发送体上限/最小artifact写权限与模型预算需另批，不挪AT02最多2次待批合成预算。[AT02执行准备](../F1/AT02ExecutionPlan.md)已列单A闭环与双初态可覆盖/双主体各闭环4次缺口，26项单MOCK双fixture离线PASS，不改cap/源码/历史/正式门或触发CI。
 
 2026-10-06新增授权仅AT02合成双主体真实验证：4个Intern请求已全部使用（每个max512），两组各PARTIAL42/84和真实read反馈链，23预检/26执行检查PASS；详见[归档](../evidence/AT02-dual-live-20261006/README.md)。产品未改/不触发重复工程CI。本轮剩余模型授权0；不能挪用于[非CSV提案](NonCSVTaskProposal.md)的V5材料外发或生成，提案仍开发方gold草案/真实提取NOT_RUN，完整F1/F2/P-A/P-B门不提升。
+
+2026-10-06本地准备收敛：[NonCSVExecutionPlan](NonCSVExecutionPlan.md)限定技术规格MD9行/822UTF8字节→保存JSON/确定性MD视图，开发gold草案/strict oracle1正28负PASS；三轮MOCK完整体2530/3613/6184字符证明旧2000发送上限不足。源任务最短3请求、当前0授权；完整P-A/P-B生成与冷会话复用另预算，非CSV检查/来源语义证明/可信注册接口未实现。owner gold、真实选段外发、最多3/每次1024/新完整发送体上界及最小artifact授权均待确认。0新模型/no feature/no注册/表/Grant/noCI/no push，非CSV和完整阶段仍NOT_RUN。AT02的PARTIAL不自动否定其原工具反馈标准，但也不能充当P-B成功source。
+
+### 2026-10-06 nonCSV离线实现事前
+
+父线程授权继续代码/本地合成/0LIVE/不扩写权限。独立先审发现旧gold概括义务粒度不足、gold与候选同步篡改可通过离线等值oracle（配置可信边界），报告保留；手工冻结另一个合成whole_resource fixture/gold，不通过产品parser造gold。最小实现受限标注规范转换：synthetic_标题+MUST/MUST_NOT规范行，实际source字节/hash/逐行完整引用核验，拒clientgold与未知语法；不冒充原V5自由MD语义提取。MOCK-only认证endpoint/持久失败与检查proof/单JSONartifact及安全MD派生；只现有resource.read与artifact.save_text交集，无新toolref/writeGrant、模型、P-A/P-B/正式发布。若新增表显式controller迁移，API不DDL。独立gold→实现→权限/过期/篡改/幂等/冷Store/PG最小CRUD及全回归→独立复核→普通push/既有ServerCI，保留未测/失败。[事前范围](../evidence/noncsv-offline-implementation-20261006/README.md)。

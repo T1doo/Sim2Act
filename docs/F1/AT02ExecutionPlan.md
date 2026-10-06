@@ -1,6 +1,8 @@
-# AT-02 最多两次 HTTP 的执行准备（2026-10-06）
+# AT-02 执行记录与历史两次 HTTP 准备（2026-10-06）
 
-状态 **PREPARED_OFFLINE / LIVE_BLOCKED**。基线产品b91e4e3（产品源码c16cbae），用户尚未批准父线程申请的新增最多2次 Intern API、每次2048输出token上界、仅合成材料、无自动重试。当前真实请求预算仍 **0**；没有读真实token、请求models或调用官方接口。本轮只创建并删除一份本地test_only双主体fixture/离线公共响应形状回放；不实现新feature、不触发CI、不改冻结[AT-02 V5-1](../../tests/cases/AT-02.json)、V5、历史LIVE/AT02或原AT05。
+当前状态：2026-10-06明确授权4次已执行用尽，详见本文末节及[冻结要求逐条核对](AT02Review.md)。以下最多两次方案及PREPARED_OFFLINE / LIVE_BLOCKED为批准前历史，不代表当前仍等待这项预算。
+
+历史准备状态 **PREPARED_OFFLINE / LIVE_BLOCKED**。基线产品b91e4e3（产品源码c16cbae），用户尚未批准父线程申请的新增最多2次 Intern API、每次2048输出token上界、仅合成材料、无自动重试。当前真实请求预算仍 **0**；没有读真实token、请求models或调用官方接口。本轮只创建并删除一份本地test_only双主体fixture/离线公共响应形状回放；不实现新feature、不触发CI、不改冻结[AT-02 V5-1](../../tests/cases/AT-02.json)、V5、历史LIVE/AT02或原AT05。
 
 依据原V5阶段计划§4.1/§11.2、[既有核对及独立结论](AT02Review.md)、[历史42链](../evidence/LIVE-20261005/README.md)。旧dd195681短任务确为两次真实Intern响应、一次resource.read VERIFIED、feedback后答案trim=42、最终PARTIAL/LIVE；初态仅一owner/项目，清理后不能补造双fixture。旧另一数据库FAILED不能和此成功拼成同一完整初态。此次未来执行必须是从初态完整的**新独立数据库、新Run**，历史记录保持原样。
 

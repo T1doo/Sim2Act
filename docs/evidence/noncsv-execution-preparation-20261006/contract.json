@@ -1,0 +1,73 @@
+{
+  "kind": "DEVELOPER_DRAFT_OFFLINE_CONTRACT",
+  "gold_owner_acceptance": "PENDING",
+  "product_action": "NOT_IMPLEMENTED",
+  "input": {
+    "format": "md",
+    "selection_utf8_bytes": 822,
+    "selection_lines": 9,
+    "local_source": "docs/sources/V5/平台产品设计.md",
+    "external_transmission": "NOT_AUTHORIZED_FOR_THIS_FUTURE_TASK"
+  },
+  "gold": {
+    "contract_version": 1,
+    "source": {
+      "resource_ref": "res_cccccccccccccccccccccccccccccccc",
+      "document_id": "v5-platform-product",
+      "document_version": 1,
+      "document_sha256": "e30251bda3f92a95728b79e002d75378669536aad1308304d73a3993dfbced78",
+      "selection_sha256": "322cd3beba676156d2731c3953acdf53cf35f8c4d376113ad58c4a1c91804c3c",
+      "line_start": 450,
+      "line_end": 458
+    },
+    "rules": [
+      {
+        "rule_key": "release_instance_preview",
+        "line_start": 452,
+        "line_end": 452,
+        "quote": "AppRelease 是不可变规格；AppInstance 保存独立业务数据与运行记录。新版本产生新 Release，不删除旧实例数据。预览使用独立测试命名空间，不能调用生产写入目标。",
+        "obligations": [
+          "immutable_release",
+          "instance_owns_data_and_runs",
+          "new_release_preserves_data",
+          "preview_test_namespace",
+          "no_production_write"
+        ]
+      },
+      {
+        "rule_key": "version_and_dynamic_authorization",
+        "line_start": 454,
+        "line_end": 454,
+        "quote": "发布绑定经过验证的 Schema、动作、工具、提示、模型配置与检查版本。更新发布指针采用版本比较；运行开始时固定使用某个 Release，不能执行一半切到新版，但每个动作继续检查动态权限。",
+        "obligations": [
+          "bind_validated_dependencies",
+          "pointer_version_compare",
+          "run_pins_release",
+          "dynamic_authorization_each_action"
+        ]
+      },
+      {
+        "rule_key": "compatible_upgrade_rollback",
+        "line_start": 456,
+        "line_end": 456,
+        "quote": "R0 只支持经过兼容性验证的升级。破坏性字段删除、类型变化或不可兼容的数据迁移直接阻止发布。回退 Release 前也检查当前数据是否兼容。",
+        "obligations": [
+          "compatible_upgrade_only",
+          "reject_breaking_delete_type_migration",
+          "rollback_checks_current_data"
+        ]
+      },
+      {
+        "rule_key": "rollback_boundaries",
+        "line_start": 458,
+        "line_end": 458,
+        "quote": "**发布回退 ≠ 数据回退 ≠ 外部动作撤销。** 数据备份、迁移和补偿是独立操作与独立证据。",
+        "obligations": [
+          "release_rollback_not_data_rollback",
+          "release_rollback_not_external_compensation",
+          "backup_migration_compensation_separate_evidence"
+        ]
+      }
+    ]
+  }
+}
