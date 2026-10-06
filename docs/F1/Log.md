@@ -262,3 +262,5 @@ E12精确Server终态：d3de155ba23cd5ba824f10f398f34b25c76e1817已普通push；
 ## 2026-10-06 / E16内部合成生命周期本地实现
 
 事前范围eaeb731，基线764a20f，正确/workspace/Sim2Act-pb/dev/f1-foundation。内部Release immutable snapshot/精确审批、复用既有runtime的独立instance、实际gateway+oracle新AppRun/结果版本与非破坏升级回退历史；五表显式Setup迁移，API/worker无DDL。无public发布/真实部署/newGrant/preview复制。独立复验schema两缺口关闭、原AT05测试逐字恢复；32新SQLitePASS/1PGSKIP，全SQLite286PASS/16SKIP/1警告42.21秒，静态通过。真PG聚合及普通push精确ServerCI待核实，不预写终态；真实0、视觉BLOCKED/F1/Win11/完整P-B/AT10未签收。
+
+E16精确终态：e029922794c9f9829ddb41bca0010aebc277e761普通push，CI37413258268/job112106185925 completed/success（3m26s），PG302PASS/0FAIL/0SKIP/1警告118.16秒。33新内部项及原AT05进程覆盖，Setup/五表显式迁移/最小业务CRUD角色/原生smoke/ruff/mypy19/Report/Cleanup全成功，server stopped。独立修复复验32PASS/1PGSKIP/1警告5.41秒/3源hash与交付一致，未独立执行PG/Windows/视觉；LinuxPG301PASS/1WindowsSKIP/2警告111.58秒，SQLite286PASS/16SKIP/1警告42.21秒。95源码/test/config/run/results归档，正确工作树、原work未改，合成PG stop/remove；实际断开通知后命令仍成功。仅内部Release/独立instance类型化结果数据/新AppRun及非破坏升级回退，无新增Grant/preview复制，正式发布/部署、完整P-B/AT10/F1/Win11/真实视觉未签收，模型0。文档普通push收尾不重复CI。

@@ -32,3 +32,5 @@ E15终态：53dc124/CI37411714116SUCCESS/PG269PASS/0SKIP，9真PG专项及完整
 E16事前范围为V5 F2-T08的内部合成Release/Instance/AppRun生命周期，源码service及测试，不启用正式发布入口或实际部署。不变Release与精确批准、复用既有应用身份/Grant、独立实例类型化result数据/版本、真实网关新AppRun、兼容升级/回退及历史保留；不新增CSV功能或任意业务写入。同工作区独立审查及精确aggregate/CI后回报，原F1/Win11/真实P-A/更广P-B/protected browser阶段门、0模型不变。E15旧grant锁已串行化基线，准确记锁序加固。
 
 E16本地内部service：[范围与接口](InternalLifecycle.md)。不可变Release审批/实例独立result数据/真实新AppRun与版本/兼容升级回退历史已实现；复用现runtime及grant。独立复验两schema问题关闭，原AT05恢复；32新内部SQLite检查PASS/1PG专用SKIP，完整SQLite286PASS/16SKIP。真PG/精确ServerCI待完成，不启用正式发布入口/部署或签收整个F2。后续仍须明确通用业务数据/动作与迁移政策、正式发布批准UI/部署链，原F1/Win11/真实P-A/P-B/AT10/protected-browser门保持，不追加CSV便利项。
+
+E16终态：e029922/[CI37413258268](https://github.com/T1doo/Sim2Act/actions/runs/37413258268)SUCCESS/PG302PASS/0SKIP，新内部33项及原AT05完整覆盖；LinuxPG301PASS/1SKIP、SQLite286PASS/16SKIP，独立32PASS/1PGSKIP并关闭schema问题。[证据](../evidence/F2-internal-lifecycle-20261006/README.md)。本轮内部路径已交付，正式发布入口/真实部署未启用，原阶段门保留。后续按V5通用生命周期/数据与正式批准链逐阶段计划，不能将本切片扩大称整个P-B或发布完成。

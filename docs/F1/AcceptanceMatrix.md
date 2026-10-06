@@ -14,7 +14,7 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 
 历史E14：独立LOCAL_DECLARATIVE_TASK实际可信工具+精确oracle才SUCCEEDED、失败真实FAILED；最小证明不含旧单元格/答案/会话，显式owner匹配证明/hash及保留最小证明consent后清旧content和任务input/output。旧source GET/工具拒绝，新Store冷会话新CSV40/换quantity5及坏输入FAILED；source现授权仍必要，撤权/过期拒绝，不恢复grant；target用户/项目/app交集保持。既有F1/目标卡/应用共享源拒绝退休，PREVIEW原路径保持。36新专项，精确ServerCI37349609291SUCCESS/PG260PASS/0FAIL/0SKIP/1警告69.05秒；Linux254PASS/6SKIP/3警告，原33+新14DOM非浏览器、未独立复跑。只完成固定合成任务/退休旧内容子项，不签收完整AT10/P-B/F1/Win11/Release，真实视觉0/BLOCKED/模型0。
 
-最新E15：实际保存环境恢复，正确副本/origin 54ac055一致，原work树不改。真实PG baseline未复现成功失效app（grant锁已挡住观察direct交错），共同project锁缺失补强；消费者/退休统一project→entity→grant、写前当前内容/退休重验，F1新提交不接收退休输入，历史Run不改。9新真PG barrier/冷Store子项，精确ServerCI37411714116SUCCESS/PG269PASS/0SKIP/1警告88.51秒，LinuxPG268PASS/1WindowsSKIP、SQLite254PASS/15SKIP。完成任务/提取/显式退休/fresh Store新与坏输入仅映射冻结AT10合成子项，不签收完整P-B/AT10。原授权/版本/失败状态、真实0/F1/Win11/Release门保持；本轮无真实浏览器或独立执行复验。
+历史E15：实际保存环境恢复，正确副本/origin 54ac055一致，原work树不改。真实PG baseline未复现成功失效app（grant锁已挡住观察direct交错），共同project锁缺失补强；消费者/退休统一project→entity→grant、写前当前内容/退休重验，F1新提交不接收退休输入，历史Run不改。9新真PG barrier/冷Store子项，精确ServerCI37411714116SUCCESS/PG269PASS/0SKIP/1警告88.51秒，LinuxPG268PASS/1WindowsSKIP、SQLite254PASS/15SKIP。完成任务/提取/显式退休/fresh Store新与坏输入仅映射冻结AT10合成子项，不签收完整P-B/AT10。原授权/版本/失败状态、真实0/F1/Win11/Release门保持；本轮无真实浏览器或独立执行复验。
 
 ## 当前证据索引
 
@@ -47,7 +47,7 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 | T01 契约 | E5/E6：严格结构、输入输出/可信引用/冻结/预算预检；CSV固定模板单节点预览 | 完整目标生成/通用编译属F2，消费版本及阶段签收待验收，不新增F1要求 |
 | T02 原生进程与依赖 | E6：Server2025/PS7.6.6/Python3.12.10/PG17.11，首次Setup/六脚本/依赖锁/重启 | 目标Win11普通用户/真实安装组合未测；Server不替代Win11 |
 | T03 工作区 | 项目/资源/任务/回执及CSV草案输入/运行/历史已有 | 最新Win11与多浏览器复测待执行；不称完整P-A/P-B已验收 |
-| T04 身份与权限 | E6 owner环境隔离及应用角色无DDL；CSV preview应用Principal/Grant与user-project-app权限交集已实现、撤权回读拒绝 | Release/实例身份及授权交集尚未实现，归F2；只读审核无新阻塞不替代签收 |
+| T04 身份与权限 | E6 owner环境隔离及应用角色无DDL；CSV preview应用Principal/Grant与user-project-app权限交集已实现、撤权回读拒绝 | E16内部实例复用既有runtime，当前权限交集已实现；正式Release发布/独立instance身份和通用授权设计仍归F2，合成复验不替代签收 |
 | T05 持久任务可靠性 | 队列/租约/fencing/心跳/核对/暂停取消、真实API-worker与重启回读 | 保留函数/事务故障注入粒度；preview同步事务不等于AppRun异步/崩溃链 |
 | T06 真实书生与账本 | E3：两轮真实选工具/反馈后回答、身份/usage/持久回读 | 核心操作/oracle独立只读核验通过；历史脚本仅一owner/一项目，完整初态缺口无法补证；额外最多2真实请求预算待批，当前0；权重unknown |
 | T07 冻结资产与回归 | 28用例资产不变；E6工程126通过 | 126工程测试不代表28完整AT通过；早期AT仍需逐项签收 |
@@ -56,3 +56,5 @@ F1仍IN_PROGRESS，未签收；用户已授权F1未签收时并行F2隔离工程
 ## 冻结AT状态
 
 AT-01 Win11仍NOT_RUN；AT-02真实操作链已有E3且独立核验一致，历史完整两主体/两项目初态未满足、不能补证，额外预算待批准，PARTIAL不改SUCCEEDED。AT-03/04/05/06/07/08有工程子项及E6回归，独立阶段验收仍未签收；AT-07保留允许故障注入，不强加真实429压测。AT-09—22的正式P-A/P-B/发布/可靠性完整验收未完成，已完成固定CSV预览工程子集；23—27归F3、28归C0。原§4.2正式阶段前置保持；用户授权的并行工程不等于放行F2发布链。
+
+E16内部合成生命周期：e029922源码已普通push，33新检查含最小PG角色CRUD；LinuxPG301PASS/1WindowsSKIP/2警告111.58秒，SQLite286PASS/16平台PGSKIP/1警告42.21秒。不可变Release/精确批准、独立instance结果数据/版本、真实网关新AppRun、兼容升级回退及历史保留；无新增Grant/preview复制。独立复验32PASS/1PGSKIP，schema缺口关闭、原AT05保留。精确CI37413258268SUCCESS/PG302PASS/0SKIP/1警告118.16秒，Setup/原生smoke/静态/Report/Cleanup全成功；只内部service，正式发布/部署、完整P-B/AT10/F1/Win11/protected-browser仍未签收，模型0。

@@ -56,3 +56,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 2026-10-05 E14：[合成完成任务来源与显式退休切片](evidence/F2-task-retirement-20261005/README.md)已交付，精确c776fa2/ServerCI37349609291SUCCESS/PG260PASS/0SKIP。36新专项及三表显式迁移/业务CRUD路径；本地254PASS/6平台SKIP，原33+新14DOM/HTTP不是视觉。owner显式清旧内容保留最小证明，当前source授权及target交集保持、撤权/过期拒绝，无grant恢复。仅LOCAL_DECLARATIVE_TASK固定合成来源/新内容冷会话子项，完整P-B/AT10/Release/F1/Win11未签收、模型0/真实视觉BLOCKED。
 
 2026-10-06 E15：[来源退休与消费者PG串行](evidence/F2-retirement-race-20261006/README.md)已交付，精确53dc124/CI37411714116SUCCESS/PG269PASS/0SKIP，9真PG barrier/冷Store子项；LinuxPG268PASS/1WindowsSKIP、SQLite254PASS/15SKIP。基线grant锁阻止观察direct失效app，未虚写复现；消费者共享project锁和持久化前当前状态重验补强。冻结AT10合成子项映射不签收完整P-B/Win11/F1/Release，0LIVE/真实视觉BLOCKED。
+
+2026-10-06 E16：[内部合成Release/Instance/AppRun生命周期](F2/InternalLifecycle.md)已交付，源码e029922/CI37413258268SUCCESS/PG302PASS/0SKIP；五表显式迁移及33新内部检查、原AT05进程回归保留。独立复验32PASS/1PGSKIP，两个schema缺口关闭；LinuxPG301PASS/1WindowsSKIP、SQLite286PASS/16SKIP。不可变快照/精确批准/独立instance结果账本/真实网关新AppRun/兼容升级回退历史，复用现runtime及Grant。正式发布入口/部署未启用，完整P-A/P-B/AT10/F1/Win11/protected browser未签收，0真实模型；[精确证据](evidence/F2-internal-lifecycle-20261006/README.md)。

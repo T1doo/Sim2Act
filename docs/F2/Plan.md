@@ -155,3 +155,7 @@ E15本地结果：真实临时PG17.11，9 barrier/冷Store专项PASS（3.26秒�
 内部生命周期service与五表显式迁移实现，精确批准绑定快照/来源/权限版本；独立实例类型化result账本与真实新AppRun，兼容指针切换保留历史/数据。不新增CSV功能或运行身份/grant，不启用HTTP/正式发布。独立合成复现schema缺properties异常和额外enum批准覆盖缺口，修为封闭受限schema；测试文件重名覆盖原AT05发现后逐字恢复，新增test_internal_lifecycle.py。补实际source bytes hash重验及严格schema版本转移。定向32PASS/2平台SKIP，SQLite/真PG聚合、独立修复复验、精确ServerCI进行中。详见InternalLifecycle.md，失败/未测门保留。
 
 E16源码固定前aggregate：真LinuxPG301PASS/1WindowsSKIP/2警告111.58秒，新内部33项含PG应用角色业务CRUD；全SQLite286PASS/16平台或PGSKIP/1警告42.21秒。独立复验32PASS/1PGSKIP/1警告5.41秒且3个源码hash一致，未独立执行PG/Windows。静态ruff/mypy19/JS/diff通过，源码正常commit/push与精确ServerCI下一步。
+
+## 2026-10-06 / E16精确Server终态交付
+
+源码e029922794c9f9829ddb41bca0010aebc277e761已普通push，CI37413258268/job112106185925 completed/success（3m26s），PG302PASS/0FAIL/0SKIP/1旧警告118.16秒。33新内部检查及原AT05进程完整覆盖；Setup/五张internal表显式迁移/业务CRUD角色/原生API-worker smoke/ruff/mypy19模块/Report/Cleanup成功，server stopped。LinuxPG301PASS/1WindowsSKIP/2警告111.58秒；SQLite286PASS/16平台PGSKIP/1警告42.21秒。独立复验32PASS/1PGSKIP且两schema问题关闭，三个源码hash与交付一致；未独立PG/Windows/视觉。95源码/test/config及run/results已归档，专用本地PG stop/remove，原work树不改。只内部不可变Release/instance结果账本/真实新AppRun/兼容指针生命周期，正式发布入口及部署未启用，完整P-A/P-B/AT10/F1/Win11/protected-browser未签收，模型0。文档收尾普通push不重复CI。
