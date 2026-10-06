@@ -13,7 +13,7 @@
 | F2-T04 运行器 | 固定可信动作、严格声明式输入输出、有限现有步骤 | 通用有限 DAG/受控分支和不同任务族运行证据不足，不能以单固定模板代替 |
 | F2-T05 身份/入口 / AT22 | user/project/app 当前权限交集；内部 instance 复用现 app runtime，不自动新增 Grant | 正式应用使用入口及发布权限/独立实例身份策略待明确；没有通用写动作的页面/API一致性证明 |
 | F2-T06 真实成果/本地数据 | CSV 真实新计算、可回读结果；E16/E17 类型化 instance result 版本账本 | 通用业务记录写入、文件/受控视图组合及生产 writer 的 schema/授权未实现。E18 note 仅合成测试写，不能提升此门 |
-| F2-T07 / AT13—15 | 既有固定对象/指纹及局部修改工程子项 | 原 V5 所列三类局部修改、依赖不确定扩大检查、人工 LOCK_CONFLICT 的完整证据未闭合；不延后到 F5 冒称完整增量 |
+| F2-T07 / AT13—15 | 既有固定对象/指纹；未提供原 V5 局部修改验收证据 | 原 V5 所列三类局部修改、依赖不确定扩大检查、人工 LOCK_CONFLICT 未验收；不延后到 F5 冒称完整增量 |
 | F2-T08 / AT16 | [E16 内部生命周期](InternalLifecycle.md)：不可变 Release、精确一次性批准、版本 CAS、两个实例数据、兼容升级回退保留历史 | 内部 service 已验；正式批准 UI、发布入口/真实部署和通用数据迁移政策未启用。类型化 result 兼容子项不是完整发布验收 |
 | AT17 | 本轮实际事务内受控 note + receipt SQL 写，独立连接读回/回滚、全部生产存储列字节不变、权限/namespace负例 | AT17_SYNTHETIC_FIXTURE PASS 以最终证据为准；原正式 AT17 OPEN。错误 namespace 拒绝为测试 adapter guard，不冒称已存在生产 writer 的隔离能力 |
 | F2-T09 / AT18—21、AT20 | [E17 持久 AppRun](PersistentAppRuns.md)：实际 PG worker 子进程、提交前后崩溃、另一进程恢复、heartbeat/pause/cancel/fencing、未知 operation 保留 RECONCILING/取消意图、原子本地 result；本轮预览重试 | 纯计算/本地原子结果及注入未知账本子项已验。AT19 受控外部服务已完成效果但丢响应链未实现，故 AT20 在途外部效果核对未完整闭合；不宣称外部连接器恢复 |
@@ -30,3 +30,5 @@
 5. **局部修改能力仍留在 F2**：按原 V5 三类修改及人工锁/不确定依赖冻结验收，再实现必要缺口，不移动到 F5。当前仅记录未完成，不自动扩大本轮。
 
 这些是后续阶段所需输入/决定，不是本轮已获授权的生产写、正式发布或额外真实调用。E18 在合成隔离证据与阶段门审查后结束。
+
+E18最终精确源码925e560dc1a196c6c4747cb349d558156a721c0f/[CI37416936441](https://github.com/T1doo/Sim2Act/actions/runs/37416936441)SUCCESS：PG353PASS/0SKIP；LinuxPG352PASS/1WindowsSKIP、SQLite332PASS/21PG平台SKIP；独立13PASS。合成隔离子项PASS，正式各门状态保持表述。全证据见上链E18目录。

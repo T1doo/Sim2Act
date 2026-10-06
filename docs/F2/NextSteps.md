@@ -44,3 +44,7 @@ E17终态：8b14cee/[CI37415214667](https://github.com/T1doo/Sim2Act/actions/run
 E18只补AT17合成受控写隔离与阶段门审查：实际预览SQL事务内test-only受控写、成功独立读回/失败回滚/重复与namespace负例；原始数据/权限逐字节不变。测试适配器不注册到生产工具，不启用发布或真实业务写，0LIVE。完成后列原V5证据与最小未完成项及真正需要的决定/接入，停止相邻功能扩张；当前production preview仍读/计算，FAULT_INJECTION不能冒充生产写实现。
 
 E18已实现受控preview record/receipt实际写入与rollback/retry/namespace负例，独立13PASS。见[阶段门审查与实际下一接入](StageGateReview.md)。当前仅合成隔离子项，正式AT17仍OPEN。下一步为Win11/保护浏览器接入、F1完整fixture/签收、真实任务族/预算或受限生产writer/发布政策及故障服务的明确选择；不在本轮继续堆相邻功能。全PG/精确CI待核实。
+
+E18最终本地全PG352PASS/1WindowsSKIP/3旧警告155.54秒、SQLite332PASS/21PG平台SKIP/1旧警告55.92秒；13新项全两DB已过，独立13PASS、最终hash一致。源码925e560dc1a196c6c4747cb349d558156a721c0f普通push，精确ServerCI37416936441进行中；原AT05/V5/历史AT02差异为空，不提前记CI成功。
+
+E18精确终态：925e560dc1a196c6c4747cb349d558156a721c0f已普通push，[CI37416936441](https://github.com/T1doo/Sim2Act/actions/runs/37416936441)/job112117505998 completed/success2m47s，PG353PASS/0FAIL/0SKIP/1旧警告105.29秒；Setup/应用角色原生smoke/ruff/mypy20/Report/Cleanup全成功，server stopped。LinuxPG352PASS/1WindowsSKIP/3旧警告155.54秒，SQLite332PASS/21PG平台SKIP/1旧警告55.92秒；独立13PASS1warning4.57秒且3文件hash一致，未独立PG/aggregate/CI/browser。13新合成写项及100source/test/config hash/实际结果归档到docs/evidence/F2-preview-isolation-20261006；专用PG stop/remove，原work/V5/历史AT02/AT05不改。仅AT17_SYNTHETIC_FIXTURE PASS；正式AT17/发布、完整P-A/P-B/AT10/AT20/F1/Win11/保护浏览器仍OPEN或NOT_RUN，0LIVE/无导出/无安全绕过。本轮停止相邻功能扩张，下一真实决定/接入见F2/StageGateReview.md。文档收尾普通push不重复CI。

@@ -193,3 +193,7 @@ fixture只在tests中、明确test_only Store与pytest SQLite临时目录/隔离
 ## 2026-10-06 / E18实现与独立复验
 
 13项实际受控SQL写隔离检查已实现；独立发现receipt写入前故障不能证明receipt回滚，已移至record+receipt实际INSERT/同conn读回后。最终独立13PASS/1warning4.57秒，三文件hash一致；主开发真PG专项13PASS/1warning13.01秒，SQLite完整332PASS/21PG平台SKIP/1warning55.92秒。全PG/精确ServerCI待核实。生产唯一变化保存已有test_only标志，默认False；测试独立MetaData，不新增生产表/工具/Grant/入口。阶段门逐条见[StageGateReview](StageGateReview.md)，仅AT17_SYNTHETIC_FIXTURE，正式AT17/发布仍OPEN。
+
+E18最终本地全PG352PASS/1WindowsSKIP/3旧警告155.54秒、SQLite332PASS/21PG平台SKIP/1旧警告55.92秒；13新项全两DB已过，独立13PASS、最终hash一致。源码925e560dc1a196c6c4747cb349d558156a721c0f普通push，精确ServerCI37416936441进行中；原AT05/V5/历史AT02差异为空，不提前记CI成功。
+
+E18精确终态：925e560dc1a196c6c4747cb349d558156a721c0f已普通push，[CI37416936441](https://github.com/T1doo/Sim2Act/actions/runs/37416936441)/job112117505998 completed/success2m47s，PG353PASS/0FAIL/0SKIP/1旧警告105.29秒；Setup/应用角色原生smoke/ruff/mypy20/Report/Cleanup全成功，server stopped。LinuxPG352PASS/1WindowsSKIP/3旧警告155.54秒，SQLite332PASS/21PG平台SKIP/1旧警告55.92秒；独立13PASS1warning4.57秒且3文件hash一致，未独立PG/aggregate/CI/browser。13新合成写项及100source/test/config hash/实际结果归档到docs/evidence/F2-preview-isolation-20261006；专用PG stop/remove，原work/V5/历史AT02/AT05不改。仅AT17_SYNTHETIC_FIXTURE PASS；正式AT17/发布、完整P-A/P-B/AT10/AT20/F1/Win11/保护浏览器仍OPEN或NOT_RUN，0LIVE/无导出/无安全绕过。本轮停止相邻功能扩张，下一真实决定/接入见F2/StageGateReview.md。文档收尾普通push不重复CI。

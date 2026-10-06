@@ -15,3 +15,5 @@
 | src/sim2act/db.py | fe5dfd49947d9f1dc5a10d42f315cabaf63d183f2dc7172d403ea5aa26e02760 |
 
 结论仅AT17_SYNTHETIC_FIXTURE；test adapter guards不等于生产writer gateway，原正式AT17/发布仍OPEN。
+
+源码925e560后另做阶段门文档只读核对：AT17合成/正式、AT20在途外部链、Server/Win11/浏览器、预算0与后续接入等级准确；指出F2-T07“局部修改工程子项”没有实际验收证据，主开发收窄为“既有固定对象/指纹；未提供原V5局部修改验收证据”。文档修正不改变已独立复验的三文件hash。
