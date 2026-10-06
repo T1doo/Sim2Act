@@ -31,3 +31,11 @@
 专用PG容器sim2act-agent-offline-pg-20261006已移除，127.0.0.1:32771实查关闭，pytest合成临时目录按托管保留。source-hashes.json最终只列106个受版本控制的源码/测试/配置文件，排除初步工作目录索引中的安装/临时产物；所有产品文件与精确本地源码commit一致。证据仅留本repo，未上传额外目的地。
 
 归档失败的原pytest日志含3行尾空白，保持原始字节；证据专属.gitAttributes规则冻结.log字节并禁其空白风格检查，代码/文档仍正常检查。此收尾仅证据配置，执行源码/测试/fixture与3e27ad9零差异。
+
+## 父检查后标准 WindowsCI 验证
+
+父线程另授权下一验证步骤后，审核07580f8/product3e27ad9与独立证据/diff，无真实凭据或新增V5段落/权限变化；正常fetch保留远端6cbf47f后普通fast-forward push。唯一标准push-trigger [run37447017944](https://github.com/T1doo/Sim2Act/actions/runs/37447017944)/[job112214194172](https://github.com/T1doo/Sim2Act/actions/runs/37447017944/job/112214194172)测试精确源码 `07580f805670e50b21639e3b0a57ed8fd6cb9c01`，与产品3e27ad9执行源码/测试相同。
+
+SUCCESS3m50秒；工程474PASS0FAIL0SKIP2warnings142.94秒、45新agent检查全部覆盖，ruff/mypy23、原最低角色native PowerShell/API-worker smoke、原保护Edge38、Report及Cleanup均成功。实际日志确认owned API/worker和temporary PG server stopped。Server2025/build26100、原windows-2025runner和permissions/action pins/上传范围不变，无LIVE。GitHub旧Node20 actions强制Node24提示只是原平台annotation，本轮未扩大配置。精确计数/JUnit属性/安全短回执/原browser结果hash见[ci-summary.json](ci-summary.json)，审批前审核见[ci-prepush-audit.json](ci-prepush-audit.json)，完整job步骤metadata见[ci-final.json](ci-final.json)。不追加截图/原始整log上传或额外恢复包，仅现repo内摘要/文档收尾，不重复CI。
+
+该成功是工程回归；原Edge38未测新增agentUI，字面检索与semantic UNKNOWN、候选/Replay由离线调用者提供、provider0、跨进程自动恢复/自由语义/完整P-A/P-B/AT10/Win11/F1签收未完成的边界保持。前面的本地0push/CI标记是本地阶段事实，未改写为当时已获外部授权。

@@ -24,3 +24,7 @@
 ### 2026-10-06 / bounded agent 精确本地回归收尾
 
 本地源码commit `3e27ad9b55b3493da2dc403461916589427d4a2d`；最后PG完整473PASS1WindowsSKIP2warnings537.72秒，实际两旧依赖警告记录在pg-regression-closed.log，无FAIL。SQLite完整450PASS24SKIP2warnings180.43秒/PG新增45PASS77.10秒/最终独立44PASS1PGSKIP20.18秒；ruff/mypy23通过。106受版本控制source/config文件hash与源码commit一致，独立全部hash逐项匹配。先前pre-hardening/full/失败日志不替最后结果，原始中间问题仍保留。移除唯一专用PG容器sim2act-agent-offline-pg-20261006并实查32771关闭；pytest托管temp保留。只本地证据commit，无push、ServerCI或模型/V5外发，原work HEAD6f688e4干净；完整阶段与semantic/自主生成/跨进程Replay恢复/浏览器未提升。
+
+### 2026-10-06 / 父检查后普通push与唯一标准WindowsCI终态
+
+父明确授权下一验证步骤，非签收。审核精确07580f805670e50b21639e3b0a57ed8fd6cb9c01/product3e27ad9b55b3493da2dc403461916589427d4a2d、全部独立/证据hash及diff：真实key签名0、原V5段落复制0、新增Grant/Principal/API/table0，workflow原配置无变化。正常fetch6cbf47f→is-ancestor PASS→普通origin HEAD:dev/f1-foundation成功，不force/main merge，远端ls-remote确认07580f8。原push-trigger标准CI一次run37447017944/job112214194172完成success3m50秒，实际474PASS0FAIL0SKIP2warnings142.94秒、ruff/mypy23成功、原最小角色原生API-worker smoke成功、原protected Edge38PASS、Report/Cleanup成功；日志owned API/worker stopped、server stopped。原Node20 action被GitHub强制Node24的deprecation annotation保留不改原action pins。只解析回读原log的短安全回执/browser结果hash，原始PNG和整log未另导出/提交，临时rawlog解析后删除。CI摘要/metadata/审核JSON归档且无凭据签名。文档仅追加结果，普通push不再CI；semantic UNKNOWN、provider0与完整阶段/新agent UI/Win11边界保持。[终态](../evidence/bounded-agent-offline-20261006/ci-summary.json)。
