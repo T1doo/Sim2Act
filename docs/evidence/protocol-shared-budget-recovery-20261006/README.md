@@ -38,3 +38,8 @@ source/extract/cold 在同一数据库按固定 mode 共享预算；不是每 Ru
 
 
 归档格式检查收尾：两份原失败日志含行末空白，提交版本仅移除行末空白。独立报告保持原始审查SHA不改；`archive-whitespace-normalization.json` 映射其原归档SHA到当前提交日志SHA，失败内容/数量不变。产品、测试及源码冻结hash未变。
+
+
+2026-10-06 唯一授权 Windows CI 实际终态 **FAIL**，source `c3b0f3c37ed53207d59535dc187f95ca89f80f77`，run [37499515105](https://github.com/T1doo/Sim2Act/actions/runs/37499515105)/job112392601026。原Setup显式PG迁移和应用role smoke SUCCESS；Ruff PASS，Windows mypy在model_budget fcntl给5个attr-defined错，pytest/JUnit未运行，不能声称新表CRUD/共享并发Windows通过或列pytest平台SKIP。浏览器step因失败跳过，此次无Edge38/agent33/registered29复验；新protocol/recover无原生UI验收。Report/Cleanup SUCCESS，owned API/worker已停、temporary PG server stopped、原JobRoot清理完成。原runner/权限/helper/超时/上传范围未变，真实请求0/LIVE0。
+
+本地Windows-target mypy复现同5错，最小修复model_budget两处锁平台判断为sys.platform=='win32'（保留msvcrt/fcntl原锁API）。修后Windows目标mypy31PASS、Ruff/format PASS、SQLite预算/恢复54PASS10.85秒；这是本地静态目标+POSIX实际运行，不伪称Windows runtime。源码变更待独立只读审查，修前/修后安全日志及CI终态见windows-ci-result.json。用户本次只授权一次CI，下一次普通push修复会触发第二CI，因此修复仅本地保存，待父额外授权；不自动rerun，不改失败历史。

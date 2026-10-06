@@ -10,6 +10,7 @@ import importlib
 import json
 import math
 import os
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -38,7 +39,7 @@ STAGES = {
 def _locked(path):
     # Nonblocking: a concurrent sender fails closed instead of waiting across network IO.
     with open(path, "a+b") as lock:
-        if os.name == "nt":
+        if sys.platform == "win32":
             win_lock: Any = importlib.import_module("msvcrt")
             if lock.tell() == 0:
                 lock.write(b"0")
@@ -58,7 +59,7 @@ def _locked(path):
         try:
             yield
         finally:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 lock.seek(0)
                 win_lock.locking(lock.fileno(), win_lock.LK_UNLCK, 1)
             else:

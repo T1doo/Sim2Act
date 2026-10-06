@@ -145,3 +145,11 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 
 
 2026-10-06 后续允许普通push及唯一既有Windows标准CI，事前范围见[Windows交付门](ProtocolSharedBudgetWindowsCIPlan.md)。原本地-only阶段历史保留；本阶段不改原runner/权限/helper/超时/上传范围。PG配置774PASS中不全为PG：同源收集775中661有PG-selecting公共/jobsfixture，114无该fixture；三个明确SQLite数据库用例、SQLite UI seed和纯model/sidecar单测分开。不提升LIVE/语义/完整P-B，CI尚未启动。
+
+
+2026-10-06 唯一授权 Windows CI 实际终态 **FAIL**，source `c3b0f3c37ed53207d59535dc187f95ca89f80f77`，run [37499515105](https://github.com/T1doo/Sim2Act/actions/runs/37499515105)/job112392601026。原Setup显式PG迁移和应用role smoke SUCCESS；Ruff PASS，Windows mypy在model_budget fcntl给5个attr-defined错，pytest/JUnit未运行，不能声称新表CRUD/共享并发Windows通过或列pytest平台SKIP。浏览器step因失败跳过，此次无Edge38/agent33/registered29复验；新protocol/recover无原生UI验收。Report/Cleanup SUCCESS，owned API/worker已停、temporary PG server stopped、原JobRoot清理完成。原runner/权限/helper/超时/上传范围未变，真实请求0/LIVE0。
+
+本地Windows-target mypy复现同5错，最小修复model_budget两处锁平台判断为sys.platform=='win32'（保留msvcrt/fcntl原锁API）。修后Windows目标mypy31PASS、Ruff/format PASS、SQLite预算/恢复54PASS10.85秒；这是本地静态目标+POSIX实际运行，不伪称Windows runtime。源码变更待独立只读审查，修前/修后安全日志及CI终态见windows-ci-result.json。用户本次只授权一次CI，下一次普通push修复会触发第二CI，因此修复仅本地保存，待父额外授权；不自动rerun，不改失败历史。
+
+
+最小锁平台补丁独立终审通过：Windows目标mypy31clean、Linux预算19PASS0.16秒（含LOCK_CONFLICT）、Ruff PASS。最终model_budget SHA a485c0106f3a569aea460bc91b70858004ce03bca35e17c2669fe10f5a34c56c。真实Windows runtime仍NOT_RUN；原失败不覆盖。修复本地提交，第二次push/CI待父额外授权。
