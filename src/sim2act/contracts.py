@@ -359,7 +359,7 @@ def validate_value(schema: dict, value, path="input"):
 def check_dependencies(dependencies):
     registry = {
         "tool": {"resource.read", "data.aggregate_csv", "artifact.save_text"},
-        "check": {"receipt.readback.v1"},
+        "check": {"receipt.readback.v1", "source.literal_evidence.v1"},
         "prompt": {"intern.system.v1"},
     }
     seen = set()
@@ -400,7 +400,7 @@ def validate_action(raw: str):
             raise ValueError("Effect must match registered capabilities")
         if action.idempotency != ("transactional" if writes else "read_only"):
             raise ValueError("Idempotency must match trusted effect")
-        if action.postcheck_refs != ["receipt.readback.v1"]:
+        if action.postcheck_refs not in [["receipt.readback.v1"], ["source.literal_evidence.v1"]]:
             raise ValueError("Independent receipt check required")
         check_dependencies(action.dependencies)
         for req in action.permission_requirements:
@@ -481,7 +481,7 @@ def validate_manifest(raw: str):
         for view in manifest.views:
             if view.output_field not in manifest.output_schema.get("properties", {}):
                 raise ValueError("View references missing output")
-        if manifest.validation_suite_ref != "receipt.readback.v1":
+        if manifest.validation_suite_ref not in {"receipt.readback.v1", "source.literal_evidence.v1"}:
             raise ValueError("Unknown independent check suite")
         return manifest
     except (ValueError, KeyError, TypeError, DomainError) as e:

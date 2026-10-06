@@ -41,7 +41,7 @@ def grant_version(c, project, user):
     )
 
 
-def execute(store, c, user, draft, limits, input_value):
+def execute(store, c, user, draft, limits, input_value, replay=None):
     _, manifest, action, _ = validate_frozen_candidate(store, c, user, draft, limits)
     validate_value(manifest.input_schema, input_value)
     rid = manifest.data_bindings[0].resource_ref
@@ -56,6 +56,16 @@ def execute(store, c, user, draft, limits, input_value):
         "resource.read",
         {"resource_id": rid},
     )
+    if action.executor.kind == "bounded_agent":
+        from .agent_apps import execute_protocol
+
+        return execute_protocol(
+            {"source": source, "args": args, "action": action.model_dump()},
+            replay,
+            lambda call_args: authorized_read(
+                store, c, user, draft["runtime_id"], draft["project_id"], "resource.read", call_args
+            ),
+        )
     value = authorized_read(
         store, c, user, draft["runtime_id"], draft["project_id"], action.executor.ref, args
     )
@@ -169,6 +179,7 @@ def prepare_release(
     *,
     data_schema=None,
     data_schema_version=1,
+    replay=None,
 ):
     if type(data_schema_version) is not int or data_schema_version < 1:
         raise DomainError("INVALID_INPUT")
@@ -180,10 +191,10 @@ def prepare_release(
         if not pid:
             raise DomainError("PERMISSION_DENIED")
         store.lock_project(c, user, pid)
-        draft, _, _, report = load_draft(store, c, user, aid, limits, lock=True)
+        draft, _, action, report = load_draft(store, c, user, aid, limits, lock=True)
         if draft["fingerprint"] != expected_draft_fp:
             raise DomainError("VERSION_CONFLICT")
-        output = execute(store, c, user, draft, limits, sample_input)
+        output = execute(store, c, user, draft, limits, sample_input, replay)
         frozen = {
             k: copy.deepcopy(draft[k])
             for k in ["id", "project_id", "runtime_id", "candidate", "fingerprint"]
@@ -195,7 +206,11 @@ def prepare_release(
             "data_schema": record_schema(draft["candidate"], data_schema),
             "data_schema_version": data_schema_version,
             "check_evidence": {
-                "ref": "csv.exact_integer_sum.v1",
+                "ref": (
+                    "source.literal_evidence.v1"
+                    if action.executor.kind == "bounded_agent"
+                    else "csv.exact_integer_sum.v1"
+                ),
                 "status": "PASS",
                 "candidate_fingerprint": expected_draft_fp,
                 "input_fingerprint": fingerprint(sample_input),

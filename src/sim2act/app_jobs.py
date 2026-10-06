@@ -1,6 +1,6 @@
 """Bounded internal AppRun queue using the existing durable Worker/Run lease ledger.
 
-Only registered pure CSV computation and atomic local typed-result append; no model,
+Registered pure CSV or explicitly offline R0 agent and atomic typed-result append; no LIVE,
 new identity/grant, publication, deployment, external effects or generic business writes.
 """
 
@@ -279,6 +279,12 @@ def inspect_job(store, user, rid):
             raise DomainError("PERMISSION_DENIED")
         limits = store.frozen_contract(c, job).limits
         s, a = load_binding(store, c, user, job, limits)
+        if job["status"] == "SUCCEEDED":
+            from .agent_apps import is_agent, verified_source
+
+            release = read_release(store, c, user, s["release_id"], limits)
+            if is_agent(release["snapshot"]["draft"]["candidate"]):
+                verified_source(store, c, user, rid, limits, require_initial=False)
         records = data_rows(c, s["instance_id"])
         result = next((dict(r) for r in records if r["run_id"] == a["id"]), None)
         return {
@@ -451,13 +457,14 @@ def prepare_dispatch(worker, run):
         args = {"resource_id": manifest.data_bindings[0].resource_ref, **s["input"]}
         validate_action_input(action, args)
         # Authorization includes both read and exact registered action before dispatch.
+        agent = action.executor.kind == "bounded_agent"
         store.authorize(
             c,
             run["principal_id"],
             draft["runtime_id"],
             draft["project_id"],
             args["resource_id"],
-            action.executor.ref,
+            "resource.read" if agent else action.executor.ref,
         )
         source = authorized_read(
             store,
@@ -468,7 +475,11 @@ def prepare_dispatch(worker, run):
             "resource.read",
             {"resource_id": args["resource_id"]},
         )
-        intent = {"tool": action.executor.ref, "args": args}
+        intent = (
+            {"tool": "resource.read", "args": {"resource_id": args["resource_id"]}}
+            if agent
+            else {"tool": action.executor.ref, "args": args}
+        )
         old = (
             c.execute(
                 select(operations).where(
@@ -497,7 +508,7 @@ def prepare_dispatch(worker, run):
                     run_id=run["id"],
                     call_id="instance_result",
                     fingerprint=fingerprint(intent),
-                    tool_ref=action.executor.ref,
+                    tool_ref=intent["tool"],
                     status="PREPARED",
                 )
             )
@@ -518,7 +529,11 @@ def prepare_dispatch(worker, run):
         }
 
 
-def compute(plan):
+def compute(plan, model=None, read=None):
+    if plan["action"]["executor"]["kind"] == "bounded_agent":
+        from .agent_apps import execute_protocol
+
+        return execute_protocol(plan, model, read)
     # No SQL transaction, arbitrary code or model: same registered trusted implementation.
     value = aggregate_csv_content(
         plan["source"]["content"], plan["args"]["resource_id"], plan["args"]["column"]
@@ -599,9 +614,15 @@ def commit_result(worker, run, plan, output):
         intent = c.execute(
             select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])
         ).scalar()
+        agent = action.executor.kind == "bounded_agent"
+        expected_intent = (
+            {"tool": "resource.read", "args": {"resource_id": args["resource_id"]}}
+            if agent
+            else {"tool": plan["action"]["executor"]["ref"], "args": plan["args"]}
+        )
         if (
             op["status"] != "PREPARED"
-            or intent != {"tool": plan["action"]["executor"]["ref"], "args": plan["args"]}
+            or intent != expected_intent
             or fingerprint(intent) != op["fingerprint"]
         ):
             raise DomainError("OUTCOME_UNKNOWN")
@@ -609,12 +630,30 @@ def commit_result(worker, run, plan, output):
         validate_value(
             release["snapshot"]["draft"]["candidate"]["manifest"]["output_schema"], output
         )
-        exact_sum_oracle(source["content"], s["input"]["column"], output)
-        identities = {
-            "resource_id": args["resource_id"],
-            "column": s["input"]["column"],
-            "source_hash": source["hash"],
-        }
+        if agent:
+            from .agent_apps import check_evidence, validate_protocol
+
+            check = check_evidence(source, args, output)
+            protocol = plan.get("protocol")
+            if (
+                not isinstance(protocol, dict)
+                or protocol.get("check") != check
+                or protocol.get("mode") != "OFFLINE_REPLAY"
+                or protocol.get("provider_requests") != 0
+                or fingerprint(protocol.get("messages")) != protocol.get("fingerprint")
+            ):
+                raise DomainError("VERIFICATION_FAILED", "Verified offline protocol required")
+            validate_protocol(plan, protocol, output)
+            checks = [check]
+            identities = {"resource_id": args["resource_id"], "source_hash": source["hash"]}
+        else:
+            exact_sum_oracle(source["content"], s["input"]["column"], output)
+            checks = [{"check": "csv.exact_integer_sum.v1", "status": "PASS"}]
+            identities = {
+                "resource_id": args["resource_id"],
+                "column": s["input"]["column"],
+                "source_hash": source["hash"],
+            }
         for field, ref in manifest.outputs.items():
             if ref.field in identities and output[field] != identities[ref.field]:
                 raise DomainError(
@@ -659,8 +698,10 @@ def commit_result(worker, run, plan, output):
             "output_fingerprint": fingerprint(output),
             "data": output,
             "artifact_refs": [],
-            "check_results": [{"check": "csv.exact_integer_sum.v1", "status": "PASS"}],
+            "check_results": checks,
         }
+        if agent:
+            receipt["protocol"] = plan["protocol"]
         c.execute(
             update(operations)
             .where(operations.c.id == op["id"])
@@ -767,7 +808,28 @@ def process_job(worker, run):
     try:
         plan = prepare_dispatch(worker, run)
         if plan is not None:
-            output = compute(plan)
+            if plan["action"]["executor"]["kind"] == "bounded_agent":
+
+                def read(args):
+                    with worker.store.tx() as c:
+                        current = lock_live(worker.store, c, run)
+                        if current["status"] != "RUNNING" or worker.stop.is_set():
+                            raise DomainError("VERSION_CONFLICT")
+                        limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
+                        load_binding(worker.store, c, run["principal_id"], current, limits)
+                        return authorized_read(
+                            worker.store,
+                            c,
+                            run["principal_id"],
+                            run["runtime_id"],
+                            run["project_id"],
+                            "resource.read",
+                            args,
+                        )
+
+                output = compute(plan, worker.model, read)
+            else:
+                output = compute(plan)
             commit_result(worker, run, plan, output)
     except DomainError as exc:
         fail_job(worker, run, exc)

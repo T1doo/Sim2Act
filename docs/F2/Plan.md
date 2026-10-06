@@ -280,3 +280,9 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 ### 本切片关闭
 
 精确f78abca普通push，ServerCI37440684427成功5m18s/PG429PASS0SKIP189.24秒/ruff/mypy22/原保护Edge38PASS/Report/Cleanup全成功，final本地PG428PASS1WinSKIP及最终独立45PASS1PGSKIP，105source/hash与独立冻结fixture/gold及失败发现保留。只关闭fixed labeled citations+既有项目artifact保存工程slice；语义NOT_RUN、通用技术MD、独立原V5gold接受、真实3请求源任务、AppManifest执行器注册/P-A/P-B/Win11/正式F1/F2门仍未关闭。当前0LIVE/预算0/no新增toolref或用户writeGrant/no发布。[终态归档](../evidence/noncsv-offline-implementation-20261006/README.md)。
+
+## 2026-10-06 / 原 V5 bounded agent 主线离线接口冻结
+
+父线程授权 AppManifest/AppRun 同协议 Replay、来源绑定、可信检查器及参数化新材料冷运行；本轮仅本地提交/验证，push/CI 等父检查，不外发V5/模型0、不新增Grant/身份/API/表。事前接口与验收见 [BoundedAgentOfflinePlan](BoundedAgentOfflinePlan.md)，独立先审权限边界。自由MD字面证据定位作为明确非语义目标：引用/字面命中检查与semantic UNKNOWN分开，不宣称义务语义正确或自主生成，不再增加孤立转换器。独立手工两材料gold先冻结，只测试使用。原work/V5/AT02不改，阶段门不提升。
+
+实现/独立终态：同一AppManifest compile与内部Release/Instance/AppRun Worker新增R0 bounded_agent分支，Replay使用共享原F1 system prompt/parse_response和真实授权read回执，provider0。source.literal_evidence.v1只验明确字面检索引用，semantic UNKNOWN；源只接受初始goal INTERNAL_APPRUN成功/精确VERIFIED Operation/内部数据/接受Run及提取请求锚点。现task_extractions记录来源与accepted_name，新候选重新绑定已有授权新MD，冷Store新结果，无新增身份/Grant/API/表。独立复现receipt全字段、protocol数值类型、来源marker请求FP三类缺口，补永久负例；补强曾触发冻结Release无name回归已关闭。最终SQLite专项44PASS1PGSKIP、本地PG专项45PASS、SQLite全450PASS24平台SKIP，独立44PASS1PGSKIP/所有hash一致；最后源码PG全回归进行中，不预写PASS。候选与Replay由离线测试提供，不称真实自主manifest生成/义务语义提取；source仅该AppRun任务子集，不接受PARTIAL/F1未知源。新浏览器链路无UI入口/NOT_RUN，父检查后另决定push/CI。

@@ -137,7 +137,9 @@ def create_csv_draft(store, user, pid, name, rid, goal, platform_limits):
     with store.tx() as c:
         project = store.lock_project(c, user, pid)
         authorize_source(store, c, user, project, rid, project["runtime_id"])
-        source = authorized_read(store, c, user, project["runtime_id"], pid, "resource.read", {"resource_id": rid})
+        source = authorized_read(
+            store, c, user, project["runtime_id"], pid, "resource.read", {"resource_id": rid}
+        )
         if source["format"] != "csv":
             raise DomainError("INVALID_INPUT", "请选择已授权的 CSV 材料")
         candidate = csv_candidate(rid, source["hash"], goal, limits)
@@ -186,10 +188,18 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
 
 
 def compile_preview(candidate, platform_limits):
+    if (not isinstance(candidate, dict) or not isinstance(candidate.get("manifest"), dict)
+            or not isinstance(candidate.get("actions"), list)
+            or not 1 <= len(candidate["actions"]) <= 16):
+        raise DomainError("INVALID_MANIFEST", "Closed candidate manifest/actions required")
     manifest, report = preflight(
         json.dumps(candidate["manifest"]), candidate["actions"], platform_limits
     )
     actions = [validate_action(json.dumps(a)) for a in candidate["actions"]]
+    if any(a.executor.kind == "bounded_agent" for a in actions):
+        from .agent_apps import compile_agent
+
+        return compile_agent(candidate, manifest, actions, report)
     if (
         len(manifest.workflow) != 1
         or len(actions) != 1
@@ -199,8 +209,12 @@ def compile_preview(candidate, platform_limits):
     ):
         raise DomainError("UNSUPPORTED_CAPABILITY", "本轮仅支持单节点 CSV 汇总预览")
     # The advertised fixed capability includes wiring and schemas, not just the tool name.
-    expected = csv_candidate(manifest.data_bindings[0].resource_ref, candidate["source_hash"],
-                             "", manifest.runtime_limits)
+    expected = csv_candidate(
+        manifest.data_bindings[0].resource_ref,
+        candidate["source_hash"],
+        "",
+        manifest.runtime_limits,
+    )
     expected["manifest"]["app_id"] = manifest.app_id
     expected["manifest"]["goal_ref"] = manifest.goal_ref
     expected["actions"][0]["action_id"] = actions[0].action_id
@@ -237,31 +251,62 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
     if fingerprint(candidate) != draft["fingerprint"]:
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     manifest, action, report = compile_preview(candidate, platform_limits)
-    generated = c.execute(select(goal_candidate_requests).where(goal_candidate_requests.c.app_id == aid)).mappings().first()
+    if action.executor.kind == "bounded_agent":
+        from .agent_apps import existing_runtime, validate_agent_origin
+
+        existing_runtime(store, c, user, draft["project_id"], draft["runtime_id"])
+        validate_agent_origin(store, c, user, draft, platform_limits)
+        rid = manifest.data_bindings[0].resource_ref
+        source = authorized_read(
+            store,
+            c,
+            user,
+            draft["runtime_id"],
+            draft["project_id"],
+            "resource.read",
+            {"resource_id": rid},
+        )
+        if source["hash"] != candidate["source_hash"] or source["format"] not in {"txt", "md"}:
+            raise DomainError("VERSION_CONFLICT", "Frozen agent source changed")
+        return draft, manifest, action, report
+    generated = (
+        c.execute(select(goal_candidate_requests).where(goal_candidate_requests.c.app_id == aid))
+        .mappings()
+        .first()
+    )
     if ("generation" in candidate) != bool(generated):
         raise DomainError("VERSION_CONFLICT", "目标候选来源记录不可移除或添加")
-    if generated and (not isinstance(candidate["generation"], dict)
-                      or generated["card_id"] != candidate["generation"].get("goal_card_id")
-                      or generated["principal_id"] != user):
+    if generated and (
+        not isinstance(candidate["generation"], dict)
+        or generated["card_id"] != candidate["generation"].get("goal_card_id")
+        or generated["principal_id"] != user
+    ):
         raise DomainError("VERSION_CONFLICT", "目标候选来源记录不可移除或替换")
     if generated:
         origin = candidate["generation"]
-        accepted_request = fingerprint({
-            "card_id": generated["card_id"], "expected_version": origin.get("goal_version"),
-            "resource_id": manifest.data_bindings[0].resource_ref,
-            "capability": origin.get("capability"),
-        })
+        accepted_request = fingerprint(
+            {
+                "card_id": generated["card_id"],
+                "expected_version": origin.get("goal_version"),
+                "resource_id": manifest.data_bindings[0].resource_ref,
+                "capability": origin.get("capability"),
+            }
+        )
         # Compare to the independent accepted-request record, not the rewritten candidate hash.
         if accepted_request != generated["request_fingerprint"]:
             raise DomainError("VERSION_CONFLICT", "候选来源版本、材料或能力与已接受请求不一致")
-    extracted = c.execute(select(preview_extractions.c.app_id).where(preview_extractions.c.app_id == aid)).first()
+    extracted = c.execute(
+        select(preview_extractions.c.app_id).where(preview_extractions.c.app_id == aid)
+    ).first()
     if extracted and "extraction" not in candidate:
         raise DomainError("VERSION_CONFLICT", "提取来源记录不可移除")
     if "extraction" in candidate:
         from .extraction import validate_extraction
 
         validate_extraction(store, c, user, draft, platform_limits)
-    task_origin = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid)).first()
+    task_origin = c.execute(
+        select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid)
+    ).first()
     if bool(task_origin) != ("task_proof" in candidate):
         raise DomainError("VERSION_CONFLICT", "完成任务来源不可添加或移除")
     if task_origin:
@@ -271,14 +316,19 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
     if "generation" in candidate:
         origin = candidate["generation"]
         old = validate_card_version(store, c, user, origin["goal_card_id"], origin["goal_version"])
-        if (old["snapshot"] != origin["goal_snapshot"] or old["fingerprint"] != origin["goal_fingerprint"]
-                or candidate["goal"] != old["snapshot"]["content"]):
+        if (
+            old["snapshot"] != origin["goal_snapshot"]
+            or old["fingerprint"] != origin["goal_fingerprint"]
+            or candidate["goal"] != old["snapshot"]["content"]
+        ):
             raise DomainError("VERSION_CONFLICT", "候选目标来源不一致")
         if manifest.goal_ref != origin["goal_card_id"]:
             raise DomainError("VERSION_CONFLICT")
     rid = manifest.data_bindings[0].resource_ref
     if "generation" in candidate:
-        frozen = next((r for r in old["snapshot"]["resource_snapshots"] if r["resource_id"] == rid), None)
+        frozen = next(
+            (r for r in old["snapshot"]["resource_snapshots"] if r["resource_id"] == rid), None
+        )
         if not frozen or frozen["format"] != "csv" or frozen["hash"] != candidate["source_hash"]:
             raise DomainError("VERSION_CONFLICT", "候选所选材料与来源不一致")
     authorize_source(store, c, user, project, rid, draft["runtime_id"])
@@ -293,6 +343,8 @@ def preview(store, user, aid, input_value, key, platform_limits):
         draft, manifest, action, report = load_draft(
             store, c, user, aid, platform_limits, lock=True
         )
+        if action.executor.kind == "bounded_agent":
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Use internal offline AppRun service")
         fp = fingerprint({"candidate": draft["fingerprint"], "input": input_value})
         old = (
             c.execute(
@@ -363,7 +415,12 @@ def inspect_draft(store, user, aid, platform_limits):
     with store.tx() as c:
         draft, manifest, _, report = load_draft(store, c, user, aid, platform_limits)
         source = authorized_read(
-            store, c, user, draft["runtime_id"], draft["project_id"], "resource.read",
+            store,
+            c,
+            user,
+            draft["runtime_id"],
+            draft["project_id"],
+            "resource.read",
             {"resource_id": manifest.data_bindings[0].resource_ref},
         )
         history = (
@@ -381,7 +438,14 @@ def inspect_draft(store, user, aid, platform_limits):
             "state": "PREVIEW_ONLY",
             "publishable": False,
             "input_schema": manifest.input_schema,
-            "validation": {k: report[k] for k in ("state", "execution_performed", "publishable", "topological_order")},
+            "validation": {
+                k: report[k]
+                for k in ("state", "execution_performed", "publishable", "topological_order")
+            },
             "history": [public_preview(r) for r in history],
-            "input_guidance": csv_column_options(source["content"]),
+            "input_guidance": (
+                csv_column_options(source["content"])
+                if manifest.validation_suite_ref == "receipt.readback.v1"
+                else {"mode": "OFFLINE_REPLAY_ONLY", "semantic_status": "UNKNOWN"}
+            ),
         }
