@@ -89,6 +89,7 @@ document.querySelector("#projects .grid > section:last-child").append($("reconci
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun);}}catch(e){$("health").textContent="后台不可用";}},2500);
 
 function clearApp() {
+  if(typeof clearInternal === "function")clearInternal();
   appReadRecovery=null;$("app-read-retry").hidden=true;
   $("app-create-status").textContent="";$("app-create-status").dataset.state="";
   extractionSource=null;$("extraction-form").hidden=true;$("extraction-status").textContent="";
@@ -166,6 +167,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
     $("extraction-form").hidden=false;$("extraction-create").disabled=extractionBusy || !$("extraction-resource").value;
     $("extraction-status").textContent=$("extraction-resource").value ? "只接受成功回执；提取时重新核查来源与独立数值结果。" : "请先在同项目保存内容不同的新CSV，再打开来源草案。";
   }
+  if(typeof openInternal === "function")await openInternal(a,generation);
   return true;
 }
 $("extraction-form").onsubmit=safe(async()=>{

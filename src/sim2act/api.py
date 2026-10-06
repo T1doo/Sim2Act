@@ -20,6 +20,7 @@ from .db import Store, app_drafts, fingerprint, grants, heartbeats, projects, re
 from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
+from .internal_api import mount as mount_internal_api
 from .local_tasks import (
     LocalTaskInput,
     RetirementInput,
@@ -444,6 +445,8 @@ def create_app(store=None, settings=None):
             "code_execution": "DISABLED",
         }
 
+    mount_internal_api(app, db, platform_limits, identity)
+
     web = Path(__file__).parent / "web"
 
     @app.get("/")
@@ -453,6 +456,10 @@ def create_app(store=None, settings=None):
     @app.get("/app.js")
     def js():
         return FileResponse(web / "app.js", media_type="text/javascript")
+
+    @app.get("/internal.js")
+    def internal_js():
+        return FileResponse(web / "internal.js", media_type="text/javascript")
 
     @app.get("/app.css")
     def css():

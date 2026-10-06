@@ -32,3 +32,7 @@
 这些是后续阶段所需输入/决定，不是本轮已获授权的生产写、正式发布或额外真实调用。E18 在合成隔离证据与阶段门审查后结束。
 
 E18最终精确源码925e560dc1a196c6c4747cb349d558156a721c0f/[CI37416936441](https://github.com/T1doo/Sim2Act/actions/runs/37416936441)SUCCESS：PG353PASS/0SKIP；LinuxPG352PASS/1WindowsSKIP、SQLite332PASS/21PG平台SKIP；独立13PASS。合成隔离子项PASS，正式各门状态保持表述。全证据见上链E18目录。
+
+## E19 内部入口增量（仍非正式发布）
+
+依据持续开发授权，原F2T05/T08/T09现有只读service接入[认证API/UI](InternalEntry.md)：精确冻结snapshot批准、内部Release、独立instance结果版本/历史、持久AppRun及pause/cancel/resume/reopen。既有注册只读action/gateway，0LIVE/无新Grant/表，正式发布部署仍false。当前T05/T08表中“内部service”工程证据增加实际页面/API入口；正式发布入口/独立instance身份政策、通用writer与迁移仍未完成。27 actualHTTP/jsdom不替代真实浏览器/Win11视觉，AT22只增加固定只读链路工程子项，不签收完整AT22/F2。其他原门不提升；最终aggregate/精确CI另记本轮证据。

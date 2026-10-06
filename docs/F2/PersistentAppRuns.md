@@ -33,3 +33,5 @@ PREPARED 在此固定纯读取/计算路径还未产生业务效果；worker 丢
 实际结果及同工作区独立审查见 [证据](../evidence/F2-persistent-apprun-20261006/README.md)。原 AT05 文件和 V5/历史 AT02 不改。AT17 保持 OPEN：只读 sum 与内部 result ledger 不能证明 preview 写隔离，须后续受控写 fixture 真正验证。
 
 正式发布/部署、通用业务数据与写动作、完整 P-A/P-B/AT10/F1/Win11/protected-browser 仍未验收。真实模型0，无业务外发/导出恢复包/安全策略绕过；本轮未新增浏览器视觉检查。
+
+2026-10-06 E19更新：原E16/E17内部service现经[已认证内部工程API/UI](InternalEntry.md)接入，精确快照显式确认及既有可信只读worker、独立实例数据/控制/重开可用；旧文“未接HTTP”是E16/E17当时边界，正式发布/部署入口仍未启用。无新Grant/表/任意writer或真实模型调用。

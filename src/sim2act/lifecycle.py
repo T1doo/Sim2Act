@@ -1,4 +1,4 @@
-"""Internal synthetic F2-T08 services; intentionally not wired to HTTP/publication.
+"""Internal F2-T08 services; authenticated engineering adapter, no formal publication.
 
 Existing principals/grants only; typed result-ledger data, no arbitrary business writes.
 """
@@ -306,7 +306,11 @@ def read_release(store, c, user, rid, limits):
     return r
 
 
-def create_instance(store, user, rid, expected_release_fp, limits):
+def create_instance(store, user, rid, expected_release_fp, limits, *, request_key=None):
+    if request_key is not None and (
+        not isinstance(request_key, str) or not 1 <= len(request_key) <= 100
+    ):
+        raise DomainError("INVALID_INPUT")
     with store.tx() as c:
         location = c.execute(
             select(internal_releases.c.project_id).where(internal_releases.c.id == rid)
@@ -316,7 +320,25 @@ def create_instance(store, user, rid, expected_release_fp, limits):
         if r["fingerprint"] != expected_release_fp:
             raise DomainError("VERSION_CONFLICT")
         draft = r["snapshot"]["draft"]
-        iid = new_id("iinstance")
+        # Existing PK plus project lock gives durable per-intent idempotency without new DDL.
+        iid = (
+            "iinstance_" + fingerprint({"user": user, "release": rid, "key": request_key})[:32]
+            if request_key is not None
+            else new_id("iinstance")
+        )
+        existing = (
+            c.execute(select(internal_instances).where(internal_instances.c.id == iid))
+            .mappings()
+            .first()
+        )
+        if existing:
+            if (
+                existing["principal_id"] != user
+                or existing["project_id"] != location
+                or existing["release_id"] != rid
+            ):
+                raise DomainError("VERSION_CONFLICT")
+            return dict(existing)
         row = {
             "id": iid,
             "project_id": location,

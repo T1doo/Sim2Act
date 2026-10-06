@@ -286,3 +286,7 @@ E18精确终态：925e560dc1a196c6c4747cb349d558156a721c0f已普通push，[CI374
 基线b7895ea/925e560，正常origin fetch核对一致，正确/workspace/Sim2Act-pb。依据原F2T05/T08/T09，仅把已有可信只读内部Release→Instance→持久AppRun接入认证API及应用页；明确INTERNAL_ENGINEERING_ONLY，正式发布部署False。精确snapshot审批须页面显示回读冻结清单/检查/期限及指纹后显式确认；只读action与当前user/project/app授权保持，不新增/恢复Grant，无任意代码、外发或LIVE。新增实例同意图request_key幂等复用现表，不新增DDL；新运行复用持久worker及Run控制，结果版本/历史独立。
 
 冻结验收：无身份/跨owner/project/instance读取和变更拒绝、批准指纹/版本/到期/当前授权变化拒绝、重复创建/提交只有一个逻辑效果及异参数冲突、应用页切换时迟到响应不覆盖、重复点击busy、提交返回失败保留原键可恢复、取消返回不取消已接受后台、pause/cancel/resume及刷新重开当前历史。桌面/手机可读样式，受保护真实浏览器先核现工具正常途径，不可用保存实际错误；不--no-sandbox/改策略，DOM不是视觉验收。全SQLite/真实PG/精确源码ServerCI/普通devpush/证据与阶段门更新；原V5/AT02/AT05及初始work不改，0LIVE/无导出。该内部入口不是正式发布或完整F2/P-A/P-B签收。
+
+E19本地入口实现：精确内部批准/Release/独立实例/持久queue/control/history接入Bearer API/UI；实例同键持久幂等、不增表或Grant；撤权owner仅最小stopmetadata，resume仍当前权限。独立实际复现late create抢实例选择并关闭，refresh两交错复验通过；新增本页旧意图结束按钮必须先GET当前历史，不取消后台/自动新提交。独立18PASS/1PGSKIP5.50秒、4文件hash一致；真PG专项19PASS11.17秒含最小CRUD角色；实际HTTP/jsdom27PASS且另一进程实际revision→UI409/新意图，NOT视觉。SQLite350PASS/22SKIP/2旧warnings75.53秒；完整PG出现1失败待定位，未记CI成功。protectedChromiumSUID helper BLOCKED，无--no-sandbox。
+
+E19完整SQLite350PASS/22PG平台SKIP/2旧warnings75.53秒；首轮LinuxPG370PASS/1FAIL/1WindowsSKIP/3旧warnings202.56秒，原AT05 start检查API/worker exited、两空日志，无异常栈/oom证据，根因未定位。原AT05/manage不改，相同源码单独重跑1PASS10.72秒；保留抑制配置后的失败JUnit，完整PG再跑/精确CI待核实。27actualHTTP/jsdom和独立18PASS/1PGSKIP/4hash一致，版本冲突旧意图可显式读取历史后结束，不自动提交或取消后台。
