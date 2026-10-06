@@ -100,7 +100,8 @@ def audit_processes(pids):
 
 def emit(root):
     # Only explicit named synthetic outputs, not config/profile/DB/env/log dumps.
-    for name in ["browser-results.json", "desktop.png", "mobile.png", "failure.png"]:
+    for name in ["browser-results.json", "desktop.png", "mobile.png", "failure.png",
+                 "agent-results.json", "agent-desktop.png", "agent-narrow.png", "agent-failure.png"]:
         path = root / name
         if not path.exists():
             continue
@@ -194,14 +195,32 @@ def main():
     child_env = system_environment()
     child_env.update({key: os.environ[key] for key in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA", "USERPROFILE"] if key in os.environ})
     api = None
+    agent_api = None
+    agent_root = root / "agent"
+    agent_root.mkdir()
+    (root / "agent-results.json").write_text(json.dumps({
+        "status": "NOT_RUN", "checks": [], "screenshots": [], "visualReview": "NOT_REVIEWED",
+        "modelRequests": 0, "legacyChecksCounted": 0,
+    }), encoding="utf-8")
     try:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            agent_port = sock.getsockname()[1]
+        subprocess.run([sys.executable, "scripts/agent-ui/fixture.py", "--root", str(agent_root),
+                        "--port", str(agent_port), "--action", "seed"], cwd=repo,
+                       env={**child_env, "PYTHONPATH": "src"}, check=True, timeout=30)
         with (root / "api.log").open("wb") as log:
             api = subprocess.Popen([sys.executable, __file__, "--root", str(root), "--serve"], cwd=repo, env=child_env, stdout=log, stderr=log)
+        with (agent_root / "api.log").open("wb") as log:
+            agent_api = subprocess.Popen([sys.executable, "scripts/agent-ui/fixture.py", "--root",
+                                          str(agent_root), "--action", "serve"], cwd=repo,
+                                         env={**child_env, "PYTHONPATH": "src"}, stdout=log, stderr=log)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            assert api.poll() is None, "Synthetic API exited before readiness"
+            assert api.poll() is None and agent_api.poll() is None, "Synthetic API exited before readiness"
             try:
-                if httpx.get(f"http://127.0.0.1:{port}/health", timeout=1).status_code == 200:
+                if all(httpx.get(f"http://127.0.0.1:{p}/health", timeout=1).status_code == 200
+                       for p in (port, agent_port)):
                     break
             except httpx.HTTPError:
                 pass
@@ -210,14 +229,25 @@ def main():
             raise RuntimeError("Synthetic API readiness deadline exceeded")
         subprocess.run(["node", "scripts/browser-ci/internal-ui.cjs", str(root), sys.executable], cwd=repo, env=child_env, check=True, timeout=150)
     finally:
-        if api is not None and api.poll() is None:
-            api.terminate()
-            try:
-                api.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                api.kill()
-                api.wait(timeout=5)
-        emit(root)
+        cleanup_error = None
+        try:
+            for owned in (agent_api, api):
+                try:
+                    if owned is not None and owned.poll() is None:
+                        owned.terminate()
+                        try:
+                            owned.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            owned.kill()
+                            owned.wait(timeout=5)
+                except Exception as error:
+                    # Attempt every owned child's cleanup even if one fails.
+                    if cleanup_error is None:
+                        cleanup_error = error
+        finally:
+            emit(root)
+        if cleanup_error is not None:
+            raise cleanup_error
 
 
 if __name__ == "__main__":

@@ -1,0 +1,33 @@
+{
+  "status": "A1_B1_ARCHIVES_VERIFIED_OBSERVER_ERROR_PATH_REVISION_REQUIRED",
+  "executed_review_actions": "Static source reads plus actual offline JSON assertions, no fixture or PostgreSQL execution.",
+  "observer_sha256": {
+    "scripts/diagnostics/pg_probe.py": "e355d4e97d47d92601e8819f2812df24989b33b17aece3ae4b385fc2026ee0b3",
+    "scripts/diagnostics/pg_trace_child.py": "771fb7b64a02b07247e1ff6afccd053d2bb6ff5669ecb700cf13efc1fde2280f"
+  },
+  "archive_assertions": "independent-a1-b1-archive-assertions.json",
+  "actual_assertions": [
+    "A1 and B1 each six child import traces match expected detached/current actual module path and current bytes hash.",
+    "Each round has four passing final process-case reports; common test hash in comparison-rounds identical c08de9921d4b5f439d440bd94bb650a69907c83eabbcf3e9cb241f5c056b78f9.",
+    "Each trace/sample capped200 rows; recorded trace/pg activity/locks columns match safe whitelist, no query text or resource content fields.",
+    "A1 guard errors are VERSION_CONFLICT on CANCELLED/SUCCEEDED lease0. They are terminal lease rejection, not failed recovery evidence."
+  ],
+  "recorded_rounds": {
+    "A1_parent": "38PASS99.90s",
+    "B1_current": "38PASS83.79s",
+    "B2_A2": "Not claimed reviewed at this point"
+  },
+  "required_revision": [
+    "Child wrapper catches BaseException then extra SELECT on original guard connection and emit. Either diagnostic SQL or file I/O error can replace the original exception; before/end emit can also prevent/change original call. Make observer best effort and preserve original call return/exception exactly.",
+    "Avoid diagnostic SQL in original failed transaction: a DB exception may leave transaction aborted; an extra SELECT then fails and hides first error. Record state unavailable or use already-observed safe values/external sampler.",
+    "Report hook and teardown diagnostic failures must not turn test report collection into misleading INTERNALERROR; classify observer failure explicitly without suppressing original failed test."
+  ],
+  "limits": [
+    "Sampling owner connection is role scoped with no query text; roles are fresh fixture-specific. Row count is bounded, but a stalled diagnostic SQL query can outlive thread.join2s; no database timeout shown in sampler.",
+    "Closed trace file preserves process-exit user-buffer writes, no fsync/power-loss durability claim.",
+    "I/O, sampling and error-path SELECT affect scheduling and transaction duration; AB/BA results are instrumented nonreproduction only.",
+    "Observed masking risk is static; no claim it occurred in A1/B1 or caused original fullPG failure.",
+    "Initial import-only setup interrupted evidence is separate and not counted formal A1/B1."
+  ],
+  "conclusion": "Source identity and safe archive fields check out. Original lease/timeout and successful return paths preserved, but cannot claim all exception semantics preserved until observer error handling is corrected."
+}

@@ -192,6 +192,40 @@ def test_AT06_transaction_crash_recovery_and_fence(env):
         )
 
 
+def test_recovered_claim_starts_lease_after_reconciliation(env, monkeypatch):
+    """A slow recovery must not hand the next worker an already expired lease."""
+    from types import SimpleNamespace
+
+    from sim2act import db
+
+    store = env[0]
+    rid = enqueue(env)
+    old = store.claim("old-worker", 1)
+    with store.tx() as c:
+        c.execute(update(runs).where(runs.c.id == rid).values(lease_until=time.time() - 1))
+    clock = [time.time()]
+    monkeypatch.setattr(db, "time", SimpleNamespace(time=lambda: clock[0]))
+    original_event = store.event
+
+    def delayed_reconciliation(c, run_id, kind, payload):
+        result = original_event(c, run_id, kind, payload)
+        if kind == "RECONCILED":
+            clock[0] += 2  # Deterministic elapsed time; no sleep or timeout change.
+        return result
+
+    monkeypatch.setattr(store, "event", delayed_reconciliation)
+    recovered = store.claim("new-worker", 1)
+    assert recovered["lease_until"] == clock[0] + 1
+    with store.tx() as c:
+        assert store.guard(c, rid, recovered["fence"])["worker_id"] == "new-worker"
+        with pytest.raises(DomainError, match="Stale"):
+            store.guard(c, rid, old["fence"])
+    clock[0] += 1
+    with store.tx() as c:
+        with pytest.raises(DomainError, match="Stale"):
+            store.guard(c, rid, recovered["fence"])
+
+
 @pytest.mark.parametrize("expired", [False, True])
 def test_AT08_revoke_expire_dispatch_and_cached_visibility(env, expired):
     store, s, client, a, b, pid, res = env

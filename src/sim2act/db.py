@@ -749,7 +749,9 @@ class Store:
             data.update(
                 status="RUNNING",
                 fence=row["fence"] + 1,
-                lease_until=now + lease_seconds,
+                # Reconciliation/row acquisition may consume the scan's entire lease.
+                # Start this new ownership interval only after that work completes.
+                lease_until=time.time() + lease_seconds,
                 worker_id=worker_id,
             )
             c.execute(

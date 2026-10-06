@@ -253,6 +253,12 @@ async function layout(page, label) {
   check('no browser script/runtime errors beyond recorded expected HTTP negatives', result.unexpectedConsoleErrors.length===0);
   result.status='PASS';
   result.syntheticBindings={app,first,second,cancelled,accepted};
+  result.agent=await require('./agent-ui.cjs')({browser,root:path.join(root,'agent'),outputRoot:root,python,
+    audit:async()=>{
+      const observed=(await cdp.send('SystemInfo.getProcessInfo')).processInfo.filter(p=>['browser','renderer'].includes(p.type));
+      const file=path.join(root,'owned-agent-browser-pids.json');fs.writeFileSync(file,JSON.stringify(observed));
+      return JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--audit',file],{encoding:'utf8',timeout:10000}));
+    }});
 })().catch(async error => {
   result.status='FAIL';result.error={name:error.name,message:error.message};
   if(activePage && !activePage.isClosed()) {
@@ -260,7 +266,10 @@ async function layout(page, label) {
   }
   process.exitCode=1;
 }).finally(async () => {
-  if(browser) await browser.close();
-  fs.writeFileSync(path.join(root,'browser-results.json'),JSON.stringify(result,null,2)+'\n');
-  console.log(`Protected browser ${result.status}: ${result.checks.length} passed checks; Win11 NOT_RUN; model requests 0.`);
+  try {if(browser) await browser.close();}
+  catch(error){result.status='FAIL';result.cleanupError=error.name;process.exitCode=1;}
+  finally {
+    fs.writeFileSync(path.join(root,'browser-results.json'),JSON.stringify(result,null,2)+'\n');
+    console.log(`Protected browser ${result.status}: ${result.checks.length} legacy checks; additional agent recorded separately; Win11 NOT_RUN; model requests 0.`);
+  }
 });

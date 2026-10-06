@@ -54,3 +54,15 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 实际HTTP20PASS、独立HTTP20PASS/旧internal18PASS1SKIP、最终DOM功能22PASS（真实本地HTTP，夹具文件/交付故障注入），SQLite493PASS24SKIP3warnings327.90秒，ruff/mypy23PASS。DOM中途v2 fetchfailed时后台已保存两版但UI清空，独立只读确认；夹具由同步改异步子进程+诊断后完整通过，无自动HTTP retry，历史传输根因未证实、不追认原失败。PG最终/源码hash/独立静态审查/清理见[证据](../evidence/bounded-agent-ui-offline-20261006/README.md)。原生保护启动三次均SUID helper配置退出，0原生检查/0截图与查看，窄屏未验收；不关闭sandbox或用未授权CI替代。父检查前本地commit、没有push/CI/LIVE；完整自主生成/自由语义/中断恢复/P-B/Win11/F1仍开放。
 
 最终PG17完整515PASS1FAIL1SKIP3warnings868.82秒，唯一旧before_commit崩溃恢复用例fault进程达73、恢复进程return0但Run仍RUNNING，保存full-pg.log，根因未确认。单独两crash2PASS1warning18.79秒只为复验，不覆盖完整失败、不称时序根因已证明；新HTTP20完整PG均PASS。未改旧lease/权限或跳过用例。仅自有API正常停止、PG容器移除，8073/8074/32773关闭、原work HEAD6f688e4干净。交付状态为本地可审查实现、验收未完成，原生视觉及完整PG失败留有明确阻塞。
+
+### 2026-10-06 / PG失败对比诊断与新增Edge实施前
+
+父要求先定位完整PG旧before_commit恢复后仍RUNNING，不用focusedPASS代替修复。固定父4e7010b与当前047bf44 AB/BA四轮、同公共persistent_app_runs模块与独立schema/最小角色，同PG17；有界trace/自有锁采样，不改lease/timeout/返回语义、不导出材料/SQL/凭据，独立审查计划完成。首轮诊断配置路径错误已中断保留，正式四轮另起。只有实际trace足够才归因修复，否则未知；之后独立审查+全PG。PG后接原保护Edge新增agent截图路径，不改runner/安全，不push/CI/LIVE。见PGRecoveryAgentEdgePlan.md。
+
+固定ABBA对比实际每轮38PASS（99.90/83.79/92.72/82.38秒），来源path/hash/公共test一致，4终态/轮/自有PID和锁安全数据归档，原RUNNING未复现。仅共同模块顺序，不能排除全套先前污染；clock offset与claim剩余lease本轮健康不解释原失败。独立发现并修诊断器I/O/guard附加查询mask风险（首版副本保留），删除失败事务内SQL、日志与close best-effort、外部read-only采样超时有界。无DB selfcheck验证原异常/返回identity及一次调用。完整PG观察重跑启动，src/lease/timeout/test未改，结果未出前不称闭合或修复、不接线/执行新原生验收。
+
+第三全量观察515PASS1FAIL1SKIP927.55秒再次复现原before_commit：恢复claim耗0.802秒，返回时lease仅余0.198秒；prepare持锁期间heartbeat等transactionid，ACTION_PREPARED已超lease，heartbeat/commit均VERSION_CONFLICT，终态RUNNING/fence3/PREPARED/result0。wall-mono稳定，未观察claim区间未授予锁，不把慢claim归因锁/污染。修复只将新ownership lease起点移到reconciliation和候选行锁之后，expired扫描仍原now、lease1和guard不改。确定性oracle以本模块clock在RECONCILED后推进2秒，无sleep/timeout变化；旧式真实1FAIL日志保留，修复式1PASS，亦验证旧fence/新lease到期拒写。AT05第二全量startup失败另存，当前无充分归因，第三全量AT05通过不擦除旧失败。独立审查实际时间线与最小diff后再全量PG。
+
+独立审核后的修后完整PG517PASS1WindowsSKIP1warning803.04秒，crashchildren无trace插桩，AT05有界identity observer通过，原三次完整失败日志保留。原before_commit缺陷已闭合；另一次AT05startupUNKNOWN不据本次PASS声称解释。之后开始新agent Edge接线：同原browser/launch/token audit，新独立API/SQLite，手工Replay/审批、来源链、冷结果v1/v2、实际接收丢回执的手工幂等重试、持久历史、迟到response/File/跨项目、撤权/篡改/Grant不变；截图agent-desktop/narrow明确hash/尺寸与visual NOT_REVIEWED，agent结果单独计数。原workflow/PS/runner/permissions/timeout不改。仅本地检查，原生NOT_RUN，截图0。
+
+接线终审已修collapsed来源details读取与两API独立cleanup，并在agent context前采legacy renderer PID baseline、后3次audit要求新renderer+全部token审查。PID差集不是严格page→PID映射；无实际native执行。最终HTTP/DOM22PASS、foundation SQLite24PASS4.00秒、ruff PASS/mypy23PASS/2JS与PythoncompilePASS，独立最终静态审无具体阻塞。新增路径native NOT_RUN、截图0、窄屏像素NOT_REVIEWED，不把旧38项作验收。自有API/临时root/PG容器清理，32774和UI端口关闭，旧work6f688e4干净；父比较worktree保留审查。证据result/README/独立review归档，本地提交、无push/CI/LIVE，其他阶段边界及AT05另次startupUNKNOWN保持。

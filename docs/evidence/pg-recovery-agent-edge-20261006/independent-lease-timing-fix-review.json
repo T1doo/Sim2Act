@@ -1,0 +1,42 @@
+{
+  "status": "THIRD_FULL_FAILURE_LEASE_START_MECHANISM_CONFIRMED_MINIMAL_FIX_STATIC_APPROVED",
+  "independent_execution": "Actual offline arithmetic/state/lock assertions plus source diff review; no PostgreSQL/test/fixture execution or product edits.",
+  "actual_timing": {
+    "claim_start": 1791288780.6194997,
+    "claim_end": 1791288781.4216392,
+    "claim_elapsed": 0.8021395206451416,
+    "lease_until": 1791288781.619526,
+    "lease_remaining_at_return": 0.19788670539855957,
+    "action_prepared": 1791288782.0631514,
+    "prepared_after_expiry": 0.44362545013427734,
+    "heartbeat_lock_wait_samples": [
+      1791288781.9403214,
+      1791288782.0491917
+    ]
+  },
+  "failure_identity": "Same accepted synthetic run, fence3 and worker throughout recovery claim/final; operation PREPARED, result0. Source imports original db ad9aa1ef... and app_jobs5bfb3db... from correct pb tree.",
+  "confirmed_mechanism": "New lease incorrectly starts at expired-scan time before reconciliation/acquisition; this consumed~0.802s of1s before returning claim. First prepare guard passes then transaction extends beyond remaining interval; heartbeat waits for transactionid lock and guard rejects expired lease. Commit guard also rejects, fenced fail_job leaves RUNNING. Observed actual third full failure supports this mechanism.",
+  "not_confirmed": [
+    "Sampling does not show denied lock in claim interval; exact source of claim elapsed duration is not identified as DB contention, CPU/load, network or observer overhead.",
+    "First uninstrumented before_commit full failure is compatible but has no trace proving identical cause.",
+    "Second full AT05 startup failure is not explained or repaired by claim lease timing.",
+    "Scoped readonly sampler/import evidence shows no reviewed source/schema cross-contamination, not a global proof of no environment interference."
+  ],
+  "actual_fix_review": {
+    "change": "db.Store.claim uses fresh time.time()+lease_seconds after reconciliation and queued row acquisition; early now retained solely for expiry scan.",
+    "semantics": "Original configured lease, reconciliation, fence increments, row lock order, guards and grants unchanged.",
+    "oracle": "Deterministic module-local SimpleNamespace clock advances2s at RECONCILED, lease1; before formula archived1FAIL. Fixed test asserts new lease usable, old fence rejected, exact expiry rejected. Reviewer statically reviewed oracle, did not execute it.",
+    "remaining": "Lease update/event/commit tail still consumes time; this fix is not a guarantee against arbitrarily long post-claim transactions or full recovery acceptance."
+  },
+  "current_source_sha256": {
+    "src/sim2act/db.py": "9ef7dea75aa8369abe204194a405e7f2d57dc96646ea52ebd5409ab79728e28c",
+    "tests/test_foundation.py": "2672990fe5b997e8b281501d1b9678573274c74c8f7d3f748b62d384dbe0620a"
+  },
+  "evidence_sha256": {
+    "docs/evidence/pg-recovery-agent-edge-20261006/full-pg-identity-observed/test_real_pg_process_crash_reopen_recovers_without_duplicate_results-before_commit-diagnostic-child-normal-202622.jsonl": "ffbd1f965dbee1f155df66ec4e11011ff4e113f8546b009a4f308eec8f21b660",
+    "docs/evidence/pg-recovery-agent-edge-20261006/full-pg-identity-observed/test_real_pg_process_crash_reopen_recovers_without_duplicate_results-before_commit-locks.json": "aada3059d4c5067abc141aa86afb6f97829a51728aa2e51c01cf80bec5aecb64",
+    "docs/evidence/pg-recovery-agent-edge-20261006/full-pg-identity-observed/test_real_pg_process_crash_reopen_recovers_without_duplicate_results-before_commit-final.json": "515e6d1da572dcb09f31ba5e3f84497ea20840e86d862724a79afba227d980ef",
+    "docs/evidence/pg-recovery-agent-edge-20261006/lease-oracle-before.log": "f31cfaadc947e7765484e03be30164d66445d487c564145850d04ba8f1d2ff6f"
+  },
+  "conclusion": "No static blocker to this narrowly supported fresh-lease fix; proceed separately to complete full PG validation. Full aggregate and AT05 remain open until actual new evidence."
+}

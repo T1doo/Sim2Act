@@ -1,0 +1,89 @@
+........................................................................ [ 13%]
+........................................................................ [ 27%]
+........................................................................ [ 41%]
+................................................................F....... [ 55%]
+........................................................................ [ 69%]
+........................................................................ [ 83%]
+s....................................................................... [ 97%]
+.............                                                            [100%]
+=================================== FAILURES ===================================
+______________ test_AT05_real_process_stop_accept_restart_reopen _______________
+
+env = (<sim2act.db.Store object at 0x7ff566cf5f70>, Settings(database_url='postgresql+psycopg://postgres:synthetic-pg-recove...f5bfcc64b24c1688bd7c2fc4a9d12d', 'user_9507b07b2c0647f1b7b8c35941e5b828', 'proj_b6e44d31e8974171aecabc2fec064eb3', ...)
+runtime_role = 'postgresql+psycopg://test_app_4a44151be865402e8ecd0b717d929ec5:7423a1ef20e38866b11b106731c698a9fe73218a8a0683a36d13aac6a1598134@127.0.0.1:32774/postgres?options=-csearch_path%3Dtest_0e21a662aa954c8887957e27fc428c97'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-137/test_AT05_real_process_stop_ac0')
+
+    @pytest.mark.skipif(
+        not os.environ.get("SIM2ACT_TEST_DATABASE_URL"),
+        reason="PostgreSQL subprocess check needs explicit test URL",
+    )
+    def test_AT05_real_process_stop_accept_restart_reopen(env, runtime_role, tmp_path):
+        store, s, client, a, b, pid, res = env
+        root = Path(__file__).parents[1]
+        data = tmp_path / "中文 空格数据"
+        # Supply only synthetic configuration; do not read dotenv or pass a live token.
+        child_env = {
+            "PATH": str(Path(sys.executable).parent),
+            "SIM2ACT_DATABASE_URL": runtime_role,
+            "SIM2ACT_DATA_DIR": str(data),
+            "SIM2ACT_MODEL_MODE": "mock",
+            "SIM2ACT_LIVE_ENABLED": "false",
+            # Deliberately poison the launcher parent. These must never reach API/worker.
+            "SIM2ACT_TEST_DATABASE_URL": "SYNTHETIC owner sentinel",
+            "PGPASSWORD": "SYNTHETIC owner sentinel",
+            "GH_TOKEN": "SYNTHETIC CI sentinel",
+            "CI_PRIVATE_SENTINEL": "SYNTHETIC private sentinel",
+        }
+        if os.name == "nt":
+            # Windows subprocesses require their system/temp paths; never inherit credentials.
+            child_env.update(
+                {
+                    key: os.environ[key]
+                    for key in ("SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP")
+                    if key in os.environ
+                }
+            )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        base = f"http://127.0.0.1:{port}"
+    
+        def manage(command):
+            p = subprocess.run(
+                [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+            return p.stdout
+    
+        try:
+>           started = json.loads(manage("start"))
+                                 ^^^^^^^^^^^^^^^
+
+tests/test_lifecycle.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'start'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+>       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'scripts/manage.py', 'start', '--port', '55979'], retu...   raise RuntimeError("API/worker exited; inspect local logs")\nRuntimeError: API/worker exited; inspect local logs\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_lifecycle.py::test_AT05_real_process_stop_accept_restart_reopen
+1 failed, 515 passed, 1 skipped, 5 warnings in 739.18s (0:12:19)
