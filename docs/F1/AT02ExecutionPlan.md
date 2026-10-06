@@ -32,3 +32,11 @@
 [26检查及完整合成trace](../evidence/AT02-budget-preparation-20261006/offline-results.json)：单test_only SQLite独立DB两owner/两project/两runtime/两TXT；四活动read授权交集、八双向HTTP拒绝、foreign-runtime/任一read交集撤回拒绝、A本地真实API→Worker→只读VERIFIED→两MOCK形状→PARTIAL42、B资源84可读不变且无模型体引用、Grant不变、cold Store回读、纯model身份policy与清理通过。无socket/provider transport/真实token读取，`live_enabled=False`、MOCK attempts `NOT_ENFORCED_SYNTHETIC`、usage unknown，不把回放算LIVE。12旧归档长度/SHA全匹配；两发送形状1170/1958字符，reservation envelope4206。该SQLite结果不证明PG CRUD角色/独立进程/真实账号；这些必须在获批准的新PG fixture中真实核对后才可发送。初离线helper错误及修复保留，原文件均未改。
 
 当前最小门槛：用户批准新增预算及发送范围；验收方明确同库B观察是否足以符合冻结条款；新PG/最小应用角色/独立API-worker及硬全局守卫的零发送预检。其余正式F1/Win11/AT02签收维持未完成。
+
+## 2026-10-06 newly authorized dual-owner LIVE execution
+
+The parent relayed explicit user approval of **at most four requests, 512 output tokens each, synthetic-only, no automatic retry**. The earlier zero-budget/offline preparation remains historical; this approval permits one fresh same-DB two-owner/two-project fixture, each a two-request resource.read→feedback→answer chain. See [frozen scope and gates](../evidence/AT02-dual-live-20261006/README.md). Minimum-role PG preflight23PASS and guard MOCK4PASS/0network precede actual sends; persistent global four-send ledger and fail-stop controller prohibit restart/retry. Product/schema/history unchanged. Final outcome remains pending before execution; this is not full F1 signoff.
+
+Execution result: `PASS_BOUNDED_DUAL_LIVE_SLICE`; exactly4 sends, A/A/B/B, each PARTIAL42/84 with two RECEIVED enforced identities and one VERIFIED read. All23 preflight+26 execution assertions passed. Reported input2506/output299/total2805 tokens; unused authorization0. Owned API/workers/PG/temp cleanup confirmed. This does not retrospectively repair historical single-owner evidence or confer formal signoff. Independent final evidence audit follows in the evidence folder; no model calls remain authorized.
+
+Final independent archive audit:58 executed assertions PASS, complete request bytes/hashes and receipt/feedback/source/account/isolation chain consistent; independent network0. This is archive verification, not repeat LIVE or re-query removed PG. Normal Runs still have semantic goal acceptance NOT_RUN; no formal signoff inferred.
