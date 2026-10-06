@@ -34,3 +34,9 @@
 独立实际diff/语法审核已修closed-details可见性与两owned进程独立清理，最终无具体静态阻塞（`independent-final-edge-wiring-review.json`）。原workflow/PS/job/timeout/security不变，无push/CI/LIVE。具名白名单新增agent-results/desktop/narrow/failure，沿用原2MB限制和原GitHub stdout链，不输出profile/DB/API日志。
 
 自有测试API停止并删除临时fixture，自有PG容器移除、两自有端口关闭，旧work仍HEAD6f688e4干净；父比较worktree留作审查。原全量失败/中断配置和observer首版均保存；源claim慢的基础负载原因及另一次AT05启动失败未归因，完整P-B/语义自主生成/Win11/F1未提升。
+
+## 首次发布与标准Windows CI
+
+源码精确fcb8959afce30727a4446d87ee7564d11128d4df普通push，原push-trigger [37465552305](https://github.com/T1doo/Sim2Act/actions/runs/37465552305)终态FAIL。完整Windows518PASS0FAIL0SKIP247.67秒，旧保护Edge38PASS；newagent7PASS后误填尚未创建实例的隐藏internal-term，原12秒deadline失败。Report/Cleanup PASS，原ownedAPI/worker停止及server stopped回执核查。
+
+agent-desktop/agent-narrow未生成，不算像素验收。仅agent-failure PNG（1280x2450）已核验原stdout hash并root/独立view_image实际审图；其空CSV数值列可见、无实例/结果，详见ci-first-independent-failure-pixel-review.json。PNG/原log未新增上传，只JSON与安全摘要留repo。最小本地修复遵循真实visible输入顺序并补label[hidden]，HTTP/DOM22PASS，独立静态审通过；修复尚未native复验，首次失败不抹除，原AT05 UNKNOWN保留。本轮仅运行一次CI，追加验证需要确认范围。
