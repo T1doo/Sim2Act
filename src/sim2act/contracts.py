@@ -167,7 +167,8 @@ class ResourceSnapshot(Strict):
 
 class FrozenRunContract(Strict):
     run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
-    runtime_id: str = Field(pattern=r"^runtime_[a-f0-9]{32}$")
+    # Existing project runtime or existing declarative app runtime; neither creates a grant.
+    runtime_id: str = Field(pattern=r"^(runtime|appruntime)_[a-f0-9]{32}$")
     contract_version: Literal["F1.3"]
     goal: GoalSpec
     resources: list[ResourceSnapshot] = Field(max_length=8)

@@ -1,0 +1,21 @@
+# E17 同工作区独立只读复验
+
+基线7e122c718b1658d06e325e16fd541ea461ebfad4，独立代理e16_readonly_review。没有改产品/库内文件、真实模型或业务外发。只独立执行SQLite合成脚本和定向用例。
+
+初版实际阻塞：GoalSpec acceptance_version Literal不符、FrozenRunContract仅runtime_格式而已有应用是appruntime_；enqueue在原子事务内拒绝无写入。最小适配现envelope与既有app身份格式后继续审查，不放宽授权。
+
+实际复现及关闭（初版app_jobs SHA d31b3a422100ef9e215f3d3dbdce8f64ba0f93c45999f786f6853c8f6bf7491d；failure引用问题在720d25b593d0c8ea830860e2ea66e1f5ebcf9caf078fe54306cba24335592064）：
+
+- /tmp/e17_review.py：另call_id DISPATCHED还在has_unknown时误SUCCEEDED/resultrows1。修后WAITING_RESOURCE、未知账本保留/resultrows0。
+- /tmp/e17_plan_review.py：真实source sum5，改plan.source为20+30后sum50可提交。修后VERSION_CONFLICT，无数据/输出追加。
+- /tmp/e17_metadata_review.py：resource_id/column/source_hash伪造仍提交。修后VERIFICATION_FAILED，无追加。
+- /tmp/e17_failure_binding_review.py：主开发提出raw失败绑定疑点，独立实际复现只换queued binding.app_run_id使别instance已SUCCEEDED的同步Run变FAILED。修后主Run FAILED，foreign同步AppRun保持SUCCEEDED。原queued AppRun关联已损坏、仍QUEUED且读取拒绝，不能安全猜测修复，此限制明确保留。
+
+正常queue cancel双终态、pause/resume、新sum5/version1、幂等cache、坏列FAILED无新data、0model attempts的独立smoke通过。原AT05文件无diff。未发现新的具体阻塞。
+
+最终独立定向：33PASS、4PG专用SKIP、1旧Starlette warning12.29秒。含新增过期lease但fence未递增拒绝旧append/failure及重排恢复、wall预算耗尽前无operation。最终核对SHA256：
+
+- src/sim2act/app_jobs.py：0699ef93ecc645b68da81650b1558ce146c1f78e377e9f57ccbb43fb207f1254
+- tests/test_persistent_app_runs.py：c6d33b20d53a170405dbfcdb191122ac27b72b14e9cd3a8d73005d2c18570764
+
+未独立执行PG子进程、完整aggregate、WindowsServerCI、浏览器或正式部署。主开发真PG/CI结果另外记录，不归为独立执行。AT17写隔离/完整F2仍未覆盖。

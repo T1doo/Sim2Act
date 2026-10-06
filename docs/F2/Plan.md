@@ -167,3 +167,11 @@ E16源码固定前aggregate：真LinuxPG301PASS/1WindowsSKIP/2警告111.58秒，
 验收冻结：enqueue后全新Store重开；实际独立worker进程接受/停止/重启与前后提交崩溃窗口；派发前pause/cancel阻止新动作；heartbeat/过期fencing拒绝旧提交；当前grant撤权/过期进入WAITING_RESOURCE并保留历史；同键幂等/跨instance隔离/并发只追加一次；错误输入FAILED无结果版本。失联只重排已知安全纯读/未提交本地事务，已有VERIFIED本地结果不重复追加；注入未知操作保持等待/RECONCILING及cancel intent，不清账本盲目重试。升级导致已接受revision前置变化采用保守拒绝，不静默换Release或迁移数据。独立只读关键边界审查，最终SQLite/真实PG/精确ServerCI；新增表经显式migrate/Setup，API/worker无DDL。
 
 AT17只读sum不证明preview写隔离，保持OPEN直到受控写fixture真正验证。本轮不是通用动作/业务数据写入、未知外部接口已恢复或完整F2。0LIVE/无导出/无sandbox绕过，原AT05/V5/历史AT02保留，F1/Win11/完整P-A/P-B/AT10/protected-browser门不提升。
+
+## 2026-10-06 / E17本地实现及独立复验
+
+内部新AppRun+现Run队列+固定输入契约+一张internal_run_bindings原子enqueue，既有claim/lease/fencing/heartbeat及事件/Operation；固定授权快照取入、事务外可信计算、当前source/Grant/实例revision重验后结果+receipt+双终态原子追加。仅已有app runtime，旧F1 envelope最小接受appruntime格式，F1创建身份/历史不改。任意call_id未知门及cancel intent保持；源码失败写入也用独立accepted快照绑定，不改另一instance历史。
+
+独立实际复现初版Literal/格式拒绝、未知call_id误SUCCEEDED、可改plan来源及output metadata、failure原始binding引用损坏foreign成功历史，均修复并持久负例；无法安全定位的原残留AppRun不猜修，读取拒绝边界保留。独立最终33PASS/4PGSKIP/1警告12.29秒，source/test hash核对，原AT05保留。主开发真PG定向35PASS/1警告31.11秒含4真实worker子进程：提交前/后os._exit与另进程恢复，hold时heartbeat/独立控制事务/暂停取消无追加；新补lease同fence过期及budget负例在完整aggregate。SQLite319PASS/20PG平台SKIP/3旧警告59.52秒，静态通过；完整PG/精确CI待核实。正式发布/部署关闭/模型0/AT17写隔离OPEN，其余阶段门保持。
+
+E17源码稳定后首轮完整真PG338PASS/1WindowsSKIP/3旧Starlette/Pydantic警告150.41秒，全部37新增用例包含4真实子进程；全SQLite319PASS/20平台PGSKIP/3旧警告59.52秒。补一项必要的最小PG角色直接enqueue binding/控制/resume/worker/result业务CRUD（先前子进程仅worker消费角色、enqueue为test-owner），以覆盖新表INSERT实际路径；源service不变。该新PG检查与最终完整aggregate/ServerCI另外核实，绝不合并猜数。

@@ -300,6 +300,14 @@ internal_instance_data = Table(
     Column("data", JSON, nullable=False), Column("fingerprint", String, nullable=False),
 )
 
+internal_run_bindings = Table(
+    "internal_run_bindings", meta,
+    Column("run_id", String, primary_key=True),
+    Column("app_run_id", String, unique=True, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+)
+
 
 def new_id(prefix):
     return prefix + "_" + uuid.uuid4().hex
@@ -683,7 +691,7 @@ class Store:
                     )
                 ).first()
                 state = (
-                    "WAITING_RESOURCE"
+                    ("RECONCILING" if r["cancel_intent"] else "WAITING_RESOURCE")
                     if pending or op
                     else (
                         "CANCELLED"
@@ -746,6 +754,9 @@ class Store:
                 )
 
     def inspect(self, principal, run_id):
+        from .app_jobs import inspect_job, is_app_job
+        if is_app_job(self, run_id):
+            return inspect_job(self, principal, run_id)
         with self.tx() as c:
             r = (
                 c.execute(select(runs).where(runs.c.id == run_id, runs.c.principal_id == principal))
@@ -848,6 +859,9 @@ class Store:
                 )
 
     def command(self, principal, run_id, command, version):
+        from .app_jobs import command_job, is_app_job
+        if is_app_job(self, run_id):
+            return command_job(self, principal, run_id, command, version)
         with self.tx() as c:
             r = (
                 c.execute(

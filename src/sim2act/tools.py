@@ -241,35 +241,41 @@ def read_data(c, rid, name, args):
     else:
         if res["format"] != "csv":
             raise DomainError("INVALID_INPUT", "CSV resource required")
-        try:
-            reader = csv.DictReader(io.StringIO(res["content"]))
-            if (
-                not reader.fieldnames
-                or len(reader.fieldnames) != len(set(reader.fieldnames))
-                or args["column"] not in reader.fieldnames
-            ):
-                raise ValueError("column")
-            vals = []
-            for row in reader:
-                if None in row or row[args["column"]] is None:
-                    raise ValueError("row")
-                num = Decimal(row[args["column"]])
-                if not num.is_finite():
-                    raise ValueError("nonfinite")
-                vals.append(num)
-                if len(vals) > 1000:
-                    raise ValueError("row limit")
-            data = {
-                "resource_id": rid,
-                "column": args["column"],
-                "count": len(vals),
-                "sum": str(sum(vals, Decimal(0))),
-                "source_hash": res["hash"],
-            }
-        except (DecimalException, ValueError, TypeError, csv.Error) as e:
-            raise DomainError(
-                "INVALID_INPUT", "CSV column must contain finite decimal values"
-            ) from e
+        data = aggregate_csv_content(res["content"], rid, args["column"])
+    return data
+
+
+def aggregate_csv_content(content, rid, column):
+    """Registered CSV computation over an already authorized immutable read snapshot."""
+    try:
+        reader = csv.DictReader(io.StringIO(content))
+        if (
+            not reader.fieldnames
+            or len(reader.fieldnames) != len(set(reader.fieldnames))
+            or column not in reader.fieldnames
+        ):
+            raise ValueError("column")
+        vals = []
+        for row in reader:
+            if None in row or row[column] is None:
+                raise ValueError("row")
+            num = Decimal(row[column])
+            if not num.is_finite():
+                raise ValueError("nonfinite")
+            vals.append(num)
+            if len(vals) > 1000:
+                raise ValueError("row limit")
+        data = {
+            "resource_id": rid,
+            "column": column,
+            "count": len(vals),
+            "sum": str(sum(vals, Decimal(0))),
+            "source_hash": hashlib.sha256(content.encode()).hexdigest(),
+        }
+    except (DecimalException, ValueError, TypeError, csv.Error) as e:
+        raise DomainError(
+            "INVALID_INPUT", "CSV column must contain finite decimal values"
+        ) from e
     return data
 
 

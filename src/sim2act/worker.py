@@ -171,6 +171,10 @@ class Worker:
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
 
     def process(self, run):
+        from .app_jobs import is_app_job, process_job
+        if is_app_job(self.store, run["id"]):
+            process_job(self, run)
+            return
         rid, fence = run["id"], run["fence"]
         with self.store.tx() as c:
             contract = self.store.frozen_contract(c, run)
@@ -389,6 +393,10 @@ class Worker:
             try:
                 self.process(run)
             except DomainError as e:
+                from .app_jobs import fail_job, is_app_job
+                if is_app_job(self.store, run["id"]):
+                    fail_job(self, run, e)
+                    return True
                 with self.store.tx() as c:
                     current = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
                     if current["fence"] == run["fence"]:
