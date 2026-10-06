@@ -11,3 +11,5 @@ prepare/GET/commit共用目标范围、兼容schema转移、保留数据验证�
 源码commit/真实CI/browser终态/PNG核验待补。Win11普通用户、物理手机、其他浏览器、完整焦点/无障碍/复杂业务schema迁移、完整AT02/F1/F2/P-A/P-B/正式发布均未签收；E20最初AT05根因UNKNOWN继续保留，Linux SUID保护路径阻塞未改。
 
 本地最终产品源码：SQLite361PASS22PG/platformSKIP118.65s；LinuxPG382PASS1WindowsSKIP300.43s；最后HTTP focused29PASS1PGSKIP14.14s，实际CRUD-only角色switch额外1PASS3.28s。PG collection之后在原role测试追加switch断言，已单独实际通过，最终精确ServerCI完整重验待；没有把此前aggregate当作新增断言已收集。ruff/mypy21/3JS syntax通过，[source hashes](source-hashes.json)；生产/API/UI与独立接受hash相同。最终follow-up只静态核新增worker-v2浏览器/role断言。
+
+首轮精确3e1688e/CI37427612714 completedFAIL：原工程383PASS0FAIL0SKIP1warning175.11s，Report/Cleanup成功；正常Edge/browser8checksPASS，实际resume后已通过真实状态QUEUED等待，但紧接测试用innerText读折叠pre得空而断言失败。无console/pageerror；[失败JSON](first-browser-results.json)/[实际截图](first-failure.png)/run/长度hash receipt均保存。只把此检查改为实际可见状态栏QUEUED，未改产品/原AT05/CSP/OS或sandbox，需新源码精确CI复验。

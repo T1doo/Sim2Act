@@ -34,3 +34,11 @@ API 统一沿用 Bearer 认证、同源限制、严格重复键 JSON/禁止额�
 [E21证据](../evidence/F2-protected-server-browser-20261006/README.md)：精确2ead9b6/CI37423790107 SUCCESS，正常保护的预装Edge、25真实检查PASS。上述内部最小认证/快照确认/实例/排队暂停取消/返回重开/worker结果与独立历史/跨owner-instance-history-control拒绝实际运行；desktop1366x900/mobile390x844 PNG人工查看，两布局可读且无横向溢出，长实例ID标题已修换行。CSP/sandbox/系统策略不放宽，renderer token实际AppContainer/restricted true/integrity0。
 
 E19段的BLOCKED是当时Linux路径事实，本轮WindowsServer正常平台补上该最小流程视觉；Linux仍BLOCKED。仍无物理手机/Win11/其他browser/完整前端或正式发布签收；撤权stop UI及更多迟到响应未纳入本次25项。仅test_only合成SQLite浏览器fixture，原PG372PASS另外通过。三个真实失败及修复记录保留，不用先前DOM29冒充本轮浏览器。
+
+## E22 内部兼容升级 / 回退入口
+
+认证入口复用既有 internal_approvals，不增加表/DDL/Grant。实例路径：`POST /api/internal/instances/{iid}/switch-approvals` 要求 `target_release_id`、精确 `expected_target_fingerprint`、`expected_revision`；`GET .../{approval_id}` 重验当前来源/权限/数据/指针/兼容性后返回冻结批准；`POST .../{approval_id}/commit` 只收精确 `fingerprint`。URL实例、批准实例/项目与当前owner相符；事务内重验项目/app/runtime、schema转移、保留typed记录、revision/data/hash/Grant和期限。跨项目一致重hash损坏批准在锁实例前拒绝。切换批准单次消费，重复/已消费/过期/stale 409；不是Release创建接口的重放语义。
+
+页面先手动选目标（默认空），核查后显示from→target、schema版本、revision、保留结果条数/数据版本、授权不新增、期限及完整指纹详情，checkbox默认未选。确认只切不可变Release指针并追加历史，数据与旧Run保留；兼容回退不回滚数据或撤销外部动作。取消/返回只使本页选择失效，不能撤销已被服务接受的确认；未知网络结果不自动重发，通过重新读取历史确认现状。旧accepted Run在指针改变后仍按既有Worker策略保守拒绝，不在此更改可靠性策略。只有既有封闭typed-result schema；通用业务迁移/正式发布入口/新instance权限政策仍未实现。
+
+验证与精确ServerCI见[E22证据](../evidence/F2-internal-switch-entry-20261006/README.md)。真实过期UI检查采用单次合成3秒TTL oracle（批准创建同事务、首次回执前绑定），不冒称生产300秒计时验证。正常sandbox/CSP/既有runner预算不变；Win11、物理手机与全部阶段门另行验收。

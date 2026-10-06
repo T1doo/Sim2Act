@@ -106,7 +106,7 @@ async function layout(page, label) {
   check('real pause persisted and resume control rendered', await activePage.locator('#internal-controls button').filter({hasText:'继续'}).isVisible());
   await activePage.locator('#internal-controls button').filter({hasText:'继续'}).click();
   await until(activePage, () => engineering.run?.status === "QUEUED" && !engineering.busy);
-  check('real resume command persists queued status before pause/cancel', (await activePage.locator('#internal-run-detail').innerText()).includes('QUEUED'));
+  check('real resume command persists queued status before pause/cancel', (await activePage.locator('#internal-run-status').innerText()).includes('QUEUED'));
   await activePage.locator('#internal-controls button').filter({hasText:'暂停'}).click();
   await until(activePage, () => engineering.run?.status === "PAUSED" && !engineering.busy);
   await activePage.locator('#internal-controls button').filter({hasText:'取消'}).click();
