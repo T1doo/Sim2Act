@@ -48,3 +48,5 @@ agent-desktop/agent-narrow未生成，不算像素验收。仅agent-failure PNG�
 新增两图的原stdout字节/SHA与原agent-results metadata逐项核验，主/独立均实际view_image original：桌面1280x3937文字/来源/引用可读；390x6297上部candidate来源/冻结文字实际空白，虽然下部hash/quotes/控件正常换行，仍NOT_ACCEPTED。原因UNKNOWN，原PNG未修改，不以DOM几何PASS替代像素。见ci-second-independent-pixel-review.json。仅安全JSON和摘要入既有repo，原log/PNG未另上传；原cleanup回执及Report/Cleanup成功保存。
 
 已本地最小修导航顺序，补capture-time DOM/style白名单元数据以帮助未来区分状态和paint；非原子截图/诊断扰动明确，未修复或验收窄屏空白。用户加速需求另有独立真实生成缺口/下一接口方案，见F2/V5MinimumExperienceGap.md和RegisteredRunGenerationSlice.md；未执行LIVE/扩权/发布，未伪称完整P-B。
+
+Third authorized UI-only standard CI: [37471361854](https://github.com/T1doo/Sim2Act/actions/runs/37471361854), source `9104b2a9ba3ec18f062cf4596d55649c62219819`, SUCCESS. `ci3-*.json` preserve original results/byte metadata and a separate actual dual-reviewer pixel review. Original agent result `visualReview: NOT_REVIEWED` is preserved; current desktop/narrow captured pixels passed independent visual review. Old blank root cause remains UNKNOWN; preceding failures remain evidence. PNGs are available through the same original approved Actions stdout, without a new upload destination.
