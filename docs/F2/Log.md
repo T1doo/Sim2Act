@@ -101,3 +101,6 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 
 
 2026-10-06 本轮真实入口阶段闭合：普通push精确源码 `447b597fefd6c2a191ef4e9ff6d4bf2f0c06d3d5`，唯一原标准CI [37476996252](https://github.com/T1doo/Sim2Act/actions/runs/37476996252) 首次SUCCESS，无重试。Windows工程564PASS/2SKIP；原Edge38、旧agent33、新registeredGeneration29分别PASS。真实受保护浏览器完成源amount3→服务端草案→既有授权新CSV→人工确认版本→新实例冷worker quantity15/resultVersion1，并实测回执恢复、撤权、篡改、旧响应、跨主体/项目、空目标及窄屏。两次capture及最终实际保护审计PASS。两原PNG按stdout字节/SHA/尺寸与里程碑核验，主审及独立实际像素复审接受本次健康历史展示范围；runtime NOT_REVIEWED保留、人工审查另存。Report/Cleanup成功。最短说明补明预览列与新任务列分别设置，每次新任务需选quantity，历史刷新后amount默认不改变既有quantity15结果。见[证据](../evidence/registered-run-browser-20261006/README.md)及[使用说明](RegisteredRunQuickstart.md)。此有限原生入口缺口闭合，不提升Win11、完整AT02/F1、语义或完整P-B；旧空白根因UNKNOWN、失败历史保留、模型请求0。
+
+
+2026-10-06 原V5下一步短差距审查（仅本地）：见[V5模型实验差距与统一预算提案](V5ModelExperimentGapReview.md)。当前可信CSV生成链已闭合，但语言目标规划/模型提取/独立语义源证明/真实模型AppRun尚缺；规划单文档义务提取和多材料冲突判断两形态，共同机制不新增固定家族。本提案最多14真实请求、只冻结的新合成材料read、不加权限/写入/部署，全部待批准且接口未实现；旧42/84仅接入/权限对照、当前预算0。本轮不LIVE/models/CI/push，未把提案当实测。
