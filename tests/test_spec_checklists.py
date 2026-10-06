@@ -28,7 +28,7 @@ from sim2act.spec_checklists import CHECK, complete_checklist, source_checklist,
 from sim2act.tools import TOOLS
 
 ROOT = Path(__file__).resolve().parents[1] / "docs/evidence/noncsv-offline-implementation-20261006"
-FIXTURE = (ROOT / "independent-fixture.md").read_text()
+FIXTURE = (ROOT / "independent-fixture.md").read_bytes().decode("utf-8")
 GOLD = json.loads((ROOT / "independent-gold.json").read_text())
 
 
