@@ -280,3 +280,9 @@ E17精确终态：8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2普通push，CI3741521
 E18最终本地全PG352PASS/1WindowsSKIP/3旧警告155.54秒、SQLite332PASS/21PG平台SKIP/1旧警告55.92秒；13新项全两DB已过，独立13PASS、最终hash一致。源码925e560dc1a196c6c4747cb349d558156a721c0f普通push，精确ServerCI37416936441进行中；原AT05/V5/历史AT02差异为空，不提前记CI成功。
 
 E18精确终态：925e560dc1a196c6c4747cb349d558156a721c0f已普通push，[CI37416936441](https://github.com/T1doo/Sim2Act/actions/runs/37416936441)/job112117505998 completed/success2m47s，PG353PASS/0FAIL/0SKIP/1旧警告105.29秒；Setup/应用角色原生smoke/ruff/mypy20/Report/Cleanup全成功，server stopped。LinuxPG352PASS/1WindowsSKIP/3旧警告155.54秒，SQLite332PASS/21PG平台SKIP/1旧警告55.92秒；独立13PASS1warning4.57秒且3文件hash一致，未独立PG/aggregate/CI/browser。13新合成写项及100source/test/config hash/实际结果归档到docs/evidence/F2-preview-isolation-20261006；专用PG stop/remove，原work/V5/历史AT02/AT05不改。仅AT17_SYNTHETIC_FIXTURE PASS；正式AT17/发布、完整P-A/P-B/AT10/AT20/F1/Win11/保护浏览器仍OPEN或NOT_RUN，0LIVE/无导出/无安全绕过。本轮停止相邻功能扩张，下一真实决定/接入见F2/StageGateReview.md。文档收尾普通push不重复CI。
+
+## 2026-10-06 / E19事前：已认证内部工程入口
+
+基线b7895ea/925e560，正常origin fetch核对一致，正确/workspace/Sim2Act-pb。依据原F2T05/T08/T09，仅把已有可信只读内部Release→Instance→持久AppRun接入认证API及应用页；明确INTERNAL_ENGINEERING_ONLY，正式发布部署False。精确snapshot审批须页面显示回读冻结清单/检查/期限及指纹后显式确认；只读action与当前user/project/app授权保持，不新增/恢复Grant，无任意代码、外发或LIVE。新增实例同意图request_key幂等复用现表，不新增DDL；新运行复用持久worker及Run控制，结果版本/历史独立。
+
+冻结验收：无身份/跨owner/project/instance读取和变更拒绝、批准指纹/版本/到期/当前授权变化拒绝、重复创建/提交只有一个逻辑效果及异参数冲突、应用页切换时迟到响应不覆盖、重复点击busy、提交返回失败保留原键可恢复、取消返回不取消已接受后台、pause/cancel/resume及刷新重开当前历史。桌面/手机可读样式，受保护真实浏览器先核现工具正常途径，不可用保存实际错误；不--no-sandbox/改策略，DOM不是视觉验收。全SQLite/真实PG/精确源码ServerCI/普通devpush/证据与阶段门更新；原V5/AT02/AT05及初始work不改，0LIVE/无导出。该内部入口不是正式发布或完整F2/P-A/P-B签收。
