@@ -175,3 +175,7 @@ AT17只读sum不证明preview写隔离，保持OPEN直到受控写fixture真正�
 独立实际复现初版Literal/格式拒绝、未知call_id误SUCCEEDED、可改plan来源及output metadata、failure原始binding引用损坏foreign成功历史，均修复并持久负例；无法安全定位的原残留AppRun不猜修，读取拒绝边界保留。独立最终33PASS/4PGSKIP/1警告12.29秒，source/test hash核对，原AT05保留。主开发真PG定向35PASS/1警告31.11秒含4真实worker子进程：提交前/后os._exit与另进程恢复，hold时heartbeat/独立控制事务/暂停取消无追加；新补lease同fence过期及budget负例在完整aggregate。SQLite319PASS/20PG平台SKIP/3旧警告59.52秒，静态通过；完整PG/精确CI待核实。正式发布/部署关闭/模型0/AT17写隔离OPEN，其余阶段门保持。
 
 E17源码稳定后首轮完整真PG338PASS/1WindowsSKIP/3旧Starlette/Pydantic警告150.41秒，全部37新增用例包含4真实子进程；全SQLite319PASS/20平台PGSKIP/3旧警告59.52秒。补一项必要的最小PG角色直接enqueue binding/控制/resume/worker/result业务CRUD（先前子进程仅worker消费角色、enqueue为test-owner），以覆盖新表INSERT实际路径；源service不变。该新PG检查与最终完整aggregate/ServerCI另外核实，绝不合并猜数。
+
+## 2026-10-06 / E17精确Server终态交付
+
+源码8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2普通push，CI37415214667/job112112211461 completed/success（3m24s），PG340PASS/0FAIL/0SKIP/1旧Starlette warning128.36秒。38新内部项含4真实最低角色worker子进程与最低角色enqueue/控制/worker CRUD；原AT05逐字保留及完整实跑。Setup/binding表显式迁移/原生API-worker smoke/ruff/mypy20/Report/Cleanup全成功，server stopped。最终LinuxPG339PASS/1WindowsSKIP/2旧警告145.72秒、SQLite319PASS/21PG平台SKIP/2旧警告55.34秒；独立最终33PASS/5PGSKIP/1警告12.54秒，source/test hash与交付一致，未独立PG/CI。98源码/test/config/run/results已归档，专用PG stop/remove、原work/V5/AT02未改；文档普通push不重复CI。仅内部固定queue/reopen/lease/fencing/currentgateway/原子结果版本与安全恢复；关联损坏残留AppRun不猜修、指针改变保守拒绝、未知外部效果未恢复证明。正式发布/部署关闭、AT17受控写OPEN、完整P-A/P-B/AT10/F1/Win11/protected-browser不签收，模型0。

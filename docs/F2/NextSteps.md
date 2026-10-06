@@ -36,3 +36,7 @@ E16本地内部service：[范围与接口](InternalLifecycle.md)。不可变Rele
 E16终态：e029922/[CI37413258268](https://github.com/T1doo/Sim2Act/actions/runs/37413258268)SUCCESS/PG302PASS/0SKIP，新内部33项及原AT05完整覆盖；LinuxPG301PASS/1SKIP、SQLite286PASS/16SKIP，独立32PASS/1PGSKIP并关闭schema问题。[证据](../evidence/F2-internal-lifecycle-20261006/README.md)。本轮内部路径已交付，正式发布入口/真实部署未启用，原阶段门保留。后续按V5通用生命周期/数据与正式批准链逐阶段计划，不能将本切片扩大称整个P-B或发布完成。
 
 E17路线：在已验E16固定内部Release/Instance上接入既有持久worker；先冻结queue/reopen、lease/fencing、pause/cancel前置、进程重启恢复、当前grant、结果版本恰好追加一次和FAILED保留。短事务输入授权与原子结果提交，中间计算不占DB长锁；任何不明效果保守等待并保留取消意图。正式发布入口关闭，不追加CSV/Grant。AT17仍OPEN：只读sum不能证明预览写隔离，需要后续受控写fixture，不能借内部result账本签收该条。
+
+E17源码8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2已普通push；[持久内部AppRun接口与边界](PersistentAppRuns.md)、[证据](../evidence/F2-persistent-apprun-20261006/README.md)。首轮完整PG338PASS/1WindowsSKIP及4真实子进程、追加最低角色enqueue1PASS；最终38项aggregate/精确CI37415214667进行中。独立最终33PASS/5PGSKIP，未知门/来源metadata/失败绑定问题关闭。篡改到失去可信关联的原AppRun保留不可读QUEUED，不猜修；正式发布/部署/通用业务数据、AT17受控写隔离、完整P-A/P-B/AT10/F1/Win11/protected-browser仍后续原门，0模型。
+
+E17终态：8b14cee/[CI37415214667](https://github.com/T1doo/Sim2Act/actions/runs/37415214667)SUCCESS/PG340PASS/0SKIP，38新项含4真实worker子进程及最低角色enqueue/控制/worker CRUD；LinuxPG339PASS/1WindowsSKIP、SQLite319PASS/21PG平台SKIP，独立33PASS/5PGSKIP，source/test hash匹配。现固定内部Release/Instance可持久enqueue、重开、恢复、控制并原子产生新结果版本；该切片交付结束。[证据](../evidence/F2-persistent-apprun-20261006/README.md)。正式发布/部署、通用业务写/迁移、AT17受控preview写隔离、完整P-A/P-B/AT10/F1/Win11/protected-browser仍原规格后续，0LIVE；不堆CSV便利项、不把未知外部副作用合成注入称实际连接器恢复。

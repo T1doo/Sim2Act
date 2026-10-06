@@ -264,3 +264,11 @@ E12精确Server终态：d3de155ba23cd5ba824f10f398f34b25c76e1817已普通push；
 事前范围eaeb731，基线764a20f，正确/workspace/Sim2Act-pb/dev/f1-foundation。内部Release immutable snapshot/精确审批、复用既有runtime的独立instance、实际gateway+oracle新AppRun/结果版本与非破坏升级回退历史；五表显式Setup迁移，API/worker无DDL。无public发布/真实部署/newGrant/preview复制。独立复验schema两缺口关闭、原AT05测试逐字恢复；32新SQLitePASS/1PGSKIP，全SQLite286PASS/16SKIP/1警告42.21秒，静态通过。真PG聚合及普通push精确ServerCI待核实，不预写终态；真实0、视觉BLOCKED/F1/Win11/完整P-B/AT10未签收。
 
 E16精确终态：e029922794c9f9829ddb41bca0010aebc277e761普通push，CI37413258268/job112106185925 completed/success（3m26s），PG302PASS/0FAIL/0SKIP/1警告118.16秒。33新内部项及原AT05进程覆盖，Setup/五表显式迁移/最小业务CRUD角色/原生smoke/ruff/mypy19/Report/Cleanup全成功，server stopped。独立修复复验32PASS/1PGSKIP/1警告5.41秒/3源hash与交付一致，未独立执行PG/Windows/视觉；LinuxPG301PASS/1WindowsSKIP/2警告111.58秒，SQLite286PASS/16SKIP/1警告42.21秒。95源码/test/config/run/results归档，正确工作树、原work未改，合成PG stop/remove；实际断开通知后命令仍成功。仅内部Release/独立instance类型化结果数据/新AppRun及非破坏升级回退，无新增Grant/preview复制，正式发布/部署、完整P-B/AT10/F1/Win11/真实视觉未签收，模型0。文档普通push收尾不重复CI。
+
+## 2026-10-06 / E17持久内部AppRun源码及本地核查
+
+范围7e122c7，源码8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2普通push，正确/workspace/Sim2Act-pb，初始work树未改。复用现Run/Worker/lease/fencing/heartbeat，one binding表显式迁移，短事务取授权输入与原子结果提交、中间真实可信计算不持长锁。不同call_id未知不覆盖，失联cancel intent保持RECONCILING；结果版本+receipt+AppRun/Run原子，旧worker拒绝。固定旧Run调度envelope接受已存在appruntime格式，不新增grant/身份，旧F1签收/历史不变。
+
+开发初版独立实际复现并关闭未知门、可改source/metadata、raw失败绑定损坏foreign历史；原关联损坏无法安全修复明确保留、读取拒绝。独立最终33PASS/5PGSKIP/1警告12.54秒/源码hash一致，未独立PG/CI。主开发首轮PG338PASS/1WindowsSKIP/3警告150.41秒含4真实子进程；SQLite319PASS/20SKIP/3警告59.52秒；追加最低CRUD角色enqueue/控制/worker1PASS0.95秒。最后38项完整aggregate/精确CI37415214667进行中，不预写终态；静态ruff/mypy20/JS/diff通过。0LIVE/无导出，正式发布/部署关闭，AT17写隔离OPEN，完整P-A/P-B/AT10/F1/Win11/protected浏览器门保持。
+
+E17精确终态：8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2普通push，CI37415214667/job112112211461 completed/success（3m24s），PG340PASS/0FAIL/0SKIP/1旧警告128.36秒。38新内部项含4真实最低角色worker子进程、最低角色enqueue/控制/worker CRUD；原AT05逐字保留。Setup/binding表显式迁移/原生smoke/ruff/mypy20/Report/Cleanup全成功，server stopped。最终LinuxPG339PASS/1WindowsSKIP/2旧警告145.72秒、SQLite319PASS/21PG平台SKIP/2旧警告55.34秒；独立33PASS/5PGSKIP/1警告12.54秒且source/test指纹一致，未独立PG/CI。98源码/test/config/run/results已归档，初始work不改、合成PG stop/remove；文档收尾普通push不重复CI。仅固定内部AppRun的持久queue/lease/fencing/current授权/原子结果与安全恢复，失效关联残留不猜修、未知外部效果及通用业务写恢复不签收；AT17受控写OPEN，正式发布/部署/完整P-A/P-B/AT10/F1/Win11/保护浏览器不提升，真实0。
