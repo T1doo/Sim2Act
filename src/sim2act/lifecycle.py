@@ -140,7 +140,9 @@ def approval(c, user, aid, fp, kind, *, allow_consumed=False):
         raise DomainError("PERMISSION_DENIED")
     p = row["payload"]
     if (
-        row["kind"] != kind
+        not isinstance(p, dict)
+        or not {"kind", "approval_id", "principal_id", "project_id", "expires_at"} <= p.keys()
+        or row["kind"] != kind
         or p["kind"] != kind
         or p["approval_id"] != aid
         or p["principal_id"] != user
@@ -503,7 +505,32 @@ def compatible(old, new):
         )
 
 
-def prepare_switch(store, user, iid, target_id, expected_revision, limits):
+def switch_target(c, i, old, target):
+    if (
+        target["project_id"] != i["project_id"]
+        or target["snapshot"]["draft"]["id"] != i["source_app_id"]
+        or target["snapshot"]["draft"]["runtime_id"] != i["runtime_id"]
+    ):
+        raise DomainError(
+            "PERMISSION_DENIED", "Cannot switch another app/runtime into this instance"
+        )
+    compatible(old["snapshot"]["data_schema"], target["snapshot"]["data_schema"])
+    same_schema = target["snapshot"]["data_schema"] == old["snapshot"]["data_schema"]
+    old_version = old["snapshot"]["data_schema_version"]
+    target_version = target["snapshot"]["data_schema_version"]
+    if (same_schema and target_version != old_version) or (
+        not same_schema and target_version <= old_version
+    ):
+        raise DomainError("VERSION_CONFLICT", "Unknown data version transition")
+    records = data_rows(c, i["id"])
+    for record in records:
+        validate_value(target["snapshot"]["data_schema"], record["data"], "retained_data")
+    return records
+
+
+def prepare_switch(
+    store, user, iid, target_id, expected_revision, limits, *, expected_target_fingerprint=None
+):
     with store.tx() as c:
         pid = c.execute(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
@@ -513,25 +540,12 @@ def prepare_switch(store, user, iid, target_id, expected_revision, limits):
         target = read_release(store, c, user, target_id, limits)
         if i["revision"] != expected_revision:
             raise DomainError("VERSION_CONFLICT")
+        records = switch_target(c, i, old, target)
         if (
-            target["project_id"] != pid
-            or target["snapshot"]["draft"]["id"] != i["source_app_id"]
-            or target["snapshot"]["draft"]["runtime_id"] != i["runtime_id"]
+            expected_target_fingerprint is not None
+            and target["fingerprint"] != expected_target_fingerprint
         ):
-            raise DomainError(
-                "PERMISSION_DENIED", "Cannot switch another app/runtime into this instance"
-            )
-        compatible(old["snapshot"]["data_schema"], target["snapshot"]["data_schema"])
-        same_schema = target["snapshot"]["data_schema"] == old["snapshot"]["data_schema"]
-        old_version = old["snapshot"]["data_schema_version"]
-        target_version = target["snapshot"]["data_schema_version"]
-        if (same_schema and target_version != old_version) or (
-            not same_schema and target_version <= old_version
-        ):
-            raise DomainError("VERSION_CONFLICT", "Unknown data version transition")
-        records = data_rows(c, iid)
-        for record in records:
-            validate_value(target["snapshot"]["data_schema"], record["data"], "retained_data")
+            raise DomainError("VERSION_CONFLICT", "Selected target fingerprint changed")
         return new_approval(
             c,
             user,
@@ -550,6 +564,79 @@ def prepare_switch(store, user, iid, target_id, expected_revision, limits):
         )
 
 
+def require_switch_payload(p):
+    if (
+        not {
+            "instance_id",
+            "from_release_id",
+            "target_release_id",
+            "target_fingerprint",
+            "revision",
+            "data_version",
+            "data_fingerprint",
+            "grant_version",
+        }
+        <= p.keys()
+    ):
+        raise DomainError("VERSION_CONFLICT", "Incomplete switch approval")
+    ids = ["instance_id", "from_release_id", "target_release_id"]
+    hashes = ["target_fingerprint", "data_fingerprint", "grant_version"]
+    if (
+        any(type(p[k]) is not str or not 1 <= len(p[k]) <= 100 for k in ids)
+        or any(
+            type(p[k]) is not str
+            or len(p[k]) != 64
+            or any(x not in "0123456789abcdef" for x in p[k])
+            for k in hashes
+        )
+        or any(
+            type(p[k]) is not int or p[k] < minimum
+            for k, minimum in [("revision", 1), ("data_version", 0)]
+        )
+    ):
+        raise DomainError("VERSION_CONFLICT", "Invalid switch approval shape")
+
+
+def inspect_switch_approval(store, user, iid, aid, limits):
+    with store.tx() as c:
+        pid = c.execute(
+            select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
+        ).scalar()
+        store.lock_project(c, user, pid)
+        row = (
+            c.execute(select(internal_approvals).where(internal_approvals.c.id == aid))
+            .mappings()
+            .first()
+        )
+        if not row or row["principal_id"] != user or row["project_id"] != pid:
+            raise DomainError("PERMISSION_DENIED")
+        a = approval(c, user, aid, row["fingerprint"], "switch")
+        p = a["payload"]
+        require_switch_payload(p)
+        if p["instance_id"] != iid:
+            raise DomainError("PERMISSION_DENIED")
+        i, old = instance(store, c, user, iid, limits, lock=True)
+        target = read_release(store, c, user, p["target_release_id"], limits)
+        records = switch_target(c, i, old, target)
+        if (
+            i["revision"] != p["revision"]
+            or i["release_id"] != p["from_release_id"]
+            or i["data_version"] != p["data_version"]
+            or target["fingerprint"] != p["target_fingerprint"]
+            or grant_version(c, pid, user) != p["grant_version"]
+            or fingerprint([dict(x) for x in records]) != p["data_fingerprint"]
+        ):
+            raise DomainError("VERSION_CONFLICT", "Switch preconditions changed")
+        return {
+            **dict(a),
+            "retained_records": len(records),
+            "from_schema_version": old["snapshot"]["data_schema_version"],
+            "target_schema_version": target["snapshot"]["data_schema_version"],
+            "data_preserved": True,
+            "new_grants": False,
+        }
+
+
 def commit_switch(store, user, approval_id, exact_fp, limits):
     with store.tx() as c:
         pid = c.execute(
@@ -558,6 +645,14 @@ def commit_switch(store, user, approval_id, exact_fp, limits):
         store.lock_project(c, user, pid)
         a = approval(c, user, approval_id, exact_fp, "switch")
         p = a["payload"]
+        require_switch_payload(p)
+        instance_project = c.execute(
+            select(internal_instances.c.project_id).where(
+                internal_instances.c.id == p["instance_id"]
+            )
+        ).scalar()
+        if instance_project != pid:
+            raise DomainError("PERMISSION_DENIED", "Approval project differs from instance")
         i, old = instance(store, c, user, p["instance_id"], limits, lock=True)
         target = read_release(store, c, user, p["target_release_id"], limits)
         if (
@@ -569,7 +664,7 @@ def commit_switch(store, user, approval_id, exact_fp, limits):
             or fingerprint([dict(x) for x in data_rows(c, i["id"])]) != p["data_fingerprint"]
         ):
             raise DomainError("VERSION_CONFLICT", "Switch preconditions changed")
-        compatible(old["snapshot"]["data_schema"], target["snapshot"]["data_schema"])
+        switch_target(c, i, old, target)
         history = [
             *i["history"],
             {

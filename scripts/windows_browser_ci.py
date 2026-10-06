@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import copy
 import ctypes
 import hashlib
 import json
@@ -15,12 +16,14 @@ from pathlib import Path
 import httpx
 import psutil
 import uvicorn
+from sqlalchemy import select, update
 
+from sim2act import lifecycle
 from sim2act.api import create_app
 from sim2act.apps import create_csv_draft
 from sim2act.config import Settings
 from sim2act.contracts import Limits
-from sim2act.db import Store
+from sim2act.db import Store, fingerprint, internal_approvals
 from sim2act.process_env import system_environment
 from sim2act.worker import Worker
 
@@ -115,6 +118,8 @@ def main():
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--worker-once", action="store_true")
     parser.add_argument("--audit", type=Path)
+    parser.add_argument("--incompatible-release", type=str)
+    parser.add_argument("--next-short-switch-ttl", action="store_true")
     args = parser.parse_args()
     if os.name != "nt":
         raise SystemExit("Actual Windows required; no platform substitution")
@@ -123,7 +128,43 @@ def main():
         print(json.dumps(audit_processes(json.loads(args.audit.read_text()))))
         return
     store, settings = fixture(root)
+    info_path = root / "info.json"
+    if args.next_short_switch_ttl or args.incompatible_release:
+        assert info_path.exists() and store.test_only
+        if args.next_short_switch_ttl:
+            (root / "short-switch-ttl.json").write_text('{"fixture_only":true}')
+            return
+        limits = Limits(**{key: getattr(settings, key) for key in Limits.model_fields})
+        user = store.authenticate("synthetic-browser-A")
+        with store.tx() as c:
+            release = lifecycle.read_release(store, c, user, args.incompatible_release, limits)
+        schema = copy.deepcopy(release["snapshot"]["data_schema"])
+        schema["properties"]["release_ref"] = {"type": "string"}
+        schema["required"].append("release_ref")
+        draft = release["snapshot"]["draft"]
+        a = lifecycle.prepare_release(store, user, draft["id"], draft["fingerprint"], limits,
+                                      {"column": "amount"}, data_schema=schema, data_schema_version=2)
+        bad = lifecycle.commit_release(store, user, a["id"], a["fingerprint"], limits)
+        print(json.dumps({"id": bad["id"], "fingerprint": bad["fingerprint"]}))
+        return
     if args.serve:
+        original = lifecycle.new_approval
+        def fixture_approval(c, user, pid, kind, payload):
+            receipt = original(c, user, pid, kind, payload)
+            marker = root / "short-switch-ttl.json"
+            if kind == "switch" and marker.exists():
+                # One owned synthetic approval gets a narrowed TTL before its first receipt.
+                # Production lifetime/clock/CSP/routes remain unchanged.
+                assert store.test_only and json.loads(marker.read_text())["fixture_only"] is True
+                marker.unlink()
+                row = c.execute(select(internal_approvals).where(internal_approvals.c.id == receipt["id"])).mappings().one()
+                p = dict(row["payload"])
+                p["expires_at"] = time.time()+3
+                fp = fingerprint(p)
+                c.execute(update(internal_approvals).where(internal_approvals.c.id == receipt["id"]).values(payload=p, expires_at=p["expires_at"], fingerprint=fp))
+                receipt["fingerprint"] = fp
+            return receipt
+        lifecycle.new_approval = fixture_approval
         info = json.loads((root / "info.json").read_text())
         uvicorn.run(create_app(store, settings), host="127.0.0.1", port=info["port"], access_log=False)
         return

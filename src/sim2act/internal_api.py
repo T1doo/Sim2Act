@@ -37,6 +37,12 @@ class AppRunInput(InstanceInput):
     input: dict
 
 
+class SwitchInput(Strict):
+    target_release_id: str = Field(min_length=1, max_length=100)
+    expected_target_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_revision: int = Field(ge=1)
+
+
 class ControlInput(Strict):
     command: str = Field(pattern=r"^(pause|cancel|resume)$")
     version: int = Field(ge=1)
@@ -175,6 +181,27 @@ def mount(app, store, limits, identity):
             release_fingerprint=release["fingerprint"],
             runs=[app_jobs.inspect_job(store, user, rid) for rid in ids],
         )
+
+    @app.post("/api/internal/instances/{iid}/switch-approvals", status_code=201)
+    def prepare_switch(iid: str, body: SwitchInput, user=user_dependency):
+        return lifecycle.prepare_switch(
+            store,
+            user,
+            iid,
+            body.target_release_id,
+            body.expected_revision,
+            limits,
+            expected_target_fingerprint=body.expected_target_fingerprint,
+        )
+
+    @app.get("/api/internal/instances/{iid}/switch-approvals/{aid}")
+    def inspect_switch(iid: str, aid: str, user=user_dependency):
+        return envelope(**lifecycle.inspect_switch_approval(store, user, iid, aid, limits))
+
+    @app.post("/api/internal/instances/{iid}/switch-approvals/{aid}/commit")
+    def switch(iid: str, aid: str, body: ApprovalInput, user=user_dependency):
+        lifecycle.inspect_switch_approval(store, user, iid, aid, limits)
+        return envelope(**lifecycle.commit_switch(store, user, aid, body.fingerprint, limits))
 
     @app.post("/api/internal/instances/{iid}/runs", status_code=202)
     def enqueue(iid: str, body: AppRunInput, user=user_dependency):

@@ -16,7 +16,7 @@ const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.code || data.detail?.[0]?.msg || "请求失败");
+  if (!response.ok) {const error=new Error(data.error?.code || data.detail?.[0]?.msg || "请求失败");error.detail=data.error?.message;error.httpStatus=response.status;throw error;}
   return data;
 }
 const safe = (fn) => async (event) => { event?.preventDefault(); $("error").textContent = ""; try {await fn(event);} catch (e) {$("error").textContent = e.message;} };

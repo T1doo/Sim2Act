@@ -104,6 +104,11 @@ async function layout(page, label) {
   await activePage.locator('#internal-controls button').filter({hasText:'暂停'}).click();
   await until(activePage, () => engineering.run?.status === "PAUSED" && !engineering.busy);
   check('real pause persisted and resume control rendered', await activePage.locator('#internal-controls button').filter({hasText:'继续'}).isVisible());
+  await activePage.locator('#internal-controls button').filter({hasText:'继续'}).click();
+  await until(activePage, () => engineering.run?.status === "QUEUED" && !engineering.busy);
+  check('real resume command persists queued status before pause/cancel', (await activePage.locator('#internal-run-detail').innerText()).includes('QUEUED'));
+  await activePage.locator('#internal-controls button').filter({hasText:'暂停'}).click();
+  await until(activePage, () => engineering.run?.status === "PAUSED" && !engineering.busy);
   await activePage.locator('#internal-controls button').filter({hasText:'取消'}).click();
   await until(activePage, () => engineering.run?.status === "CANCELLED" && !engineering.busy);
   check('cancel persists terminal status and explicit cancel intent', (await activePage.locator('#internal-run-detail').textContent()).includes('"cancel_intent": true'));
@@ -128,14 +133,90 @@ async function layout(page, label) {
     return {status:r.status,sum:r.result?.sum,version:r.result_version};
   }, {first,accepted});
   check('authenticated current Run readback succeeds without model', runRead.status==='SUCCEEDED' && runRead.sum==='40' && runRead.version===1);
+  const originalRelease = await activePage.evaluate(()=>engineering.instance.release_id);
+  let retainedBefore = await activePage.evaluate(()=>({data:engineering.instance.data,runs:engineering.instance.runs}));
+  // A second compatible immutable Release is created through the existing manual UI.
+  await activePage.locator('#internal-prepare').click();
+  await activePage.locator('#internal-approval').waitFor({state:'visible'});
+  await idle(activePage);
+  await activePage.locator('#internal-approval-ack').check();
+  await activePage.locator('#internal-commit').click();
+  await until(activePage,()=>engineering.releases.length===2 && !engineering.busy);
+  const targetRelease = await activePage.evaluate(old=>engineering.releases.find(r=>r.id!==old).id,originalRelease);
+  // Refresh the selected instance to acquire its target options without default approval.
+  await activePage.locator('#internal-refresh').click();await idle(activePage);
+  check('switch target and acknowledgement have no default selection', await activePage.locator('#internal-switch-target').inputValue()==='' && !(await activePage.locator('#internal-switch-ack').isChecked()));
+  const switchUrl = `${base}/api/internal/instances/${first}/switch-approvals`;
+  let posted=0;
+  activePage.on('request',request=>{if(request.url()===switchUrl && request.method()==='POST')posted++;});
+  // Delay delivery only after the real server accepted the approval. Cancel/return cannot repaint it.
+  let unblock, acceptedPrepare;
+  const received = new Promise(resolve=>{acceptedPrepare=resolve;});
+  const gate = new Promise(resolve=>{unblock=resolve;});
+  await activePage.route(switchUrl,async route=>{if(route.request().method()!=='POST')return route.continue();const response=await route.fetch();acceptedPrepare();await gate;await route.fulfill({response});});
+  await activePage.locator('#internal-switch-target').selectOption(targetRelease);
+  await activePage.locator('#internal-switch-prepare').click();await received;
+  await activePage.locator('#internal-switch-cancel').click();
+  await activePage.locator('#internal-back').click();unblock();
+  await activePage.unroute(switchUrl);
+  await activePage.locator('#app-list button').first().click();await idle(activePage);
+  await activePage.locator('#internal-instances button').first().click();await idle(activePage);
+  check('accepted late prepare cannot restore cancelled/returned approval', !(await activePage.locator('#internal-switch-approval').isVisible()) && await activePage.locator('#internal-switch-target').inputValue()==='');
+  await activePage.locator('#internal-switch-target').selectOption(targetRelease);
+  const beforePosts=posted;
+  await activePage.evaluate(()=>{document.querySelector('#internal-switch-prepare').click();document.querySelector('#internal-switch-prepare').click();});
+  await activePage.locator('#internal-switch-approval').waitFor({state:'visible'});await idle(activePage);
+  check('duplicate prepare click creates one request and exact data scope is rendered', posted-beforePosts===1 && (await activePage.locator('#internal-switch-summary').innerText()).includes('保留 1 条结果'));
+  check('switch requires fresh manual acknowledgement', await activePage.locator('#internal-switch-commit').isDisabled());
+  const approval=await activePage.evaluate(()=>({id:engineering.switchApproval.id,fingerprint:engineering.switchApproval.fingerprint}));
+  let commitPosts=0;activePage.on('request',r=>{if(r.url().endsWith(`/switch-approvals/${approval.id}/commit`))commitPosts++;});
+  await activePage.locator('#internal-switch-ack').check();
+  await activePage.evaluate(()=>{document.querySelector('#internal-switch-commit').click();document.querySelector('#internal-switch-commit').click();});
+  await until(activePage,id=>engineering.instance?.release_id===id && !engineering.busy,targetRelease);
+  check('compatible upgrade commits once and retains result and Run lineage', commitPosts===1 && await activePage.evaluate(before=>JSON.stringify(engineering.instance.data)===JSON.stringify(before.data) && JSON.stringify(engineering.instance.runs)===JSON.stringify(before.runs) && engineering.instance.revision===2,retainedBefore));
+  await activePage.locator('#internal-run-submit').click();
+  await until(activePage,()=>engineering.run?.status==='QUEUED' && !engineering.busy);
+  const upgradedRun=await activePage.evaluate(()=>engineering.run.id);
+  execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--worker-once'],{timeout:15000,stdio:'pipe'});
+  await activePage.locator('#internal-refresh').click();
+  await until(activePage,()=>engineering.instance?.data.length===2 && !engineering.busy);
+  check('new accepted worker Run pins upgraded Release and appends result v2',await activePage.evaluate(args=>engineering.instance.data[1].release_id===args.targetRelease && engineering.instance.data[1].version===2 && engineering.instance.runs.some(r=>r.id===args.upgradedRun && r.status==='SUCCEEDED' && r.release_id===args.targetRelease),{targetRelease,upgradedRun}));
+  retainedBefore=await activePage.evaluate(()=>({data:engineering.instance.data,runs:engineering.instance.runs}));
+  const consumed=await activePage.evaluate(async args=>{const r=await fetch(`/api/internal/instances/${args.first}/switch-approvals/${args.approval.id}/commit`,{method:'POST',headers:{Authorization:'Bearer synthetic-browser-A','Content-Type':'application/json'},body:JSON.stringify({fingerprint:args.approval.fingerprint})});return r.status;},{first,approval});
+  check('consumed exact switch approval cannot create a second history event',consumed===409);
+  await activePage.locator('#internal-switch-target').selectOption(originalRelease);
+  await activePage.locator('#internal-switch-prepare').click();await activePage.locator('#internal-switch-approval').waitFor({state:'visible'});await idle(activePage);
+  await activePage.locator('#internal-switch-ack').check();await activePage.locator('#internal-switch-commit').click();
+  await until(activePage,id=>engineering.instance?.release_id===id && engineering.instance.revision===3 && !engineering.busy,originalRelease);
+  check('compatible rollback retains exact data and three pointer history events',await activePage.evaluate(before=>JSON.stringify(engineering.instance.data)===JSON.stringify(before.data) && JSON.stringify(engineering.instance.runs)===JSON.stringify(before.runs) && engineering.instance.history.length===3,retainedBefore));
+  // Existing service creates a synthetic incompatible target, not a production fixture endpoint.
+  const bad=JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--incompatible-release',originalRelease],{encoding:'utf8',timeout:15000}));
+  await activePage.locator('#internal-refresh').click();await idle(activePage);
+  await activePage.locator('#internal-switch-target').selectOption(bad.id);
+  await activePage.locator('#internal-switch-prepare').click();await idle(activePage);
+  check('incompatible target has readable rejection and no approval/pointer change',(await activePage.locator('#internal-switch-status').innerText()).includes('Incompatible instance schema') && !(await activePage.locator('#internal-switch-approval').isVisible()) && await activePage.evaluate(()=>engineering.instance.revision===3));
+  // Explicit one-approval synthetic TTL fault before its first receipt; no production clock/lifetime override.
+  execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--next-short-switch-ttl'],{timeout:10000,stdio:'pipe'});
+  await activePage.locator('#internal-switch-target').selectOption(targetRelease);
+  await activePage.locator('#internal-switch-prepare').click();await activePage.locator('#internal-switch-approval').waitFor({state:'visible'});await idle(activePage);
+  const expired=await activePage.evaluate(()=>({id:engineering.switchApproval.id,fingerprint:engineering.switchApproval.fingerprint,expires_at:engineering.switchApproval.expires_at}));
+  await activePage.locator('#internal-switch-ack').check();
+  await until(activePage,()=>engineering.switchApproval.expires_at*1000<=Date.now() && document.querySelector('#internal-switch-commit').disabled);
+  const expiryResponse=await activePage.evaluate(async args=>{const r=await fetch(`/api/internal/instances/${args.first}/switch-approvals/${args.expired.id}/commit`,{method:'POST',headers:{Authorization:'Bearer synthetic-browser-A','Content-Type':'application/json'},body:JSON.stringify({fingerprint:args.expired.fingerprint})});return {status:r.status,text:await r.text()};},{first,expired});
+  check('expired synthetic TTL approval disabled in UI and exact server commit rejected',expiryResponse.status===409 && expiryResponse.text.includes('expired') && (await activePage.locator('#internal-switch-status').innerText()).includes('到期'));
+  result.expiryOracle={kind:'one owned synthetic approval TTL narrowed to 3 seconds before receipt',productionTTLSeconds:300,productionClockChanged:false,approval:expired,status:expiryResponse.status};
+  await activePage.locator('#internal-switch-cancel').click();
+  await activePage.locator('#internal-refresh').click();await idle(activePage);
+  check('refresh after rejected/expired intents preserves original release/data/history',await activePage.evaluate(args=>engineering.instance.release_id===args.originalRelease && engineering.instance.revision===3 && engineering.instance.history.length===3 && JSON.stringify(engineering.instance.data)===JSON.stringify(args.retainedBefore.data),{originalRelease,retainedBefore}));
   await layout(activePage, 'desktop');
   // Independent cold context, actual mobile viewport; not a physical phone/Win11.
   const mobile = await context({width:390,height:844});
   activePage = mobile.p;
   await login(activePage,'synthetic-browser-A');
   await activePage.locator('#internal-instances button').first().click();
-  await until(activePage,() => engineering.instance?.data.length === 1 && !engineering.busy);
+  await until(activePage,() => engineering.instance?.data.length === 2 && !engineering.busy);
   check('cold mobile context reads server result/history rather than JS memory', (await activePage.locator('#internal-data').innerText()).includes('40') && (await activePage.locator('#internal-runs').innerText()).includes('CANCELLED'));
+  check('cold mobile reads compatible upgrade/rollback history',await activePage.evaluate(()=>engineering.instance.revision===3 && engineering.instance.history.length===3) && (await activePage.locator('#internal-switch-history').innerText()).includes('revision 3'));
   await layout(activePage,'mobile');
   // Another instance remains independent; requests are rejected by existing real API.
   await activePage.locator('#internal-releases button').first().click();
@@ -163,6 +244,7 @@ async function layout(page, label) {
   check('cancelled history preserved after independent worker completion', retained.status==='CANCELLED' && retained.cancel_intent===true);
   // Expected 403 fetches are negative cases, not script/runtime failures.
   const expectedErrorUrls = new Set([base+'/favicon.ico', `${base}/api/internal/instances/${second}/runs/${accepted}`, `${base}/api/internal/instances/${first}`, `${base}/api/internal/instances/${first}/runs/${accepted}`, `${base}/api/internal/instances/${first}/runs/${accepted}/control-status`]);
+  expectedErrorUrls.add(switchUrl);expectedErrorUrls.add(`${switchUrl}/${approval.id}/commit`);expectedErrorUrls.add(`${switchUrl}/${expired.id}/commit`);
   result.unexpectedConsoleErrors = result.consoleErrors.filter(e=>e.kind==='pageerror' || !expectedErrorUrls.has(e.url));
   check('no browser script/runtime errors beyond recorded expected HTTP negatives', result.unexpectedConsoleErrors.length===0);
   result.status='PASS';

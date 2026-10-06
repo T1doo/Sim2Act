@@ -11,6 +11,8 @@ function engineeringStatus(view,text,state="") {
   $("internal-status").textContent=text;$("internal-status").dataset.state=state;
 }
 function clearInternal() {
+  if(engineering)clearSwitch(engineering);
+  $("internal-switch").hidden=true;$("internal-switch-history").replaceChildren();
   engineeringGeneration++;engineering=null;
   $("internal-panel").hidden=true;$("internal-approval").hidden=true;$("internal-approval-detail").textContent="";$("internal-approval-ack").checked=false;
   $("internal-status").textContent="";
@@ -19,6 +21,11 @@ function clearInternal() {
 }
 function engineeringButtons(view) {
   if(!engineeringCurrent(view))return;
+  const switchExpired=view.switchApproval && view.switchApproval.expires_at*1000<=Date.now();
+  $("internal-switch-prepare").disabled=!!view.busy || !view.instance || !$("internal-switch-target").value;
+  $("internal-switch-target").disabled=!!view.busy;
+  $("internal-switch-commit").disabled=!!view.busy || !view.instance || !view.switchApproval || switchExpired || !$("internal-switch-ack").checked;
+  if(switchExpired)$("internal-switch-status").textContent="批准已到期，请重新核查；不会自动重发确认。";
   $("internal-prepare").disabled=!!view.busy;
   $("internal-refresh").disabled=!!view.busy;
   $("internal-commit").disabled=!!view.busy || !view.approval || !$("internal-approval-ack").checked;
@@ -36,7 +43,7 @@ async function engineeringAction(view,fn) {
   finally {view.busy=false;engineeringButtons(view);}
 }
 async function openInternal(app,appGeneration) {
-  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0};
+  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null};
   engineering=view;$("apps").append($("internal-panel"));$("internal-panel").hidden=false;
   engineeringButtons(view);engineeringStatus(view,"正在读取内部版本与实例…","loading");
   try {await refreshInternal(view);}
@@ -46,6 +53,7 @@ async function refreshInternal(view=engineering) {
   if(!view || !engineeringCurrent(view))return;
   const [releases,instances]=await Promise.all([api(`/api/internal/apps/${view.app}/releases`),api(`/api/internal/apps/${view.app}/instances`)]);
   if(!engineeringCurrent(view))return;
+  view.releases=releases.items;
   $("internal-releases").replaceChildren(...releases.items.map(release=>row(`内部 Release ${release.id} · 指纹 ${release.fingerprint.slice(0,16)} · 正式发布关闭`,()=>engineeringAction(view,async()=>{
     const selection=view.instanceGeneration;
     let key=engineeringInstanceKeys.get(release.id);if(!key){key=crypto.randomUUID();engineeringInstanceKeys.set(release.id,key);}
@@ -65,13 +73,14 @@ async function refreshInternal(view=engineering) {
 }
 async function showInternalInstance(id,view=engineering) {
   if(!view || !engineeringCurrent(view))return;
+  clearSwitch(view);$("internal-switch").hidden=true;
   const selection=++view.instanceGeneration;view.runGeneration++;view.instance=null;view.run=null;
   $("internal-run-form").hidden=true;$("internal-controls").replaceChildren();$("internal-run-detail").textContent="";$("internal-run-status").textContent="正在读取实例…";$("internal-data").replaceChildren();$("internal-runs").replaceChildren();engineeringButtons(view);
   try {
     const instance=await api(`/api/internal/instances/${id}`);
     if(!engineeringCurrent(view) || selection!==view.instanceGeneration)return;
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
-    view.instance=instance;$("internal-instance-title").textContent=`内部实例 ${id}`;
+    view.instance=instance;renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
     $("internal-run-form").hidden=false;
@@ -95,6 +104,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
       if(!["GRANT_REVOKED","PERMISSION_DENIED"].includes(error.message))throw error;
       run=await api(`/api/internal/instances/${instance.id}/runs/${id}/control-status`);
       if(!current())return;
+      clearSwitch(view);$("internal-switch").hidden=true;
       $("internal-run-form").hidden=true;$("internal-retry").hidden=true;$("internal-new-intent").hidden=true;$("internal-data").replaceChildren();$("internal-runs").replaceChildren();
       engineeringStatus(view,"当前权限不允许读取内容；仅显示 owner 停止控制状态，不恢复授权。","error");
     }
@@ -163,3 +173,51 @@ setInterval(async()=>{
  const view=engineering;if(!view || !engineeringCurrent(view) || view.busy || !view.run || !view.instance)return;
  if(!["SUCCEEDED","FAILED","CANCELLED"].includes(view.run.status))await showInternalRun(view.run.id,view,view.instance);
 },2500);
+
+function clearSwitch(view) {
+  view.switchGeneration++;view.switchApproval=null;
+  $("internal-switch-approval").hidden=true;$("internal-switch-ack").checked=false;
+  $("internal-switch-detail").textContent="";$("internal-switch-summary").textContent="";
+  $("internal-switch-status").textContent="";$("internal-switch-target").value="";
+}
+function renderSwitch(view) {
+  $("internal-switch").hidden=false;
+  $("internal-switch-target").replaceChildren(new Option("请手动选择目标版本",""),...view.releases.filter(r=>r.id!==view.instance.release_id).map(r=>new Option(`${r.id} · schema v${r.snapshot.data_schema_version} · ${r.fingerprint.slice(0,16)}`,r.id)));
+  $("internal-switch-history").replaceChildren(...view.instance.history.map(h=>row(`revision ${h.revision} · ${h.previous_release_id || "初始版本"} → ${h.release_id} · ${h.kind || "create"}`)));
+}
+$("internal-switch-target").onchange=()=>{const view=engineering;if(!view)return;const value=$("internal-switch-target").value;clearSwitch(view);$("internal-switch-target").value=value;engineeringButtons(view);};
+$("internal-switch-ack").onchange=()=>{if(engineering)engineeringButtons(engineering);};
+$("internal-switch-cancel").onclick=()=>{const view=engineering;if(!view)return;clearSwitch(view);$("internal-switch-status").textContent="已取消本页选择；已被服务接受的切换仍可能完成，请重新读取历史确认。";engineeringButtons(view);};
+$("internal-switch-prepare").onclick=()=>engineeringAction(engineering,async()=>{
+  const view=engineering,instance=view.instance,target=view.releases.find(r=>r.id===$("internal-switch-target").value);
+  if(!instance || !target)return;
+  clearSwitch(view);$("internal-switch-target").value=target.id;
+  const generation=view.switchGeneration,selection=view.instanceGeneration;
+  const current=()=>engineeringCurrent(view) && selection===view.instanceGeneration && generation===view.switchGeneration && view.instance?.id===instance.id;
+  $("internal-switch-status").textContent="正在检查兼容性、当前权限和保留数据…";
+  try {
+    const prepared=await api(`/api/internal/instances/${instance.id}/switch-approvals`,"POST",{target_release_id:target.id,expected_target_fingerprint:target.fingerprint,expected_revision:instance.revision});
+    if(!current())return;
+    const detail=await api(`/api/internal/instances/${instance.id}/switch-approvals/${prepared.id}`);
+    if(!current())return;
+    if(detail.fingerprint!==prepared.fingerprint || detail.payload.instance_id!==instance.id || detail.payload.target_release_id!==target.id || detail.payload.target_fingerprint!==target.fingerprint)throw Error("切换批准绑定不一致");
+    view.switchApproval=detail;$("internal-switch-approval").hidden=false;
+    $("internal-switch-summary").textContent=`${detail.payload.from_release_id} → ${detail.payload.target_release_id} · revision ${detail.payload.revision} → ${detail.payload.revision+1} · schema ${detail.from_schema_version} → ${detail.target_schema_version} · 保留 ${detail.retained_records} 条结果，结果版本 ${detail.payload.data_version} 不变 · 不新增授权 · 到期 ${new Date(detail.expires_at*1000).toLocaleString()}`;
+    $("internal-switch-detail").textContent=JSON.stringify(detail,null,2);$("internal-switch-status").textContent="兼容性检查通过。请核对目标版本并手动确认。";
+  } catch(error){if(current())$("internal-switch-status").textContent=`核查拒绝：${error.detail || error.message}`;}
+});
+$("internal-switch-commit").onclick=()=>engineeringAction(engineering,async()=>{
+  const view=engineering,instance=view.instance,approval=view.switchApproval;
+  if(!instance || !approval || !$("internal-switch-ack").checked || approval.expires_at*1000<=Date.now())return;
+  const generation=view.switchGeneration,selection=view.instanceGeneration;
+  const current=()=>engineeringCurrent(view) && selection===view.instanceGeneration && generation===view.switchGeneration && view.instance?.id===instance.id;
+  // A consumed approval is never retried. Lost response must be resolved by history readback.
+  view.switchApproval=null;$("internal-switch-ack").checked=false;$("internal-switch-approval").hidden=true;engineeringButtons(view);
+  try {
+    const saved=await api(`/api/internal/instances/${instance.id}/switch-approvals/${approval.id}/commit`,"POST",{fingerprint:approval.fingerprint});
+    if(!current())return;
+    await showInternalInstance(instance.id,view);
+    if(engineeringCurrent(view) && view.instance?.id===instance.id)$("internal-switch-status").textContent=`已切换至 ${saved.release_id}，revision ${saved.revision}；数据与历史保留。`;
+  } catch(error){if(current())$("internal-switch-status").textContent=`确认结果待核对：${error.detail || error.message}。请重新读取历史；不自动重发批准。`;}
+});
+setInterval(()=>{if(engineering?.switchApproval)engineeringButtons(engineering);},500);

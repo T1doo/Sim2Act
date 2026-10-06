@@ -314,4 +314,24 @@ def test_pg_minimum_role_authenticated_internal_http(env, runtime_role):
         assert Worker(role_store, env[1], NoModel()).once()
         assert client.get(url).json()["status"] == "SUCCEEDED"
         assert client.get("/api/internal/instances/" + i["id"]).json()["data_version"] == 1
+        target, _, _ = release(role_env, aid, fp)
+        a = client.post(
+            f"/api/internal/instances/{i['id']}/switch-approvals",
+            json={
+                "target_release_id": target["id"],
+                "expected_target_fingerprint": target["fingerprint"],
+                "expected_revision": 1,
+            },
+        )
+        assert a.status_code == 201, a.text
+        switch_url = f"/api/internal/instances/{i['id']}/switch-approvals/{a.json()['id']}"
+        assert client.get(switch_url).json()["retained_records"] == 1
+        assert (
+            client.post(
+                switch_url + "/commit", json={"fingerprint": a.json()["fingerprint"]}
+            ).status_code
+            == 200
+        )
+        assert client.get("/api/internal/instances/" + i["id"]).json()["revision"] == 2
+        assert client.get("/api/internal/instances/" + i["id"]).json()["data_version"] == 1
     role_store.engine.dispose()
