@@ -25,3 +25,5 @@ API 统一沿用 Bearer 认证、同源限制、严格重复键 JSON/禁止额�
 受保护浏览器正常 CLI 首次 socket目录只读；官方 AGENT_BROWSER_SOCKET_DIR 指向本轮/tmp后，Chromium仍因系统SUID sandbox helper不正确而abort。没有采用--no-sandbox提示或修改系统策略。仅DOM/HTTP检查与手机CSS规则，不声称真实桌面/手机视觉通过。
 
 [本轮证据](../evidence/F2-internal-entry-20261006/README.md)。[原 V5 阶段门](StageGateReview.md)仍保留：F1/Win11/完整两路径与任务族、通用DAG/局部修改、正式发布/数据writer/迁移、受控外部在途效果核对及真实浏览器。内部工程入口现可实际使用，不等于放行正式发布。
+
+最终aaf07f49/[精确CI37419363378](https://github.com/T1doo/Sim2Act/actions/runs/37419363378)SUCCESS/PG372PASS0SKIP，API19项含最小CRUD角色、DOM/HTTP29项及独立复验归档。此入口不包括内部兼容升级/回退switch页面，也不启用正式部署。真实浏览器/手机视觉仍BLOCKED，首次本地AT05启动失败仍保留未定位，不改历史。

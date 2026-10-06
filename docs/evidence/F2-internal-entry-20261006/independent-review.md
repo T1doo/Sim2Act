@@ -14,3 +14,5 @@
 | tests/test_internal_api.py | 1529cb99759364efaf59b9d71acaf88dcc45adcc53592c21c34fd0b13da8c4ea |
 
 未独立执行PG、完整aggregate、CI或真实浏览器；Node脚本仅合成最小DOM。PG/CI由主开发另记录。不签收正式发布/完整P-A/P-B/F2或视觉。
+
+最终aaf07f4另对app.js通用showRun diff做只读静态复核：内部结果明确0模型/结果版本；回读和命令返回检查task/project/token/请求generation，无具体新增错误。SHA256 eff6180cea9e2a83cac7d0141efc0e0babca34c8f153fd678ebf6ebaa5e1aad9与主开发一致；未独立执行新增29DOM/PG/CI。前四文件hash保持最终复验值。

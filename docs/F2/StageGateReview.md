@@ -36,3 +36,5 @@ E18最终精确源码925e560dc1a196c6c4747cb349d558156a721c0f/[CI37416936441](ht
 ## E19 内部入口增量（仍非正式发布）
 
 依据持续开发授权，原F2T05/T08/T09现有只读service接入[认证API/UI](InternalEntry.md)：精确冻结snapshot批准、内部Release、独立instance结果版本/历史、持久AppRun及pause/cancel/resume/reopen。既有注册只读action/gateway，0LIVE/无新Grant/表，正式发布部署仍false。当前T05/T08表中“内部service”工程证据增加实际页面/API入口；正式发布入口/独立instance身份政策、通用writer与迁移仍未完成。27 actualHTTP/jsdom不替代真实浏览器/Win11视觉，AT22只增加固定只读链路工程子项，不签收完整AT22/F2。其他原门不提升；最终aggregate/精确CI另记本轮证据。
+
+E19精确源码aaf07f49b3d32eeb360d8cd60a52a4fad22959fd/[CI37419363378](https://github.com/T1doo/Sim2Act/actions/runs/37419363378)SUCCESS：PG372PASS/0SKIP；LinuxPG371PASS/1WindowsSKIP、SQLite350PASS/22SKIP；HTTP/jsdom29PASS，独立18PASS/1PGSKIP与UI竞态/最终mainJS静态。内部入口切片交付结束，正式发布部署false；兼容switch service尚未接页面，通用writer/迁移仍无。首轮AT05启动失败未定位、原记录保留，单独及完整重跑通过；protected-browser仍BLOCKED、Win11仍NOT_RUN。下一必要原规格接入/决定保持上述列表，不借工程总数签收。
