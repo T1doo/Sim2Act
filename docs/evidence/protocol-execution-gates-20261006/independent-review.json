@@ -1,0 +1,201 @@
+{
+  "stage": "Initial independent architecture review; new experiment/egress modules pending",
+  "head": "d64550772115d02c4e0dd744d5ef6e9efae474cd",
+  "snapshot_hashes": {
+    "src/sim2act/protocol_api.py": "7b41e8ac059d6b3e37bb4d033cfa66bf53132850dd693abda424cfda49f5f123",
+    "src/sim2act/model_budget.py": "a485c0106f3a569aea460bc91b70858004ce03bca35e17c2669fe10f5a34c56c",
+    "src/sim2act/model.py": "ec929951261e45019eecf397589b5fbbb6ce6dbc63ec8e07f82eda787be5559d",
+    "src/sim2act/worker.py": "ece7b0142531e99b6317f6d67b74e6b11130c7055929caeb2f6e427a58efd3e9",
+    "src/sim2act/protocol_pool.py": "a229be8a4a907ea26a59bc21f652b7aaf80fae6b95da844db65530058d957a86",
+    "src/sim2act/protocol_jobs.py": "4b673726a3562de471dff3af66db0f509b6e4d35c717cf27644ef4c10da643a0",
+    "src/sim2act/protocol_reviews.py": "3b2703c84c51689d3b3890cde380dcbf4d8bf3232ad05785009c30d9d2e5c6bc",
+    "src/sim2act/protocol_readiness.py": "6e392a031ba23703b2ffb96b55e9be7cad4d826057a47c7761651f1d1463cf90"
+  },
+  "scope": "Only offline execution gates, exactwire, globalbudget, source/evaluation/cold provenance. No product edit, network or LIVE.",
+  "key_interfaces": [
+    {
+      "id": "FINAL-WIRE",
+      "risk": "Validating an outbound projection but passing mutable messages/settings to the model causes checker/sender mismatch.",
+      "minimum": "One private complete serialized body including exact endpoint/model/messages/tools/stream/max_tokens; validation and immutable Experiment/Attempt/slot seals bind its bytes/hash. Actual MockTransport request.content matches; no alternate unlocked send entry."
+    },
+    {
+      "id": "GLOBAL-POOL",
+      "risk": "New per-experiment pools or controller reinitialization reset shared lifetime allowance.",
+      "minimum": "Experiment policy only tightens existing protocol14/64k global pool. Default0 and LIVE0 persist; experiment approval bool cannot activate transport. Missing or inconsistent ledgers refuse, never create replacements."
+    },
+    {
+      "id": "STAGE-ACCOUNTING",
+      "risk": "Per-sidecar stage/rate clocks are not cross-Run or process guarantees.",
+      "minimum": "Shared sealed family/phase counts3/1/3, token8k/24k, stage start/deadline and nextsend clock reserve/settle with Attempt+slot in same transaction. Check currentlease after lock waiting. Define full300secondwall versus dispatch gate. Known settlement+6 conservatively spaces one-inflight calls; unknown persists halt and never retries."
+    },
+    {
+      "id": "LOCKS",
+      "risk": "Experiment/pool row acquired before a dependency project/Run recreates actual prior deadlock.",
+      "minimum": "Respect established project→Run→quota→pool order throughout reserve/finish/control/recovery. New experiment lock requires one consistent placement and independent schedule oracle. All dependency/project/Run acquisition before shared pool; each expired Run separate committed transaction. Never hold DB locks over provider network."
+    },
+    {
+      "id": "PROVENANCE",
+      "risk": "Coherent mutable fingerprints can manufacture scope, stage, source or approval.",
+      "minimum": "Independent accepted controller seals anchor Experiment policy and phase/egress contract. Source/extract use-source, cold uses-cold registered role. Extract only sealed independently reviewed SUCCEEDED source in samefamily/currentgrant; cold only accepted plan plus freshmaterials. Recheck currentowner/grants/version/lease/fence at each stage and commit."
+    },
+    {
+      "id": "EVALUATION-EGRESS",
+      "risk": "Treating owner clicks/canonical template as semantic PASS or passing oldsource answers into cold.",
+      "minimum": "Private gold/checker remains separate from runtime generation. PARTIAL/UNKNOWN never source. Freeze source-evidence extraction projection; cold only current newmaterials and independently approved exactinstructions/schema, no oldoutput/proof/trace. Fixed public template is narrow engineered restriction, not generic semantic verification."
+    },
+    {
+      "id": "SAFE-METADATA",
+      "risk": "Error/report metadata can become a second outbound route for gold, private reasoning or source answers.",
+      "minimum": "Closed metadata/error projections with codes, fingerprints, sizes, count and stages; no gold/expectedoutput/rubric/rawbody/headers/credentials/private reasoning. Preserve safe persisted Attemptresponse policies."
+    }
+  ],
+  "acceptance_oracles": [
+    "Exactactual Mock wire bytes match accepted manifest and Attempt request fingerprint even under caller/authhook/settings mutation",
+    "Crossproject owner/current grant and phase-role negatives reject before dispatch",
+    "Shared lifetime lastslot competition and perstage/rate/deadline crossprocess assertions",
+    "Crash after DB STARTED, sidecarSTARTED beforetransport, duringtransport, afterresponse beforeDBfinish and afterfinish recover with no resend; true sendcount differs by window",
+    "Coherent mutable counter/policy/slot deletion and approval/source changes reject immutable anchors",
+    "Unknown/error paths persist globalhalt outside any rolledback failing transaction; actual overusage kept instead of capped/zeroed",
+    "Candidate/gold/private sentinel absent from actual source/extract/cold request bodies and metadata, with independently authored expectedwire projection"
+  ],
+  "verdict": "Conditional architecture acceptance for bounded offline implementation only; final new modules and their actual sender need independent review before signoff. Real provider remains blocked/default0. No new implementation reviewed in this report.",
+  "implementation_review": {
+    "stage": "Initial implemented modules; author fixes pending",
+    "observed_hashes": {
+      "protocol_experiment.py": "95aa9ab94f55d950c322bb64078914557a06be390eaa687c331c872a808fb169",
+      "protocol_egress.py": "a9b42fb47fcad27639d9b3c047b705b851cbc7be9abc985e0eade3ebaef0aa6c",
+      "model.py": "eaf2c280ce400344f1bfbf83adaf7f4ba34f763414cd2bb17d0411dd183a61fb",
+      "model_budget.py": "fc110f6e962dd29a5767fd9a15facdc5d567ccdf543ed80ab74a412cb5c2f94b",
+      "protocol_api.py": "50ed44a2cb5ee539d06f6477ffdf563c5ead3040cdc5f8bc5857c1c92af0f91a",
+      "protocol_pool.py": "078611ce07c1529ed40131292d683175bb097e4a34dcb0b378490db6ddc486de",
+      "worker.py": "8d3dd7d0768182e826828e2c51b84091dc02168c1fb310885c2cc52bbe91a5a8"
+    },
+    "actual_findings": [
+      {
+        "id": "RESERVATION-TIME-SPACING",
+        "status": "REPRODUCED; fix pending",
+        "actual": "Real Store reserve at synthetic1000; actual InternModel+MockTransport call1005 and known _record settle; next reserve/Mocksend1006 accepted. Requests1second apart despite promised6secondspacing. Pure offline hooks used, no protocolprojection/live bypass claimed.",
+        "minimum": "Use latest known completion/settlement+6 conservative send gate, or a robust actual-dispatch boundary serialized by DB. Validate with delayed reservation-to-send oracle."
+      },
+      {
+        "id": "EXPERIMENT-REVERSE-BIJECTION",
+        "status": "REPRODUCED; fix pending",
+        "actual": "After two known Attempts retaining original DB pool slots/Attempt ledgers, delete experiment SEND/SETTLED events and respective Attempt mirrors. inspect_experiment reports requests0 settled0 ACTIVE; third sameclock reservation accepted. Global DB14 cap not bypassed.",
+        "minimum": "Audit all bound Run slots/Attempts against complete experiment send/settlement facts in both directions. Explicitly allow only caller current new reservation before seal insertion; deleted historical facts halt and refuse."
+      },
+      {
+        "id": "BOUND-REVERSE-MEMBERSHIP",
+        "status": "REPRODUCED; fix pending",
+        "actual": "Fresh bound and claimed Run, delete only experiment BOUND event while keeping Run BINDING mirror. inspect returns bound_stages0; preflight raises raw IndexError on bound[lenadvanced]. No model requests, no claim send bypass; fail transaction does not persist STOP.",
+        "minimum": "Validate BOUND↔all Run BINDING for this experiment, and explicitly check current membership/length before indexing. Invalid ledger state yields typed error and persistentstop, never guess/rebuild."
+      },
+      {
+        "id": "EXPERIMENT-MARKER-STRIPPING",
+        "status": "REPRODUCED; fix pending",
+        "actual": "Fresh bound/claimed Run: remove OFFLINE_POOL GENESIS plus current Run BINDING while retaining experiment-id GENESIS and BOUND. is_experiment_run false; actual unpatched Worker.reserve succeeds and skips experiment hooks. Zero transport; old DBpool still accounts its slot.",
+        "minimum": "Central experiment marker oracle must recognize retained experiment-id origin, BOUND and SEND facts, and prohibit legacy fallback whenever experiment history exists. Broken binding rejects instead of granting legacy mode.",
+        "probe_note": "Initial fixture monkeypatch inserted an extra experimental reserve hook and artificially refused; undoing it before actual Worker.reserve reproduced true integration flaw. This is validation setup history, not contradictory product result."
+      },
+      {
+        "id": "DURABLE-WIRE-NUMERIC-SHAPE",
+        "status": "REPRODUCED; fix pending",
+        "observed_egress_hash": "2b35795f2b6d8d7ca6e5e5a6ff6cec31cde41e115613ebed6661e2bc807f7fd0",
+        "actual": "Actual first experiment source, projected publicwire, actual Worker.reserve creates STARTED Attempt/slot and PROTOCOL_WIRE_RESERVED. Wrong parameterSHA or wrong independent witnessSHA each refuses VERSION_CONFLICT with0Mocksend. Coordinated stored parameters.protocol_wire.bytes=int→equalfloat and witness.wire.bytes→equalfloat plus fence1→True accepted by Python dict equality; actual InternModel.request_serialized sends1Mock request. Body stays original whitelist; no network/secret/data leak claimed.",
+        "minimum": "Canonical fingerprint strict comparison for parameters wire object and own full witness list, including numeric types; permanent float/bool negatives.",
+        "script": "independent-wire-probes.py --assert-closed"
+      }
+    ],
+    "other_static_observations": [
+      "Exact outbound projection validates original messages against trusted accepted state then deepcopies whitelist. Extract omits oldsource answer/trace, instead instructs provider to return fixed publiccandidate unchanged; this is fixedtemplate engineering, not learned reusable task inference.",
+      "Cold re-reads current authorized new binding contents via VERIFIED operations, complete canonicalcandidate required; no sourceanswer freefields forwarded.",
+      "Sender passes bytes content with no second JSON encoding; provider captures wireguard and verifies identity after authorization, actual httpx Request checked just before send. Tests should cover metadata value and credential mutation without logging secrets.",
+      "Existing lock sequence hooks use already owned project/Run/pool and acquire no dependency Run; outbound validator reads dependencies before DBreserve, wireguard reauth uses transactions outside network call.",
+      "Experiment _records SQL has no order_by for bound/advanced events although _state treats their returned list position as stage order. Recommend deterministic ordinal-based sorting and duplicate ordinal strict validation; not reproduced as current test failure."
+    ],
+    "independent_script": "independent-experiment-probes.py with --assert-closed for later closure; no URLs/material/credentials emitted",
+    "external_provider_calls": 0,
+    "verdict": "See final_review: all five independently reproduced implementation findings closed by final independent replay. Prior stage failure facts retained, not current blockers.",
+    "closure_round1": {
+      "experiment_hash": "bbfa1df9c8e55b2bd1502ad6757408d995fda4258e6a6ff42d8c0570e0a452b9",
+      "egress_hash": "15e13495f20be028f9e78a38f2e6532a3bf9591c9a9a0f02ad1e33c34fb7084b",
+      "actual_result": "Both original independent-experiment-probes.py --assert-closed probes PASS (spacing, deleted_events)",
+      "changes_observed": "Last known settlement+6 conservative gate, boundRun slot↔SEND reverse membership and actual finaldispatch ownSTARTED/STOP/deadline gate",
+      "remaining": "Third BOUND reverse membership bug not yet closed; not final implementation acceptance"
+    },
+    "closure_round2": {
+      "experiment_hash": "f6c6025667d5541647ab9b54143be4b6ad5f85e35098dc47e6fe707584aff42d",
+      "actual_result": "Four original independent probes all CLOSED; fresh binding/markers probes undo fixture shim and use actual Worker integration. BOUND preflight typed rejection also checked durable STOP event.",
+      "static_changes": "Deterministic ordinal/stage sort; finite/strict stage clock checks; reverse BINDING membership and central all-experiment-traces fallback oracle"
+    },
+    "auth_metadata_probe": "Current BudgetedProvider settings identity pin rejects synthetic authorization callback replacing credential with source-answer sentinel;0Mocksend. This is a passing negative, not a reproduced vulnerability.",
+    "focused_regression": "sender+experiment+egress48PASS,1dependency warning,17.60s; collection before later durablewire tests/changes, not current final aggregate."
+  },
+  "final_review": {
+    "status": "No remaining concrete blocking finding within independently reviewed bounded offline execution-gate scope",
+    "source_hashes": {
+      "src/sim2act/protocol_experiment.py": "f6c6025667d5541647ab9b54143be4b6ad5f85e35098dc47e6fe707584aff42d",
+      "src/sim2act/protocol_egress.py": "9f5952a8414b3046e1c137b5ac1af43a1e49965f67c09d944c38664f87f10619",
+      "src/sim2act/model.py": "285194c1466f0d01a51df3501f0c5e7c92a522c105d99547798cf584a2c16674",
+      "src/sim2act/model_budget.py": "3307a57bfe01248d3a209b3c6cfd90f95d05b788266c373ea3691fcd9ba50688",
+      "src/sim2act/protocol_api.py": "50ed44a2cb5ee539d06f6477ffdf563c5ead3040cdc5f8bc5857c1c92af0f91a",
+      "src/sim2act/protocol_pool.py": "078611ce07c1529ed40131292d683175bb097e4a34dcb0b378490db6ddc486de",
+      "src/sim2act/worker.py": "989ac77a5c5cb1c40be0b1c92be7251e41240cb63341dbc44ad0a5e144a138e9",
+      "scripts/protocol-store-dryrun.py": "50aa296d50e74f0424aab8f4ad615c0ab5bf41d7c56021446b44ff53f5b53e66",
+      "tests/test_protocol_gated_execution.py": "1940d229b48ec2c0cffb50914aa3b9829ac113178d1075d14812a4554d2814f7"
+    },
+    "hash_stability": "Seven core source files identical before and after final independent probes/typedwire/budget sender tests; dryrun hash recorded final only. Prior intermediate hashes/results retained.",
+    "closed_finding_ids": [
+      "RESERVATION-TIME-SPACING",
+      "EXPERIMENT-REVERSE-BIJECTION",
+      "BOUND-REVERSE-MEMBERSHIP",
+      "EXPERIMENT-MARKER-STRIPPING",
+      "DURABLE-WIRE-NUMERIC-SHAPE"
+    ],
+    "actual_final_checks": [
+      {
+        "script": "independent-experiment-probes.py --assert-closed",
+        "results": [
+          "spacing CLOSED",
+          "deleted_events CLOSED",
+          "binding CLOSED (typed error and durableSTOP checked)",
+          "markers CLOSED (actual Worker without fixture shim)"
+        ]
+      },
+      {
+        "script": "independent-wire-probes.py --assert-closed",
+        "results": [
+          "parameters CLOSED_0SEND",
+          "witness CLOSED_0SEND",
+          "coherent_float_bool CLOSED_0SEND"
+        ],
+        "boundary": "Real InternModel.request_serialized plus MockTransport, valid projected public wire and actual STARTED slot+Attempt. Refusal happens before transport."
+      },
+      {
+        "suite": "test_protocol_gated_execution.py -k durable_wire_tamper",
+        "result": "3PASS30deselected,1 dependency warning,1.58s",
+        "scope": "All three permanent parameters/witness/coherent type attack cases; other selected file modules excluded by -k, not claimed run here."
+      },
+      {
+        "suite": "tests/test_model_budget.py tests/test_protocol_sender.py",
+        "result": "26PASS,1 dependency warning,1.25s",
+        "scope": "Synthetic settings/transport/auth metadata freeze, serialized exact sender and budget gates; zero-network local"
+      }
+    ],
+    "static_final_observations": [
+      "Actual sender receives frozen bytes and validates exact final Request without reconstructing JSON; BudgetedProvider pins Settings identity, transport, wireguard and exact privately frozen Authorization. No credential values logged/read from environment by this reviewer.",
+      "Full wire SHA/byte/character facts stored atomically with original Attempt/slot reservation and independently witnessed event; final sender checks actual own STARTED identity and canonical parameter/witness fingerprints, rejecting bool/float substitutions.",
+      "Known settlement+6 is conservative experiment-wide spacing; stage cap/count/token/order policy and deadlines persist across Run events; malformed or stripped stage markers fail closed, no legacy protocol fallback.",
+      "Forward/reverse stage bindings and slot-send records checked; deterministic bound/advanced ordering; unknown Attempt retains original budget and shared halt. No erase/refill/resend interface.",
+      "Dependencies acquire project/Run before shared pool; experiment reserve/settle hooks operate inside current transaction, no network in DB transaction. Independent PG lock/concurrency full execution remains parent responsibility.",
+      "Extract uses a versioned public candidate template and fixed DAG rules, omits previous source answer/trace/proof/tokens. This template echo is explicit bounded engineering, not genuine model-generated reuse or semantic/general P-B proof.",
+      "Owner acceptance does not independently prove model semantics; registered private synthetic evaluation is separate. Source/cold actual authorization and registered phase roles remain mandatory. Default experiment0 and LIVE0 unchanged."
+    ],
+    "limits": [
+      "Only local SQLite, actual MockTransport and synthetic credentials; no LIVE/provider network/push/CI/nativebrowser",
+      "Earlier48 focused regression corresponds prefinal collector; final new wire3 and budget sender26 are separate scopes",
+      "This report does not claim final allsuitePG/Windows/runtime/native renderer or general semantic acceptance; those results must be recorded independently",
+      "No assertion budget request count or known usages imply monetary cost or actual model quality",
+      "Original five actual findings and intermediate validation fixture mistake/shim artifact facts remain in implementation_review; their historical pending labels are original-stage status, current state is this final_review"
+    ]
+  }
+}

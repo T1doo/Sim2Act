@@ -43,3 +43,5 @@ oracle、项目协议入口和双形态零网络预演。文件 sidecar 按 Run/
 5. 汇总真实usage/未知/介入/失败及清理。两形态P-B实验成功也不替代P-A、Win11/F1/完整AT02/正式发布或完整V5签收，不加部署。
 
 本轮代码使真正provider可注入的最小协议不再停留在方案，未声称现产品端到端语义已完成；上述可信持久源/调度接线和用户审批为下一真实执行阻塞。
+
+2026-10-06 bounded controller update: `protocol_experiment.py` now enforces a sealed six-stage cross-Run identity and shared settlement clock; `protocol_egress.py` plus serialized Intern sender validate the full actual envelope and durable wire seals. Prior statements that these two offline gates are missing describe the earlier snapshot. The gated offline executable package and exact remaining production-activation code boundary are documented in `ProtocolExecutionGatesPlan.md` and `../evidence/protocol-execution-gates-20261006/README.md`. LIVE remains0; fixed public-template extraction is not real learned-reuse/owner-semantic acceptance.

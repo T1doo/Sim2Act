@@ -242,7 +242,9 @@ def require_pool(store, pool_id):
         raise error
 
 
-def reserve_slot(store, c, run, fence, attempt_id, reserved_tokens, request_fingerprint):
+def reserve_slot(
+    store, c, run, fence, attempt_id, reserved_tokens, request_fingerprint, *, clock=None
+):
     """Called within Worker.reserve: slot+Attempt+context commit atomically."""
     job = (
         c.execute(select(protocol_jobs).where(protocol_jobs.c.run_id == run["id"]))
@@ -326,6 +328,10 @@ def reserve_slot(store, c, run, fence, attempt_id, reserved_tokens, request_fing
             version=pool["version"] + 1,
         )
     )
+    from .protocol_experiment import is_experiment_run, reserve_in_tx
+
+    if is_experiment_run(c, run["id"]):
+        reserve_in_tx(store, c, run, fence, attempt_id, clock=clock)
 
 
 def finish_slot(store, c, run, fence, attempt_id, status, usage, safe_response):

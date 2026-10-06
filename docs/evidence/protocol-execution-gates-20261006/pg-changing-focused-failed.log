@@ -1,0 +1,388 @@
+........F..............................................F...              [100%]
+=================================== FAILURES ===================================
+_ test_two_forms_real_worker_review_sequence_global_clock_and_shared_pool[False] _
+
+wired = ((<sim2act.db.Store object at 0x7fce5b417fe0>, 'user_f0faf48bbc8f46b4a814fb62381f3531', 'proj_400f60e2f9f5467f9d037ef6...ted_at': 1791312913.636938, 'error': None, ...}, <sim2act.protocol_api.ProtocolAttemptRunner object at 0x7fce5b45b050>)
+wrong_source = False
+
+    @pytest.mark.parametrize("wrong_source", [False, True])
+    def test_two_forms_real_worker_review_sequence_global_clock_and_shared_pool(wired, wrong_source):
+        import json
+        from pathlib import Path
+    
+        from sim2act.protocol_jobs import inspect, process_job
+        from sim2act.protocol_readiness import candidate_for
+        from sim2act.protocol_reviews import contract_snapshot, evaluation_contract, review
+    
+        env, ticks, eid, first, first_adapter = wired
+        store, user, pid, a, b, worker, tmp = env
+        material_root = (
+            Path(__file__).parents[1] / "docs/evidence/model-protocol-preparation-20261006/materials"
+        )
+        refs = {"a-source": [a], "a-cold": [b]}
+        for package in ("b-source", "b-cold"):
+            refs[package] = [
+                store.resource(
+                    user, pid, package + name, "txt", (material_root / package / name).read_text()
+                )
+                for name in ("request.txt", "rules.txt")
+            ]
+        seen = []
+    
+        def execute(run, stage, replies):
+            requests = factory_for(env, replies, stage)
+            factory = worker.protocol_runner_factory
+    
+            def timed_factory(worker, run, snapshot):
+                if run["id"] == first["id"]:
+                    import httpx
+    
+                    adapter = first_adapter  # Reuse existing unsent ledger, never reset it.
+                    pending = list(replies)
+    
+                    def original(request):
+                        requests.append(json.loads(request.content))
+                        return httpx.Response(200, json=pending.pop(0))
+                else:
+                    adapter = factory(worker, run, snapshot)
+                    original = adapter.provider.model.transport.handler
+                transport = adapter.provider.model.transport
+    
+                def response(request):
+                    result = original(request)
+                    ticks[0] += 7  # Explicit synthetic server clock, shared across all six jobs.
+                    return result
+    
+                transport.handler = response
+                original_call = adapter.call
+    
+                def scheduled_call(messages, tools):
+                    ticks[0] += 7  # Conservative six seconds AFTER prior settlement.
+                    return original_call(messages, tools)
+    
+                adapter.call = scheduled_call
+                return adapter
+    
+            worker.protocol_runner_factory = timed_factory
+            process_job(worker, run)
+            seen.extend(requests)
+            return inspect(store, user, run["id"])
+    
+        def accepted(rid, result, contract_id):
+            decision = review(
+                store,
+                user,
+                rid,
+                {
+                    "contract_id": contract_id,
+                    "expected_result_fingerprint": result["result_fingerprint"],
+                    "expected_fence": result["fence"],
+                    "expected_version": result["version"],
+                    "request_key": "accept-" + rid,
+                },
+            )
+            assert decision["decision"] == "PASS"
+            advance(store, user, eid, rid, clock=lambda: ticks[0])
+            return inspect(store, user, rid)
+    
+        def queued(phase, payload, key):
+            rid = enqueue(store, user, pid, phase, payload, key, LIMITS)["run_id"]
+            bind_run(store, user, eid, rid, clock=lambda: ticks[0])
+            claimed = store.claim(worker.id, worker.s.lease_seconds)
+            assert claimed["id"] == rid
+            return claimed
+    
+        for family in ("a", "b"):
+            source_id = f"protocol.synthetic.{family}-source.v1"
+            cold_id = f"protocol.synthetic.{family}-cold.v1"
+            contract = evaluation_contract(source_id)[0]
+            source = (
+                first
+                if family == "a"
+                else queued(
+                    "source",
+                    {
+                        "contract_id": source_id,
+                        "goal": contract["public_goal"],
+                        "inputs": contract["expected_inputs"],
+                        "resource_ids": refs[family + "-source"],
+                    },
+                    "source-b",
+                )
+            )
+            read = wire(rid=refs[family + "-source"][0])
+            read["choices"][0]["message"]["tool_calls"] = [
+                {
+                    "id": "read-" + str(i),
+                    "type": "function",
+                    "function": {
+                        "name": "resource.read",
+                        "arguments": json.dumps({"resource_id": rid}),
+                    },
+                }
+                for i, rid in enumerate(refs[family + "-source"])
+            ]
+            result = execute(
+                source,
+                "source_" + family,
+                [read, wire({"wrong": True} if wrong_source else contract["expected_output"])],
+            )
+            assert result["status"] == "WAITING_APPROVAL", result
+            if wrong_source:
+                verdict = review(
+                    store,
+                    user,
+                    source["id"],
+                    {
+                        "contract_id": source_id,
+                        "expected_result_fingerprint": result["result_fingerprint"],
+                        "expected_fence": result["fence"],
+                        "expected_version": result["version"],
+                        "request_key": "fail-review",
+                    },
+                )
+                assert verdict["decision"] == "FAIL"
+                with pytest.raises(DomainError):
+                    advance(store, user, eid, source["id"], clock=lambda: ticks[0])
+                assert inspect_experiment(store, user, eid)["status"] == "STOPPED"
+                assert inspect_experiment(store, user, eid)["requests"] == 2
+                return
+            source_result = accepted(source["id"], result, source_id)
+            extraction = queued(
+                "extract",
+                {
+                    "source_run_id": source["id"],
+                    "expected_source_fingerprint": source_result["result_fingerprint"],
+                },
+                "extract-" + family,
+            )
+            extracted = execute(
+                extraction,
+                "extract_" + family,
+                [wire(candidate_for(contract_snapshot(source_id), refs[family + "-source"]))],
+            )
+            assert extracted["status"] == "SUCCEEDED"
+            advance(store, user, eid, extraction["id"], clock=lambda: ticks[0])
+            plan = extracted["result"]["compiled_plan"]
+            cold_contract = evaluation_contract(cold_id)[0]
+            cold = queued(
+                "cold",
+                {
+                    "extraction_run_id": extraction["id"],
+                    "expected_plan_fingerprint": plan["plan_fingerprint"],
+                    "inputs": cold_contract["expected_inputs"],
+                    "resource_bindings": {
+                        f"material_{i}": rid for i, rid in enumerate(refs[family + "-cold"])
+                    },
+                    "contract_id": cold_id,
+                },
+                "cold-" + family,
+            )
+            pending = execute(cold, "cold_" + family, [wire(cold_contract["expected_output"])])
+            assert pending["status"] == "WAITING_APPROVAL"
+>           accepted(cold["id"], pending, cold_id)
+
+tests/test_protocol_experiment.py:360: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_protocol_experiment.py:262: in accepted
+    advance(store, user, eid, rid, clock=lambda: ticks[0])
+src/sim2act/protocol_experiment.py:577: in advance
+    return inspect_experiment(store, user, eid)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/protocol_experiment.py:584: in inspect_experiment
+    policy, bound, advanced, sends, settled, stopped = _state(c, eid)
+                                                       ^^^^^^^^^^^^^^
+src/sim2act/protocol_experiment.py:212: in _state
+    return _read_state(c, eid, pending_attempt_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = <sqlalchemy.engine.base.Connection object at 0x7fce5ab6ea20>
+eid = 'experiment_acb5074cebc64f4aaa31432dcf34e08c', pending_attempt_id = None
+
+    def _read_state(c, eid, pending_attempt_id=None):
+        origin = _records(c, eid, GENESIS)
+        mirror = [v for v in _records(c, OFFLINE_POOL, GENESIS) if v.get("experiment_id") == eid]
+        if len(origin) != 1 or mirror != origin:
+            raise DomainError("VERSION_CONFLICT", "Experiment controller identity missing or changed")
+        policy = origin[0]
+        expected = {
+            "namespace": VERSION,
+            "experiment_id": eid,
+            "principal_id": policy.get("principal_id"),
+            "project_id": policy.get("project_id"),
+            "request_key": policy.get("request_key"),
+            "pool_id": OFFLINE_POOL,
+            "pool_policy_fingerprint": policy.get("pool_policy_fingerprint"),
+            "request_limit": policy.get("request_limit"),
+            "order": ORDER,
+            "stage_caps": CAPS,
+            "stage_token_caps": TOKENS,
+            "spacing_seconds": 6,
+            "stage_seconds": 300,
+            "mode": "offline",
+            "live_enabled": False,
+        }
+        if (
+            fingerprint(policy) != fingerprint(expected)
+            or type(policy["request_limit"]) is not int
+            or not 0 <= policy["request_limit"] <= 14
+        ):
+            raise DomainError("VERSION_CONFLICT")
+        pool = c.execute(select(pools).where(pools.c.id == OFFLINE_POOL)).mappings().one()
+        if policy["pool_policy_fingerprint"] != pool["policy_fingerprint"]:
+            raise DomainError("VERSION_CONFLICT")
+        bound, advanced = _records(c, eid, BOUND), _records(c, eid, ADVANCED)
+        if len(bound) > 6 or len(advanced) > len(bound):
+            raise DomainError("VERSION_CONFLICT")
+        for i, binding in enumerate(bound):
+            if binding["stage"] != ORDER[i] or binding["ordinal"] != i:
+                raise DomainError("VERSION_CONFLICT")
+            mirrors = _records(c, binding["run_id"], BINDING)
+            if mirrors != [{**binding, "experiment_id": eid}]:
+                raise DomainError("VERSION_CONFLICT", "Run experiment binding changed")
+        actual_bindings = list(
+            c.execute(
+                select(events.c.data).where(
+                    events.c.kind == BINDING,
+                    events.c.data["value"]["experiment_id"].as_string() == eid,
+                )
+            ).scalars()
+        )
+        expected_bindings = [
+            {
+                "value": {**v, "experiment_id": eid},
+                "fingerprint": fingerprint({**v, "experiment_id": eid}),
+            }
+            for v in bound
+        ]
+        if sorted(fingerprint(v) for v in actual_bindings) != sorted(
+            fingerprint(v) for v in expected_bindings
+        ):
+            raise DomainError("VERSION_CONFLICT", "Actual Run bindings lack experiment forward seals")
+        if len({v["run_id"] for v in bound}) != len(bound):
+            raise DomainError("VERSION_CONFLICT")
+        for i, record in enumerate(advanced):
+            if record["run_id"] != bound[i]["run_id"] or record["stage"] != ORDER[i]:
+>               raise DomainError("VERSION_CONFLICT")
+E               sim2act.errors.DomainError: VERSION_CONFLICT
+
+src/sim2act/protocol_experiment.py:141: DomainError
+____ test_expired_scan_releases_pool_before_next_project_and_generic_claim _____
+
+recovery_context = <isolated PostgreSQL recovery context>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fce59377cb0>
+
+    def test_expired_scan_releases_pool_before_next_project_and_generic_claim(
+        recovery_context, monkeypatch
+    ):
+        ctx = recovery_context
+        store = ctx.store
+        response = ctx.client.post(
+            f"/api/projects/{ctx.project}/protocol/source", json=body(ctx.fixture)
+        )
+        assert response.status_code == 202
+        expired_a = response.json()["run_id"]
+        project_b = ctx.client.post("/api/projects", json={"name": "other lock project"}).json()["id"]
+        resource_b = ctx.client.post(
+            f"/api/projects/{project_b}/resources",
+            json={"name": "lock-policy", "format": "txt", "content": MATERIAL.read_text()},
+        ).json()["id"]
+        fixture_b = (*ctx.fixture[:5], project_b, resource_b)
+        response = ctx.client.post(f"/api/projects/{project_b}/protocol/source", json=body(fixture_b))
+        assert response.status_code == 202
+        expired_b = response.json()["run_id"]
+        # Recovery sorts projects. Put the active reservation in its second project
+        # regardless of random IDs, so the first recovery can actually hold the pool.
+        active_fixture = fixture_b if project_b > ctx.project else ctx.fixture
+        active_project = active_fixture[5]
+        response = ctx.client.post(
+            f"/api/projects/{active_project}/protocol/source",
+            json=body(active_fixture, request_key="active-reservation"),
+        )
+        assert response.status_code == 202
+        active_id = response.json()["run_id"]
+        owned = [store.claim("worker-" + str(i), 60) for i in range(3)]
+        active = next(value for value in owned if value["id"] == active_id)
+        with store.tx() as c:
+            c.execute(update(runs).where(runs.c.id.in_([expired_a, expired_b])).values(lease_until=0))
+    
+        worker = Worker(store, ctx.settings, NoProvider())
+        reached = threading.Event()
+        proceed = threading.Event()
+        backend_pid = []
+        trace = []
+        gated = False
+        original_reserve = protocol_pool.reserve_slot
+        original_audit = protocol_recovery._pool_state
+    
+        def reserve(*args):
+            connection = args[1]
+            backend_pid.append(connection.execute(text("select pg_backend_pid()")).scalar_one())
+            trace.append("reserve holds project B / active Run / quota")
+            reached.set()
+            assert proceed.wait(10), "Recovery did not reach pool lock"
+            return original_reserve(*args)
+    
+        def audit(*args):
+            nonlocal gated
+            value = original_audit(*args)
+            if gated:
+                return value
+            gated = True
+            trace.append("expired A recovery holds pool")
+            proceed.set()
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                with store.engine.connect() as observer:
+                    wait = observer.execute(
+                        text("select wait_event_type from pg_stat_activity where pid=:pid"),
+                        {"pid": backend_pid[0]},
+                    ).scalar()
+                if wait == "Lock":
+                    trace.append("reservation waits on pool")
+                    break
+                time.sleep(0.01)
+            else:
+                pytest.fail("Actual reservation did not contend on recovery's pool lock")
+            return value
+    
+        monkeypatch.setattr(protocol_pool, "reserve_slot", reserve)
+        monkeypatch.setattr(protocol_recovery, "_pool_state", audit)
+        context = copy.deepcopy(active["context"])
+        context["messages"] = [{"role": "user", "content": "offline lock probe"}]
+        read_tools = [tool for tool in definitions() if tool["function"]["name"] == "resource.read"]
+    
+        def sender():
+            try:
+                worker.reserve(active_id, active["fence"], context, request_tools=read_tools)
+                return "RESERVED"
+            except DBAPIError as exc:
+                return ("DATABASE_ERROR", getattr(exc.orig, "sqlstate", None))
+    
+        def scanner():
+            try:
+                assert store.claim("expired-scanner", 30) is None
+                return "SCAN_FINISHED"
+            except DBAPIError as exc:
+                return ("DATABASE_ERROR", getattr(exc.orig, "sqlstate", None))
+    
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            sent = pool.submit(sender)
+>           assert reached.wait(10), "Reservation did not reach project/Run/quota locks"
+E           AssertionError: Reservation did not reach project/Run/quota locks
+E           assert False
+E            +  where False = wait(10)
+E            +    where wait = <threading.Event at 0x7fce593d91c0: unset>.wait
+
+tests/test_protocol_recovery_concurrency.py:134: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_protocol_experiment.py::test_two_forms_real_worker_review_sequence_global_clock_and_shared_pool[False]
+FAILED tests/test_protocol_recovery_concurrency.py::test_expired_scan_releases_pool_before_next_project_and_generic_claim
+2 failed, 57 passed, 1 warning in 116.54s (0:01:56)

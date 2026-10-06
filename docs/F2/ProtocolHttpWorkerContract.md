@@ -124,3 +124,11 @@ The DB total is shared, but six-stage/time policy remains per sidecar. The unifo
 experiment identity, exact sender projection and owner approval are still missing.
 See [scope and checks](ProtocolExecutionReadinessPlan.md) and
 [evidence](../evidence/protocol-egress-readiness-20261006/README.md).
+
+## Bounded experiment controller integration (2026-10-06)
+
+Controller-only initialize/bind/advance on the fixed DB pool adds sealed events without new tables. Initialization defaults0; offline controller demonstration may tighten the existing shared14/64000 allowance. Run→stage→Attempt→slot→completewire witnesses are checked bidirectionally; any retained experiment trace prevents downgrade to a legacy sender. Source/cold require separate persisted registered checker acceptance before advance, while owner acceptance remains PENDING. Unknown stops globally; no refill or resend.
+
+Worker reserve commits experiment SEND and completewire SHA256/byte/character witnesses with the actual Attempt/slot. Current result settlement commits in the existing adapter transaction. Reserve and actual transport both enforce last known settlement+6 and300second stage bound. The actual sender uses frozen checkedbytes, performs a strict metadata and current-state guard directly before client.send, and validates type-sensitive durablewire seals. Cold has only newmaterials; fixed extract public projection excludes the previous answer and evaluator metadata.
+
+These hooks are offline/test-only. Production LIVE remains forbidden in HTTP/worker, with pool0; a separately authorized production controller binding an owner-approved exactspec is still required to execute real requests. See the bounded package evidence for exact code boundary rather than interpreting a synthetic checker PASS as permission to send.

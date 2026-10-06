@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import signal
 import threading
@@ -24,19 +25,25 @@ from .tools import definitions, dispatch
 
 
 class Worker:
-    def __init__(self, store, settings, model=None, *, protocol_runner_factory=None):
+    def __init__(
+        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None
+    ):
         self.store, self.s = store, settings
         self.id = new_id("worker")
         self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
         if protocol_runner_factory is not None and (not store.test_only or settings.mode != "mock"):
             raise DomainError("PERMISSION_DENIED", "Protocol injection is test-only and offline")
         self.protocol_runner_factory = protocol_runner_factory
+        if protocol_clock is not None and (not store.test_only or settings.mode != "mock"):
+            raise DomainError("PERMISSION_DENIED", "Synthetic protocol clock is test-only")
+        self.protocol_clock = protocol_clock
         self.stop = threading.Event()
 
     def reserve(self, run_id, fence, context, *, request_tools=None):
         s = self.s
         protocol_request = request_tools is not None
         request_tools = definitions() if request_tools is None else request_tools
+        wire_seal = None
         # Conservative byte envelope, not a claim of actual tokenizer usage.
         envelope = (
             len(
@@ -49,22 +56,23 @@ class Worker:
         if protocol_request:
             import httpx
 
-            envelope = (
-                len(
-                    httpx.Request(
-                        "POST",
-                        "https://offline.invalid",
-                        json={
-                            "model": s.model,
-                            "messages": context["messages"],
-                            "tools": request_tools,
-                            "stream": False,
-                            "max_tokens": s.max_output_tokens,
-                        },
-                    ).content
-                )
-                + s.max_output_tokens
-            )
+            serialized = httpx.Request(
+                "POST",
+                "https://offline.invalid",
+                json={
+                    "model": s.model,
+                    "messages": context["messages"],
+                    "tools": request_tools,
+                    "stream": False,
+                    "max_tokens": s.max_output_tokens,
+                },
+            ).content
+            wire_seal = {
+                "sha256": hashlib.sha256(serialized).hexdigest(),
+                "bytes": len(serialized),
+                "characters": len(serialized.decode("utf-8")),
+            }
+            envelope = len(serialized) + s.max_output_tokens
         with self.store.tx() as c:
             if protocol_request:
                 owner = (
@@ -129,6 +137,7 @@ class Worker:
                     fingerprint(
                         {"messages": context["messages"], "tools": request_tools, "model": s.model}
                     ),
+                    **({"clock": self.protocol_clock} if self.protocol_clock is not None else {}),
                 )
             c.execute(
                 insert(reservations).values(
@@ -158,9 +167,17 @@ class Worker:
                                 "model": s.model,
                             }
                         ),
+                        **({"protocol_wire": wire_seal} if wire_seal is not None else {}),
                     },
                 )
             )
+            if wire_seal is not None:
+                self.store.event(
+                    c,
+                    run_id,
+                    "PROTOCOL_WIRE_RESERVED",
+                    {"attempt_id": aid, "fence": fence, "wire": wire_seal},
+                )
             context["requests"] += 1
             context["reserved_tokens"] += envelope
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))

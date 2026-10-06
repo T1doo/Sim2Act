@@ -196,6 +196,9 @@ def main():
     child_env.update({key: os.environ[key] for key in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA", "USERPROFILE"] if key in os.environ})
     api = None
     agent_api = None
+    protocol_api = None
+    protocol_root = root / "protocol"
+    protocol_root.mkdir()
     agent_root = root / "agent"
     agent_root.mkdir()
     (root / "agent-results.json").write_text(json.dumps({
@@ -209,6 +212,16 @@ def main():
         subprocess.run([sys.executable, "scripts/agent-ui/fixture.py", "--root", str(agent_root),
                         "--port", str(agent_port), "--action", "seed"], cwd=repo,
                        env={**child_env, "PYTHONPATH": "src"}, check=True, timeout=30)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            protocol_port = sock.getsockname()[1]
+        subprocess.run([sys.executable, "scripts/protocol-ui/fixture.py", "--root", str(protocol_root),
+                        "--port", str(protocol_port), "--action", "seed"], cwd=repo,
+                       env={**child_env, "PYTHONPATH": "src"}, check=True, timeout=30)
+        with (protocol_root / "api.log").open("wb") as log:
+            protocol_api = subprocess.Popen([sys.executable, "scripts/protocol-ui/fixture.py", "--root",
+                                             str(protocol_root), "--action", "serve"], cwd=repo,
+                                            env={**child_env, "PYTHONPATH": "src"}, stdout=log, stderr=log)
         with (root / "api.log").open("wb") as log:
             api = subprocess.Popen([sys.executable, __file__, "--root", str(root), "--serve"], cwd=repo, env=child_env, stdout=log, stderr=log)
         with (agent_root / "api.log").open("wb") as log:
@@ -217,10 +230,10 @@ def main():
                                          env={**child_env, "PYTHONPATH": "src"}, stdout=log, stderr=log)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            assert api.poll() is None and agent_api.poll() is None, "Synthetic API exited before readiness"
+            assert api.poll() is None and agent_api.poll() is None and protocol_api.poll() is None, "Synthetic API exited before readiness"
             try:
                 if all(httpx.get(f"http://127.0.0.1:{p}/health", timeout=1).status_code == 200
-                       for p in (port, agent_port)):
+                       for p in (port, agent_port, protocol_port)):
                     break
             except httpx.HTTPError:
                 pass
@@ -231,7 +244,7 @@ def main():
     finally:
         cleanup_error = None
         try:
-            for owned in (agent_api, api):
+            for owned in (protocol_api, agent_api, api):
                 try:
                     if owned is not None and owned.poll() is None:
                         owned.terminate()

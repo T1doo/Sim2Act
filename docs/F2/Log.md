@@ -187,3 +187,15 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 失败与混合快照保留：旧源历史限额回归、测试夹具两失败、oversized cold负例前置拒绝、原生浏览器失败；两次中途全量794/35不能作为最终冻结证据，其中一次other_run缺失造成负例虚假通过，已加真实fixture和严格ID oracle再完整重跑。最后发现真实cold/source角色隔离缺口，在三层修复并新增负例；旧全注册positive测试误将cold叫source，修正后152专项及799最终全量通过。无gold/PINS/AT02历史改写。
 
 LIVE工程仍未就绪：六阶段/时间策略尚为per-sidecar，缺sealed实验身份及DB全局时序；缺实际sender完整外发envelope验证、独立接受的cold instruction/source反馈投影，以及绑定预算/精确数据/provider/私有ledger路径的用户批准。generic continuation、真实语义、完整P-B/F1/AT02/正式Release均未提升。证据：docs/evidence/protocol-egress-readiness-20261006/final-validation.json、final-frozen-full.log及docs/evidence/protocol-ui-entry-20261006/final-frozen-http-dom.json。
+
+2026-10-06 持久实验时序与实际发送体门控本地闭合（baseline d64550772115d02c4e0dd744d5ef6e9efae474cd）。本轮最新授权仅本地工程、独立复核、隔离PG及protected Edge wiring准备；无LIVE、push、新CI或权限扩张。既有固定pool+sealed events实现两种形态的source→独立登记验收→extract→fresh cold有序六阶段，跨Run共享3/1/3、24k/8k/24k、14/64k、已知settlement后6秒、stage300秒策略；UNKNOWN全局STOP，无refill/retry/resend。新增表0、API DDL0，沿用既有显式迁移与业务CRUD角色。
+
+完整actual httpx Request字节冻结并校验endpoint/model/messages/tools/headers/max_tokens1024/streamfalse及8000字符/10000UTF8bytes。Attempt wire SHA/字节/字符与独立event seal同事务记录；实际发送前再核对当前STARTED/fence/lease/权限/版本/来源及typed fingerprint。extract仅public-read-interpret.v1固定公开模板和五项已核验回执，不带旧答案/输出/text/proof/usage、gold或rubric；这是固定模板工程，不证明真实模型提炼/通用P-B。正常8MockCalls/8Attempt/8slot/6VERIFIED Operation、6accepted stages；B来源失败6调用永久STOP。最大完整body5126字符/5218字节。真实provider请求0，生产LIVE额度0。
+
+独立复核五项实际缺陷（reserve-time间隔、SEND账本删除、BOUND删除异常、marker删除legacy降级、bool/float wire seal混淆）均保留原probe并闭合零发送负例。native夹具既有排队竞态以至多16次真实default Worker.once有界drain修正，四个Run自然WAITING_RESOURCE/0新增调用，不伪造终态。全PG首次886PASS/3SKIP/1FAIL保留：AT05暴露既有Linux启动cmdline瞬态空值与异常清理漏child；自有Popen负责退出/失败清理，strict identity+health仍须通过才保存，持久PID校验不变。独立真实子进程复现与四类永久负例、实际PG AT05+identity7PASS支持修复。
+
+最终894 collected：SQLite858PASS/36SKIP/0FAIL396.87秒；实际隔离PG17.11套件891PASS/3SKIP/0FAIL738.98秒。PG套件的env-backed路径含真实并发、进程crash/restart、业务CRUD最小角色及两种完整门控链；显式SQLite/Mock/JS模块仍为其原backend，不把891全部称PG。147源码/脚本/测试文件冻结前后SHA一致，4注册评估asset与baseline bytes一致；Ruff PASS、mypy34源文件PASS、Node2语法与源码/docs diff PASS。修复前完整及三组中止、夹具count断言失败、AT05复现均保留。旧wholeSQLite854/36是修复前证据，不替代最终858/36。
+
+protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/recover零发送已准备；沿用原browser sandbox/8emission names/permissions/150秒限时。新native Edge/Win11仍NOT_RUN，PNG NOT_REVIEWED；Windows/PG UI fixture跳过原因原样保留。本轮owned临时PG残schema1删除、role0，实测剩余schema/role0；服务器停止、私有URL文件移除，不触碰其他工作树/服务。
+
+剩余真实代码边界：offline/test-only initialize/egress/runner限制和LIVEpool0仍在，用户批准本身不能使当前CLI LIVE。至少还需消费authenticated owner-approved sealed14/provider/data/private-ledger规格并绑定既有LIVEpool/Run来源的可信production activation/controller，只有此获批模式可走相同门控，不refill或test injection。pending-14-request-proposal.json列出精确合成材料hash、provider/模型、预算/完整body/时序范围以及未解决的身份/ledger批准绑定；旧耗尽10和待批2/3均不增加额度。完整P-B、真实语义、generic continuation、F1/AT02/正式Release不提升。证据：docs/evidence/protocol-execution-gates-20261006/final-validation.json、两份final-frozen日志、source-freeze前后、独立review与owned-cleanup。只做本地提交，父线程另行决定CI。

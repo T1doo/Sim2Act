@@ -14,7 +14,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -142,7 +142,9 @@ class BudgetedProvider:
         self.model, self.path, self.scope, self.stage = model, Path(path), scope, stage
         self.authorize, self.clock = authorize, clock
         self.transport = model.transport
+        self.settings = model.settings
         self.last_response = None
+        self.wire_guard: Callable[[httpx.Request], None] | None = None
         self.require_scope(scope)
 
     def _load(self):
@@ -213,6 +215,7 @@ class BudgetedProvider:
         if (
             type(self.model) is not InternModel
             or self.model.transport is not self.transport
+            or self.model.settings is not self.settings
             or self.model.settings.model != "intern-s2"
             or self.model.settings.max_output_tokens != 1024
             or (
@@ -236,6 +239,12 @@ class BudgetedProvider:
             chars = len(body.decode("utf-8"))
         except (ValueError, TypeError, UnicodeError) as e:
             raise DomainError("INVALID_INPUT") from e
+        if self.wire_guard is not None:
+            self.wire_guard(
+                httpx.Request(
+                    "POST", ENDPOINT, content=body, headers={"Content-Type": "application/json"}
+                )
+            )
         return body, chars
 
     def _check_request(self, data, body, chars, reserve):
@@ -262,6 +271,7 @@ class BudgetedProvider:
             raise DomainError("PERMISSION_DENIED")
         if (
             self.model.transport is not self.transport
+            or self.model.settings is not self.settings
             or self.model.settings.model != "intern-s2"
             or self.model.settings.max_output_tokens != 1024
         ):
@@ -277,15 +287,30 @@ class BudgetedProvider:
 
     def call(self, messages, tools):
         self.last_response = None
+        wire_guard = self.wire_guard
         body, chars = self._request_body(messages, tools)
         # Private JSON copies break aliases to caller-owned input and authorization hooks.
         frozen = json.loads(body)
         messages, tools = frozen["messages"], frozen["tools"]
         reserve = len(body) + 1024
+
+        def actual_guard(request):
+            if (
+                wire_guard is None
+                or self.model.transport is not self.transport
+                or self.model.settings is not self.settings
+                or self.wire_guard is not wire_guard
+                or request.headers.get("authorization") != "Bearer " + self.settings.token
+            ):
+                raise DomainError("PERMISSION_DENIED", "Frozen provider metadata changed")
+            wire_guard(request)
+
         with _locked(self.path.with_suffix(".lock")):
             data = self._load()
             try:
                 self._check_request(data, body, chars, reserve)
+                if self.wire_guard is not wire_guard:
+                    raise DomainError("PERMISSION_DENIED", "Frozen wire validator changed")
             except DomainError:
                 if self.clock() - data["stage_started"][self.stage] > 300:
                     data["halted"] = True
@@ -304,7 +329,11 @@ class BudgetedProvider:
             data["reserved"] += reserve
             _save(self.path, data)  # Crash after this point consumes a slot, never resend.
             try:
-                raw = self.model.request(messages, tools)
+                raw = (
+                    self.model.request_serialized(body, actual_guard)
+                    if wire_guard is not None
+                    else self.model.request(messages, tools)
+                )
                 self.last_response = copy.deepcopy(raw)
                 require_returned_model(returned_model_identity("intern-s2", raw.get("model")))
                 usage = normalize_usage(raw)

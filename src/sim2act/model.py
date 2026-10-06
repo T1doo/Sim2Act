@@ -132,6 +132,33 @@ class InternModel:
         self.transport = transport
 
     def request(self, messages, tools):
+        if not self.settings.live_enabled or not self.settings.token:
+            raise DomainError(
+                "RESOURCE_UNAVAILABLE", "LIVE requires local token and approved finite budget"
+            )
+        try:
+            body = httpx.Request(
+                "POST",
+                "https://chat.intern-ai.org.cn/api/v1/chat/completions",
+                json={
+                    "model": self.settings.model,
+                    "messages": messages,
+                    "tools": tools,
+                    "stream": False,
+                    "max_tokens": self.settings.max_output_tokens,
+                },
+            ).content
+        except (ValueError, TypeError, UnicodeError) as exc:
+            raise DomainError("INVALID_INPUT", "Request envelope cannot be serialized") from exc
+        return self._request_serialized(body)
+
+    def request_serialized(self, body, wire_guard):
+        """Send exactly the checked bytes; never reconstruct a checked JSON envelope."""
+        if not isinstance(body, bytes) or not callable(wire_guard):
+            raise DomainError("PERMISSION_DENIED", "Frozen wire and validator required")
+        return self._request_serialized(body, wire_guard)
+
+    def _request_serialized(self, body, wire_guard=None):
         s = self.settings
         if not s.live_enabled or not s.token:
             raise DomainError(
@@ -143,17 +170,18 @@ class InternModel:
             with httpx.Client(
                 timeout=130, transport=self.transport, follow_redirects=False
             ) as client:
-                response = client.post(
+                request = client.build_request(
+                    "POST",
                     "https://chat.intern-ai.org.cn/api/v1/chat/completions",
-                    headers={"Authorization": "Bearer " + s.token},
-                    json={
-                        "model": s.model,
-                        "messages": messages,
-                        "tools": tools,
-                        "stream": False,
-                        "max_tokens": s.max_output_tokens,
+                    headers={
+                        "Authorization": "Bearer " + s.token,
+                        "Content-Type": "application/json",
                     },
+                    content=body,
                 )
+                if wire_guard is not None:
+                    wire_guard(request)
+                response = client.send(request)
                 if response.status_code == 429:
                     raise DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
                 if response.status_code != 200:

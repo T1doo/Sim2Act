@@ -71,6 +71,18 @@ def stop(records):
                     raise RuntimeError("Owned process did not stop")
 
 
+def stop_launched(children):
+    """Clean retained child handles even while startup argv is temporarily unavailable."""
+    for child in children:
+        if child.poll() is None:
+            child.terminate()
+        try:
+            child.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(timeout=5)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["doctor", "start", "status", "stop"])
@@ -124,6 +136,7 @@ def main():
                 raise SystemExit("Port occupied; no process started") from None
         data.mkdir(parents=True, exist_ok=True)
         launched = []
+        children = []
         try:
             for kind, command in [
                 (
@@ -154,6 +167,7 @@ def main():
                         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
                         start_new_session=os.name != "nt",
                     )
+                children.append(p)
                 launched.append(
                     {
                         "kind": kind,
@@ -164,11 +178,15 @@ def main():
                     }
                 )
             for _ in range(30):
-                if not all(process(r) for r in launched):
+                if any(child.poll() is not None for child in children):
                     raise RuntimeError("API/worker exited; inspect local logs")
                 try:
                     h = httpx.get(url + "/health", timeout=1).json()
-                    if h.get("worker") == "UP" and h.get("database") == "UP":
+                    if (
+                        h.get("worker") == "UP"
+                        and h.get("database") == "UP"
+                        and all(process(r) for r in launched)
+                    ):
                         break
                 except httpx.HTTPError:
                     pass
@@ -187,7 +205,7 @@ def main():
                 )
             )
         except BaseException:
-            stop(launched)
+            stop_launched(children)
             raise
 
 

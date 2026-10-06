@@ -1,0 +1,104 @@
+{
+  "scope": "Owned synthetic Python subprocess startup identity only; no PG connection, role/schema mutation, LIVE, credentials, or product edit.",
+  "source_sha256": "494fa852840657e603b8be6248e1c46240d4b0b26167d4da1a53d2d8eb2b386b",
+  "first_probe": {
+    "attempts": 150,
+    "false_live": [
+      {
+        "n": 4,
+        "j": 0,
+        "status": "running",
+        "ctime_delta": 0.0,
+        "argc": 0,
+        "command_match": false
+      },
+      {
+        "n": 4,
+        "j": 1,
+        "status": "running",
+        "ctime_delta": 0.0,
+        "argc": 0,
+        "command_match": false
+      },
+      {
+        "n": 4,
+        "j": 2,
+        "status": "running",
+        "ctime_delta": 0.0,
+        "argc": 0,
+        "command_match": false
+      },
+      {
+        "n": 55,
+        "j": 0,
+        "status": "running",
+        "ctime_delta": 0.0,
+        "argc": 0,
+        "command_match": false
+      },
+      {
+        "n": 55,
+        "j": 1,
+        "status": "running",
+        "ctime_delta": 0.0,
+        "argc": 0,
+        "command_match": false
+      },
+      {
+        "n": 55,
+        "j": 2,
+        "status": "running",
+        "ctime_delta": 0.0,
+        "argc": 0,
+        "command_match": false
+      }
+    ],
+    "exceptions": []
+  },
+  "eventual_identity_probe": {
+    "attempts": 34,
+    "witness": {
+      "initial": {
+        "running": true,
+        "status": "running",
+        "ctime_match": true,
+        "manager_denied": true,
+        "alive_before_wait": true
+      },
+      "eventual_command_match": true,
+      "eventual_manager_accepts": true,
+      "still_alive": true
+    }
+  },
+  "finding": "A live owned startup child can temporarily expose empty cmdline with exact create_time. process(record) returns None, which startup currently treats as exited. stop(records) uses same strict check and can skip such a still-live child. Parent actual AT05 trace independently captured empty argv at both startup and cleanup.",
+  "recommended_fix": [
+    "Retain original Popen handles for newly launched children. During bounded startup use poll() to identify actual exit.",
+    "Require strict process(record) identity AND existing health success before persisting PID records; transient unavailable identity may wait only within existing startup bound.",
+    "On launch/startup failure clean every retained Popen handle with terminate/wait/kill and reap; do not weaken persisted process(record) or stop ownership verification."
+  ],
+  "required_tests": [
+    "Transient empty cmdline recovers before health; success requires exact identity.",
+    "Persistent empty identity times out, persists no records, and reaps all owned children.",
+    "Nonempty wrong cmdline never permits persistence.",
+    "Any child actual exit fails and cleans other launched child."
+  ],
+  "limitations": [
+    "No fixed-source review or AT05 regression run yet.",
+    "Underlying Linux exec/loader reason for empty proc cmdline is not established; observed transient identity is sufficient concrete failure mechanism.",
+    "A first auxiliary stop probe lost the child after argv became readable and stop legitimately terminated it; post-stop NoSuchProcess was probe race, not product evidence.",
+    "Does not independently prove the full PG late role-missing symptom; parent captured actual startup/cleanup trace supplies that link."
+  ],
+  "source_hash_capture_note": "Initial report source_sha256 was captured after parent concurrently installed the fix, so it is not the reproduced baseline hash. Probe reproduction used unchanged strict process(record), which is identical in baseline and fixed source. Baseline exact HEAD bytes independently recovered below; original recorded value retained.",
+  "baseline_manage_sha256": "1bc1f7c2940665f82fd5214304a997fc49e542cc7a43761f1b81123f9c3a935d",
+  "final_fix_review": {
+    "manage_sha256": "494fa852840657e603b8be6248e1c46240d4b0b26167d4da1a53d2d8eb2b386b",
+    "tests_sha256": "f2586d186edeff0c240258121d133e08e1c37231ec4ef8f66c583b6c47a4ddd2",
+    "conclusion": "No blocking defect found in this narrow startup-identity fix. process(record) and persisted stop(records) unchanged. Cleanup uses only Popen instances created and retained by this launch; append precedes creation-time read, covering record-construction errors. No identity requirement, command comparison, kill permission, health condition, or startup poll count relaxed.",
+    "actual_test": "tests/test_process_identity.py: 6 passed, 1 dependency deprecation warning, 0.05s; includes four deterministic startup cases plus exact identity and AccessDenied tests.",
+    "limits": [
+      "This reviewer did not run PG/AT05; parent actual uninstrumented rerun is separate.",
+      "Deterministic tests do not exercise kill-after-timeout or permission-denied cleanup. Existing terminate/wait OS failures may abort cleanup before later children; not the observed empty-argv failure and not claimed tested.",
+      "Normal start may lose a child immediately after final poll/identity/health check; inherent readiness snapshot boundary, no general liveness guarantee."
+    ]
+  }
+}

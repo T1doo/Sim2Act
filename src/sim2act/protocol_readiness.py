@@ -1,7 +1,7 @@
 """Controller-only offline handoff oracle; never an approval or LIVE activation.
 
-Existing offline fixtures remain independent. Any future activation must wire this
-oracle into its actual sender and add the explicitly listed missing real gates.
+Legacy fixtures remain independent. Controller-bound offline experiments compose
+this oracle with protocol_experiment and the actual serialized sender guard.
 """
 
 import copy
@@ -24,8 +24,7 @@ VERSION = "protocol-offline-handoff.v1"
 EVENT = "PROTOCOL_OFFLINE_HANDOFF"
 BLOCKERS = [
     "LIVE approval and exact outbound data/wire approval absent",
-    "Real provider transport activation absent",
-    "Six stages share neither one sidecar scope nor a global six-second clock",
+    "Production controller/provider activation remains disabled; gates are offline only",
     "Private sidecar path and persistent experiment identity not approved",
     "Real semantic acceptance remains independent and UNKNOWN",
 ]
@@ -191,7 +190,7 @@ def _prepared(store, c, job, run):
             "sidecar_scope_fingerprint": fingerprint(snapshot["scope"]),
             "sidecar_stage_request_limit": min(STAGES[stage], snapshot["scope"]["max_requests"]),
             "sidecar_spacing_seconds": 6,
-            "spacing_scope": "per-sidecar, not DB-wide or six-stage experiment-wide",
+            "spacing_scope": "per-sidecar supplement; controller-bound protocol-experiment.v1 also enforces a DB-wide settlement clock",
         },
         "live_ready": False,
         "semantic_acceptance": "UNKNOWN",

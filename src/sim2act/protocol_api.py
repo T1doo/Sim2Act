@@ -278,6 +278,18 @@ class ProtocolAttemptRunner:
         messages, tools = copy.deepcopy(messages), copy.deepcopy(tools)
         self.require_scope(self.snapshot["scope"])
         worker, run = self.worker, self.run
+        from .protocol_experiment import is_experiment_run, preflight
+
+        with worker.store.tx() as c:
+            experiment_bound = is_experiment_run(c, run["id"])
+        if experiment_bound:
+            from .protocol_egress import project_request
+
+            preflight(worker.store, run["principal_id"], run["id"], clock=worker.protocol_clock)
+            messages, tools, guard = project_request(
+                worker.store, self.snapshot, messages, tools, clock=worker.protocol_clock
+            )
+            self.provider.wire_guard = guard
         with worker.store.tx() as c:
             worker.store.lock_project(c, run["principal_id"], run["project_id"])
             current = worker.store.guard(c, run["id"], run["fence"])
@@ -367,3 +379,7 @@ class ProtocolAttemptRunner:
                     elapsed=time.monotonic() - start,
                 )
             )
+            from .protocol_experiment import is_experiment_run, settle_in_tx
+
+            if is_experiment_run(c, run["id"]):
+                settle_in_tx(worker.store, c, run, run["fence"], aid, clock=worker.protocol_clock)

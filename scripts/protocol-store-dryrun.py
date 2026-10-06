@@ -17,6 +17,7 @@ from pathlib import Path
 import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy import text as sql_text
 
 from sim2act.api import create_app
 from sim2act.config import Settings
@@ -25,14 +26,17 @@ from sim2act.db import (
     attempts,
     fingerprint,
     grants,
+    new_id,
     operations,
     principals,
     protocol_jobs,
     protocol_request_slots,
 )
+from sim2act.errors import DomainError
 from sim2act.model import InternModel
 from sim2act.model_budget import ENDPOINT, BudgetedProvider, initialize_ledger
 from sim2act.protocol_api import ProtocolAttemptRunner
+from sim2act.protocol_experiment import advance, bind_run, initialize_experiment, inspect_experiment
 from sim2act.protocol_pool import OFFLINE_POOL, initialize_pools, inspect_pool
 from sim2act.protocol_readiness import candidate_for, prepare_handoff, require_handoff
 from sim2act.protocol_reviews import contract_snapshot, evaluation_contract
@@ -116,7 +120,7 @@ def authority_summary(store):
     }
 
 
-def demonstrate(*, fail_source=None):
+def demonstrate(*, fail_source=None, experiment=False, database_url=None):
     if fail_source not in {None, "a", "b"}:
         raise ValueError("Failure injection is limited to synthetic source a/b")
     manifest = json.loads((MATERIALS / "manifest.json").read_text())
@@ -124,8 +128,14 @@ def demonstrate(*, fail_source=None):
     wire, families, submissions, handoffs, handoff_checks = [], [], [], [], []
     with tempfile.TemporaryDirectory(prefix="sim2act-store-demo-") as owned:
         directory = Path(owned)
-        url = "sqlite:///" + str(directory / "store.sqlite")
+        url = database_url or "sqlite:///" + str(directory / "store.sqlite")
         store = Store(url, test_only=True)
+        schema = None
+        if not store.sqlite:
+            schema = new_id("gated_demo")
+            with store.engine.begin() as c:
+                c.execute(sql_text(f'CREATE SCHEMA "{schema}"'))
+            store.engine = store.engine.execution_options(schema_translate_map={None: schema})
         store.initialize()  # Explicit controller migration, never API construction.
         initialize_pools(store, offline_limit=14)  # Synthetic test controller, LIVE stays zero.
         user = store.user("offline demo", "synthetic-protocol-demo")
@@ -136,6 +146,17 @@ def demonstrate(*, fail_source=None):
                 project = client.post(
                     "/api/projects", json={"name": "synthetic two-form demo"}
                 ).json()["id"]
+                ticks = [1000.0]
+                eid = None
+                if experiment:
+                    eid = initialize_experiment(
+                        store,
+                        user,
+                        project,
+                        "synthetic-two-form",
+                        request_limit=14,
+                        clock=lambda: ticks[0],
+                    )["experiment_id"]
                 base = f"/api/projects/{project}/protocol"
                 resources, material_texts = {}, {}
                 for package_id, package in packages.items():
@@ -181,6 +202,8 @@ def demonstrate(*, fail_source=None):
                             },
                         )
                     )
+                    if eid:
+                        bind_run(store, user, eid, rid, clock=lambda: ticks[0])
                     return rid
 
                 def execute(rid, stage, replies):
@@ -191,7 +214,8 @@ def demonstrate(*, fail_source=None):
                         scope = snapshot["scope"]
                         ledger = directory / (rid + ".json")
                         initialize_ledger(ledger, scope)
-                        ticks = [1000.0]
+                        if not experiment:
+                            ticks[0] = 1000.0
 
                         def transport(request):
                             assert str(request.url) == ENDPOINT and queued
@@ -234,6 +258,10 @@ def demonstrate(*, fail_source=None):
                         original_call = runner.call
 
                         def guarded_call(messages, tools):
+                            if experiment:
+                                ticks[0] += (
+                                    7  # Explicit synthetic clock passage; no runtime wait/retry.
+                                )
                             require_handoff(
                                 store, user, rid
                             )  # BEFORE own STARTED slot reservation.
@@ -244,7 +272,11 @@ def demonstrate(*, fail_source=None):
                         return runner
 
                     assert Worker(
-                        store, settings, NoLegacyProvider(), protocol_runner_factory=factory
+                        store,
+                        settings,
+                        NoLegacyProvider(),
+                        protocol_runner_factory=factory,
+                        protocol_clock=(lambda: ticks[0]) if experiment else None,
                     ).once()
                     assert not queued, current(rid)
                     return current(rid)
@@ -293,6 +325,12 @@ def demonstrate(*, fail_source=None):
                         and completed["semantic_status"] == "UNKNOWN"
                     )
                     decision, accepted = review(rid, completed, source_contract_id)
+                    if eid:
+                        try:
+                            advance(store, user, eid, rid, clock=lambda: ticks[0])
+                        except DomainError:
+                            if decision == "PASS":
+                                raise
                     record = {
                         "form": family,
                         "source_run_id": rid,
@@ -318,6 +356,8 @@ def demonstrate(*, fail_source=None):
                         [mock_response(candidate_for(public, resources[source_id]))],
                     )
                     assert compiled["status"] == "SUCCEEDED"
+                    if eid:
+                        advance(store, user, eid, extraction, clock=lambda: ticks[0])
                     plan = compiled["result"]["compiled_plan"]
                     cold = submit(
                         "cold",
@@ -339,6 +379,8 @@ def demonstrate(*, fail_source=None):
                         and pending["semantic_status"] == "UNKNOWN"
                     )
                     cold_decision, reviewed = review(cold, pending, cold_contract_id)
+                    if eid:
+                        advance(store, user, eid, cold, clock=lambda: ticks[0])
                     record.update(
                         extraction_run_id=extraction,
                         cold_run_id=cold,
@@ -403,6 +445,8 @@ def demonstrate(*, fail_source=None):
                 assert all(w["chars"] <= 8000 and w["bytes"] <= 10000 for w in wire)
                 result = {
                     "kind": "SYNTHETIC_STORE_HTTP_WORKER_ZERO_NETWORK",
+                    "backend": "sqlite" if store.sqlite else "postgresql",
+                    "experiment": inspect_experiment(store, user, eid) if eid else None,
                     "external_requests": 0,
                     "real_model_semantics": "NOT_RUN",
                     "owner_acceptance": "PENDING",
@@ -438,11 +482,16 @@ def demonstrate(*, fail_source=None):
                     "limits": [
                         "Mock replies use pinned synthetic checker answers; no real model planning",
                         "Exact registered synthetic review is not owner semantic acceptance",
-                        "Actual public source outputs may enter extract; private gold assets never do",
-                        "SQLite temporary Store; no native UI, LIVE, publication, or generic recovery",
+                        "Gated extract uses public fixed candidate and closed receipt; no previous answer"
+                        if experiment
+                        else "Legacy extract includes source output; gated mode excludes it",
+                        "Owned temporary Store; no native UI, LIVE, publication, or generic recovery",
                     ],
                 }
         finally:
+            if schema:
+                with store.engine.begin() as c:
+                    c.execute(sql_text(f'DROP SCHEMA "{schema}" CASCADE'))
             store.engine.dispose()
     return result
 
@@ -451,8 +500,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--fail-source", choices=["a", "b"])
+    parser.add_argument("--experiment", action="store_true")
+    parser.add_argument(
+        "--database-config",
+        type=Path,
+        help="Private JSON containing isolated test URL; never copied to evidence",
+    )
     args = parser.parse_args()
-    report = demonstrate(fail_source=args.fail_source)
+    database_url = (
+        json.loads(args.database_config.read_text())["url"] if args.database_config else None
+    )
+    report = demonstrate(
+        fail_source=args.fail_source, experiment=args.experiment, database_url=database_url
+    )
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "protocol-store-dryrun.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n"

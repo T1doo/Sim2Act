@@ -3,7 +3,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const {execFileSync} = require('node:child_process');
+const {execFileSync, execFile} = require('node:child_process');
+const {promisify} = require('node:util');
+const execFileAsync = promisify(execFile);
 const {chromium} = require('playwright-core');
 const root = process.argv[2], python = process.argv[3];
 const info = JSON.parse(fs.readFileSync(path.join(root, 'info.json'), 'utf8'));
@@ -259,6 +261,42 @@ async function layout(page, label) {
       const file=path.join(root,'owned-agent-browser-pids.json');fs.writeFileSync(file,JSON.stringify(observed));
       return JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--audit',file],{encoding:'utf8',timeout:10000}));
     }});
+  const protocolRoot=path.join(root,'protocol');
+  const protocolInfo=JSON.parse(fs.readFileSync(path.join(protocolRoot,'info.json'),'utf8'));
+  const protocolBase=`http://127.0.0.1:${protocolInfo.port}`;
+  const protocolContext=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:false,bypassCSP:false});
+  try {
+    await protocolContext.route('**/*',route=>route.request().url().startsWith(protocolBase+'/')?route.continue():route.abort());
+    const protocolPage=await protocolContext.newPage();activePage=protocolPage;protocolPage.setDefaultTimeout(12000);
+    const protocolErrors=[];
+    protocolPage.on('pageerror',e=>protocolErrors.push({kind:'pageerror',message:e.message}));
+    protocolPage.on('console',m=>{if(m.type()==='error')protocolErrors.push({kind:'console',message:m.text(),url:m.location().url});});
+    const auditProtocol=async()=>{
+      const observed=(await cdp.send('SystemInfo.getProcessInfo')).processInfo.filter(p=>['browser','renderer'].includes(p.type));
+      const file=path.join(protocolRoot,'owned-browser-pids.json');fs.writeFileSync(file,JSON.stringify(observed));
+      return JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--audit',file],{encoding:'utf8',timeout:10000}));
+    };
+    const action=async(name,args=[])=>{
+      const r=await execFileAsync(python,['scripts/protocol-ui/fixture.py','--root',protocolRoot,'--action',name,...args],{encoding:'utf8',timeout:30000,env:{...process.env,PYTHONPATH:'src'}});return r.stdout.trim();
+    };
+    const sandboxBefore=await auditProtocol();
+    result.protocol=await require('./protocol-ui.cjs')({page:protocolPage,base:protocolBase,info:protocolInfo,action,
+      capture:async label=>{const sandbox=await auditProtocol();await protocolPage.screenshot({path:path.join(protocolRoot,`${label}.png`),fullPage:true});return {label,scope:'protocol-source-extract-cold',emitted:false,visualReview:'NOT_REVIEWED',sandbox};}});
+    result.protocol.sandboxBefore=sandboxBefore;result.protocol.sandboxAfter=await auditProtocol();
+    const expectedProtocolError=e=>{
+      if(e.kind!=='console')return false;
+      const u=new URL(e.url||protocolBase);
+      if(u.origin!==new URL(protocolBase).origin)return false;
+      const failedReceipt=e.message.includes('net::ERR_FAILED')&&(u.pathname===`/api/projects/${protocolInfo.project}/protocol/source`||/^\/api\/projects\/[^/]+\/protocol\/runs\/[^/]+\/recover$/.test(u.pathname));
+      const denied=e.message.includes('403')&&(u.pathname===`/api/projects/${protocolInfo.project}/protocol/contracts`||u.pathname===`/api/projects/${protocolInfo.other_project}/protocol/runs/${result.protocol.metadata.source?.id}`);
+      const missingIcon=e.message.includes('404')&&u.pathname==='/favicon.ico';
+      return failedReceipt||denied||missingIcon;
+    };
+    result.protocol.consoleErrors=protocolErrors;result.protocol.unexpectedConsoleErrors=protocolErrors.filter(e=>!expectedProtocolError(e));
+    check('protocol native has no unexpected script or console failures',result.protocol.unexpectedConsoleErrors.length===0);
+    fs.writeFileSync(path.join(protocolRoot,'protocol-results.json'),JSON.stringify(result.protocol,null,2)+'\n');
+    check('separate protocol/recover native flow passes',result.protocol.status==='PASS');
+  } finally {await protocolContext.close();}
 })().catch(async error => {
   result.status='FAIL';result.error={name:error.name,message:error.message};
   if(activePage && !activePage.isClosed()) {
