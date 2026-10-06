@@ -142,3 +142,6 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 
 
 最终锁修复冻结版 PG配置全量 **774 PASS / 1 SKIP / 0 FAIL**，1475.06秒，775 collected；2个既有依赖/字段警告。PG配置全量含纯单元与显式SQLite测试，不把774全部称真实PG；真实跨进程/三Run并发/角色专项另列。结合SQLite741PASS34SKIP637.12秒及最终独立两报告，此有界离线工程切片通过。删容器前owned PG残test schema/role均0；仅本轮容器已移除且inspect确认不存在，私有credential env/state目录已清除。真实模型请求0，LIVE预算0；无push/CI。最终本地提交hash在父线程交付回执，证据见protocol-shared-budget-recovery-20261006/result.json。
+
+
+2026-10-06 后续允许普通push及唯一既有Windows标准CI，事前范围见[Windows交付门](ProtocolSharedBudgetWindowsCIPlan.md)。原本地-only阶段历史保留；本阶段不改原runner/权限/helper/超时/上传范围。PG配置774PASS中不全为PG：同源收集775中661有PG-selecting公共/jobsfixture，114无该fixture；三个明确SQLite数据库用例、SQLite UI seed和纯model/sidecar单测分开。不提升LIVE/语义/完整P-B，CI尚未启动。
