@@ -329,6 +329,7 @@ class Store:
             raise ValueError("PostgreSQL required outside engineering tests")
         self.engine = create_engine(url, pool_pre_ping=True)
         self.sqlite = self.engine.dialect.name == "sqlite"
+        self.test_only = test_only  # Explicit fixture guard; production entrypoints leave False.
 
     @contextmanager
     def tx(self):

@@ -42,3 +42,5 @@ E17源码8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2已普通push；[持久内部Ap
 E17终态：8b14cee/[CI37415214667](https://github.com/T1doo/Sim2Act/actions/runs/37415214667)SUCCESS/PG340PASS/0SKIP，38新项含4真实worker子进程及最低角色enqueue/控制/worker CRUD；LinuxPG339PASS/1WindowsSKIP、SQLite319PASS/21PG平台SKIP，独立33PASS/5PGSKIP，source/test hash匹配。现固定内部Release/Instance可持久enqueue、重开、恢复、控制并原子产生新结果版本；该切片交付结束。[证据](../evidence/F2-persistent-apprun-20261006/README.md)。正式发布/部署、通用业务写/迁移、AT17受控preview写隔离、完整P-A/P-B/AT10/F1/Win11/protected-browser仍原规格后续，0LIVE；不堆CSV便利项、不把未知外部副作用合成注入称实际连接器恢复。
 
 E18只补AT17合成受控写隔离与阶段门审查：实际预览SQL事务内test-only受控写、成功独立读回/失败回滚/重复与namespace负例；原始数据/权限逐字节不变。测试适配器不注册到生产工具，不启用发布或真实业务写，0LIVE。完成后列原V5证据与最小未完成项及真正需要的决定/接入，停止相邻功能扩张；当前production preview仍读/计算，FAULT_INJECTION不能冒充生产写实现。
+
+E18已实现受控preview record/receipt实际写入与rollback/retry/namespace负例，独立13PASS。见[阶段门审查与实际下一接入](StageGateReview.md)。当前仅合成隔离子项，正式AT17仍OPEN。下一步为Win11/保护浏览器接入、F1完整fixture/签收、真实任务族/预算或受限生产writer/发布政策及故障服务的明确选择；不在本轮继续堆相邻功能。全PG/精确CI待核实。

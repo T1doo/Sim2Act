@@ -272,3 +272,7 @@ E16精确终态：e029922794c9f9829ddb41bca0010aebc277e761普通push，CI3741325
 开发初版独立实际复现并关闭未知门、可改source/metadata、raw失败绑定损坏foreign历史；原关联损坏无法安全修复明确保留、读取拒绝。独立最终33PASS/5PGSKIP/1警告12.54秒/源码hash一致，未独立PG/CI。主开发首轮PG338PASS/1WindowsSKIP/3警告150.41秒含4真实子进程；SQLite319PASS/20SKIP/3警告59.52秒；追加最低CRUD角色enqueue/控制/worker1PASS0.95秒。最后38项完整aggregate/精确CI37415214667进行中，不预写终态；静态ruff/mypy20/JS/diff通过。0LIVE/无导出，正式发布/部署关闭，AT17写隔离OPEN，完整P-A/P-B/AT10/F1/Win11/protected浏览器门保持。
 
 E17精确终态：8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2普通push，CI37415214667/job112112211461 completed/success（3m24s），PG340PASS/0FAIL/0SKIP/1旧警告128.36秒。38新内部项含4真实最低角色worker子进程、最低角色enqueue/控制/worker CRUD；原AT05逐字保留。Setup/binding表显式迁移/原生smoke/ruff/mypy20/Report/Cleanup全成功，server stopped。最终LinuxPG339PASS/1WindowsSKIP/2旧警告145.72秒、SQLite319PASS/21PG平台SKIP/2旧警告55.34秒；独立33PASS/5PGSKIP/1警告12.54秒且source/test指纹一致，未独立PG/CI。98源码/test/config/run/results已归档，初始work不改、合成PG stop/remove；文档收尾普通push不重复CI。仅固定内部AppRun的持久queue/lease/fencing/current授权/原子结果与安全恢复，失效关联残留不猜修、未知外部效果及通用业务写恢复不签收；AT17受控写OPEN，正式发布/部署/完整P-A/P-B/AT10/F1/Win11/保护浏览器不提升，真实0。
+
+## 2026-10-06 / E18合成写隔离与阶段门审查
+
+事前4c545ef，仅test-only SQL适配器在实际preview持久事务注入note+receipt，不注册生产写动作/Grant/表；当前生产仍只读计算。独立复验发现并修复receipt实际写入后回滚证据缺口，13PASS/1warning4.57秒；主开发真PG定向13PASS13.01秒，SQLite完整332PASS/21SKIP55.92秒。全PG/精确CI待核实。原始数据/权限按全生产表原存储column文本UTF8 bytes比较，仅排除合法app_previews变化；不冒充物理页检查。见F2/StageGateReview.md，AT17_SYNTHETIC_FIXTURE可闭合，原正式AT17/P-A/P-B/AT10/AT20/F1/Win11/protected-browser发布门不提升。0LIVE/无导出/无安全绕过，原work/V5/AT02/AT05保留。

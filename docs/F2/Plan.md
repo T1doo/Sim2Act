@@ -189,3 +189,7 @@ fixture只在tests中、明确test_only Store与pytest SQLite临时目录/隔离
 冻结验收：成功实际写并新连接独立读回；after-write故障先证明事务内已写再抛错、preview及fixture写全回滚；相同逻辑请求重复/并发只有一份record/receipt，不同输入键冲突；错误namespace/owner/project/app/instance/release绑定拒绝。真实E16Release/两instance和数据预先落库；每次前后对所有生产meta（仅允许app_previews历史变化）的原始column CAST text/UTF8快照逐字节比对，包含instance typed-data/版本/历史、grants、principals、resources、runs等。不能只核table count或hash宣称字节一致。
 
 同工作区独立只读审查、SQLite/真实PG最终aggregate、精确源码ServerCI及正常devpush；无真实模型/外部写/恢复包/安全绕过。然后依V5明确F1/F2/P-A/P-B/AT10/AT17/AT20/WindowsServer/Win11/真实浏览器每项证据及最小缺口、下一阶段实际决定/接入，不用总测试数签收。AT17只闭合该受控写隔离现象证据；生产writer/正式preview action与完整阶段门仍需独立前置。
+
+## 2026-10-06 / E18实现与独立复验
+
+13项实际受控SQL写隔离检查已实现；独立发现receipt写入前故障不能证明receipt回滚，已移至record+receipt实际INSERT/同conn读回后。最终独立13PASS/1warning4.57秒，三文件hash一致；主开发真PG专项13PASS/1warning13.01秒，SQLite完整332PASS/21PG平台SKIP/1warning55.92秒。全PG/精确ServerCI待核实。生产唯一变化保存已有test_only标志，默认False；测试独立MetaData，不新增生产表/工具/Grant/入口。阶段门逐条见[StageGateReview](StageGateReview.md)，仅AT17_SYNTHETIC_FIXTURE，正式AT17/发布仍OPEN。
