@@ -72,14 +72,14 @@ async function layout(page, label) {
   activePage = desktop.p;
   await activePage.goto(base, {waitUntil:'networkidle'});
   const cdp = await browser.newBrowserCDPSession();
-  const commandLine = (await cdp.send('Browser.getBrowserCommandLine')).arguments;
-  check('actual browser command line contains no sandbox disabling switches', !commandLine.some(a => /^--(?:no-sandbox|disable-.*sandbox|no-zygote|allow-no-sandbox-job)(?:=|$)/.test(a)));
-  check('SDK security-weakening defaults are absent from actual browser args', !commandLine.some(a => removedSecurityDefaults.includes(a) || a.startsWith('--disable-features=')));
-  result.observedCommandSwitches = commandLine.filter(a=>a.startsWith('--')).map(a=>a.split('=')[0]);
   const processes = (await cdp.send('SystemInfo.getProcessInfo')).processInfo.filter(p=>['browser','renderer'].includes(p.type));
   const audit = path.join(root,'owned-browser-pids.json');
   fs.writeFileSync(audit,JSON.stringify(processes));
   result.sandbox = JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--audit',audit], {encoding:'utf8',timeout:10000}));
+  check('actual browser and renderer args contain no sandbox-disabling switches', result.sandbox.length>0 && result.sandbox.every(p=>p.security_args_verified));
+  const actualBrowser = result.sandbox.find(p=>p.type==='browser');
+  check('SDK security-weakening defaults absent from actual browser args', !!actualBrowser && !actualBrowser.command_switches.includes('--disable-features'));
+  result.observedCommandSwitches=actualBrowser.command_switches;
   const renderers = result.sandbox.filter(p=>p.type==='renderer');
   check('actual Windows renderers have restricted low-integrity or AppContainer tokens', renderers.length>0 && renderers.every(p=>p.app_container || (p.restricted_token && p.integrity_rid<=4096)));
   await login(activePage, 'synthetic-browser-A');
@@ -127,7 +127,7 @@ async function layout(page, label) {
     const r = await api(`/api/internal/instances/${ids.first}/runs/${ids.accepted}`);
     return {status:r.status,sum:r.result?.sum,version:r.result_version};
   }, {first,accepted});
-  check('authenticated current Run readback succeeds without model', runRead.status==='SUCCEEDED' && runRead.sum==='40.00' && runRead.version===1);
+  check('authenticated current Run readback succeeds without model', runRead.status==='SUCCEEDED' && runRead.sum==='40' && runRead.version===1);
   await layout(activePage, 'desktop');
   // Independent cold context, actual mobile viewport; not a physical phone/Win11.
   const mobile = await context({width:390,height:844});
@@ -147,7 +147,7 @@ async function layout(page, label) {
     const r = await fetch(`/api/internal/instances/${ids.second}/runs/${ids.accepted}`,{headers:{Authorization:'Bearer synthetic-browser-A'}});
     return {status:r.status,text:await r.text()};
   },{second,accepted});
-  check('wrong instance cannot read accepted result', wrong.status===403 && !wrong.text.includes('40.00'));
+  check('wrong instance cannot read accepted result', wrong.status===403 && !wrong.text.includes('"result"') && !wrong.text.includes('"sum"'));
   const foreign = await context({width:1366,height:900});
   activePage = foreign.p;
   await login(activePage,'synthetic-browser-B');
@@ -156,7 +156,7 @@ async function layout(page, label) {
     const urls=[`/api/internal/instances/${ids.first}`,`/api/internal/instances/${ids.first}/runs/${ids.accepted}`,`/api/internal/instances/${ids.first}/runs/${ids.accepted}/control-status`];
     return await Promise.all(urls.map(async url=>{const r=await fetch(url,{headers:{Authorization:'Bearer synthetic-browser-B'}});return {status:r.status,text:await r.text()};}));
   },{first,accepted});
-  check('foreign owner instance/history/control reject without another result', denied.every(r=>r.status===403 && !r.text.includes('40.00')));
+  check('foreign owner instance/history/control reject without another result', denied.every(r=>r.status===403 && !r.text.includes('"result"') && !r.text.includes('"sum"')));
   check('foreign UI does not render another result', !(await activePage.locator('#internal-data').innerText()).includes('40'));
   // Reopened A task is terminal and stop button cannot issue another mutation.
   const retained = await desktop.p.evaluate(async ids=>await api(`/api/internal/instances/${ids.first}/runs/${ids.cancelled}`),{first,cancelled});

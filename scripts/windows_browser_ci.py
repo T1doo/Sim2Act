@@ -59,6 +59,12 @@ def audit_processes(pids):
             "--disable-seccomp-filter-sandbox", "--no-zygote",
             "--disable-renderer-sandbox", "--allow-no-sandbox-job",
         } for arg in args), "Sandbox-disabling argument observed"
+        if item["type"] == "browser":
+            assert not any(arg.startswith("--disable-features=") or arg in {
+                "--enable-unsafe-swiftshader", "--unsafely-disable-devtools-self-xss-warnings",
+                "--disable-ipc-flooding-protection", "--disable-client-side-phishing-detection",
+                "--password-store=basic", "--use-mock-keychain",
+            } for arg in args), "SDK browser protection weakening observed"
         handle = kernel.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
         if not handle:
             raise ctypes.WinError(ctypes.get_last_error())
@@ -80,7 +86,8 @@ def audit_processes(pids):
             restricted = bool(security.IsTokenRestricted(token))
             result.append({"type": item["type"], "pid": pid, "sandbox_disabling_args": [],
                            "app_container": bool(app_container.value), "restricted_token": restricted,
-                           "integrity_rid": integrity})
+                           "integrity_rid": integrity, "security_args_verified": True,
+                           "command_switches": [arg.split("=", 1)[0] for arg in args if arg.startswith("--")]})
         finally:
             if token:
                 kernel.CloseHandle(token)
