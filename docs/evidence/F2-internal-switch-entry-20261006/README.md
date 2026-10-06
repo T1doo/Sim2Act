@@ -13,3 +13,5 @@ prepare/GET/commit共用目标范围、兼容schema转移、保留数据验证�
 本地最终产品源码：SQLite361PASS22PG/platformSKIP118.65s；LinuxPG382PASS1WindowsSKIP300.43s；最后HTTP focused29PASS1PGSKIP14.14s，实际CRUD-only角色switch额外1PASS3.28s。PG collection之后在原role测试追加switch断言，已单独实际通过，最终精确ServerCI完整重验待；没有把此前aggregate当作新增断言已收集。ruff/mypy21/3JS syntax通过，[source hashes](source-hashes.json)；生产/API/UI与独立接受hash相同。最终follow-up只静态核新增worker-v2浏览器/role断言。
 
 首轮精确3e1688e/CI37427612714 completedFAIL：原工程383PASS0FAIL0SKIP1warning175.11s，Report/Cleanup成功；正常Edge/browser8checksPASS，实际resume后已通过真实状态QUEUED等待，但紧接测试用innerText读折叠pre得空而断言失败。无console/pageerror；[失败JSON](first-browser-results.json)/[实际截图](first-failure.png)/run/长度hash receipt均保存。只把此检查改为实际可见状态栏QUEUED，未改产品/原AT05/CSP/OS或sandbox，需新源码精确CI复验。
+
+第二轮64f9783/CI37428175050 completedFAIL：原工程383PASS0SKIP1warning175.82s/cleanup成功；已签名Edge/固定SDK准备成功，延迟实际响应用例在route.fulfill报`Route is already handled`，Node异步异常导致没有browser JSON/PNG回执。不能声称第二轮实际浏览器检查数量。原空receipt、run与有界错误excerpt保存second-*。已检查本地integrity锁SDK源码：unroute会更新拦截模式，待处理请求需先完成再移除handler。修测试等实际响应交付后才unroute，并捕获handler异常交回主catch保存真实失败报告；不伪造响应/放宽断言或更改产品/OS/CSP/sandbox。继续新精确源码CI。

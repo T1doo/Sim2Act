@@ -150,15 +150,19 @@ async function layout(page, label) {
   let posted=0;
   activePage.on('request',request=>{if(request.url()===switchUrl && request.method()==='POST')posted++;});
   // Delay delivery only after the real server accepted the approval. Cancel/return cannot repaint it.
-  let unblock, acceptedPrepare;
+  let unblock, acceptedPrepare, deliveredPrepare, routeFailure;
   const received = new Promise(resolve=>{acceptedPrepare=resolve;});
   const gate = new Promise(resolve=>{unblock=resolve;});
-  await activePage.route(switchUrl,async route=>{if(route.request().method()!=='POST')return route.continue();const response=await route.fetch();acceptedPrepare();await gate;await route.fulfill({response});});
+  const delivered = new Promise(resolve=>{deliveredPrepare=resolve;});
+  const delayedHandler=async route=>{try {if(route.request().method()!=='POST')return await route.continue();const response=await route.fetch();acceptedPrepare();await gate;await route.fulfill({response});} catch(error){routeFailure=error;acceptedPrepare();} finally {deliveredPrepare();}};
+  await activePage.route(switchUrl,delayedHandler);
   await activePage.locator('#internal-switch-target').selectOption(targetRelease);
   await activePage.locator('#internal-switch-prepare').click();await received;
   await activePage.locator('#internal-switch-cancel').click();
   await activePage.locator('#internal-back').click();unblock();
-  await activePage.unroute(switchUrl);
+  // Keep interception registered until its actual accepted response is delivered.
+  await delivered;if(routeFailure)throw routeFailure;
+  await activePage.unroute(switchUrl,delayedHandler);
   await activePage.locator('#app-list button').first().click();await idle(activePage);
   await activePage.locator('#internal-instances button').first().click();await idle(activePage);
   check('accepted late prepare cannot restore cancelled/returned approval', !(await activePage.locator('#internal-switch-approval').isVisible()) && await activePage.locator('#internal-switch-target').inputValue()==='');

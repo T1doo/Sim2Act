@@ -19,3 +19,5 @@ Final SHA256:
 No new concrete blocker found in final review. PG, aggregate regression, CI, and actual protected Windows browser not independently executed. Formal publication, Win11 and whole F2 acceptance remain outside this slice.
 
 Final follow-up static review: additional upgraded Release worker result v2/rollback both ledgers and minimumCRUD-role switch assertions accepted. Browser SHA256 8b17ae8dce5fc87a21c9b9b93c47bee272f665f282566e68c6102688906979c6; API test SHA256 9a59f0b9573325111147ed17be073aee163a6635579bab57cd22e1db0e6266f4. Production/API/UI hashes above unchanged. This follow-up did not execute PG/browser.
+
+After first protected CI failure, independent one-line static confirmation: browser check reads visible internal-run-status rather than hidden collapsed detail; original real QUEUED wait/assertion retained, all product/API/UI hashes unchanged. Final browser SHA256 8d0332e07a08fd8fd8a8b95d28858b5b9dee45fe7638ae4ab176a46a9551bb63. New CI/browser terminal not independently verified.

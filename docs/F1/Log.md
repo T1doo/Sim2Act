@@ -343,3 +343,5 @@ E21执行中检查点：源码59f34817dd65201bd5ba204661d6787b19255fd3普通push
 E22实现阶段：认证实例范围switch prepare/GET/commit及目标fp；复用服务兼容检查并补commit app/runtime/schema版本/retained数据重验、payload类型及approval project→instance project锁前核对。独立实际复现同owner跨项目一致重hash损坏批准服务commit缺口（HTTP原拒绝），修复/永久负例/独立直接service复验DomainError闭合。UI手动目标/无默认批准/精确保留范围与期限/一次性确认，cancel/back代际丢弃迟到响应，无自动重发。独立11PASS6.36s与合成NodeVM late/duplicate通过，PG最小CRUD role切换1PASS3.28s；full aggregate/精确Server normal browser终态待。初开发helper变量6FAIL保留，原AT05/AT02/V5不改；0LIVE/noGrant/DDL/formal false。
 
 E22首CI37427612714/3e1688e原PG383PASS0SKIP175.11s，Cleanup成功；真实browser实际resume回到QUEUED后测试用innerText读折叠pre导致8checks后失败。完整失败PNG/JSON/receipt保存，改核实际可见Run status，产品不变/无安全降级，普通新sourcepush并复验终态待。
+
+E22第二CI37428175050/64f9783原PG383PASS0SKIP175.82s/cleanup成功；测试延迟实际响应handler在fulfill前unroute，Node异步Route already handled未输出browserJSON/PNG。保留second-run/原空receipt/有界errorexcerpt，不假定检查数。修等实际响应交付再unroute+异常归主catch（读锁SDK源码），产品/API/UI不变，仍正常sandbox/CSP，继续精确CI。
