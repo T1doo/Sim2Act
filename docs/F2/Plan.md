@@ -179,3 +179,13 @@ E17源码稳定后首轮完整真PG338PASS/1WindowsSKIP/3旧Starlette/Pydantic�
 ## 2026-10-06 / E17精确Server终态交付
 
 源码8b14cee7ca8b55bef5f5e2f3dfd3a89482f837e2普通push，CI37415214667/job112112211461 completed/success（3m24s），PG340PASS/0FAIL/0SKIP/1旧Starlette warning128.36秒。38新内部项含4真实最低角色worker子进程与最低角色enqueue/控制/worker CRUD；原AT05逐字保留及完整实跑。Setup/binding表显式迁移/原生API-worker smoke/ruff/mypy20/Report/Cleanup全成功，server stopped。最终LinuxPG339PASS/1WindowsSKIP/2旧警告145.72秒、SQLite319PASS/21PG平台SKIP/2旧警告55.34秒；独立最终33PASS/5PGSKIP/1警告12.54秒，source/test hash与交付一致，未独立PG/CI。98源码/test/config/run/results已归档，专用PG stop/remove、原work/V5/AT02未改；文档普通push不重复CI。仅内部固定queue/reopen/lease/fencing/currentgateway/原子结果版本与安全恢复；关联损坏残留AppRun不猜修、指针改变保守拒绝、未知外部效果未恢复证明。正式发布/部署关闭、AT17受控写OPEN、完整P-A/P-B/AT10/F1/Win11/protected-browser不签收，模型0。
+
+## 2026-10-06 / E18事前：AT17受控预览写隔离证据与阶段门
+
+基线727d023/8b14cee，正常origin fetch核对、正确/workspace/Sim2Act-pb，初始work树/V5/历史AT02保留。本轮不扩CSV或生命周期功能；仅原AT17预览中真实写入的合成故障fixture与阶段门审查。现生产preview是固定读/计算，不具写action；因此严格标FAULT_INJECTION，而非生产写接口、正式发布或完整F2签收。
+
+fixture只在tests中、明确test_only Store与pytest SQLite临时目录/隔离test_ PG schema；独立MetaData表经fixture显式Setup，生产meta/CLI迁移/工具目录/HTTP接口无新增写能力和Grant。把受控SQL business-record写入注入实际apps.preview持久INSERT同一Store.tx，以真实数据库行为核查namespace/rollback/idempotency。明确PREVIEW/owner/project/app/preview_id，不接受instance/release目标；固定受控record来自实际preview输入，不隐藏新调用参数或自授权。
+
+冻结验收：成功实际写并新连接独立读回；after-write故障先证明事务内已写再抛错、preview及fixture写全回滚；相同逻辑请求重复/并发只有一份record/receipt，不同输入键冲突；错误namespace/owner/project/app/instance/release绑定拒绝。真实E16Release/两instance和数据预先落库；每次前后对所有生产meta（仅允许app_previews历史变化）的原始column CAST text/UTF8快照逐字节比对，包含instance typed-data/版本/历史、grants、principals、resources、runs等。不能只核table count或hash宣称字节一致。
+
+同工作区独立只读审查、SQLite/真实PG最终aggregate、精确源码ServerCI及正常devpush；无真实模型/外部写/恢复包/安全绕过。然后依V5明确F1/F2/P-A/P-B/AT10/AT17/AT20/WindowsServer/Win11/真实浏览器每项证据及最小缺口、下一阶段实际决定/接入，不用总测试数签收。AT17只闭合该受控写隔离现象证据；生产writer/正式preview action与完整阶段门仍需独立前置。
