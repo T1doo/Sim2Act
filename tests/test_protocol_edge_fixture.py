@@ -2,11 +2,10 @@
 
 import importlib.util
 import json
-import socket
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
+from protocol_socket_oracle import forbid_external_network
 from sqlalchemy import select
 
 from sim2act.api import create_app
@@ -14,12 +13,7 @@ from sim2act.db import events
 
 
 def test_edge_fixture_gated_actual_http_and_metadata_recovery(tmp_path, monkeypatch):
-    def forbidden(*args, **kwargs):
-        pytest.fail("Protected Edge fixture controller attempted external connection")
-
-    monkeypatch.setattr(socket.socket, "connect", forbidden)
-    monkeypatch.setattr(socket.socket, "connect_ex", forbidden)
-    monkeypatch.setattr(socket, "create_connection", forbidden)
+    forbid_external_network(monkeypatch, "Protected Edge fixture controller attempted external connection")
     spec = importlib.util.spec_from_file_location(
         "protocol_native_fixture", Path(__file__).parents[1] / "scripts/protocol-ui/fixture.py"
     )

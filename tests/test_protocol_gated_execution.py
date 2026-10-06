@@ -3,10 +3,10 @@
 import importlib.util
 import json
 import os
-import socket
 from pathlib import Path
 
 import pytest
+from protocol_socket_oracle import forbid_external_network
 
 SPEC = importlib.util.spec_from_file_location(
     "gated_protocol_demo", Path(__file__).parents[1] / "scripts/protocol-store-dryrun.py"
@@ -39,12 +39,7 @@ def assert_report(report, calls, completed):
 
 @pytest.mark.parametrize("fail_source,calls", [(None, 8), ("a", 2), ("b", 6)])
 def test_whole_package_zero_network(monkeypatch, fail_source, calls):
-    def forbidden(*args, **kwargs):
-        pytest.fail("Gated mock package attempted socket connection")
-
-    monkeypatch.setattr(socket.socket, "connect", forbidden)
-    monkeypatch.setattr(socket.socket, "connect_ex", forbidden)
-    monkeypatch.setattr(socket, "create_connection", forbidden)
+    forbid_external_network(monkeypatch, "Gated mock package attempted external connection")
     report = DEMO.demonstrate(experiment=True, fail_source=fail_source)
     assert_report(report, calls, fail_source is None)
     assert report["backend"] == "sqlite"

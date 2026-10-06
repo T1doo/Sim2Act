@@ -2,12 +2,12 @@
 
 import importlib.util
 import json
-import socket
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from protocol_socket_oracle import forbid_external_network
 
 SCRIPT = Path(__file__).parents[1] / "scripts/protocol-store-dryrun.py"
 spec = importlib.util.spec_from_file_location("protocol_store_dryrun", SCRIPT)
@@ -18,12 +18,7 @@ spec.loader.exec_module(demo)
 
 @pytest.fixture
 def no_network(monkeypatch):
-    def forbidden(*args, **kwargs):
-        pytest.fail("Offline demonstration attempted a real socket connection")
-
-    monkeypatch.setattr(socket.socket, "connect", forbidden)
-    monkeypatch.setattr(socket.socket, "connect_ex", forbidden)
-    monkeypatch.setattr(socket, "create_connection", forbidden)
+    forbid_external_network(monkeypatch, "Offline demonstration attempted external connection")
 
 
 def test_two_forms_share_actual_database_pool_and_independent_reviews(no_network):

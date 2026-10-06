@@ -100,9 +100,12 @@ def audit_processes(pids):
 
 def emit(root):
     # Only explicit named synthetic outputs, not config/profile/DB/env/log dumps.
-    for name in ["browser-results.json", "desktop.png", "mobile.png", "failure.png",
-                 "agent-results.json", "agent-desktop.png", "agent-narrow.png", "agent-failure.png"]:
-        path = root / name
+    names = ["browser-results.json", "desktop.png", "mobile.png", "failure.png",
+             "agent-results.json", "agent-desktop.png", "agent-narrow.png", "agent-failure.png"]
+    outputs = {name: root / name for name in names}
+    for name in ["protocol-results.json", "protocol-desktop.png", "protocol-narrow.png"]:
+        outputs[name] = root / "protocol" / name
+    for name, path in outputs.items():
         if not path.exists():
             continue
         data = path.read_bytes()
