@@ -26,3 +26,5 @@ E14本地实现及35专项/1PG待CI、完整254PASS/6SKIP、原33+新14 DOM/HTTP
 E14精确终态：c776fa2/CI37349609291SUCCESS/PG260PASS/0SKIP，36新专项含三表最小业务CRUD角色路径已通过；合成固定任务证明/显式退休/旧内容独立新输入子项交付。source撤权后继续复用未实现、默认拒绝，通用P-B与原规格全部AT10证据/Release/真实视觉及F1/Win11仍后续独立门。
 
 2026-10-06 E15范围：恢复后真实PG两种顺序核查，共享project→card/app→grant锁和候选持久化前重验。基线grant锁已挡住观察到的direct交错，未复现成功插入失效app；project锁缺失按真实结果补强。9真PG专项已通过，完整聚合/精确CI待核实。仅映射[冻结AT10合成子项](AT10Subitems.md)，不改V5/不扩展CSV/不签收完整P-B，真实浏览器/Win11/F1/Release和预算0边界保持。
+
+E15终态：53dc124/CI37411714116SUCCESS/PG269PASS/0SKIP，9真PG专项及完整角色CRUD通过。完成本轮退休/消费者串行补强及冻结AT10合成子项映射，到此切片结束；未独立执行/视觉，通用P-B/原规格全部证据/Win11/F1/Release仍后续独立门，模型0。

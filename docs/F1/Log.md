@@ -254,3 +254,7 @@ E12精确Server终态：d3de155ba23cd5ba824f10f398f34b25c76e1817已普通push；
 ## 2026-10-05 / E14精确Server终态交付
 
 源码c776fa24dac957485a65337ed3d4b428848b584c普通push；run37349609291/job111896821583 completed/success（2m31s），PG260PASS/0FAIL/0SKIP/1旧Starlette警告69.05秒。36新检查含临时PG最小应用角色完成task/提取/退休/回读/新输入/错误历史/重试整条业务CRUD，三张新表由现显式Setup迁移创建，API/worker无DDL；原生API-worker smoke/ruff/mypy18模块/Report/Cleanup全通过、server stopped。实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时PG。Linux254PASS/6平台SKIP/3警告30.16秒；原33+新14DOM/HTTP非浏览器。92源码hash/终态/results归档，修复未独立执行复验；合成服务停，文档收尾普通push不触发CI。完成LOCAL_DECLARATIVE_TASK固定数值任务，最小证明及owner显式清旧source内容/任务input/output，源当前grant不新增/恢复且撤权/过期拒绝，新输入交集保持。旧PREVIEW仍需旧资料审计，其他共享消费者拒绝退休。仅这个有界合成切片，完整P-B/AT10/真实生成/Release未签收，F1/Win11保持、视觉0/BLOCKED、模型0。
+
+## 2026-10-06 / E15精确Server终态交付
+
+源码53dc124ea8aeb554939ad79bbbb7d9526a66578f普通push；run37411714116/job112101374653 completed/success（2m51s），PG269PASS/0FAIL/0SKIP/1旧Starlette警告88.51秒。9新真PG barrier/冷Store子项及完整业务CRUD角色回归，原生API-worker smoke/ruff/mypy18模块/Report/Cleanup全部成功、server stopped；实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时PG。LinuxPG268PASS/1Windows平台SKIP/2警告82.16秒，SQLite254PASS/15平台/PGSKIP/2警告33.30秒，PG专项9PASS。基线退休200/direct400（grant锁挡住交错），未复现成功失效app；共享project锁缺失真实补强，统一project→entity→grant与写前当前内容/退休重验。93源码hash/实际run/results及冻结AT10合成子项映射归档；未独立执行复验，真实浏览器0/BLOCKED，不新增CSS/视觉签收。保存环境恢复ready/正确工作树54ac055与origin一致，初始work未改，本地合成PG容器已停并删除；文档收尾普通push不重复CI。0LIVE/无导出，完整P-B/AT10/Win11/F1/Release签收未提升，V5/历史AT02不变。

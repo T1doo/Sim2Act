@@ -54,3 +54,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 2026-10-05 E13：[来源请求锚定与回读恢复](evidence/F2-origin-recovery-20261005/README.md)已交付，精确4d01fb7/ServerCI37346429353SUCCESS/PG224PASS/0SKIP。5新专项、本地219PASS/5SKIP、DOM33明确非浏览器。完整P-B需先明示旧来源文件运行依赖、制定来源退休权限策略及完成合成task fixture，见[路线](F2/NextSteps.md)；当前未实施，不以冷页替代AT10。真实视觉BLOCKED、模型0、F1/Win11/Release未签收不变。
 
 2026-10-05 E14：[合成完成任务来源与显式退休切片](evidence/F2-task-retirement-20261005/README.md)已交付，精确c776fa2/ServerCI37349609291SUCCESS/PG260PASS/0SKIP。36新专项及三表显式迁移/业务CRUD路径；本地254PASS/6平台SKIP，原33+新14DOM/HTTP不是视觉。owner显式清旧内容保留最小证明，当前source授权及target交集保持、撤权/过期拒绝，无grant恢复。仅LOCAL_DECLARATIVE_TASK固定合成来源/新内容冷会话子项，完整P-B/AT10/Release/F1/Win11未签收、模型0/真实视觉BLOCKED。
+
+2026-10-06 E15：[来源退休与消费者PG串行](evidence/F2-retirement-race-20261006/README.md)已交付，精确53dc124/CI37411714116SUCCESS/PG269PASS/0SKIP，9真PG barrier/冷Store子项；LinuxPG268PASS/1WindowsSKIP、SQLite254PASS/15SKIP。基线grant锁阻止观察direct失效app，未虚写复现；消费者共享project锁和持久化前当前状态重验补强。冻结AT10合成子项映射不签收完整P-B/Win11/F1/Release，0LIVE/真实视觉BLOCKED。

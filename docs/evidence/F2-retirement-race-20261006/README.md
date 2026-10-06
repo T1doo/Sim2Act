@@ -8,6 +8,6 @@
 
 新增9真PG检查：direct/目标卡创建/修订/F1提交双顺序8项，PG backend/blocking_pids证明等待；退休先行创建拒绝且无新增principal/app/grant，消费先行退休409且内容/既有消费者可读。第9项完成合成任务→提取→退休→fresh Store新40/坏列FAILED及历史，映射[冻结AT10子项](../../F2/AT10Subitems.md)。PG专项9PASS/1旧警告3.26秒，[JUnit](pg-barrier.xml)。主开发实跑，不是独立复验。
 
-完整LinuxPG/SQLite及精确Server终态随后记录；当前不预写PASS。真实浏览器/视觉0/BLOCKED，E14 DOM为历史旁证，本轮未新增浏览器/手机签收。只合成固定任务/退休旧内容子项，不提升完整P-B/AT10/Win11/F1/Release。0LIVE，无导出/额外恢复包或安全策略绕过。
+精确源码[53dc124](https://github.com/T1doo/Sim2Act/commit/53dc124ea8aeb554939ad79bbbb7d9526a66578f)已普通push，[ServerCI37411714116](https://github.com/T1doo/Sim2Act/actions/runs/37411714116)SUCCESS/job112101374653/2m51s，PG269PASS/0FAIL/0SKIP/1旧警告88.51秒。9新PG专项及既有最小应用角色CRUD/原生smoke/静态/Report/Cleanup成功、server stopped。实际平台/计数[results](windows-results.json)、完整步骤[run](windows-run.json)、[93源码指纹](source-hashes.json)归档；本地自建PG容器已停止并删除，未导出额外文件。真实浏览器/视觉0/BLOCKED，E14 DOM为历史旁证，本轮未新增浏览器/手机签收。只合成固定任务/退休旧内容子项，不提升完整P-B/AT10/Win11/F1/Release。0LIVE，无导出/额外恢复包或安全策略绕过。
 
 本地完整聚合：[LinuxPG JUnit](linux-pg.xml)268PASS/1Windows平台SKIP/2警告82.16秒；[SQLite JUnit](sqlite.xml)254PASS/15平台/PGSKIP/2警告33.30秒。ruff/mypy18模块/JS syntax/diff通过。现警告为Starlette及并发FastAPI构造Pydantic alias警告，保留。不将SQLite15SKIP顶替真实PG专项。PG运行在测试专用loopback Docker postgres:17，实际17.11，镜像digest sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f；只合成账户，既有真实账户/环境安全策略未改。
