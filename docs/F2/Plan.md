@@ -308,3 +308,7 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 2026-10-06内部agent UI本地切片：既有应用界面现可对已验证来源的bounded_agent候选显示离线/UNKNOWN和适用term，复用审批/内部版本/实例/Run/结果历史；冻结显式两条Replay到既有绑定JSON，冷进程执行新Run，提交/成功冷读核对已接受响应，未新增表/权限/Grant/provider。新HTTP20PASS、DOM功能22PASS、完整SQLite493PASS24SKIP；PG最终见[证据](../evidence/bounded-agent-ui-offline-20261006/README.md)。独立两项篡改错误成功已修，失败和夹具问题原始日志保留。原生Chromium仍SUID helper阻塞、0实际原生检查/0截图，窄屏未验收；只本地提交，父检查前无push/CI，自主生成/完整恢复/原P-B及F1阶段不提升。
 
 本步最终PG17完整515PASS1FAIL1SKIP3warnings868.82秒；唯一旧提交前进程崩溃恢复用例恢复后仍RUNNING，根因未确认。两crash单独2PASS18.79秒不覆盖原失败；完整PG/恢复仍未签收。新HTTP20均在PG通过。原生视觉和PG遗留失败明确留待父检查，未push/CI、未改lease或安全策略；自有API/PG已清理。
+
+## 2026-10-06 / 来源驱动 registered CSV 生成切片终态
+
+按用户授权实施 [RegisteredRunGenerationSlice](RegisteredRunGenerationSlice.md)。成功内部 CSV Run → 服务端可信声明式草案 → 已有授权新 CSV → 新 column 冷 worker 链路已实现并独立审查；用户无 candidate/wire/gold/权限字段。精确源码1413cbf，独立标准 Windows CI37472996465 SUCCESS（559 PASS / 1 SKIP）；最终冻结 SQLite全套、PG来源/权限/CRUD角色与真实HTTP-DOM16已测。没有新Principal/Grant/表/DDL/LIVE/正式发布；共享授权撤回影响明确。来源PARTIAL/FAILED/UNKNOWN拒绝，语义NOT_RUN/完整P-B未签收。新生成用户入口的原生浏览器/截图仍未验，现Edge38+agent33只证明此前回归链路，不能充生成UI验收。[日志与保留失败](../evidence/registered-run-generation-20261006/README.md)。独立UI切片9104b2a/CI37471361854成功、两张真实agent截图有限范围通过双审；旧窄屏空白根因UNKNOWN，失败证据保留。
