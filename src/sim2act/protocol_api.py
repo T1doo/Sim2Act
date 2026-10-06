@@ -146,6 +146,9 @@ class ProtocolAttemptRunner:
             self.worker.store.guard(c, self.run["id"], self.run["fence"])
             if job["snapshot"] != self.snapshot:
                 raise DomainError("VERSION_CONFLICT", "Accepted protocol scope changed")
+        from .protocol_pool import require_pool
+
+        require_pool(self.worker.store, self.snapshot["request_pool_id"])
         self.provider.require_scope(scope)
 
     def halt(self):
@@ -225,6 +228,7 @@ class ProtocolAttemptRunner:
         return True
 
     def call(self, messages, tools):
+        messages, tools = copy.deepcopy(messages), copy.deepcopy(tools)
         self.require_scope(self.snapshot["scope"])
         worker, run = self.worker, self.run
         with worker.store.tx() as c:
@@ -238,6 +242,7 @@ class ProtocolAttemptRunner:
             if pending:
                 raise DomainError("OUTCOME_UNKNOWN", "Unresolved model request cannot be resent")
             context = copy.deepcopy(current["context"])
+        self.provider.preflight(messages, tools)
         context["messages"] = copy.deepcopy(messages)
         aid = worker.reserve(run["id"], run["fence"], context, request_tools=tools)
         self.last_attempt_id = aid
@@ -254,7 +259,20 @@ class ProtocolAttemptRunner:
             return raw
         except DomainError as exc:
             raw = raw if raw is not None else self.provider.last_response
-            self._record(aid, raw, start, "FAILED", exc.code)
+            try:
+                self._record(aid, raw, start, "FAILED", exc.code)
+            except BaseException:
+                from .protocol_pool import halt_unknown
+
+                halt_unknown(
+                    worker.store, self.snapshot["request_pool_id"], "UNSETTLED_RESPONSE", aid
+                )
+                raise
+            raise
+        except BaseException:
+            from .protocol_pool import halt_unknown
+
+            halt_unknown(worker.store, self.snapshot["request_pool_id"], "INTERRUPTED_REQUEST", aid)
             raise
         # Process termination leaves STARTED durable and consumes the reservation.
 
@@ -286,6 +304,9 @@ class ProtocolAttemptRunner:
                 except DomainError:
                     pass  # Invalid/private output is represented by its fingerprint only.
             parameters["safe_response_fingerprint"] = fingerprint(safe)
+            from .protocol_pool import finish_slot
+
+            finish_slot(worker.store, c, run, run["fence"], aid, state, normalize_usage(raw), safe)
             c.execute(
                 update(attempts)
                 .where(attempts.c.id == aid)

@@ -16,7 +16,8 @@ import uvicorn
 from sim2act.api import create_app
 
 
-def test_registered_generation_direct_actual_http_dom(tmp_path):
+@pytest.mark.parametrize("inject_poll_race", [False, True], ids=["normal", "poll-refresh-order"])
+def test_registered_generation_direct_actual_http_dom(tmp_path, inject_poll_race):
     if not shutil.which("node"):
         pytest.skip("Developer Node required for optional HTTP DOM module check")
     probe = subprocess.run(
@@ -53,6 +54,7 @@ def test_registered_generation_direct_actual_http_dom(tmp_path):
                 "tests/registered_generation_native_dom.cjs",
                 str(tmp_path),
                 os.sys.executable,
+                *(["--inject-poll-race"] if inject_poll_race else []),
             ],
             capture_output=True,
             text=True,
@@ -64,6 +66,16 @@ def test_registered_generation_direct_actual_http_dom(tmp_path):
         data = json.loads(result.stdout.strip())
         assert data["browser"] == "NOT_RUN" and data["visual"] == "NOT_RUN"
         assert data["result"]["status"] == "PASS"
+        race = data["result"]["pollRace"]
+        assert race["enabled"] is inject_poll_race
+        if inject_poll_race:
+            assert race["observedNull"] is True and race["recovered"] is True
+            null_event = next(e for e in race["events"] if e["name"] == "manual read returned")
+            recovered = race["events"][-1]
+            assert null_event["iid"] is None and null_event["rid"] is None
+            assert recovered["iid"] == data["result"]["metadata"]["generated"]["instance"]
+            assert recovered["rid"] == data["result"]["metadata"]["generated"]["id"]
+            assert recovered["status"] == "SUCCEEDED"
         assert (
             data["result"]["metadata"]["source"]["id"]
             != data["result"]["metadata"]["generated"]["id"]

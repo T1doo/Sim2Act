@@ -46,6 +46,25 @@ class Worker:
             )
             + s.max_output_tokens
         )
+        if protocol_request:
+            import httpx
+
+            envelope = (
+                len(
+                    httpx.Request(
+                        "POST",
+                        "https://offline.invalid",
+                        json={
+                            "model": s.model,
+                            "messages": context["messages"],
+                            "tools": request_tools,
+                            "stream": False,
+                            "max_tokens": s.max_output_tokens,
+                        },
+                    ).content
+                )
+                + s.max_output_tokens
+            )
         with self.store.tx() as c:
             if protocol_request:
                 owner = (
@@ -97,6 +116,20 @@ class Worker:
             if q["blocked_until"] > now or count >= s.rpm:
                 raise DomainError("RATE_LIMITED", "Account-wide quota waiting", retryable=True)
             aid = new_id("attempt")
+            if protocol_request:
+                from .protocol_pool import reserve_slot
+
+                reserve_slot(
+                    self.store,
+                    c,
+                    run,
+                    fence,
+                    aid,
+                    envelope,
+                    fingerprint(
+                        {"messages": context["messages"], "tools": request_tools, "model": s.model}
+                    ),
+                )
             c.execute(
                 insert(reservations).values(
                     id=aid, subject=s.quota_subject, created_at=now, run_id=run_id

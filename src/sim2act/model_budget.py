@@ -208,8 +208,7 @@ class BudgetedProvider:
                 _save(self.path, data)
                 raise DomainError("BUDGET_EXHAUSTED", "Stage wall time exhausted")
 
-    def call(self, messages, tools):
-        self.last_response = None
+    def _request_body(self, messages, tools):
         if (
             type(self.model) is not InternModel
             or self.model.transport is not self.transport
@@ -236,43 +235,61 @@ class BudgetedProvider:
             chars = len(body.decode("utf-8"))
         except (ValueError, TypeError, UnicodeError) as e:
             raise DomainError("INVALID_INPUT") from e
+        return body, chars
+
+    def _check_request(self, data, body, chars, reserve):
+        if data["halted"] or any(x["status"] == "STARTED" for x in data["slots"]):
+            raise DomainError(
+                "OUTCOME_UNKNOWN", "Prior unknown request stops all experiment stages"
+            )
+        if self.clock() - data["stage_started"][self.stage] > 300:
+            raise DomainError("BUDGET_EXHAUSTED", "Stage wall time exhausted")
+        own = [x for x in data["slots"] if x["stage"] == self.stage]
+        if (
+            chars > 8000
+            or len(body) > 10000
+            or len(data["slots"]) >= 14
+            or len(own) >= min(STAGES[self.stage], self.scope["max_requests"])
+            or data["reserved"] + reserve > 64000
+            or sum(x["reserved"] for x in own) + reserve
+            > (8000 if self.stage.startswith("extract") else 24000)
+        ):
+            raise DomainError("BUDGET_EXHAUSTED", "Frozen complete body/global/stage cap exceeded")
+        if data["slots"] and self.clock() - data["slots"][-1]["time"] < 6:
+            raise DomainError("RATE_LIMITED", "No automatic wait/retry")
+        if self.authorize(json.loads(json.dumps(self.scope))) is not True:
+            raise DomainError("PERMISSION_DENIED")
+        if (
+            self.model.transport is not self.transport
+            or self.model.settings.model != "intern-s2"
+            or self.model.settings.max_output_tokens != 1024
+        ):
+            raise DomainError("PERMISSION_DENIED", "Provider changed during authorization")
+
+    def preflight(self, messages, tools):
+        """Pure request-policy check; no new slot, send, wait or retry."""
+        body, chars = self._request_body(messages, tools)
+        with _locked(self.path.with_suffix(".lock")):
+            data = self._load()
+            self._check_request(data, body, chars, len(body) + 1024)
+        return len(body) + 1024
+
+    def call(self, messages, tools):
+        self.last_response = None
+        body, chars = self._request_body(messages, tools)
         # Private JSON copies break aliases to caller-owned input and authorization hooks.
         frozen = json.loads(body)
         messages, tools = frozen["messages"], frozen["tools"]
         reserve = len(body) + 1024
         with _locked(self.path.with_suffix(".lock")):
             data = self._load()
-            if data["halted"] or any(x["status"] == "STARTED" for x in data["slots"]):
-                raise DomainError(
-                    "OUTCOME_UNKNOWN", "Prior unknown request stops all experiment stages"
-                )
-            if self.clock() - data["stage_started"][self.stage] > 300:
-                data["halted"] = True
-                _save(self.path, data)
-                raise DomainError("BUDGET_EXHAUSTED", "Stage wall time exhausted")
-            own = [x for x in data["slots"] if x["stage"] == self.stage]
-            if (
-                chars > 8000
-                or len(body) > 10000
-                or len(data["slots"]) >= 14
-                or len(own) >= min(STAGES[self.stage], self.scope["max_requests"])
-                or data["reserved"] + reserve > 64000
-                or sum(x["reserved"] for x in own) + reserve
-                > (8000 if self.stage.startswith("extract") else 24000)
-            ):
-                raise DomainError(
-                    "BUDGET_EXHAUSTED", "Frozen complete body/global/stage cap exceeded"
-                )
-            if data["slots"] and self.clock() - data["slots"][-1]["time"] < 6:
-                raise DomainError("RATE_LIMITED", "No automatic wait/retry")
-            if self.authorize(json.loads(json.dumps(self.scope))) is not True:
-                raise DomainError("PERMISSION_DENIED")
-            if (
-                self.model.transport is not self.transport
-                or self.model.settings.model != "intern-s2"
-                or self.model.settings.max_output_tokens != 1024
-            ):
-                raise DomainError("PERMISSION_DENIED", "Provider changed during authorization")
+            try:
+                self._check_request(data, body, chars, reserve)
+            except DomainError:
+                if self.clock() - data["stage_started"][self.stage] > 300:
+                    data["halted"] = True
+                    _save(self.path, data)
+                raise
             slot = {
                 "stage": self.stage,
                 "status": "STARTED",

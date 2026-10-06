@@ -1,0 +1,146 @@
+..............F                                                          [100%]
+=================================== FAILURES ===================================
+____ test_expired_scan_releases_pool_before_next_project_and_generic_claim _____
+
+recovery_context = <isolated PostgreSQL recovery context>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2cb4c6d250>
+
+    def test_expired_scan_releases_pool_before_next_project_and_generic_claim(
+        recovery_context, monkeypatch
+    ):
+        ctx = recovery_context
+        store = ctx.store
+        response = ctx.client.post(
+            f"/api/projects/{ctx.project}/protocol/source", json=body(ctx.fixture)
+        )
+        assert response.status_code == 202
+        expired_a = response.json()["run_id"]
+        project_b = ctx.client.post("/api/projects", json={"name": "other lock project"}).json()["id"]
+        resource_b = ctx.client.post(
+            f"/api/projects/{project_b}/resources",
+            json={"name": "lock-policy", "format": "txt", "content": MATERIAL.read_text()},
+        ).json()["id"]
+        fixture_b = (*ctx.fixture[:5], project_b, resource_b)
+        response = ctx.client.post(f"/api/projects/{project_b}/protocol/source", json=body(fixture_b))
+        assert response.status_code == 202
+        expired_b = response.json()["run_id"]
+        response = ctx.client.post(
+            f"/api/projects/{project_b}/protocol/source",
+            json=body(fixture_b, request_key="active-reservation"),
+        )
+        assert response.status_code == 202
+        active_id = response.json()["run_id"]
+        owned = [store.claim("worker-" + str(i), 60) for i in range(3)]
+        active = next(value for value in owned if value["id"] == active_id)
+        with store.tx() as c:
+            c.execute(update(runs).where(runs.c.id.in_([expired_a, expired_b])).values(lease_until=0))
+
+        worker = Worker(store, ctx.settings, NoProvider())
+        reached = threading.Event()
+        proceed = threading.Event()
+        backend_pid = []
+        trace = []
+        gated = False
+        original_reserve = protocol_pool.reserve_slot
+        original_audit = protocol_recovery._pool_state
+
+        def reserve(*args):
+            connection = args[1]
+            backend_pid.append(connection.execute(text("select pg_backend_pid()")).scalar_one())
+            trace.append("reserve holds project B / active Run / quota")
+            reached.set()
+            assert proceed.wait(10), "Recovery did not reach pool lock"
+            return original_reserve(*args)
+
+        def audit(*args):
+            nonlocal gated
+            value = original_audit(*args)
+            if gated:
+                return value
+            gated = True
+            trace.append("expired A recovery holds pool")
+            proceed.set()
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                with store.engine.connect() as observer:
+                    wait = observer.execute(
+                        text("select wait_event_type from pg_stat_activity where pid=:pid"),
+                        {"pid": backend_pid[0]},
+                    ).scalar()
+                if wait == "Lock":
+                    trace.append("reservation waits on pool")
+                    break
+                time.sleep(0.01)
+            else:
+                pytest.fail("Actual reservation did not contend on recovery's pool lock")
+            return value
+
+        monkeypatch.setattr(protocol_pool, "reserve_slot", reserve)
+        monkeypatch.setattr(protocol_recovery, "_pool_state", audit)
+        context = copy.deepcopy(active["context"])
+        context["messages"] = [{"role": "user", "content": "offline lock probe"}]
+        read_tools = [tool for tool in definitions() if tool["function"]["name"] == "resource.read"]
+
+        def sender():
+            try:
+                worker.reserve(active_id, active["fence"], context, request_tools=read_tools)
+                return "RESERVED"
+            except DBAPIError as exc:
+                return ("DATABASE_ERROR", getattr(exc.orig, "sqlstate", None))
+
+        def scanner():
+            try:
+                assert store.claim("expired-scanner", 30) is None
+                return "SCAN_FINISHED"
+            except DBAPIError as exc:
+                return ("DATABASE_ERROR", getattr(exc.orig, "sqlstate", None))
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            sent = pool.submit(sender)
+            assert reached.wait(10), "Reservation did not reach project/Run/quota locks"
+            scanned = pool.submit(scanner)
+>           outcomes = [sent.result(timeout=20), scanned.result(timeout=20)]
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_protocol_recovery_concurrency.py:132:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_protocol_recovery_concurrency.py:116: in sender
+    worker.reserve(active_id, active["fence"], context, request_tools=read_tools)
+src/sim2act/worker.py:122: in reserve
+    reserve_slot(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+args = (<sim2act.db.Store object at 0x7f2cb52d47a0>, <sqlalchemy.engine.base.Connection object at 0x7f2cb4ef2bd0>, {'cancel_i... ...}, 'created_at': 1791303584.8629239, 'error': None, ...}, 1, 'attempt_cbaf338e75c44cb994f88963ea7b7b5a', 1368, ...)
+connection = <sqlalchemy.engine.base.Connection object at 0x7f2cb4ef2bd0>
+@py_assert1 = <bound method Event.wait of <threading.Event at 0x7f2cb4f07080: set>>
+@py_assert3 = 10
+
+    def reserve(*args):
+        connection = args[1]
+        backend_pid.append(connection.execute(text("select pg_backend_pid()")).scalar_one())
+        trace.append("reserve holds project B / active Run / quota")
+        reached.set()
+>       assert proceed.wait(10), "Recovery did not reach pool lock"
+E       AssertionError: Recovery did not reach pool lock
+E       assert False
+E        +  where False = wait(10)
+E        +    where wait = <threading.Event at 0x7f2cb4f07080: unset>.wait
+
+tests/test_protocol_recovery_concurrency.py:82: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_protocol_recovery_concurrency.py::test_expired_scan_releases_pool_before_next_project_and_generic_claim
+1 failed, 14 passed, 1 warning in 35.92s

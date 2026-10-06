@@ -1,0 +1,201 @@
+{
+  "reviewer": "e16_readonly_review",
+  "workspace_head": "fd259942b85cc2d67bef184d7afb10fb682974fd",
+  "reviewed_state": "Budget review complete on recorded source hashes; prior claim/recovery integration snapshot superseded, separate independent lock-fix review pending",
+  "source_hashes": {
+    "src/sim2act/protocol_pool.py": "a229be8a4a907ea26a59bc21f652b7aaf80fae6b95da844db65530058d957a86",
+    "src/sim2act/protocol_recovery.py": "26ca52407924da2b0bc80e80e11e8c47adce27d993dc5a34a9e60f730499f98b",
+    "src/sim2act/protocol_jobs.py": "2fc11f3c26dd4fb422c1a7ccded75710cea2de1fc6adfa0e78b9dde0be428d43",
+    "src/sim2act/protocol_api.py": "36fdca1fe1a46bfb55b3e2282c5fe88b9f947b88630e0a1b7eba3b250c4b2f20",
+    "src/sim2act/model_budget.py": "633a0100ed9a578b03e135b993d8f4ebd4ab6aff9a671886d00ac49e0046d4d8",
+    "src/sim2act/worker.py": "ece7b0142531e99b6317f6d67b74e6b11130c7055929caeb2f6e427a58efd3e9",
+    "src/sim2act/db.py": "2b62578f9faf7064c1f881983b37eeb47c26517a0ee69997a442ea2b4449b10d",
+    "tests/test_protocol_pool.py": "b427ab68481a09501a725536a23541ba6bc6bc68e33f3b73935d6111accd4890",
+    "tests/test_protocol_recovery.py": "eaba5520be069bf8dfef21a044cadfad5f14f35924b3ddf54d90b725da682dc9",
+    "tests/test_protocol_pool_process.py": "aae52528a984ef7104602b9da98ee0cb027279ba5976956ccebdc1b4472bd62f",
+    "tests/fixtures/protocol_pool_process_child.py": "505ef11137a358892a0a9ce745485444fed17e380e3e5ed4d5bea3cc84916bab"
+  },
+  "findings": [
+    {
+      "id": "B1",
+      "before": "Offline capacity 0 changed to 14 with coherent mutable policy fingerprint",
+      "after": "Independent controller genesis rejects change"
+    },
+    {
+      "id": "B2",
+      "before": "Coordinated slot deletion and counter reset allowed new Run/new sidecar Mock send while prior Attempt survived",
+      "after": "Bidirectional Attempt/slot and independent reservation events reject reset"
+    },
+    {
+      "id": "B3",
+      "before": "Slot fence and phase changes accepted",
+      "after": "Independent reservation seal rejects changes"
+    },
+    {
+      "id": "B4",
+      "before": "Slot reserved tokens and coordinated counter could be reduced",
+      "after": "Attempt equality plus reservation seal reject changes"
+    },
+    {
+      "id": "B5",
+      "before": "Mutable token limit exceeded frozen policy",
+      "after": "Strict row policy rejects change"
+    },
+    {
+      "id": "B6",
+      "before": "Actual known usage 100000 exceeded token cap without halt",
+      "after": "Original usage preserved and global send rejected"
+    },
+    {
+      "id": "B7",
+      "before": "Clearing mutable halt after overuse allowed a new Mock send",
+      "after": "Independent halt facts and actual usage reject send"
+    },
+    {
+      "id": "R1",
+      "before": "Stripped job, accepted event and context marker while valid frozen namespace remained: generic recovery re-claimed RUNNING; no model request",
+      "after": "Central namespace oracle covers jobs/pool/claim/recovery; state only WAITING_RESOURCE"
+    },
+    {
+      "id": "B8",
+      "before": "Malformed stored known usage tokens None raised TypeError without durable halt; no send bypass demonstrated",
+      "after": "Controlled OUTCOME_UNKNOWN and durable halt"
+    }
+  ],
+  "independent_closure": {
+    "sqlite": {
+      "passed": 9,
+      "seconds": 2.54
+    },
+    "actual_postgresql": {
+      "passed": 9,
+      "seconds": 6.41
+    }
+  },
+  "regression": {
+    "sqlite_pool_and_recovery": {
+      "passed": 35,
+      "seconds": 13.48
+    },
+    "actual_postgresql_pool_recovery_and_permanent_processes": {
+      "passed": 41,
+      "seconds": 63.93
+    }
+  },
+  "permanent_process_verification": {
+    "passed": 6,
+    "seconds": 26.7,
+    "two_owner_project_last_slot": {
+      "already_received": 13,
+      "competing_processes": 2,
+      "actual_additional_mock_requests": 1
+    },
+    "crash_cases": [
+      {
+        "point": "after_db_started",
+        "exit_code": 73,
+        "actual_mock_requests": 0,
+        "recovery": "STOPPED_UNKNOWN"
+      },
+      {
+        "point": "before_transport_after_sidecar",
+        "exit_code": 77,
+        "actual_mock_requests": 0,
+        "recovery": "STOPPED_UNKNOWN"
+      },
+      {
+        "point": "during_transport",
+        "exit_code": 74,
+        "actual_mock_requests": 1,
+        "recovery": "STOPPED_UNKNOWN"
+      },
+      {
+        "point": "after_response_before_db",
+        "exit_code": 75,
+        "actual_mock_requests": 1,
+        "recovery": "STOPPED_UNKNOWN"
+      },
+      {
+        "point": "after_finished",
+        "exit_code": 76,
+        "actual_mock_requests": 1,
+        "recovery": "CONTINUATION_NOT_IMPLEMENTED"
+      }
+    ],
+    "cold_store": true,
+    "unknown_cases_new_run_sidecar_process_additional_requests": 0,
+    "unknown_reserved_slots_preserved": 1,
+    "connection_handling": "Inherited child environment only; not config or output"
+  },
+  "validation_history": [
+    {
+      "stage": "Initial attack fixture",
+      "result": "1 failed, 4 passed",
+      "reason": "Same-Run sidecar initialization rejected; changed to genuine new Run; five baseline accepts then reproduced."
+    },
+    {
+      "stage": "Mixed external and repo tests",
+      "result": "30 passed, 14 setup errors",
+      "reason": "External jobs fixture polluted API fixture resolution; separate subprocess invocations corrected it; not product failure."
+    },
+    {
+      "stage": "Caller-message late mutation probe",
+      "result": "Expected mismatch assertion failed",
+      "reason": "Current adapter private copy kept actual wire and PG request fingerprint identical; no vulnerability reproduced."
+    },
+    {
+      "stage": "Evidence log guard",
+      "result": "Raw log copy rejected before report generation",
+      "reason": "Only static result summaries are archived; warnings and trace details excluded."
+    }
+  ],
+  "initial_observed_hashes_not_atomic_to_each_reproduction": {
+    "src/sim2act/protocol_pool.py": "726ccc74a3988a3cf1b0b140a8d2d803a8e2532d6b302ba8f382960a56926823",
+    "src/sim2act/db.py": "da13c4f906c0694ff7ddeec70393a8ec58f316a1be90cc0a6c4bb79e2600a0e2"
+  },
+  "logs": [
+    "independent-closed-sqlite.log",
+    "independent-closed-pg.log",
+    "independent-regression-sqlite.log",
+    "independent-regression-pg.log",
+    "independent-process-pg.log"
+  ],
+  "scope_limits": [
+    "Zero external network and LIVE; actual InternModel with httpx.MockTransport",
+    "Global pool covers protocol namespace, not legacy F1 model requests",
+    "Single in-flight and sticky observation halt sacrifice availability; not parallel execution capability",
+    "DB, sidecar and network do not commit atomically; unknown may include undelivered requests",
+    "State recovery does not rebuild responses, results, proofs or source success",
+    "Synthetic exact-JSON proofs do not establish general semantic or LIVE model acceptance",
+    "PG process tests used isolated schemas, not independent least-privilege role proof",
+    "No Windows/native browser/CI; original historical unknowns untouched"
+  ],
+  "blocking_findings_remaining": [],
+  "reviewer_product_changes": false,
+  "reviewer_owned_test_files": [
+    "tests/test_protocol_pool_process.py",
+    "tests/fixtures/protocol_pool_process_child.py"
+  ],
+  "stage_scope": {
+    "accepted_budget_source_files": [
+      "src/sim2act/protocol_pool.py",
+      "src/sim2act/protocol_api.py",
+      "src/sim2act/protocol_jobs.py",
+      "src/sim2act/model_budget.py",
+      "src/sim2act/worker.py"
+    ],
+    "superseded_integration_source_files": [
+      "src/sim2act/protocol_recovery.py",
+      "src/sim2act/db.py"
+    ],
+    "superseded_hash_meaning": "Recorded hashes are the snapshots exercised in this review, not sign-off of current whole integration",
+    "reported_by_parent_independent_recovery_review": {
+      "actual_postgresql_error": "40P01",
+      "schedule": "three Runs",
+      "cause": "The original claim transaction recovered multiple expired Runs, retaining a pool lock while subsequently acquiring project B",
+      "root_fix": "Separate project -> Run -> pool transaction for each expired Run, commit before next; normal claim transaction takes no pool lock",
+      "fix_review": "Separate recovery reviewer is validating the same schedule and permanent concurrency regression; not executed or signed off by this budget reviewer"
+    }
+  },
+  "blocking_findings_remaining_scope": "Budget slice only; this does not assert current whole-integration lock fix has passed independent review"
+}

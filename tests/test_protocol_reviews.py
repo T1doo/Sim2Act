@@ -29,6 +29,14 @@ from sim2act.protocol_reviews import (
 )
 from sim2act.worker import Worker
 
+
+@pytest.fixture(autouse=True)
+def initialized_request_pool(env):
+    from sim2act.protocol_pool import initialize_pools
+
+    initialize_pools(env[0], offline_limit=14)
+
+
 CONTRACT = "protocol.synthetic.a-source.v1"
 MATERIAL = (
     Path(__file__).resolve().parents[1]

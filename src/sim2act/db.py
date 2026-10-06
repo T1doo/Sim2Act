@@ -379,6 +379,43 @@ protocol_reviews = Table(
 )
 
 
+# Explicit migration only; fixed service-selected protocol pools, no runtime DDL.
+protocol_request_pools = Table(
+    "protocol_request_pools",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("mode", String, nullable=False),
+    Column("request_limit", Integer, nullable=False),
+    Column("token_limit", Integer, nullable=False),
+    Column("reserved_requests", Integer, nullable=False),
+    Column("reserved_tokens", Integer, nullable=False),
+    Column("known_tokens", Integer, nullable=False),
+    Column("halted", Boolean, nullable=False),
+    Column("halt_reason", String),
+    Column("policy_fingerprint", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", Float, nullable=False),
+)
+protocol_request_slots = Table(
+    "protocol_request_slots",
+    meta,
+    Column("attempt_id", String, primary_key=True),
+    Column("pool_id", String, nullable=False),
+    Column("ordinal", Integer, nullable=False),
+    Column("run_id", String, nullable=False),
+    Column("fence", Integer, nullable=False),
+    Column("phase", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("reserved_tokens", Integer, nullable=False),
+    Column("status", String, nullable=False),
+    Column("usage", JSON),
+    Column("safe_response_fingerprint", String),
+    Column("error", String),
+    Column("created_at", Float, nullable=False),
+    Column("finished_at", Float),
+    UniqueConstraint("pool_id", "ordinal"),
+)
+
 # Explicit Store.initialize/controller migration only, never API DDL.
 spec_checklist_tasks = Table(
     "spec_checklist_tasks",
@@ -761,12 +798,18 @@ class Store:
         return contract
 
     def claim(self, worker_id, lease_seconds):
+        from .protocol_jobs import protocol_run_ids
+        from .protocol_recovery import recover_expired_protocols
+
+        recover_expired_protocols(self)
         now = time.time()
         with self.tx() as c:
+            protocol_member = runs.c.id.in_(protocol_run_ids(c))
             expired = (
                 c.execute(
                     select(runs)
                     .where(
+                        ~protocol_member,
                         runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]),
                         runs.c.lease_until <= now,
                     )

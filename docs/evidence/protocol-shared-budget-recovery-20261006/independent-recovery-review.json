@@ -1,0 +1,185 @@
+{
+  "kind": "independent-recovery-review.v1",
+  "review_date": "2026-10-06",
+  "reviewer": "readonly_boundary_review",
+  "decision": "PASS_FOR_BOUNDED_STATE_ONLY_RECOVERY_AFTER_PG_LOCK_CORRECTION",
+  "source_sha256": {
+    "src/sim2act/protocol_jobs.py": "2fc11f3c26dd4fb422c1a7ccded75710cea2de1fc6adfa0e78b9dde0be428d43",
+    "src/sim2act/protocol_pool.py": "a229be8a4a907ea26a59bc21f652b7aaf80fae6b95da844db65530058d957a86",
+    "src/sim2act/protocol_recovery.py": "26ca52407924da2b0bc80e80e11e8c47adce27d993dc5a34a9e60f730499f98b",
+    "src/sim2act/db.py": "2b62578f9faf7064c1f881983b37eeb47c26517a0ee69997a442ea2b4449b10d",
+    "src/sim2act/protocol_api.py": "36fdca1fe1a46bfb55b3e2282c5fe88b9f947b88630e0a1b7eba3b250c4b2f20",
+    "tests/test_protocol_recovery.py": "eaba5520be069bf8dfef21a044cadfad5f14f35924b3ddf54d90b725da682dc9",
+    "tests/test_protocol_recovery_concurrency.py": "325843e3b2c641453c52b165d8b8a5c839c7d3eb41bc11511cee1566719e6728"
+  },
+  "checks": [
+    {
+      "id": "shared-namespace-oracle",
+      "status": "PASS",
+      "detail": "Jobs, pool accounting, claim partition and expired recovery share protocol_run_ids: job, accepted event, context kind, protocol result marker, valid hash-bound frozen constraints list. Stripped first three markers remain excluded from generic F1 recovery."
+    },
+    {
+      "id": "old-f1-route",
+      "status": "PASS",
+      "detail": "Legacy Runs without protocol markers retain generic expired claim behavior; permanent actual PG regression passed. Marker-bearing Runs cannot use this fallback."
+    },
+    {
+      "id": "state-only-completion",
+      "status": "PASS",
+      "detail": "Sealed completed source remains WAITING_APPROVAL with unchanged result/fence/version. Recovery does not create semantic PASS, reconstruct result/proof, or undo later pause versions."
+    },
+    {
+      "id": "unknown-no-resend",
+      "status": "PASS",
+      "detail": "STARTED/unknown or single-sided durable reservation never becomes an unsent job. Known RECEIVED without atomic completion cannot continue. Unknown cancellation preserves RECONCILING. Shared pool blocks additional reservations; recovery itself sends zero provider requests."
+    },
+    {
+      "id": "current-boundaries",
+      "status": "PASS",
+      "detail": "Current owner/project/resources, frozen dependencies, expected strict fence/version, active lease and exact cached response fingerprint checked. Seven bool/int/status/extra cached response mutations rejected."
+    },
+    {
+      "id": "actual-pg-lock-cycle-regression",
+      "status": "PASS",
+      "detail": "Pre-fix actual worker reservation returned 40P01. Per-Run recovery commits pool locks before acquiring the next project, and before generic claim. Same observed pool contention now completes without deadlock or retry; permanent PG gate passed."
+    }
+  ],
+  "actual_validation": [
+    {
+      "suite": "tests/test_protocol_recovery.py",
+      "backend": "PostgreSQL",
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 14.62,
+      "log": "independent-recovery-pg-existing.log",
+      "source_set": "pre_lock_source_sha256"
+    },
+    {
+      "suite": "independent temporary attacks",
+      "backend": "PostgreSQL",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 21.57,
+      "log": "independent-recovery-pg-attacks.log",
+      "cases": [
+        "cached response version=True",
+        "cached response fence=True",
+        "cached provider_requests=False",
+        "cached automatic_resend=0",
+        "cached cached=0",
+        "cached status=SUCCEEDED",
+        "cached extra gold",
+        "single-sided deleted Attempt",
+        "single-sided deleted slot",
+        "unknown cancel remains RECONCILING"
+      ],
+      "source_set": "pre_lock_source_sha256"
+    },
+    {
+      "suite": "tests/test_protocol_recovery.py + tests/test_protocol_recovery_concurrency.py",
+      "backend": "PostgreSQL",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 23.58,
+      "source_set": "source_sha256",
+      "log": "independent-recovery-lock-corrected-pg.safe.log"
+    },
+    {
+      "suite": "same actual PG deadlock schedule after product correction",
+      "backend": "PostgreSQL",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 2.81,
+      "log": "independent-claim-deadlock-after.safe.log"
+    }
+  ],
+  "prior_validation": {
+    "sqlite_existing_passed": 13,
+    "sqlite_independent_attacks_passed": 10,
+    "previous_pg_attacks_passed": 10,
+    "post_lock_sqlite_recovery_passed": 14,
+    "post_lock_sqlite_pg_only_test_skipped": 1
+  },
+  "retained_failures": [
+    {
+      "stage": "independent harness collection",
+      "detail": "Initial combined external and repository collection registered conftest twice; separated invocations corrected harness without product edits."
+    },
+    {
+      "stage": "earlier namespace implementation",
+      "detail": "Independent e16 review reproduced stripped namespace falling into generic F1 re-claim with zero sends; final central oracle and permanent PG negative passed."
+    },
+    {
+      "stage": "PG deadlock probe first harness",
+      "detail": "Probe gated every audit and waited for already-finished worker on second iteration; corrected to gate first audit only, then reproduced real 40P01."
+    },
+    {
+      "stage": "Permanent PG barrier first setup",
+      "detail": "14 PASS / 1 FAIL: random project IDs placed held project first in the new sorted recovery scan, so audit barrier could not be reached. Test now puts active reservation in sorted second project. Corrected permanent suite passed all 15."
+    }
+  ],
+  "boundaries": {
+    "live_requests": 0,
+    "recovery_provider_requests": 0,
+    "test_transport": "Explicit offline MockTransport only",
+    "native_browser": "NOT_RUN",
+    "visual": "NOT_RUN",
+    "full_suite": "Root owns parallel full SQLite/PG validation; not claimed here",
+    "real_model_semantics": "NOT_RUN",
+    "all_namespace_anchors_destroyed": "Cannot infer provenance after every marker is removed; not claimed",
+    "arbitrary_global_database_rewrite": "Not claimed",
+    "scope": "No generic F1 reconciliation changes beyond protocol prefilter; no automatic protocol continuation or provider receipt settlement"
+  },
+  "resource_cleanup": {
+    "pg_schemas": "Fixture finally drops each isolated schema",
+    "pg_container": "Root retains ownership; untouched",
+    "temporary_attack_script": "Removed after final evidence capture",
+    "parent_tmp": "Untouched",
+    "temporary_deadlock_script": "Removed after before/after capture; permanent regression is checked in workspace test file"
+  },
+  "product_edits": false,
+  "log_sha256": {
+    "independent-recovery-pg-existing.log": "5a69f9ef46bd1380901fb74b65120356717262c7d818656ceaf4a757d8be746e",
+    "independent-recovery-pg-attacks.log": "0fd662832d3e2d3bf743a8f952f890185f36980007e8a7f3c0502c5240f1ec76",
+    "independent-claim-deadlock-before.safe.log": "4cec8efc1791719d5f27e8e258a22aec7519b13aa3e57337a1322b7b7b397a8a",
+    "independent-claim-deadlock-after.safe.log": "63aa614b6471aeac7529900bd8e119e44d6c24492f92ce7065486d8c225ef826",
+    "independent-recovery-lock-corrected-pg.safe.log": "83853054a8e88063fadecd890e61c06388dea142a84bdd99be3e4a7b3bc99d6f",
+    "independent-recovery-lock-corrected-sqlite.safe.log": "110c8f34101a801d141d86f5936a1ac2f7a5937e6deba54148f7ce63aed9033e",
+    "independent-recovery-harness-order-failed.safe.log": "53a6e966c4cbee0bf6cf322a66107eead8204091eb8cf39f05ba24d2b21e494c"
+  },
+  "blocking_findings": [
+    {
+      "id": "pool-project-lock-cycle",
+      "source_db_sha256": "3a8c2f0c61d1e6df883945319b79e45092b141dc1121a3c845a2829a04986823",
+      "reproduction": "Actual Worker.reserve on active Run C holds project B/Run C/quota. Store.claim recovers expired A and holds pool across iteration, then waits project B for expired B. Observed worker waiting Lock in pg_stat_activity; PostgreSQL aborts reserve with 40P01. No model request occurred.",
+      "probe_passed": 1,
+      "seconds": 4.68,
+      "outcomes": [
+        "40P01",
+        "claimed"
+      ],
+      "required_fix": "Each expired protocol Run in its own project -> Run -> pool short transaction; commit before next project. Generic expired/queued claim transaction must not inherit pool locks.",
+      "status": "RESOLVED_BY_PER_RUN_TRANSACTION_BOUNDARY",
+      "after_probe_passed": 1,
+      "after_seconds": 2.81,
+      "after_outcomes": [
+        "reserved",
+        "claimed"
+      ],
+      "permanent_actual_pg_gate": "15 PASS; barrier asserts one STARTED reservation/one slot, no provider calls/retry, both expired Runs PAUSED, active Run RUNNING, all results None"
+    }
+  ],
+  "pre_lock_source_sha256": {
+    "src/sim2act/protocol_jobs.py": "2fc11f3c26dd4fb422c1a7ccded75710cea2de1fc6adfa0e78b9dde0be428d43",
+    "src/sim2act/protocol_pool.py": "a229be8a4a907ea26a59bc21f652b7aaf80fae6b95da844db65530058d957a86",
+    "src/sim2act/protocol_recovery.py": "06ca6d9b025b9334b014ccbb42e07b3aef42c2ff6ea7ee543cae90c1c45ae92d",
+    "src/sim2act/db.py": "3a8c2f0c61d1e6df883945319b79e45092b141dc1121a3c845a2829a04986823",
+    "src/sim2act/protocol_api.py": "36fdca1fe1a46bfb55b3e2282c5fe88b9f947b88630e0a1b7eba3b250c4b2f20",
+    "tests/test_protocol_recovery.py": "eaba5520be069bf8dfef21a044cadfad5f14f35924b3ddf54d90b725da682dc9"
+  },
+  "owned_new_test": "tests/test_protocol_recovery_concurrency.py"
+}

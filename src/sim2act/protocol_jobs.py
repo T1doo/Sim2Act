@@ -118,6 +118,10 @@ def _authority(store, c, run, snapshot):
     if contract.limits.model_dump() != snapshot["limits"]:
         raise DomainError("VERSION_CONFLICT")
     scope = Scope.model_validate(snapshot["scope"])
+    from .protocol_pool import selected_pool
+
+    if snapshot.get("request_pool_id") != selected_pool(scope.mode):
+        raise DomainError("VERSION_CONFLICT", "Fixed shared request pool changed")
     if (
         scope.mode != "offline"
         or scope.project_id != run["project_id"]
@@ -205,40 +209,45 @@ def verified_pending(store, c, user, rid, *, stop_only=False):
     }, dict(run)
 
 
+def protocol_run_ids(c, rid=None):
+    """Central marker oracle; optional per-Run lookups avoid scanning unrelated rows."""
+    jobs_query = select(_table().c.run_id)
+    events_query = select(events.c.run_id).where(events.c.kind == "PROTOCOL_ACCEPTED")
+    runs_query = select(runs.c.id, runs.c.context, runs.c.result)
+    contracts_query = select(run_contracts)
+    if rid is not None:
+        jobs_query = jobs_query.where(_table().c.run_id == rid)
+        events_query = events_query.where(events.c.run_id == rid)
+        runs_query = runs_query.where(runs.c.id == rid)
+        contracts_query = contracts_query.where(run_contracts.c.run_id == rid)
+    ids = set(c.execute(jobs_query).scalars())
+    ids.update(c.execute(events_query).scalars())
+    for run in c.execute(runs_query).mappings():
+        context, result = run["context"], run["result"]
+        if isinstance(context, dict) and context.get("kind") == NAMESPACE:
+            ids.add(run["id"])
+        if (
+            isinstance(result, dict)
+            and isinstance(result.get("protocol_result"), dict)
+            and result["protocol_result"].get("kind") == "model-protocol.v1"
+        ):
+            ids.add(run["id"])
+    for contract in c.execute(contracts_query).mappings():
+        saved = contract["snapshot"]
+        goal = saved.get("goal") if isinstance(saved, dict) else None
+        constraints = goal.get("constraints") if isinstance(goal, dict) else None
+        if (
+            isinstance(constraints, list)
+            and NAMESPACE in constraints
+            and fingerprint(saved) == contract["fingerprint"]
+        ):
+            ids.add(contract["run_id"])
+    return ids
+
+
 def is_protocol_job(store, rid):
     with store.engine.connect() as c:
-        current = (
-            c.execute(select(runs.c.context, runs.c.result).where(runs.c.id == rid))
-            .mappings()
-            .first()
-        )
-        context = current["context"] if current else None
-        result_marker = bool(
-            current
-            and isinstance(current["result"], dict)
-            and isinstance(current["result"].get("protocol_result"), dict)
-            and current["result"]["protocol_result"].get("kind") == "model-protocol.v1"
-        )
-        bound = c.execute(select(_table().c.run_id).where(_table().c.run_id == rid)).first()
-        frozen = (
-            c.execute(select(run_contracts).where(run_contracts.c.run_id == rid)).mappings().first()
-        )
-        marker = bool(
-            frozen
-            and fingerprint(frozen["snapshot"]) == frozen["fingerprint"]
-            and NAMESPACE in frozen["snapshot"].get("goal", {}).get("constraints", [])
-        )
-        accepted = c.execute(
-            select(events.c.id).where(events.c.run_id == rid, events.c.kind == "PROTOCOL_ACCEPTED")
-        ).first()
-        return bool(
-            bound
-            or result_marker
-            or marker
-            or accepted
-            or isinstance(context, dict)
-            and context.get("kind") == NAMESPACE
-        )
+        return rid in protocol_run_ids(c, rid)
 
 
 def _attempt_seal(attempt):
@@ -562,7 +571,10 @@ def enqueue(store, user, pid, phase, payload, key, limits):
         ).model_dump()
         if compiled:
             validate_candidate(compiled["candidate"], Scope.model_validate(scope))
+        from .protocol_pool import selected_pool
+
         snapshot = {
+            "request_pool_id": selected_pool("offline"),
             "namespace": NAMESPACE,
             "version": 1,
             "run_id": rid,

@@ -2,15 +2,16 @@
 
 import copy
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
 from sim2act.config import Settings
-from sim2act.db import Store, attempts, fingerprint, grants, principals, protocol_jobs, runs
+from sim2act.db import Store, attempts, fingerprint, grants, new_id, principals, protocol_jobs, runs
 from sim2act.errors import DomainError
 from sim2act.model import InternModel
 from sim2act.model_budget import BudgetedProvider, initialize_ledger
@@ -57,16 +58,29 @@ def wire(value=None, rid=None):
 
 @pytest.fixture
 def env(tmp_path):
-    store = Store("sqlite:///" + str(tmp_path / "jobs.sqlite"), test_only=True)
+    url = os.environ.get("SIM2ACT_TEST_DATABASE_URL", "sqlite:///" + str(tmp_path / "jobs.sqlite"))
+    store = Store(url, test_only=True)
+    schema = new_id("test")
+    if not store.sqlite:
+        with store.engine.begin() as c:
+            c.execute(text('CREATE SCHEMA "' + schema + '"'))
+        store.engine = store.engine.execution_options(schema_translate_map={None: schema})
     store.initialize()
+    from sim2act.protocol_pool import initialize_pools
+
+    initialize_pools(store, offline_limit=14)
     user = store.user("synthetic protocol owner", "secret test token")
     pid = store.project(user, "synthetic protocol project")
     materials = ROOT / "docs/evidence/model-protocol-preparation-20261006/materials"
     a = store.resource(user, pid, "A source", "md", (materials / "a-source/policy.txt").read_text())
     b = store.resource(user, pid, "A unseen", "md", (materials / "a-cold/policy.txt").read_text())
-    s = Settings(database_url="sqlite://", data_dir=tmp_path, max_requests=3, max_repairs=0)
+    s = Settings(database_url=url, data_dir=tmp_path, max_requests=3, max_repairs=0)
     worker = Worker(store, s)
-    return store, user, pid, a, b, worker, tmp_path
+    yield store, user, pid, a, b, worker, tmp_path
+    if not store.sqlite:
+        with store.engine.begin() as c:
+            c.execute(text('DROP SCHEMA "' + schema + '" CASCADE'))
+    store.engine.dispose()
 
 
 def source_payload(rid):
@@ -269,6 +283,23 @@ def test_reviewed_source_model_extract_compiles_and_cold_reads_unseen_material(e
     requests = factory_for(env, [wire(cold["expected_output"])], "cold_a")
     completed = execute(env)
     assert completed["status"] == "WAITING_APPROVAL"
+    from sim2act.db import protocol_request_slots
+    from sim2act.protocol_pool import OFFLINE_POOL, inspect_pool
+
+    shared = inspect_pool(store, OFFLINE_POOL)
+    assert shared["reserved_requests"] == 4 and shared["known_tokens"] == 80
+    with store.engine.connect() as c:
+        phases = list(c.execute(select(protocol_request_slots.c.phase)).scalars())
+    assert sorted(phases) == ["cold", "extract", "source", "source"]
+    with store.engine.connect() as c:
+        slots = list(c.execute(select(protocol_request_slots)).mappings())
+        accepted_scopes = list(c.execute(select(protocol_jobs.c.accepted_snapshot)).scalars())
+        actual_ids = set(c.execute(select(attempts.c.id)).scalars())
+    assert {slot["pool_id"] for slot in slots} == {OFFLINE_POOL}
+    assert {slot["attempt_id"] for slot in slots} == actual_ids
+    assert {snapshot["request_pool_id"] for snapshot in accepted_scopes} == {OFFLINE_POOL}
+    assert len({snapshot["scope"]["approval_id"] for snapshot in accepted_scopes}) == 3
+
     trace = completed["result"]["protocol_result"]["evidence"]["tool_trace"]
     assert trace[0]["args"]["resource_id"] == b
     assert (

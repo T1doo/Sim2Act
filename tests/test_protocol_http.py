@@ -22,6 +22,9 @@ from sim2act.worker import Worker
 
 @pytest.fixture
 def env(env):
+    from sim2act.protocol_pool import initialize_pools
+
+    initialize_pools(env[0], offline_limit=14)
     material = (
         Path(__file__).parents[1]
         / "docs/evidence/model-protocol-preparation-20261006/materials/a-source/policy.txt"

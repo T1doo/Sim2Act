@@ -335,3 +335,24 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 最终 root 完整 SQLite 为 **704 PASS / 26 SKIP / 1 FAIL**（325.10s），失败为旧 registered-generation actual HTTP DOM 冷运行 helper 最终读 engineering.run.id / instance.id 时 null（日志不足判定具体对象）。独立单测复跑 **1 PASS**（26.99s），未改 UI/DOM 测试或伪称根因已确认；原失败日志保存、完整回归 NOT_ACCEPTED，待后续定位。PG 专项 **131 PASS**（92.90s）含两表显式迁移/受限CRUD与原F1，非完整PG全套。Ruff全src/tests、修改文件format、mypy29、diff均PASS；独立格式化后52PASS+F1 61PASS且hash不变。该未闭合旧DOM失败是交付明确边界，单项重跑不覆盖它。
 
 临时真实HTTP诊断保留正常poll，只hold两个实际回执顺序，确实观察到manual refresh返回时run/instance同时null、释放实例回执后原IID/RID恢复SUCCEEDED（exit0，owned server/Node已清理）。这是受控注入时序的可行性证据，不能倒推完整测试原失败原因；旧产品/UI/harness未修改，原完整NOT_ACCEPTED保留。见dom-injected-timing-diagnostic.txt。
+
+
+### 2026-10-06 / 跨阶段共享预算与安全状态恢复（本地工程）
+
+按本轮追加授权实施 [范围与验收计划](ProtocolSharedBudgetRecoveryPlan.md)。协议 source/extract/cold 的所有 owner、project、Run、进程固定共用 mode pool，Attempt STARTED 与 slot 同事务占额，收到响应后双账同事务核对；重启、新阶段、新 sidecar 不刷新预算。显式 controller 初始化默认 offline/live 均0，仅 test_only 合成夹具明确 offline14；真实 LIVE 仍0且拒绝。新增两表仅显式 Store.initialize migration，API 不建表，既有业务角色 CRUD 与禁止 DDL 已真实 PG 验证，无新增产品身份/Grant。
+
+新增 owner 授权 recover HTTP 入口只固化/读取状态：完整原子结果等待原验收；严格无发送证据才 PAUSED；STARTED/未知/单边账全局停止且不退款；RECEIVED 缺 atomic completion 明确 CONTINUATION_NOT_IMPLEMENTED。不重发、不补答案、不造 seal/PASS。协议过期 claim 隔离旧 F1 自动恢复，旧 F1 无协议 marker 的路径保持。
+
+独立终审实际发现 coherent policy 提额、清账/清 halt、slot 字段/usage 篡改及 namespace 剥离缺口，已用永久负例和独立 SQLite/真实PG复验闭合。真实三 Run PG 又复现40P01：旧恢复事务持有 pool 后锁第二 project，与另一项目 reserve 成环。每 expired Run 独立 project→Run→pool 短事务，释放后再下一个，普通 claim 不携带 pool 锁；同屏障修后0死锁/0重试/0 provider，永久 PG 并发负例纳入最终完整回归。单 in-flight 的保守策略可能牺牲并发可用性，观察到 STARTED 即 sticky halt，不宣称并行吞吐。
+
+旧 DOM 原704PASS26SKIP1FAIL保留；父7beb20d全599PASS25SKIP、当前原序相关110PASS1SKIP，受控真实回执均复现旧 helper 的 null 窗口。只改两测试文件等待原 IID/RID 的终态、表单和非 busy，正常 poll/12秒 timeout 保留。修后隔离基线全706PASS26SKIP；准确原失败 interleaving 仍 UNKNOWN，此证据不证明产品回归根因。合并最终完整结果及每次失败见 [本轮证据](../evidence/protocol-shared-budget-recovery-20261006/README.md)。
+
+上一阶段“PG专项131”覆盖更正为91真实PG、40SQLite；历史记录不改。当前 jobs fixture 已真实接 PG。独立跨进程末槽竞争、五崩溃点和冷重启6例真实PG通过，发送未知保留占额且新 Run/sidecar0额外发送。完整回归在最终锁修复和永久测试冻结后重跑，修前全量单列不顶替修后签收。
+
+本轮不 push/CI/LIVE/业务外发/新部署；固定 Mock 与四包 exactJSON gold 只验证技术边界，不是书生真实模型语义。完整 continuation、正式 AppManifest/Release、原生/视觉、本轮 Windows、完整P-B及 F1/Win11/AT02 未签收。只本地提交，结果与精确 hash 另列。
+
+
+最终锁修复与永久并发测试冻结后，root SQLite 完整 **741 PASS / 34 SKIP / 0 FAIL**，637.12秒（775 collected，2个既有依赖/字段警告）；两个实际HTTP DOM模式均含在完整顺序内。PG配置全量尚待终态，不提前签收。修前全量 SQLite741PASS33SKIP469.32秒、PG773PASS1SKIP1369.60秒仅历史快照，未收录新永久锁回归且不能覆盖后续源码。
+
+
+最终锁修复冻结版 PG配置全量 **774 PASS / 1 SKIP / 0 FAIL**，1475.06秒，775 collected；2个既有依赖/字段警告。PG配置全量含纯单元与显式SQLite测试，不把774全部称真实PG；真实跨进程/三Run并发/角色专项另列。结合SQLite741PASS34SKIP637.12秒及最终独立两报告，此有界离线工程切片通过。删容器前owned PG残test schema/role均0；仅本轮容器已移除且inspect确认不存在，私有credential env/state目录已清除。真实模型请求0，LIVE预算0；无push/CI。最终本地提交hash在父线程交付回执，证据见protocol-shared-budget-recovery-20261006/result.json。

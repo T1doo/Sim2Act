@@ -1,0 +1,124 @@
+{
+  "kind": "protocol-shared-budget-recovery-local.v1",
+  "base_commit": "fd259942b85cc2d67bef184d7afb10fb682974fd",
+  "branch": "dev/f1-foundation",
+  "decision": "PASS_FOR_BOUNDED_OFFLINE_ENGINEERING_SLICE",
+  "source_hash_manifest": "final-source-hashes.json",
+  "final_full_regression": [
+    {
+      "configuration": "SQLite",
+      "command": "NODE_PATH=/workspace/browser-tools/node_modules python -m pytest -q",
+      "passed": 741,
+      "skipped": 34,
+      "failed": 0,
+      "warnings": 2,
+      "seconds": 637.12,
+      "log": "root-full-final-sqlite.safe.log"
+    },
+    {
+      "configuration": "PostgreSQL-enabled full suite",
+      "command": "SIM2ACT_TEST_DATABASE_URL=<private owned PG> NODE_PATH=/workspace/browser-tools/node_modules python -m pytest -q",
+      "passed": 774,
+      "skipped": 1,
+      "failed": 0,
+      "warnings": 2,
+      "seconds": 1475.06,
+      "log": "root-full-final-pg.safe.log",
+      "coverage_note": "Contains pure unit and explicitly SQLite-only tests; total is not a claim that every case uses PostgreSQL."
+    }
+  ],
+  "independent_actual_pg": [
+    {
+      "suite": "state-only recovery and permanent three-Run lock test",
+      "passed": 15,
+      "seconds": 23.58,
+      "report": "independent-recovery-review.json"
+    },
+    {
+      "suite": "two-process final slot and five cold crash seams",
+      "passed": 6,
+      "seconds": 26.7,
+      "log": "root-process-pg.safe.log"
+    }
+  ],
+  "schema_validation": {
+    "passed": 3,
+    "seconds": 1.5,
+    "actual_pg_role_cases": 2,
+    "explicit_sqlite_api_no_ddl_cases": 1,
+    "log": "root-schema-pg.safe.log"
+  },
+  "static_checks": {
+    "ruff_src_tests": "PASS",
+    "format_modified_python_files": 18,
+    "mypy_source_files": 31,
+    "git_diff_check": "PASS"
+  },
+  "pre_lock_full_snapshots": [
+    {
+      "configuration": "SQLite",
+      "passed": 741,
+      "skipped": 33,
+      "seconds": 469.32,
+      "log": "root-full-before-lock-sqlite.safe.log"
+    },
+    {
+      "configuration": "PG-enabled",
+      "passed": 773,
+      "skipped": 1,
+      "seconds": 1369.6,
+      "log": "root-full-before-lock-pg.safe.log"
+    }
+  ],
+  "old_dom_failure_preserved": {
+    "passed": 704,
+    "skipped": 26,
+    "failed": 1,
+    "exact_original_interleaving": "UNKNOWN",
+    "report": "dom-summary.md"
+  },
+  "correction_prior_pg_131": {
+    "actual_pg": 91,
+    "sqlite": 40,
+    "old_history_preserved": true
+  },
+  "policy": {
+    "default_offline_requests": 0,
+    "live_requests": 0,
+    "synthetic_test_only_offline_allowance": 14,
+    "protocol_pool_scope": "all protocol source/extract/cold owners/projects/Runs/processes in one database",
+    "single_inflight": true,
+    "known_response_does_not_clear_prior_halt": true,
+    "automatic_resend": false,
+    "automatic_continuation": false
+  },
+  "real_provider_requests": 0,
+  "push": false,
+  "ci": false,
+  "cleanup": {
+    "remaining_test_schemas": 0,
+    "remaining_test_roles": 0,
+    "owned_container_removed": true,
+    "credential_state_removed": true
+  },
+  "remaining_unverified": [
+    "real Intern/书生 model semantics",
+    "complete continuation",
+    "formal AppManifest/Release compatibility",
+    "this slice native/visual and Windows",
+    "whole P-B",
+    "F1/Win11/full AT02"
+  ],
+  "preserved_failures": [
+    "original full DOM failure",
+    "independent coherent budget/slot/halt/usage tampering exploits before closure",
+    "actual PG 40P01 before per-Run transaction correction",
+    "root test fixture first 10 failures: material/tuple errors",
+    "independent concurrency harness first failure: random project sort barrier"
+  ],
+  "limitations": [
+    "Conservative observation of STARTED may permanently halt otherwise valid concurrent work.",
+    "Historical protocol Attempts without pool accounting require explicit migration; no reset/refill supplied.",
+    "Audit does not claim resistance to an administrator rewriting all database rows and all event history."
+  ]
+}

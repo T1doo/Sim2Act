@@ -74,3 +74,29 @@ complete persisted safe envelope. Completion seals can re-compute this value;
 the original raw response hash remains unchanged and cannot substitute for a
 re-computable persisted response fingerprint after private fields are removed.
 After the lock-order strengthening, HTTP/jobs integration measured 53 passed.
+
+
+## 2026-10-06 bounded shared-pool and recovery follow-up
+
+The earlier missing shared total and recovery gate is historical for that slice.
+The local follow-up now binds source/extract/cold across protocol owners/projects/
+Runs/processes to a fixed mode pool. Controller initialization defaults to zero;
+14 is explicit synthetic test-only offline allowance, LIVE remains zero and
+rejected. Attempt STARTED and pool slot reserve in one transaction; received
+outcomes settle both ledgers together. Pending/unknown and inconsistent records
+retain consumption and block sends. The conservative one-inflight policy may
+halt concurrent work even when the originating caller later records a response.
+No reset/refill/retry interface is supplied.
+
+POST `/api/projects/{pid}/protocol/runs/{rid}/recover` accepts only strict
+`expected_version`, `expected_fence`, `request_key`. It rechecks owner/project,
+current resources and frozen dependencies, returning metadata, never a provider
+request. Sealed results await their existing review; unknown stays stopped; known
+responses without atomic protocol completion report continuation unimplemented.
+Each expired protocol Run is recovered in a separate project→Run→pool transaction;
+ordinary F1 claim holds no pool lock. This follows an actual PostgreSQL 40P01
+reproduction and same-schedule fix verification. See
+[scope](ProtocolSharedBudgetRecoveryPlan.md) and
+[evidence](../evidence/protocol-shared-budget-recovery-20261006/README.md).
+There is no LIVE/semantic, automatic continuation, native-browser or whole-P-B
+acceptance claim. Prior failures and coverage correction remain recorded.

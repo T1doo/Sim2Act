@@ -17,7 +17,12 @@ def test_api_construction_never_creates_protocol_tables(tmp_path):
     create_app(store, Settings("unused", tmp_path))
     assert not inspect(store.engine).get_table_names()
     store.initialize()
-    assert {"protocol_jobs", "protocol_reviews"} <= set(inspect(store.engine).get_table_names())
+    assert {
+        "protocol_jobs",
+        "protocol_reviews",
+        "protocol_request_pools",
+        "protocol_request_slots",
+    } <= set(inspect(store.engine).get_table_names())
     store.engine.dispose()
 
 
@@ -76,4 +81,74 @@ def test_protocol_records_crud_under_existing_application_role(env, runtime_role
     with store.tx() as c:
         c.execute(protocol_reviews.delete().where(protocol_reviews.c.id == review))
         c.execute(protocol_jobs.delete().where(protocol_jobs.c.run_id == run))
+    store.engine.dispose()
+
+
+def test_shared_budget_tables_crud_use_business_role_and_deny_ddl(env, runtime_role):
+    from sim2act.db import protocol_request_pools, protocol_request_slots
+
+    store = Store(runtime_role)
+    pid, aid = "crud-probe-pool", new_id("attempt")
+    now = time.time()
+    with store.tx() as c:
+        c.execute(
+            insert(protocol_request_pools).values(
+                id=pid,
+                mode="offline",
+                request_limit=0,
+                token_limit=0,
+                reserved_requests=0,
+                reserved_tokens=0,
+                known_tokens=0,
+                halted=True,
+                halt_reason="CRUD_PROBE_ONLY",
+                policy_fingerprint=fingerprint({"kind": "CRUD_PROBE_ONLY"}),
+                version=1,
+                created_at=now,
+            )
+        )
+        c.execute(
+            insert(protocol_request_slots).values(
+                attempt_id=aid,
+                pool_id=pid,
+                ordinal=1,
+                run_id="CRUD_PROBE_ONLY",
+                fence=1,
+                phase="source",
+                request_fingerprint=fingerprint({}),
+                reserved_tokens=0,
+                status="STARTED",
+                usage={"status": "unknown", "tokens": None},
+                created_at=now,
+            )
+        )
+        c.execute(
+            update(protocol_request_pools)
+            .where(protocol_request_pools.c.id == pid)
+            .values(version=2)
+        )
+        c.execute(
+            update(protocol_request_slots)
+            .where(protocol_request_slots.c.attempt_id == aid)
+            .values(status="UNKNOWN", error="CRUD_PROBE_ONLY")
+        )
+        assert (
+            c.execute(
+                select(protocol_request_pools.c.version).where(protocol_request_pools.c.id == pid)
+            ).scalar_one()
+            == 2
+        )
+        assert (
+            c.execute(
+                select(protocol_request_slots.c.status).where(
+                    protocol_request_slots.c.attempt_id == aid
+                )
+            ).scalar_one()
+            == "UNKNOWN"
+        )
+    with pytest.raises(DBAPIError), store.tx() as c:
+        c.execute(text("CREATE TABLE protocol_pool_forbidden_ddl (id integer)"))
+    with store.tx() as c:
+        c.execute(protocol_request_slots.delete().where(protocol_request_slots.c.attempt_id == aid))
+        c.execute(protocol_request_pools.delete().where(protocol_request_pools.c.id == pid))
     store.engine.dispose()
