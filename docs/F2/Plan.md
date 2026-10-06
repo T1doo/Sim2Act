@@ -213,3 +213,11 @@ E19收尾修正通用项目页showRun：内部AppRun不再误称书生记录，�
 E19最终Python/API/service完整LinuxPG重跑371PASS/1WindowsSKIP/2旧warnings229.50秒，原AT05通过；首轮启动failure保留、根因未确认，AT05/manage/V5/历史AT02不改。最终源码aaf07f49b3d32eeb360d8cd60a52a4fad22959fd普通push，项目页JS最终actualHTTP/jsdom29PASS（NOT视觉）、独立接口18PASS/1PGSKIP及UI交错，103source/test/config hash保存；旧候选CI37419044735被新提交concurrency取消，新精确CI37419363378进行中，不记成功。
 
 E19精确终态：aaf07f49b3d32eeb360d8cd60a52a4fad22959fd普通push，[CI37419363378](https://github.com/T1doo/Sim2Act/actions/runs/37419363378)/job112125096801 completed/success2m39s，PG372PASS/0FAIL/0SKIP/1旧warning100.86秒，19新项含实际最小CRUD角色API链及原AT05；Setup/原生smoke/ruff/mypy21/Report/Cleanup全成功，server stopped。LinuxPG最终371PASS/1WindowsSKIP/2warnings229.50秒，SQLite350PASS/22PG平台SKIP/2warnings75.53秒；首轮AT05启动failure、空日志保留，根因未确认，单独1PASS及完整重跑通过，原AT05/manage不改。actualHTTP/jsdom29PASS不是视觉，独立18PASS/1PGSKIP5.50秒及UI交错/最终main JS静态，5hash一致，未独立PG/CI/29DOM/browser；protectedChromiumSUID helperBLOCKED，不绕过。103source/test/config/results/evidence归档，仅内部工程认证只读Release/Instance/持久AppRun批准/history/control/reopen，无新增生产Grant/表/业务writer，正式发布部署false。兼容switch未接页面、完整F1/F2/P-A/P-B/AT10/19/20/Win11/视觉原门保持。合成server/PG stop/remove、原work/V5/AT02/AT05不改，0LIVE/无导出；文档普通push收尾不重复CI。
+
+## 2026-10-06 / E20事前：有界稳定性诊断
+
+基线e94ddc9/aaf07f4，正常origin fetch同HEAD。仅收敛原AT05首次进程启动failure及E19身份/instance/history/control复验，不加feature。原失败JUnit与空日志现象保持，失败test time1.269s、manage报exited而不是startup健康timeout；现证据不能区分真实子进程退出与process身份判定拒绝，更不能从空日志或后续绿色推断根因。
+
+冻结诊断上限：4次原AT05原样独立重复，再4次保留原全部断言的diagnostic launcher重复（只观察monotonic时间、process判定/当前cmd匹配/创建时间差/实际Popen退出码/日志长度，输出不含配置/凭据）；每次合成隔离PG schema/最小CRUD角色/新port/tmp，不引入生产诊断flag或额外工具。不改原测试、失败时也完整原finally停止。若发现具体可复现原因，另记录最小修复与负例及原AT05/aggregate/精确ServerCI；否则保持未知，不改产品凭猜测、不无限加次数。
+
+用户显式要求独立只读E19认证API/跨owner-instance-history-control/currentgrant复验，默认继承6.1solmedium。读protectedChromium实际helper65534:65534(mode4755)，工具已因非root-owned拒绝；只列环境方正常安装/root-owned helper或可用内核namespace sandbox/受保护CDP runner的最小要求，本轮不chmod/chown/关闭sandbox/绕过拒绝，不追加DOM冒充视觉。0LIVE/无导出/正式发布关闭/原work/V5/AT02/AT05保持，正常devpush及精确CI按实际源码变化与授权执行。
