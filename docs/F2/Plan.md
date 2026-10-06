@@ -131,3 +131,7 @@
 ## 2026-10-05 / E14精确Server终态交付
 
 源码c776fa24dac957485a65337ed3d4b428848b584c普通push；run37349609291/job111896821583 completed/success（2m31s），PG260PASS/0FAIL/0SKIP/1旧Starlette警告69.05秒。36新检查含临时PG最小应用角色完成task/提取/退休/回读/新输入/错误历史/重试整条业务CRUD，三张新表由现显式Setup迁移创建，API/worker无DDL；原生API-worker smoke/ruff/mypy18模块/Report/Cleanup全通过、server stopped。实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时PG。Linux254PASS/6平台SKIP/3警告30.16秒；原33+新14DOM/HTTP非浏览器。92源码hash/终态/results归档，修复未独立执行复验；合成服务停，文档收尾普通push不触发CI。完成LOCAL_DECLARATIVE_TASK固定数值任务，最小证明及owner显式清旧source内容/任务input/output，源当前grant不新增/恢复且撤权/过期拒绝，新输入交集保持。旧PREVIEW仍需旧资料审计，其他共享消费者拒绝退休。仅这个有界合成切片，完整P-B/AT10/真实生成/Release未签收，F1/Win11保持、视觉0/BLOCKED、模型0。
+
+## 2026-10-06 / E15实施前：PG来源退休与消费者创建交错
+
+恢复环境ready，/workspace/Sim2Act-pb干净dev/f1-foundation 54ac055，正常origin fetch同HEAD；旧初始work不改。范围仅E14来源退休与消费者创建竞态：用真实PG barrier控制事务两种顺序，核查grant现有锁是否足以闭合；对消费者统一project锁并在锁内重验当前内容/退休状态，锁顺序project→card/app→grant，避免退休扫描后出现新消费者及反向锁死。覆盖direct草案、F1提交、目标卡创建/修订、候选/提取共享持久化入口。保留旧来源授权/退休默认拒绝、无新表/权限/CSV能力/真实模型。实际复现结果据实记录，不将SQLite或假锁作为PG通过。聚合/普通push精确ServerCI；之后只映射冻结AT10的完成合成任务→提取→退休→fresh Store新/坏输入子项，完整P-B/Win11/F1/Release仍未签收，0LIVE/无导出/无sandbox绕过。
