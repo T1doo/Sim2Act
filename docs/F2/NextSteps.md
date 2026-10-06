@@ -34,3 +34,5 @@ E16事前范围为V5 F2-T08的内部合成Release/Instance/AppRun生命周期，
 E16本地内部service：[范围与接口](InternalLifecycle.md)。不可变Release审批/实例独立result数据/真实新AppRun与版本/兼容升级回退历史已实现；复用现runtime及grant。独立复验两schema问题关闭，原AT05恢复；32新内部SQLite检查PASS/1PG专用SKIP，完整SQLite286PASS/16SKIP。真PG/精确ServerCI待完成，不启用正式发布入口/部署或签收整个F2。后续仍须明确通用业务数据/动作与迁移政策、正式发布批准UI/部署链，原F1/Win11/真实P-A/P-B/AT10/protected-browser门保持，不追加CSV便利项。
 
 E16终态：e029922/[CI37413258268](https://github.com/T1doo/Sim2Act/actions/runs/37413258268)SUCCESS/PG302PASS/0SKIP，新内部33项及原AT05完整覆盖；LinuxPG301PASS/1SKIP、SQLite286PASS/16SKIP，独立32PASS/1PGSKIP并关闭schema问题。[证据](../evidence/F2-internal-lifecycle-20261006/README.md)。本轮内部路径已交付，正式发布入口/真实部署未启用，原阶段门保留。后续按V5通用生命周期/数据与正式批准链逐阶段计划，不能将本切片扩大称整个P-B或发布完成。
+
+E17路线：在已验E16固定内部Release/Instance上接入既有持久worker；先冻结queue/reopen、lease/fencing、pause/cancel前置、进程重启恢复、当前grant、结果版本恰好追加一次和FAILED保留。短事务输入授权与原子结果提交，中间计算不占DB长锁；任何不明效果保守等待并保留取消意图。正式发布入口关闭，不追加CSV/Grant。AT17仍OPEN：只读sum不能证明预览写隔离，需要后续受控写fixture，不能借内部result账本签收该条。

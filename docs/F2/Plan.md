@@ -159,3 +159,11 @@ E16源码固定前aggregate：真LinuxPG301PASS/1WindowsSKIP/2警告111.58秒，
 ## 2026-10-06 / E16精确Server终态交付
 
 源码e029922794c9f9829ddb41bca0010aebc277e761已普通push，CI37413258268/job112106185925 completed/success（3m26s），PG302PASS/0FAIL/0SKIP/1旧警告118.16秒。33新内部检查及原AT05进程完整覆盖；Setup/五张internal表显式迁移/业务CRUD角色/原生API-worker smoke/ruff/mypy19模块/Report/Cleanup成功，server stopped。LinuxPG301PASS/1WindowsSKIP/2警告111.58秒；SQLite286PASS/16平台PGSKIP/1警告42.21秒。独立复验32PASS/1PGSKIP且两schema问题关闭，三个源码hash与交付一致；未独立PG/Windows/视觉。95源码/test/config及run/results已归档，专用本地PG stop/remove，原work树不改。只内部不可变Release/instance结果账本/真实新AppRun/兼容指针生命周期，正式发布入口及部署未启用，完整P-A/P-B/AT10/F1/Win11/protected-browser未签收，模型0。文档收尾普通push不重复CI。
+
+## 2026-10-06 / E17事前：固定内部 AppRun 接入持久 worker
+
+基线1149816/e029922，正确/workspace/Sim2Act-pb、正常origin fetch同分支。依据原V5 F2-T09与产品§8/§10，仅E16已有固定可信Release/Instance：原子enqueue新内部AppRun、固定Release/实例revision/输入和既有Run队列；复用现claim/lease/fencing/独立heartbeat/事件账本，不建grant，不扩展CSV。短事务授权读取输入及PREPARED意图，可信纯计算在事务外，短事务重验当前Release/Instance/Grant/fence并把结果版本+回执+AppRun终态原子提交；不在长服务事务中同步执行。正式发布/部署入口保持关闭。
+
+验收冻结：enqueue后全新Store重开；实际独立worker进程接受/停止/重启与前后提交崩溃窗口；派发前pause/cancel阻止新动作；heartbeat/过期fencing拒绝旧提交；当前grant撤权/过期进入WAITING_RESOURCE并保留历史；同键幂等/跨instance隔离/并发只追加一次；错误输入FAILED无结果版本。失联只重排已知安全纯读/未提交本地事务，已有VERIFIED本地结果不重复追加；注入未知操作保持等待/RECONCILING及cancel intent，不清账本盲目重试。升级导致已接受revision前置变化采用保守拒绝，不静默换Release或迁移数据。独立只读关键边界审查，最终SQLite/真实PG/精确ServerCI；新增表经显式migrate/Setup，API/worker无DDL。
+
+AT17只读sum不证明preview写隔离，保持OPEN直到受控写fixture真正验证。本轮不是通用动作/业务数据写入、未知外部接口已恢复或完整F2。0LIVE/无导出/无sandbox绕过，原AT05/V5/历史AT02保留，F1/Win11/完整P-A/P-B/AT10/protected-browser门不提升。
