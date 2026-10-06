@@ -30,3 +30,5 @@ E14精确终态：c776fa2/CI37349609291SUCCESS/PG260PASS/0SKIP，36新专项含�
 E15终态：53dc124/CI37411714116SUCCESS/PG269PASS/0SKIP，9真PG专项及完整角色CRUD通过。完成本轮退休/消费者串行补强及冻结AT10合成子项映射，到此切片结束；未独立执行/视觉，通用P-B/原规格全部证据/Win11/F1/Release仍后续独立门，模型0。
 
 E16事前范围为V5 F2-T08的内部合成Release/Instance/AppRun生命周期，源码service及测试，不启用正式发布入口或实际部署。不变Release与精确批准、复用既有应用身份/Grant、独立实例类型化result数据/版本、真实网关新AppRun、兼容升级/回退及历史保留；不新增CSV功能或任意业务写入。同工作区独立审查及精确aggregate/CI后回报，原F1/Win11/真实P-A/更广P-B/protected browser阶段门、0模型不变。E15旧grant锁已串行化基线，准确记锁序加固。
+
+E16本地内部service：[范围与接口](InternalLifecycle.md)。不可变Release审批/实例独立result数据/真实新AppRun与版本/兼容升级回退历史已实现；复用现runtime及grant。独立复验两schema问题关闭，原AT05恢复；32新内部SQLite检查PASS/1PG专用SKIP，完整SQLite286PASS/16SKIP。真PG/精确ServerCI待完成，不启用正式发布入口/部署或签收整个F2。后续仍须明确通用业务数据/动作与迁移政策、正式发布批准UI/部署链，原F1/Win11/真实P-A/P-B/AT10/protected-browser门保持，不追加CSV便利项。

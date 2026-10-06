@@ -258,3 +258,7 @@ E12精确Server终态：d3de155ba23cd5ba824f10f398f34b25c76e1817已普通push；
 ## 2026-10-06 / E15精确Server终态交付
 
 源码53dc124ea8aeb554939ad79bbbb7d9526a66578f普通push；run37411714116/job112101374653 completed/success（2m51s），PG269PASS/0FAIL/0SKIP/1旧Starlette警告88.51秒。9新真PG barrier/冷Store子项及完整业务CRUD角色回归，原生API-worker smoke/ruff/mypy18模块/Report/Cleanup全部成功、server stopped；实际Server2025Datacenter/build26100/镜像20260925.250.1/PS7.6.6/Python3.12.10/admin=true/EnableLUA1/原生临时PG。LinuxPG268PASS/1Windows平台SKIP/2警告82.16秒，SQLite254PASS/15平台/PGSKIP/2警告33.30秒，PG专项9PASS。基线退休200/direct400（grant锁挡住交错），未复现成功失效app；共享project锁缺失真实补强，统一project→entity→grant与写前当前内容/退休重验。93源码hash/实际run/results及冻结AT10合成子项映射归档；未独立执行复验，真实浏览器0/BLOCKED，不新增CSS/视觉签收。保存环境恢复ready/正确工作树54ac055与origin一致，初始work未改，本地合成PG容器已停并删除；文档收尾普通push不重复CI。0LIVE/无导出，完整P-B/AT10/Win11/F1/Release签收未提升，V5/历史AT02不变。
+
+## 2026-10-06 / E16内部合成生命周期本地实现
+
+事前范围eaeb731，基线764a20f，正确/workspace/Sim2Act-pb/dev/f1-foundation。内部Release immutable snapshot/精确审批、复用既有runtime的独立instance、实际gateway+oracle新AppRun/结果版本与非破坏升级回退历史；五表显式Setup迁移，API/worker无DDL。无public发布/真实部署/newGrant/preview复制。独立复验schema两缺口关闭、原AT05测试逐字恢复；32新SQLitePASS/1PGSKIP，全SQLite286PASS/16SKIP/1警告42.21秒，静态通过。真PG聚合及普通push精确ServerCI待核实，不预写终态；真实0、视觉BLOCKED/F1/Win11/完整P-B/AT10未签收。

@@ -226,6 +226,12 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
     draft = c.execute(query.with_for_update() if lock else query).mappings().first()
     if not draft:
         raise DomainError("PERMISSION_DENIED")
+    return validate_frozen_candidate(store, c, user, draft, platform_limits)
+
+
+def validate_frozen_candidate(store, c, user, draft, platform_limits):
+    """Revalidate exact frozen specs and current grants without reading mutable draft content."""
+    aid = draft["id"]
     project = store.own_project(c, user, draft["project_id"])
     candidate = draft["candidate"]
     if fingerprint(candidate) != draft["fingerprint"]:

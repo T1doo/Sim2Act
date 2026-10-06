@@ -149,3 +149,9 @@ E15本地结果：真实临时PG17.11，9 barrier/冷Store专项PASS（3.26秒�
 本轮最小内部工程service，不接入HTTP发布入口/页面/实际部署。显式迁移internal_*表，内部批准payload一次写入绑定owner/project/source candidate及精确manifest/actions/dependencies、实际新可信验证/oracle证据、当前相关授权修订、到期时间和实例切换前置revision/data_version。提交时精确fingerprint/版本/当前授权重验，Release副本独立于可变草案、无编辑入口；instances复用该候选既有应用runtime/grant，不创建/恢复/扩大grant。实例数据限新AppRun计算出的类型化result记录及可选release_ref元数据，独立namespace/版本/历史；无任意业务写入/CSV新便利项。新AppRun实际走现权限网关/严格输入输出和独立数值检查，不复制PREVIEW历史，失败真实保留。只兼容字段保留/类型不变/不新增必填的声明升级，回退也按当前数据/schema校验；不自动迁移或删除记录。
 
 测试范围：批准前指纹/草案/资源/授权/到期改变拒绝；Release写后篡改/不可变旧快照/跨owner；两instance数据和幂等独立，fresh Store回读、失败历史与新结果版本；用户/project/app当前撤权/过期拒绝，Grant前后完全一致；升级/回退CAS及不兼容拒绝/历史保留；明确正式发布入口不存在。用户要求同工作区独立只读审查，完成源码后委派，修具体问题并aggregate/普通push精确ServerCI。0真实调用，无导出/备份/安全策略绕过，完整P-B/AT10/Release正式发布、Win11/F1仍未签收。
+
+## 2026-10-06 / E16实现与独立审查修复
+
+内部生命周期service与五表显式迁移实现，精确批准绑定快照/来源/权限版本；独立实例类型化result账本与真实新AppRun，兼容指针切换保留历史/数据。不新增CSV功能或运行身份/grant，不启用HTTP/正式发布。独立合成复现schema缺properties异常和额外enum批准覆盖缺口，修为封闭受限schema；测试文件重名覆盖原AT05发现后逐字恢复，新增test_internal_lifecycle.py。补实际source bytes hash重验及严格schema版本转移。定向32PASS/2平台SKIP，SQLite/真PG聚合、独立修复复验、精确ServerCI进行中。详见InternalLifecycle.md，失败/未测门保留。
+
+E16源码固定前aggregate：真LinuxPG301PASS/1WindowsSKIP/2警告111.58秒，新内部33项含PG应用角色业务CRUD；全SQLite286PASS/16平台或PGSKIP/1警告42.21秒。独立复验32PASS/1PGSKIP/1警告5.41秒且3个源码hash一致，未独立执行PG/Windows。静态ruff/mypy19/JS/diff通过，源码正常commit/push与精确ServerCI下一步。

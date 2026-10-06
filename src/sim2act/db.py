@@ -263,6 +263,44 @@ resource_retirements = Table(
 )
 
 
+# Internal F2-T08 engineering namespace only; explicit migration, no publication API.
+internal_approvals = Table(
+    "internal_approvals", meta, Column("id", String, primary_key=True),
+    Column("principal_id", String, nullable=False), Column("project_id", String, nullable=False),
+    Column("kind", String, nullable=False), Column("payload", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False), Column("expires_at", Float, nullable=False),
+    Column("consumed", Boolean, nullable=False),
+)
+internal_releases = Table(
+    "internal_releases", meta, Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False), Column("principal_id", String, nullable=False),
+    Column("approval_id", String, unique=True, nullable=False),
+    Column("snapshot", JSON, nullable=False), Column("fingerprint", String, nullable=False),
+)
+internal_instances = Table(
+    "internal_instances", meta, Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False), Column("principal_id", String, nullable=False),
+    Column("source_app_id", String, nullable=False), Column("runtime_id", String, nullable=False),
+    Column("release_id", String, nullable=False), Column("revision", Integer, nullable=False),
+    Column("data_version", Integer, nullable=False), Column("history", JSON, nullable=False),
+)
+internal_app_runs = Table(
+    "internal_app_runs", meta, Column("id", String, primary_key=True),
+    Column("instance_id", String, nullable=False), Column("release_id", String, nullable=False),
+    Column("principal_id", String, nullable=False), Column("request_key", String, nullable=False),
+    Column("fingerprint", String, nullable=False), Column("input", JSON, nullable=False),
+    Column("status", String, nullable=False), Column("output", JSON), Column("error", JSON),
+    Column("result_version", Integer),
+    UniqueConstraint("instance_id", "principal_id", "request_key"),
+)
+internal_instance_data = Table(
+    "internal_instance_data", meta, Column("instance_id", String, primary_key=True),
+    Column("version", Integer, primary_key=True), Column("run_id", String, unique=True, nullable=False),
+    Column("release_id", String, nullable=False), Column("schema_version", Integer, nullable=False),
+    Column("data", JSON, nullable=False), Column("fingerprint", String, nullable=False),
+)
+
+
 def new_id(prefix):
     return prefix + "_" + uuid.uuid4().hex
 
