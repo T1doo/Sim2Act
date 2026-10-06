@@ -107,3 +107,17 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 
 
 2026-10-06 通用模型协议离线实现：按用户授权两形态材料/gold草案独立冻结，并实现provider可接source/extract/cold协议及持久14-slot预算门，候选锚定actual response receipt；仅MockTransport。145PASS1SKIP、独立58PASS，完整8wire max4542chars/bytes，四包真实语义UNKNOWN/owner pending。见[统一执行计划](ModelProtocolExecutionPlan.md)与[证据](../evidence/model-protocol-preparation-20261006/README.md)。协议候选尚非现AppManifest/AppRun可执行版本，可信Store来源/语义回调、HTTP/worker和运行审批仍为明确前置；原PARTIAL历史不动。本轮不push/CI/LIVE/新权限/表/部署，当前真实预算0。
+
+
+### 2026-10-06 / 模型协议可信 Store / HTTP / worker 本地闭环
+
+按父后续限定授权，不push/CI/LIVE，独立架构审条件通过后实施 [范围计划](ProtocolStoreLoopPlan.md)。新增协议namespace source/extract/cold；真实Run/Attempt/授权read Operation、冻结accepted合同与completion seal、独立注册合成checker、来源proof、实际extract响应编译计划和新材料cold闭合。模型runner仍严格test-only MockTransport；技术完成待验，不将原F1 PARTIAL/FAILED/UNKNOWN提升。两个新增表由原显式controller migrate创建，API不建表，现业务角色CRUD/DDL拒绝已PG验证。无新增产品Principal/Grant/部署或正式AppManifest发布。
+
+独立复现回执身份、通用GET绕过、stored-review类型/额外字段、cold实际响应及callid篡改、未知STARTED重复cancel错误；修后永久negative与独立13例均拒绝，保留修前事实。最终格式化后独立13+jobs39=52PASS，原F1基础/闭合/恢复61PASS，原F1方法AST未改；root PG17协议/受限CRUD/旧F1合计131PASS。完整root SQLite结果在[证据](../evidence/protocol-store-loop-20261006/README.md)另列。私有owned PG残testschema/role均0，容器与含凭据状态已清理。
+
+每job双账/未知停止有证据；跨source/extract/cold共享14-slot/64k总预算和持久continuation尚未实现，不能以单独预算单测顶替。有限合成exactJSON oracle不证明LIVE模型语义或任意材料；真实请求0、当前真实预算0。Windows/nativebrowser/CI本轮NOT_RUN；完整P-B/F1/Win11/AT02仍未签收。只本地提交，最终hash见交付回执。
+
+
+最终 root 完整 SQLite 为 **704 PASS / 26 SKIP / 1 FAIL**（325.10s），失败为旧 registered-generation actual HTTP DOM 冷运行 helper 最终读 engineering.run.id / instance.id 时 null（日志不足判定具体对象）。独立单测复跑 **1 PASS**（26.99s），未改 UI/DOM 测试或伪称根因已确认；原失败日志保存、完整回归 NOT_ACCEPTED，待后续定位。PG 专项 **131 PASS**（92.90s）含两表显式迁移/受限CRUD与原F1，非完整PG全套。Ruff全src/tests、修改文件format、mypy29、diff均PASS；独立格式化后52PASS+F1 61PASS且hash不变。该未闭合旧DOM失败是交付明确边界，单项重跑不覆盖它。
+
+临时真实HTTP诊断保留正常poll，只hold两个实际回执顺序，确实观察到manual refresh返回时run/instance同时null、释放实例回执后原IID/RID恢复SUCCEEDED（exit0，owned server/Node已清理）。这是受控注入时序的可行性证据，不能倒推完整测试原失败原因；旧产品/UI/harness未修改，原完整NOT_ACCEPTED保留。见dom-injected-timing-diagnostic.txt。

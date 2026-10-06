@@ -519,3 +519,45 @@ def test_cold_receipt_verification_requires_positive_true_not_none():
     with pytest.raises(DomainError):
         cold.run_candidate(extracted, {"style": "exact"}, {"material": B}, source=source)
     assert reads == [] and runner.requests == []
+
+
+def test_trusted_store_deferred_evaluation_never_self_signs_or_halts_pending():
+    runner = FakeRunner(
+        [wire(calls=[("resource.read", {"resource_id": A})]), wire({"summary": "Alpha"})]
+    )
+
+    def forbidden_verifier(*_):
+        raise AssertionError("Pending execution cannot sign its own semantic result")
+
+    result = ModelProtocol(
+        runner,
+        scope=SCOPE,
+        enabled=True,
+        independent_verify=forbidden_verifier,
+        read_only=read,
+        defer_evaluation=True,
+    ).complete_task("Read", {"style": "exact"}, [A])
+    assert result["status"] == "AWAITING_EVALUATION"
+    assert result["semantic_status"] == "UNKNOWN" and result["verification"] is None
+    assert not runner.halted
+
+
+def test_store_read_context_keeps_original_model_tool_call_identity():
+    runner = FakeRunner(
+        [wire(calls=[("resource.read", {"resource_id": A})]), wire({"summary": "Alpha"})]
+    )
+    seen = []
+
+    def context_read(tool, args, context):
+        seen.append(context)
+        return read(tool, args)
+
+    ModelProtocol(
+        runner,
+        scope=SCOPE,
+        enabled=True,
+        independent_verify=verify,
+        read_only=context_read,
+        read_context=True,
+    ).complete_task("Read", {"style": "exact"}, [A])
+    assert seen == [{"tool_call_id": "read", "request_index": 0, "step_id": None}]

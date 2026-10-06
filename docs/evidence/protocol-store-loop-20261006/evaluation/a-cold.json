@@ -1,0 +1,96 @@
+{
+  "id": "protocol.synthetic.a-cold.v1",
+  "version": 1,
+  "checker": "exact-json-semantic.v1",
+  "review_basis": "independent-draft-review-20261006",
+  "reviewer": "readonly_boundary_review",
+  "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+  "expected_inputs": {
+    "format": "JSON with line evidence and explicit UNKNOWN"
+  },
+  "resource_hashes": [
+    "29209e986cfb89cd0620dd8d4a67f3f0ba428fe823cd852012929808e201b1fc"
+  ],
+  "expected_output": {
+    "obligations": {
+      "submit_form": {
+        "actor": "星桥小组成员",
+        "action": "提交费用表",
+        "condition": "培训结束后",
+        "lines": [
+          3
+        ],
+        "deadline": {
+          "amount": 5,
+          "unit": "工作日",
+          "start_event": "培训结束",
+          "absolute_date": "UNKNOWN"
+        }
+      },
+      "submit_proof": {
+        "actor": "星桥小组成员",
+        "action": "提交参加证明",
+        "condition": "培训结束后",
+        "lines": [
+          3
+        ],
+        "deadline": {
+          "amount": 5,
+          "unit": "工作日",
+          "start_event": "培训结束",
+          "absolute_date": "UNKNOWN"
+        }
+      },
+      "prior_approval": {
+        "actor": "星桥小组成员",
+        "action": "取得组长批准",
+        "condition": {
+          "field": "金额",
+          "operator": ">=",
+          "value": 800,
+          "unit": "元"
+        },
+        "lines": [
+          4
+        ],
+        "order": "before submission"
+      },
+      "missing_proof_block": {
+        "actor": "星桥小组成员",
+        "action": "不得提交",
+        "condition": "缺少参加证明",
+        "lines": [
+          5
+        ],
+        "release_condition": "参加证明补齐"
+      },
+      "unchanged_deadline": {
+        "actor": "星桥小组成员",
+        "action": "补齐参加证明后仍按R1期限处理",
+        "condition": "之前缺少参加证明后补齐",
+        "lines": [
+          3,
+          5
+        ],
+        "deadline": {
+          "amount": 5,
+          "unit": "工作日",
+          "start_event": "培训结束",
+          "absolute_date": "UNKNOWN"
+        },
+        "no_extension_or_restart": true
+      }
+    },
+    "case": {
+      "decision": "CONFLICT",
+      "may_submit_now": false,
+      "blocking_rule": "missing_proof_block",
+      "required_next_step": "补齐参加证明后，按原5工作日期限提交费用表和证明"
+    },
+    "absolute_deadline": "UNKNOWN"
+  },
+  "gold_sha256": "cc3386c7ef3d4d703e1031896dba9254147c019ed1d48fbeb3012baa4a34048c",
+  "rubric_sha256": "788d5c108b8057f3625ca72c1c209a04d5a134161bd2f11d377ec21a7ef6e4fe",
+  "semantic_scope": "frozen synthetic input only; no general semantic inference",
+  "provider_allowed": false
+}

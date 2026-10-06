@@ -24,24 +24,38 @@ from .tools import definitions, dispatch
 
 
 class Worker:
-    def __init__(self, store, settings, model=None):
+    def __init__(self, store, settings, model=None, *, protocol_runner_factory=None):
         self.store, self.s = store, settings
         self.id = new_id("worker")
         self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
+        if protocol_runner_factory is not None and (not store.test_only or settings.mode != "mock"):
+            raise DomainError("PERMISSION_DENIED", "Protocol injection is test-only and offline")
+        self.protocol_runner_factory = protocol_runner_factory
         self.stop = threading.Event()
 
-    def reserve(self, run_id, fence, context):
+    def reserve(self, run_id, fence, context, *, request_tools=None):
         s = self.s
+        protocol_request = request_tools is not None
+        request_tools = definitions() if request_tools is None else request_tools
         # Conservative byte envelope, not a claim of actual tokenizer usage.
         envelope = (
             len(
                 json.dumps(
-                    {"messages": context["messages"], "tools": definitions()}, ensure_ascii=False
+                    {"messages": context["messages"], "tools": request_tools}, ensure_ascii=False
                 ).encode()
             )
             + s.max_output_tokens
         )
         with self.store.tx() as c:
+            if protocol_request:
+                owner = (
+                    c.execute(
+                        select(runs.c.principal_id, runs.c.project_id).where(runs.c.id == run_id)
+                    )
+                    .mappings()
+                    .one()
+                )
+                self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
             if run["status"] != "RUNNING":
                 raise DomainError("VERSION_CONFLICT")
@@ -107,7 +121,7 @@ class Worker:
                         "request_fingerprint": fingerprint(
                             {
                                 "messages": context["messages"],
-                                "tools": definitions(),
+                                "tools": request_tools,
                                 "model": s.model,
                             }
                         ),
@@ -172,7 +186,16 @@ class Worker:
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
 
     def process(self, run):
+        from .protocol_jobs import is_protocol_job
+        from .protocol_jobs import process_job as process_protocol_job
+
+        if is_protocol_job(self.store, run["id"]):
+            if self.s.mode != "mock":
+                raise DomainError("PERMISSION_DENIED", "Protocol LIVE execution is not enabled")
+            process_protocol_job(self, run)
+            return
         from .app_jobs import is_app_job, process_job
+
         if is_app_job(self.store, run["id"]):
             process_job(self, run)
             return
@@ -394,7 +417,14 @@ class Worker:
             try:
                 self.process(run)
             except DomainError as e:
+                from .protocol_jobs import fail_job as fail_protocol_job
+                from .protocol_jobs import is_protocol_job
+
+                if is_protocol_job(self.store, run["id"]):
+                    fail_protocol_job(self, run, e)
+                    return True
                 from .app_jobs import fail_job, is_app_job
+
                 if is_app_job(self.store, run["id"]):
                     fail_job(self, run, e)
                     return True

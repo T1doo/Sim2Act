@@ -164,7 +164,8 @@ heartbeats = Table("heartbeats", meta, Column("id", String, primary_key=True), C
 
 # F2 engineering preview namespace, separate from F1 tasks and release/instance data.
 goal_cards = Table(
-    "goal_cards", meta,
+    "goal_cards",
+    meta,
     Column("id", String, primary_key=True),
     Column("project_id", String, nullable=False),
     Column("title", String, nullable=False),
@@ -173,7 +174,8 @@ goal_cards = Table(
     Column("created_at", Float, nullable=False),
 )
 goal_candidate_requests = Table(
-    "goal_candidate_requests", meta,
+    "goal_candidate_requests",
+    meta,
     Column("card_id", String, primary_key=True),
     Column("principal_id", String, primary_key=True),
     Column("request_key", String, primary_key=True),
@@ -181,7 +183,8 @@ goal_candidate_requests = Table(
     Column("app_id", String, nullable=False),
 )
 goal_card_versions = Table(
-    "goal_card_versions", meta,
+    "goal_card_versions",
+    meta,
     Column("card_id", String, primary_key=True),
     Column("version", Integer, primary_key=True),
     Column("snapshot", JSON, nullable=False),
@@ -218,7 +221,8 @@ app_previews = Table(
 
 # Explicit migration only; bounded P-B extraction from verified PREVIEW receipts.
 preview_extractions = Table(
-    "preview_extractions", meta,
+    "preview_extractions",
+    meta,
     Column("preview_id", String, primary_key=True),
     Column("principal_id", String, primary_key=True),
     Column("request_key", String, primary_key=True),
@@ -230,7 +234,8 @@ preview_extractions = Table(
 
 # Explicit migration only: completed local fixed tasks, proof-bound candidates and retirement.
 local_csv_tasks = Table(
-    "local_csv_tasks", meta,
+    "local_csv_tasks",
+    meta,
     Column("id", String, primary_key=True),
     Column("project_id", String, nullable=False),
     Column("principal_id", String, nullable=False),
@@ -238,12 +243,16 @@ local_csv_tasks = Table(
     Column("request_key", String, nullable=False),
     Column("request_fingerprint", String, nullable=False),
     Column("status", String, nullable=False),
-    Column("input", JSON), Column("output", JSON), Column("error", JSON),
-    Column("proof", JSON), Column("proof_fingerprint", String),
+    Column("input", JSON),
+    Column("output", JSON),
+    Column("error", JSON),
+    Column("proof", JSON),
+    Column("proof_fingerprint", String),
     UniqueConstraint("project_id", "principal_id", "request_key"),
 )
 task_extractions = Table(
-    "task_extractions", meta,
+    "task_extractions",
+    meta,
     Column("task_id", String, primary_key=True),
     Column("principal_id", String, primary_key=True),
     Column("request_key", String, primary_key=True),
@@ -252,7 +261,8 @@ task_extractions = Table(
     Column("snapshot", JSON, nullable=False),
 )
 resource_retirements = Table(
-    "resource_retirements", meta,
+    "resource_retirements",
+    meta,
     Column("resource_id", String, primary_key=True),
     Column("project_id", String, nullable=False),
     Column("principal_id", String, nullable=False),
@@ -265,43 +275,71 @@ resource_retirements = Table(
 
 # Internal F2-T08 engineering namespace only; explicit migration, no publication API.
 internal_approvals = Table(
-    "internal_approvals", meta, Column("id", String, primary_key=True),
-    Column("principal_id", String, nullable=False), Column("project_id", String, nullable=False),
-    Column("kind", String, nullable=False), Column("payload", JSON, nullable=False),
-    Column("fingerprint", String, nullable=False), Column("expires_at", Float, nullable=False),
+    "internal_approvals",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("expires_at", Float, nullable=False),
     Column("consumed", Boolean, nullable=False),
 )
 internal_releases = Table(
-    "internal_releases", meta, Column("id", String, primary_key=True),
-    Column("project_id", String, nullable=False), Column("principal_id", String, nullable=False),
+    "internal_releases",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
     Column("approval_id", String, unique=True, nullable=False),
-    Column("snapshot", JSON, nullable=False), Column("fingerprint", String, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
 )
 internal_instances = Table(
-    "internal_instances", meta, Column("id", String, primary_key=True),
-    Column("project_id", String, nullable=False), Column("principal_id", String, nullable=False),
-    Column("source_app_id", String, nullable=False), Column("runtime_id", String, nullable=False),
-    Column("release_id", String, nullable=False), Column("revision", Integer, nullable=False),
-    Column("data_version", Integer, nullable=False), Column("history", JSON, nullable=False),
+    "internal_instances",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("source_app_id", String, nullable=False),
+    Column("runtime_id", String, nullable=False),
+    Column("release_id", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("data_version", Integer, nullable=False),
+    Column("history", JSON, nullable=False),
 )
 internal_app_runs = Table(
-    "internal_app_runs", meta, Column("id", String, primary_key=True),
-    Column("instance_id", String, nullable=False), Column("release_id", String, nullable=False),
-    Column("principal_id", String, nullable=False), Column("request_key", String, nullable=False),
-    Column("fingerprint", String, nullable=False), Column("input", JSON, nullable=False),
-    Column("status", String, nullable=False), Column("output", JSON), Column("error", JSON),
+    "internal_app_runs",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("instance_id", String, nullable=False),
+    Column("release_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("input", JSON, nullable=False),
+    Column("status", String, nullable=False),
+    Column("output", JSON),
+    Column("error", JSON),
     Column("result_version", Integer),
     UniqueConstraint("instance_id", "principal_id", "request_key"),
 )
 internal_instance_data = Table(
-    "internal_instance_data", meta, Column("instance_id", String, primary_key=True),
-    Column("version", Integer, primary_key=True), Column("run_id", String, unique=True, nullable=False),
-    Column("release_id", String, nullable=False), Column("schema_version", Integer, nullable=False),
-    Column("data", JSON, nullable=False), Column("fingerprint", String, nullable=False),
+    "internal_instance_data",
+    meta,
+    Column("instance_id", String, primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("run_id", String, unique=True, nullable=False),
+    Column("release_id", String, nullable=False),
+    Column("schema_version", Integer, nullable=False),
+    Column("data", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
 )
 
 internal_run_bindings = Table(
-    "internal_run_bindings", meta,
+    "internal_run_bindings",
+    meta,
     Column("run_id", String, primary_key=True),
     Column("app_run_id", String, unique=True, nullable=False),
     Column("snapshot", JSON, nullable=False),
@@ -309,9 +347,42 @@ internal_run_bindings = Table(
 )
 
 
+# Explicit controller migration; isolated protocol namespace, no identity/capability grant.
+protocol_jobs = Table(
+    "protocol_jobs",
+    meta,
+    Column("run_id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("runtime_id", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("accepted_snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("result_snapshot", JSON),
+    Column("result_fingerprint", String),
+    Column("completed_fence", Integer),
+    Column("created_at", Float, nullable=False),
+)
+protocol_reviews = Table(
+    "protocol_reviews",
+    meta,
+    Column("id", String, primary_key=True),
+    Column("run_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("contract_id", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+    UniqueConstraint("run_id", "request_key"),
+)
+
+
 # Explicit Store.initialize/controller migration only, never API DDL.
 spec_checklist_tasks = Table(
-    "spec_checklist_tasks", meta,
+    "spec_checklist_tasks",
+    meta,
     Column("id", String, primary_key=True),
     Column("project_id", String, nullable=False),
     Column("principal_id", String, nullable=False),
@@ -420,9 +491,15 @@ class Store:
 
     def lock_project(self, c, principal, project_id):
         """Consumer creation and source retirement share project -> entity -> grant order."""
-        p = c.execute(select(projects).where(
-            projects.c.id == project_id, projects.c.owner_id == principal
-        ).with_for_update()).mappings().first()
+        p = (
+            c.execute(
+                select(projects)
+                .where(projects.c.id == project_id, projects.c.owner_id == principal)
+                .with_for_update()
+            )
+            .mappings()
+            .first()
+        )
         if not p:
             raise DomainError("PERMISSION_DENIED")
         return p
@@ -541,7 +618,11 @@ class Store:
                 p = self.lock_project(c, principal, project_id)
                 for rid in refs:
                     self.authorize(c, principal, p["runtime_id"], project_id, rid, "resource.read")
-                    if c.execute(select(resource_retirements.c.resource_id).where(resource_retirements.c.resource_id == rid)).first():
+                    if c.execute(
+                        select(resource_retirements.c.resource_id).where(
+                            resource_retirements.c.resource_id == rid
+                        )
+                    ).first():
                         raise DomainError("RESOURCE_UNAVAILABLE", "退休来源不能成为新的任务输入")
                 old = (
                     c.execute(
@@ -779,7 +860,13 @@ class Store:
                 )
 
     def inspect(self, principal, run_id):
+        from .protocol_jobs import inspect as inspect_protocol_job
+        from .protocol_jobs import is_protocol_job
+
+        if is_protocol_job(self, run_id):
+            return inspect_protocol_job(self, principal, run_id)
         from .app_jobs import inspect_job, is_app_job
+
         if is_app_job(self, run_id):
             return inspect_job(self, principal, run_id)
         with self.tx() as c:
@@ -884,7 +971,13 @@ class Store:
                 )
 
     def command(self, principal, run_id, command, version):
+        from .protocol_jobs import command_job as command_protocol_job
+        from .protocol_jobs import is_protocol_job
+
+        if is_protocol_job(self, run_id):
+            return command_protocol_job(self, principal, run_id, command, version)
         from .app_jobs import command_job, is_app_job
+
         if is_app_job(self, run_id):
             return command_job(self, principal, run_id, command, version)
         with self.tx() as c:
@@ -946,6 +1039,11 @@ class Store:
             return state
 
     def unresolved_attempts(self, principal, run_id):
+        from .protocol_jobs import is_protocol_job, verified_pending
+
+        if is_protocol_job(self, run_id):
+            with self.tx() as c:
+                verified_pending(self, c, principal, run_id)
         with self.engine.connect() as c:
             if not c.execute(
                 select(runs.c.id).where(runs.c.id == run_id, runs.c.principal_id == principal)
@@ -985,6 +1083,14 @@ class Store:
         response=None,
     ):
         from .model import parse_response, require_returned_model, returned_model_identity
+        from .protocol_jobs import is_protocol_job, verified_pending
+
+        if is_protocol_job(self, run_id):
+            with self.tx() as c:
+                verified_pending(self, c, principal, run_id)
+            raise DomainError(
+                "UNSUPPORTED_CAPABILITY", "Protocol continuation is not implemented; no F1 fallback"
+            )
 
         with self.tx() as c:
             run = (
@@ -1175,7 +1281,15 @@ class Store:
     def reconcile_operation(
         self, principal, run_id, operation_id, version, expected_fingerprint, evidence
     ):
+        from .protocol_jobs import is_protocol_job, verified_pending
         from .tools import reconcile_readback
+
+        if is_protocol_job(self, run_id):
+            with self.tx() as c:
+                verified_pending(self, c, principal, run_id)
+            raise DomainError(
+                "UNSUPPORTED_CAPABILITY", "Protocol reconciliation requires its own immutable plan"
+            )
 
         with self.tx() as c:
             run = (

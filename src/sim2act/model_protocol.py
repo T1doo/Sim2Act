@@ -223,11 +223,20 @@ def _guarded(method):
 
 class ModelProtocol:
     def __init__(
-        self, runner=None, *, scope=None, enabled=False, independent_verify=None, read_only=None
+        self,
+        runner=None,
+        *,
+        scope=None,
+        enabled=False,
+        independent_verify=None,
+        read_only=None,
+        defer_evaluation=False,
+        read_context=False,
     ):
         self.runner, self.enabled = runner, enabled
         self._scope: Scope | None = _parse(Scope, scope) if scope is not None else None
         self.verify, self.read_only = independent_verify, read_only
+        self.defer_evaluation, self.read_context = defer_evaluation, read_context
 
     @property
     def scope(self) -> Scope:
@@ -303,6 +312,16 @@ class ModelProtocol:
     def _finish(self, stage, evidence):
         self.runner.require_scope(self.scope.model_dump())
         _no_gold(evidence)
+        if self.defer_evaluation:
+            # Trusted Store adapter persists completion, then runs an independent checker.
+            # Pending evaluation neither claims semantic PASS nor consumes a retry.
+            return {
+                "kind": VERSION,
+                "status": "AWAITING_EVALUATION",
+                "semantic_status": "UNKNOWN",
+                "evidence": evidence,
+                "verification": None,
+            }
         proof = self._verification(stage, evidence)
         self.runner.require_scope(self.scope.model_dump())
         if proof is None:
@@ -388,8 +407,10 @@ class ModelProtocol:
             )
         return evidence, proof
 
-    def _read(self, tool, args):
+    def _read(self, tool, args, context):
         self.runner.require_scope(self.scope.model_dump())
+        if self.read_context:
+            return _json(self.read_only(tool, copy.deepcopy(args), copy.deepcopy(context)))
         return _json(self.read_only(tool, copy.deepcopy(args)))
 
     @_guarded
@@ -448,7 +469,15 @@ class ModelProtocol:
                     raise DomainError("PERMISSION_DENIED")
                 if len(trace) >= 4:
                     raise DomainError("BUDGET_EXHAUSTED")
-                data = self._read(tool, args)
+                data = self._read(
+                    tool,
+                    args,
+                    {
+                        "tool_call_id": call["id"],
+                        "request_index": len(attempts) - 1,
+                        "step_id": None,
+                    },
+                )
                 validate_value(OUTPUTS[tool], data, "trusted_read")
                 if data["resource_id"] != args["resource_id"]:
                     raise DomainError("VERIFICATION_FAILED")
@@ -562,7 +591,11 @@ class ModelProtocol:
             args = {k: resolve(v) for k, v in node.inputs.items()}
             if node.kind == "registered_tool":
                 validate_call(node.tool_ref, args)
-                value = self._read(node.tool_ref, args)
+                value = self._read(
+                    node.tool_ref,
+                    args,
+                    {"tool_call_id": None, "request_index": None, "step_id": node.id},
+                )
                 validate_value(OUTPUTS[node.tool_ref], value, node.id)
                 if value["resource_id"] != args["resource_id"]:
                     raise DomainError("VERIFICATION_FAILED")

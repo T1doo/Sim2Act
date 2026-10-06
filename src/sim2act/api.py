@@ -33,6 +33,8 @@ from .local_tasks import (
 )
 from .planning import GoalCandidateInput, candidate_options, generate_candidate
 from .preflight import preflight
+from .protocol_api import mount as mount_protocol_api
+from .protocol_reviews import mount as mount_protocol_reviews
 from .spec_checklists import SpecChecklistInput, complete_checklist, inspect_checklist
 
 
@@ -372,7 +374,9 @@ def create_app(store=None, settings=None):
 
     @app.put("/api/goal-cards/{cid}")
     def update_goal_card(cid: str, body: GoalCardUpdate, user=user_dependency):
-        return revise_card(db, user, cid, body.model_dump(exclude={"expected_version"}), body.expected_version)
+        return revise_card(
+            db, user, cid, body.model_dump(exclude={"expected_version"}), body.expected_version
+        )
 
     @app.get("/api/goal-cards/{cid}/candidate-options")
     def goal_candidate_options(cid: str, user=user_dependency):
@@ -457,6 +461,8 @@ def create_app(store=None, settings=None):
         }
 
     mount_internal_api(app, db, platform_limits, identity)
+    mount_protocol_api(app, db, platform_limits, identity, s)
+    mount_protocol_reviews(app, db, identity)
 
     web = Path(__file__).parent / "web"
 
