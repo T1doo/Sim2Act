@@ -20,3 +20,7 @@
 独立接口审查先确认app身份不继承项目Grant、实际工具intent resource.read及独立来源marker三个前置。实现统一apps/lifecycle/app_jobs路径，固定可信literal checker/同协议Replay，仅已存在同项目app授权域，2离线round/1read/0repair/provider0，来源版本1/hash/原行引用与typed结果关联，task_extractions复用无DDL。独立实测回执状态/各ID/输出FP/artifact refs协调篡改、协议float/bool等值、接受提取请求FP及另一真实源替换曾被接受，修为完整receipt/protocol严格指纹及独立accepted request重建；补强无name KeyError造成正链1FAIL，修accepted_name固定在marker。早期空protocol只有静态发现，独立复现时已拒绝，不能伪写修前实际接受。中间失败/各阶段日志和三独立重现脚本均保留。
 
 最终专项SQLite44PASS1PGSKIP21.04秒/PG45PASS77.10秒，完整SQLite450PASS24SKIP2warning180.43秒，独立44PASS1PGSKIP20.18秒和所有hash一致。ruff/mypy23成功。最后源码PG全回归进行中；前完整PG469PASS1WinSKIP3warnings493.65秒是pre-final，不能替最后源码。代码/独立检查已本地冻结，准备本地source commit，0push/CI/LIVE/V5外发。测试准备新增合成read Grant不等于产品授权能力，产品阶段计数无新增Principal/Grant。没有新界面/HTTP接入与本轮浏览器验收；literal成功不代表semantic、自主生成或完整P-B/AT10。
+
+### 2026-10-06 / bounded agent 精确本地回归收尾
+
+本地源码commit `3e27ad9b55b3493da2dc403461916589427d4a2d`；最后PG完整473PASS1WindowsSKIP2warnings537.72秒，实际两旧依赖警告记录在pg-regression-closed.log，无FAIL。SQLite完整450PASS24SKIP2warnings180.43秒/PG新增45PASS77.10秒/最终独立44PASS1PGSKIP20.18秒；ruff/mypy23通过。106受版本控制source/config文件hash与源码commit一致，独立全部hash逐项匹配。先前pre-hardening/full/失败日志不替最后结果，原始中间问题仍保留。移除唯一专用PG容器sim2act-agent-offline-pg-20261006并实查32771关闭；pytest托管temp保留。只本地证据commit，无push、ServerCI或模型/V5外发，原work HEAD6f688e4干净；完整阶段与semantic/自主生成/跨进程Replay恢复/浏览器未提升。

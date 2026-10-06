@@ -113,3 +113,5 @@ E21执行中检查点：源码59f34817dd65201bd5ba204661d6787b19255fd3普通push
 此前E22“待接入”现在完成最小内部compatible switch认证API/UI：[精确c16cbae/CI37428871976 SUCCESS](https://github.com/T1doo/Sim2Act/actions/runs/37428871976)，PG383PASS0SKIP+38真实保护browserPASS，两viewport截图/升级后worker v2/rollback保留历史已验。取消迟到prepare/重复/过期/不兼容和实际resume覆盖；late commit cancel为独立NodeVM，短TTL仅显式合成oracle。初两个测试CI失败全保留，产品hash不变。无需继续堆CSV邻接能力或重复已有绿色工程。
 
 后续仍按原V5未闭合项决定：Win11普通用户及完整AT02 fixture/F1签收输入；新任务族与独立成果oracle/P-A/P-B；F2局部修改/通用受限业务数据与schema迁移及正式发布政策；受控外部在途效果AT19/20。当前0LIVE、最多额外两次尚待明确批准，不models探测/自动真实重试；本轮不自动开通以上范围。Linux SUID安全路径仍BLOCKED，原AT05首因UNKNOWN。完整F2/AT16及正式发布未提升，手机viewport不代物理设备/完整无障碍。[E22证据](../evidence/F2-internal-switch-entry-20261006/README.md)。
+
+2026-10-06本地bounded_agent主线已接原AppManifest/AppRun，源码3e27ad9，R0现app授权域/真实read反馈/可信literal checker/接受来源锚点/新MD冷Store结果闭合，详见BoundedAgentOfflinePlan与evidence/bounded-agent-offline-20261006。仍需回到原V5自主候选生成、自由规范语义验收与实际授权材料/接口；不能用literal fixture PASS扩为语义理解或完整P-B。当前0LIVE、不新增Grant；无现app MD授权则拒绝，不用项目runtime兜底。agent跨进程Replay自动恢复和新UI/浏览器尚未实现。本轮只本地commit，父检查前不push/CI，不再追加转换器家族。

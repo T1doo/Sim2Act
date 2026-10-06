@@ -14,3 +14,5 @@ V5冻结条目不改：AT-10“P-B 从已完成任务提取应用，在冷会话
 对应测试：`tests/test_retirement_race.py::test_pg_retirement_consumers_serialize_and_recheck`（8种参数），`test_pg_fixed_at10_subitems_after_serialization`；后者实际调用`tests/test_local_task_retirement.py::test_completed_task_retired_source_cold_client_new_input_and_failure`，创建新Store/API客户端，不从原Session取缓存。
 
 实际源/当前完整聚合/精确WindowsServerCI见[E15证据](../evidence/F2-retirement-race-20261006/README.md)。E14的量化与冷DOM历史仅作为历史旁证；本轮不宣称重新完成真实渲染/浏览器或手机视觉。通用稳定变量识别、非固定任务族、真实P-A生成/完整P-B、正式运行/发布/实例与原V5其余验收未完成，Win11/F1/Release仍未签收，真实预算0。
+
+2026-10-06追加本地R0 agent证据：精确3e27ad9源AppManifest/AppRun的显式字面任务→真实resource.read反馈/精确VERIFIED receipt→独立接受来源提取marker→已授权新MD/新term→冷Store同Worker新结果，零新增产品Grant/Principal/表/API，provider0。PG45专项、完整473PASS1WinSKIP/SQLite450PASS24SKIP及独立44PASS1PGSKIP通过。仅literal引用完整性，semantic UNKNOWN，候选/Replay由离线调用者提供；不代表自由规范语义正确、真实模型自主生成、一般F1任务提取、跨进程Replay自动恢复或完整AT10/P-B。无push/CI，本轮父检查后再决定。

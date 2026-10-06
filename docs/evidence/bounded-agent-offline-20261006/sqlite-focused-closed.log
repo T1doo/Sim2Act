@@ -1,0 +1,118 @@
+F...............................s............                            [100%]
+=================================== FAILURES ===================================
+__ test_real_manifest_source_proof_extraction_new_md_cold_worker_zero_grants ___
+
+env = (<sim2act.db.Store object at 0x7f787bab4c80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-103/test_re...d86b5b556e4b90b5aa24ca16b4dc19', 'user_f7b4e1e613a6481a9cdda4690a7a30ab', 'proj_db68dfe7d458453d97de2432db0715b4', ...)
+
+    def test_real_manifest_source_proof_extraction_new_md_cold_worker_zero_grants(env):
+        runtime, ids, texts, aid, cand, rel, inst, value = setup(env)
+        before = counts(env[0])
+        protocol = replay(ids[0], value)
+        accepted, result = run(env, inst, rel, ids[0], value, model=protocol)
+        assert result["status"] == "SUCCEEDED" and result["result"] == value
+        assert len(protocol.requests) == 2
+        feedback = protocol.requests[1]["messages"][-1]
+        assert (
+            feedback["role"] == "tool"
+            and json.loads(feedback["content"])["data"]["content"] == texts[0]
+        )
+        assert [t["function"]["name"] for t in protocol.requests[0]["tools"]] == ["resource.read"]
+        with env[0].tx() as c:
+            proof = verified_source(env[0], c, env[3], accepted["run_id"], limits(env))
+        target = candidate(ids[1], texts[1])
+        created = extract_agent_candidate(
+            env[0],
+            env[3],
+            accepted["run_id"],
+            fingerprint(proof),
+            target,
+            runtime,
+            "reusable evidence",
+            "extract",
+            limits(env),
+        )
+        cached = extract_agent_candidate(
+            env[0],
+            env[3],
+            accepted["run_id"],
+            fingerprint(proof),
+            target,
+            runtime,
+            "reusable evidence",
+            "extract",
+            limits(env),
+        )
+        assert cached["id"] == created["id"] and cached["cached"]
+        with env[0].tx() as c:
+            frozen = c.execute(
+                select(app_drafts.c.candidate).where(app_drafts.c.id == created["id"])
+            ).scalar_one()
+        second = output(ids[1], texts[1], "source_b")
+>       rel2, inst2 = release(env, created["id"], frozen, second)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_bounded_agent_apps.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_bounded_agent_apps.py:240: in release
+    inst = create_instance(env[0], env[3], rel["id"], rel["fingerprint"], limits(env))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/lifecycle.py:336: in create_instance
+    r = read_release(store, c, user, rid, limits)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/lifecycle.py:321: in read_release
+    validate_frozen_candidate(store, c, user, draft, limits)
+src/sim2act/apps.py:254: in validate_frozen_candidate
+    validate_agent_origin(store, c, user, draft, platform_limits)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7f787bab4c80>
+c = <sqlalchemy.engine.base.Connection object at 0x7f787a6feb40>
+user = 'user_c3d86b5b556e4b90b5aa24ca16b4dc19'
+draft = {'candidate': {'actions': [{'action_id': 'action_9b59e53ddc8b49be9db58c4280629faf', 'allowed_tool_refs': ['resource.re...50915e1120d', 'id': 'app_6e620fbf82244aa3ab5e264eaedfafd9', 'project_id': 'proj_db68dfe7d458453d97de2432db0715b4', ...}
+limits = Limits(max_requests=4, max_tools=4, max_repairs=1, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)
+
+    def validate_agent_origin(store, c, user, draft, limits):
+        candidate = draft["candidate"]
+        marker = (
+            c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"]))
+            .mappings()
+            .first()
+        )
+        provenance = candidate.get("agent_provenance")
+        if bool(marker) != (provenance is not None):
+            raise DomainError("VERSION_CONFLICT", "Independent extraction marker required")
+        if not marker:
+            if candidate["manifest"]["origin"] != "goal":
+                raise DomainError("VERSION_CONFLICT")
+            return
+        snap = marker["snapshot"]
+        if (
+            not isinstance(snap, dict)
+            or snap.get("kind") != PROVENANCE
+            or marker["principal_id"] != user
+            or snap.get("proof") != provenance
+            or snap.get("project_id") != draft["project_id"]
+            or snap.get("runtime_id") != draft["runtime_id"]
+            or snap.get("candidate_fingerprint") != draft["fingerprint"]
+            or candidate["manifest"]["source_run_ref"] != marker["task_id"]
+            or candidate["manifest"]["origin"] != "task_run"
+            or verified_source(store, c, user, marker["task_id"], limits) != provenance
+        ):
+            raise DomainError("VERSION_CONFLICT", "Trusted source/provenance changed")
+        accepted_candidate = copy.deepcopy(candidate)
+        accepted_candidate.pop("agent_provenance")
+        accepted_candidate["manifest"]["origin"] = "goal"
+        accepted_candidate["manifest"]["source_run_ref"] = None
+        accepted_request = {
+            "proof": fingerprint(provenance),
+            "candidate": accepted_candidate,
+            "runtime": draft["runtime_id"],
+>           "name": draft["name"],
+                    ^^^^^^^^^^^^^
+        }
+E       KeyError: 'name'
+
+src/sim2act/agent_apps.py:589: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_bounded_agent_apps.py::test_real_manifest_source_proof_extraction_new_md_cold_worker_zero_grants
+1 failed, 43 passed, 1 skipped, 1 warning in 30.00s

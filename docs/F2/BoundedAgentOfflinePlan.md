@@ -25,3 +25,9 @@
 5. 现有 CSV/F1 回归、ruff/mypy；SQLite 全回归及可用本地 PG 最小 CRUD，无 API DDL。没有新增 UI 时明确此切片无新浏览器验收，不把旧 Edge 38 项算作新功能浏览器证据。
 
 先独立审查上述权限和诚实性边界，再实施。独立审查发现与未测场景追加 Log，最终只本地 commit。自由语义提取/模型自主规划生成/LIVE/完整 P-B/Win11/F1签收/正式发布仍 NOT_RUN。
+
+## 实施后实际边界
+
+源码本地提交 `3e27ad9b55b3493da2dc403461916589427d4a2d`。独立最终复验44PASS1PGSKIP/三重现脚本exit0，实施中的真实失败与修复均保留。源任务仅初始goal的INTERNAL_APPRUN，不能把普通F1 Run或旧PARTIAL源迁入；候选/Replay response仍由离线调用者显式提供，模型自主生成AppManifest、自由规范语义检查未实现。提取服务验证稳定限定契约及来源后重新绑定新资源，未见材料冷Store运行通过，semantic一直UNKNOWN。
+
+Replay按调用者明确注入，默认Worker不会执行agent或降级到真实provider。冷Store已验，agent中途中断后的跨进程Replay自动恢复/回复持久化未实现，不能借既有CSV恢复测试宣称它已通过。新HTTP/UI/浏览器入口也未实现。本轮只本地源码和证据commit，父检查后才能决定push/CI；原V5正式阶段门不提升。
