@@ -26,7 +26,7 @@ function check(name,value){assert.ok(value,name);result.checks.push({name,status
 async function action(name){return (await execFileAsync(python,['scripts/agent-ui/fixture.py','--root',root,'--action',name],{cwd:repo,env:{...process.env,PYTHONPATH:'src'},encoding:'utf8'})).stdout.trim();}
 async function idle(){await page.waitForFunction(()=>engineering && !engineering.busy);}
 async function open(id){await page.locator('#app-list .row').filter({hasText:id===info.derived_app?'已完成任务的 agent 候选':id===info.initial_app?'evidence app':'existing R0 app domain'}).getByRole('button').click();await page.waitForFunction(id=>activeApp===id && engineering && !engineering.busy,id);}
-async function inputs(file,term){await page.locator('#app-agent-term').fill(term);await page.locator('#internal-term').fill(term);await page.locator('#internal-replay-file').setInputFiles(path.join(root,file));await page.waitForFunction(()=>engineering.offlineReplay!==null);}
+async function inputs(file,term){await page.locator('#app-agent-term').fill(term);if(await page.locator('#internal-term').isVisible())await page.locator('#internal-term').fill(term);await page.locator('#internal-replay-file').setInputFiles(path.join(root,file));await page.waitForFunction(()=>engineering.offlineReplay!==null);}
 async function layout(label){const bounds=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('#internal-panel button,#internal-panel input,#internal-panel blockquote')].filter(e=>e.getClientRects().length).filter(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth+1;}).length}));check(`${label}: no document/control/quote horizontal overflow`,bounds.scroll<=bounds.width+1&&bounds.overflow===0);const file=label+'.png';await page.screenshot({path:path.join(outputRoot,file),fullPage:true});const bytes=fs.readFileSync(path.join(outputRoot,file));result.screenshots.push({name:file,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20),visualReview:'NOT_REVIEWED'});}
  try{
   const baseline=await audit();baselineRendererPids=new Set(baseline.filter(p=>p.type==='renderer').map(p=>p.pid));
@@ -36,6 +36,7 @@ async function layout(label){const bounds=await page.evaluate(()=>({width:innerW
   page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>result.unexpectedPageErrors.push(e.message));
   await page.goto(base,{waitUntil:'networkidle'});await verifySandbox();await page.locator('#token').fill('synthetic-agent-ui-A');await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
   await page.locator('#project-select').selectOption(info.project);await page.locator('[data-tab="apps"]').click();await open(info.derived_app);
+  check('agent hides the CSV-only parameter label',await page.locator('#app-column-label').isHidden());
   check('existing authenticated app path opens agent',await page.locator('#internal-agent').isVisible());
   check('offline supplied candidate and semantic UNKNOWN are clear',(await page.locator('#internal-agent').innerText()).includes('尚无真实模型自主生成')&&(await page.locator('#app-origin').innerText()).includes('UNKNOWN'));
   await page.locator('#app-frozen-goal summary').click();await page.locator('#app-frozen-goal-text').waitFor({state:'visible'});
@@ -47,6 +48,7 @@ async function layout(label){const bounds=await page.evaluate(()=>({width:innerW
   await page.locator('#internal-approval-ack').check();await page.locator('#internal-commit').click();await idle();
   await page.locator('#internal-releases button').last().click();await page.waitForFunction(()=>engineering.instance && !engineering.busy);
   const iid=await page.evaluate(()=>engineering.instance.id);
+  await page.locator('#internal-run-form').waitFor({state:'visible'});await inputs('derived-replay.json',info.term_b);
   await page.locator('#internal-run-submit').click();await idle();await action('worker');await page.locator('#internal-refresh').click();await idle();
   check('cold default worker persisted independent result v1',(await page.locator('#internal-data').innerText()).includes('历史结果 v1'));
   check('literal citations and UNKNOWN shown',(await page.locator('#internal-data blockquote').count())>0&&(await page.locator('#internal-data').innerText()).includes('语义 UNKNOWN'));
