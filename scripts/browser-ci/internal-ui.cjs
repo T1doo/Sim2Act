@@ -26,8 +26,8 @@ const removedSecurityDefaults = [
 ];
 result.removedSDKSecurityDefaults = removedSecurityDefaults;
 function check(name, condition) { assert.ok(condition, name); result.checks.push({name,status:'PASS'}); }
-async function until(page, expression) { await page.waitForFunction(expression, null, {timeout:12000}); }
-async function idle(page) { await until(page, 'engineering && !engineering.busy'); }
+async function until(page, predicate, arg=null) { await page.waitForFunction(predicate, arg, {timeout:12000}); }
+async function idle(page) { await until(page, () => engineering && !engineering.busy); }
 async function login(page, bearer) {
   await page.goto(base, {waitUntil:'networkidle'});
   await page.locator('#token').fill(bearer);
@@ -39,7 +39,7 @@ async function login(page, bearer) {
   await idle(page);
 }
 async function context(viewport) {
-  const c = await browser.newContext({viewport, acceptDownloads:false});
+  const c = await browser.newContext({viewport, acceptDownloads:false, bypassCSP:false});
   await c.route('**/*', route => route.request().url().startsWith(base + '/') ? route.continue() : route.abort());
   const p = await c.newPage();
   p.setDefaultTimeout(12000);
@@ -99,16 +99,16 @@ async function layout(page, label) {
   const app = await activePage.evaluate(() => engineering.app);
   check('new instance initially has independent empty result ledger', (await activePage.locator('#internal-data').innerText()).trim()==='');
   await activePage.locator('#internal-run-submit').click();
-  await until(activePage, 'engineering.run?.status === "QUEUED" && !engineering.busy');
+  await until(activePage, () => engineering.run?.status === "QUEUED" && !engineering.busy);
   const cancelled = await activePage.evaluate(() => engineering.run.id);
   await activePage.locator('#internal-controls button').filter({hasText:'暂停'}).click();
-  await until(activePage, 'engineering.run?.status === "PAUSED" && !engineering.busy');
+  await until(activePage, () => engineering.run?.status === "PAUSED" && !engineering.busy);
   check('real pause persisted and resume control rendered', await activePage.locator('#internal-controls button').filter({hasText:'继续'}).isVisible());
   await activePage.locator('#internal-controls button').filter({hasText:'取消'}).click();
-  await until(activePage, 'engineering.run?.status === "CANCELLED" && !engineering.busy');
+  await until(activePage, () => engineering.run?.status === "CANCELLED" && !engineering.busy);
   check('cancel persists terminal status and explicit cancel intent', (await activePage.locator('#internal-run-detail').textContent()).includes('"cancel_intent": true'));
   await activePage.locator('#internal-run-submit').click();
-  await until(activePage, 'engineering.run?.status === "QUEUED" && !engineering.busy');
+  await until(activePage, () => engineering.run?.status === "QUEUED" && !engineering.busy);
   const accepted = await activePage.evaluate(() => engineering.run.id);
   await activePage.locator('#internal-back').click();
   await activePage.locator('#internal-panel').waitFor({state:'hidden'});
@@ -117,11 +117,11 @@ async function layout(page, label) {
   await activePage.locator('#internal-panel').waitFor({state:'visible'});
   await idle(activePage);
   await activePage.locator('#internal-instances button').first().click();
-  await until(activePage, `engineering.instance?.id === ${JSON.stringify(first)} && !engineering.busy`);
+  await until(activePage, id => engineering.instance?.id === id && !engineering.busy, first);
   check('reopen reads accepted queued and cancelled persisted history', (await activePage.locator('#internal-runs').innerText()).includes('QUEUED') && (await activePage.locator('#internal-runs').innerText()).includes('CANCELLED'));
   execFileSync(python, ['scripts/windows_browser_ci.py','--root',root,'--worker-once'], {timeout:15000,stdio:'pipe'});
   await activePage.locator('#internal-refresh').click();
-  await until(activePage, 'engineering.instance?.data.length === 1 && !engineering.busy');
+  await until(activePage, () => engineering.instance?.data.length === 1 && !engineering.busy);
   check('actual separate worker result 40 and immutable result v1 render', (await activePage.locator('#internal-data').innerText()).includes('40') && (await activePage.locator('#internal-data').innerText()).includes('结果 v1'));
   const runRead = await activePage.evaluate(async ids => {
     const r = await api(`/api/internal/instances/${ids.first}/runs/${ids.accepted}`);
@@ -134,13 +134,13 @@ async function layout(page, label) {
   activePage = mobile.p;
   await login(activePage,'synthetic-browser-A');
   await activePage.locator('#internal-instances button').first().click();
-  await until(activePage,'engineering.instance?.data.length === 1 && !engineering.busy');
+  await until(activePage,() => engineering.instance?.data.length === 1 && !engineering.busy);
   check('cold mobile context reads server result/history rather than JS memory', (await activePage.locator('#internal-data').innerText()).includes('40') && (await activePage.locator('#internal-runs').innerText()).includes('CANCELLED'));
   await layout(activePage,'mobile');
   // Another instance remains independent; requests are rejected by existing real API.
   await activePage.locator('#internal-releases button').first().click();
   await idle(activePage);
-  await until(activePage, `engineering.instance?.id !== ${JSON.stringify(first)} && !engineering.busy`);
+  await until(activePage, id => engineering.instance?.id !== id && !engineering.busy, first);
   const second = await activePage.evaluate(()=>engineering.instance.id);
   check('second instance has no inherited results', (await activePage.locator('#internal-data').innerText()).trim()==='');
   const wrong = await activePage.evaluate(async ids => {
