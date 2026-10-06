@@ -30,6 +30,23 @@ from sim2act.protocol_reviews import (
 from sim2act.worker import Worker
 
 
+@pytest.mark.parametrize("family", ["a", "b"])
+@pytest.mark.parametrize("phase,role", [("source", "cold"), ("cold", "source")])
+def test_registered_material_role_cannot_cross_source_cold_phase(family, phase, role):
+    contract_id = f"protocol.synthetic.{family}-{role}.v1"
+    contract, _ = evaluation_contract(contract_id)
+    # All content/goal fields genuinely match this registration. Only its role
+    # differs, so hash verification alone cannot prove phase isolation.
+    with pytest.raises(DomainError) as refused:
+        freeze_contract(
+            contract_id,
+            phase,
+            contract["public_goal"],
+            [{"content_hash": h} for h in contract["resource_hashes"]],
+        )
+    assert refused.value.code == "PERMISSION_DENIED"
+
+
 @pytest.fixture(autouse=True)
 def initialized_request_pool(env):
     from sim2act.protocol_pool import initialize_pools
@@ -256,7 +273,7 @@ def test_all_private_registry_assets_versioned_public_shapes_without_expected_va
         assert (
             freeze_contract(
                 contract_id,
-                "source",
+                "cold" if "-cold." in contract_id else "source",
                 private["public_goal"],
                 [{"content_hash": h} for h in private["resource_hashes"]],
             )

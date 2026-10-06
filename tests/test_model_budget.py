@@ -63,6 +63,18 @@ def test_oversize_or_denial_never_reserves_or_sends(fixture):
     assert not sent and not json.loads(path.read_text())["slots"]
 
 
+@pytest.mark.parametrize("text", ["x" * 8000, "中" * 4000])
+def test_complete_wire_preflight_refuses_character_or_byte_overflow_without_consumption(fixture, text):
+    _, path, _, _, sent, runner = fixture
+    provider = runner()
+    before = json.loads(path.read_text())
+    messages = [{"role": "user", "content": text}]
+    body, chars = provider._request_body(messages, [])
+    assert chars > 8000 if text.isascii() else chars < 8000 and len(body) > 10000
+    code("BUDGET_EXHAUSTED", lambda: provider.preflight(messages, []))
+    assert json.loads(path.read_text()) == before and sent == []
+
+
 def test_per_stage_cap_is_durable_across_instances(fixture):
     _, path, _, ticks, sent, runner = fixture
     runner("extract_a").call([], [])

@@ -100,3 +100,27 @@ reproduction and same-schedule fix verification. See
 [evidence](../evidence/protocol-shared-budget-recovery-20261006/README.md).
 There is no LIVE/semantic, automatic continuation, native-browser or whole-P-B
 acceptance claim. Prior failures and coverage correction remain recorded.
+
+## Offline preparation and project canvas follow-up
+
+The project-owned `/protocol/contracts` GET now exposes only fixed public goals,
+inputs, schemas and material hashes. Project task history/result canvas offers
+source, reviewed-source extraction, fresh-input cold submission and metadata-only
+recovery with original-key retry. It never submits a checker verdict or grants
+permissions. `owner_semantic_acceptance=PENDING` remains separate from the finite
+registered review state. UI responses recheck identity/project and user selection.
+
+Controller `prepare_handoff`/`require_handoff` use existing events to freeze the
+offline accepted snapshot, scope, material projection and budget policy. The
+zero-network demo rechecks this before each actual request reservation; legacy
+offline fixtures are not silently relabeled as approved experiments. A cold
+handoff accepts only one exact public read/interpret template, including all
+schema/argument/instruction fields. Source dependencies are checked before the
+pool lock. Provider stages are bound to frozen family/phase; extraction scope is
+one request and source history uses its original frozen allowance.
+
+This handoff is not an actual outgoing-envelope validator or LIVE provider switch.
+The DB total is shared, but six-stage/time policy remains per sidecar. The uniform
+experiment identity, exact sender projection and owner approval are still missing.
+See [scope and checks](ProtocolExecutionReadinessPlan.md) and
+[evidence](../evidence/protocol-egress-readiness-20261006/README.md).

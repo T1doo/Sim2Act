@@ -94,13 +94,14 @@ def verify(stage, evidence):
 class FakeRunner:
     """Protocol-only fake; not a production approval or model adapter."""
 
-    def __init__(self, responses):
+    def __init__(self, responses, scope=SCOPE):
         self.responses, self.requests, self.halted = list(responses), [], False
+        self.scope = copy.deepcopy(scope)
         self.accepted = {}
         self.latest_response_fingerprint = None
 
     def require_scope(self, scope):
-        assert scope == SCOPE
+        assert scope == self.scope
         if self.halted:
             raise DomainError("OUTCOME_UNKNOWN")
 
@@ -195,6 +196,40 @@ def completed():
         [wire(calls=[("resource.read", {"resource_id": A})]), wire({"summary": "Alpha"})]
     )
     return p.complete_task("Return supplied material", {"style": "exact"}, [A])
+
+
+@pytest.mark.parametrize("value", [True, 2.0, 0, 4, "2"])
+def test_frozen_source_history_limit_is_strict_and_bounded(value):
+    with pytest.raises(DomainError, match="Frozen source request limit"):
+        ModelProtocol(scope=SCOPE, source_request_limit=value)
+
+
+def test_one_request_extraction_uses_source_history_own_bound():
+    source = completed()
+    runner = FakeRunner([wire(candidate())], scope={**SCOPE, "max_requests": 1})
+    protocol = ModelProtocol(
+        runner,
+        scope={**SCOPE, "max_requests": 1},
+        enabled=True,
+        independent_verify=verify,
+        read_only=read,
+        source_request_limit=2,
+    )
+    assert protocol.extract_candidate(source)["candidate"]
+    assert len(runner.requests) == 1
+    source["evidence"]["attempts"].append(copy.deepcopy(source["evidence"]["attempts"][0]))
+    runner = FakeRunner([], scope={**SCOPE, "max_requests": 1})
+    protocol = ModelProtocol(
+        runner,
+        scope={**SCOPE, "max_requests": 1},
+        enabled=True,
+        independent_verify=verify,
+        read_only=read,
+        source_request_limit=2,
+    )
+    with pytest.raises(DomainError, match="Complete bounded source trace"):
+        protocol.extract_candidate(source)
+    assert runner.requests == []
 
 
 def test_default_disabled_no_call_or_authority():

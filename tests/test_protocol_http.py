@@ -81,6 +81,97 @@ def test_http_durable_async_default_provider_unavailable_and_idempotent(env):
         assert c.execute(select(func.count()).select_from(protocol_jobs)).scalar_one() == 1
 
 
+def test_public_contract_catalog_is_owned_and_excludes_private_oracle(env):
+    response = env[2].get(url(env) + "/contracts")
+    assert response.status_code == 200
+    catalog = response.json()
+    assert catalog["owner_semantic_acceptance"] == "PENDING"
+    assert catalog["live_enabled"] is False
+    assert len(catalog["items"]) == 4
+    for entry in catalog["items"]:
+        assert set(entry) == {
+            "contract_id",
+            "version",
+            "family",
+            "phase",
+            "public_goal",
+            "public_inputs",
+            "output_schema",
+            "resource_hashes",
+        }
+        assert entry["phase"] in {"source", "cold"}
+    text = response.text.lower()
+    assert not any(x in text for x in ("expected_output", "gold_sha256", "rubric", "reviewer"))
+    assert env[2].get("/api/projects/proj_" + "f" * 32 + "/protocol/contracts").status_code == 403
+    unauthenticated = TestClient(create_app(store=env[0], settings=env[1]))
+    denied = unauthenticated.get(url(env) + "/contracts")
+    assert denied.status_code == 403 and "items" not in denied.json()
+
+
+@pytest.mark.parametrize("stage", ["extract_a", "source_b", "cold_a"])
+def test_provider_stage_must_match_frozen_phase_and_family(env, tmp_path, stage):
+    seen = []
+    queued = env[2].post(url(env) + "/source", json=body(env))
+    assert queued.status_code == 202
+    worker = Worker(
+        env[0],
+        env[1],
+        NoProvider(),
+        protocol_runner_factory=factory(env, tmp_path, [], seen, stage),
+    )
+    assert worker.once()
+    assert state(env, queued.json()["run_id"])["status"] == "FAILED"
+    assert seen == []
+    with env[0].tx() as c:
+        assert c.execute(select(func.count()).select_from(attempts)).scalar_one() == 0
+
+
+def test_provider_stage_change_after_construction_stops_before_reservation(env, tmp_path):
+    seen = []
+    queued = env[2].post(url(env) + "/source", json=body(env))
+
+    def changed(worker, run, snapshot):
+        runner = factory(env, tmp_path, [], seen)(worker, run, snapshot)
+        runner.provider.stage = "extract_a"
+        return runner
+
+    assert Worker(env[0], env[1], NoProvider(), protocol_runner_factory=changed).once()
+    assert state(env, queued.json()["run_id"])["status"] == "FAILED"
+    assert seen == []
+    with env[0].tx() as c:
+        assert c.execute(select(func.count()).select_from(attempts)).scalar_one() == 0
+
+
+def test_source_refuses_cold_packet_even_with_matching_goal_hash_and_permissions(env):
+    contract, _ = evaluation_contract("protocol.synthetic.a-cold.v1")
+    material = Path(__file__).parents[1] / (
+        "docs/evidence/model-protocol-preparation-20261006/materials/a-cold/policy.txt"
+    )
+    resource = env[2].post(
+        f"/api/projects/{env[5]}/resources",
+        json={
+            "name": "authorized cold packet",
+            "format": "txt",
+            "content": material.read_text(),
+        },
+    )
+    assert resource.status_code == 201
+    response = env[2].post(
+        url(env) + "/source",
+        json=body(
+            env,
+            contract_id=contract["id"],
+            goal=contract["public_goal"],
+            inputs=contract["expected_inputs"],
+            resource_ids=[resource.json()["id"]],
+        ),
+    )
+    assert response.status_code == 403
+    with env[0].tx() as c:
+        assert c.execute(select(func.count()).select_from(protocol_jobs)).scalar_one() == 0
+        assert c.execute(select(func.count()).select_from(attempts)).scalar_one() == 0
+
+
 @pytest.mark.parametrize(
     "field",
     [

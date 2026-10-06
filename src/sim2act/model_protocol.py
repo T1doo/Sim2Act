@@ -232,11 +232,17 @@ class ModelProtocol:
         read_only=None,
         defer_evaluation=False,
         read_context=False,
+        source_request_limit=None,
     ):
         self.runner, self.enabled = runner, enabled
         self._scope: Scope | None = _parse(Scope, scope) if scope is not None else None
         self.verify, self.read_only = independent_verify, read_only
         self.defer_evaluation, self.read_context = defer_evaluation, read_context
+        if source_request_limit is not None and (
+            type(source_request_limit) is not int or not 1 <= source_request_limit <= 3
+        ):
+            raise DomainError("INVALID_INPUT", "Frozen source request limit required")
+        self.source_request_limit = source_request_limit
 
     @property
     def scope(self) -> Scope:
@@ -369,7 +375,13 @@ class ModelProtocol:
             or not 1 <= len(evidence["tool_trace"]) <= 4
             or not isinstance(evidence["output"], dict)
             or not isinstance(evidence["attempts"], list)
-            or not 1 <= len(evidence["attempts"]) <= self.scope.max_requests
+            or not 1
+            <= len(evidence["attempts"])
+            <= (
+                self.source_request_limit
+                if self.source_request_limit is not None
+                else self.scope.max_requests
+            )
         ):
             raise DomainError("VERIFICATION_FAILED", "Complete bounded source trace required")
         for entry in evidence["tool_trace"]:

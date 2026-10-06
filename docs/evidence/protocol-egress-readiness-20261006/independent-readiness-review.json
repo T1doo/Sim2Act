@@ -1,0 +1,71 @@
+{
+  "head": "3cbd112be29549009f330b0235f3a9288b26e398",
+  "scope": "Read-only current global 14-request readiness and exact egress integration audit; zero-network local validation only",
+  "source_sha256": {
+    "src/sim2act/model_budget.py": "a485c0106f3a569aea460bc91b70858004ce03bca35e17c2669fe10f5a34c56c",
+    "src/sim2act/protocol_pool.py": "a229be8a4a907ea26a59bc21f652b7aaf80fae6b95da844db65530058d957a86",
+    "src/sim2act/protocol_api.py": "38e287be740aedfcde8806d0a30669e52df5d5af9d0be11f8baaffe3c5f8dc72",
+    "src/sim2act/protocol_jobs.py": "76375a14056d9bcab1dd6e5878f7070dc471832c28104220392bc5cd94be2644",
+    "src/sim2act/model_protocol.py": "841077c1c735d5efeb5984a59cc54d96d7096234a20cb063094164f9da06a4c1",
+    "src/sim2act/protocol_reviews.py": "f3f5a87b1b4448d4c35656f434486a47c116a382a18e2a51b437f2729627dbc5",
+    "src/sim2act/worker.py": "ece7b0142531e99b6317f6d67b74e6b11130c7055929caeb2f6e427a58efd3e9",
+    "docs/F2/ModelProtocolExecutionPlan.md": "e1818347c9aa8f9bcb48833a1feb917f8828381b95cfb1a6936cc3e19cba1b77",
+    "docs/F2/ProtocolSharedBudgetRecoveryPlan.md": "d4239a03b7a5ee1596c0ff61313255e79fec40897e7a785bfe976e2aade0ab7e",
+    "docs/F2/ProtocolHttpWorkerContract.md": "390d25583f39f3955a51f8e619bc6de44600ce1a150cdcced23461336f3bb597"
+  },
+  "implemented": [
+    "Shared DB protocol-only offline pool across source/extract/cold Runs, owners/projects/processes; controller default allowance0, explicit test_only allowance <=14, 64000 envelope; LIVE pool0",
+    "API requires mock; worker factory defaultNone; actual protocol adapter requires test_only+MockTransport and refuses LIVE, without F1 fallback",
+    "Private serialized complete provider body preflight <=8000 UTF8 characters and <=10000 bytes, max_tokens1024; frozen read schema; full request reservation before send, no retry",
+    "Registered source/cold contracts bind public goal, inputs and actual authorized resource hashes; gold and rubric stay in server-only evaluation; source/extract dependency requires sealed reviewed success, not F1 PARTIAL",
+    "Protocol DB Attempt+slot reservation/settlement atomic, file STARTED before actual transport; network and ledgers cannot be atomic and unknown retains consumption/stops recovery sends"
+  ],
+  "readiness_gaps": [
+    {
+      "id": "EGRESS-CONTROLLER",
+      "classification": "Required before future LIVE enablement, not an existing offline authorization escape",
+      "actual": "No service-owned outbound manifest/experiment approval registration or outgoing-message validator is wired into BudgetedProvider or ProtocolAttemptRunner. Budget scope checks ids/tools/model/caps and authorization, not the exact four-package/phase wire field allowlist. Registered contract input/resource hashes narrow today offline jobs but do not establish the proposed full outbound manifest.",
+      "minimum_change": "Controller freezes independent experiment_id, approval identity/expiry, package/phase mapping and versions, material hashes, prompts/tools versions, derivation/field allowlist and immutable acceptance seal. Enqueue references this sealed policy, never client gold. Runner validates copied exact outbound envelope before preflight/DB reserve; provider validates the identical private final body fingerprint immediately before transport. Preserve denial before slot/send wherever possible.",
+      "acceptance": [
+        "Unlisted authorized project resource, changed package/hash/version, extra payload field or altered prompt/tool rejected with zero sends",
+        "Source/extract cannot read or embed cold package bytes; cold may send only current approved new material plus separately accepted candidate instructions",
+        "Authorization revoke/expiry and mutable body alteration between checks reject; frozen private body equals Attempt request fingerprint and egress sealed envelope"
+      ]
+    },
+    {
+      "id": "GLOBAL-STAGES-TIME",
+      "classification": "Required DB policy to claim executable six-stage14 plan",
+      "actual": "DB pool enforces total14/64000 and pending-stop, but has no global six-stage counts/8000-or24000 limits/6-second spacing/300-second stage deadline. These reside in each BudgetedProvider file; protocol factories create separate run-scoped sidecars. ProtocolAttemptRunner does not bind provider.stage to accepted phase/shape. Global RPM is not the proposed >=6-second rule.",
+      "minimum_change": "Under existing shared pool lock add sealed service stage identity (A/B and phase), per-stage first start/request/reserved/known accounting and last known settlement timestamp. Derive stage from controller accepted mapping, not arbitrary factory label. Check stage3/1/3 and8k/24k/deadline on reservation. With one inflight, >=6 seconds after last known settlement conservatively guarantees spacing without claiming reservation time equals actual send time. Unknown stays stopped. Decide whether300seconds is dispatch deadline or full stage wall; full wall requires remaining-deadline transport timeout and completion check.",
+      "acceptance": [
+        "Cross-Run/project/process calls in same stage share3/1/3 and token limits",
+        "A source Run cannot choose cold/extract label; fresh sidecar cannot reset stage count/start/rate gate",
+        "Deterministic same-time cross-Run request rejected without send; after six seconds allowed if capacity remains",
+        "Stage expiry across process restart rejects, late transport completion is handled explicitly and cannot claim deadline success"
+      ]
+    },
+    {
+      "id": "EGRESS-DERIVED-CONTENT",
+      "classification": "Required exact data review; no proven current gold leak",
+      "actual": "ModelProtocol.extract_candidate sends source evidence including output/tool trace; cold sends model-generated node.instruction, inputs and output_schema. _no_gold recursively forbids named keys but cannot detect an old answer or forbidden content embedded in free strings. Registered gold is not read into request construction; hashes/proof are not gold values.",
+      "minimum_change": "Explicitly freeze permitted source-evidence projection and trusted read receipt projection in the manifest. Before cold, independently approve exact accepted candidate instruction fingerprints/allowed derived fields, or constrain them with a sound bounded construction; do not assert arbitrary language instructions are old-answer-free because keys pass a denylist.",
+      "acceptance": [
+        "Capture actual Mock wire and compare each phase full bytes to independently authored permitted projection",
+        "Sentinel gold/rubric/private reasoning/other-project/cold-before-cold values absent from all actual source/extract/cold request bodies",
+        "Candidate containing literal source-answer sentinel in cold instruction is blocked before send by policy, not merely excluded by a test generator"
+      ]
+    }
+  ],
+  "actual_validation": {
+    "pytest": "tests/test_model_budget.py tests/test_protocol_http.py tests/test_protocol_pool.py: 65PASS,1 dependency warning,19.47s (SQLite/MockTransport; no real provider)",
+    "independent_mock_probe": "Two distinct sidecar paths each accepted same synthetic scope/stage/time100 and sent synthetic unregistered sentinel content. This demonstrates sidecar has neither cross-file timing nor exact manifest enforcement; no protocol DB bypass asserted.",
+    "network_requests": 0
+  },
+  "verdict": "Existing bounded offline functionality passes focused regression; no new concrete LIVE activation bypass found. Future approved provider execution remains blocked by missing immutable outbound controller/policy and shared phase/time enforcement, in addition to user approval and independent semantic review. Do not remove guards as a substitute for these interfaces.",
+  "limits": [
+    "No LIVE, network, push, CI or product edits",
+    "Focused local results do not replace prior PG/Windows concurrency evidence",
+    "Scope is protocol experiment, not legacy F1 model calls",
+    "No assertion natural-language semantic evaluation or entire P-B completed"
+  ]
+}

@@ -565,7 +565,7 @@ def enqueue(store, user, pid, phase, payload, key, limits):
             project_id=pid,
             resource_ids=refs,
             tool_refs=["resource.read"],
-            max_requests=min(limits.max_requests, 3),
+            max_requests=min(limits.max_requests, 1 if phase == "extract" else 3),
             mode="offline",
             model="intern-s2",
         ).model_dump()
@@ -668,6 +668,7 @@ def _public(job, run, *, cached=False):
         "namespace": NAMESPACE,
         "semantic_status": "NOT_RUN" if job["phase"] == "extract" else "UNKNOWN",
         "semantic_review": "NOT_RUN" if job["phase"] == "extract" else "WAITING_APPROVAL",
+        "owner_semantic_acceptance": "PENDING",
         "run_id": run["id"],
         "phase": job["phase"],
         "status": run["status"],
@@ -869,6 +870,21 @@ def process_job(worker, run):
                     raise DomainError("VERIFICATION_FAILED")
                 return frozen["proof"]
 
+        payload, phase = snapshot["payload"], snapshot["phase"]
+        source_result = None
+        source_request_limit = None
+        if snapshot["source"]:
+            with store.tx() as c:
+                source_job, _ = verified_pending(
+                    store, c, run["principal_id"], snapshot["source"]["run_id"]
+                )
+            source_request_limit = source_job["snapshot"]["scope"]["max_requests"]
+            source_result = {
+                **copy.deepcopy(source_job["result"]["protocol_result"]),
+                "status": "SUCCEEDED",
+                "semantic_status": "PASS",
+                "verification": snapshot["source"]["proof"],
+            }
         protocol = ModelProtocol(
             runner,
             scope=snapshot["scope"],
@@ -877,20 +893,8 @@ def process_job(worker, run):
             read_only=read,
             defer_evaluation=True,
             read_context=True,
+            source_request_limit=source_request_limit,
         )
-        payload, phase = snapshot["payload"], snapshot["phase"]
-        source_result = None
-        if snapshot["source"]:
-            with store.tx() as c:
-                source_job, _ = verified_pending(
-                    store, c, run["principal_id"], snapshot["source"]["run_id"]
-                )
-            source_result = {
-                **copy.deepcopy(source_job["result"]["protocol_result"]),
-                "status": "SUCCEEDED",
-                "semantic_status": "PASS",
-                "verification": snapshot["source"]["proof"],
-            }
         compiled = None
         if phase == "source":
             result = protocol.complete_task(

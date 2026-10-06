@@ -480,6 +480,10 @@ def create_app(store=None, settings=None):
     def internal_js():
         return FileResponse(web / "internal.js", media_type="text/javascript")
 
+    @app.get("/protocol.js")
+    def protocol_js():
+        return FileResponse(web / "protocol.js", media_type="text/javascript")
+
     @app.get("/app.css")
     def css():
         return FileResponse(web / "app.css", media_type="text/css")

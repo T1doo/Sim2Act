@@ -1,0 +1,33 @@
+{
+  "review": "Final independent synchronous user-intent and recovery await-gate review",
+  "actual_final_hashes": {
+    "src/sim2act/web/protocol.js": "dcf97729f2a69872a8b7c33374e9f2cd50e88c8b368c4d417ba133bea8e5f1e8",
+    "src/sim2act/web/app.js": "a54385a96a5e5d9178376b9552c85b5f74a559a06be5c93aafb3c390f748d3d1",
+    "src/sim2act/protocol_readiness.py": "c7866fac59257b4bb875a72f4cb3bc70c9c35447bd4543b917627ae5202f0580",
+    "scripts/protocol-store-dryrun.py": "29b4b232b7a363bcc971de52914777334a59c100f1a4b2b4d51c71325a5e2f40"
+  },
+  "parent_initial_ui_hash": "38b271998ae7954c084f09677004964caab5b72fd438cef65e969fd10197384b",
+  "hash_note": "UI changed to actual dcf97729 during review; parent notified; final four submit probes rerun against actual final hash. No product edits by reviewer.",
+  "assessment": [
+    "showRun synchronously sets activeRun and invokes protocolSelectRun before generic GET; user selection increments intent even when ctx.run null",
+    "Timer showRun(activeRun,false) does not create user intent; polling cannot automatically invalidate legitimate submit intent",
+    "Submit freezes intentEpoch and selectedRun; accepted and rejected callbacks/finally gate user intent; token/project/generation still checked",
+    "Recovery after await showProtocolRun rechecks current context, activeRun and current run identity before applying receipt status",
+    "Earlier static recovery status risk now actually exercised with delayed GET and closed; no further concrete blocker found within reviewed UI race scope"
+  ],
+  "actual_checks": [
+    "Actual protocol.js pure Node vm accepted late submit preserves selection",
+    "Actual protocol.js pure Node vm rejected late submit preserves status",
+    "Both above with ctx.run null before another synchronous user selection also pass",
+    "Recovery response arrives, readback GET waits, user chooses another Run, readback returns: new status remains",
+    "node --check protocol.js PASS"
+  ],
+  "probe": "independent-late-submit-probe.cjs updated only reviewer evidence to call actual synchronous user intent; --assert-closed, --reject, --null-current",
+  "history": "Earlier submitted/late-error baseline facts in independent-handoff-ui-review.json remain unchanged. No repeat full regression.",
+  "limits": [
+    "Synthetic DOM/fake fetch, not real HTTP DOM, pixel or native browser evidence",
+    "Native sandbox blocked status is parent-reported; no browser launched here",
+    "Live readiness remains false: final wire approval/controller and experiment-wide timing/accounting gates absent",
+    "No LIVE/network/push/CI/product edits"
+  ]
+}

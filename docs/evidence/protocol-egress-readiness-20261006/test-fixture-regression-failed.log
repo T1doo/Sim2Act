@@ -1,0 +1,85 @@
+.....F.................................................................. [ 62%]
+................F...........................                             [100%]
+=================================== FAILURES ===================================
+__________ test_one_request_extraction_uses_source_history_own_bound ___________
+
+    def test_one_request_extraction_uses_source_history_own_bound():
+        source = completed()
+        runner = FakeRunner([wire(candidate())])
+        protocol = ModelProtocol(
+            runner,
+            scope={**SCOPE, "max_requests": 1},
+            enabled=True,
+            independent_verify=verify,
+            read_only=read,
+            source_request_limit=2,
+        )
+>       assert protocol.extract_candidate(source)["candidate"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_model_protocol.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/model_protocol.py:214: in wrapped
+    self._admit()
+src/sim2act/model_protocol.py:273: in _admit
+    self.runner.require_scope(self.scope.model_dump())
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <test_model_protocol.FakeRunner object at 0x7f5991e755b0>
+scope = {'approval_id': 'explicit-offline-test', 'max_requests': 1, 'mode': 'offline', 'model': 'intern-s2', ...}
+
+    def require_scope(self, scope):
+>       assert scope == SCOPE
+E       AssertionError: assert {'approval_id...tern-s2', ...} == {'approval_id...tern-s2', ...}
+E         
+E         Omitting 6 identical items, use -vv to show
+E         Differing items:
+E         {'max_requests': 1} != {'max_requests': 3}
+E         Use -v to get more diff
+
+tests/test_model_protocol.py:103: AssertionError
+______ test_public_contract_catalog_is_owned_and_excludes_private_oracle _______
+
+env = (<sim2act.db.Store object at 0x7f5991c68da0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-327/test_pu...a3060bcfd74132a201d5c531af8f03', 'user_a4a20f247f794312972fb2a4d68f84c6', 'proj_693038622bbc485fa65fe34fa1381cf7', ...)
+
+    def test_public_contract_catalog_is_owned_and_excludes_private_oracle(env):
+        response = env[2].get(url(env) + "/contracts")
+        assert response.status_code == 200
+        catalog = response.json()
+        assert catalog["owner_semantic_acceptance"] == "PENDING"
+        assert catalog["live_enabled"] is False
+        assert len(catalog["items"]) == 4
+        for entry in catalog["items"]:
+            assert set(entry) == {
+                "contract_id",
+                "version",
+                "family",
+                "phase",
+                "public_goal",
+                "public_inputs",
+                "output_schema",
+                "resource_hashes",
+            }
+            assert entry["phase"] in {"source", "cold"}
+        text = response.text.lower()
+        assert not any(x in text for x in ("expected_output", "gold_sha256", "rubric", "reviewer"))
+        assert env[2].get("/api/projects/proj_" + "f" * 32 + "/protocol/contracts").status_code == 403
+        unauthenticated = TestClient(create_app(store=env[0], settings=env[1]))
+>       denied = unauthenticated.get(url(env) + "/contracts")
+E       AssertionError: assert 403 == 401
+E        +  where 403 = <Response [403 Forbidden]>.status_code
+E        +    where <Response [403 Forbidden]> = get(('/api/projects/proj_693038622bbc485fa65fe34fa1381cf7/protocol' + '/contracts'))
+E        +      where get = <starlette.testclient.TestClient object at 0x7f5991315b20>.get
+E        +      and   '/api/projects/proj_693038622bbc485fa65fe34fa1381cf7/protocol' = url((<sim2act.db.Store object at 0x7f5991c68da0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-327/test_pu...a3060bcfd74132a201d5c531af8f03', 'user_a4a20f247f794312972fb2a4d68f84c6', 'proj_693038622bbc485fa65fe34fa1381cf7', ...))
+
+tests/test_protocol_http.py:107: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_model_protocol.py::test_one_request_extraction_uses_source_history_own_bound
+FAILED tests/test_protocol_http.py::test_public_contract_catalog_is_owned_and_excludes_private_oracle
+2 failed, 114 passed, 1 warning in 31.82s

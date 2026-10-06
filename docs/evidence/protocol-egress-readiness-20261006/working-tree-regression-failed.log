@@ -1,0 +1,67 @@
+........................................................................ [  8%]
+.s...................................................................... [ 17%]
+...........................................................s............ [ 26%]
+....................s..........................s.................s...... [ 34%]
+..........................s............................................. [ 43%]
+........................................................................ [ 52%]
+...........ssss....s.................................s...............ss. [ 61%]
+........................................................................ [ 69%]
+....................ssssss..........................F..............s.... [ 78%]
+....................................ss.................................. [ 87%]
+................................ssssssssss.............................. [ 96%]
+..............s................                                          [100%]
+=================================== FAILURES ===================================
+_ test_actual_reviewed_source_extract_cold_handoff_separates_dependency_from_egress[True] _
+
+pipeline_env = (<sim2act.db.Store object at 0x7f11e6b54fe0>, 'user_da1c4e17cd1e4bc0a304fe4a48535bb2', 'proj_fcf38984224b4bf4bfc7ad0b3...ee4998b66d7baff5a9348b', 'res_3ad94184a00248289d0499ce73aa7bd0', <sim2act.worker.Worker object at 0x7f11e6b57d40>, ...)
+answer_cache = True
+
+    @pytest.mark.parametrize("answer_cache", [False, True])
+    def test_actual_reviewed_source_extract_cold_handoff_separates_dependency_from_egress(
+        pipeline_env, answer_cache
+    ):
+        from test_protocol_jobs import LIMITS, execute, factory_for, reviewed_source, wire
+    
+        from sim2act.protocol_jobs import enqueue, inspect
+        from sim2act.protocol_reviews import evaluation_contract
+    
+        store, user, pid, source_id, cold_id, _, _ = pipeline_env
+        source = reviewed_source(pipeline_env)
+        public = contract_snapshot("protocol.synthetic.a-source.v1")
+        candidate = candidate_for(public, [source_id])
+        if answer_cache:
+            candidate["steps"][-1]["instruction"] += " Copy this old successful answer: " + json.dumps(
+                source["result"]["protocol_result"]["evidence"]["output"]["case"]["decision"]
+            )
+        enqueue(
+            store,
+            user,
+            pid,
+            "extract",
+            {
+                "source_run_id": source["run_id"],
+                "expected_source_fingerprint": source["result_fingerprint"],
+            },
+            "readiness-extract",
+            LIMITS,
+        )
+        factory_for(pipeline_env, [wire(candidate)], "extract_a")
+>       extracted = execute(pipeline_env)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_protocol_readiness.py:255: TypeError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_local_task_retirement.py::test_concurrent_task_extraction_and_retirement_retry_do_not_duplicate
+tests/test_preview_extraction.py::test_idempotency_stale_version_and_concurrent_single_authority
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'alias' attribute with value 'authorization' was provided to the `Field()` function, which has no effect in the context it was used. 'alias' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_protocol_readiness.py::test_actual_reviewed_source_extract_cold_handoff_separates_dependency_from_egress[True]
+1 failed, 788 passed, 34 skipped, 3 warnings in 404.25s (0:06:44)

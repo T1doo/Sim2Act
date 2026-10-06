@@ -115,6 +115,7 @@ def freeze_contract(contract_id, phase, goal, resource_snapshots):
     value = contract_snapshot(contract_id)
     if (
         phase not in {"source", "cold"}
+        or not contract_id.endswith(f"-{phase}.v1")
         or goal != value["public_goal"]
         or sorted(r["content_hash"] for r in resource_snapshots) != sorted(value["resource_hashes"])
     ):

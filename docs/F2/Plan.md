@@ -390,3 +390,14 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 三项SKIP分别为registered_generation_native_dom正常/受控时序两个SQLite seed项，以及registered_run_generation_http lost receipt的公共PG fixture DOM项；可选Node/jsdom前置，未从原-q/Report单独取得具体skip reason，不虚构安装状态。真实受保护Edge38、agent33、registeredGeneration29均PASS，无unexpected console/pageerror，实际renderer AppContainer/restricted token审计PASS，原helper/SDK/权限/超时/上传八名称范围未变。原命名JSON/PNG六个存在输出按stdout chunks字节/SHA/2MB核验（failure文件成功时不存在）；PNG未额外写入或发布，视觉审查保持NOT_REVIEWED，不把hash等同像素可见验收。上述browser fixture仍SQLite，原覆盖不替代新protocol/recover原生UI，后者NOT_RUN。
 
 清理：原owned API/worker stopped、temporary PG server stopped、Cleanup SUCCESS和原JobRoot删除正常完成，浏览器helper正常结束其owned API finally；Windows残schema/role未额外计数，不伪称实测0。推前真实临时clone已删，无本地新PG/运行服务。前两CI37499515105/37500554573失败记录、误判普通attrs LF的本地verifier修正、全量与fixture口径更正全部保留。gold/PINS原bytes与篡改拒绝不变。真实模型请求0，LIVE总预算0；完整P-B、真实语义、generic continuation、正式Release/F1/Win11/完整AT02不提升。证据见windows-ci-third-result.json、case-map、browser-summary及third-real-checkout。最后只追加docs证据提交，不改成功source实现。
+
+
+2026-10-06 离线协议准备与项目入口本地闭合（baseline 3cbd112be29549009f330b0235f3a9288b26e398）。本轮最新授权仅本地工程/提交，不push、不运行新CI、不请求LIVE批准。新增controller-only不可变handoff及完整固定cold候选oracle；source/extract/cold角色在冻结合同、provider stage及handoff三层一致，真实cold材料不能冒充source。extract最多1请求，源历史另按已认证源scope计数。沿用项目画布提供公共合同、任务结果、显式extract/cold与metadata recover；独立合成checker PASS仍保留owner PENDING，不自动验收/继续/发布，不新增表或API DDL。
+
+两种本地合成形态经实际HTTP→Worker→MockTransport→持久Attempt/Operation→独立注册review→extract→新材料cold完成：共8 mock调用/8槽、6 VERIFIED Operation，同一14槽DB pool；独立gold未进入模型输入。失败B在6调用后停止，保留已耗槽及已知usage。真实模型请求0，未查询models/读取真实provider凭据。14/64000仍是待批准提案，生产/LIVE默认0；1024 output、完整8000字符/10000 UTF-8 bytes预检负例通过，不以160 mock tokens估算费用。
+
+最终冻结源码157文件前后SHA无变化：834 collected，799 PASS /35 SKIP /0 FAIL，365.72秒，1既有warning。当前角色闭合专项152 PASS；Ruff src/scripts/tests PASS、mypy32源文件PASS、Node三文件语法及diff检查PASS。实际HTTP DOM21项PASS，真实owned-other-project Run fixture及严格ID guard验证跨项目拒绝，外域pagefetch0。安装的Chromium默认沙箱因SUID helper配置失败，原FAIL保留，仅精确条件标记BLOCKED_SANDBOX；native视觉/新UI Windows/Win11未测，本轮PG专项未启用，不将799全部称PG。
+
+失败与混合快照保留：旧源历史限额回归、测试夹具两失败、oversized cold负例前置拒绝、原生浏览器失败；两次中途全量794/35不能作为最终冻结证据，其中一次other_run缺失造成负例虚假通过，已加真实fixture和严格ID oracle再完整重跑。最后发现真实cold/source角色隔离缺口，在三层修复并新增负例；旧全注册positive测试误将cold叫source，修正后152专项及799最终全量通过。无gold/PINS/AT02历史改写。
+
+LIVE工程仍未就绪：六阶段/时间策略尚为per-sidecar，缺sealed实验身份及DB全局时序；缺实际sender完整外发envelope验证、独立接受的cold instruction/source反馈投影，以及绑定预算/精确数据/provider/私有ledger路径的用户批准。generic continuation、真实语义、完整P-B/F1/AT02/正式Release均未提升。证据：docs/evidence/protocol-egress-readiness-20261006/final-validation.json、final-frozen-full.log及docs/evidence/protocol-ui-entry-20261006/final-frozen-http-dom.json。

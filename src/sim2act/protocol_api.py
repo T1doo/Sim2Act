@@ -54,6 +54,24 @@ FORBIDDEN_CLIENT_KEYS = {
 }
 
 
+def provider_stage(snapshot):
+    """Derive the finite experiment stage from the frozen server registration."""
+    contract_id = snapshot.get("contract", {}).get("contract_id")
+    family = {
+        "protocol.synthetic.a-source.v1": "a",
+        "protocol.synthetic.a-cold.v1": "a",
+        "protocol.synthetic.b-source.v1": "b",
+        "protocol.synthetic.b-cold.v1": "b",
+    }.get(contract_id)
+    phase = snapshot.get("phase")
+    if family is None or phase not in {"source", "extract", "cold"}:
+        raise DomainError("VERSION_CONFLICT", "Unregistered experiment stage")
+    expected_role = "cold" if phase == "cold" else "source"
+    if not contract_id.endswith(f"-{expected_role}.v1"):
+        raise DomainError("VERSION_CONFLICT", "Registered material role differs from phase")
+    return f"{phase}_{family}"
+
+
 def _closed_client_inputs(value):
     if isinstance(value, dict):
         if any(key.lower() in FORBIDDEN_CLIENT_KEYS for key in value):
@@ -69,6 +87,33 @@ def mount(app, store, limits, identity, settings):
     from .protocol_jobs import enqueue, inspect
 
     user_dependency = Depends(identity)
+
+    @app.get("/api/projects/{pid}/protocol/contracts")
+    def public_contracts(pid: str, user=user_dependency):
+        """Public preparation fields only; independent evaluator output stays private."""
+        from .protocol_reviews import PINS, contract_snapshot, evaluation_contract
+
+        with store.tx() as c:
+            store.own_project(c, user, pid)
+        items = []
+        for contract_id in PINS:
+            value, _ = evaluation_contract(contract_id)
+            public = contract_snapshot(contract_id)
+            parts = contract_id.split(".")
+            family, phase = parts[2].split("-")
+            items.append(
+                {
+                    "contract_id": contract_id,
+                    "version": public["version"],
+                    "family": family,
+                    "phase": phase,
+                    "public_goal": public["public_goal"],
+                    "public_inputs": value["expected_inputs"],
+                    "output_schema": public["output_schema"],
+                    "resource_hashes": public["resource_hashes"],
+                }
+            )
+        return {"items": items, "owner_semantic_acceptance": "PENDING", "live_enabled": False}
 
     def submit(pid, phase, body, user):
         if settings.mode != "mock":
@@ -118,6 +163,7 @@ class ProtocolAttemptRunner:
             or not isinstance(provider.model.transport, httpx.MockTransport)
             or provider.scope != snapshot["scope"]
             or provider.scope["mode"] != "offline"
+            or provider.stage != provider_stage(snapshot)
         ):
             raise DomainError("PERMISSION_DENIED", "Explicit test-only offline provider required")
         self.worker, self.run, self.provider = worker, run, provider
@@ -134,6 +180,7 @@ class ProtocolAttemptRunner:
             or not isinstance(self.provider.model.transport, httpx.MockTransport)
             or self.provider.scope != self.snapshot["scope"]
             or self.provider.scope["mode"] != "offline"
+            or self.provider.stage != provider_stage(self.snapshot)
         ):
             raise DomainError("PERMISSION_DENIED", "Offline provider boundary changed")
         from .protocol_jobs import verified_pending

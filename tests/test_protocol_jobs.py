@@ -161,6 +161,39 @@ def reviewed_source(env):
     return inspect(store, user, accepted["run_id"])
 
 
+def test_coherent_source_limit_rewrite_cannot_replace_accepted_scope(env):
+    store, user, pid, _, _, _, _ = env
+    source = reviewed_source(env)
+    with store.tx() as c:
+        row = (
+            c.execute(select(protocol_jobs).where(protocol_jobs.c.run_id == source["run_id"]))
+            .mappings()
+            .one()
+        )
+        snapshot = copy.deepcopy(row["accepted_snapshot"])
+        snapshot["scope"]["max_requests"] = 2
+        changed = fingerprint(snapshot)
+        c.execute(
+            update(protocol_jobs)
+            .where(protocol_jobs.c.run_id == source["run_id"])
+            .values(accepted_snapshot=snapshot, fingerprint=changed)
+        )
+        c.execute(update(runs).where(runs.c.id == source["run_id"]).values(fingerprint=changed))
+    with pytest.raises(DomainError):
+        enqueue(
+            store,
+            user,
+            pid,
+            "extract",
+            {
+                "source_run_id": source["run_id"],
+                "expected_source_fingerprint": source["result_fingerprint"],
+            },
+            "tampered-history-limit",
+            LIMITS,
+        )
+
+
 def test_source_technical_completion_waits_for_independent_review_and_preserves_authority(env):
     store, user, pid, a, b, worker, tmp = env
     with store.engine.connect() as c:

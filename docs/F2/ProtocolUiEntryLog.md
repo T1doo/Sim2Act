@@ -1,0 +1,19 @@
+# Protocol project entry — local engineering boundary
+
+The project results area now exposes registered public source tasks, selected protocol Run details, extraction from independently reviewed sources, and cold execution with new authorized resource references. Existing task history opens protocol Runs in this area. The compiled plan is an unpublished protocol draft, not an AppManifest, deployed instance, or user-accepted application.
+
+Only the owner/project-bound public contract catalog supplies goal, public inputs, output schema, and material version hashes. Source and cold inputs contain the closed backend reference/input fields; extraction contains only the source Run and result fingerprint. There is no UI for supplying candidate programs, Replay responses, gold, or review decisions. Cold contracts must match the source goal; the server rejects mismatches rather than inferring family from model-generated instructions.
+
+Source/cold technical completion remains `WAITING_APPROVAL`, semantic `UNKNOWN`, owner `PENDING`. Explicit independent registry review may yield registered `PASS`; owner semantic acceptance still remains `PENDING`. The UI does not invoke the review endpoint. Default protocol provider absence produces `WAITING_RESOURCE` and zero Attempts. Recovery only reconciles persisted metadata; it does not continue execution or send a provider request.
+
+Submission retries reuse the original request key only for exactly the same identity, project, phase, and body. Lost metadata-recovery receipts retain the original version, fence, and key for manual retry. User task selection is recorded synchronously before its HTTP read; a late accepted or failed submission cannot steal the selected canvas. Normal 2500ms background polling remains enabled and is a read rather than a new selection intent. Late catalog/read responses are bound to identity/project and run selection; hidden prior-identity cold inputs are cleared. Refreshing a changed material list preserves unsent public input edits.
+
+## Validation
+
+`tests/test_protocol_ui.py` serves the real HTTP app and invokes `tests/protocol_ui_driver.cjs` in two explicitly separate engines. The DOM engine uses developer jsdom; run with `NODE_PATH=/workspace/browser-tools/node_modules /workspace/sim2act-pb-venv/bin/python -m pytest tests/test_protocol_ui.py -q`. jsdom is an explicit development dependency, not a product dependency or native browser result.
+
+`tests/fixtures/protocol_ui_control.py` is an explicit local test controller. It executes the actual Worker with the actual Intern adapter and `httpx.MockTransport`; fixtures are provider wire responses only in tests. The independent expected output is never sent as request context or exposed by the public catalog. The source, extracted plan, and cold Run are created through actual UI POSTs, not seeded. The controller's review is an explicit independent test action; the UI never sends it. The source/extract/cold chain persists four actual Attempts. Default worker/recovery persist no additional Attempt.
+
+The Chromium engine launches installed Linux Chromium through native CDP with the default sandbox and no sandbox/security disabling flags. The first native attempt failed because the installed SUID helper is not root-owned mode 4755. That original failure is retained in the evidence directory. The final test marks only that exact FATAL sandbox-helper error `BLOCKED_SANDBOX`; arbitrary startup timeouts, DOM errors, and functional failures remain failures. Native browser visuals, 390-width rendering, Windows/Edge, and LIVE provider execution remain unverified. System security policy is unchanged.
+
+Focused final results and hashes are in `docs/evidence/protocol-ui-entry-20261006/summary.json`. No push, CI, LIVE call, new role, new Grant, or owner semantic approval is part of this slice.

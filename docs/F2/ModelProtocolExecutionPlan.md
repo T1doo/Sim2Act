@@ -2,6 +2,15 @@
 
 2026-10-06；前置[V5差距评审](V5ModelExperimentGapReview.md)。本轮按用户授权完成离线代码/材料/负例与独立审查；只本地提交，不push/CI/LIVE。不是一份可立刻外发的脚本许可。
 
+**后续实现口径**：本文以下预算与缺口清单记录最初独立协议阶段。
+现离线 HTTP/Worker 已接持久源、注册独立 checker、受限编译、共享 DB
+14/64000 总额和状态恢复；本次又补离线 controller handoff、完整固定冷模板
+oracle、项目协议入口和双形态零网络预演。文件 sidecar 按 Run/scope 独立，
+六阶段/6 秒限制不能称 DB 全局策略；精确出站 body 校验与统一实验策略仍缺。
+最终事实与保留阻塞见[本次计划](ProtocolExecutionReadinessPlan.md)和
+[证据/预算/数据说明](../evidence/protocol-egress-readiness-20261006/README.md)。
+提案仍未批准，LIVE 为 0；注册合成 checker PASS 不等于 owner 语义签收。
+
 ## 已完成的最小协议与复用范围
 
 - [model_protocol.py](../../src/sim2act/model_protocol.py)：`complete_task`实际provider工具反馈循环；`extract_candidate`一次真实provider可接的有限DAG候选；`run_candidate`新资源绑定/新语言调用，无旧答案缓存。默认disabled，runner必须有require_scope/call/halt，当前批准交集read回调及独立verifier必须注入。不同模型输出决定步骤/参数/语言节点；服务端只验证范围、闭合schema/接线/预算。模型任务结果不是源码，不执行代码/URL/自由SQL。

@@ -1,0 +1,50 @@
+..............................F......................................... [ 47%]
+........................................................................ [ 94%]
+........                                                                 [100%]
+=================================== FAILURES ===================================
+_ test_all_private_registry_assets_versioned_public_shapes_without_expected_values _
+
+    def test_all_private_registry_assets_versioned_public_shapes_without_expected_values():
+        for contract_id in PINS:
+            private, _ = evaluation_contract(contract_id)
+            public = contract_snapshot(contract_id)
+            assert public["checker"] == "exact-json-semantic.v1" and public["version"] == 1
+            assert "expected_output" not in public and "gold" not in public
+            assert (
+>               freeze_contract(
+                    contract_id,
+                    "source",
+                    private["public_goal"],
+                    [{"content_hash": h} for h in private["resource_hashes"]],
+                )
+                == public
+            )
+
+tests/test_protocol_reviews.py:274: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+contract_id = 'protocol.synthetic.a-cold.v1', phase = 'source'
+goal = '只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。'
+resource_snapshots = [{'content_hash': '29209e986cfb89cd0620dd8d4a67f3f0ba428fe823cd852012929808e201b1fc'}]
+
+    def freeze_contract(contract_id, phase, goal, resource_snapshots):
+        value = contract_snapshot(contract_id)
+        if (
+            phase not in {"source", "cold"}
+            or not contract_id.endswith(f"-{phase}.v1")
+            or goal != value["public_goal"]
+            or sorted(r["content_hash"] for r in resource_snapshots) != sorted(value["resource_hashes"])
+        ):
+>           raise DomainError("PERMISSION_DENIED", "Input is outside the frozen evaluation contract")
+E           sim2act.errors.DomainError: Input is outside the frozen evaluation contract
+
+src/sim2act/protocol_reviews.py:122: DomainError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_protocol_reviews.py::test_all_private_registry_assets_versioned_public_shapes_without_expected_values
+1 failed, 151 passed, 1 warning in 65.73s (0:01:05)
