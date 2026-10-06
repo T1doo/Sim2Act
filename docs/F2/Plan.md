@@ -367,3 +367,14 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 
 
 最小锁平台补丁独立终审通过：Windows目标mypy31clean、Linux预算19PASS0.16秒（含LOCK_CONFLICT）、Ruff PASS。最终model_budget SHA a485c0106f3a569aea460bc91b70858004ce03bca35e17c2669fe10f5a34c56c。真实Windows runtime仍NOT_RUN；原失败不覆盖。修复本地提交，第二次push/CI待父额外授权。
+
+
+2026-10-06 父明确追加一次原standardCI授权，允许普通push已审最小修复18fbae4175477d85eb2fd620905e9d4adcf5096b。推前独立函数绑定适配器契约核验：Windows分支不导入fcntl，仍msvcrt LK_NBLCK/byte1/offset0；正常/异常LK_UNLCK一次；竞争返回LOCK_CONFLICT，不进入发送、不错误unlock。未修改真实sys.platform/os.name，该隔离检查不代表真实Windows锁执行。Windows目标mypy31PASS，Linux预算19PASS0.42秒。普通push c3b0f3c→18fbae4成功，追加唯一CI [37500554573](https://github.com/T1doo/Sim2Act/actions/runs/37500554573)，job112396152608；Setup/smoke成功，工程正在跑，未预写PASS。原CI37499515105失败完整保留；runner/权限/helper/超时/上传范围无diff，无LIVE/权限扩展。终态及实际关键case边界另存追加CI结果。
+
+
+追加唯一原CI37500554573/source18fbae4175477d85eb2fd620905e9d4adcf5096b终态FAIL：645PASS127FAIL3SKIP，775 collected，315.83秒。真实WindowsRuff/mypy31成功；同源775收集顺序映射原-q进度且匹配JUnit总量（非下载JUnit逐case明细）：预算锁19PASS含native锁竞争；schema3PASS，其中2真实PG应用role新表CRUD/DDL拒绝，1显式SQLite API无DDL。6跨进程/崩溃及1三Run并发在oracle加载前FAIL，不能签Windows并发成功。公共/jobs PG fixture路由661项为533PASS127FAIL1SKIP，另114项为112PASS2SKIP；这是fixture路由，不将全部645称真实PG。3SKIP为registered-generation可选jsdom两个模式、旧生成HTTP DOM jsdom项；浏览器step因工程失败跳过，当前两CI均无旧Edge38/agent33/registered29复验，更无新protocol/recover原生UI验收。Report/Cleanup成功，owned API/worker及PG server已停，原jobroot清理完成；Windows残schema/role未独立计数。两次失败保留，LIVE0。
+
+127FAIL均同Registered evaluation asset changed。真实隔离Git core.autocrlf=true checkout4个固定evaluation JSON，四个CRLF/PIN失配，loader拒绝，匹配CI错误；CI未导出四原文件字节，换行归因来自此Git复现。最小.gitattributes仅两行使该四资产-text保持原bytes，原PINS/gold/hash校验未改；同checkout四原SHA/loader通过，独立四单字节篡改均拒绝。独立补丁审通过，attrs SHA76c84a011a591088588f448560f3442283d044aa8b98d8cd9c416c842acb3bad。SQLite相关79PASS2个PG-only角色SKIP46.14秒，非Win签收。追加一次额度已用完；byte修复仅本地提交，第三push/CI待父授权，不改runner/权限/上传范围。结果见windows-ci-second-result.json。
+
+
+口径定点更正：WindowsCIPlan此前把所有registered HTTP DOM宽泛称SQLite，现按实际fixture细分。scripts/windows_browser_ci.py与scripts/agent-ui/fixture.py都固定SQLite，因此原Edge/agent/registered native fixture及两个direct generation DOM为SQLite；旧test_registered_run_generation_http::test_real_http_dom_generation_entry_and_lost_receipt依赖公共PG env，此次1项SKIP也归PG-selecting fixture列。因此实际路由为533PASS127FAIL1SKIP（661 PG-selecting），112PASS2SKIP（114其他），非534/111。三个skip属于可选Node/jsdom前置，未单独导出JUnit具体skip reason，不伪称已实测Node缺失或jsdom缺失。原-q定位的127个FAILED nodeid与CI完整failure summary逐一完全一致，定位证据自洽；仍明确不是独立JUnit逐case下载。新表2真实PG角色检查通过不等于预算6process/1concurrency已过，后者本轮均停于oracle PIN拒绝。
