@@ -228,3 +228,10 @@ E19精确终态：aaf07f49b3d32eeb360d8cd60a52a4fad22959fd普通push，[CI374193
 见 [稳定性报告](../evidence/F2-startup-stability-20261006/README.md)：原AT05原样4PASS39.99s、观察修正后4PASS35.59s，原断言/manage/test未改；初版probe参数名冲突4FAIL14.55s独立保留，仅观察包装器修正。有效12start/24child、0启动process拒绝，boot epoch恒定；停止阶段拒绝不能解释首次启动failure。首次1.269s进程guard错误、空日志、无PID/rc/bootepoch，原因保持UNKNOWN，不从绿色推断修复、不无限重复、不改产品。独立E19 API18PASS/1PGSKIP4.53s及跨owner-instance-history-control/撤权合成负例拒绝；损坏binding聚合history遗漏但直接409边界保留，未独立PG/CI/browser。
 
 受保护Chrome实际helper65534:65534 mode4755，owner错误/正常namespace历史No usable sandbox；环境方最小提供正常沙箱浏览器或已有protectedCDP/connector，不chown/chmod/--no-sandbox/绕拒，视觉0BLOCKED。24有效child已退出为ppid1 zombie，无执行中owned服务，环境init未reap如实保留；专用PGstop/remove，不杀系统进程。source/tests/config与aaf07f49b3d32eeb360d8cd60a52a4fad22959fd无差异；精确CI37419363378重新核验success/372PASS0FAIL0SKIP，文档push不触发paths，不借CI关闭UNKNOWN。0LIVE/无导出/正式发布关闭，原work/V5/AT02/AT05/阶段门不变。有效上限4+4结束，不加feature；最小后续仅再次真失败记录rc身份时间与环境受保护浏览器接入。
+
+
+## 2026-10-06 / E21事前：既有WindowsServerCI受保护真实浏览器
+
+基线5c3292d/aaf07f4正常fetch；不加业务feature、不重试LinuxSUID拒绝。既有windows-2025作业15分钟预算，前轮实际2m39s；新增最多4分钟同job浏览器步骤，不增runner/订阅/超时，官方镜像预装Edge先做实际路径/version/签名检查，缺失或不可信直接BLOCKED。不自动下载浏览器。唯一新增测试依赖官方npm registry固定playwright-core1.63.0及integrity lock，ignore-scripts，和应用Python lock隔离。官方Playwright Chromium默认sandbox false，必须显式chromiumSandbox:true；核实际args无禁用sandbox，并只读Windows renderer restricted/AppContainer及低integrity token证据，不改系统权限/UAC/沙箱策略、不--no-sandbox，失败不降级。
+
+冻结最小流程：现有认证内部Release快照确认→实例→持久Run QUEUED/暂停/取消/返回后重开；另任务实际现Worker成功→独立结果history；desktop1366x900/mobile390x844同WindowsServer真实viewport截图/布局检查、页面runtime错误检查；另一owner/instance历史及control拒绝并不显示他人数据。只用test_only明确临时SQLite合成身份/CSV，显式test初始化不生产API建表，无真实模型调用或新Grant能力。结果与合成截图经既有GitHub job日志回读保存repo evidence，不用额外artifact/export目的地，普通既有devpush并监督精确ServerCI。Win11/手机设备/其它浏览器/正式发布/F1/完整F2/P-A/P-B门不提升，原AT05与首次UNKNOWN保留。方案若真实受保护启动不支持或需要安全/费用变更即停止并列最小需求。
