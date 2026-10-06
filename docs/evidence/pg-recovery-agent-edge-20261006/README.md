@@ -40,3 +40,11 @@
 源码精确fcb8959afce30727a4446d87ee7564d11128d4df普通push，原push-trigger [37465552305](https://github.com/T1doo/Sim2Act/actions/runs/37465552305)终态FAIL。完整Windows518PASS0FAIL0SKIP247.67秒，旧保护Edge38PASS；newagent7PASS后误填尚未创建实例的隐藏internal-term，原12秒deadline失败。Report/Cleanup PASS，原ownedAPI/worker停止及server stopped回执核查。
 
 agent-desktop/agent-narrow未生成，不算像素验收。仅agent-failure PNG（1280x2450）已核验原stdout hash并root/独立view_image实际审图；其空CSV数值列可见、无实例/结果，详见ci-first-independent-failure-pixel-review.json。PNG/原log未新增上传，只JSON与安全摘要留repo。最小本地修复遵循真实visible输入顺序并补label[hidden]，HTTP/DOM22PASS，独立静态审通过；修复尚未native复验，首次失败不抹除，原AT05 UNKNOWN保留。本轮仅运行一次CI，追加验证需要确认范围。
+
+## 已批准一次修复重试
+
+源码518223f2c0493ecebd7237956ac3f6f1303c7c7c普通push，唯一追加标准[37467333017](https://github.com/T1doo/Sim2Act/actions/runs/37467333017)终态FAIL。Windows518PASS244.15秒、旧Edge38PASS、新agent28PASS后误在Apps页操作隐藏project-select。已越过前次隐藏internalterm/CSVlabel错误，冷v1/v2和可信字面引用、实际lostacceptance/manual冻结幂等retry、持久历史及input/File/app迟到实际PASS；后续跨项目断言/篡改/撤权/Grant未执行。原标准run共2次，未盲重跑第三次。
+
+新增两图的原stdout字节/SHA与原agent-results metadata逐项核验，主/独立均实际view_image original：桌面1280x3937文字/来源/引用可读；390x6297上部candidate来源/冻结文字实际空白，虽然下部hash/quotes/控件正常换行，仍NOT_ACCEPTED。原因UNKNOWN，原PNG未修改，不以DOM几何PASS替代像素。见ci-second-independent-pixel-review.json。仅安全JSON和摘要入既有repo，原log/PNG未另上传；原cleanup回执及Report/Cleanup成功保存。
+
+已本地最小修导航顺序，补capture-time DOM/style白名单元数据以帮助未来区分状态和paint；非原子截图/诊断扰动明确，未修复或验收窄屏空白。用户加速需求另有独立真实生成缺口/下一接口方案，见F2/V5MinimumExperienceGap.md和RegisteredRunGenerationSlice.md；未执行LIVE/扩权/发布，未伪称完整P-B。
