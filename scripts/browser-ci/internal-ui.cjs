@@ -57,9 +57,9 @@ async function layout(page, label) {
       buttons:buttons.map(b => ({width:b.getBoundingClientRect().width, height:b.getBoundingClientRect().height,
         left:b.getBoundingClientRect().left,right:b.getBoundingClientRect().right}))};
   });
+  result[label] = measure;
   check(`${label} real layout has no horizontal page overflow`, measure.documentWidth <= measure.viewport + 1);
   check(`${label} rendered controls fit viewport and have usable height`, measure.buttons.length > 0 && measure.buttons.every(b => b.height >= 40 && b.left >= 0 && b.right <= measure.viewport+1));
-  result[label] = measure;
   await page.locator('#internal-panel').scrollIntoViewIfNeeded();
   await page.screenshot({path:path.join(root,`${label}.png`),fullPage:true});
 }
