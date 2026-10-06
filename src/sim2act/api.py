@@ -33,6 +33,7 @@ from .local_tasks import (
 )
 from .planning import GoalCandidateInput, candidate_options, generate_candidate
 from .preflight import preflight
+from .spec_checklists import SpecChecklistInput, complete_checklist, inspect_checklist
 
 
 class ProjectInput(Strict):
@@ -413,6 +414,16 @@ def create_app(store=None, settings=None):
     @app.post("/api/previews/{pid}/extract", status_code=201)
     def preview_to_candidate(pid: str, body: ExtractionInput, user=user_dependency):
         return extract_preview(db, user, pid, body.model_dump(), platform_limits)
+
+    @app.post("/api/projects/{pid}/spec-checklist-tasks", status_code=201)
+    def spec_checklist_task(pid: str, body: SpecChecklistInput, user=user_dependency):
+        if s.mode != "mock":
+            raise DomainError("UNSUPPORTED_CAPABILITY", "仅合成标注规范检查，不允许LIVE")
+        return complete_checklist(db, user, pid, body.model_dump())
+
+    @app.get("/api/spec-checklist-tasks/{tid}")
+    def get_spec_checklist(tid: str, user=user_dependency):
+        return inspect_checklist(db, user, tid)
 
     @app.post("/api/projects/{pid}/local-csv-tasks", status_code=201)
     def local_csv_task(pid: str, body: LocalTaskInput, user=user_dependency):

@@ -309,6 +309,28 @@ internal_run_bindings = Table(
 )
 
 
+# Explicit Store.initialize/controller migration only, never API DDL.
+spec_checklist_tasks = Table(
+    "spec_checklist_tasks", meta,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("runtime_id", String, nullable=False),
+    Column("resource_id", String, nullable=False),
+    Column("source_hash", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("request", JSON, nullable=False),
+    Column("status", String, nullable=False),
+    Column("output", JSON),
+    Column("receipt", JSON),
+    Column("proof", JSON),
+    Column("proof_fingerprint", String),
+    Column("error", JSON),
+    UniqueConstraint("principal_id", "project_id", "request_key"),
+)
+
+
 def new_id(prefix):
     return prefix + "_" + uuid.uuid4().hex
 

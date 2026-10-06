@@ -111,41 +111,14 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False):
         )
         artifact_refs = []
         if name == "artifact.save_text":
-            output_id = new_id("res")
-            content = args["text"]
-            c.execute(
-                insert(resources).values(
-                    id=output_id,
-                    project_id=run["project_id"],
-                    name="Run artifact",
-                    format="md",
-                    content=content,
-                    hash=hashlib.sha256(content.encode()).hexdigest(),
-                )
+            data = write_text_artifact(
+                store, c, run["principal_id"], run["runtime_id"], run["project_id"], args["text"]
             )
-            c.execute(
-                insert(local_effects).values(
-                    operation_id=oid,
-                    resource_id=output_id,
-                    content_hash=hashlib.sha256(content.encode()).hexdigest(),
-                )
-            )
-            store.add_grants(
-                c,
-                run["principal_id"],
-                run["runtime_id"],
-                run["project_id"],
-                output_id,
-                ["resource.read"],
-            )
-            data = {"resource_id": output_id, "hash": hashlib.sha256(content.encode()).hexdigest()}
+            output_id = data["resource_id"]
+            c.execute(insert(local_effects).values(
+                operation_id=oid, resource_id=output_id, content_hash=data["hash"]
+            ))
             artifact_refs = [output_id]
-            # Independent readback of written content before marking verified.
-            back = c.execute(
-                select(resources.c.content).where(resources.c.id == output_id)
-            ).scalar_one()
-            if back != content:
-                raise DomainError("VERIFICATION_FAILED")
         else:
             data = authorized_read(
                 store, c, run["principal_id"], run["runtime_id"], run["project_id"], name, args
@@ -353,3 +326,23 @@ def reconcile_readback(store, c, run, operation):
         "error": None,
     }
     return "VERIFIED", receipt
+
+
+def write_text_artifact(store, c, principal, runtime, project_id, content):
+    """Existing registered project artifact effect; caller owns transaction/idempotency.
+
+    No new tool or write grant. Derived artifact read grants match normal dispatch.
+    """
+    validate_call("artifact.save_text", {"text": content})
+    store.authorize(c, principal, runtime, project_id, project_id, "artifact.save_text")
+    output_id = new_id("res")
+    content_hash = hashlib.sha256(content.encode()).hexdigest()
+    c.execute(insert(resources).values(
+        id=output_id, project_id=project_id, name="Run artifact", format="md",
+        content=content, hash=content_hash,
+    ))
+    store.add_grants(c, principal, runtime, project_id, output_id, ["resource.read"])
+    back = c.execute(select(resources.c.content).where(resources.c.id == output_id)).scalar_one()
+    if back != content:
+        raise DomainError("VERIFICATION_FAILED")
+    return {"resource_id": output_id, "hash": content_hash}
