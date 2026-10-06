@@ -247,3 +247,12 @@ E21执行中检查点：源码59f34817dd65201bd5ba204661d6787b19255fd3普通push
 实际UI/API快照确认→Release→独立实例→QUEUED/pause/cancel→接受新任务后返回并重开→独立one-shot Worker真实sum40/resultv1→cold mobile读回→第二实例独立/跨owner-instance-history-control403均通过。显式test_only临时SQLite合成两owner各一project，非业务库、非原AT02完整初态；PG角色/native另有原工程结果。desktop1366x900/mobile390x844两真实完整PNG已回读验块序/长度/SHA256并人工查看，两列/单列无横向溢出、标题/按钮/状态/结果可读；四预期403 console完整保留，无pageerror/意外console。
 
 首候选browser前cancel/skipped；原诊断接口缺enable-automation失败、CSP字符串等待失败、真实mobile长标题溢出失败及对应PNG/JSON/run/receipt均保留。只修测试查询/函数等待与原整数契约40期待；产品仅一条标题overflow-wrap:anywhere，布局原断言不放宽。最终证据[README](../evidence/F2-protected-server-browser-20261006/README.md)，所有失败保留first/second/third-*；handoff状态另存旧checkpoint，新checkpoint记最小流完成。0LIVE/无Library或恢复包/额外artifact目的地，正式发布false，原work/V5/历史AT02/AT05不改。Win11/物理手机/其他browser/全界面焦点无障碍、撤权stop及更多迟到响应真实浏览器仍NOT_RUN；完整F1/F2/P-A/P-B/AT10/19/20门不提升，E20首次AT05根因UNKNOWN保持。
+
+
+## 2026-10-06 / E22事前：兼容升级/回退的认证内部入口
+
+基线e3a2843/2ead9b6，正常origin fetch HEAD一致，正确Sim2Act-pb/dev；原V5§10.1、F2-T08/AT16要求数据与版本分离、切换/回退均先兼容检查、运行固定Release、保留历史；不是数据回滚或外部效果撤销。本轮仅将既有prepare_switch/commit_switch接认证API/UI，不新增CSV能力/Grant/表/身份/迁移/正式发布。限既有封闭typed-result schema，同schema/version升级回退和可选metadata兼容服务；通用业务schema/复杂迁移仍未实现。
+
+接口限制owner/project/app/runtime/精确instance及targetRelease fingerprint、revision；prepare只产生既有精确批准，GET再检查完整payload fingerprint/expiry/currentgrant/data/pointer/兼容性，commit只accept精确fingerprint，并事务内再验绑定。UI先手动选target（无默认）/prepare→回读快照及保留数据/当前目标/期限/指纹→未勾选禁用commit；取消/返回仅本页选择，不撤销已接受切换，迟到结果不抢选择。一次性批准consume保持，重复或旧批准409，不增加重放机制；未知网络结果不自动重发，提示读历史。升级/回退增加revision/history，旧data/Run记录保留，新运行用读回的新版本。既有worker在指针变化后保守拒绝旧接受任务边界明确，不在本轮改可靠性政策。
+
+冻结验收：真实API兼容切换/回退及新worker result、数据/历史与Grant/principal不变；不兼容required添加及删除式回退拒绝、无token/跨owner/project/app/instance、fp/tamper/expired/consumed/stale revision/data/grant/target拒绝；并发重复只有一次切换。独立只读review、SQLite/真PG aggregate/最小CRUD role及精确源码现有标准CI/普通push。正常受保护Edge+CSP维持，扩已有真实浏览器流程覆盖升级/回退、精确显示/确认、取消/返回、重复点击、过期批准以及实际pause→resume→QUEUED→worker。仅test_only既有fixture加最小服务生成target/不兼容Release和一次短TTL oracle，无新fixture HTTP接口；短TTL在新switch批准生成同事务内绑定精确expiry/fingerprint，等待实际过期再拒绝，不在收到批准后篡改fp、不改生产300秒或时间/OS/CSP。所有截图/JSON仅合成repo证据，保留失败与未测。0LIVE/noLibrary或恢复包导出/正式deploy false，原work/V5/AT02/AT05及首因UNKNOWN、Win11/物理手机/完整PA/PB/F1F2门不提升。
