@@ -92,3 +92,9 @@ apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独�
 真实 HTTP/冷 Store、新资料求和、权限与来源篡改/版本/幂等/跨主体跨项目/冷队列撤权、真实 HTTP-backed DOM 丢回执手动原 key及 accepted app GET恢复已测。名称清理补修防止来源/身份切换保留上一用户编辑，同来源同版轮询仍保留。独立审核 APPROVE；实际 PG 相关回归121 PASS，最终16-check HTTP-DOM与无DDL CRUD角色边界2 PASS。合并长回归期间测试依赖/数量曾调整，SQLite两次与PG首轮的唯一DOM失败保留，详见实施日志和 evidence；冻结后全SQLite仍运行，不把混合运行称全部绿色。生成真实浏览器/视觉、Windows生成入口、语义目标和全P-B未签收；UI-only CI不替代生成验收。
 
 独立生成切片交付终态：普通push精确1413cbf0bd134cb7c3717141402b304fbab52673（原隔离commit a7c19c5），standardCI37472996465/job112301076482 SUCCESS，Windows559 PASS/1 SKIP/0 FAIL/560 collected。旧protectedEdge38+agent33/Report/Cleanup全部通过，原helper/SDK/权限/输出范围未改；raw结果visual NOT_REVIEWED保留，截图人工审独立记录，不充新生成入口验收。冻结源SQLite全535 PASS/25环境SKIP/0FAIL195秒；PG相关121PASS，最终HTTP-DOM16+PG受限CRUD角色2PASS。所有长回归依赖/计数失败保留后，冻结版实际闭合，不把失败改PASS。owned PG删除前残schema/role均0，原work树未改。用户可体验成功CSV任务→保存新草案→明确选已有授权新资料→核对内部版本→新列冷任务新结果；新入口native/pixel/语义/全P-B/Win11/F1仍未验，不以标准CI旧agent画面代替。证据见registered-run-generation-20261006。
+
+### 2026-10-06 / registered生成入口原生浏览器：先声明范围再实施
+
+新父授权真实用户入口接现有受保护Edge，先本地DOM/API+独立review，再普通devpush一次原standardCI；确切harness失败允许最小已审修复重试，保留失败。承认此前生成切片自行追加第二CI偏离原阶段门槛，不以它推导继续自动CI授权。本轮范围预先写RegisteredRunBrowserPlan.md：原38+agent33保留、新generation独立报告；八原文件名/2MB/runner/helper/SDK/保护/超时不改，两成功agent名明确承载新生成里程碑、旧图留原CI。先冻结source3/targetquantity15合成数据；seed仅已有授权initialCSV app，不seed成功源/生成candidate。fixture、独立native模块和root接线不冲突实施；独立设计review可继续但未审实现、不预写nativePASS。最短使用说明在RegisteredRunQuickstart.md，不加新部署/LIVE/权限。
+
+本地与审查门已完成：fixture/API5PASS、新直接realHTTP-DOM1PASS、旧agentrealHTTP/jsdom22checksPASS；root冻结后合并43PASS91.89秒。新DOM wrapper曾id/run字段错误，修正实际复验，原生成产品未改。e16静态全导航/等待/截图scope/原保护/150秒/partialFAIL审APPROVE；readonly_boundary独立5PASS并先旧agentcorrupt/revoke再真实CSV生成兼容PASS、完整authority指纹不变。principal token_hash只入聚合fingerprint不输出，故障只精确合成域；lateidentity为明确client-memory切换fault，其他身份/项目实际HTTP拒绝。新module/capture/fixture审查hash一致。已先向用户报告“两原PNG名改展示新生成里程碑”的范围，再按已授权准备普通push及唯一standardCI，不在此预写native/visual PASS。

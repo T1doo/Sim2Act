@@ -1,4 +1,4 @@
-"""Local synthetic HTTP/DOM/protected-browser fixture; no production route or Grant change."""
+"""Local synthetic browser fixture; initial authorization and explicit scoped faults only."""
 
 import argparse
 import asyncio
@@ -25,13 +25,101 @@ from test_executor_family_provenance import effects
 
 from sim2act.api import create_app
 from sim2act.config import Settings
-from sim2act.db import Store, app_drafts, fingerprint, grants
+from sim2act.db import Store, app_drafts, fingerprint, grants, principals, task_extractions
+from sim2act.errors import DomainError
 from sim2act.worker import Worker
 
 
 def context(root):
     url = "sqlite:///" + str(root / "fixture.db")
     return Store(url, test_only=True), Settings(url, root, mode="mock")
+
+
+class NeverProvider:
+    def request(self, *_):
+        raise AssertionError("Browser fixture local worker must never call a model/provider")
+
+
+def generation_counts(store):
+    """Full authority comparison without emitting authentication token hashes."""
+    with store.tx() as c:
+        grant_rows = [dict(r) for r in c.execute(select(grants).order_by(grants.c.id)).mappings()]
+        identities = [
+            dict(r) for r in c.execute(select(principals).order_by(principals.c.id)).mappings()
+        ]
+    return {
+        **effects(store),
+        "principals": len(identities),
+        "grant_rows": grant_rows,
+        "grant_fingerprint": fingerprint(grant_rows),
+        "grant_fingerprint_fields": [
+            "id",
+            "principal_id",
+            "project_id",
+            "resource_id",
+            "tool_ref",
+            "expires_at",
+            "revision",
+            "revoked",
+        ],
+        "principal_rows": [{"id": r["id"], "name": r["name"]} for r in identities],
+        "principal_fingerprint": fingerprint(identities),
+        "principal_fingerprint_fields": ["id", "name", "token_hash"],
+    }
+
+
+def generation_corrupt(store, info, app_id):
+    """Only a server-generated registered candidate in this fixture's project."""
+    if not isinstance(app_id, str):
+        raise DomainError("INVALID_INPUT", "Explicit generated --app-id required")
+    with store.tx() as c:
+        draft = (
+            c.execute(
+                select(app_drafts).where(
+                    app_drafts.c.id == app_id, app_drafts.c.project_id == info["project"]
+                )
+            )
+            .mappings()
+            .first()
+        )
+        marker = (
+            c.execute(select(task_extractions).where(task_extractions.c.app_id == app_id))
+            .mappings()
+            .first()
+        )
+        if (
+            not draft
+            or not marker
+            or marker["snapshot"].get("kind") != "registered_csv_source.v1"
+            or draft["candidate"].get("task_proof", {}).get("proof", {}).get("kind")
+            != "completed_registered_csv_apprun.v1"
+        ):
+            raise DomainError(
+                "PERMISSION_DENIED", "Registered generated app in fixture project only"
+            )
+        candidate_value = copy.deepcopy(draft["candidate"])
+        candidate_value["task_proof"]["proof"]["source_hash"] = "0" * 64
+        c.execute(
+            update(app_drafts)
+            .where(app_drafts.c.id == app_id)
+            .values(candidate=candidate_value, fingerprint=fingerprint(candidate_value))
+        )
+
+
+def generation_revoke(store, info, *, source=False):
+    prefix = "registered_source" if source else "registered_target"
+    with store.tx() as c:
+        c.execute(
+            update(grants)
+            .where(
+                grants.c.project_id == info["project"],
+                grants.c.principal_id == info[prefix + "_runtime"],
+                grants.c.resource_id == info[prefix + "_resource"],
+                grants.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                grants.c.revoked.is_(False),
+            )
+            .values(revoked=True, revision=grants.c.revision + 1)
+        )
 
 
 def seed(root, port):
@@ -77,6 +165,51 @@ def seed(root, port):
                 for d in drafts
                 if d["candidate"]["actions"][0]["executor"]["kind"] == "registered_tool"
             )
+        # Only initial authenticated CSV apps and their already-authorized domains
+        # are provisioned here. The browser must create the registered source Run
+        # and call the real generation endpoint; no registered result/candidate seed.
+        target_resource = client.post(
+            f"/api/projects/{pid}/resources",
+            json={
+                "name": "generation-target.csv",
+                "format": "csv",
+                "content": "amount,quantity\n10,7\n20,8\n",
+            },
+        ).json()["id"]
+        target_app = client.post(
+            f"/api/projects/{pid}/apps/csv-preview",
+            json={
+                "name": "已有新 CSV 授权域",
+                "resource_id": target_resource,
+                "goal": "SYNTHETIC existing target authorization domain",
+            },
+        ).json()["id"]
+        with store.tx() as c:
+            target_runtime = c.execute(
+                select(app_drafts.c.runtime_id).where(app_drafts.c.id == target_app)
+            ).scalar_one()
+            source_runtime = c.execute(
+                select(app_drafts.c.runtime_id).where(app_drafts.c.id == csv_app)
+            ).scalar_one()
+        empty_project = client.post(
+            "/api/projects", json={"name": "SYNTHETIC 无不同 CSV 授权域"}
+        ).json()["id"]
+        empty_resource = client.post(
+            f"/api/projects/{empty_project}/resources",
+            json={"name": "only-source.csv", "format": "csv", "content": "amount\n1\n2\n"},
+        ).json()["id"]
+        empty_app = client.post(
+            f"/api/projects/{empty_project}/apps/csv-preview",
+            json={
+                "name": "仅有来源 CSV",
+                "resource_id": empty_resource,
+                "goal": "SYNTHETIC no distinct target domain",
+            },
+        ).json()["id"]
+        with store.tx() as c:
+            empty_runtime = c.execute(
+                select(app_drafts.c.runtime_id).where(app_drafts.c.id == empty_app)
+            ).scalar_one()
         info = {
             "port": port,
             "project": pid,
@@ -84,6 +217,16 @@ def seed(root, port):
             "initial_app": aid,
             "derived_app": derived["id"],
             "csv_app": csv_app,
+            "registered_source_app": csv_app,
+            "registered_source_resource": csv,
+            "registered_source_runtime": source_runtime,
+            "registered_target_app": target_app,
+            "registered_target_resource": target_resource,
+            "registered_target_runtime": target_runtime,
+            "empty_target_project": empty_project,
+            "empty_target_source_app": empty_app,
+            "empty_target_source_resource": empty_resource,
+            "empty_target_source_runtime": empty_runtime,
             "resource_a": ids[0],
             "resource_b": ids[1],
             "term_a": value["term"],
@@ -108,8 +251,22 @@ def main():
     parser.add_argument("--port", type=int, default=8073)
     parser.add_argument(
         "--action",
-        choices=["seed", "serve", "worker", "revoke", "corrupt", "counts"],
+        choices=[
+            "seed",
+            "serve",
+            "worker",
+            "revoke",
+            "corrupt",
+            "counts",
+            "generation-counts",
+            "generation-corrupt",
+            "generation-revoke",
+            "generation-source-revoke",
+        ],
         required=True,
+    )
+    parser.add_argument(
+        "--app-id", help="Exact server-generated registered app for generation-corrupt"
     )
     args = parser.parse_args()
     root = args.root
@@ -119,8 +276,19 @@ def main():
     store, settings = context(root)
     info = json.loads((root / "info.json").read_text())
     if args.action == "worker":
-        Worker(store, settings).once()
-        print("PASS new cold default worker processed accepted frozen Replay")
+        assert Worker(store, settings, NeverProvider()).once(), "No accepted local Run to process"
+        print("PASS new cold default worker processed local AppRun; provider forbidden")
+    elif args.action == "generation-counts":
+        print(json.dumps(generation_counts(store), ensure_ascii=False))
+    elif args.action == "generation-corrupt":
+        generation_corrupt(store, info, args.app_id)
+        print("PASS exact registered generated candidate rehashed; independent marker retained")
+    elif args.action == "generation-revoke":
+        generation_revoke(store, info)
+        print("PASS existing generation target runtime Grants revoked; other Grants retained")
+    elif args.action == "generation-source-revoke":
+        generation_revoke(store, info, source=True)
+        print("PASS existing generation source runtime Grants revoked; other Grants retained")
     elif args.action == "revoke":
         with store.tx() as c:
             c.execute(

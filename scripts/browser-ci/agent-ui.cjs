@@ -6,7 +6,7 @@ const execFileAsync=require('node:util').promisify(execFile);
 module.exports=async function runAgentChecks({browser,root,outputRoot,python,audit}){
  const repo=path.resolve(__dirname,'../..');
  const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8')),base=`http://127.0.0.1:${info.port}`;
- const result={kind:'Additional agent checks / same actual protected Windows Edge / synthetic HTTP',platform:process.platform,modelRequests:0,legacyChecksCounted:0,checks:[],screenshots:[],unexpectedPageErrors:[],sandbox:[],visualReview:'NOT_REVIEWED',win11:'NOT_RUN'};
+ const result={kind:'Agent regression plus registered generation / same actual protected Windows Edge / synthetic HTTP',platform:process.platform,modelRequests:0,legacyChecksCounted:0,checks:[],screenshots:[],unexpectedPageErrors:[],sandbox:[],visualReview:'NOT_REVIEWED',win11:'NOT_RUN'};
  let page,context;const held=[];let baselineRendererPids=new Set();
  async function verifySandbox(){
   const observed=await audit();result.sandbox.push(observed);
@@ -23,7 +23,7 @@ module.exports=async function runAgentChecks({browser,root,outputRoot,python,aud
   return {accepted,deliver:async()=>{release();await delivered;await page.unroute(pattern,handler);if(failure)throw failure;}};
  }
 function check(name,value){assert.ok(value,name);result.checks.push({name,status:'PASS'});}
-async function action(name){return (await execFileAsync(python,['scripts/agent-ui/fixture.py','--root',root,'--action',name],{cwd:repo,env:{...process.env,PYTHONPATH:'src'},encoding:'utf8'})).stdout.trim();}
+async function action(name,args=[]){return (await execFileAsync(python,['scripts/agent-ui/fixture.py','--root',root,'--action',name,...args],{cwd:repo,env:{...process.env,PYTHONPATH:'src'},encoding:'utf8'})).stdout.trim();}
 async function idle(){await page.waitForFunction(()=>engineering && !engineering.busy);}
 async function open(id){await page.locator('#app-list .row').filter({hasText:id===info.derived_app?'已完成任务的 agent 候选':id===info.initial_app?'evidence app':'existing R0 app domain'}).getByRole('button').click();await page.waitForFunction(id=>activeApp===id && engineering?.app===id && engineering.project===document.getElementById('project-select').value && !engineering.busy && document.getElementById('internal-status').textContent==='内部历史已读回；正式发布与部署仍关闭。',id);}
 async function selectProject(pid){
@@ -34,7 +34,30 @@ async function selectProject(pid){
  await page.locator('[data-tab="apps"]').click();
 }
 async function inputs(file,term){await page.locator('#app-agent-term').fill(term);if(await page.locator('#internal-term').isVisible())await page.locator('#internal-term').fill(term);await page.locator('#internal-replay-file').setInputFiles(path.join(root,file));await page.waitForFunction(()=>engineering.offlineReplay!==null);}
-async function layout(label){const bounds=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('#internal-panel button,#internal-panel input,#internal-panel blockquote')].filter(e=>e.getClientRects().length).filter(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth+1;}).length}));check(`${label}: no document/control/quote horizontal overflow`,bounds.scroll<=bounds.width+1&&bounds.overflow===0);const diagnostic=await page.evaluate(()=>({scrollY,fonts:document.fonts.status,nodes:['app-title','app-origin','app-frozen-goal-text','app-agent-term','internal-status','internal-data'].map(id=>{const e=document.getElementById(id),r=e.getBoundingClientRect(),style=getComputedStyle(e);return{id,characters:(e.value??e.textContent).trim().length,display:style.display,visibility:style.visibility,color:style.color,opacity:style.opacity,width:r.width,height:r.height,inViewport:r.bottom>0&&r.top<innerHeight};})}));result.captureDiagnostics??={};result.captureDiagnostics[label]={bounds,...diagnostic};await page.evaluate(async()=>{await document.fonts.ready;const viewport=innerHeight,total=document.documentElement.scrollHeight;if(total>viewport*24)throw Error('Synthetic screenshot viewport bound exceeded');for(let y=0;y<total;y+=Math.max(1,Math.floor(viewport*.75))){scrollTo(0,y);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}scrollTo(0,0);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});result.captureDiagnostics[label].capturePreparation='fonts ready; bounded normal scroll through page; original full-page PNG, no pixel editing';const file=label+'.png';await page.screenshot({path:path.join(outputRoot,file),fullPage:true});const bytes=fs.readFileSync(path.join(outputRoot,file));result.screenshots.push({name:file,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20),visualReview:'NOT_REVIEWED'});}
+async function layout(label){
+ const bounds=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('#internal-panel button,#internal-panel input,#internal-panel blockquote')].filter(e=>e.getClientRects().length).filter(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth+1;}).length}));
+ check(`${label}: no document/control/quote horizontal overflow`,bounds.scroll<=bounds.width+1&&bounds.overflow===0);
+ // Prior agent screenshots remain in their earlier source CI. This run archives
+ // only the new generation milestone below, with explicit scope and actual hashes.
+}
+async function captureRegistered(label,scope){
+ assert.ok(scope && scope.flow==='registered CSV Run -> server generated app -> cold new input' && scope.source?.run && scope.generated?.run,'Explicit registered generation milestone required');
+ assert.ok(['agent-desktop','agent-narrow'].includes(label));
+ const observed=await audit(),renderers=observed.filter(p=>p.type==='renderer');
+ assert.ok(observed.some(p=>p.type==='browser')&&observed.every(p=>p.security_args_verified),'Generation capture browser arguments preserve protection');
+ assert.ok(renderers.some(p=>!baselineRendererPids.has(p.pid)),'Generation capture has an actual renderer beyond legacy baseline');
+ assert.ok(renderers.length>0&&renderers.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)),'Generation capture actual renderer tokens remain protected');
+ result.generationCaptureSandbox??=[];result.generationCaptureSandbox.push({phase:label,observed});
+ const diagnostic=await page.evaluate(()=>({scrollY,fonts:document.fonts.status,viewport:{width:innerWidth,height:innerHeight},nodes:['app-title','app-origin','app-frozen-goal-text','internal-status','internal-data','registered-extraction-proof'].map(id=>{const e=document.getElementById(id),r=e.getBoundingClientRect(),style=getComputedStyle(e);return{id,characters:(e.value??e.textContent).trim().length,display:style.display,visibility:style.visibility,color:style.color,opacity:style.opacity,width:r.width,height:r.height,inViewport:r.bottom>0&&r.top<innerHeight};})}));
+ result.captureDiagnostics??={};result.captureDiagnostics[label]={scope:'registered-run-generation',milestone:scope,...diagnostic};
+ await page.evaluate(async()=>{await document.fonts.ready;const viewport=innerHeight,total=document.documentElement.scrollHeight;if(total>viewport*24)throw Error('Synthetic screenshot viewport bound exceeded');for(let y=0;y<total;y+=Math.max(1,Math.floor(viewport*.75))){scrollTo(0,y);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}scrollTo(0,0);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});
+ result.captureDiagnostics[label].capturePreparation='fonts ready; bounded normal scroll; actual original full-page PNG, no pixel editing; old blank cause remains UNKNOWN';
+ const file=label+'.png';await page.screenshot({path:path.join(outputRoot,file),fullPage:true});
+ const bytes=fs.readFileSync(path.join(outputRoot,file));
+ const metadata={name:file,scope:'registered-run-generation',milestone:scope,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20),visualReview:'NOT_REVIEWED'};
+ result.screenshots.push(metadata);return metadata;
+}
+
  try{
   const baseline=await audit();baselineRendererPids=new Set(baseline.filter(p=>p.type==='renderer').map(p=>p.pid));
   result.legacyRendererBaseline=[...baselineRendererPids];
@@ -97,14 +120,28 @@ async function layout(label){const bounds=await page.evaluate(()=>({width:innerW
   await action('corrupt');await page.locator('#internal-refresh').click();await idle();check('provenance tamper clears protected snapshots',await page.locator('#internal-data').textContent()===''&&await page.locator('#app-manifest').textContent()==='');
   await open(info.initial_app);await action('revoke');await page.locator('#internal-refresh').click();await idle();check('current revocation clears protected results',await page.locator('#internal-data').textContent()===''&&await page.locator('#internal-run-form').isHidden());
   check('UI actions grant nothing',JSON.parse(await action('counts')).grants===info.grant_count);
-  check('no unexpected page errors',result.unexpectedPageErrors.length===0);result.status='PASS';
+  check('no unexpected page errors',result.unexpectedPageErrors.length===0);
+  assert.equal(result.checks.length,33,'Existing agent checks must remain separately counted');
+  result.registeredGeneration=await require('./registered-generation-ui.cjs')({page,base,info,action,capture:captureRegistered});
+  assert.equal(result.registeredGeneration.status,'PASS','Registered generation native flow failed');
+  const observed=await audit();result.registeredGeneration.sandbox=observed;
+  const renderers=observed.filter(p=>p.type==='renderer');
+  assert.ok(observed.some(p=>p.type==='browser')&&observed.every(p=>p.security_args_verified),'Generation browser arguments preserve protection');
+  assert.ok(renderers.some(p=>!baselineRendererPids.has(p.pid)),'Generation page uses actual renderer beyond legacy baseline');
+  assert.ok(renderers.length>0&&renderers.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)),'Generation actual renderer tokens remain protected');
+  result.registeredGeneration.securityStatus='PASS';
+  result.registeredGeneration.captureSandbox=result.generationCaptureSandbox;
+  assert.equal(result.generationCaptureSandbox?.length,2,'Both actual generation capture stages audited');
+  assert.equal(result.unexpectedPageErrors.length,0,'No new generation page runtime errors');
+  assert.equal(result.screenshots.length,2,'Only the two named generation milestone screenshots');
+  result.status='PASS';
  }catch(error){result.status='FAIL';result.error={name:error.name,message:error.message};if(page&&!page.isClosed()){try{await page.screenshot({path:path.join(outputRoot,'agent-failure.png'),fullPage:true});}catch{}}}
  finally{
   held.forEach(release=>release());
   try{await context?.close();}catch(error){result.status='FAIL';result.cleanupError=error.name;}
   finally{fs.writeFileSync(path.join(outputRoot,'agent-results.json'),JSON.stringify(result,null,2)+'\n');}
  }
- console.log(`Additional agent ${result.status}: ${result.checks.length} passed checks; screenshots ${result.screenshots.length}; visual NOT_REVIEWED; model requests 0.`);
+ console.log(`Additional agent ${result.status}: ${result.checks.length} regression checks; registered generation ${result.registeredGeneration?.status || 'NOT_RUN'} (${result.registeredGeneration?.checks?.length || 0} checks); scoped generation screenshots ${result.screenshots.length}; visual NOT_REVIEWED; model requests 0.`);
  if(result.status!=='PASS')throw Error('Additional agent native checks failed; see named agent-results.json');
  return result;
 };
