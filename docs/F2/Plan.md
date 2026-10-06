@@ -378,3 +378,15 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 
 
 口径定点更正：WindowsCIPlan此前把所有registered HTTP DOM宽泛称SQLite，现按实际fixture细分。scripts/windows_browser_ci.py与scripts/agent-ui/fixture.py都固定SQLite，因此原Edge/agent/registered native fixture及两个direct generation DOM为SQLite；旧test_registered_run_generation_http::test_real_http_dom_generation_entry_and_lost_receipt依赖公共PG env，此次1项SKIP也归PG-selecting fixture列。因此实际路由为533PASS127FAIL1SKIP（661 PG-selecting），112PASS2SKIP（114其他），非534/111。三个skip属于可选Node/jsdom前置，未单独导出JUnit具体skip reason，不伪称已实测Node缺失或jsdom缺失。原-q定位的127个FAILED nodeid与CI完整failure summary逐一完全一致，定位证据自洽；仍明确不是独立JUnit逐case下载。新表2真实PG角色检查通过不等于预算6process/1concurrency已过，后者本轮均停于oracle PIN拒绝。
+
+
+2026-10-06 父追加允许精确byte保护b6c8acd450e51a8c1da6df735b9f03e73063608a普通push及一次原standardCI。推前真实local clone --no-checkout、core.autocrlf=true detached checkout精确commit，4有效text=unset、4原gold/PINS逐byte一致、4单字节篡改VERSION_CONFLICT；临时clone已删，无输入归一化/更新gold。首个本地verifier误要求普通-text auto的.gitattributes本身rawLF不转换，改为核验提交blob和有效attributes，oracle raw断言未动；此测试夹具修正保留，非产品失败/新CI。普通push18fbae4→b6c8acd成功；本次仅该byte政策和docs，src/scripts/tests/workflow/evaluation资产对18f无diff。CI尚待终态，不预写Windows成功。两次失败完整保留，无LIVE/权限扩展。
+
+
+2026-10-06 本次唯一授权标准CI闭合：精确source **b6c8acd450e51a8c1da6df735b9f03e73063608a**，run [37502853220](https://github.com/T1doo/Sim2Act/actions/runs/37502853220)/job [112403984046](https://github.com/T1doo/Sim2Act/actions/runs/37502853220/job/112403984046) **SUCCESS**。原Windows Server2025 job10m24秒；Ruff、mypy31、Setup显式PG迁移、最小role smoke、工程、旧受保护浏览器、Report/Cleanup全部成功。工程 **772 PASS / 3 SKIP / 0 FAIL / 0 ERROR**，775 collected，460.50秒。
+
+逐项实际后端：同源收集顺序对应原-q进度、总数与JUnit Report一致，非单独JUnit逐case下载。公共/jobs及派生PG fixture为660PASS1SKIP（661路由项），另112PASS2SKIP（114其他）；不把772统称真实PG。协议关键9模块小计167PASS，其中145使用PG fixture，19是模型provider/文件账（无PG）、3是显式SQLite（pool默认/Genesis2、API无DDL1）。HTTP25/jobs39/reviews39/recovery14/pool19PG/process6PG/三Runconcurrency1PG/role2PG均PASS；pool模块21另外2SQLite，schema3另外1SQLite。新pool/slot和job/review既有非superuser业务role CRUD与DDL拒绝真实PG通过；6跨进程末槽+五崩溃点及永久三Run锁序Windows全部通过。19预算file-lock/Mock单测在Windows执行，含实际msvcrt非阻塞竞争，未忽略类型或削弱锁。
+
+三项SKIP分别为registered_generation_native_dom正常/受控时序两个SQLite seed项，以及registered_run_generation_http lost receipt的公共PG fixture DOM项；可选Node/jsdom前置，未从原-q/Report单独取得具体skip reason，不虚构安装状态。真实受保护Edge38、agent33、registeredGeneration29均PASS，无unexpected console/pageerror，实际renderer AppContainer/restricted token审计PASS，原helper/SDK/权限/超时/上传八名称范围未变。原命名JSON/PNG六个存在输出按stdout chunks字节/SHA/2MB核验（failure文件成功时不存在）；PNG未额外写入或发布，视觉审查保持NOT_REVIEWED，不把hash等同像素可见验收。上述browser fixture仍SQLite，原覆盖不替代新protocol/recover原生UI，后者NOT_RUN。
+
+清理：原owned API/worker stopped、temporary PG server stopped、Cleanup SUCCESS和原JobRoot删除正常完成，浏览器helper正常结束其owned API finally；Windows残schema/role未额外计数，不伪称实测0。推前真实临时clone已删，无本地新PG/运行服务。前两CI37499515105/37500554573失败记录、误判普通attrs LF的本地verifier修正、全量与fixture口径更正全部保留。gold/PINS原bytes与篡改拒绝不变。真实模型请求0，LIVE总预算0；完整P-B、真实语义、generic continuation、正式Release/F1/Win11/完整AT02不提升。证据见windows-ci-third-result.json、case-map、browser-summary及third-real-checkout。最后只追加docs证据提交，不改成功source实现。
