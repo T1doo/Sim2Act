@@ -318,3 +318,6 @@ E22本地实现/复核：最终产品hash固定，SQLite361PASS22PG/platformSKIP
 
 
 2026-10-06 原V5下一步短差距审查（仅本地）：见[V5模型实验差距与统一预算提案](V5ModelExperimentGapReview.md)。当前可信CSV生成链已闭合，但语言目标规划/模型提取/独立语义源证明/真实模型AppRun尚缺；规划单文档义务提取和多材料冲突判断两形态，共同机制不新增固定家族。本提案最多14真实请求、只冻结的新合成材料read、不加权限/写入/部署，全部待批准且接口未实现；旧42/84仅接入/权限对照、当前预算0。本轮不LIVE/models/CI/push，未把提案当实测。
+
+
+2026-10-06 通用模型协议离线实现：按用户授权两形态材料/gold草案独立冻结，并实现provider可接source/extract/cold协议及持久14-slot预算门，候选锚定actual response receipt；仅MockTransport。145PASS1SKIP、独立58PASS，完整8wire max4542chars/bytes，四包真实语义UNKNOWN/owner pending。见[统一执行计划](ModelProtocolExecutionPlan.md)与[证据](../evidence/model-protocol-preparation-20261006/README.md)。协议候选尚非现AppManifest/AppRun可执行版本，可信Store来源/语义回调、HTTP/worker和运行审批仍为明确前置；原PARTIAL历史不动。本轮不push/CI/LIVE/新权限/表/部署，当前真实预算0。
