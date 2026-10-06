@@ -1,6 +1,7 @@
 "use strict";
 let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
+let runSelectionGeneration = 0;
 let activeApp = null, activeGoalCard = null;
 let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false;
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
@@ -48,16 +49,26 @@ async function refresh() {
 }
 async function showRun(id) {
   activeRun = id;
+  const project=$("project-select").value,identity=token,generation=++runSelectionGeneration;
+  const current=()=>activeRun===id && project===$("project-select").value && identity===token && generation===runSelectionGeneration;
   const r = await api(`/api/runs/${id}`);
+  if(!current())return;
+  const internal=r.namespace === "INTERNAL_APPRUN";
+  const attempts = !internal && ["WAITING_RESOURCE","RECONCILING"].includes(r.status) ? await api(`/api/runs/${id}/unresolved-attempts`) : [];
+  if(!current())return;
   reconcileVersion = r.version;
-  unresolvedAttempts = ["WAITING_RESOURCE","RECONCILING"].includes(r.status) ? await api(`/api/runs/${id}/unresolved-attempts`) : [];
+  unresolvedAttempts=attempts;
   $("reconcile-panel").hidden = unresolvedAttempts.length === 0;
   const selectedAttempt = $("reconcile-attempt").value;
   $("reconcile-attempt").replaceChildren(...unresolvedAttempts.map(a => {const o=document.createElement("option");o.value=a.attempt_id;o.textContent=`${a.mode || "历史请求"} · ${a.attempt_id.slice(0,16)} · ${a.request_fingerprint ? a.request_fingerprint.slice(0,12) : "历史请求未绑定，只能结束"}`;o.title=a.request_fingerprint || "没有可恢复绑定";return o;}));
   if (unresolvedAttempts.some(a => a.attempt_id === selectedAttempt)) $("reconcile-attempt").value = selectedAttempt;
   const labels = {QUEUED:"等待后台执行",RUNNING:"正在执行",PARTIAL:"部分完成",FAILED:"执行失败",WAITING_RESOURCE:"等待资源或授权",PAUSED:"已暂停",CANCELLED:"已取消"};
   $("result").replaceChildren(row(`${labels[r.status] || r.status}（${r.status}）`));
-  if (r.result) {
+  if(internal){
+    $("result").append(row(`内部工程只读任务 · 0 模型请求 · 结果版本 ${r.result_version ?? "无"} · 正式发布关闭`));
+    if(r.result)$("result").append(row(`${r.result.column} 合计 ${r.result.sum}，共 ${r.result.count} 条记录。`));
+  }
+  if (r.result && !internal) {
     $("result").append(row(`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
     for (const receipt of r.result.receipts || []) {
       const data = receipt.data;
@@ -70,7 +81,7 @@ async function showRun(id) {
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
   $("events").textContent = JSON.stringify(r.events, null, 2);
   const commands = ["QUEUED","RUNNING"].includes(r.status) ? ["pause","cancel"] : ["PAUSED","WAITING_RESOURCE"].includes(r.status) ? (unresolvedAttempts.length ? ["cancel"] : ["resume","cancel"]) : [];
-  $("commands").replaceChildren(...commands.map(command => {const b = document.createElement("button"); b.textContent = {pause:"暂停",cancel:"取消",resume:"继续"}[command]; b.onclick = safe(async () => {await api(`/api/runs/${id}/commands`, "POST", {command,version:r.version}); await showRun(id);}); return b;}));
+  $("commands").replaceChildren(...commands.map(command => {const b = document.createElement("button"); b.textContent = {pause:"暂停",cancel:"取消",resume:"继续"}[command]; b.onclick = safe(async () => {if(!current())return;await api(`/api/runs/${id}/commands`, "POST", {command,version:r.version}); if(current())await showRun(id);}); return b;}));
 }
 async function loadProjects() {
   const ps = await api("/api/projects"); const old = $("project-select").value;

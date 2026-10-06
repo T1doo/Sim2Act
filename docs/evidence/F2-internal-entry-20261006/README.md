@@ -11,3 +11,5 @@
 `ui-fixture.py`仅为回归初始化合成数据并启动实际production API，无新测试HTTP端点/生产fixture/工具能力。`dom-http.cjs`读取实际UI/HTTP，独立worker子进程执行已接受任务，另进程调用既有switch service产生真实版本CAS冲突；它仍是Node/jsdom，不是Chromium/手机视觉。没有把前端文本或缓存假作新求和；新输入40、真实FAILED与独立结果版本在API回归另覆盖。最终源码/aggregate/独立hash/ServerCI终态另记。
 
 最终actualHTTP/jsdom [27项](dom-results.json)PASS，独立[18PASS/1PGSKIP及UI交错](independent-review.md)；4源码/test hash与最终审查一致。SQLite完整[350PASS/22PG平台SKIP/2旧警告75.53秒](sqlite.xml)。首轮LinuxPG[370PASS/1FAIL/1WindowsSKIP/3旧warnings202.56秒](linux-pg-first-failure.xml)：原AT05真实进程start报API/worker exited，两个日志0字节，未找到异常栈，cgroup oom/kill计数0；配置已抑制。未改原AT05或manage源码，不能断言根因；相同源码[AT05单独重跑](at05-recheck.xml)1PASS/1warning10.72秒。完整PG重跑中，精确ServerCI另核，不删除失败或借skip替代。
+
+收尾发现项目页通用showRun会把内部AppRun的直接result误标“书生运行记录”；修为namespace明确内部只读/0模型/结果版本，并加task/project/token/请求generation迟到保护及命令返回保护。最终actualHTTP/jsdom29PASS，新增真实内部Run主项目页标签与迟到回读负例；原27项完整继续覆盖。因为源码JS变化，需新的精确commit/CI，5462b24只是先前候选源码而非最终视觉或集成签收。

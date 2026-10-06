@@ -207,3 +207,5 @@ E18精确终态：925e560dc1a196c6c4747cb349d558156a721c0f已普通push，[CI374
 E19本地入口实现：精确内部批准/Release/独立实例/持久queue/control/history接入Bearer API/UI；实例同键持久幂等、不增表或Grant；撤权owner仅最小stopmetadata，resume仍当前权限。独立实际复现late create抢实例选择并关闭，refresh两交错复验通过；新增本页旧意图结束按钮必须先GET当前历史，不取消后台/自动新提交。独立18PASS/1PGSKIP5.50秒、4文件hash一致；真PG专项19PASS11.17秒含最小CRUD角色；实际HTTP/jsdom27PASS且另一进程实际revision→UI409/新意图，NOT视觉。SQLite350PASS/22SKIP/2旧warnings75.53秒；完整PG出现1失败待定位，未记CI成功。protectedChromiumSUID helper BLOCKED，无--no-sandbox。
 
 E19完整SQLite350PASS/22PG平台SKIP/2旧warnings75.53秒；首轮LinuxPG370PASS/1FAIL/1WindowsSKIP/3旧warnings202.56秒，原AT05 start检查API/worker exited、两空日志，无异常栈/oom证据，根因未定位。原AT05/manage不改，相同源码单独重跑1PASS10.72秒；保留抑制配置后的失败JUnit，完整PG再跑/精确CI待核实。27actualHTTP/jsdom和独立18PASS/1PGSKIP/4hash一致，版本冲突旧意图可显式读取历史后结束，不自动提交或取消后台。
+
+E19收尾修正通用项目页showRun：内部AppRun不再误称书生记录，明确内部只读/0模型及版本；迟到task/project/token/generation回读和命令返回保护。最终actualHTTP/jsdom29PASS（不是视觉），原27项未删。JS源码变更须另普通push/精确CI，5462b24候选CI不替代最终源码验证。

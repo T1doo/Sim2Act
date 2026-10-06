@@ -58,6 +58,12 @@ async function page(){
  await w.eval(`showInternalRun('${newRun}',engineering,engineering.instance)`);
  check('actual worker new result 40 not static UI template',$('internal-run-status').textContent.includes('40'));
  check('terminal refresh reopens instance new result version',$('internal-data').textContent.includes('结果 v1'));
+ await w.eval(`showRun('${newRun}')`);
+ check('project task readback labels internal no model rather than real model',$('result').textContent.includes('内部工程只读任务') && $('result').textContent.includes('0 模型请求') && !$('result').textContent.includes('书生运行记录'));
+ let mainHeld=false,releaseMain;const mainGate=new Promise(r=>releaseMain=r);
+ w.fetch=async(url,opts)=>{const response=await realFetch(url,opts);if(String(url)===`/api/runs/${newRun}`){mainHeld=true;await mainGate;}return response;};
+ const oldMain=w.eval(`showRun('${newRun}')`);await wait(()=>mainHeld);w.eval('activeRun=null');$('result').textContent='新任务选择';releaseMain();await oldMain;w.fetch=realFetch;
+ check('project task late read cannot override cleared selection',$('result').textContent==='新任务选择');
  // Another instance from same frozen release, no data inheritance.
  let lateCreated=false,createdInstance,releaseLateCreate;const lateCreateGate=new Promise(r=>releaseLateCreate=r);
  w.fetch=async(url,opts)=>{const response=await realFetch(url,opts);if(String(url).endsWith('/instances') && opts?.method==='POST'){createdInstance=await response.clone().json();lateCreated=true;await lateCreateGate;}return response;};
