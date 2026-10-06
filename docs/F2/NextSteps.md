@@ -107,3 +107,9 @@ E21执行中检查点：源码59f34817dd65201bd5ba204661d6787b19255fd3普通push
 接口限制owner/project/app/runtime/精确instance及targetRelease fingerprint、revision；prepare只产生既有精确批准，GET再检查完整payload fingerprint/expiry/currentgrant/data/pointer/兼容性，commit只accept精确fingerprint，并事务内再验绑定。UI先手动选target（无默认）/prepare→回读快照及保留数据/当前目标/期限/指纹→未勾选禁用commit；取消/返回仅本页选择，不撤销已接受切换，迟到结果不抢选择。一次性批准consume保持，重复或旧批准409，不增加重放机制；未知网络结果不自动重发，提示读历史。升级/回退增加revision/history，旧data/Run记录保留，新运行用读回的新版本。既有worker在指针变化后保守拒绝旧接受任务边界明确，不在本轮改可靠性政策。
 
 冻结验收：真实API兼容切换/回退及新worker result、数据/历史与Grant/principal不变；不兼容required添加及删除式回退拒绝、无token/跨owner/project/app/instance、fp/tamper/expired/consumed/stale revision/data/grant/target拒绝；并发重复只有一次切换。独立只读review、SQLite/真PG aggregate/最小CRUD role及精确源码现有标准CI/普通push。正常受保护Edge+CSP维持，扩已有真实浏览器流程覆盖升级/回退、精确显示/确认、取消/返回、重复点击、过期批准以及实际pause→resume→QUEUED→worker。仅test_only既有fixture加最小服务生成target/不兼容Release和一次短TTL oracle，无新fixture HTTP接口；短TTL在新switch批准生成同事务内绑定精确expiry/fingerprint，等待实际过期再拒绝，不在收到批准后篡改fp、不改生产300秒或时间/OS/CSP。所有截图/JSON仅合成repo证据，保留失败与未测。0LIVE/noLibrary或恢复包导出/正式deploy false，原work/V5/AT02/AT05及首因UNKNOWN、Win11/物理手机/完整PA/PB/F1F2门不提升。
+
+## E22已交付后的边界（2026-10-06）
+
+此前E22“待接入”现在完成最小内部compatible switch认证API/UI：[精确c16cbae/CI37428871976 SUCCESS](https://github.com/T1doo/Sim2Act/actions/runs/37428871976)，PG383PASS0SKIP+38真实保护browserPASS，两viewport截图/升级后worker v2/rollback保留历史已验。取消迟到prepare/重复/过期/不兼容和实际resume覆盖；late commit cancel为独立NodeVM，短TTL仅显式合成oracle。初两个测试CI失败全保留，产品hash不变。无需继续堆CSV邻接能力或重复已有绿色工程。
+
+后续仍按原V5未闭合项决定：Win11普通用户及完整AT02 fixture/F1签收输入；新任务族与独立成果oracle/P-A/P-B；F2局部修改/通用受限业务数据与schema迁移及正式发布政策；受控外部在途效果AT19/20。当前0LIVE、最多额外两次尚待明确批准，不models探测/自动真实重试；本轮不自动开通以上范围。Linux SUID安全路径仍BLOCKED，原AT05首因UNKNOWN。完整F2/AT16及正式发布未提升，手机viewport不代物理设备/完整无障碍。[E22证据](../evidence/F2-internal-switch-entry-20261006/README.md)。
