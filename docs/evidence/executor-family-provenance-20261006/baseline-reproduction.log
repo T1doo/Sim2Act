@@ -1,0 +1,76 @@
+ISOLATED_SOURCE_FAMILY_RESULT {'family': 'goal', 'inspection_status': 200, 'approval_created': True, 'rejection': None, 'replay_rounds': 2, 'run_created': True}
+FISOLATED_SOURCE_FAMILY_RESULT {'family': 'preview', 'inspection_status': 200, 'approval_created': True, 'rejection': None, 'replay_rounds': 2, 'run_created': True}
+F
+=================================== FAILURES ===================================
+_ test_independent_source_family_blocks_executor_replacement_before_approval[goal] _
+
+env = (<sim2act.db.Store object at 0x7f30206aef00>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-110/test_in...e8fe065fc1433d8d74e228888ab281', 'user_d581199655f7492db896d4d3f6e71001', 'proj_19e55fceee394c0a97dec893f272b912', ...)
+family = 'goal'
+
+    @pytest.mark.parametrize('family', ['goal','preview'])
+    def test_independent_source_family_blocks_executor_replacement_before_approval(env, family):
+        aid, md, forged, value, _ = switched_fixture(env, family)
+        before = effects(env[0])
+        actual = env[2].get(f'/api/apps/{aid}')
+        protocol = replay(md, value)
+        accepted = None
+        rejection = None
+        try:
+            accepted = prepare_release(env[0], env[3], aid, fingerprint(forged), limits(env),
+                                       {'term':value['term']}, replay=protocol)
+        except DomainError as exc:
+            rejection = exc.code
+        reached = {'family':family,'inspection_status':actual.status_code,
+                   'approval_created':accepted is not None,'rejection':rejection,
+                   'replay_rounds':len(protocol.requests),'run_created':False}
+        if accepted:
+            release = commit_release(env[0], env[3], accepted['id'], accepted['fingerprint'], limits(env))
+            instance = create_instance(env[0], env[3], release['id'], release['fingerprint'], limits(env))
+            queued = app_jobs.enqueue(env[0], env[3], instance['id'], 1, release['fingerprint'],
+                                      {'term':value['term']}, 'corrupt-source-family', limits(env))
+            reached['run_created'] = bool(queued['run_id'])
+        print('ISOLATED_SOURCE_FAMILY_RESULT', reached)
+>       assert actual.status_code == 409, reached
+E       AssertionError: {'approval_created': True, 'family': 'goal', 'inspection_status': 200, 'rejection': None, ...}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/test_executor_family_provenance.py:80: AssertionError
+_ test_independent_source_family_blocks_executor_replacement_before_approval[preview] _
+
+env = (<sim2act.db.Store object at 0x7f301f263d70>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-110/test_in...1cd90f3f7f4463ab065a6bfa638d78', 'user_6860c64c19cf48fc9e45fd2c595a4306', 'proj_befd279e719e4bbaafa530f6ff347838', ...)
+family = 'preview'
+
+    @pytest.mark.parametrize('family', ['goal','preview'])
+    def test_independent_source_family_blocks_executor_replacement_before_approval(env, family):
+        aid, md, forged, value, _ = switched_fixture(env, family)
+        before = effects(env[0])
+        actual = env[2].get(f'/api/apps/{aid}')
+        protocol = replay(md, value)
+        accepted = None
+        rejection = None
+        try:
+            accepted = prepare_release(env[0], env[3], aid, fingerprint(forged), limits(env),
+                                       {'term':value['term']}, replay=protocol)
+        except DomainError as exc:
+            rejection = exc.code
+        reached = {'family':family,'inspection_status':actual.status_code,
+                   'approval_created':accepted is not None,'rejection':rejection,
+                   'replay_rounds':len(protocol.requests),'run_created':False}
+        if accepted:
+            release = commit_release(env[0], env[3], accepted['id'], accepted['fingerprint'], limits(env))
+            instance = create_instance(env[0], env[3], release['id'], release['fingerprint'], limits(env))
+            queued = app_jobs.enqueue(env[0], env[3], instance['id'], 1, release['fingerprint'],
+                                      {'term':value['term']}, 'corrupt-source-family', limits(env))
+            reached['run_created'] = bool(queued['run_id'])
+        print('ISOLATED_SOURCE_FAMILY_RESULT', reached)
+>       assert actual.status_code == 409, reached
+E       AssertionError: {'approval_created': True, 'family': 'preview', 'inspection_status': 200, 'rejection': None, ...}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/test_executor_family_provenance.py:80: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_executor_family_provenance.py::test_independent_source_family_blocks_executor_replacement_before_approval[goal]
+FAILED tests/test_executor_family_provenance.py::test_independent_source_family_blocks_executor_replacement_before_approval[preview]
+2 failed, 1 warning in 1.39s

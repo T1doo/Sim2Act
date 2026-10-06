@@ -28,3 +28,13 @@
 ### 2026-10-06 / 父检查后普通push与唯一标准WindowsCI终态
 
 父明确授权下一验证步骤，非签收。审核精确07580f805670e50b21639e3b0a57ed8fd6cb9c01/product3e27ad9b55b3493da2dc403461916589427d4a2d、全部独立/证据hash及diff：真实key签名0、原V5段落复制0、新增Grant/Principal/API/table0，workflow原配置无变化。正常fetch6cbf47f→is-ancestor PASS→普通origin HEAD:dev/f1-foundation成功，不force/main merge，远端ls-remote确认07580f8。原push-trigger标准CI一次run37447017944/job112214194172完成success3m50秒，实际474PASS0FAIL0SKIP2warnings142.94秒、ruff/mypy23成功、原最小角色原生API-worker smoke成功、原protected Edge38PASS、Report/Cleanup成功；日志owned API/worker stopped、server stopped。原Node20 action被GitHub强制Node24的deprecation annotation保留不改原action pins。只解析回读原log的短安全回执/browser结果hash，原始PNG和整log未另导出/提交，临时rawlog解析后删除。CI摘要/metadata/审核JSON归档且无凭据签名。文档仅追加结果，普通push不再CI；semantic UNKNOWN、provider0与完整阶段/新agent UI/Win11边界保持。[终态](../evidence/bounded-agent-offline-20261006/ci-summary.json)。
+
+### 2026-10-06 / executor来源家族边界真实失败基线
+
+父要求先验证后修复，基线96a6ae0（已发布CI07580f8），原产品3e27ad9。新隔离tests/test_executor_family_provenance.py两fixture：此前原来源CSV合法、MD授权预先就绪；撤CSV后原GET403；协调candidate/fingerprint换initialagent但独立goal/preview表不改，两个GET200/审批/Release/Instance/QUEUED Run创建、Replay2轮。实际基线2FAIL1warning1.39秒，独立同2FAIL1.22秒，原App/apps49dc0d与agent9ccaeef hash保存。无真实模型或生产数据/权限改动，未运行损坏来源Run、不定性公开接口越权。拟将全部持久来源家族检查放executor分派前并拒重复/冲突/未知marker，保持原详细source授权与FP。只本地实现/测试/commit，无push/CI。
+
+### 2026-10-06 / executor来源家族修复与本地终态
+
+apps.py在candidate指纹后、compile_preview/executor分派前遍历全部独立goal/preview/task记录，拒重复/冲突/owner、未知task种类、顶层claim及executor家族替换，无marker只允许无提取来源的初始goal。原各家族详细授权、snapshot与accepted-request校验保留；task明确分agent_source.v1和legacy completed_fixed_csv_task。原两失败链现在GET409、VERSION_CONFLICT、Replay0、未审批/排队，effects/Grant计数不变。23新增负例覆盖反向agent→CSV保留/移除claim、legacy→agent、冲突/重复/虚构claim/未知snapshot/坏executor。扩展夹具嵌套HTTP事务锁1FAIL保留且修正，非产品失败伪改PASS。
+
+最终完整SQLite473PASS24SKIP2warnings200.07秒、PG17完整496PASS1WinSKIP3warnings462.24秒，ruff/mypy23PASS；独立focused23PASS12.56秒、related135PASS4SKIP3warnings77.38秒，hash逐项相符/无新具体阻塞。apps8416b6f5、agent9ccaeefb未改、testc24ee19f；原2FAIL真实主/独立基线及所有原始日志保留。仅合成SQL协调篡改来源完整性缺口修复，不称公开接口越权或损坏来源Worker成功，也不覆盖同时篡改全部独立锚点。容器sim2act-provenance-pg-20261006已移除、32772关闭、原work6f688e4干净；本轮本地commit/无push/CI/provider0，无新Windows/浏览器验证，原V5/AT02/P-B/F1阶段不提升。[证据](../evidence/executor-family-provenance-20261006/README.md)。

@@ -243,6 +243,69 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
     return validate_frozen_candidate(store, c, user, draft, platform_limits)
 
 
+def validate_source_family(c, user, draft):
+    """Bind dispatch to independent stored origin records before choosing an executor."""
+    candidate = draft["candidate"]
+    markers = []
+    for table, field, kind in (
+        (goal_candidate_requests, "generation", "registered_tool"),
+        (preview_extractions, "extraction", "registered_tool"),
+        (task_extractions, None, None),
+    ):
+        rows = c.execute(select(table).where(table.c.app_id == draft["id"])).mappings().all()
+        for row in rows:
+            expected_field, expected_kind = field, kind
+            if table is task_extractions:
+                snapshot = row["snapshot"]
+                proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
+                if isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
+                    expected_field, expected_kind = "agent_provenance", "bounded_agent"
+                elif (
+                    isinstance(snapshot, dict)
+                    and "kind" not in snapshot
+                    and isinstance(proof, dict)
+                    and proof.get("kind") == "completed_fixed_csv_task"
+                ):
+                    expected_field, expected_kind = "task_proof", "registered_tool"
+                else:
+                    raise DomainError(
+                        "VERSION_CONFLICT", "Independent extraction marker kind changed"
+                    )
+            if row["principal_id"] != user:
+                raise DomainError("VERSION_CONFLICT", "Independent extraction marker owner changed")
+            markers.append((expected_field, expected_kind))
+    if len(markers) > 1 or not isinstance(candidate, dict):
+        raise DomainError("VERSION_CONFLICT", "Independent extraction marker conflict")
+    claimed = {
+        k for k in ("generation", "extraction", "task_proof", "agent_provenance") if k in candidate
+    }
+    expected = {markers[0][0]} if markers else set()
+    if claimed != expected:
+        raise DomainError(
+            "VERSION_CONFLICT", "Independent extraction marker does not match candidate"
+        )
+    if markers:
+        actions = candidate.get("actions")
+        if not isinstance(actions, list) or not actions:
+            raise DomainError("VERSION_CONFLICT", "Independent extraction marker executor missing")
+        for action in actions:
+            executor = action.get("executor") if isinstance(action, dict) else None
+            if not isinstance(executor, dict) or executor.get("kind") != markers[0][1]:
+                raise DomainError(
+                    "VERSION_CONFLICT", "Independent extraction marker executor changed"
+                )
+    else:
+        manifest = candidate.get("manifest")
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("origin") != "goal"
+            or manifest.get("source_run_ref") is not None
+        ):
+            raise DomainError(
+                "VERSION_CONFLICT", "Independent extraction marker missing for task origin"
+            )
+
+
 def validate_frozen_candidate(store, c, user, draft, platform_limits):
     """Revalidate exact frozen specs and current grants without reading mutable draft content."""
     aid = draft["id"]
@@ -250,6 +313,7 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
     candidate = draft["candidate"]
     if fingerprint(candidate) != draft["fingerprint"]:
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
+    validate_source_family(c, user, draft)
     manifest, action, report = compile_preview(candidate, platform_limits)
     if action.executor.kind == "bounded_agent":
         from .agent_apps import existing_runtime, validate_agent_origin

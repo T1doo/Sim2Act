@@ -1,0 +1,84 @@
+{
+  "status": "BASELINE_REPRODUCED_REPAIR_INDEPENDENTLY_VERIFIED_WITHIN_OFFLINE_SCOPE",
+  "date": "2026-10-06",
+  "independent_baseline": {
+    "failed": 2,
+    "warnings": 1,
+    "seconds": 1.22,
+    "log": "independent-baseline-reproduction.log",
+    "families": [
+      "goal_candidate_requests",
+      "preview_extractions"
+    ],
+    "actual_results": {
+      "inspection_HTTP": 200,
+      "approval_created": true,
+      "replay_rounds": 2,
+      "release_created": true,
+      "instance_created": true,
+      "run_queued": true,
+      "worker_success": "NOT_RUN"
+    }
+  },
+  "fixture_review": [
+    "New MD rights established legitimately before source corruption/revocation; no permissions added after corruption to rescue old provenance.",
+    "Original CSV revoke causes unmodified old draft HTTP403. Preview case original CSV is the preview source; target CSV remains readable.",
+    "Only coordinated mutable candidate+fingerprint rewritten; independent source family rows retained.",
+    "Test directly corrupts owned synthetic DB; does not demonstrate public API injection/cross-owner access."
+  ],
+  "root_cause": "bounded_agent early return precedes goal/preview independent source lookups; agent origin checks only task_extractions, so executor replacement can erase original source checks.",
+  "required_repair": [
+    "Source-family guard before compile/executor branching and before Replay or approval effects.",
+    "Query all rows in goal_candidate_requests, preview_extractions and task_extractions; reject cross-family conflicts or duplicate same-family accepted anchors.",
+    "Task marker kind must be strictly agent_source.v1 or recognized legacy completed_fixed_csv_task proof; unknown or malformed type rejects safely.",
+    "Candidate source metadata must correspond exactly to stored family and executor family; no marker means no provenance fields and goal origin.",
+    "Keep detailed accepted requestFP/current source and owner/runtime grant checks, not merely family labels.",
+    "Test reverse agent→CSV, local CSV task→agent, conflicting/duplicate markers, unknown task-kind, malformed precompile shape and legitimate positive family flows."
+  ],
+  "remaining_untested": "No independent PostgreSQL, full-suite aggregate, CI, browser or LIVE execution in this review. Direct initial drafts without accepted origin markers are not claimed to be protected against arbitrary raw SQL replacement by this guard. Database-corruption fixtures do not establish a public API exploit. The earlier fixture-lock-failure log is preserved by the developer; this reviewer did not execute that faulty fixture.",
+  "review_external_requests": 0,
+  "source_edits_by_reviewer": 0,
+  "baseline_source_sha256": {
+    "src/sim2act/apps.py": "49dc0d77564c874885959331aa36070c304bffeee69965112170a39c36e6c0d8",
+    "src/sim2act/agent_apps.py": "9ccaeefbbcddc61b8d09a02a5a8e500bed10e2c8736cb458d8697f3b2848c313",
+    "tests/test_executor_family_provenance.py": "d0db1072291f155b6a1ee00a6e644be851f5a5985aa6b6d4d1444e137fc79d9e"
+  },
+  "final_source_sha256": {
+    "src/sim2act/apps.py": "8416b6f5281137ca45218b89cafd36f437a40fec7bea3fcb0a3fb2d1094004ae",
+    "src/sim2act/agent_apps.py": "9ccaeefbbcddc61b8d09a02a5a8e500bed10e2c8736cb458d8697f3b2848c313",
+    "tests/test_executor_family_provenance.py": "c24ee19f8223d31efd4d2804c6e34a2b71c42faa017a314bf69899f7ee80ccdc"
+  },
+  "final_independent_tests": [
+    {
+      "command": "pytest -q tests/test_executor_family_provenance.py",
+      "passed": 23,
+      "skipped": 0,
+      "warnings": 1,
+      "seconds": 12.56,
+      "exit_code": 0,
+      "log": "independent-final-focused.log"
+    },
+    {
+      "command": "pytest -q tests/test_goal_candidates.py tests/test_preview_extraction.py tests/test_local_task_retirement.py tests/test_bounded_agent_apps.py",
+      "passed": 135,
+      "skipped": 4,
+      "warnings": 3,
+      "seconds": 77.38,
+      "exit_code": 0,
+      "log": "independent-related-regression.log"
+    }
+  ],
+  "log_sha256": {
+    "independent-baseline-reproduction.log": "a7020e3e049610087c3154757c97503b7090143973bea437db44952b5f5e11eb",
+    "independent-final-focused.log": "cb001be56aa35bce604b8625748d7f740b1d05c8cba31a8ff05c4ce55a9dceac",
+    "independent-related-regression.log": "729eea54024ec0f05a13ecec714db5ed4d39753c3230be976dc3f19f97a3e6e4"
+  },
+  "repair_review": [
+    "validate_source_family runs after draft fingerprint/ownership checks and before compile_preview and executor dispatch.",
+    "All rows from the three independent marker tables are inspected; duplicate or cross-family anchors, wrong marker owner, unknown task snapshot kind, fabricated/removed top-level origin claims and incompatible executor kind reject before approval.",
+    "Recognized legacy CSV and bounded-agent task markers remain distinct; family labels do not replace the existing detailed source/accepted-request/current-grant validation.",
+    "The 23 negative cases include the two independently reproduced baseline cases and reverse agent-to-CSV/legacy-CSV-to-agent substitution. Related positive and existing negative family regressions pass.",
+    "No principal, grant, registered tool, schema migration or external effect is added by the guard."
+  ],
+  "final_conclusion": "No new concrete blocking defect found within the inspected source-family guard and independently executed SQLite focused/related regression scope."
+}
