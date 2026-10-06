@@ -12,6 +12,19 @@ const result = {kind:'Actual Windows Server installed Edge / protected Chromium 
   commit:info.commit, inventory:info.inventory, chromiumSandbox:true, win11:'NOT_RUN',
   mobileDevice:'NOT_RUN - viewport only', modelRequests:0, checks:[], consoleErrors:[], sandbox:[]};
 let browser, activePage;
+// Exact defaults from integrity-locked 1.63.0. Remove browser protection weakening;
+// preserve the installed Edge's normal sandbox, security features and privilege handling.
+const removedSecurityDefaults = [
+  '--enable-unsafe-swiftshader', '--unsafely-disable-devtools-self-xss-warnings',
+  '--disable-ipc-flooding-protection', '--disable-client-side-phishing-detection',
+  '--password-store=basic', '--use-mock-keychain',
+  '--disable-features=' + ['AvoidUnnecessaryBeforeUnloadCheckSync','DestroyProfileOnBrowserClose',
+    'DialMediaRouteProvider','GlobalMediaControls','HttpsUpgrades','LensOverlay','MediaRouter',
+    'PaintHolding','ThirdPartyStoragePartitioning','BlockOriginHeaderModificationOnRedirect',
+    'Translate','AutoDeElevate','OptimizationHints','msForceBrowserSignIn',
+    'msEdgeUpdateLaunchServicesPreferredVersion'].join(',')
+];
+result.removedSDKSecurityDefaults = removedSecurityDefaults;
 function check(name, condition) { assert.ok(condition, name); result.checks.push({name,status:'PASS'}); }
 async function until(page, expression) { await page.waitForFunction(expression, null, {timeout:12000}); }
 async function idle(page) { await until(page, 'engineering && !engineering.busy'); }
@@ -52,8 +65,8 @@ async function layout(page, label) {
 }
 (async () => {
   // chromiumSandbox false is Playwright's default: explicit true is mandatory.
-  // No extra browser flags, ignoreDefaultArgs, installer or unsafe fallback.
-  browser = await chromium.launch({channel:'msedge',chromiumSandbox:true,headless:true,timeout:20000,env:process.env});
+  // Only remove pinned SDK security-weakening defaults; no custom flags or unsafe fallback.
+  browser = await chromium.launch({channel:'msedge',chromiumSandbox:true,headless:true,ignoreDefaultArgs:removedSecurityDefaults,timeout:20000,env:process.env});
   result.browserVersion = browser.version();
   const desktop = await context({width:1366,height:900});
   activePage = desktop.p;
@@ -61,6 +74,7 @@ async function layout(page, label) {
   const cdp = await browser.newBrowserCDPSession();
   const commandLine = (await cdp.send('Browser.getBrowserCommandLine')).arguments;
   check('actual browser command line contains no sandbox disabling switches', !commandLine.some(a => /^--(?:no-sandbox|disable-.*sandbox|no-zygote|allow-no-sandbox-job)(?:=|$)/.test(a)));
+  check('SDK security-weakening defaults are absent from actual browser args', !commandLine.some(a => removedSecurityDefaults.includes(a) || a.startsWith('--disable-features=')));
   result.observedCommandSwitches = commandLine.filter(a=>a.startsWith('--')).map(a=>a.split('=')[0]);
   const processes = (await cdp.send('SystemInfo.getProcessInfo')).processInfo.filter(p=>['browser','renderer'].includes(p.type));
   const audit = path.join(root,'owned-browser-pids.json');
