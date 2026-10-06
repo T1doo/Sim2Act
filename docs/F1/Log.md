@@ -304,3 +304,10 @@ E19精确终态：aaf07f49b3d32eeb360d8cd60a52a4fad22959fd普通push，[CI374193
 冻结诊断上限：4次原AT05原样独立重复，再4次保留原全部断言的diagnostic launcher重复（只观察monotonic时间、process判定/当前cmd匹配/创建时间差/实际Popen退出码/日志长度，输出不含配置/凭据）；每次合成隔离PG schema/最小CRUD角色/新port/tmp，不引入生产诊断flag或额外工具。不改原测试、失败时也完整原finally停止。若发现具体可复现原因，另记录最小修复与负例及原AT05/aggregate/精确ServerCI；否则保持未知，不改产品凭猜测、不无限加次数。
 
 用户显式要求独立只读E19认证API/跨owner-instance-history-control/currentgrant复验，默认继承6.1solmedium。读protectedChromium实际helper65534:65534(mode4755)，工具已因非root-owned拒绝；只列环境方正常安装/root-owned helper或可用内核namespace sandbox/受保护CDP runner的最小要求，本轮不chmod/chown/关闭sandbox/绕过拒绝，不追加DOM冒充视觉。0LIVE/无导出/正式发布关闭/原work/V5/AT02/AT05保持，正常devpush及精确CI按实际源码变化与授权执行。
+
+
+## 2026-10-06 / E20有界稳定性诊断终态
+
+见 [稳定性报告](../evidence/F2-startup-stability-20261006/README.md)：原AT05原样4PASS39.99s、观察修正后4PASS35.59s，原断言/manage/test未改；初版probe参数名冲突4FAIL14.55s独立保留，仅观察包装器修正。有效12start/24child、0启动process拒绝，boot epoch恒定；停止阶段拒绝不能解释首次启动failure。首次1.269s进程guard错误、空日志、无PID/rc/bootepoch，原因保持UNKNOWN，不从绿色推断修复、不无限重复、不改产品。独立E19 API18PASS/1PGSKIP4.53s及跨owner-instance-history-control/撤权合成负例拒绝；损坏binding聚合history遗漏但直接409边界保留，未独立PG/CI/browser。
+
+受保护Chrome实际helper65534:65534 mode4755，owner错误/正常namespace历史No usable sandbox；环境方最小提供正常沙箱浏览器或已有protectedCDP/connector，不chown/chmod/--no-sandbox/绕拒，视觉0BLOCKED。24有效child已退出为ppid1 zombie，无执行中owned服务，环境init未reap如实保留；专用PGstop/remove，不杀系统进程。source/tests/config与aaf07f49b3d32eeb360d8cd60a52a4fad22959fd无差异；精确CI37419363378重新核验success/372PASS0FAIL0SKIP，文档push不触发paths，不借CI关闭UNKNOWN。0LIVE/无导出/正式发布关闭，原work/V5/AT02/AT05/阶段门不变。有效上限4+4结束，不加feature；最小后续仅再次真失败记录rc身份时间与环境受保护浏览器接入。

@@ -1,0 +1,649 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="14.547" timestamp="2026-10-06T05:47:42.383996+00:00" hostname="0af355134a6a"><testcase classname="test_at05_observed" name="test_observed_original_at05[0]" time="3.549"><failure message="AssertionError: Lifecycle subprocess failed (configuration values suppressed)&#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode">env = (&lt;sim2act.db.Store object at 0x7fae9f2b4c80&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_884bc5a9e7c346b3b9622cf65bc96b9d', 'proj_8b099b126e3f415581a4036fc75c68e5', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_0_0')
+
+    @pytest.mark.skipif(
+        not os.environ.get("SIM2ACT_TEST_DATABASE_URL"),
+        reason="PostgreSQL subprocess check needs explicit test URL",
+    )
+    def test_AT05_real_process_stop_accept_restart_reopen(env, runtime_role, tmp_path):
+        store, s, client, a, b, pid, res = env
+        root = Path(__file__).parents[1]
+        data = tmp_path / "中文 空格数据"
+        # Supply only synthetic configuration; do not read dotenv or pass a live token.
+        child_env = {
+            "PATH": str(Path(sys.executable).parent),
+            "SIM2ACT_DATABASE_URL": runtime_role,
+            "SIM2ACT_DATA_DIR": str(data),
+            "SIM2ACT_MODEL_MODE": "mock",
+            "SIM2ACT_LIVE_ENABLED": "false",
+            # Deliberately poison the launcher parent. These must never reach API/worker.
+            "SIM2ACT_TEST_DATABASE_URL": "SYNTHETIC owner sentinel",
+            "PGPASSWORD": "SYNTHETIC owner sentinel",
+            "GH_TOKEN": "SYNTHETIC CI sentinel",
+            "CI_PRIVATE_SENTINEL": "SYNTHETIC private sentinel",
+        }
+        if os.name == "nt":
+            # Windows subprocesses require their system/temp paths; never inherit credentials.
+            child_env.update(
+                {
+                    key: os.environ[key]
+                    for key in ("SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP")
+                    if key in os.environ
+                }
+            )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        base = f"http://127.0.0.1:{port}"
+    
+        def manage(command):
+            p = subprocess.run(
+                [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+            return p.stdout
+    
+        try:
+            started = json.loads(manage("start"))
+            assert len({p["pid"] for p in started["processes"]}) == 2
+            import psutil
+    
+            for record in started["processes"]:
+                names = set(psutil.Process(record["pid"]).environ())
+                assert not names &amp; {
+                    "SIM2ACT_TEST_DATABASE_URL", "PGPASSWORD", "GH_TOKEN", "CI_PRIVATE_SENTINEL"
+                }, "Privileged environment name visible in actual API/worker"
+            assert httpx.get(base + "/health").json()["worker"] == "UP"
+            # Port conflict must not launch a second process pair.
+            duplicate = subprocess.run(
+                [sys.executable, "scripts/manage.py", "start", "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert duplicate.returncode != 0
+            wp = next(x for x in started["processes"] if x["kind"] == "worker")
+            psutil.Process(wp["pid"]).terminate()
+            for _ in range(100):
+                try:
+                    if psutil.Process(wp["pid"]).status() in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}:
+                        break
+                except psutil.NoSuchProcess:
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError("Worker did not stop")
+            with httpx.Client(
+                base_url=base, headers={"Authorization": "Bearer synthetic-test-A"}
+            ) as browser:
+                response = browser.post(
+                    f"/api/projects/{pid}/runs",
+                    json={
+                        "goal": "process disconnect test",
+                        "resource_refs": [res],
+                        "request_key": "real-process",
+                    },
+                )
+                assert response.status_code == 202
+                rid = response.json()["run_id"]
+                assert browser.get(f"/api/runs/{rid}").json()["status"] == "QUEUED"
+            # Client disconnected. Database owns accepted task; restart both independent processes.
+&gt;           manage("stop")
+
+tests/test_lifecycle.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+env = (&lt;sim2act.db.Store object at 0x7fae9f2b4c80&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_884bc5a9e7c346b3b9622cf65bc96b9d', 'proj_8b099b126e3f415581a4036fc75c68e5', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_0_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fae9d70e180&gt;
+repeat = 0
+
+    @pytest.mark.parametrize('repeat',range(4))
+    def test_observed_original_at05(env,runtime_role,tmp_path,monkeypatch,repeat):
+        run=subprocess.run
+        def observed(args,*a,**kw):
+            if len(args)&gt;1 and args[1]=='scripts/manage.py':
+                args=[args[0],'docs/evidence/F2-startup-stability-20261006/at05-probe.py',*args[2:]]
+            return run(args,*a,**kw)
+        monkeypatch.setattr(subprocess,'run',observed)
+        try:
+&gt;           original(env,runtime_role,tmp_path)
+
+/tmp/sim2act-e20-tests/test_at05_observed.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lifecycle.py:133: in test_AT05_real_process_stop_accept_restart_reopen
+    manage("stop")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError</failure></testcase><testcase classname="test_at05_observed" name="test_observed_original_at05[1]" time="3.300"><failure message="AssertionError: Lifecycle subprocess failed (configuration values suppressed)&#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode">env = (&lt;sim2act.db.Store object at 0x7fae9d7d2ae0&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_aaf9f085d48543f380432f4b7d7f034d', 'proj_ca8e13e8dc8d4f99a39f23140b685317', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_1_0')
+
+    @pytest.mark.skipif(
+        not os.environ.get("SIM2ACT_TEST_DATABASE_URL"),
+        reason="PostgreSQL subprocess check needs explicit test URL",
+    )
+    def test_AT05_real_process_stop_accept_restart_reopen(env, runtime_role, tmp_path):
+        store, s, client, a, b, pid, res = env
+        root = Path(__file__).parents[1]
+        data = tmp_path / "中文 空格数据"
+        # Supply only synthetic configuration; do not read dotenv or pass a live token.
+        child_env = {
+            "PATH": str(Path(sys.executable).parent),
+            "SIM2ACT_DATABASE_URL": runtime_role,
+            "SIM2ACT_DATA_DIR": str(data),
+            "SIM2ACT_MODEL_MODE": "mock",
+            "SIM2ACT_LIVE_ENABLED": "false",
+            # Deliberately poison the launcher parent. These must never reach API/worker.
+            "SIM2ACT_TEST_DATABASE_URL": "SYNTHETIC owner sentinel",
+            "PGPASSWORD": "SYNTHETIC owner sentinel",
+            "GH_TOKEN": "SYNTHETIC CI sentinel",
+            "CI_PRIVATE_SENTINEL": "SYNTHETIC private sentinel",
+        }
+        if os.name == "nt":
+            # Windows subprocesses require their system/temp paths; never inherit credentials.
+            child_env.update(
+                {
+                    key: os.environ[key]
+                    for key in ("SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP")
+                    if key in os.environ
+                }
+            )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        base = f"http://127.0.0.1:{port}"
+    
+        def manage(command):
+            p = subprocess.run(
+                [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+            return p.stdout
+    
+        try:
+            started = json.loads(manage("start"))
+            assert len({p["pid"] for p in started["processes"]}) == 2
+            import psutil
+    
+            for record in started["processes"]:
+                names = set(psutil.Process(record["pid"]).environ())
+                assert not names &amp; {
+                    "SIM2ACT_TEST_DATABASE_URL", "PGPASSWORD", "GH_TOKEN", "CI_PRIVATE_SENTINEL"
+                }, "Privileged environment name visible in actual API/worker"
+            assert httpx.get(base + "/health").json()["worker"] == "UP"
+            # Port conflict must not launch a second process pair.
+            duplicate = subprocess.run(
+                [sys.executable, "scripts/manage.py", "start", "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert duplicate.returncode != 0
+            wp = next(x for x in started["processes"] if x["kind"] == "worker")
+            psutil.Process(wp["pid"]).terminate()
+            for _ in range(100):
+                try:
+                    if psutil.Process(wp["pid"]).status() in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}:
+                        break
+                except psutil.NoSuchProcess:
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError("Worker did not stop")
+            with httpx.Client(
+                base_url=base, headers={"Authorization": "Bearer synthetic-test-A"}
+            ) as browser:
+                response = browser.post(
+                    f"/api/projects/{pid}/runs",
+                    json={
+                        "goal": "process disconnect test",
+                        "resource_refs": [res],
+                        "request_key": "real-process",
+                    },
+                )
+                assert response.status_code == 202
+                rid = response.json()["run_id"]
+                assert browser.get(f"/api/runs/{rid}").json()["status"] == "QUEUED"
+            # Client disconnected. Database owns accepted task; restart both independent processes.
+&gt;           manage("stop")
+
+tests/test_lifecycle.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+env = (&lt;sim2act.db.Store object at 0x7fae9d7d2ae0&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_aaf9f085d48543f380432f4b7d7f034d', 'proj_ca8e13e8dc8d4f99a39f23140b685317', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_1_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fae9cb5f6e0&gt;
+repeat = 1
+
+    @pytest.mark.parametrize('repeat',range(4))
+    def test_observed_original_at05(env,runtime_role,tmp_path,monkeypatch,repeat):
+        run=subprocess.run
+        def observed(args,*a,**kw):
+            if len(args)&gt;1 and args[1]=='scripts/manage.py':
+                args=[args[0],'docs/evidence/F2-startup-stability-20261006/at05-probe.py',*args[2:]]
+            return run(args,*a,**kw)
+        monkeypatch.setattr(subprocess,'run',observed)
+        try:
+&gt;           original(env,runtime_role,tmp_path)
+
+/tmp/sim2act-e20-tests/test_at05_observed.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lifecycle.py:133: in test_AT05_real_process_stop_accept_restart_reopen
+    manage("stop")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError</failure></testcase><testcase classname="test_at05_observed" name="test_observed_original_at05[2]" time="3.628"><failure message="AssertionError: Lifecycle subprocess failed (configuration values suppressed)&#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode">env = (&lt;sim2act.db.Store object at 0x7fae9cf7a1b0&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_6a46561bde294f90944aa3d4bc49d612', 'proj_dc1795f1c53b4328bd711a894064c9e6', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_2_0')
+
+    @pytest.mark.skipif(
+        not os.environ.get("SIM2ACT_TEST_DATABASE_URL"),
+        reason="PostgreSQL subprocess check needs explicit test URL",
+    )
+    def test_AT05_real_process_stop_accept_restart_reopen(env, runtime_role, tmp_path):
+        store, s, client, a, b, pid, res = env
+        root = Path(__file__).parents[1]
+        data = tmp_path / "中文 空格数据"
+        # Supply only synthetic configuration; do not read dotenv or pass a live token.
+        child_env = {
+            "PATH": str(Path(sys.executable).parent),
+            "SIM2ACT_DATABASE_URL": runtime_role,
+            "SIM2ACT_DATA_DIR": str(data),
+            "SIM2ACT_MODEL_MODE": "mock",
+            "SIM2ACT_LIVE_ENABLED": "false",
+            # Deliberately poison the launcher parent. These must never reach API/worker.
+            "SIM2ACT_TEST_DATABASE_URL": "SYNTHETIC owner sentinel",
+            "PGPASSWORD": "SYNTHETIC owner sentinel",
+            "GH_TOKEN": "SYNTHETIC CI sentinel",
+            "CI_PRIVATE_SENTINEL": "SYNTHETIC private sentinel",
+        }
+        if os.name == "nt":
+            # Windows subprocesses require their system/temp paths; never inherit credentials.
+            child_env.update(
+                {
+                    key: os.environ[key]
+                    for key in ("SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP")
+                    if key in os.environ
+                }
+            )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        base = f"http://127.0.0.1:{port}"
+    
+        def manage(command):
+            p = subprocess.run(
+                [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+            return p.stdout
+    
+        try:
+            started = json.loads(manage("start"))
+            assert len({p["pid"] for p in started["processes"]}) == 2
+            import psutil
+    
+            for record in started["processes"]:
+                names = set(psutil.Process(record["pid"]).environ())
+                assert not names &amp; {
+                    "SIM2ACT_TEST_DATABASE_URL", "PGPASSWORD", "GH_TOKEN", "CI_PRIVATE_SENTINEL"
+                }, "Privileged environment name visible in actual API/worker"
+            assert httpx.get(base + "/health").json()["worker"] == "UP"
+            # Port conflict must not launch a second process pair.
+            duplicate = subprocess.run(
+                [sys.executable, "scripts/manage.py", "start", "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert duplicate.returncode != 0
+            wp = next(x for x in started["processes"] if x["kind"] == "worker")
+            psutil.Process(wp["pid"]).terminate()
+            for _ in range(100):
+                try:
+                    if psutil.Process(wp["pid"]).status() in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}:
+                        break
+                except psutil.NoSuchProcess:
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError("Worker did not stop")
+            with httpx.Client(
+                base_url=base, headers={"Authorization": "Bearer synthetic-test-A"}
+            ) as browser:
+                response = browser.post(
+                    f"/api/projects/{pid}/runs",
+                    json={
+                        "goal": "process disconnect test",
+                        "resource_refs": [res],
+                        "request_key": "real-process",
+                    },
+                )
+                assert response.status_code == 202
+                rid = response.json()["run_id"]
+                assert browser.get(f"/api/runs/{rid}").json()["status"] == "QUEUED"
+            # Client disconnected. Database owns accepted task; restart both independent processes.
+&gt;           manage("stop")
+
+tests/test_lifecycle.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+env = (&lt;sim2act.db.Store object at 0x7fae9cf7a1b0&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_6a46561bde294f90944aa3d4bc49d612', 'proj_dc1795f1c53b4328bd711a894064c9e6', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_2_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fae9c767830&gt;
+repeat = 2
+
+    @pytest.mark.parametrize('repeat',range(4))
+    def test_observed_original_at05(env,runtime_role,tmp_path,monkeypatch,repeat):
+        run=subprocess.run
+        def observed(args,*a,**kw):
+            if len(args)&gt;1 and args[1]=='scripts/manage.py':
+                args=[args[0],'docs/evidence/F2-startup-stability-20261006/at05-probe.py',*args[2:]]
+            return run(args,*a,**kw)
+        monkeypatch.setattr(subprocess,'run',observed)
+        try:
+&gt;           original(env,runtime_role,tmp_path)
+
+/tmp/sim2act-e20-tests/test_at05_observed.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lifecycle.py:133: in test_AT05_real_process_stop_accept_restart_reopen
+    manage("stop")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError</failure></testcase><testcase classname="test_at05_observed" name="test_observed_original_at05[3]" time="3.466"><failure message="AssertionError: Lifecycle subprocess failed (configuration values suppressed)&#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode">env = (&lt;sim2act.db.Store object at 0x7fae9c767140&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_35a6a312ecd3493dbde8330c7dd8b3f8', 'proj_f051470009ef44d0a69ed49766b322af', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_3_0')
+
+    @pytest.mark.skipif(
+        not os.environ.get("SIM2ACT_TEST_DATABASE_URL"),
+        reason="PostgreSQL subprocess check needs explicit test URL",
+    )
+    def test_AT05_real_process_stop_accept_restart_reopen(env, runtime_role, tmp_path):
+        store, s, client, a, b, pid, res = env
+        root = Path(__file__).parents[1]
+        data = tmp_path / "中文 空格数据"
+        # Supply only synthetic configuration; do not read dotenv or pass a live token.
+        child_env = {
+            "PATH": str(Path(sys.executable).parent),
+            "SIM2ACT_DATABASE_URL": runtime_role,
+            "SIM2ACT_DATA_DIR": str(data),
+            "SIM2ACT_MODEL_MODE": "mock",
+            "SIM2ACT_LIVE_ENABLED": "false",
+            # Deliberately poison the launcher parent. These must never reach API/worker.
+            "SIM2ACT_TEST_DATABASE_URL": "SYNTHETIC owner sentinel",
+            "PGPASSWORD": "SYNTHETIC owner sentinel",
+            "GH_TOKEN": "SYNTHETIC CI sentinel",
+            "CI_PRIVATE_SENTINEL": "SYNTHETIC private sentinel",
+        }
+        if os.name == "nt":
+            # Windows subprocesses require their system/temp paths; never inherit credentials.
+            child_env.update(
+                {
+                    key: os.environ[key]
+                    for key in ("SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP")
+                    if key in os.environ
+                }
+            )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        base = f"http://127.0.0.1:{port}"
+    
+        def manage(command):
+            p = subprocess.run(
+                [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+            return p.stdout
+    
+        try:
+            started = json.loads(manage("start"))
+            assert len({p["pid"] for p in started["processes"]}) == 2
+            import psutil
+    
+            for record in started["processes"]:
+                names = set(psutil.Process(record["pid"]).environ())
+                assert not names &amp; {
+                    "SIM2ACT_TEST_DATABASE_URL", "PGPASSWORD", "GH_TOKEN", "CI_PRIVATE_SENTINEL"
+                }, "Privileged environment name visible in actual API/worker"
+            assert httpx.get(base + "/health").json()["worker"] == "UP"
+            # Port conflict must not launch a second process pair.
+            duplicate = subprocess.run(
+                [sys.executable, "scripts/manage.py", "start", "--port", str(port)],
+                cwd=root,
+                env=child_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert duplicate.returncode != 0
+            wp = next(x for x in started["processes"] if x["kind"] == "worker")
+            psutil.Process(wp["pid"]).terminate()
+            for _ in range(100):
+                try:
+                    if psutil.Process(wp["pid"]).status() in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}:
+                        break
+                except psutil.NoSuchProcess:
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError("Worker did not stop")
+            with httpx.Client(
+                base_url=base, headers={"Authorization": "Bearer synthetic-test-A"}
+            ) as browser:
+                response = browser.post(
+                    f"/api/projects/{pid}/runs",
+                    json={
+                        "goal": "process disconnect test",
+                        "resource_refs": [res],
+                        "request_key": "real-process",
+                    },
+                )
+                assert response.status_code == 202
+                rid = response.json()["run_id"]
+                assert browser.get(f"/api/runs/{rid}").json()["status"] == "QUEUED"
+            # Client disconnected. Database owns accepted task; restart both independent processes.
+&gt;           manage("stop")
+
+tests/test_lifecycle.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+env = (&lt;sim2act.db.Store object at 0x7fae9c767140&gt;, Settings(database_url='[SYNTHETIC_DB_CONFIG_SUPPRESSED]', 'user_35a6a312ecd3493dbde8330c7dd8b3f8', 'proj_f051470009ef44d0a69ed49766b322af', ...)
+runtime_role = '[SYNTHETIC_DB_CONFIG_SUPPRESSED]'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-66/test_observed_original_at05_3_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fae9b367b00&gt;
+repeat = 3
+
+    @pytest.mark.parametrize('repeat',range(4))
+    def test_observed_original_at05(env,runtime_role,tmp_path,monkeypatch,repeat):
+        run=subprocess.run
+        def observed(args,*a,**kw):
+            if len(args)&gt;1 and args[1]=='scripts/manage.py':
+                args=[args[0],'docs/evidence/F2-startup-stability-20261006/at05-probe.py',*args[2:]]
+            return run(args,*a,**kw)
+        monkeypatch.setattr(subprocess,'run',observed)
+        try:
+&gt;           original(env,runtime_role,tmp_path)
+
+/tmp/sim2act-e20-tests/test_at05_observed.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lifecycle.py:133: in test_AT05_real_process_stop_accept_restart_reopen
+    manage("stop")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = 'stop'
+
+    def manage(command):
+        p = subprocess.run(
+            [sys.executable, "scripts/manage.py", command, "--port", str(port)],
+            cwd=root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+&gt;       assert p.returncode == 0, "Lifecycle subprocess failed (configuration values suppressed)"
+E       AssertionError: Lifecycle subprocess failed (configuration values suppressed)
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/sim2act-pb-venv/bin/python', 'docs/evidence/F2-startup-stability-20261006/at05-prob...n observe\n    event(\'process_rejected\',**snapshot)\nTypeError: event() got multiple values for argument \'kind\'\n').returncode
+
+tests/test_lifecycle.py:59: AssertionError</failure></testcase></testsuite></testsuites>
