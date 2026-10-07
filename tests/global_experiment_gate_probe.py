@@ -14,6 +14,8 @@ from sim2act.db import (
     attempts,
     events,
     fingerprint,
+    grants,
+    principals,
     protocol_request_pools,
     protocol_request_slots,
     runs,
@@ -39,15 +41,18 @@ def main():
         def seals():
             with store.tx() as c:
                 return {table.name: fingerprint([dict(row) for row in c.execute(select(table)).mappings()])
-                        for table in [protocol_request_pools, protocol_request_slots, attempts]}
+                        for table in [protocol_request_pools, protocol_request_slots, attempts, grants, principals]}
 
         before = seals()
+        with store.tx() as c:
+            if c.execute(select(runs.c.id).where(runs.c.status == "QUEUED")).first() is not None:
+                raise RuntimeError("Sequential sealed fixture cannot contain pending work")
         with TestClient(create_app(store, settings), headers={"Authorization": "Bearer " + info["bearer"]}) as client:
             base = f"/api/projects/{pid}/conditional-runs"
             contract = client.get(base + "/contract").json()
             reply = client.post(base + "/source", json={"resource_id": source,
                 "expected_source_hash": contract["source_hash"], "expected_contract_fingerprint": contract["check_contract_fingerprint"],
-                "goal": contract["goal"], "request_key": "global-seal-negative",
+                "goal": contract["goal"], "request_key": "global-seal-negative-" + scope + "-" + str(sys.flags.optimize),
                 "scenario": {"kind": "HYPOTHETICAL_EMPLOYEE", "trip_ended": True, "amount": 680,
                              "receipt_present": True, "approved": False, "elapsed_days": 2}})
             if reply.status_code != 202:
@@ -66,7 +71,8 @@ def main():
         (root / "global-gate-receipt.json").write_text(json.dumps({"status": "PASS", "scope": scope,
             "optimized": sys.flags.optimize, "run_status": current["status"], "error": current["error"],
             "actual_new_mock_requests": 0, "before": before, "after": after,
-            "pool_slots_attempts_unchanged": True, "events": trace}, indent=2))
+            "pool_slots_attempts_unchanged": True, "authority_unchanged": True,
+            "preexisting_queued": 0, "request_key": "global-seal-negative-" + scope + "-" + str(sys.flags.optimize), "events": trace}, indent=2))
     finally:
         store.engine.dispose()
 
