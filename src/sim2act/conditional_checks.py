@@ -135,10 +135,7 @@ def _conditions(s):
     return applies, decision, actions, not contradictory
 
 
-def evaluate(store, user, pid, body):
-    request = CheckInput.model_validate(body)
-    if request.expected_contract_fingerprint != fingerprint(CONTRACT):
-        raise DomainError("VERSION_CONFLICT", "Registered check contract changed")
+def read_source(store, user, pid, rid, expected_hash=None):
     with store.tx() as c:
         project = store.own_project(c, user, pid)
         source = authorized_read(
@@ -148,12 +145,73 @@ def evaluate(store, user, pid, body):
             project["runtime_id"],
             pid,
             "resource.read",
-            {"resource_id": request.resource_id},
+            {"resource_id": rid},
         )
     if source["format"] not in {"txt", "md"}:
         raise DomainError("UNSUPPORTED_CAPABILITY", "Pinned textual rule source required")
-    if source["hash"] != request.expected_source_hash or source["hash"] != SOURCE_HASH:
+    if source["hash"] != SOURCE_HASH or (
+        expected_hash is not None and source["hash"] != expected_hash
+    ):
         raise DomainError("VERSION_CONFLICT", "Source is outside the pinned rule contract")
+    return source
+
+
+def rule_results(s, lines):
+    def state(value):
+        return "UNKNOWN" if value is None else "SATISFIED" if value else "UNSATISFIED"
+
+    r1 = ("NOT_APPLICABLE", "行程尚未结束，原10自然日期限尚未开始。")
+    if s.trip_ended is None:
+        r1 = ("UNKNOWN", "行程结束与否未知，不能确定期限是否开始。")
+    elif s.trip_ended:
+        r1 = (
+            state(None if s.elapsed_days is None else s.elapsed_days <= 10),
+            "结束后的自然日数未知。"
+            if s.elapsed_days is None
+            else (
+                f"假设已结束{s.elapsed_days}个自然日，仍在10自然日期限窗口；未核查报销单和收据是否已实际提交。"
+                if s.elapsed_days <= 10
+                else f"假设已结束{s.elapsed_days}个自然日，期限窗口已超过；逾期政策未知，不证明当前可补报。"
+            ),
+        )
+    r2 = ("UNKNOWN", "金额未知，不能确定超过500元的审批条件。")
+    if s.amount is not None:
+        r2 = (
+            ("NOT_APPLICABLE", f"金额{s.amount}元，未超过500元。")
+            if s.amount <= 500
+            else (
+                state(s.approved),
+                f"金额{s.amount}元，超过500元；主管批准"
+                + ("未知。" if s.approved is None else "已取得。" if s.approved else "尚未取得。"),
+            )
+        )
+    r3 = (
+        state(s.receipt_present),
+        "收据状态"
+        + (
+            "未知。"
+            if s.receipt_present is None
+            else "齐全；仍沿用原期限。"
+            if s.receipt_present
+            else "缺失；不得提交，补齐不重启期限。"
+        ),
+    )
+    return [
+        {
+            "rule_id": rid,
+            "satisfaction": status,
+            "reason": reason,
+            "citation": {"line": RULE_LINES[rid], "quote": lines[RULE_LINES[rid] - 1]},
+        }
+        for rid, (status, reason) in zip(RULE_LINES, [r1, r2, r3], strict=True)
+    ]
+
+
+def evaluate(store, user, pid, body):
+    request = CheckInput.model_validate(body)
+    if request.expected_contract_fingerprint != fingerprint(CONTRACT):
+        raise DomainError("VERSION_CONFLICT", "Registered check contract changed")
+    source = read_source(store, user, pid, request.resource_id, request.expected_source_hash)
     lines = source["content"].splitlines()
     expected, decision, actions, consistent = _conditions(request.scenario)
     report = request.report
@@ -187,6 +245,9 @@ def evaluate(store, user, pid, body):
     check("exception.no_deadline_restart", report.receipt_restarts_deadline is False)
     return {
         "contract_id": CONTRACT["id"],
+        "contract_version": CONTRACT["version"],
+        "rule_results": rule_results(request.scenario, lines),
+        "decision": decision,
         "contract_fingerprint": fingerprint(CONTRACT),
         "source": {"resource_id": request.resource_id, "hash": source["hash"]},
         "input_fingerprint": fingerprint(request.scenario.model_dump()),
@@ -210,6 +271,22 @@ def mount(app, store, identity):
         with store.tx() as c:
             store.own_project(c, user, pid)
         return public_contract()
+
+    @app.get("/api/projects/{pid}/conditional-checks/sources/{rid}")
+    def source(pid: str, rid: str, user=user_dependency):
+        from .contracts import resource_id
+
+        resource_id(rid)
+        value = read_source(store, user, pid, rid)
+        lines = value["content"].splitlines()
+        return {
+            "resource_id": rid,
+            "hash": value["hash"],
+            "contract": public_contract(),
+            "rules": [
+                {"rule_id": r, "line": n, "quote": lines[n - 1]} for r, n in RULE_LINES.items()
+            ],
+        }
 
     @app.post("/api/projects/{pid}/conditional-checks")
     def inspect(pid: str, body: CheckInput, user=user_dependency):

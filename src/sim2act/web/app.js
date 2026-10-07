@@ -32,8 +32,11 @@ async function refresh() {
   const pid = $("project-select").value; if (!pid) return;
   const identity=token,generation=++runHistoryGeneration;
   const current=()=>pid===$("project-select").value && identity===token && generation===runHistoryGeneration;
-  const materials = await api(`/api/projects/${pid}/resources`);
+  let materials;
+  try {materials = await api(`/api/projects/${pid}/resources`);}
+  catch(error){if(current() && typeof invalidateConditionalSource === "function")invalidateConditionalSource("授权列表读取失败");throw error;}
   if (!current()) return;
+  if(typeof reconcileConditionalSources === "function")reconcileConditionalSources(materials);
   refs = materials.map(x => x.id);
   const selectedGoals=Array.from($("goal-card-resources").selectedOptions).map(o=>o.value);
   $("goal-card-resources").replaceChildren(...materials.map(m=>{const o=new Option(m.name,m.id);o.selected=selectedGoals.includes(m.id);return o;}));
