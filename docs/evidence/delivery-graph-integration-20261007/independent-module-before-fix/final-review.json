@@ -1,0 +1,61 @@
+{
+  "decision": "BLOCK_STRICT_PURE_INTERFACE",
+  "source": {
+    "integrated_head": "bd502de9776acd19d2836e67ba5e264896921389",
+    "remote_source": "e66a437be14d40ff7ad70bad2a96e30a1d3db572",
+    "module_path": "/workspace/Sim2Act-delivery-graph-integration/src/sim2act/delivery_graph.py",
+    "module_sha256": "30f40df236697ec129230921a67974706fe67328c202c99baa797387cafbc67a",
+    "test_sha256": "ff539cab200d19073bd653a2b2b11285168907f79d620d7fa47fc9151535b786",
+    "interpreter": "/tmp/delivery-graph-integration-independent/venv/bin/python",
+    "actual_Report_fixture_sha256": "7345fce04c3c7ad1e6872c303488f6071747321e247cc65dfe091b6d13b0de53"
+  },
+  "compatibility": {
+    "canonical_report_current_shared_preflight": "PASS",
+    "derived_nodes": 17,
+    "derived_edges": 39,
+    "presentation_revalidation": "VIEW/CHECK/MANIFEST conservatively invalidated; ACTION unchanged. More conservative than hand minimum; logical ARTIFACT definitions are not existing result claims."
+  },
+  "defects": [
+    {
+      "line": 553,
+      "kind": "STORED_RECEIPT_BOOL_INT_EQUIVALENCE",
+      "actual": "previous_receipt.patch_executed False\u21920 and retained_objects[0].revision1\u2192True accepted with original plan_fingerprint",
+      "consequence": "No execution/authorization bypass observed: fresh valid plan returned. Contract nevertheless fails to reject tampered stored receipt.",
+      "minimum_fix": "Canonical full JSON hash equality against freshly reconstructed authorized receipt, plus explicit prior plan_fingerprint consistency or strict receipt shape."
+    },
+    {
+      "line": 245,
+      "kind": "SOURCE_VERSION_BOOL_FLOAT_EQUIVALENCE",
+      "actual": "source_versions separate argument revision1\u2192True or1.0 accepted when strict context revision remains1",
+      "consequence": "Malformed public pure-interface input ignored/normalized instead of strict rejection; trusted context preserves safety but contract violated.",
+      "minimum_fix": "Strict SourceVersion parsing of each raw external mapping and canonical equality to current trusted context."
+    }
+  ],
+  "passed_negative_gates": [
+    "authorization_revision change\u2192PERMISSION_DENIED",
+    "current source fingerprint change\u2192VERSION_CONFLICT",
+    "missing persistent graph anchor\u2192VERSION_CONFLICT"
+  ],
+  "adapter_required_constraints": [
+    "Do not pass caller authorized/authorization_revision/source_versions/previous_receipt/context into pure functions. Current Report load or CSV/agent loader must first check owner/runtime/currentresources/source Run complete status+both results+Attempt/seal/check/target hashes.",
+    "Actual resources have no revision/status counter; declaration revision1 must be labeled as such, paired with current actual byte hash/format/proof gate; not pretend a DB revision count.",
+    "authorization_revision must cover scoped actual Grant identity/revision/expiry/revocation and authorization checked each call, including time-based expiry with unchanged revision. Pure context authorizedtrue does not perform permission check.",
+    "Persist graph anchor and request-key receipt independently server-side; serialize same-key competition. Never self-rehash caller graph into current_context.graph_fingerprint. No persistence/side-effect/restart idempotency is supplied by module.",
+    "Unknown PROJECT pure receipt signals project-wide validation but returns only current graph nodes. Consumer must enumerate current authorized other project apps/checks, not mark project validation executed or passed.",
+    "Declaring source/target permission does not prove actual read. Keep immutable actual Worker receipt provenance separate; source history read cannot become fresh cold observation.",
+    "Preserve semanticUNKNOWN/NOT_ACCEPTED/ownerPENDING; no AppRelease/AppInstance/actual scheduling/execution or whole-V5 approval inferred."
+  ],
+  "execution": "Own tmp pure functions only. No Store/DB/PG/model/network/full-suite/pytest invoked.",
+  "evidence": {
+    "source-manifest.json": "59133548cd14f451345252d6376c264c8ec4173c369d2f892e3691dc1437ccca",
+    "probe.py": "46aca602f934036810026b685276b097b62ab3722d46c3c1e60a965f2d65370a",
+    "probe.log": "1d32358ca4e19bff693d25e7846127e5942898c4f2aec268a4d180c12db9ebfa",
+    "result.json": "8b702a1bac1f2986dcb3bbcd59163614711be077ab47b3fcb70dcab576c7ffad",
+    "source_version_probe.py": "8a73b6ebfc17466ac38bb12ab70a2edfce5e67c98a9993961ef9a4d5c0bd88bb",
+    "source-version-result.json": "ff20dae69a69e527a8518360d798698ce4843f736c94d189b6cca71b8668ed49",
+    "source-version.log": "4d7d272681d415d950f728db9b267ef37da68a71d53e0ff94693a0e4a0aa699f",
+    "uncertainty_probe.py": "3a098ec4b66e1583694138ed0deb5926e82b5b91086edf39ed6cf29fc4ed1e09",
+    "project-scope-result.json": "cc6b7957891428acc10aee3b490d946fd60656c7cf9ffe74674d44a14a7a1ce1",
+    "project-scope.log": "1d32358ca4e19bff693d25e7846127e5942898c4f2aec268a4d180c12db9ebfa"
+  }
+}
