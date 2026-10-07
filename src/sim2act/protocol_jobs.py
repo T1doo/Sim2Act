@@ -189,10 +189,15 @@ def verified_pending(store, c, user, rid, *, stop_only=False):
         return {**dict(job), "phase": job["kind"], "snapshot": snapshot, "result": None}, dict(run)
     from .protocol_reviews import contract_snapshot
 
-    if snapshot.get("contract") != contract_snapshot(
-        snapshot.get("contract", {}).get("contract_id")
-    ):
-        raise DomainError("VERSION_CONFLICT", "Frozen evaluation registry changed")
+    if snapshot.get("bounded_check_namespace"):
+        from .conditional_runs import validate_snapshot
+
+        validate_snapshot(snapshot)
+    else:
+        if snapshot.get("contract") != contract_snapshot(
+            snapshot.get("contract", {}).get("contract_id")
+        ):
+            raise DomainError("VERSION_CONFLICT", "Frozen evaluation registry changed")
     _authority(store, c, run, snapshot)
     if run["result"] is not None and (
         job["result_snapshot"] != run["result"]
@@ -296,11 +301,13 @@ def _completed(store, c, job, run):
         .scalars()
         .all()
     )
-    if len(seals) != 1 or seals[0] != {
-        "result_fingerprint": fingerprint(result),
-        "completed_fence": result["completed_fence"],
-        "completed_run_version": result["completed_run_version"],
-    }:
+    if len(seals) != 1 or fingerprint(seals[0]) != fingerprint(
+        {
+            "result_fingerprint": fingerprint(result),
+            "completed_fence": result["completed_fence"],
+            "completed_run_version": result["completed_run_version"],
+        }
+    ):
         raise DomainError("VERSION_CONFLICT", "Independent completion seal changed")
     if (
         result["completed_fence"] != job["completed_fence"]
@@ -481,12 +488,29 @@ def _completed(store, c, job, run):
             )
 
 
-def enqueue(store, user, pid, phase, payload, key, limits):
+def enqueue(store, user, pid, phase, payload, key, limits, *, bounded=False):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
+    expected_check = None
+    if bounded and phase == "extract":
+        from .conditional_runs import ExtractRequest
+
+        closed = ExtractRequest.model_validate({**payload, "request_key": key}).model_dump()
+        closed.pop("request_key")
+        expected_check = closed.pop("expected_check_fingerprint")
+        payload = closed
     payload = _closed(phase, payload)
+    if bounded and phase == "extract":
+        payload["expected_check_fingerprint"] = expected_check
     limits = Limits.model_validate(limits.model_dump() if isinstance(limits, Limits) else limits)
-    request_fp = fingerprint({"phase": phase, "payload": payload, "limits": limits.model_dump()})
+    request_fp = fingerprint(
+        {
+            "phase": phase,
+            "payload": payload,
+            "limits": limits.model_dump(),
+            **({"bounded": True} if bounded else {}),
+        }
+    )
     table = _table()
     with store.tx() as c:
         project = store.lock_project(c, user, pid)
@@ -494,9 +518,21 @@ def enqueue(store, user, pid, phase, payload, key, limits):
         if phase == "source":
             refs, goal = payload["resource_ids"], payload["goal"]
         elif phase == "extract":
-            source = _source(
-                store, c, user, payload["source_run_id"], payload["expected_source_fingerprint"]
-            )
+            if bounded:
+                from .conditional_runs import source_completion
+
+                source = source_completion(
+                    store,
+                    c,
+                    user,
+                    payload["source_run_id"],
+                    payload["expected_source_fingerprint"],
+                    payload["expected_check_fingerprint"],
+                )
+            else:
+                source = _source(
+                    store, c, user, payload["source_run_id"], payload["expected_source_fingerprint"]
+                )
             _, parent = verified_pending(store, c, user, source["run_id"])
             if parent["project_id"] != pid:
                 raise DomainError("PERMISSION_DENIED")
@@ -505,9 +541,23 @@ def enqueue(store, user, pid, phase, payload, key, limits):
             compiled = _plan(
                 store, c, user, payload["extraction_run_id"], payload["expected_plan_fingerprint"]
             )
-            source = _source(
-                store, c, user, compiled["source_run_id"], compiled["source_result_fingerprint"]
-            )
+            if bounded:
+                from .conditional_runs import source_completion
+
+                if not compiled.get("bounded_check_namespace"):
+                    raise DomainError("PERMISSION_DENIED")
+                source = source_completion(
+                    store,
+                    c,
+                    user,
+                    compiled["source_run_id"],
+                    compiled["source_result_fingerprint"],
+                    compiled["source_check_fingerprint"],
+                )
+            else:
+                source = _source(
+                    store, c, user, compiled["source_run_id"], compiled["source_result_fingerprint"]
+                )
             _, parent = verified_pending(store, c, user, source["run_id"])
             if parent["project_id"] != pid:
                 raise DomainError("PERMISSION_DENIED")
@@ -531,9 +581,24 @@ def enqueue(store, user, pid, phase, payload, key, limits):
             material = list(
                 c.execute(select(resources).where(resources.c.id.in_(actual_refs))).mappings()
             )
-            registered = freeze_contract(
-                payload["contract_id"], phase, goal, [{"content_hash": r["hash"]} for r in material]
-            )
+            if bounded:
+                from .conditional_runs import GOAL, contract_snapshot
+
+                registered = contract_snapshot(payload["contract_id"], payload["inputs"])
+                if (
+                    goal != GOAL
+                    or len(material) != 1
+                    or material[0]["hash"] != registered["source_hash"]
+                    or material[0]["format"] not in {"txt", "md"}
+                ):
+                    raise DomainError("PERMISSION_DENIED", "Exact bounded rules and goal required")
+            else:
+                registered = freeze_contract(
+                    payload["contract_id"],
+                    phase,
+                    goal,
+                    [{"content_hash": r["hash"]} for r in material],
+                )
             if fingerprint(payload["inputs"]) != registered["expected_inputs_fingerprint"]:
                 raise DomainError(
                     "PERMISSION_DENIED", "Inputs differ from frozen evaluation contract"
@@ -543,6 +608,8 @@ def enqueue(store, user, pid, phase, payload, key, limits):
                 raise DomainError("VERIFICATION_FAILED")
             source_job, _ = verified_pending(store, c, user, source["run_id"])
             registered = copy.deepcopy(source_job["snapshot"]["contract"])
+            if bounded != bool(source_job["snapshot"].get("bounded_check_namespace")):
+                raise DomainError("PERMISSION_DENIED")
         old = (
             c.execute(
                 select(runs).where(
@@ -590,6 +657,10 @@ def enqueue(store, user, pid, phase, payload, key, limits):
             "source": source,
             "compiled_plan": compiled,
         }
+        if bounded:
+            from .conditional_runs import NAMESPACE as CHECK_NAMESPACE
+
+            snapshot["bounded_check_namespace"] = CHECK_NAMESPACE
         contract = FrozenRunContract(
             run_id=rid,
             runtime_id=project["runtime_id"],
@@ -665,7 +736,12 @@ def enqueue(store, user, pid, phase, payload, key, limits):
 
 def _public(job, run, *, cached=False):
     return {
-        "namespace": NAMESPACE,
+        "namespace": job["snapshot"].get("bounded_check_namespace", NAMESPACE),
+        **(
+            {"overall_run_acceptance": "NOT_ACCEPTED", "candidate_only": True}
+            if job["snapshot"].get("bounded_check_namespace")
+            else {}
+        ),
         "semantic_status": "NOT_RUN" if job["phase"] == "extract" else "UNKNOWN",
         "semantic_review": "NOT_RUN" if job["phase"] == "extract" else "WAITING_APPROVAL",
         "owner_semantic_acceptance": "PENDING",
@@ -698,7 +774,19 @@ def inspect(store, user, rid):
 def _dependencies(store, c, user, snapshot):
     source = snapshot["source"]
     if source is not None:
-        fresh = _source(store, c, user, source["run_id"], source["result_fingerprint"])
+        if snapshot.get("bounded_check_namespace"):
+            from .conditional_runs import source_completion
+
+            fresh = source_completion(
+                store,
+                c,
+                user,
+                source["run_id"],
+                source["result_fingerprint"],
+                source["check_fingerprint"],
+            )
+        else:
+            fresh = _source(store, c, user, source["run_id"], source["result_fingerprint"])
         if fresh != source:
             raise DomainError("VERSION_CONFLICT", "Source review changed")
     if snapshot["phase"] == "cold":
@@ -873,7 +961,7 @@ def process_job(worker, run):
         payload, phase = snapshot["payload"], snapshot["phase"]
         source_result = None
         source_request_limit = None
-        if snapshot["source"]:
+        if snapshot["source"] and not snapshot.get("bounded_check_namespace"):
             with store.tx() as c:
                 source_job, _ = verified_pending(
                     store, c, run["principal_id"], snapshot["source"]["run_id"]
@@ -901,7 +989,12 @@ def process_job(worker, run):
                 payload["goal"], payload["inputs"], payload["resource_ids"]
             )
         elif phase == "extract":
-            result = protocol.extract_candidate(source_result)
+            if snapshot.get("bounded_check_namespace"):
+                from .conditional_runs import extract_candidate
+
+                result = extract_candidate(store, run, snapshot, protocol)
+            else:
+                result = protocol.extract_candidate(source_result)
             compiled = {
                 "kind": "protocol-compiled-plan.v1",
                 "compiler_version": COMPILER_VERSION,
@@ -910,6 +1003,9 @@ def process_job(worker, run):
                 "source_result_fingerprint": snapshot["source"]["result_fingerprint"],
             }
             compiled["kind"] = "protocol-compiled-plan.v1"
+            if snapshot.get("bounded_check_namespace"):
+                compiled["source_check_fingerprint"] = snapshot["source"]["check_fingerprint"]
+                compiled["bounded_check_namespace"] = snapshot["bounded_check_namespace"]
             compiled["plan_fingerprint"] = fingerprint(compiled)
         else:
             plan = snapshot["compiled_plan"]
@@ -926,9 +1022,41 @@ def process_job(worker, run):
                 ]
             }
             extracted["kind"] = "model-protocol.v1"
-            result = protocol.run_candidate(
-                extracted, payload["inputs"], payload["resource_bindings"], source=source_result
-            )
+            if snapshot.get("bounded_check_namespace"):
+                from .conditional_runs import candidate_for
+
+                with store.tx() as c:
+                    source_job, source_run = verified_pending(
+                        store, c, run["principal_id"], snapshot["source"]["run_id"]
+                    )
+                    template = candidate_for(
+                        source_job["snapshot"]["contract"], source_run["resource_refs"][0]
+                    )
+                if fingerprint(plan["candidate"]) != fingerprint(template):
+                    raise DomainError("INVALID_MANIFEST")
+                if (
+                    runner.verify_candidate_receipt(
+                        plan["candidate_receipt"],
+                        plan["candidate_fingerprint"],
+                        plan["source_proof_fingerprint"],
+                    )
+                    is not True
+                ):
+                    raise DomainError("VERIFICATION_FAILED")
+                result = protocol.run_bounded_declaration(
+                    plan["candidate"],
+                    payload["inputs"],
+                    payload["resource_bindings"],
+                    goal=payload.get("goal", run["goal"]),
+                )
+            else:
+                result = protocol.run_candidate(
+                    extracted, payload["inputs"], payload["resource_bindings"], source=source_result
+                )
+        if snapshot.get("bounded_check_namespace") and phase != "extract":
+            from .conditional_runs import validate_report
+
+            validate_report(result["evidence"]["output"])
         with store.tx() as c:
             verified_pending(store, c, run["principal_id"], rid)
             current = store.guard(c, rid, fence)

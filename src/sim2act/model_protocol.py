@@ -578,6 +578,25 @@ class ModelProtocol:
             is not True
         ):
             raise DomainError("VERIFICATION_FAILED", "Positive independent acceptance required")
+        return self._execute_declared(
+            candidate, inputs, resource_bindings, source["evidence"]["goal"]
+        )
+
+    @_guarded
+    def run_bounded_declaration(self, raw_candidate, inputs, resource_bindings, *, goal):
+        """Technical finite DAG only; host must reverify its bound check and receipt.
+
+        This deliberately creates no source-success proof or semantic acceptance.
+        HTTP callers cannot access this engine seam or submit a raw candidate.
+        """
+        if not self.defer_evaluation:
+            raise DomainError(
+                "PERMISSION_DENIED", "Bounded declaration requires independent pending evaluation"
+            )
+        candidate = validate_candidate(raw_candidate, self.scope)
+        return self._execute_declared(candidate, inputs, resource_bindings, goal)
+
+    def _execute_declared(self, candidate, inputs, resource_bindings, goal):
         inputs, resource_bindings = _json(inputs), _json(resource_bindings)
         _no_gold(inputs)
         validate_value(candidate.input_schema, inputs)
@@ -641,7 +660,7 @@ class ModelProtocol:
         output = {field: resolve(binding) for field, binding in candidate.outputs.items()}
         validate_value(candidate.output_schema, output)
         evidence = {
-            "goal": source["evidence"]["goal"],
+            "goal": goal,
             "inputs": inputs,
             "resource_ids": list(resource_bindings.values()),
             "tool_trace": trace,

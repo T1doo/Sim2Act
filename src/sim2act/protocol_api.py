@@ -63,6 +63,11 @@ def provider_stage(snapshot):
         "protocol.synthetic.b-source.v1": "b",
         "protocol.synthetic.b-cold.v1": "b",
     }.get(contract_id)
+    if snapshot.get("bounded_check_namespace"):
+        from .conditional_runs import COLD, SOURCE, validate_snapshot
+
+        validate_snapshot(snapshot)
+        family = "a" if contract_id in {SOURCE, COLD} else None
     phase = snapshot.get("phase")
     if family is None or phase not in {"source", "extract", "cold"}:
         raise DomainError("VERSION_CONFLICT", "Unregistered experiment stage")
