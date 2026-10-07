@@ -192,7 +192,7 @@ def _validate_catalog(c):
             any(t is None for _, t, _, _ in expected)
             or sorted(actual) != sorted(expected)
             or actual_keys != expected_keys
-            or found[name]["kind"] not in {"r", "p"}
+            or found[name]["kind"] != "r"
         ):
             damaged.append(name)
     checks.append(_check("metadata", not damaged, "SCHEMA_MISMATCH", tables=sorted(damaged)))

@@ -193,6 +193,7 @@ def test_current_session_or_reachable_privileged_owner_is_blocked(key):
         ("old", "TABLES_MISSING"),
         ("shadow", "SCHEMA_RESOLUTION_MISMATCH"),
         ("owner", "EXCESSIVE_AUTHORITY"),
+        ("partition", "SCHEMA_MISMATCH"),
         ("column", "SCHEMA_MISMATCH"),
         ("column_type", "SCHEMA_MISMATCH"),
         ("column_limit", "SCHEMA_MISMATCH"),
@@ -216,6 +217,8 @@ def test_unprepared_or_damaged_catalog_fails_closed(damage, reason):
         engine.data["relations"][0]["resolves_here"] = False
     elif damage == "owner":
         engine.data["relations"][0]["owner"] = True
+    elif damage == "partition":
+        engine.data["relations"][0]["kind"] = "p"
     elif damage == "column":
         engine.data["columns"].pop()
     elif damage == "column_type":
