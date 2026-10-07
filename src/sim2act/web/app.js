@@ -198,6 +198,7 @@ document.querySelector("#projects .grid > section:last-child").append($("reconci
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun,false);}}catch(e){$("health").textContent="后台不可用";}},2500);
 
 function clearApp() {
+  if(typeof clearDeliveryGraph === "function")clearDeliveryGraph();
   if(typeof clearReportManifest === "function")clearReportManifest();
   if(typeof clearReportApps === "function")clearReportApps();
   if(typeof clearApplicationUse === "function")clearApplicationUse();
@@ -237,6 +238,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token)return false;
   if(a.project_id !== pid)throw Error("候选不属于当前项目，请重新选择");
   activeApp=id;activeAppProject=pid;
+  if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);
   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;
