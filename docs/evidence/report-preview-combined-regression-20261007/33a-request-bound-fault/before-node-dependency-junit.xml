@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.607" timestamp="2026-10-07T14:40:23.120997+00:00" hostname="0af355134a6a"><testcase classname="tests.test_report_manifest_apps_ui" name="test_report_manifest_real_http_dom" time="0.486"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;      at Module._load (node:internal/modules/cjs/loader:1294:5)&#10;      at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)&#10;      at Module.require (node:internal/modules/cjs/loader:1617:12)&#10;      at require (node:internal/modules/helpers:153:16)&#10;      at Object.&lt;anonymous&gt; (/workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs:2:130)&#10;      at Module._compile (node:internal/modules/cjs/loader:1872:14) {&#10;    code: 'MODULE_NOT_FOUND',&#10;    requireStack: [&#10;      '/workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs'&#10;    ]&#10;  }&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/report_manifest_ui.cjs', '/tmp/report-fault-start-33a06f3-tests/test_report_mani...ack: [\n    '/workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs'\n  ]\n}\n\nNode.js v24.19.0\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7fd96933f290&gt;, Settings(database_url='sqlite:////tmp/report-fault-start-33a06f3-tests/t...0fb841867e41f78e37e571c3f2a7de', 'user_5c99848d743c47da9f7075201fa518ac', 'proj_ffb8300b9668434c8d404109bc615c28', ...)
+tmp_path = PosixPath('/tmp/report-fault-start-33a06f3-tests/test_report_manifest_real_http0')
+
+    def test_report_manifest_real_http_dom(env, tmp_path):
+        assert shutil.which("node"), "developer Node dependency required"
+        store, settings, _, owner, _, pid, source, fresh = env
+        wires = []
+        other = store.project(owner, "Other own project")
+        before = authority(env)
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-manifest-worker/{phase}")
+        def worker(phase: str):
+            with store.tx() as c:
+                job = c.execute(select(protocol_jobs).join(runs, runs.c.id == protocol_jobs.c.run_id)
+                                .where(runs.c.status == "QUEUED", runs.c.project_id == pid)).mappings().one()
+            if phase == "source":
+                values = [envelope(resource=source), envelope(source_report())]
+            elif phase == "extract":
+                values = [envelope(candidate_for(job["accepted_snapshot"]["contract"], source))]
+            elif phase == "allow":
+                report = independent_report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])
+            elif phase == "block":
+                report = independent_report(("TRUE", "TRUE", "TRUE"), "BLOCK", ["obtain_receipt", "obtain_prior_approval"])
+            elif phase == "unknown":
+                report = independent_report(("UNKNOWN", "UNKNOWN", "UNKNOWN"), "UNKNOWN", ["clarify_facts"])
+            else:
+                raise AssertionError("closed fixture")
+            if phase in {"allow", "block", "unknown"}:
+                values = [envelope(report)]
+            assert Worker(store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)).once()
+            assert not values
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": pid, "other": other, "source": source, "fresh": fresh}))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            output = subprocess.run(["node", "tests/report_manifest_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
+&gt;           assert output.returncode == 0, output.stdout + output.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.&lt;anonymous&gt; (/workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs:2:130)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [
+E                 '/workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs'
+E               ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_manifest_ui.cjs', '/tmp/report-fault-start-33a06f3-tests/test_report_mani...ack: [\n    '/workspace/Sim2Act-bounded-product-candidate/tests/report_manifest_ui.cjs'\n  ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_report_manifest_apps_ui.py:73: AssertionError</failure></testcase></testsuite></testsuites>
