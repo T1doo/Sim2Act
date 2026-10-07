@@ -1,0 +1,936 @@
+{
+  "adapter_context": {
+    "app_id": "app_22222222222222222222222222222222",
+    "current_authorized_resource_refs": [
+      "res_55555555555555555555555555555555",
+      "res_66666666666666666666666666666666"
+    ],
+    "owner_acceptance": "PENDING",
+    "project_id": "proj_11111111111111111111111111111111",
+    "runtime_mode": "user_and_project_intersection",
+    "semantic_status": "UNKNOWN",
+    "state": "PREVIEW_ONLY"
+  },
+  "candidate": {
+    "actions": [
+      {
+        "action_id": "action_44444444444444444444444444444444",
+        "allowed_tool_refs": [
+          "resource.read"
+        ],
+        "dependencies": [
+          {
+            "kind": "resource",
+            "ref": "res_55555555555555555555555555555555",
+            "version": "1"
+          },
+          {
+            "kind": "resource",
+            "ref": "res_66666666666666666666666666666666",
+            "version": "1"
+          }
+        ],
+        "effect": "read",
+        "error_contract": [
+          "INVALID_INPUT",
+          "PERMISSION_DENIED",
+          "GRANT_REVOKED",
+          "VERSION_CONFLICT",
+          "RESOURCE_UNAVAILABLE"
+        ],
+        "executor": {
+          "kind": "bounded_report",
+          "ref": "intern.conditional_report",
+          "version": "1"
+        },
+        "idempotency": "read_only",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "maximum": 1000000,
+              "minimum": 0,
+              "nullable": true,
+              "type": "integer"
+            },
+            "approved": {
+              "nullable": true,
+              "type": "boolean"
+            },
+            "elapsed_days": {
+              "maximum": 3650,
+              "minimum": 0,
+              "nullable": true,
+              "type": "integer"
+            },
+            "kind": {
+              "enum": [
+                "HYPOTHETICAL_EMPLOYEE"
+              ],
+              "type": "string"
+            },
+            "receipt_present": {
+              "nullable": true,
+              "type": "boolean"
+            },
+            "resource_id": {
+              "type": "string"
+            },
+            "trip_ended": {
+              "nullable": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "resource_id",
+            "kind",
+            "trip_ended",
+            "amount",
+            "receipt_present",
+            "approved",
+            "elapsed_days"
+          ],
+          "type": "object"
+        },
+        "limits": {
+          "max_output_tokens": 1024,
+          "max_repairs": 1,
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_total_tokens": 64000,
+          "run_seconds": 300
+        },
+        "output_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "absolute_date": {
+              "maxLength": 40,
+              "type": "string"
+            },
+            "deadline_days": {
+              "maximum": 3650,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "decision": {
+              "enum": [
+                "ALLOW",
+                "BLOCK",
+                "UNKNOWN"
+              ],
+              "type": "string"
+            },
+            "explanation": {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            "findings": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "applies": {
+                    "enum": [
+                      "TRUE",
+                      "FALSE",
+                      "UNKNOWN"
+                    ],
+                    "type": "string"
+                  },
+                  "citation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "line": {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "quote": {
+                        "maxLength": 1000,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "line",
+                      "quote"
+                    ],
+                    "type": "object"
+                  },
+                  "rule_id": {
+                    "enum": [
+                      "R1",
+                      "R2",
+                      "R3"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rule_id",
+                  "applies",
+                  "citation"
+                ],
+                "type": "object"
+              },
+              "maxItems": 3,
+              "type": "array"
+            },
+            "next_actions": {
+              "items": {
+                "enum": [
+                  "wait_trip_end",
+                  "obtain_receipt",
+                  "obtain_prior_approval",
+                  "clarify_facts",
+                  "clarify_late_policy",
+                  "submit_claim_and_receipt"
+                ],
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            "receipt_restarts_deadline": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "findings",
+            "decision",
+            "next_actions",
+            "deadline_days",
+            "absolute_date",
+            "receipt_restarts_deadline",
+            "explanation"
+          ],
+          "type": "object"
+        },
+        "permission_requirements": [
+          {
+            "resource_ref": "res_55555555555555555555555555555555",
+            "tool_ref": "resource.read"
+          },
+          {
+            "resource_ref": "res_66666666666666666666666666666666",
+            "tool_ref": "resource.read"
+          }
+        ],
+        "postcheck_refs": [
+          "source.conditional_report.v1"
+        ],
+        "preconditions": [],
+        "reconcile_ref": "operation.lookup.v1",
+        "revision": 1,
+        "schema_version": "1.0-draft"
+      }
+    ],
+    "manifest": {
+      "action_bindings": [
+        {
+          "action_id": "action_44444444444444444444444444444444",
+          "binding_id": "conditional_report",
+          "revision": 1
+        }
+      ],
+      "app_id": "app_22222222222222222222222222222222",
+      "data_bindings": [
+        {
+          "binding_id": "rules",
+          "resource_ref": "res_66666666666666666666666666666666"
+        }
+      ],
+      "data_schema_version": 1,
+      "dependency_lock": [
+        {
+          "kind": "resource",
+          "ref": "res_55555555555555555555555555555555",
+          "version": "1"
+        },
+        {
+          "kind": "resource",
+          "ref": "res_66666666666666666666666666666666",
+          "version": "1"
+        },
+        {
+          "kind": "tool",
+          "ref": "resource.read",
+          "version": "1"
+        },
+        {
+          "kind": "prompt",
+          "ref": "intern.system.v1",
+          "version": "1"
+        },
+        {
+          "kind": "check",
+          "ref": "source.conditional_report.v1",
+          "version": "1"
+        }
+      ],
+      "goal_ref": "goal_99999999999999999999999999999999",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "approved": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "elapsed_days": {
+            "maximum": 3650,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "HYPOTHETICAL_EMPLOYEE"
+            ],
+            "type": "string"
+          },
+          "receipt_present": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "trip_ended": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "trip_ended",
+          "amount",
+          "receipt_present",
+          "approved",
+          "elapsed_days"
+        ],
+        "type": "object"
+      },
+      "origin": "task_run",
+      "output_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "absolute_date": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "deadline_days": {
+            "maximum": 3650,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "decision": {
+            "enum": [
+              "ALLOW",
+              "BLOCK",
+              "UNKNOWN"
+            ],
+            "type": "string"
+          },
+          "explanation": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "applies": {
+                  "enum": [
+                    "TRUE",
+                    "FALSE",
+                    "UNKNOWN"
+                  ],
+                  "type": "string"
+                },
+                "citation": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "line": {
+                      "maximum": 200,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "quote": {
+                      "maxLength": 1000,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "line",
+                    "quote"
+                  ],
+                  "type": "object"
+                },
+                "rule_id": {
+                  "enum": [
+                    "R1",
+                    "R2",
+                    "R3"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule_id",
+                "applies",
+                "citation"
+              ],
+              "type": "object"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "next_actions": {
+            "items": {
+              "enum": [
+                "wait_trip_end",
+                "obtain_receipt",
+                "obtain_prior_approval",
+                "clarify_facts",
+                "clarify_late_policy",
+                "submit_claim_and_receipt"
+              ],
+              "type": "string"
+            },
+            "maxItems": 6,
+            "type": "array"
+          },
+          "receipt_restarts_deadline": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "findings",
+          "decision",
+          "next_actions",
+          "deadline_days",
+          "absolute_date",
+          "receipt_restarts_deadline",
+          "explanation"
+        ],
+        "type": "object"
+      },
+      "outputs": {
+        "absolute_date": {
+          "field": "absolute_date",
+          "ref": "report",
+          "source": "step"
+        },
+        "deadline_days": {
+          "field": "deadline_days",
+          "ref": "report",
+          "source": "step"
+        },
+        "decision": {
+          "field": "decision",
+          "ref": "report",
+          "source": "step"
+        },
+        "explanation": {
+          "field": "explanation",
+          "ref": "report",
+          "source": "step"
+        },
+        "findings": {
+          "field": "findings",
+          "ref": "report",
+          "source": "step"
+        },
+        "next_actions": {
+          "field": "next_actions",
+          "ref": "report",
+          "source": "step"
+        },
+        "receipt_restarts_deadline": {
+          "field": "receipt_restarts_deadline",
+          "ref": "report",
+          "source": "step"
+        }
+      },
+      "permission_requirements": [
+        {
+          "resource_ref": "res_55555555555555555555555555555555",
+          "tool_ref": "resource.read"
+        },
+        {
+          "resource_ref": "res_66666666666666666666666666666666",
+          "tool_ref": "resource.read"
+        }
+      ],
+      "revision": 1,
+      "runtime_identity_requirements": {
+        "mode": "user_and_project_intersection"
+      },
+      "runtime_limits": {
+        "max_output_tokens": 1024,
+        "max_repairs": 1,
+        "max_requests": 4,
+        "max_tools": 4,
+        "max_total_tokens": 64000,
+        "run_seconds": 300
+      },
+      "schema_version": "1.0-draft",
+      "source_run_ref": "run_77777777777777777777777777777777",
+      "validation_suite_ref": "source.conditional_report.v1",
+      "views": [
+        {
+          "component_ref": "text",
+          "output_field": "decision"
+        }
+      ],
+      "workflow": [
+        {
+          "binding_id": "conditional_report",
+          "depends_on": [],
+          "inputs": {
+            "amount": {
+              "field": "amount",
+              "source": "input"
+            },
+            "approved": {
+              "field": "approved",
+              "source": "input"
+            },
+            "elapsed_days": {
+              "field": "elapsed_days",
+              "source": "input"
+            },
+            "kind": {
+              "field": "kind",
+              "source": "input"
+            },
+            "receipt_present": {
+              "field": "receipt_present",
+              "source": "input"
+            },
+            "resource_id": {
+              "field": "resource_id",
+              "ref": "rules",
+              "source": "data"
+            },
+            "trip_ended": {
+              "field": "trip_ended",
+              "source": "input"
+            }
+          },
+          "step_id": "report"
+        }
+      ]
+    },
+    "namespace": "bounded-report-manifest.v1",
+    "report_proof": {
+      "expected_check_fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "expected_named_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "expected_plan_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "expected_target_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+      "extraction_run_id": "run_88888888888888888888888888888888",
+      "limits": {
+        "max_output_tokens": 1024,
+        "max_repairs": 1,
+        "max_requests": 4,
+        "max_tools": 4,
+        "max_total_tokens": 64000,
+        "run_seconds": 300
+      },
+      "named_app_id": "app_33333333333333333333333333333333",
+      "runtime_id": "runtime_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_resource_id": "res_55555555555555555555555555555555",
+      "source_run_id": "run_77777777777777777777777777777777",
+      "target_resource_id": "res_66666666666666666666666666666666"
+    },
+    "source_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808"
+  },
+  "candidate_fingerprint": "31ec2b89745514cc50b3d5b1aae2163b993698da1db882b45d81fc571be01dcc",
+  "canonical_action_fingerprint": "3d9503ec5b987da16701bd3b94a095edd96343362e6ce390ec650f4db3f1f55a",
+  "canonical_manifest_fingerprint": "993f625e15eb534aac4c88921b75eaa6681f838c17b9568cac1073215cc47061",
+  "ids": {
+    "action": "action_44444444444444444444444444444444",
+    "app": "app_22222222222222222222222222222222",
+    "check": "report-fixture.check.conditional.v1",
+    "extract_run": "run_88888888888888888888888888888888",
+    "goal": "goal_99999999999999999999999999999999",
+    "named": "app_33333333333333333333333333333333",
+    "project": "proj_11111111111111111111111111111111",
+    "runtime": "runtime_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": "res_55555555555555555555555555555555",
+    "source_run": "run_77777777777777777777777777777777",
+    "target": "res_66666666666666666666666666666666",
+    "view": "report-fixture.view.decision.v1"
+  },
+  "kind": "report-delivery-adapter-fixture.v1",
+  "origin": "actual canonical() and compile_report() pure functions",
+  "persisted_proof": false,
+  "platform_limits": {
+    "max_output_tokens": 1024,
+    "max_repairs": 1,
+    "max_requests": 4,
+    "max_tools": 4,
+    "max_total_tokens": 64000,
+    "run_seconds": 300
+  },
+  "preflight": {
+    "actual_execution_gateway": "protocol-cold.v1",
+    "budget_envelope": {
+      "max_repairs": 1,
+      "max_requests": 4,
+      "max_tools": 4,
+      "max_total_tokens": 64000,
+      "run_seconds": 300
+    },
+    "candidate_fingerprint_basis": {
+      "action_bindings": [
+        {
+          "action_id": "action_44444444444444444444444444444444",
+          "binding_id": "conditional_report",
+          "revision": 1
+        }
+      ],
+      "app_id": "app_22222222222222222222222222222222",
+      "data_bindings": [
+        {
+          "binding_id": "rules",
+          "resource_ref": "res_66666666666666666666666666666666"
+        }
+      ],
+      "data_schema_version": 1,
+      "dependency_lock": [
+        {
+          "kind": "resource",
+          "ref": "res_55555555555555555555555555555555",
+          "version": "1"
+        },
+        {
+          "kind": "resource",
+          "ref": "res_66666666666666666666666666666666",
+          "version": "1"
+        },
+        {
+          "kind": "tool",
+          "ref": "resource.read",
+          "version": "1"
+        },
+        {
+          "kind": "prompt",
+          "ref": "intern.system.v1",
+          "version": "1"
+        },
+        {
+          "kind": "check",
+          "ref": "source.conditional_report.v1",
+          "version": "1"
+        }
+      ],
+      "goal_ref": "goal_99999999999999999999999999999999",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "approved": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "elapsed_days": {
+            "maximum": 3650,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "HYPOTHETICAL_EMPLOYEE"
+            ],
+            "type": "string"
+          },
+          "receipt_present": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "trip_ended": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "trip_ended",
+          "amount",
+          "receipt_present",
+          "approved",
+          "elapsed_days"
+        ],
+        "type": "object"
+      },
+      "origin": "task_run",
+      "output_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "absolute_date": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "deadline_days": {
+            "maximum": 3650,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "decision": {
+            "enum": [
+              "ALLOW",
+              "BLOCK",
+              "UNKNOWN"
+            ],
+            "type": "string"
+          },
+          "explanation": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "applies": {
+                  "enum": [
+                    "TRUE",
+                    "FALSE",
+                    "UNKNOWN"
+                  ],
+                  "type": "string"
+                },
+                "citation": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "line": {
+                      "maximum": 200,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "quote": {
+                      "maxLength": 1000,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "line",
+                    "quote"
+                  ],
+                  "type": "object"
+                },
+                "rule_id": {
+                  "enum": [
+                    "R1",
+                    "R2",
+                    "R3"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule_id",
+                "applies",
+                "citation"
+              ],
+              "type": "object"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "next_actions": {
+            "items": {
+              "enum": [
+                "wait_trip_end",
+                "obtain_receipt",
+                "obtain_prior_approval",
+                "clarify_facts",
+                "clarify_late_policy",
+                "submit_claim_and_receipt"
+              ],
+              "type": "string"
+            },
+            "maxItems": 6,
+            "type": "array"
+          },
+          "receipt_restarts_deadline": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "findings",
+          "decision",
+          "next_actions",
+          "deadline_days",
+          "absolute_date",
+          "receipt_restarts_deadline",
+          "explanation"
+        ],
+        "type": "object"
+      },
+      "outputs": {
+        "absolute_date": {
+          "field": "absolute_date",
+          "ref": "report",
+          "source": "step"
+        },
+        "deadline_days": {
+          "field": "deadline_days",
+          "ref": "report",
+          "source": "step"
+        },
+        "decision": {
+          "field": "decision",
+          "ref": "report",
+          "source": "step"
+        },
+        "explanation": {
+          "field": "explanation",
+          "ref": "report",
+          "source": "step"
+        },
+        "findings": {
+          "field": "findings",
+          "ref": "report",
+          "source": "step"
+        },
+        "next_actions": {
+          "field": "next_actions",
+          "ref": "report",
+          "source": "step"
+        },
+        "receipt_restarts_deadline": {
+          "field": "receipt_restarts_deadline",
+          "ref": "report",
+          "source": "step"
+        }
+      },
+      "permission_requirements": [
+        {
+          "resource_ref": "res_55555555555555555555555555555555",
+          "tool_ref": "resource.read"
+        },
+        {
+          "resource_ref": "res_66666666666666666666666666666666",
+          "tool_ref": "resource.read"
+        }
+      ],
+      "revision": 1,
+      "runtime_identity_requirements": {
+        "mode": "user_and_project_intersection"
+      },
+      "runtime_limits": {
+        "max_output_tokens": 1024,
+        "max_repairs": 1,
+        "max_requests": 4,
+        "max_tools": 4,
+        "max_total_tokens": 64000,
+        "run_seconds": 300
+      },
+      "schema_version": "1.0-draft",
+      "source_run_ref": "run_77777777777777777777777777777777",
+      "validation_suite_ref": "source.conditional_report.v1",
+      "views": [
+        {
+          "component_ref": "text",
+          "output_field": "decision"
+        }
+      ],
+      "workflow": [
+        {
+          "binding_id": "conditional_report",
+          "depends_on": [],
+          "inputs": {
+            "amount": {
+              "field": "amount",
+              "ref": null,
+              "source": "input"
+            },
+            "approved": {
+              "field": "approved",
+              "ref": null,
+              "source": "input"
+            },
+            "elapsed_days": {
+              "field": "elapsed_days",
+              "ref": null,
+              "source": "input"
+            },
+            "kind": {
+              "field": "kind",
+              "ref": null,
+              "source": "input"
+            },
+            "receipt_present": {
+              "field": "receipt_present",
+              "ref": null,
+              "source": "input"
+            },
+            "resource_id": {
+              "field": "resource_id",
+              "ref": "rules",
+              "source": "data"
+            },
+            "trip_ended": {
+              "field": "trip_ended",
+              "ref": null,
+              "source": "input"
+            }
+          },
+          "step_id": "report"
+        }
+      ]
+    },
+    "compiler": "bounded-report-manifest.v1",
+    "execution_performed": false,
+    "not_an_executable_plan": true,
+    "publishable": false,
+    "resource_refs": [
+      "res_55555555555555555555555555555555",
+      "res_66666666666666666666666666666666"
+    ],
+    "scope": "finite Report only; semantic UNKNOWN, owner PENDING",
+    "state": "PREFLIGHTED_DRAFT",
+    "topological_order": [
+      "report"
+    ]
+  },
+  "runtime_observations_verified": false,
+  "source_versions": [
+    {
+      "cold_actual_read_required": false,
+      "content_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+      "declared": true,
+      "project_id": "proj_11111111111111111111111111111111",
+      "resource_id": "res_55555555555555555555555555555555",
+      "revision": 1,
+      "revision_authority": "SYNTHETIC_ORACLE_ONLY; DB has no resource revision column"
+    },
+    {
+      "cold_actual_read_required": true,
+      "content_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+      "declared": true,
+      "project_id": "proj_11111111111111111111111111111111",
+      "resource_id": "res_66666666666666666666666666666666",
+      "revision": 1,
+      "revision_authority": "SYNTHETIC_ORACLE_ONLY; DB has no resource revision column"
+    }
+  ],
+  "stable_ids": {
+    "checks": {
+      "source.conditional_report.v1": "report-fixture.check.conditional.v1"
+    },
+    "views": {
+      "0": "report-fixture.view.decision.v1"
+    }
+  },
+  "synthetic": true
+}

@@ -21,3 +21,7 @@ canonical Report同时声明source_resource与target_resource的read权限/资�
 只返回不可执行的impact plan；不得顺带改候选、Run、检查、release或模型配置。预览请求校验expected_candidate_fingerprint，跨项目/撤权先拒绝，coherent candidate+graph重hash仍要与独立服务端来源/当前hash相符。错误时整表计数和既有对象字节不变；同key同参需实际持久receipt支撑并重验当前授权/版本，没有持久记录不得声称跨进程幂等。
 
 先接收到精确可fetch模块commit、实际函数/封闭schema及独审回执，再实现最小只读接口与真实HTTP/DOMoracle。静态图/影响预览只证明声明影响，不能代替真实局部补丁、重验、正式发布或V5整体验收。该入口若在当前full完成后落源，必须重新冻结并按实际影响补验证，不能沿用e4全量作为新源码通过。
+
+## 已保存的准备物（非入口成果）
+
+见`docs/evidence/report-delivery-graph-adapter-preparation-20261007/README.md`：当前真实canonical/compile_report纯函数样本共用preflight PASS；独立手绘7节点13边/7影响答案及unknown/model变体；adapter源位置/接口证据。root逐个验证8文件bytes/SHA一致，manifest SHA93abfe1173e42c1f675086aa6672511f4c530455d8b5760f2ad473ada333b5f6。样本IDs/授权/来源hash为synthetic，没有持久proof、observedreads、实际Graph执行或入口，不能拿纯编译PASS代替真实来源/授权。Report有限check仅检查输出契约；纯view变化可保留该计算check定义，仍要求展示验证与packaging失效，不能假设这个check验证UI语义。
