@@ -816,7 +816,6 @@ def process(worker, run, contract):
                 raw = provider.request_serialized(body, guard)
                 received_message = safe_received_message(raw)
                 msg, calls = parse_response(raw)
-                received_message = msg
                 require_returned_model(returned_model_identity("intern-s2", raw.get("model")))
                 if calls:
                     raise DomainError(

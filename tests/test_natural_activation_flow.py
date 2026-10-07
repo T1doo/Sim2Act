@@ -98,7 +98,9 @@ def test_disabled_activation_has_zero_dml_and_network(env):
     value = setup(env, enabled=False)
     store, _, _, *_ = value
     before = rows(store, events), rows(store, runs), authority(store)
-    assert draft(value).status_code == 503
+    denied = draft(value)
+    assert denied.status_code == 400
+    assert denied.json()["error"]["code"] == "RESOURCE_UNAVAILABLE"
     assert not rows(store, natural_activations) and not rows(store, attempts)
     assert (rows(store, events), rows(store, runs), authority(store)) == before
 
@@ -221,7 +223,8 @@ def test_unexpected_provider_failure_retains_unknown_slot_no_retry(env):
     assert not rows(store, operations)
     assert "SYNTHETIC_SECRET_MUST_NOT_LEAK" not in str(rows(store, attempts) + rows(store, events))
     second = submit(value, session, "read_preview", "second-after-unknown")
-    assert second.status_code == 409, second.text
+    assert second.status_code == 400, second.text
+    assert second.json()["error"]["code"] == "OUTCOME_UNKNOWN"
 
 
 def test_scope_caller_cannot_change_caps_clock_model_or_false_consent(env):
