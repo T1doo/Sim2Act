@@ -1,0 +1,19 @@
+# e4 complete regressions — PostgreSQL FAILED
+
+Frozen source `e4ea5dbf418ae32ddb4767855fa860e6940b4f6c`; execution HEAD `51b94058cdb0dfe2c0c94616e391de73bc52fae1` adds only the preserved135 interrupted-history docs. All225 src/tests/scripts/.github tracked bytes match the freeze; six current/clean-child origin probes each load45Python modules and5scripts from this worktree, with no script main activated. Fresh collection is1104. Source, timeouts and coverage were not modified while either full ran.
+
+| Complete serial run | Passed | Skipped | Failed / errors | Duration | Exit |
+|---|---:|---:|---:|---:|---:|
+| SQLite | 1063 | 41 | 0 / 0 | 571.35s | 0 |
+| PostgreSQL17 | 1098 | 4 | 2 / 0 | 1253.38s | 1 |
+
+Both actually executed the entire1104 collection with `-q -ra --durations=30 --junitxml=... --basetemp=...`. SQLite finished before PG started; no concurrent full controllers. Full-ra skip/failure reasons, slowest30, JUnit, source/origin hashes, commands and absolute timestamps are preserved here and in `full-summary.json`. This candidate cannot be called complete PASS; SQLitePASS does not cover the PG failures. The older135 partial152PASS/2SKIP was interrupted at154 recorded cases and is kept separately, never reused as this result.
+
+Actual PG failures:
+
+1. `test_named_report_draft_real_http_dom` reaches `tests/test_conditional_apps_ui.py:154` and fails its authority tuple/list equality. Its actual HTTP/jsdom driver completed PASS18checks/6Mock/LIVE0; the traceback reports index1 (grant list), truncated by pytest. The helper selects principals/grants without ordering, but original before/after complete rows were not saved and the test schema was dropped during normal teardown. **Row-field equality vs pure row-order difference is not proven**; no diagnostic replay or sort/source change was performed. See `named-authority-observations.json`, original driver/results and fullJUnit.
+2. `test_report_manifest_real_http_dom` times out its Node process at the unchanged90seconds; testcase elapsed92.070seconds, stdout/stderr empty. No result/driver/failureJSON exists: request/check arrays are stored only at completion/catch, so the last HTTP request is **not retained**. Completed fixture schemas are already dropped, so actualRun/Attempt/queued-job rows cannot be read or reconstructed. Six supplementary local file ledgers show7RECEIVED/0STARTED slots (source2/extract1/cold4), known140tokens, nohalt. They establish limited Mock progress, not complete UI PASS or database truth. Their latest actual filemtime is14:19:30Z; ledger clock1000 is synthetic. See `report-ui-timeout-observations.json`. No new run, timer relaxation or retry was started.
+
+The new minimum-business-CRUD regression `test_existing_pg_crud_role_manifest_preview_without_ddl_or_authority_expansion` actually PASSes4.655seconds inside the completePG run. It uses Store(runtime_role) without initialize and checks no schema-create/superuser/createdb/createrole permission, identical schema inventory and authority; this result does not cure the two UI failures.
+
+Scoped cleanup14:28:16Z: ownedschema0/role0/publictable0/controller&child0; only the exact two e4 fixture directories and private rawPG log/JUnit were removed after safe evidence capture and actual-password/DSN scanning. Otherowner resources/security/sharedvenv were untouched. Parent explicitly permits retaining the **empty ownlabel container** and0600privateURL for one bounded future ReportUI diagnostic only after newsourcefreeze and explicitGO; private ledger summaries remain0700/0600. **Container was not deleted and is not falsely counted0.** No diagnostic has started. No push/CI/LIVE by this agent. Remaining blockers: actual authority row-diff diagnosis and90s ReportUI hang/timeout diagnosis; future DeliveryGraph changes are a different source and need newfreeze/verification.
