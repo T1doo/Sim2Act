@@ -702,3 +702,70 @@ def test_source_known_receipt_and_current_material_cannot_be_replaced(env, tmp_p
     response = env[2].post(base(env) + "/extract", json=extract_body(rid, result, checked))
     assert response.status_code in {400, 403, 409}, response.text
     assert len(wires) == 2
+
+
+@pytest.mark.parametrize("phase", ["source", "extract", "cold"])
+def test_actual_completed_run_result_null_rejects_check_extract_and_cold(env, tmp_path, phase):
+    """A sealed job snapshot never substitutes a missing authoritative Run mirror."""
+    test_actual_source_check_extract_new_scenario_cold_chain_no_authority_or_success_promotion(
+        env, tmp_path
+    )
+    with env[0].tx() as c:
+        job = c.execute(select(protocol_jobs).where(protocol_jobs.c.kind == phase)).mappings().one()
+        source_job = (
+            c.execute(select(protocol_jobs).where(protocol_jobs.c.kind == "source"))
+            .mappings()
+            .one()
+        )
+        source_check = c.execute(
+            select(events.c.data).where(
+                events.c.run_id == source_job["run_id"], events.c.kind == CHECK_EVENT
+            )
+        ).scalar_one()
+        run = c.execute(select(runs).where(runs.c.id == job["run_id"])).mappings().one()
+        actual_attempts_before = c.execute(select(func.count()).select_from(attempts)).scalar_one()
+        c.execute(update(runs).where(runs.c.id == job["run_id"]).values(result=None))
+    # Job payload, hashes, completion/check seals, version/fence and Actual Attempt ledger remain untouched.
+    assert env[2].get(base(env) + "/" + job["run_id"]).status_code == 409
+    if phase in {"source", "cold"}:
+        response = env[2].post(
+            base(env) + "/" + job["run_id"] + "/checks",
+            json={
+                "expected_result_fingerprint": job["result_fingerprint"],
+                "expected_version": run["version"],
+                "expected_fence": run["fence"],
+                "request_key": "missing-primary-result",
+            },
+        )
+        assert response.status_code == 409, response.text
+    if phase == "source":
+        response = env[2].post(
+            base(env) + "/extract",
+            json=extract_body(
+                job["run_id"],
+                {"result_fingerprint": job["result_fingerprint"]},
+                source_check,
+                request_key="no-null-source",
+            ),
+        )
+        assert response.status_code == 409, response.text
+    if phase == "extract":
+        response = env[2].post(
+            base(env) + "/cold",
+            json={
+                "extraction_run_id": job["run_id"],
+                "expected_plan_fingerprint": job["result_snapshot"]["compiled_plan"][
+                    "plan_fingerprint"
+                ],
+                "resource_id": env[7],
+                "scenario": facts(500),
+                "request_key": "no-null-plan",
+            },
+        )
+        assert response.status_code == 409, response.text
+    with env[0].tx() as c:
+        assert (
+            c.execute(select(func.count()).select_from(attempts)).scalar_one()
+            == actual_attempts_before
+            == 4
+        )

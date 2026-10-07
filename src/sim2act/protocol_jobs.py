@@ -199,7 +199,7 @@ def verified_pending(store, c, user, rid, *, stop_only=False):
         ):
             raise DomainError("VERSION_CONFLICT", "Frozen evaluation registry changed")
     _authority(store, c, run, snapshot)
-    if run["result"] is not None and (
+    if (run["result"] is not None or job["result_snapshot"] is not None) and (
         job["result_snapshot"] != run["result"]
         or job["result_fingerprint"] != fingerprint(run["result"])
     ):
