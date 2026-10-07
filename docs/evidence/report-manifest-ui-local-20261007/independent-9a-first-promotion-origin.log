@@ -1,0 +1,46 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________________ test_actual_http_short_ui_oracles _______________________
+
+env = (<sim2act.db.Store object at 0x7fef0738d280>, Settings(database_url='sqlite:////tmp/report-manifest-ui-independent-rev...b2270e2161448e9ffc7a47c74e43bd', 'user_edf921a4ef154a1fb0dca6af9cfe459f', 'proj_0d8b2b10ec724a2c8f45dc4f3efa948b', ...)
+tmp_path = PosixPath('/tmp/report-manifest-ui-independent-review/fixtures/test_actual_http_short_ui_orac0')
+
+    def test_actual_http_short_ui_oracles(env,tmp_path):
+     named,_,wires=saved(env,tmp_path)
+     store,settings,client,a,b,pid,source,target=env
+     other=store.project(a,'Independent other project fixture')
+     with store.tx() as c:authority={n:fingerprint([dict(r) for r in c.execute(select(meta.tables[n])).mappings()]) for n in ['grants','principals']}
+     app=create_app(store,settings)
+     @app.post('/independent-worker')
+     def worker():
+      lines=(REPO/'docs/evidence/model-protocol-preparation-20261006/materials/a-source/policy.txt').read_text().splitlines()
+      report={'findings':[{'rule_id':'R1','applies':'TRUE','citation':{'line':3,'quote':lines[2]}},{'rule_id':'R2','applies':'TRUE','citation':{'line':4,'quote':lines[3]}},{'rule_id':'R3','applies':'FALSE','citation':{'line':5,'quote':lines[4]}}],'decision':'BLOCK','next_actions':['obtain_prior_approval'],'deadline_days':10,'absolute_date':'UNKNOWN','receipt_restarts_deadline':False,'explanation':'<img src=x onerror="globalThis.PWNED=1"><script>globalThis.PWNED=2</script> "quoted" & ordinary text'}
+      values=[envelope(report)];assert Worker(store,settings,protocol_runner_factory=factory(env,tmp_path,values,wires)).once();assert not values;return {'status':'done'}
+     with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+     (tmp_path/'info.json').write_text(json.dumps({'base':f'http://127.0.0.1:{port}','project':pid,'other':other,'named':named['id'],'named_fingerprint':named['fingerprint']}))
+     server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=port,log_level='error'));thread=threading.Thread(target=server.run,daemon=True);thread.start()
+     try:
+      end=time.monotonic()+10
+      while not server.started:
+       assert thread.is_alive() and time.monotonic()<end;time.sleep(.01)
+      result=subprocess.run(['node',str(ROOT/'driver.cjs'),str(tmp_path)],env={**os.environ,'NODE_PATH':'/workspace/browser-tools/node_modules'},capture_output=True,text=True,timeout=50)
+      (ROOT/'driver.log').write_text(result.stdout+result.stderr)
+>     assert result.returncode==0,result.stdout+result.stderr
+E     AssertionError: AssertionError [ERR_ASSERTION]: foreign named-app origin in coherent-shaped promotion receipt must retain UNKNOWN key
+E           at check (/tmp/report-manifest-ui-independent-review/driver.cjs:3:29)
+E           at /tmp/report-manifest-ui-independent-review/driver.cjs:13:126
+E           at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E       
+E     assert 1 == 0
+E      +  where 1 = CompletedProcess(args=['node', '/tmp/report-manifest-ui-independent-review/driver.cjs', '/tmp/report-manifest-ui-indep...endent-review/driver.cjs:13:126\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+/tmp/report-manifest-ui-independent-review/test_ui.py:41: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/report-manifest-ui-independent-review/test_ui.py::test_actual_http_short_ui_oracles
+1 failed, 1 warning in 3.35s
