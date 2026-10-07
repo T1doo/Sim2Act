@@ -1,0 +1,13 @@
+# 有限条件 Run 产品与原生候选合并
+
+2026-10-07，父线程授权两线本地实现、独审及主审合并，暂不push/新CI。独立主审树 `/workspace/Sim2Act-bounded-product-candidate` / `dev/bounded-product-candidate-local`；初始0126f5459d7385f0c33f3ca4d9d585d91e2a4a1f，正常合并core eb90d6bdb7711f63d7e7f20ca1317b5a9b7458b2与native8d3c1a3e9693233679eb33a9d4286eb7f0b16a06，无冲突，源码合并提交bfdbcc875bc7c14b4d480e95c07c61e3178f6b80。未改原main/work或旧工作树。
+
+core独立产品区：显式授权资料→假设事实source Run→实际回执只读刷新→绑定独立check→有限eligible才extract固定DAG→新资料/Scenario冷Run→新check。人工Report不进入Run.result、sourceproof或候选请求；默认provider未配置真实WAITING_RESOURCE，不注入Mock或开启准备器。整体NOT_ACCEPTED/semanticUNKNOWN/ownerPENDING/发布关闭，技术编译成功不等于任务成功。失读、编辑、ABA和不明接受同键恢复分别处理。
+
+native独立脚本：仅七个既有私有fixture动作复用一个有界stdin进程，保持原事务和全表快照；双protocol PNG槽改捕人工报告PASS/BLOCK1280、PASS/UNKNOWN390，旧26行为保留、旧图标superseded。不增加runner/cache/权限/新PNG槽，原15分钟job/150秒Node/4分钟step保留。新Edge、实际新图/textarea几何和合并Windows预算NOT_RUN。
+
+合并验收采用当前新venv `/tmp/bounded-product-candidate-venv` 的localpth当前src→只读共享依赖路径，不处理共享editable pth，洁净环境import实际当前树。Node/jsdom只读取已有依赖目录，未安装/写共享包。逐字比较产品src与eb90、脚本与8d；组合源码跑实际HTTP/DOM与session/来源绑定专项，并比较完整collection的旧节点未删除。两线独立全量分别按精确source报告，不把它们相加伪作合并whole套件。
+
+core独审1ea的授权列表失读缺陷已BLOCK并停止两自有全量，清理owned残schema/role/process后修eb90；原partial和失败不删。native的不必要全量重启与初失败也原样保留。实际SQLite/PG终态、清理与完整SHA写阶段Log和证据后合并docs，本轮不运行WindowsCI或push。
+
+完整有界产品演示目前还差原生保护浏览器对新增来源绑定区的实际流程/像素验证；人工报告新双图仅有捕获接线，不能替代它。真实provider activation/模型请求批准、现实事实及开放语义/owner签收、正式App/Release绑定另属未完成范围，不通过本片有限技术候选自动获得。现可执行的下一步是依据本地计时继续减少原测试重复准备，然后审定唯一精确Windows候选；不能以局部5.39秒节省承诺900秒通过。
