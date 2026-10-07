@@ -41,3 +41,11 @@ python -m ruff check tests/delivery_graph_adapter_contract.py tests/test_deliver
 组合全量仅准备：实际 1261 collected，独立 source-first 工作副本/清理方案已保存，未运行新版 full 或 PG。核心 `0836bf` 已拒绝历史回执 bool/int 协调篡改；但 `derive_manifest_graph` 原始 source_versions 在建模前仍以 Python dict 相等比较，独立实际 True/1.0 被接受，整体 BLOCK_UPSTREAM_RAW_SOURCE_VERSION。模块所有权按父既定分工交独立核心线，主开发不重复编辑；已请求可正常 fetch 的修复 SHA。收到后正常合入、最终冻结及 SQLite→PG 串行自然终态，实际执行两个最小 CRUD 角色用例，再普通同步既有 dev。
 
 图模型增量 0 / LIVE 0，不新增产品 Principal/Grant。受保护 Chromium 现有 SUID helper 阻塞未解除，HTTP/DOM 不等于浏览器像素通过。Windows 原 900 秒预算仍 NO_GO，不盲重跑；Win11/F1/AT02/owner/语义/完整 P-B 均未签收。所有本阶段资源已自然终态，尚需上游修复、最终 full/PG 和精确普通 push；没有额外上传目的地或恢复包。
+
+## 后续：纯核心 BLOCK 闭合并启动最终全量
+
+父线 `97c7d43f25a259e221ebbca2c5e7cfff0b7ca0b0` 已正常 fetch 并 cherry-pick 为 `a62779342925866c8aebb8307721a66d1a7dd035`，接口不变。根实际 108 核心专项通过；Ruff 全 src/scripts/tests、mypy 全 src 41 文件及 Node 语法通过。独审 exact a627793 的 CSV/Report 10 项原负例/合法版本/规划与历史回执检查通过，全部输入不变；True/1.0 为 INVALID_MANIFEST，合法整数不一致为 VERSION_CONFLICT。此前原始类型 BLOCK 仅在此对应范围关闭，旧报告原文保留；新证据位于 independent-core-final。
+
+最终冻结文档 tip `8c106e9ba7e12d298a5ac3ff5c7d7409e16aa4a7`：实际 collection 1283、238 tracked 源码文件逐字匹配、6 次当前/clean-child 实际导入均来自专属回归树。SQLite 一次全量已经启动，PG 必须待其自然 exit0 后建立。运行中所有 src/tests/scripts/.github 保持冻结；本记录仅 docs，不变更运行源码。终态通过之前不 push、不把旧全量或专项合计冒认本次全量。
+
+CI NO_GO 不再由核心缺陷导致。上次 Windows whole job 已在 912/900 秒取消，工程 741 秒加 setup55、未完成 Edge110、cleanup6 已超过 900；本次 1283 项较其1046新增237项。局部 Linux fixture节省19–21秒并无Windows全分支资格证据，新增用例的完整 Windows 成本未知。既有并行 controller 提案仍缺原job-start marker、整Edge240deadline和owned descendants fault/cleanup资格验证，尚未实施或获准启用。不能以降低断言、加timeout、换容量或盲重跑填补该缺口；最终本地全量后普通push须明确延后自动CI，并单独给出原预算内下一步准备。
