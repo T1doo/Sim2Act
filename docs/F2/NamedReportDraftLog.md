@@ -73,3 +73,22 @@ list ABA and history authorization failure); these are explicitly separate from 
 Three previous independent backend attack probes remain applicable to the unchanged backend SHA.
 No remaining blocker was reported within this finite PREVIEW_ONLY slice. This does not establish
 full-suite, native, PG, AppManifest/AppPrincipal or owner semantic acceptance.
+
+## Necessary baseline alignment
+
+A normal merge of exact e6c03cf15b7473ebce4cd3d5b8c4dcc06405a676 into the isolated named
+branch produced 08ad84ea16527dd126912131cd16267300bc518a without conflicts. Scope was
+recorded first in NamedReportBaselineAlignmentPlan.md (4a25e60). All eleven named source/test
+files retained exactly the same bytes and SHA256; the named behavior and recovery correction
+were not rewritten. The e6 native namespace/FIFO guard fix is now included. Withdrawn 8de
+cleanup was not merged, and no other tree or parent candidate was edited.
+
+Only affected guards and named probes ran: 12 PASS, 0 FAIL/SKIP (21.92s). They cover no-queued
+and optimized missing-root/wrong-owner/no-queued refusal, ordinary and optimized wrong-namespace
+refusal with all durable tables unchanged, real gated FIFO four-default-run drainage/recovery,
+named actual-HTTP recovery (2), and original row-key/missing-origin/bool-version hardening (3).
+Evidence: docs/evidence/named-report-baseline-alignment-20261007/{before,after,summary}.json
+and targeted.log.gz. No full suite, PG, actual native browser/CI, provider activation, LIVE,
+push, publication, new authority or merge into the parent candidate occurred. Original review
+evidence and old failures remain historical evidence; alignment does not sign off the parent CI
+or promote UNKNOWN/NOT_ACCEPTED/PENDING to semantic acceptance. All test-owned servers exited.
