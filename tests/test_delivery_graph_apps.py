@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
-from test_internal_lifecycle import setup_draft
+from test_internal_lifecycle import limits, setup_draft
 
 from sim2act.api import create_app
 from sim2act.db import Store, app_drafts, fingerprint, grants, meta, resources
@@ -325,7 +325,12 @@ def test_real_report_origin_two_sources_project_pending_jobs_and_unsupported_omi
 
     bounded = bounded_env.__wrapped__(env)
     app, parent, _, _, wires = promoted(bounded, tmp_path)
-    peer, _ = setup_draft(env)
+    peer, peer_fp = setup_draft(env)
+    peer_reply = env[2].post(
+        path(env, peer) + "/derive",
+        json=dict(expected_candidate_fingerprint=peer_fp, request_key="peer"),
+    )
+    assert peer_reply.status_code == 201, peer_reply.text
     before = snapshot(env)
     url = path(env, app["id"])
     reply = env[2].post(
@@ -381,3 +386,162 @@ def test_competing_same_key_serializes_one_anchor_and_one_pending_job(env):
     with env[0].tx() as c:
         assert len(c.execute(select(anchors).where(anchors.c.app_id == aid)).all()) == 1
         assert len(c.execute(select(jobs).where(jobs.c.source_app_id == aid)).all()) == 1
+
+
+def report_project(env, tmp_path):
+    from test_conditional_run_bindings import env as bounded_env
+    from test_report_manifest_apps import promoted
+
+    bounded = bounded_env.__wrapped__(env)
+    app, *_ = promoted(bounded, tmp_path)
+    peer, peer_fp, peer_graph = setup_graph(env)
+    made = env[2].post(
+        path(env, app["id"]) + "/derive",
+        json=dict(expected_candidate_fingerprint=app["fingerprint"], request_key="report"),
+    )
+    assert made.status_code == 201, made.text
+    return app, peer, peer_fp, peer_graph, made.json()
+
+
+def lock_node(env, aid, graph, key="lock"):
+    from sim2act.delivery_graph_apps import set_lock
+
+    body = change(graph)
+    value = dict(
+        expected_graph_fingerprint=graph["graph_fingerprint"],
+        request_key=key,
+        change=body["changes"][0],
+        locked=True,
+    )
+    return set_lock(env[0], env[3], env[5], aid, value, limits(env))
+
+
+@pytest.mark.parametrize(
+    "attack", ["peer_anchor", "peer_auth", "peer_lock", "membership", "peer_graph_bool"]
+)
+def test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership(
+    env, tmp_path, attack
+):
+    app, peer, peer_fp, peer_graph, graph = report_project(env, tmp_path)
+    body = change(graph)
+    accepted = env[2].post(path(env, app["id"]) + "/plans", json=body)
+    assert accepted.status_code == 201, accepted.text
+    value = accepted.json()
+    binding = next(v for v in value["scope_expansion"]["applications"] if v["app_id"] == peer)
+    assert binding["graph_fingerprint"] == peer_graph["graph_fingerprint"]
+    if attack == "peer_anchor":
+        with env[0].tx() as c:
+            c.execute(update(anchors).where(anchors.c.app_id == peer).values(fingerprint="0" * 64))
+    elif attack == "peer_auth":
+        with env[0].tx() as c:
+            runtime = c.execute(
+                select(app_drafts.c.runtime_id).where(app_drafts.c.id == peer)
+            ).scalar_one()
+            row = (
+                c.execute(select(grants).where(grants.c.principal_id == runtime)).mappings().first()
+            )
+            c.execute(
+                update(grants)
+                .where(grants.c.id == row["id"])
+                .values(expires_at=row["expires_at"] + 1000)
+            )
+    elif attack == "peer_lock":
+        lock_node(env, peer, peer_graph)
+        response = env[2].post(
+            path(env, peer) + "/derive",
+            json=dict(expected_candidate_fingerprint=peer_fp, request_key="locked"),
+        )
+        assert response.status_code == 201, response.text
+    elif attack == "membership":
+        setup_draft(env)
+    else:
+        with env[0].tx() as c:
+            row = c.execute(select(states).where(states.c.app_id == peer)).mappings().one()
+            data = copy.deepcopy(row["snapshot"])
+            data["graph_revision"] = True
+            c.execute(
+                update(states)
+                .where(states.c.app_id == peer)
+                .values(snapshot=data, fingerprint=fingerprint(data))
+            )
+            c.execute(
+                update(anchors)
+                .where(anchors.c.id == row["anchor_id"])
+                .values(snapshot=data, fingerprint=fingerprint(data))
+            )
+    before = snapshot(env)
+    retry = env[2].post(path(env, app["id"]) + "/plans", json=body)
+    assert retry.status_code >= 400, retry.text
+    assert env[2].get(path(env, app["id"]) + "/plans").status_code >= 400
+    assert snapshot(env) == before
+    fresh = env[2].post(
+        path(env, app["id"]) + "/plans", json=change(graph, "fresh-after-peer-change")
+    )
+    if fresh.status_code < 400:
+        result = fresh.json()
+        assert result["scope_expansion"]["status"] == "BLOCKED_PARTIAL", fresh.text
+        if attack != "membership":
+            assert peer not in {job["app_id"] for job in result["scope_jobs"]}
+    else:
+        assert snapshot(env) == before
+
+
+@pytest.mark.parametrize("which", ["target", "peer"])
+def test_initial_affected_manual_lock_rejects_project_without_ledger_writes(env, tmp_path, which):
+    app, peer, peer_fp, peer_graph, graph = report_project(env, tmp_path)
+    aid, g, fp = (
+        (app["id"], graph, app["fingerprint"]) if which == "target" else (peer, peer_graph, peer_fp)
+    )
+    lock_node(env, aid, g)
+    made = env[2].post(
+        path(env, aid) + "/derive",
+        json=dict(expected_candidate_fingerprint=fp, request_key="lock-anchor"),
+    )
+    assert made.status_code == 201, made.text
+    if which == "target":
+        graph = made.json()
+    before = snapshot(env)
+    response = env[2].post(path(env, app["id"]) + "/plans", json=change(graph))
+    assert (
+        response.status_code in {400, 409} and response.json()["error"]["code"] == "LOCK_CONFLICT"
+    ), response.text
+    assert snapshot(env) == before
+
+
+def test_internal_lock_owner_and_client_context_are_not_authority(env):
+    from sim2act.delivery_graph_apps import set_lock
+    from sim2act.errors import DomainError
+
+    aid, _, graph = setup_graph(env)
+    value = dict(
+        expected_graph_fingerprint=graph["graph_fingerprint"],
+        request_key="bad-owner",
+        change=change(graph)["changes"][0],
+        locked=True,
+    )
+    before = snapshot(env)
+    with pytest.raises(DomainError) as error:
+        set_lock(env[0], env[4], env[5], aid, value, limits(env))
+    assert error.value.code == "PERMISSION_DENIED"
+    assert snapshot(env) == before
+
+
+def test_project_missing_peer_anchor_is_explicit_partial_not_candidate_only_job(env, tmp_path):
+    app, peer, _, _, graph = report_project(env, tmp_path)
+    extra, _ = setup_draft(env)
+    before = snapshot(env)
+    reply = env[2].post(path(env, app["id"]) + "/plans", json=change(graph, "partial"))
+    assert reply.status_code == 201, reply.text
+    value = reply.json()
+    assert value["scope_expansion"]["status"] == "BLOCKED_PARTIAL"
+    assert {"app_id": extra, "reason": "GRAPH_NOT_DERIVED"} in value["scope_expansion"]["omissions"]
+    assert extra not in {v["app_id"] for v in value["scope_jobs"]}
+    assert {v["app_id"] for v in value["expansion"]["applications"]} == {app["id"], peer}
+    assert value["outer_fingerprint"] == fingerprint(
+        {"core": value["receipt"], "expansion": value["expansion"]}
+    )
+    assert value["native_outer_fingerprint"] == fingerprint(
+        {k: v for k, v in value.items() if k not in {"native_outer_fingerprint", "cached"}}
+    )
+    after = snapshot(env)
+    assert all(before[k] == after[k] for k in before if not k.startswith("delivery_graph_"))
