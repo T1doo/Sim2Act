@@ -319,3 +319,36 @@ def test_truncated_actual_response_keeps_bounded_text_model_known_usage(env):
     assert "DO_NOT_PERSIST_METADATA" not in str(rows(store, attempts) + rows(store, events))
     assert len(sent) == 1 and not rows(store, operations)
     assert client.get(f"/api/runs/{rid}").json()["result"] is None
+
+
+@pytest.mark.parametrize("fault", ["partial_usage", "invalid_unicode"])
+def test_received_failure_cleans_lease_retains_usage_without_unsafe_text(env, fault):
+    value = setup(env)
+    store, settings, client, *_ = value
+    session, _ = approved(value)
+    rid = submit(value, session).json()["run_id"]
+    sent = []
+    def handler(request):
+        sent.append(request.content)
+        actual = response(wire(value))
+        if fault == "partial_usage":
+            actual["usage"] = {"prompt_tokens": 10}
+        else:
+            actual["choices"][0]["message"]["content"] = "\ud800"
+            actual["model"] = "\ud800"
+        return httpx.Response(200, content=json.dumps(actual).encode("ascii"))
+    worker = Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler))
+    assert worker.once()
+    attempt = rows(store, attempts)[0]
+    assert attempt["status"] == "FAILED"
+    assert len(sent) == 1 and not rows(store, operations)
+    assert rows(store, runs)[0]["lease_until"] == 0
+    if fault == "partial_usage":
+        assert attempt["usage"] == {"status": "partial", "tokens": {"prompt_tokens": 10}}
+        assert client.get(f"/api/runs/{rid}").json()["status"] == "WAITING_RESOURCE"
+        rejected = submit(value, session, "read_preview", "after-partial")
+        assert rejected.status_code == 400 and rejected.json()["error"]["code"] == "OUTCOME_UNKNOWN"
+    else:
+        assert attempt["response"] is None and attempt["response_model"] is None
+        assert len(attempt["parameters"]["planning_received_response_fingerprint"]) == 64
+        assert client.get(f"/api/runs/{rid}").status_code == 200

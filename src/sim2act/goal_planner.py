@@ -142,6 +142,29 @@ def safe_received_message(raw):
     return {"role": "assistant", "content": message["content"]}
 
 
+def received_response_fingerprint(raw):
+    # ASCII escaping retains malformed Unicode as an opaque hash, never text.
+    if not isinstance(raw, dict):
+        return None
+    try:
+        encoded = json.dumps(raw, ensure_ascii=True, sort_keys=True,
+                             separators=(",", ":"), allow_nan=False).encode("ascii")
+    except (ValueError, TypeError, UnicodeError):
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def safe_response_model(raw):
+    model = raw.get("model") if isinstance(raw, dict) else None
+    if not isinstance(model, str) or not 1 <= len(model) <= 200:
+        return None
+    try:
+        model.encode("utf-8")
+    except UnicodeError:
+        return None
+    return model
+
+
 def configured_provider(worker):
     """Existing explicit Intern settings, with a separate synthetic adapter."""
     if worker.goal_planner_transport is None:
@@ -848,7 +871,7 @@ def process(worker, run, contract):
                             response_model=raw.get("model"),
                             response=msg,
                             parameters={**worker.attempt_parameters(c, aid, raw),
-                                        **({"planning_received_response_fingerprint": fingerprint(raw)}
+                                        **({"planning_received_response_fingerprint": received_response_fingerprint(raw)}
                                            if contract.natural_planning.activation is not None else {})},
                             usage=normalize_usage(raw),
                             elapsed=time.monotonic() - start,
@@ -892,10 +915,10 @@ def process(worker, run, contract):
                             response=received_message,
                             parameters={**dict(c.execute(select(attempts.c.parameters).where(
                                 attempts.c.id == aid)).scalar_one()),
-                                **({"planning_received_response_fingerprint": fingerprint(raw)}
+                                **({"planning_received_response_fingerprint": received_response_fingerprint(raw)}
                                    if isinstance(raw, dict)
                                    and contract.natural_planning.activation is not None else {})},
-                            response_model=raw.get("model") if isinstance(raw, dict) else None,
+                            response_model=safe_response_model(raw),
                             usage=normalize_usage(raw),
                             elapsed=time.monotonic() - start,
                         )
