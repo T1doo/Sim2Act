@@ -30,8 +30,8 @@ result.removedSDKSecurityDefaults = removedSecurityDefaults;
 function check(name, condition) { assert.ok(condition, name); result.checks.push({name,status:'PASS'}); }
 async function until(page, predicate, arg=null) { await page.waitForFunction(predicate, arg, {timeout:12000}); }
 async function idle(page) { await until(page, () => engineering && !engineering.busy); }
-async function login(page, bearer) {
-  await page.goto(base, {waitUntil:'networkidle'});
+async function login(page, bearer, alreadyLoaded=false) {
+  if(!alreadyLoaded)await page.goto(base, {waitUntil:'networkidle'});
   await page.locator('#token').fill(bearer);
   await page.locator('#connect').click();
   await page.locator('#login').waitFor({state:'hidden'});
@@ -84,7 +84,7 @@ async function layout(page, label) {
   result.observedCommandSwitches=actualBrowser.command_switches;
   const renderers = result.sandbox.filter(p=>p.type==='renderer');
   check('actual Windows renderers have restricted low-integrity or AppContainer tokens', renderers.length>0 && renderers.every(p=>p.app_container || (p.restricted_token && p.integrity_rid<=4096)));
-  await login(activePage, 'synthetic-browser-A');
+  await login(activePage, 'synthetic-browser-A', true);
   check('authenticated real page and explicit internal-only publication status render', (await activePage.locator('#internal-panel').innerText()).includes('正式发布与部署仍关闭'));
   await activePage.locator('#internal-prepare').click();
   await activePage.locator('#internal-approval').waitFor({state:'visible'});
@@ -357,6 +357,9 @@ async function layout(page, label) {
     const conditionalSandboxBefore=await auditProtocol();
     const conditionalFixture=require('./conditional-fixture-session.cjs')({python,root:protocolRoot});
     try{
+      result.protocol.boundRuns=await require('./conditional-runs-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalFixture.action});
+      result.protocol.boundRuns.sourceSHA256=require('node:crypto').createHash('sha256').update(fs.readFileSync('scripts/browser-ci/conditional-runs-ui.cjs')).digest('hex');
+      check('actual bound Run source/check/extract/cold/check preserves UNKNOWN and NOT_ACCEPTED',result.protocol.boundRuns.status==='PASS'&&result.protocol.boundRuns.actual_mock_requests===4&&result.protocol.boundRuns.semanticStatus==='UNKNOWN'&&result.protocol.boundRuns.overallAcceptance==='NOT_ACCEPTED');
       result.protocol.conditional=await require('./conditional-checks-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalFixture.action,
         capture:async(label,milestone)=>{
           const width=label==='protocol-desktop'?1280:390;

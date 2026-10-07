@@ -101,7 +101,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $RuntimeU
     'PASS: native PostgreSQL / existing Setup / migration; runtime role has no DDL grant.' | Add-Content $env:GITHUB_STEP_SUMMARY
 } elseif ($Phase -eq 'Test') {
     $Xml = Join-Path $JobRoot 'engineering.xml'
-    $env:PYTEST_ADDOPTS = "--junitxml=`"$Xml`""
+    $env:PYTEST_ADDOPTS = "--junitxml=`"$Xml`" --durations=30 -ra"
     try {
         $env:SIM2ACT_TEST_DATABASE_URL = ([IO.File]::ReadAllText($TestOwnerConfig) -split '=', 2)[1]
         & ./scripts/Test.ps1 -Suite Engineering

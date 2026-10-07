@@ -6,11 +6,6 @@ import json
 import sys
 from pathlib import Path
 
-from sqlalchemy import select, update
-
-from sim2act.conditional_checks import SOURCE_HASH
-from sim2act.db import Store, fingerprint, grants, meta, resources
-
 POLICY = (
     Path(__file__).resolve().parents[2]
     / "docs/evidence/model-protocol-preparation-20261006/materials/a-source/policy.txt"
@@ -18,10 +13,21 @@ POLICY = (
 
 
 def action(root, name):
+    from sqlalchemy import func, select, update
+
+    from sim2act.conditional_checks import SOURCE_HASH
+    from sim2act.db import Store, attempts, fingerprint, grants, meta, operations, resources
+
     root = root.resolve()
-    assert (root / "fixture.db").is_file() and (root / "info.json").is_file()
+    if not (root / "fixture.db").is_file() or not (root / "info.json").is_file():
+        raise ValueError("Existing owned fixture required")
     info = json.loads((root / "info.json").read_text(encoding="utf-8"))
-    assert info["bearer"] == "synthetic-protocol-browser-A"
+    if info["bearer"] != "synthetic-protocol-browser-A":
+        raise ValueError("Existing synthetic protocol owner required")
+    if name in {"run-source", "run-extract", "run-cold"}:
+        from run_fixture import work
+
+        return work(root, name.removeprefix("run-"))
     store = Store("sqlite:///" + str(root / "fixture.db"), test_only=True)
     original = POLICY.read_text(encoding="utf-8")
     assert hashlib.sha256(original.encode()).hexdigest() == SOURCE_HASH
@@ -98,6 +104,10 @@ def action(root, name):
                     ]
                 ),
                 "real_model_requests": 0,
+                "attempts_count": c.execute(select(func.count()).select_from(attempts)).scalar_one(),
+                "resource_reads_count": c.execute(select(func.count()).select_from(operations).where(
+                    operations.c.tool_ref == "resource.read", operations.c.status == "VERIFIED"
+                )).scalar_one(),
             }
     finally:
         store.engine.dispose()
@@ -108,7 +118,7 @@ def session_request(line):
     if type(request) is not dict or set(request) != {"action"}:
         raise ValueError("Expected one bounded fixture action")
     if type(request["action"]) is not str or request["action"] not in {
-        "snapshot", "change", "restore", "revoke"
+        "snapshot", "change", "restore", "revoke", "run-source", "run-extract", "run-cold"
     }:
         raise ValueError("Unsupported fixture action")
     return request["action"]
@@ -118,7 +128,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--action", choices=["snapshot", "change", "restore", "revoke"])
+    mode.add_argument("--action", choices=["snapshot", "change", "restore", "revoke", "run-source", "run-extract", "run-cold"])
     mode.add_argument("--session", action="store_true")
     args = parser.parse_args()
     if args.session:
