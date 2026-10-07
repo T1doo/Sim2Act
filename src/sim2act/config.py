@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,8 @@ class Settings:
     run_seconds: int = 300
     lease_seconds: int = 30
     goal_planner_provider: str = "disabled"
+    natural_activation_enabled: bool = False
+    natural_activation_live_id: str = ""
 
     @classmethod
     def from_env(cls):
@@ -40,6 +43,8 @@ class Settings:
             quota_subject=os.environ.get("SIM2ACT_QUOTA_SUBJECT", "default-intern-account"),
             rpm=int(os.environ.get("SIM2ACT_RPM", "30")),
             goal_planner_provider=os.environ.get("SIM2ACT_GOAL_PLANNER_PROVIDER", "disabled"),
+            natural_activation_enabled=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_ENABLED", "false").lower() == "true",
+            natural_activation_live_id=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_LIVE_ID", ""),
             **{
                 k: int(os.environ.get("SIM2ACT_" + k.upper(), str(v)))
                 for k, v in {
@@ -56,6 +61,10 @@ class Settings:
             raise ValueError("Only explicit mock or intern-s2 live is supported in F1")
         if s.goal_planner_provider not in {"disabled", "intern-s2"}:
             raise ValueError("Select disabled or intern-s2 goal planner explicitly")
+        if s.natural_activation_live_id and not re.fullmatch(
+            r"nlactivation_[a-f0-9]{32}", s.natural_activation_live_id
+        ):
+            raise ValueError("A specific natural activation ID is required")
         if not 1 <= s.rpm <= 30 or not s.quota_subject:
             raise ValueError("Unverified quota must be between 1 and 30 RPM")
         bounds = [

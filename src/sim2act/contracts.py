@@ -172,6 +172,12 @@ class GoalCardRunSource(Strict):
     snapshot: dict
 
 
+class NaturalActivationBinding(Strict):
+    activation_id: str = Field(pattern=r"^nlactivation_[a-f0-9]{32}$")
+    scope_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    approval_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class NaturalPlanningPolicy(Strict):
     version: Literal["natural-goal-planning.v1"]
     provider: Literal["disabled", "intern-s2"]
@@ -180,6 +186,7 @@ class NaturalPlanningPolicy(Strict):
     repair_limit: int = Field(strict=True, ge=0, le=0)
     live_request_allowance: int = Field(strict=True, ge=0, le=0)
     require_confirmation: Literal[True] | None = None
+    activation: NaturalActivationBinding | None = None
 
     @field_validator("require_confirmation", mode="before")
     @classmethod

@@ -127,6 +127,8 @@ def normalize_usage(raw):
 
 
 class InternModel:
+    ENDPOINT = "https://chat.intern-ai.org.cn/api/v1/chat/completions"
+
     def __init__(self, settings, transport=None):
         self.settings = settings
         self.transport = transport
@@ -139,7 +141,7 @@ class InternModel:
         try:
             body = httpx.Request(
                 "POST",
-                "https://chat.intern-ai.org.cn/api/v1/chat/completions",
+                self.ENDPOINT,
                 json={
                     "model": self.settings.model,
                     "messages": messages,
@@ -172,7 +174,7 @@ class InternModel:
             ) as client:
                 request = client.build_request(
                     "POST",
-                    "https://chat.intern-ai.org.cn/api/v1/chat/completions",
+                    self.ENDPOINT,
                     headers={
                         "Authorization": "Bearer " + s.token,
                         "Content-Type": "application/json",
