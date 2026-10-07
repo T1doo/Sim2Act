@@ -1,0 +1,150 @@
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 16%]
+........................................................................ [ 22%]
+........................................................................ [ 28%]
+........................................................................ [ 33%]
+........................................................................ [ 39%]
+........................................................................ [ 44%]
+........................................................................ [ 50%]
+........................................................................ [ 56%]
+........................................................................ [ 61%]
+...................................................s.................... [ 67%]
+........................................................................ [ 72%]
+........................................................................ [ 78%]
+........................................................................ [ 84%]
+......................................ss................................ [ 89%]
+...................................................F.................... [ 95%]
+...............................................s...........              [100%]
+=================================== FAILURES ===================================
+______________________ test_report_manifest_real_http_dom ______________________
+
+env = (<sim2act.db.Store object at 0x7fd1167840e0>, Settings(database_url='[REDACTED_POSTGRES_DSN]', 'user_422a5b0caea84d79a5be4b1066fa4c54', 'proj_56705f9fdc1f464cb782ee89478a8049', ...)
+tmp_path = PosixPath('/tmp/delivery-graph-combined-8c106e9ba7e1-pg-tests/test_report_manifest_real_http0')
+
+    def test_report_manifest_real_http_dom(env, tmp_path):
+        assert shutil.which("node"), "developer Node dependency required"
+        store, settings, _, owner, _, pid, source, fresh = env
+        wires = []
+        other = store.project(owner, "Other own project")
+        before = authority(env)
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-manifest-worker/{phase}")
+        def worker(phase: str):
+            with store.tx() as c:
+                job = c.execute(select(protocol_jobs).join(runs, runs.c.id == protocol_jobs.c.run_id)
+                                .where(runs.c.status == "QUEUED", runs.c.project_id == pid)).mappings().one()
+            if phase == "source":
+                values = [envelope(resource=source), envelope(source_report())]
+            elif phase == "extract":
+                values = [envelope(candidate_for(job["accepted_snapshot"]["contract"], source))]
+            elif phase == "allow":
+                report = independent_report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])
+            elif phase == "block":
+                report = independent_report(("TRUE", "TRUE", "TRUE"), "BLOCK", ["obtain_receipt", "obtain_prior_approval"])
+            elif phase == "unknown":
+                report = independent_report(("UNKNOWN", "UNKNOWN", "UNKNOWN"), "UNKNOWN", ["clarify_facts"])
+            else:
+                raise AssertionError("closed fixture")
+            if phase in {"allow", "block", "unknown"}:
+                values = [envelope(report)]
+            assert Worker(store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)).once()
+            assert not values
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": pid, "other": other, "source": source, "fresh": fresh}))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+>           output = subprocess.run(["node", "tests/report_manifest_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_report_manifest_apps_ui.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['node', 'tests/report_manifest_ui.cjs', '/tmp/...>
+endtime = 171947.953867146, orig_timeout = 90, stdout_seq = [], stderr_seq = []
+skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['node', 'tests/report_manifest_ui.cjs', '/tmp/delivery-graph-combined-8c106e9ba7e1-pg-tests/test_report_manifest_real_http0']' timed out after 90 seconds
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:1253: TimeoutExpired
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_local_task_retirement.py::test_concurrent_task_extraction_and_retirement_retry_do_not_duplicate
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'alias' attribute with value 'pid' was provided to the `Field()` function, which has no effect in the context it was used. 'alias' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+    warnings.warn(
+
+tests/test_preview_extraction.py::test_idempotency_stale_version_and_concurrent_single_authority
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'alias' attribute with value 'body' was provided to the `Field()` function, which has no effect in the context it was used. 'alias' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 30 durations =============================
+90.71s call     tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+62.10s call     tests/test_delivery_graph_apps_ui.py::test_delivery_graph_actual_http_dom[REPORT]
+31.70s call     tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom
+24.17s call     tests/test_protocol_gated_execution.py::test_whole_package_actual_postgresql_two_forms
+21.23s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[True]
+19.14s call     tests/test_protocol_experiment.py::test_two_forms_real_worker_review_sequence_global_clock_and_shared_pool[False]
+17.28s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[False]
+16.27s call     tests/test_registered_generation_native_dom.py::test_registered_generation_direct_actual_http_dom[normal]
+15.83s call     tests/test_registered_generation_native_dom.py::test_registered_generation_direct_actual_http_dom[poll-refresh-order]
+15.83s call     tests/test_conditional_apps.py::test_named_draft_two_actual_new_scenarios_history_and_recovery
+13.17s call     tests/test_report_manifest_apps.py::test_real_common_manifest_compiler_catalog_and_two_actual_cold_scenarios
+12.77s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_lock]
+10.90s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_auth]
+10.77s call     tests/test_delivery_graph_apps_ui.py::test_delivery_graph_actual_http_dom[CSV]
+10.67s call     tests/test_application_use.py::test_application_use_actual_http
+10.19s call     tests/test_product_integration.py::test_integrated_same_session_source_and_recovery
+9.26s call     tests/test_conditional_run_product.py::test_source_bound_product_actual_http_dom
+9.24s call     tests/test_lifecycle.py::test_AT05_real_process_stop_accept_restart_reopen
+9.12s call     tests/test_conditional_apps_recovery.py::test_actual_prior_unknown_retry_422_keeps_original_intent[lost]
+9.05s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_graph_bool]
+9.00s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[membership]
+8.73s call     tests/test_conditional_native_oracle.py::test_conditional_native_shared_module_existing_fixture
+8.57s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_anchor]
+7.56s call     tests/test_protocol_gated_execution.py::test_whole_package_zero_network[None-8]
+7.35s call     tests/test_conditional_apps_recovery.py::test_actual_prior_unknown_retry_422_keeps_original_intent[malformed]
+7.28s call     tests/test_conditional_native_oracle.py::test_conditional_capture_optional_and_failure[omit]
+6.77s call     tests/test_delivery_graph_apps.py::test_initial_affected_manual_lock_rejects_project_without_ledger_writes[target]
+6.74s call     tests/test_registered_run_generation_http.py::test_real_http_dom_generation_entry_and_lost_receipt
+6.48s call     tests/test_protocol_store_dryrun.py::test_two_forms_share_actual_database_pool_and_independent_reviews
+6.25s call     tests/test_delivery_graph_apps.py::test_project_missing_peer_anchor_is_explicit_partial_not_candidate_only_job
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_process_environment.py:73: Actual Windows PowerShell native launch required
+SKIPPED [2] tests/test_protocol_ui.py:25: Owned subprocess fixture currently SQLite only; no PG UI coverage claimed
+SKIPPED [1] tests/test_task_submission_recovery.py:64: Protected Chromium sandbox startup blocked; actual stderr retained in driver.log
+FAILED tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+1 failed, 1278 passed, 4 skipped, 3 warnings in 1407.99s (0:23:27)
