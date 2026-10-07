@@ -19,3 +19,11 @@ root负责API mount/static路由、接口协调、最终整合冻结与验收。
 先专项SQLite/实际HTTP与DOM/独立oracle/静态验证，PG最小CRUD角色永久用例与整树回归在旧e4 PG自然终态闭合后另冻结执行。每轮source SHA、实际导入、全部收集、JUnit/skip/失败/cleanup各自记录；不得把e4通过计作后续新源码全量通过。若旧PG失败，先保存自然trace并修本轮具体问题，不能合并掩盖旧失败。
 
 Windows预算仍NO_GO，原900/240/150、全部断言/保护/清理不变。普通既有dev同步需显式延后自动CI；本切片不授予LIVE/models预算、不上传其他目的地、不签完整增量补丁/发布/P-B/F1/AT02/Win11。
+
+## 组合前验收进展（全量尚未执行）
+
+后台 `73d80f0e` 的专项 34 PASS / 1 PG 角色 SKIP；独审冻结 `3f07b751` 的 9 项实际 HTTP/SQLite 攻击限定通过。原 peer 缓存/历史漏洞及独审脚本主键假设失败均保留，不抹除。合法 peer 可入等待队列；缺锚、缺权限或不支持的 peer 明确 BLOCKED_PARTIAL，未伪装完整项目已验证。
+
+UI 源码 `2b642618`、交付 `8de03b51`：4 项实际 HTTP/DOM 回归 PASS / 62.66s，图 CSV 和 Report 各 29 检查、原 Report 49 检查及原应用流程，图请求模型增量 0。真实服务契约交付 `ff04a78e`：17 个黑盒检查实际到达，加冷 Store/撤权及 Report 部分扩展 2 例，共 19 PASS / 13.20s。完整 PROJECT fixture 使用现有声明式 bounded_agent 与合法 CSV peer，未冒称 agent 来源任务终态；真实 promoted Report 的不支持 parent 保留为部分扩展额外验收。
+
+整合冻结前仍须关闭纯核心 raw source_versions 的 bool/float 类型问题，上游负责修复；随后重新收集全部测试、证明实际 source-first 导入，执行新版完整 SQLite→PG 串行回归和两个最小 CRUD 角色用例。旧 e4 的 SQLite 通过及 PG 2 FAIL 保留为旧源码终态，不能计入此组合通过。

@@ -1,0 +1,76 @@
+{
+  "decision": "BLOCK",
+  "exact_source": "5b6b44de76659b7542604f61eae08ebb59430b31",
+  "source_manifest": [
+    {
+      "file": "src/sim2act/delivery_graph_apps.py",
+      "archive_path": "/tmp/delivery-graph-adapter-independent/source-5b6/src/sim2act/delivery_graph_apps.py",
+      "sha256": "5a5a541cb98c05b458866a2dd5001cce0f4cc9a4c95f33b7a75110bf684d9c71",
+      "matches_exact_git_object": true
+    },
+    {
+      "file": "src/sim2act/delivery_graph.py",
+      "archive_path": "/tmp/delivery-graph-adapter-independent/source-5b6/src/sim2act/delivery_graph.py",
+      "sha256": "d8f42ecf25fa00091248887bbc9bd2b45f39f2c797702896211fb72f6852f259",
+      "matches_exact_git_object": true
+    },
+    {
+      "file": "src/sim2act/db.py",
+      "archive_path": "/tmp/delivery-graph-adapter-independent/source-5b6/src/sim2act/db.py",
+      "sha256": "a6c5466708b7892e0b6c6b7301e87e2c872636cd0a5a103670147ad4b3dc5f7c",
+      "matches_exact_git_object": true
+    },
+    {
+      "file": "src/sim2act/api.py",
+      "archive_path": "/tmp/delivery-graph-adapter-independent/source-5b6/src/sim2act/api.py",
+      "sha256": "fdef99ac4fabd000bb4db86132be72099a3b7edbb2eab90825c13d7de0ef9668",
+      "matches_exact_git_object": true
+    },
+    {
+      "file": "docs/F2/DeliveryGraphIntegrationContract.md",
+      "archive_path": "/tmp/delivery-graph-adapter-independent/source-5b6/docs/F2/DeliveryGraphIntegrationContract.md",
+      "sha256": "a5fd0ac982fbb9478fb092c5cd47c6539d9ee59a357ec5333caeec01a6128736",
+      "matches_exact_git_object": true
+    }
+  ],
+  "runtime_provenance": "actual HTTP second run imported archived exact src; explicit sys.path precedes readonly shared dependency path; in-process TestClient/Worker, no Python child",
+  "findings": [
+    {
+      "id": "PROJECT_PEER_ANCHOR_UNBOUND",
+      "severity": "BLOCK",
+      "oracle": "peer GET409 after anchor fingerprint mutation; PROJECT retry201 cached / history peer PENDING",
+      "zero_write_on_replay": true
+    },
+    {
+      "id": "PROJECT_PEER_AUTH_REVISION_UNBOUND",
+      "severity": "BLOCK",
+      "oracle": "peer GET403 after still-valid runtime grant expiry change; PROJECT retry201 cached, new-key201 writes2requests+2jobs",
+      "fix_requirement": "snapshot complete peer graph/auth revision/manual lock/current scope and membership into canonical independently sealed outer receipt; check before first write and every cached/history read"
+    },
+    {
+      "id": "CORE_RAW_SOURCE_VERSION_NONSTRICT",
+      "severity": "BLOCK_UPSTREAM",
+      "oracle": "True and1.0 accepted as source_versions revision vs strict trusted revision1"
+    }
+  ],
+  "confirmed_fix": "core0836 rejects priorreceipt patchFalse→0 and retainedrevision1→True",
+  "evidence": [
+    "actual-http-report.json",
+    "actual-http-report-v2.json",
+    "actual-http.log",
+    "actual-http-v2.log",
+    "result.json",
+    "pure.log",
+    "source-version-result.json",
+    "source-version.log"
+  ],
+  "boundaries": [
+    "No PG/full/native/CI/network/LIVE",
+    "Only synthetic fixture setup used three fixed Mock replies; DeliveryGraph operations perform zero provider requests",
+    "Baseline app fixtures may create existing prescribed test grants; measured graph operations create no Grant/Principal",
+    "Manual lock behavior not dynamically tested: no supported persisted lock route; current build uses empty locked_nodes",
+    "No scheduling, patch, semantic acceptance or P-B approval",
+    "Initial live-tree run completed at frozen moduleSHA; second run archived exactsource avoids later root/owner WIP changes"
+  ],
+  "cleanup": "Both fixture TestClients closed and Store engines disposed; no owned network server/background process. Synthetic SQLite files removed after recording evidence."
+}
