@@ -2,7 +2,7 @@
 
 目标环境是 Windows 11 x64 原生、Python 3.12 x64、PowerShell 7 和本机 PostgreSQL。本说明与新增预检在 Linux 验证；**真实 Win11 普通用户安装/启动未测**，不能据此签收 AT-01、AT-27 或 F1。MOCK 不需要模型账号，当前工程能力与正式产品验收边界见 [README](../README.md)。
 
-本切片基线为 `e828c066ec63689fe5de5d66f650eda33c0086e8`。整合前，新增预检仅在独立分支 `dev/install-preflight`；主线整合后可改用 `dev/f1-foundation`。本说明不要求管理员权限来运行 API/worker；数据库建库、建角色和授权由本机数据库管理员另外准备。
+本切片基线为 `e828c066ec63689fe5de5d66f650eda33c0086e8`。安装切片源 `e700db211378e67ca99529f4a5270f0ea6162769` 已正常整合至当前开发工作副本；拉取分支使用 `dev/f1-foundation`。本说明不要求管理员权限来运行 API/worker；数据库建库、建角色和授权由本机数据库管理员另外准备。
 
 ## 1. 准备软件与拉取代码
 
@@ -19,7 +19,7 @@ Python 必须显示 3.12，PowerShell 必须显示 7.x。没有 `py` 时先修�
 在 PowerShell 7 中进入你自己的可用目录（路径可以包含空格），再执行：
 
 ```powershell
-git clone --branch dev/install-preflight https://github.com/T1doo/Sim2Act.git
+git clone --branch dev/f1-foundation https://github.com/T1doo/Sim2Act.git
 Set-Location Sim2Act
 Copy-Item .env.example .env
 notepad .env
@@ -124,4 +124,4 @@ python3.12 -m ruff check scripts/install_preflight.py tests/test_install_preflig
 
 本切片实际验证记录（2026-10-07）：Linux x86_64、Python 3.12.14；13 项独立 unittest 全部通过（0 失败/0 跳过），Ruff 0.15.6 check 通过。Ruff 使用 `/tmp` 内隔离开发工具环境，未改项目 lock 或系统软件。真实 CLI 从仓库外目录读取显式合成配置：setup 返回 0/PASS，start 返回 1/BLOCKED（仓库虚拟环境及锁定依赖未准备），缺配置返回 1/BLOCKED；配置/环境秘密哨兵不出现在输出，配置字节与临时目录文件列表保持不变。独立审查另以合成平台/包元数据覆盖 Windows/Linux 两阶段及坏配置/缺命令；文件 SHA256 不变，网络/进程启动陷阱未触发，未发现阻塞问题。按审查建议，实际 CLI 测试允许缺先决命令时正确返回 BLOCKED，避免要求测试机先完成产品安装。Windows 合成分支不是 Windows 实测；未运行整套产品回归或新 CI，因为本切片没有改既有产品源码。
 
-主线可只 cherry-pick 本切片的三个新增文件；整合后建议由主线在 README 加入本说明链接，并将本说明拉取分支切回 `dev/f1-foundation`。这两项共享入口调整由主线整合，本线未修改 README、阶段 Plan/Log、主入口或 workflow。后续 Win11 普通用户验收按上述步骤记录真实阻塞、介入、进程及首次 CSV=30 结果，不以预检测试数替代可用性结论。
+主开发已正常 cherry-pick 本切片的三个新增文件，并在 README 加入说明链接、将拉取分支切回 `dev/f1-foundation`。安装切片未修改产品核心、生命周期入口、权限、迁移或 workflow。后续 Win11 普通用户验收按上述步骤记录真实阻塞、介入、进程及首次 CSV=30 结果，不以预检测试数替代可用性结论。
