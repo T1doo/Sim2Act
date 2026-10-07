@@ -87,3 +87,15 @@ def test_optimized_run_control_refuses_invalid_owned_context(tmp_path, mode):
                           str(tmp_path), "--session"], input='{"action":"run-source"}\n',
                          text=True, capture_output=True, timeout=10)
     assert out.returncode != 0 and out.stdout == ""
+
+
+@pytest.mark.parametrize("optimized", [False, True])
+def test_actual_original_namespace_refused_without_any_durable_change(tmp_path, optimized):
+    command = [sys.executable] + (["-O"] if optimized else [])
+    out = subprocess.run(command + ["tests/bounded_native_namespace_probe.py", str(tmp_path)],
+                         text=True, capture_output=True, timeout=30)
+    assert out.returncode == 0, out.stdout + out.stderr
+    receipt = json.loads((tmp_path / "namespace-refusal.json").read_text())
+    assert receipt["status"] == "PASS" and receipt["all_tables_unchanged"] is True
+    assert receipt["attempts_delta"] == 0 and receipt["run_status"] == "QUEUED"
+    assert receipt["before"] == receipt["after"]
