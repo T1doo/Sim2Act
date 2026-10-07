@@ -1,0 +1,58 @@
+...F
+=================================== FAILURES ===================================
+_ test_post_origin_same_transaction_mutation_rejects_without_writes[new-grant] _
+
+env = (<sim2act.db.Store object at 0x7f61de6532f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-569/test_po...c95f0674634d1ab2b6006be4a20b8d', 'user_7021faf8320649d189dc60581120793d', 'proj_d94745e2fff740a093750e66d569bf0c', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-569/test_post_origin_same_transact3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f61de8a6db0>
+damage = 'grant', operation = 'new'
+
+    @pytest.mark.parametrize("damage", ["source", "extraction", "seal", "grant", "target"])
+    @pytest.mark.parametrize("operation", ["new", "cached", "read"])
+    def test_post_origin_same_transaction_mutation_rejects_without_writes(
+        env, tmp_path, monkeypatch, damage, operation
+    ):
+        parent, _, wires = saved(env, tmp_path)
+        path = f"/api/projects/{env[5]}/conditional-apps/{parent['id']}/manifest-preview"
+        body = dict(expected_app_fingerprint=parent["fingerprint"], request_key="origin")
+        app = None
+        if operation != "new":
+            accepted = env[2].post(path, json=body)
+            assert accepted.status_code == 201, accepted.text
+            app = accepted.json()
+        before = whole_database(env[0])
+        original = named._load_validated_origin
+        reached = []
+    
+        def changed(store, c, user, pid, aid):
+            result = original(store, c, user, pid, aid)
+            reached.append(aid)
+            mutate(c, result[0], result[1], damage)
+            return result
+    
+        monkeypatch.setattr(named, "_load_validated_origin", changed)
+        response = (
+            env[2].get(f"/api/projects/{env[5]}/apps/{app['id']}")
+            if operation == "read"
+            else env[2].post(path, json=body)
+        )
+        assert reached == [parent["id"]]
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+            "VERIFICATION_FAILED",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_report_validated_origin.py:105: AssertionError
+=============================== warnings summary ===============================
+../../tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_validated_origin.py::test_post_origin_same_transaction_mutation_rejects_without_writes[new-grant]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 3 passed, 1 warning in 3.73s

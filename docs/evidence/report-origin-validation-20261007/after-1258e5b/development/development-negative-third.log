@@ -1,0 +1,43 @@
+...............F
+=================================== FAILURES ===================================
+_______ test_cached_new_http_request_revalidates_current_origin[source] ________
+
+env = (<sim2act.db.Store object at 0x7f5300aa9fd0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-570/test_ca...324b7237004fa885501bd75cadba47', 'user_6e1fd1252f584316a5431a17ff9edfe6', 'proj_1233c65ea4ab4a86a0454206151b13c6', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-570/test_cached_new_http_request_r0')
+damage = 'source'
+
+    @pytest.mark.parametrize("damage", ["source", "extraction", "seal", "grant", "target"])
+    def test_cached_new_http_request_revalidates_current_origin(env, tmp_path, damage):
+        parent, _, wires = saved(env, tmp_path)
+        path = f"/api/projects/{env[5]}/conditional-apps/{parent['id']}/manifest-preview"
+        body = dict(expected_app_fingerprint=parent["fingerprint"], request_key="origin")
+        app = env[2].post(path, json=body)
+        assert app.status_code == 201, app.text
+        with env[0].tx() as c:
+            _, plan, _ = named._load_validated_origin(env[0], c, env[3], env[5], parent["id"])
+>           mutate(c, parent, plan, damage)
+
+tests/test_report_validated_origin.py:126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = <sqlalchemy.engine.base.Connection object at 0x7f5300e85d60>
+parent = {'authorization_domain': 'SHARED_EXISTING_PROJECT_RUNTIME', 'cached': False, 'fingerprint': '0dda8061bf323a79ed02e2fd7cbed99b995736aa198f263355eabef19ceee5fd', 'formal_publication_enabled': False, ...}
+plan = {'bounded_check_namespace': 'conditional-run-checks.v1', 'candidate': {'input_schema': {'additionalProperties': False,...5', 'extraction_run_id': 'run_f43ced9430f247fc81475fdb5644eeda', 'namespace': 'protocol-attempt-receipt.v1', ...}, ...}
+damage = 'source'
+
+    def mutate(c, parent, plan, damage):
+>       eid = parent["candidate"]["origin"]["extraction_run_id"]
+              ^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'candidate'
+
+tests/test_report_validated_origin.py:32: KeyError
+=============================== warnings summary ===============================
+../../tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_validated_origin.py::test_cached_new_http_request_revalidates_current_origin[source]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 15 passed, 1 warning in 17.97s

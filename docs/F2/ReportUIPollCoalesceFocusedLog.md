@@ -1,0 +1,7 @@
+# Poll coalesce PG focused阶段日志
+
+准备Plan/controller ed0aca9先行，父唯一GO后正常FF0c2f13f，240source逐字与freeze一致、PG父/cleanchild实际本树imports含delivery/api。创建唯一exactlabel专属PG与0600privateURL，原case一次session80952/PID804118，Node90/49/14promotion/7Mock固定。
+
+自然exit1/1FAIL/1warning91.74秒；实际TimeoutExpired90/stdoutstderr空，不是assertion。39checks/最新proofref86562ms，lastconditional-apps277=20089145ms1301ms/resources279start89146ms未回；完整progress/fault_target保留。sidecar实际6RECEIVED/0STARTED（source2/extract1/cold3），7只最终预期未达。results/failure/driverlog缺、loadedhash exporter NOT_RECORDED；finalauthority断言 NOT_REACHED、beforeafterrows未持久fixture已drop不重建。原因UNKNOWN，不以mainbusy修片对旧失败推因果；没有重跑或新版full。
+
+自然终态保存安全完整pytest/JUnit/controller/progress/sidecar投影及绝对时间，限定ownDBschema/role/table/controllerchildren0，exactlabelcontainerdeleted/剩余0、privateURL/rawfiles/fixturetmp删除，其他owner未动。source240再次与0c2逐字相同，docs-only本地提交，无push/CI/LIVE/权限扩大。等待父下一GO，FAILED不能充PASS。

@@ -1,0 +1,7 @@
+# 来源复用 PG focused 日志
+
+准备845585a先行，未GO前只manifest/imports，不建PG/跑测试。父19actual独审LIMITEDPASS后唯一GO，normal FF7cd8058，241source逐字一致和PG父/cleanchild当前srcactualimportsPASS；创建唯一exactlabelPG/0600privateURL，session34401/PID810529仅原case一次。
+
+自然exit1：1FAIL/1warning94.50秒，call93.61秒，Node90 TimeoutExpired/stdoutstderr空。40checks/lastprojectABA86737ms、GETapps299=20087973ms1233ms/history305start87979ms未回；安全progress/fault_target/完整-ra/slow30/JUnit/command/绝对时间与旁账6RECEIVED/0STARTED保存，expected7未达。loadedhash/results/failure/driverlog缺、final完整authoritytupleassert NOT_REACHED，DBfixture已drop没有重建。原因UNKNOWN，profile SELECT下降和独审通过不能冒充PG90闭合，原0c2与8c失败继续保留。
+
+没有第二run/full/修改90或源码。自然终态后限定schema/role/table/controllerchildren0、exactlabelcontainerdeleted/剩余0、privateURL/rawlogXML/ownfixturetmp删，其他owner/resources/sharedvenv未触。最终source241与7cd逐字一致，docs-only本地提交，LIVE0/pushCI0/新权限0。FAILED等待父后续，不自动循环。

@@ -1,0 +1,78 @@
+{
+  "decision": "MINIMAL_BACKGROUND_COALESCE_DESIGN_ACCEPTABLE_PENDING_IMPLEMENTATION_ORACLES",
+  "observed_head": "52b67c4c50589e9abf5ca3e82e9b4de5aa072714",
+  "source_path": "/workspace/Sim2Act-bounded-product-candidate/src/sim2act/web/app.js",
+  "source_sha256": "882ad8a7ce17a619e422d1fdb4f282061ac779762d4f1e4bb877b233a44d17a1",
+  "matches_8c106e9_source_bytes": true,
+  "findings": [
+    {
+      "file": "src/sim2act/web/app.js",
+      "line": 198,
+      "finding": "setInterval invokes async callback every2500ms without waiting for previous promise; health→refresh→showRun may overlap",
+      "causal_limit": "Overlapping request possibility is proved by code; no causal attribution of PG timeout, lock/queue/CPU delay is proved."
+    },
+    {
+      "line": 33,
+      "finding": "Each refresh increments runHistoryGeneration. Overlap invalidates old refresh output, but does not stop previously issued HTTP GETs."
+    },
+    {
+      "line": 193,
+      "finding": "Explicit history refresh directly calls refresh; should remain outside background busy guard."
+    },
+    {
+      "line": 195,
+      "finding": "Project change clears existing evidence and generations, then explicitly refreshes. Preserve this path; do not reset busy early during identity/project changes."
+    }
+  ],
+  "minimal_contract": [
+    "One backgroundBusy flag acquired synchronously before first await; return immediately when busy. Wrap complete health→refresh→showRun sequence in try/catch/finally; finally is only release point.",
+    "Guard background interval only; do not add guard to refresh/showRun themselves or prevent explicit user refresh.",
+    "No queue/catch-up tick, no immediate self-call in finally, no automatic POST or accepted-intent retry. Next scheduled interval may do ordinary GET reads.",
+    "Keep existing current/generation checks and metadata failure invalidation. Never restore stale evidence or clear pending accepted-body/key maps to improve performance.",
+    "Do not clear busy on identity/project switch; old work must settle and finally release. Explicit switch refresh remains allowed.",
+    "Coalescing does not bound a permanently unsettled fetch; this is an honest remaining network-liveness boundary, not a reason to fake completion or relax90/150/900 timeouts."
+  ],
+  "required_oracles": [
+    "Hold health unresolved across multiple synthetic interval firings: one background health call only. Resolve and next tick proceeds.",
+    "Hold refresh unresolved: later intervals add no background refresh/showRun; explicit refresh still starts independently.",
+    "Reject health, refresh, and showRun separately: catch behavior retained and next scheduled tick resumes after finally.",
+    "Token/project A→B→A during suspended work: existing clear/generation hooks still run; stale response cannot repopulate A old evidence. Do not early release backgroundBusy.",
+    "Metadata503/auth revocation: previous source/report/plan remains cleared; unchanged authorized metadata preserves current facts.",
+    "UNKNOWN/malformed accepted receipt remains same key and body; tick recovery never submits/retries POST. Count actual methods over repeated ticks.",
+    "Deferred source report text remains textContent-safe; no task success/semantic or owner approval changes.",
+    "Real loaded app.js hash and actual HTTP DOM recorded; keep90s budget; targeted finalcurrentPG run only if root authorizes."
+  ],
+  "progress_evidence": {
+    "path": "/workspace/Sim2Act-bounded-product-candidate/docs/evidence/delivery-graph-combined-regression-20261007/8c106e9-final/report-driver-progress.jsonl",
+    "sha256": "92bce9cd9f6e6be5f95d6916ee4e37b207ac2ae49dea10d3c01dab0e753459f1",
+    "records": 817,
+    "last_three": [
+      {
+        "event": "http_start",
+        "elapsed_ms": 88977,
+        "index": 373,
+        "path": "/health",
+        "method": "GET"
+      },
+      {
+        "event": "http_response",
+        "elapsed_ms": 88985,
+        "index": 373,
+        "path": "/health",
+        "method": "GET",
+        "status": 200,
+        "duration_ms": 8
+      },
+      {
+        "event": "http_start",
+        "elapsed_ms": 88986,
+        "index": 374,
+        "path": "/api/projects/proj_56705f9fdc1f464cb782ee89478a8049/resources",
+        "method": "GET"
+      }
+    ],
+    "browser_loaded_js_hash": "NOT_RECORDED_IN_EXISTING_FAILURE",
+    "pg_root_cause": "UNKNOWN"
+  },
+  "execution_bounds": "Readonly static analysis only; no product edits/test suite/PG/provider calls/network/server processes."
+}

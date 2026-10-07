@@ -1,0 +1,11 @@
+# Report validated-origin reuse (bounded internal optimization)
+
+Baseline source: 33ee0f14cc316d406489c5980e3c228b8d3f8784. Read-only actual SQLite profile: named load 228 SELECT, Report load 416 SELECT, cached promotion 646 SELECT. Source setup used three fixed OFFLINE Mock requests; measurement added zero model/network requests. These are diagnostic counts, not a PG timeout root-cause or performance acceptance.
+
+Authorized scope: conditional_apps.py/report_manifest_apps.py, focused tests and evidence only. Preserve public named load/anchors signatures and return values. Do not modify protocol_jobs, _plan, verified_pending, source_completion, cold-history verification, UI, core graph, DDL, permissions, provider activation or timeouts.
+
+Private named companion returns the already validated plan/job alongside the parent after all original checks. Report consumes it immediately within the same transaction and exact named identity/project/id/fingerprint scope. Report retains fresh extraction/source verified_pending; additionally binds fresh SUCCEEDED extraction compiled_plan to the carried plan with type-sensitive fingerprints and the expected plan fingerprint. Remove only Report's redundant _plan call. Cached promotion may skip its second named validation via a private lexical canonical validator, retaining independent manifest marker, candidate, caps, source, target and proof checks. No public optional bundle, cross-request cache or generic memo framework.
+
+Same transaction alone is not freshness. After companion return, fresh extraction/source and target authorized read/hash checks must reject mutation of source/extraction result/seal, Grant or target before any business insertion. Tests inject mutations within the transaction and check zero business writes/unchanged existing receipts; ordinary next-request/cached mutations and wrong scope also reject. Cold history retains its existing per-Run validation.
+
+Acceptance: actual three-Mock fixture and semantic/API parity; before/after SELECT and verified-call counts; focused SQLite Report/named negative collections once; all-src mypy and Ruff. Preserve original PG/full/focused timeout failures. Do not run PG/full/CI or claim the PG gate fixed. Freeze source and notify root before final checks. Any type guards must remain fail closed.

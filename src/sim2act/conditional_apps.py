@@ -45,7 +45,7 @@ class RunRequest(Strict):
     request_key: str = Field(min_length=1, max_length=100)
 
 
-def anchors(store, c, user, pid, body):
+def _anchors_validated(store, c, user, pid, body):
     project = store.lock_project(c, user, pid)
     plan = _plan(store, c, user, body["extraction_run_id"], body["expected_plan_fingerprint"])
     job, run = verified_pending(store, c, user, body["extraction_run_id"])
@@ -62,6 +62,16 @@ def anchors(store, c, user, pid, body):
         plan["source_result_fingerprint"],
         body["expected_check_fingerprint"],
     )
+    _current_target(store, c, user, pid, project, body)
+    return project, plan, job
+
+
+def anchors(store, c, user, pid, body):
+    project, _, _ = _anchors_validated(store, c, user, pid, body)
+    return project
+
+
+def _current_target(store, c, user, pid, project, body):
     target = authorized_read(
         store,
         c,
@@ -77,10 +87,9 @@ def anchors(store, c, user, pid, body):
         or target["hash"] != body["expected_target_hash"]
     ):
         raise DomainError("VERSION_CONFLICT")
-    return project
 
 
-def load(store, c, user, pid, aid):
+def _load_validated_origin(store, c, user, pid, aid):
     store.lock_project(c, user, pid)
     draft = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().first()
     marker = (
@@ -157,9 +166,14 @@ def load(store, c, user, pid, aid):
     }
     if fingerprint(wrapper) != fingerprint(expected_wrapper):
         raise DomainError("VERSION_CONFLICT")
-    project = anchors(store, c, user, pid, wrapper["origin"])
+    project, plan, job = _anchors_validated(store, c, user, pid, wrapper["origin"])
     if project["runtime_id"] != draft["runtime_id"]:
         raise DomainError("VERSION_CONFLICT")
+    return draft, plan, job
+
+
+def load(store, c, user, pid, aid):
+    draft, _, _ = _load_validated_origin(store, c, user, pid, aid)
     return draft
 
 
