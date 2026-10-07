@@ -1,0 +1,37 @@
+........F........                                                        [100%]
+=================================== FAILURES ===================================
+___ test_actual_new_scenarios_independent_reports_and_unknown_stays_unknown ____
+
+env = (<sim2act.db.Store object at 0x7f9562444650>, Settings(database_url='sqlite:////tmp/v5-manifest-cold-independent-revie...97d27ea3c34faba1ed7df67259881a', 'user_e04d2332ae31452d8fee7c0215d3258c', 'proj_1e24fdd24a5b4d9ba63b4d730669b7f2', ...)
+tmp_path = PosixPath('/tmp/v5-manifest-cold-independent-review/http-fixtures/test_actual_new_scenarios_inde0')
+
+    def test_actual_new_scenarios_independent_reports_and_unknown_stays_unknown(env,tmp_path):
+        app,_,wires=promote(env,tmp_path)
+        before=snap(env);authority={k:before[k] for k in ['principals','grants']}
+        seen=[]
+        for key,facts,output in [('independent501',scenario(),response_report()),('independent-unknown',scenario(amount=None,approved=True),response_report('UNKNOWN',True))]:
+            body={'expected_candidate_fingerprint':app['fingerprint'],'input':facts,'request_key':key}
+            path=f'/api/projects/{env[5]}/apps/{app["id"]}/previews'
+            accepted=env[2].post(path,json=body);assert accepted.status_code==202,accepted.text
+            rid=accepted.json()['run_id'];seen.append(rid)
+            assert env[2].post(path,json=body).json()['run_id']==rid
+            work(env,tmp_path,[envelope(output)],wires)
+            run=env[2].get(f'/api/projects/{env[5]}/conditional-runs/{rid}');assert run.status_code==200,run.text
+            run=run.json();assert run['status']=='WAITING_APPROVAL' and run['overall_run_acceptance']=='NOT_ACCEPTED'
+            assert run['result']['protocol_result']['evidence']['output']==output
+            check=env[2].post(f'/api/projects/{env[5]}/conditional-runs/{rid}/check',json={'expected_result_fingerprint':run['result_fingerprint'],'expected_version':run['version'],'expected_fence':run['fence'],'request_key':key+'-check'})
+>           assert check.status_code in {200,201},check.text
+E           AssertionError: {"detail":"Not Found"}
+E           assert 404 in {200, 201}
+E            +  where 404 = <Response [404 Not Found]>.status_code
+
+/tmp/v5-manifest-cold-independent-review/test_http_independent.py:95: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/v5-manifest-cold-independent-review/test_http_independent.py::test_actual_new_scenarios_independent_reports_and_unknown_stays_unknown
+1 failed, 16 passed, 1 warning in 12.26s

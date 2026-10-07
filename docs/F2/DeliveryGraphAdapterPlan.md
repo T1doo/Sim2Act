@@ -1,0 +1,23 @@
+# DeliveryGraph 主入口适配准备（尚未实施）
+
+2026-10-07，主线组合源码e4ea5dbf418ae32ddb4767855fa860e6940b4f6c。独立模块以可fetch的e700为基线实现，root保留服务端适配与UI/runner所有权。当前SQLite→PG全量期间仅准备合同与独立oracle，不修改被冻结产品源码，也不将此文档记作已消费DeliveryGraph。
+
+## 真实对象与权限来源
+
+Report必须经`report_manifest_apps.load`再次核验当前项目所有者、独立task_extractions快照/请求、named指纹、来源Run/有限plan/check封印、目标hash和原预算，不能直接把客户端AppManifest转换为可信图。CSV/agent复用`apps.validate_frozen_candidate`及原existing_runtime/current授权路径；Report保持既有user_and_project_intersection，不借图查询创建AppPrincipal/Grant。
+
+图context只由服务端当前事务构造。应用revision来自严格canonical manifest；action revision来自exact binding；goal/app/action/resource IDs复用实际ID。现有resources表只有id/project_id/format/content/hash，没有resource revision计数列，不能伪造一个可持久递增版本。声明dependency.version="1"是合同版本，不是资源数据库版本；来源以真实hash及重新计算content hash比较。若独立模块要求来源revision，适配必须明确为sealed declaration revision=1并同时比较可信当前content fingerprint，不能把该1声称当前资源版本计数。需要真正资源revision语义时另立显式迁移与CRUD切片，本轮不由API建表。
+
+VIEW/CHECK采用服务端确定slot键：app_id+view序号/组件/字段，app_id+validation_suite_ref；仅同一原slot复用，组件变化不能凭客户端指定旧slot冒充未变。请求只可提出bounded修改候选；scope/授权/内容hash/当前版本由服务端读回，不接受客户权限清单、previous_receipt或presentation_only标签。
+
+## Report 独立答案（用来审查实际输出）
+
+canonical Report同时声明source_resource与target_resource的read权限/资源依赖，data_binding rules仅接target。source是提取来源证据，target是当前冷Run规则输入；二者不得因都在manifest.resource集合中被说成每次cold都实际读取，实际读证据来自本次Worker回执。source Run、extraction、plan/check、named、target hash须保留独立来源链，不升级为SUCCESS、完整语义或verified。
+
+手绘确定关系：target→report ACTION（规则/data），report ACTION→decision VIEW（presentation），report ACTION→source.conditional_report CHECK（verified_by，仅声明的检查槽），ACTION/VIEW/CHECK→MANIFEST（packaged_in）。source→提取/来源语义约束的变化至少扩大Report相关重验；无法证明其全部依赖时标uncertain，不能借未知依赖删掉source或减少检查。VIEW纯展示修改可保留计算Action的稳定ID/content/revision，但相关展示检查和MANIFEST仍失效。target内容改变影响Action、View、Check和Manifest；与此app无依赖的另一app不改对象，只在project uncertainty要求时加入重验scope。锁定任一确定影响对象拒绝，原历史/候选字节不变。
+
+## 有界入口验收门（后续源码实现前固定）
+
+只返回不可执行的impact plan；不得顺带改候选、Run、检查、release或模型配置。预览请求校验expected_candidate_fingerprint，跨项目/撤权先拒绝，coherent candidate+graph重hash仍要与独立服务端来源/当前hash相符。错误时整表计数和既有对象字节不变；同key同参需实际持久receipt支撑并重验当前授权/版本，没有持久记录不得声称跨进程幂等。
+
+先接收到精确可fetch模块commit、实际函数/封闭schema及独审回执，再实现最小只读接口与真实HTTP/DOMoracle。静态图/影响预览只证明声明影响，不能代替真实局部补丁、重验、正式发布或V5整体验收。该入口若在当前full完成后落源，必须重新冻结并按实际影响补验证，不能沿用e4全量作为新源码通过。
