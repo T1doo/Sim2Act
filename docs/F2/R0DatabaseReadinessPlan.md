@@ -13,3 +13,7 @@ Before implementation commit this plan; freeze draft source before final dedicat
 ## Independent draft correction before further execution
 
 Independent static review of b701 found two blockers: Doctor finally.dispose can bypass safe JSON with raw exception; schema CREATE checked only current effective role while login/MEMBER-reachable roles may regain CREATE through RESET/SET ROLE. Preserve b701 evidence. Authorized minimum: catch cleanup failure and append fixed cleanup BLOCKED (never READY); aggregate reachable schema CREATE in existing ROLES set and enforce strict bool. Add sentinel CLI cleanup failure and reachable-CREATE unit negative, retain original41 cases; freeze new source for actual PG preparation. No PG/container or mainline write is authorized yet.
+
+## Ordinary relation scope correction before PG execution
+
+Parent review limits readiness to the physical shape created by the existing explicit Store.initialize: ordinary relation kind r. Partition parent p and view v are unsupported metadata and must return BLOCKED/SCHEMA_MISMATCH. Add the partition synthetic negative while retaining all44 prior unit cases; update the prepared23-case PG oracle so only healthy ordinary40-table least-role schema qualifies. No actual PG startup or execution before root confirms the newly frozen checker source.
