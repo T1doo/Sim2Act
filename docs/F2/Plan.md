@@ -433,3 +433,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 2026-10-07 独立第二主线应用使用范围：冻结bd56f80之外本地，用户在应用页以数值列业务参数运行已有固定CSV实例，正常worker持久新AppRun/结果、手动读回/历史/冷会话；版本材料与未发布边界明示。只用已有授权与业务CRUD，不创建身份/Grant/Release/Instance/DDL，不调用模型或Replay。接受未知同键恢复、读取失败GET恢复、当前失败不冒历史成功、跨身份项目/ABA/来源版本负例；见[事前范围](ApplicationUsePlan.md)。新切片PG/native/正式发布均不得借bd CI升格。
 
 2026-10-07 整合三产品切片的阶段计划与边界：525纯docs同步，d069/1eb真实merge双清理保留，完整SQLite/PG及同会话跨片oracle，不累计单片为组合验收；新增共享16core的Edge同browser/API接线准备，保护/时限/限名不变。源码freeze后最终精确全量结果另记，产品候选不push/CI。[计划](ProductIntegrationPlan.md)。
+
+2026-10-07 三片整合精确20bb标准Windows验收闭合：工程907PASS11SKIP/918、真实组合16PASS与应用使用桌面/窄屏主审，原保护/时限/权限/输出不变。独立只读验收核对d464仅本地SQLite/PG，未混CI/未push；技术与语义/用户/发布边界保留。详见[整合终态](../evidence/windows-product-integration-20bbd5a-20261007/README.md)。

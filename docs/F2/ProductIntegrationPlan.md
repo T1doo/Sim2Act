@@ -9,3 +9,5 @@
 下一核心缺口在既有范围内辨认：固定CSV内部使用已形成有界闭环，正式应用发布与目标语义仍未验收。本轮不增加发布开关或semantic虚假PASS；后续可基于可信来源与正常已保存结果，准备有界的只读业务结果验收入口/可核查oracle，先明确前置，不堆抽象。
 
 本地阶段终态：真实双merge、组合负例与独立审查、精确4c8fdaf源码918完整SQLite/PG配置回归均闭合（880/38与914/4，0FAIL）；owned PG已清理。保护Edge接线已准备，实际新原生与像素待父安排；不把NOT_RUN关闭为已完成，不自动产品push/CI。终态细项、源码SHA与CI差异见[证据](../evidence/product-integration-20261007/README.md)。
+
+父安排冻结20bb唯一标准WindowsCI37582278570已终态SUCCESS：918工程907PASS11SKIP、新增真实同会话16PASS，实际Edge124秒/job824秒在原预算；main两PNG实际查看并标应用使用scope。未测前置仍Win11/语义/正式发布/完整F1/AT02/P-B；新独立d464验收核对源不在此CI。[精确终态](../evidence/windows-product-integration-20bbd5a-20261007/README.md)。
