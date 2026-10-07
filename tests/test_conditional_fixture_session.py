@@ -55,3 +55,13 @@ def test_owned_session_child_failures_and_timeout():
                             capture_output=True,text=True,timeout=15)
     assert output.returncode == 0, output.stdout+output.stderr
     assert '"status":"PASS"' in output.stdout
+
+
+def test_actual_owned_session_closed_exception_is_safe_and_preserves_tables(tmp_path):
+    subprocess.run([sys.executable, 'scripts/protocol-ui/fixture.py', '--root', str(tmp_path),
+                    '--port', '12345', '--action', 'seed'], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+    output = subprocess.run(['node', 'tests/conditional_closed_diagnostic.cjs', str(tmp_path),
+                             sys.executable], capture_output=True, text=True, timeout=30)
+    assert output.returncode == 0, output.stdout + output.stderr
+    assert (tmp_path / 'closed-session-diagnostic.json').is_file()

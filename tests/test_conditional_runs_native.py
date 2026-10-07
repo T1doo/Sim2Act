@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from protocol_terminal_setup import prepare
 
 
 @pytest.mark.parametrize("optimized", [False, True])
@@ -50,6 +51,11 @@ def test_conditional_bound_native_shared_actual_http(tmp_path, monkeypatch, opti
         timeout=30,
     )
     assert seed.returncode == 0, seed.stdout + seed.stderr
+    fresh_seed = subprocess.run([
+        sys.executable, "scripts/protocol-ui/fixture.py", "--root", str(tmp_path / "fresh"),
+        "--port", str(port), "--action", "seed"], env=child, cwd=repo,
+        capture_output=True, text=True, timeout=30)
+    assert fresh_seed.returncode == 0, fresh_seed.stdout + fresh_seed.stderr
     with (tmp_path / "api.log").open("wb") as log:
         server = subprocess.Popen(
             [
@@ -77,19 +83,18 @@ def test_conditional_bound_native_shared_actual_http(tmp_path, monkeypatch, opti
             time.sleep(0.05)
         else:
             pytest.fail("Owned fixture API not ready")
-        out = subprocess.run(
-            ["node", "tests/conditional_runs_native.cjs", str(tmp_path), sys.executable],
-            env=child,
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        (tmp_path / "driver.log").write_text(out.stdout + out.stderr)
-        assert out.returncode == 0, out.stdout + out.stderr
+        prepare(tmp_path)
+        sys.path.insert(0, str(repo / "scripts/protocol-ui"))
+        from rotation import run_node
+
+        with (tmp_path / "driver.log").open("wb") as output:
+            run_node(["node", "tests/conditional_runs_native.cjs", str(tmp_path), sys.executable],
+                     server, tmp_path, repo, child, timeout=60, stdout=output, stderr=output)
         result = json.loads((tmp_path / "bound-native-results.json").read_text())
         assert result["status"] == "PASS" and result["bound"]["real_model_requests"] == 0
         assert len(result["bound"]["checks"]) == 19 and len(result["manual"]["checks"]) == 22
+        assert result["transition"]["old_all_tables_retained"] is True
+        assert result["transition"]["max_concurrent_protocol_servers"] == 1
     finally:
         if server.poll() is None:
             server.terminate()

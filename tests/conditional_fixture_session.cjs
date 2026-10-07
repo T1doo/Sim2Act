@@ -2,13 +2,14 @@
 const assert=require('node:assert/strict'),cp=require('node:child_process'),originalSpawn=cp.spawn;
 const python=process.argv[2],timers=[],originalTimer=global.setTimeout;
 (async()=>{
- for(const mode of ['spawn','exit','wrong','timeout']){
+ for(const mode of ['spawn','exit','wrong','timeout','stderr','unknownstderr']){
   let child;
-  cp.spawn=()=>{child=originalSpawn(mode==='spawn'?'missing-owned-fixture-executable':python,['-c',mode==='exit'?'raise SystemExit(3)':mode==='wrong'?"import sys; sys.stdin.readline(); print('{}',flush=True); sys.stdin.read()":"import sys; sys.stdin.read()"],{stdio:['pipe','pipe','pipe']});return child;};
+  cp.spawn=()=>{child=originalSpawn(mode==='spawn'?'missing-owned-fixture-executable':python,['-c',mode==='exit'?'raise SystemExit(3)':mode==='wrong'?"import sys; sys.stdin.readline(); print('{}',flush=True); sys.stdin.read()":['stderr','unknownstderr'].includes(mode)?"import sys; sys.stdin.readline(); sys.stderr.write('SECRET_DSN_PASSWORD arbitrary/private/path\\n'*1000); sys.stderr.write("+(mode==='stderr'?"'sim2act.errors.DomainError: SECRET_TOKEN\\n'":"'UnlistedSecretException: SECRET_TOKEN\\n'")+"); sys.stderr.flush(); raise SystemExit(3)":"import sys; sys.stdin.read()"],{stdio:['pipe','pipe','pipe']});return child;};
   global.setTimeout=(fn,ms,...args)=>{timers.push(ms);return originalTimer(fn,mode==='timeout'?20:ms,...args);};
   delete require.cache[require.resolve('../scripts/browser-ci/conditional-fixture-session.cjs')];
   const fixture=require('../scripts/browser-ci/conditional-fixture-session.cjs')({python,root:'test-only-invalid'});
-  await assert.rejects(fixture.action('snapshot'),mode==='spawn'?/ENOENT/:mode==='exit'?/exited/:mode==='wrong'?/Wrong conditional fixture reply/:/10000ms/);
+  await assert.rejects(fixture.action('snapshot'),mode==='spawn'?/ENOENT/:mode==='exit'||['stderr','unknownstderr'].includes(mode)?/exited/:mode==='wrong'?/Wrong conditional fixture reply/:/10000ms/);
+  if(['stderr','unknownstderr'].includes(mode)){assert.equal(fixture.diagnostics.exceptionClass,mode==='stderr'?'DomainError':'UNKNOWN');assert(fixture.diagnostics.stderrBytes>4096&&fixture.diagnostics.stderrTruncated);assert(!JSON.stringify(fixture.diagnostics).includes('SECRET'));assert.equal(fixture.diagnostics.lastRequestedAction,'snapshot');}
   await assert.rejects(fixture.close());
   assert(mode==='spawn'?child.pid===undefined:(child.exitCode!==null||child.signalCode!==null),'owned process collected');
  }
