@@ -10,6 +10,7 @@ import time
 
 import pytest
 import uvicorn
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, update
 from test_conditional_run_bindings import POLICY, envelope, factory, report
 
@@ -59,6 +60,22 @@ def test_source_bound_product_actual_http_dom(env, tmp_path):
         ]
     app = create_app(store, settings)
     wires = []
+    metadata_fault = [False]
+
+    @app.middleware("http")
+    async def synthetic_metadata_failure(request, call_next):
+        if (
+            metadata_fault[0]
+            and request.method == "GET"
+            and request.url.path == f"/api/projects/{pid}/resources"
+        ):
+            return JSONResponse({"error": {"code": "AUTH_LIST_UNAVAILABLE"}}, status_code=503)
+        return await call_next(request)
+
+    @app.post("/test-only-bounded-metadata/{mode}")
+    def set_metadata_failure(mode: str):
+        metadata_fault[0] = mode == "fail"
+        return {"test_only": True}
 
     @app.post("/test-only-bounded-work/{phase}")
     def execute(phase: str):

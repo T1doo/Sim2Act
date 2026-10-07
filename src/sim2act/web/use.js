@@ -225,6 +225,7 @@ $("condition-recheck").onclick=safe(()=>runConditionalCheck(true));
 $("condition-form").oninput=()=>{if(conditionalContext){conditionalContext.readGeneration=(conditionalContext.readGeneration||0)+1;conditionalContext.body=null;}$("condition-results").replaceChildren();$("condition-recheck").hidden=true;$("condition-status").textContent="输入已变化，旧证据失效；请重新核对。";};
 
 function invalidateConditionalSource(reason){
+ if(typeof clearConditionalRuns==="function"){clearConditionalRuns();$("condition-run-status").textContent=`旧来源绑定证据失效：${reason}。请重新打开当前授权资料；已接受Run未取消，同键回执仍保留。`;}
  if(!conditionalContext?.source)return;
  clearConditionalChecks();$("condition-status").textContent=`旧证据失效：${reason}。请重新选择并核对授权资料。`;
 }

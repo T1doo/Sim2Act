@@ -46,6 +46,10 @@ const work=phase=>fetch(info.base+'/test-only-bounded-work/'+phase,{method:'POST
  const metadata=await(await fetch(info.base+'/api/projects/'+info.project+'/resources',{headers:{Authorization:'Bearer synthetic-test-A'}})).json();w.reconcileConditionalSources(metadata);
  check($('condition-run-plan').hidden&&$('condition-run-check-output').textContent===''&&$('condition-run-status').textContent.includes('版本已变化'),'real metadata version change clears bound candidate even after manual source context was cleared');
  await fetch(info.base+'/test-only-bounded-source-version/restore',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});await open();facts('condition-run-source',680);await w.startBoundedSource();
+ await w.extractBoundedCandidate();await w.boundedAction(w.boundedRead);check(!$('condition-run-plan').hidden,'known source/plan can be recovered using same actual accepted receipts');
+ await fetch(info.base+'/test-only-bounded-metadata/fail',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});w.eval('conditionalContext.source=null');await assert.rejects(w.refresh(),/AUTH_LIST_UNAVAILABLE/);
+ check($('condition-run-output').textContent===''&&$('condition-run-plan-text').textContent===''&&$('condition-run-plan').hidden&&$('condition-run-extract').hidden&&$('condition-run-cold-form').hidden,'actual refresh HTTP503 clears real bound Report and sealed plan even with manual source empty');
+ await fetch(info.base+'/test-only-bounded-metadata/ok',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});await open();facts('condition-run-source',680);await w.startBoundedSource();
  // ABA invalidates late check response even if identity/project return to same values.
  mode='hold';const late=w.boundedAction(c=>w.checkBoundedRun(c,'source'));await wait(()=>release,'held check');
  $('project-select').value=info.other;$('project-select').dispatchEvent(new w.Event('change'));await wait(()=>$('condition-run-source-form').hidden,'project clear');
