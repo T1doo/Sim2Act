@@ -23,3 +23,5 @@
 Edge/Windows原生renderer功能与新phaseaudit/截图像素/Win11 NOT_RUN；DOM不是原生。此候选不扩大原PNG签收范围，新phase无截图。复用旧20bb参考124秒protectedhelper/824秒job，仅是旧源码历史，不能签567/此候选。新增phase七个fixtureCLI、两次rendereraudit和真实2700ms等待；本地module时序不证明Windows总helper<150或job<900。预算均未放宽，必须以后实际授权Server终态验证；本轮无push/CI，无真实模型/真实身份/准备器激活。
 
 下一可执行原生片：在明确授权后只取精确本候选到既有分支，正常push单次Server，监督既有15分钟/150秒终态；若预算失败修本候选时序/接线不降旧断言、不加时、不绕保护。核心线不能借此原生候选签收。
+
+2026-10-07补充Python来源闭合：核心线发现共享venv旧editable可能影响部分旧子进程测试，因此本候选相关集合也在单独`/tmp/sim2act-conditional-native-venv`重跑。该环境的local pth先指本树src、再复用共享依赖目录，不处理旧editable pth，不修改共享venv或旧树。实际主进程及清空环境子进程的module file均指本树，见`isolated-python-provenance.json`；相同八文件相关集最终40PASS/1SKIP/0FAIL/0ERROR，97.73秒1warning，见`isolated-related.log`。唯一SKIP仍为Chromium SUID sandbox BLOCKED。新增oracle及既有native caller的fixture子进程另显式`PYTHONPATH=src`。此补验仍为本地HTTP/DOM，不提升Windows/Edge/像素或既有150/900秒预算。source候选213fe90不变，文档tip另记。
