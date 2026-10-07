@@ -31,6 +31,7 @@ from .db import (
     run_contracts,
     runs,
 )
+from .delivery_graph_apps import mount as mount_delivery_graph_apps
 from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
@@ -497,6 +498,7 @@ def create_app(store=None, settings=None):
     mount_conditional_runs(app, db, identity, platform_limits, s)
     mount_conditional_apps(app, db, identity, platform_limits, s)
     mount_report_manifest_apps(app, db, identity, platform_limits, s)
+    mount_delivery_graph_apps(app, db, identity, platform_limits, s)
 
     web = Path(__file__).parent / "web"
 
@@ -523,6 +525,10 @@ def create_app(store=None, settings=None):
     @app.get("/report-manifest.js")
     def report_manifest_js():
         return FileResponse(web / "report-manifest.js", media_type="text/javascript")
+
+    @app.get("/delivery-graph.js")
+    def delivery_graph_js():
+        return FileResponse(web / "delivery-graph.js", media_type="text/javascript")
 
     @app.get("/conditional-apps.js")
     def conditional_apps_js():
