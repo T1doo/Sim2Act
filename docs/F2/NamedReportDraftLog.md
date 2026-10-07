@@ -51,3 +51,20 @@ authority baseline preceded explicit creation of the other-project fixture. They
 not product timeouts relaxed. The subsequent final DOM passed. A tamper test initially used the
 wrong persisted column name; corrected to result_snapshot before the 16-pass focused run.
 Independent review is requested separately; local commit does not imply integration acceptance.
+
+## Independent recovery rejection and final correction
+
+Independent actual HTTP reproduced a missing composite negative on frozen da81199: accepted
+cold response loss → same-key actual cached202 replaced by a synthetic transport422 → the
+UI cleared pending state, and a new key created a second real Run. The original 3PASS1FAIL9.09s
+review log and real receipt proof are preserved under independent-pre-correction-failure.*.
+The previous 62-family/DOM tests do not sign the corrected UI source.
+
+Scope correction was committed first as e348159. Only runReportApp changed: an explicit first
+422 may allow correction, but an earlier unknown intent or retry preserves immutable body/key.
+Permanent focused actual HTTP DOM tests cover lost accepted receipt and malformed accepted200,
+each followed by later retry422. They also prove first422 allows correction, a new submit is blocked
+while uncertainty remains, and eventual successful same-key receipt resolves exactly one cold Run.
+Two tests passed in 6.73s; each has seven assertions and records actual HTTP-loaded new UI hash,
+three existing source/extraction Mock requests and zero cold provider calls. Principal/Grant rows
+remain identical. No large suites were repeated. Final independent hash review is still pending.

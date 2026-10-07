@@ -51,10 +51,11 @@ async function runReportApp(retry=false){
  const c=reportAppContext;if(!c||!reportCurrent(c)||!c.app||c.busy)return;
  if(c.pending&&!retry)throw Error("先恢复原回执");
  const key=JSON.stringify([c.identity,c.project,c.id,c.app.fingerprint]);
+ const earlierUnknown=!!c.pending;
  const body=retry?c.pending?.body:{expected_app_fingerprint:c.app.fingerprint,scenario:boundedFacts("report-app"),request_key:reportKey()};if(!body)return;
  const intent=c.pending||{body};c.pending=intent;reportIntents.set(key,intent);c.busy=true;reportAppButtons(c);
  try{const made=await api(`/api/projects/${c.project}/conditional-apps/${c.id}/runs`,"POST",body);if(made.app_id!==c.id||made.app_fingerprint!==c.app.fingerprint||!/^run_[a-f0-9]{32}$/.test(made.run_id)||made.namespace!=="conditional-run-checks.v1"||made.phase!=="cold"||!Number.isInteger(made.version)||made.version<1||!Number.isInteger(made.fence)||made.fence<0||made.owner_semantic_acceptance!=="PENDING"||made.overall_run_acceptance!=="NOT_ACCEPTED"||!["QUEUED","RUNNING","WAITING_INPUT","WAITING_APPROVAL","WAITING_RESOURCE","PAUSE_REQUESTED","PAUSED","CANCEL_REQUESTED","RECONCILING","SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(made.status))throw Error("VERSION_CONFLICT");reportIntents.delete(key);c.pending=null;if(!reportCurrent(c))return;$("report-app-output").textContent=`已接受新 Run ${made.run_id} · ${made.status}；刷新只读历史。未启用 provider，整体未验收。`;await readReportHistory(c);}
- catch(e){if(e.httpStatus===422){reportIntents.delete(key);c.pending=null;}if(reportCurrent(c))$("report-app-output").textContent=e.message+"；用原键恢复接受回执，不另建任务。";}
+ catch(e){if(e.httpStatus===422&&!earlierUnknown&&!retry){reportIntents.delete(key);c.pending=null;}if(reportCurrent(c))$("report-app-output").textContent=e.message+"；用原键恢复接受回执，不另建任务。";}
  finally{c.busy=false;reportAppButtons(c);}
 }
 $("report-save-form").onsubmit=safe(()=>saveReportDraft());$("report-save-retry").onclick=safe(()=>saveReportDraft(true));$("report-app-list-refresh").onclick=safe(refreshReportApps);$("report-app-form").onsubmit=safe(()=>runReportApp());$("report-app-retry").onclick=safe(()=>runReportApp(true));$("report-app-refresh").onclick=safe(()=>readReportHistory());
