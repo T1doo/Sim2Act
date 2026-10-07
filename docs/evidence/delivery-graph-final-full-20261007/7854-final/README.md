@@ -1,0 +1,11 @@
+# 最终组合完整回归：精确7854029，两套全集自然通过
+
+执行冻结7854029d702769e26c9cd9cf2d4f22e2a97750ce，246tracked src/tests/scripts/.github逐字hash，最终两新src-firstvenv×父/clean-child四actualimports均本tree。实际collection1309/0.38秒，唯一完整节点集合；两套原JUnit的1309node multiset均逐case精确吻合（含unittest class），不是只count或相加分线结果。
+
+SQLite唯一session27969/PID816052自然exit0：1267PASS/42SKIP/2warnings599.26秒。随后才建立一次exactlabel专属PG，唯一session41076/PID829079自然exit0：1305PASS/4SKIP/1warning1235.82秒，20:59:19Z—21:19:57Z。两完整原-ra/durations30/JUnit/controllers/实际全部skip按node+reason+count保存，SQLite独审已提供安全副本。PG skip为Windows native1、现有SQLite-only protocol UI2、protected Chromium sandbox启动1；不宣称它们通过。受保护Chromium实际driver.log已匹配导出，两phase各保留安全stderr日志，实际fixture路径列表见skip-driver-evidence；pytest/JUnit真实skip理由完整保留。
+
+PG actual role名字匹配21cases均PASS，Graph minimum CRUD角色0.854秒/ReportManifest角色3.837秒；SQLite角色skip不作其通过证明。两Report UI完整case均actual49checks、14manifest-preview POST精确body指纹一致、实际6sidecars7RECEIVED0STARTED=source2/extract1/cold4，known140。原Python len(wires)==7与完整sorted principals/grants before/after tuple equality finalassert实际达到并PASS；完整authority行未导出（NOT_EXPORTED），不以safe投影替代原断言。实际loadedindex.html+7JS逐项match冻结bytehash。sidecars/wires不等于导出了7DB Attempts，DBfixture自动drop后未重建Run/Attempt。结果保持有限技术Mock/整体语义未验收，非真实模型或发布签收。
+
+原件处理及限制：SQLite原日志/JUnit仍可读，安全副本与其实际byteidentical；PG安全日志/JUnit标SANITIZED（只应用DSN/password替换guard，未改测试结果）。按限定cleanup原privatePG文件已删除，但删除前未保存独立rawSHA，必须标rawsha NOT_RECORDED，不能把safeSHA冒充rawhash或宣称PGrawbyteidentical。safeSHA及其他实际资料hash均artifact-hashes可核。原8c/e4全量FAIL、0c2/7cd两focus90FAIL、owner111JUnit NOT_RECORDED均保持失败/缺漏历史，不回标PASS。
+
+最终onlyownedcleanup实际schema/role/publictable/controllerchildren0；核exactlabel sim2act.delivery-graph-final-full=20261007删除容器并verify0、privateURL/rawPGlogXML/两自有fixturetmp已删，其他owner/sharedvenv/数据库未触。未合R0draft或其他运行中源，根后来仅docs另有remote提交，不能把后来HEAD标成执行源。全期间无source/guard/coverage/预算/时限改变、无retry/fullrerun/CI/LIVE；Windows900/Edge240/Node150保持，Linux终态不构成Windows预算资格。后续发布/Windows验收仍NO_GO。
