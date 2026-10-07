@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict');
 // Shared actual served UI oracle. Caller owns browser protection, fixture and transport.
-module.exports=async function conditionalChecks({evaluate,reload,info,action}){
+module.exports=async function conditionalChecks({evaluate,reload,info,action,capture}){
  const started=Date.now(),checks=[],json=JSON.stringify;
  const result={status:'NOT_RUN',checks,real_model_requests:0,semanticStatus:'UNKNOWN',ownerAcceptance:'PENDING',formalPublication:false,browser:'CALLER_OWNED',visualReview:'NOT_REVIEWED',screenshots:[]};
  const get=code=>evaluate(code),check=(ok,name)=>{assert.ok(ok,name);checks.push({name,status:'PASS'});};
@@ -15,6 +15,11 @@ module.exports=async function conditionalChecks({evaluate,reload,info,action}){
  const open=async id=>{await get(`listConditionalSources()`);await get(`$('condition-resource').value=${json(id)};openConditionalSource()`);};
  const manual=async unknown=>get(`for(const [k,v] of Object.entries(${json({trip:unknown?'':'true',amount:unknown?'':'680',receipt:unknown?'':'true',approved:unknown?'':'false',days:unknown?'':'2',R1:unknown?'UNKNOWN':'TRUE',R2:unknown?'UNKNOWN':'TRUE',R3:unknown?'UNKNOWN':'FALSE',decision:unknown?'UNKNOWN':'BLOCK',deadline:'10',date:'UNKNOWN',restart:'false',explanation:'Hand-entered synthetic report; free prose is not graded.'})}))$('condition-'+k).value=v;for(const o of $('condition-actions').options)o.selected=o.value===${json(unknown?'clarify_facts':'obtain_prior_approval')};void 0`);
  const run=()=>get('runConditionalCheck()');
+ const captureReport=async(label,decision)=>{
+  if(!capture)return;
+  const source=await get('({resource_id:conditionalContext.source.resource_id,hash:conditionalContext.source.hash,contract_id:conditionalContext.source.contract.id,contract_version:conditionalContext.source.contract.version,contract_fingerprint:conditionalContext.source.contract.fingerprint})');
+  result.screenshots.push(await capture(label,{scope:'conditional-hand-report',source,checkStatus:'PASS',decision,semanticStatus:'UNKNOWN',ownerAcceptance:'PENDING',formalPublication:false}));
+ };
  const tables=(before,after,allowed=[])=>Object.keys(before.tables).filter(k=>before.tables[k]!==after.tables[k]&&!allowed.includes(k));
  await reload();await watch();await login();
  const before=await action('snapshot');
@@ -24,6 +29,7 @@ module.exports=async function conditionalChecks({evaluate,reload,info,action}){
  await manual(false);await run();
  check(await get(`$('condition-results').textContent.includes('报告核对 PASS')&&$('condition-results').textContent.includes('决策 BLOCK')&&$('condition-results').textContent.includes('R2：不满足')&&$('condition-results').textContent.includes('未核查报销单和收据是否已实际提交')`),'valid unmet-condition report separates PASS from submission BLOCK and completed obligations');
  check(await get(`$('condition-results').textContent.includes('语义 UNKNOWN；用户确认 PENDING')&&$('condition-results').textContent.includes('NOT_CHECKED')`),'semantic owner and free prose are never promoted by a finite check');
+ await captureReport('protocol-desktop','BLOCK');
  // Preserve actual interval, unlike the old history helper's isolated polling mode.
  const stable=await get(`$('condition-results').textContent`);await new Promise(r=>setTimeout(r,2700));
  check(await get(`$('condition-amount').value==='680'&&$('condition-results').textContent===${json(stable)}`),'actual 2500ms poll retains unchanged inputs and evidence');
@@ -31,6 +37,7 @@ module.exports=async function conditionalChecks({evaluate,reload,info,action}){
  check(await get(`!$('condition-results').textContent&&$('condition-recheck').hidden`),'editing facts immediately invalidates the old report');
  await run();check(await get(`$('condition-results').textContent.includes('报告核对 FAIL')&&$('condition-results').textContent.includes('R2：不适用')&&$('condition-results').textContent.includes('语义 UNKNOWN；用户确认 PENDING')`),'incorrect hand report stays FAIL and never changes semantic or owner acceptance');
  await manual(true);await run();check(await get(`$('condition-results').textContent.includes('报告核对 PASS')&&$('condition-results').textContent.includes('决策 UNKNOWN')&&$('condition-results').textContent.includes('R1：未知')`),'unknown facts remain UNKNOWN despite structurally correct report');
+ await captureReport('protocol-narrow','UNKNOWN');
  await get(`window.conditionFail=true;runConditionalCheck(true)`);check(await get(`!$('condition-results').textContent&&!$('condition-source').textContent&&$('condition-status').textContent.includes('请求失败不等于业务条件不满足')`),'technical failure clears evidence without declaring a business-rule failure');
  await open(info.source);await manual(false);await run();
  const readOnly=await action('snapshot');check(tables(before,readOnly).length===0,'all persistent tables unchanged by source reads and repeated check POSTs');
@@ -52,4 +59,13 @@ module.exports=async function conditionalChecks({evaluate,reload,info,action}){
  result.expectedNegativeURLs=[`/api/projects/${info.project}/conditional-checks/sources/${info.cold}`,`/api/projects/${info.project}/conditional-checks`];
  result.mutations=['only existing synthetic source content/hash changed and exactly restored','only one existing source user-read grant revoked; no grant restored or created'];
  return result;
+};
+
+// Same actual protection oracle for before/after and the exact screenshot observation.
+module.exports.assertSandboxSafety=function(observed,check,label){
+ check(`${label} actual args preserve existing browser protections`,observed.length>0&&observed.every(p=>p.security_args_verified));
+ const renderer=observed.filter(p=>p.type==='renderer');
+ check(`${label} renderer tokens remain protected`,renderer.length>0&&renderer.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)));
+ const main=observed.find(p=>p.type==='browser');
+ check(`${label} SDK weakening absent`,!!main&&!main.command_switches.includes('--disable-features'));
 };

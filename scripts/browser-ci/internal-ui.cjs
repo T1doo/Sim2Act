@@ -341,8 +341,7 @@ async function layout(page, label) {
       const r=await execFileAsync(python,['scripts/protocol-ui/fixture.py','--root',protocolRoot,'--action',name,...args],{encoding:'utf8',timeout:30000,env:{...process.env,PYTHONPATH:'src'}});return r.stdout.trim();
     };
     const sandboxBefore=await auditProtocol();
-    result.protocol=await require('./protocol-ui.cjs')({page:protocolPage,base:protocolBase,info:protocolInfo,action,
-      capture:async label=>{const sandbox=await auditProtocol();await protocolPage.screenshot({path:path.join(protocolRoot,`${label}.png`),fullPage:true});return {label,scope:'protocol-source-extract-cold',emitted:false,visualReview:'NOT_REVIEWED',sandbox};}});
+    result.protocol=await require('./protocol-ui.cjs')({page:protocolPage,base:protocolBase,info:protocolInfo,action});
     result.protocol.sandboxBefore=sandboxBefore;result.protocol.sandboxAfter=await auditProtocol();
     const expectedProtocolError=e=>{
       if(e.kind!=='console')return false;
@@ -355,17 +354,30 @@ async function layout(page, label) {
       return failedReceipt||denied||missingIcon||conditionalNegative;
     };
     // Additional phase reuses existing policy/identity and this protected context.
-    const conditionalAction=async name=>JSON.parse((await execFileAsync(python,['scripts/conditional-ui/fixture.py','--root',protocolRoot,'--action',name],{encoding:'utf8',timeout:10000,env:{...process.env,PYTHONPATH:'src'}})).stdout);
     const conditionalSandboxBefore=await auditProtocol();
-    result.protocol.conditional=await require('./conditional-checks-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalAction});
+    const conditionalFixture=require('./conditional-fixture-session.cjs')({python,root:protocolRoot});
+    try{
+      result.protocol.conditional=await require('./conditional-checks-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalFixture.action,
+        capture:async(label,milestone)=>{
+          const width=label==='protocol-desktop'?1280:390;
+          await protocolPage.setViewportSize({width,height:label==='protocol-desktop'?1000:844});
+          const bounds=await protocolPage.evaluate(()=>({width:innerWidth,documentWidth:document.documentElement.scrollWidth,
+            overflow:[...document.querySelectorAll('#conditional-panel button,#conditional-panel select,#conditional-panel input,#conditional-panel textarea,#condition-source,#condition-results')].filter(e=>e.getClientRects().length).filter(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth+1;}).length}));
+          check(`${label}: conditional report and controls fit actual viewport`,bounds.width===width&&bounds.documentWidth<=width+1&&bounds.overflow===0);
+          const sandbox=await auditProtocol();
+          require('./conditional-checks-ui.cjs').assertSandboxSafety(sandbox,check,`conditional ${label} capture`);
+          await protocolPage.screenshot({path:path.join(protocolRoot,`${label}.png`),fullPage:true});
+          await protocolPage.setViewportSize({width:1280,height:900});
+          return {label,scope:milestone.scope,milestone,bounds,emitted:false,visualReview:'NOT_REVIEWED',sandbox};
+        }});
+      result.protocol.conditional.fixtureTimings=conditionalFixture.timings;
+    }finally{await conditionalFixture.close();}
+    result.protocol.screenshotsSupersededBy='conditional-hand-report PASS/BLOCK desktop and PASS/UNKNOWN narrow; old protocol26 and layouts retained';
+    result.protocol.screenshots=result.protocol.conditional.screenshots;
     result.protocol.conditional.sandboxBefore=conditionalSandboxBefore;
     result.protocol.conditional.sandboxAfter=await auditProtocol();
     for(const [label,observed] of [['before',conditionalSandboxBefore],['after',result.protocol.conditional.sandboxAfter]]){
-      check(`conditional ${label} actual args preserve existing browser protections`,observed.length>0&&observed.every(p=>p.security_args_verified));
-      const renderer=observed.filter(p=>p.type==='renderer');
-      check(`conditional ${label} renderer tokens remain protected`,renderer.length>0&&renderer.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)));
-      const main=observed.find(p=>p.type==='browser');
-      check(`conditional ${label} SDK weakening absent`,!!main&&!main.command_switches.includes('--disable-features'));
+      require('./conditional-checks-ui.cjs').assertSandboxSafety(observed,check,`conditional ${label}`);
     }
     check('bounded conditional native phase passes without semantic promotion',result.protocol.conditional.status==='PASS'&&result.protocol.conditional.semanticStatus==='UNKNOWN'&&result.protocol.conditional.ownerAcceptance==='PENDING');
     result.protocol.consoleErrors=protocolErrors;result.protocol.unexpectedConsoleErrors=protocolErrors.filter(e=>!expectedProtocolError(e));
