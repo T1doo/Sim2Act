@@ -16,7 +16,13 @@ async function refreshApplicationUse(apps){
  const identity=token,project=$("project-select").value,generation=++applicationUseListGeneration,context=applicationUseContextGeneration;
  const current=()=>identity===token&&project===$("project-select").value&&generation===applicationUseListGeneration;
  const rows=[];
+ if(applicationUseCurrent(applicationUse)&&!apps.some(summary=>summary.id===applicationUse.appId))clearApplicationUseData(applicationUse);
  for(const summary of apps){
+  // A family hint skips discovery only; opening an instance still fully inspects it.
+  if(summary.csv_instance_candidate===false){
+   if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);
+   continue;
+  }
   let app,reply;
   try{app=await api(`/api/apps/${summary.id}`);if(!current())return;if(!csvUseApp(app))continue;reply=await api(`/api/internal/apps/${app.id}/instances`);}
   catch(error){if(!current())return;rows.push(row(`${summary.name} · 当前版本不可读取；请核对授权与来源。`));if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);continue;}

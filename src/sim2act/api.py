@@ -51,12 +51,40 @@ from .preflight import preflight
 from .protocol_api import mount as mount_protocol_api
 from .protocol_recovery import mount as mount_protocol_recovery
 from .protocol_reviews import mount as mount_protocol_reviews
+from .report_manifest_apps import NAMESPACE as REPORT_MANIFEST_NAMESPACE
 from .report_manifest_apps import mount as mount_report_manifest_apps
 from .spec_checklists import SpecChecklistInput, complete_checklist, inspect_checklist
 
 
 class ProjectInput(Strict):
     name: str = Field(min_length=1, max_length=200)
+
+
+def _csv_instance_candidate(candidate):
+    """Directory routing only; selected instances still require authoritative inspect."""
+    if not isinstance(candidate, dict):
+        return None
+    manifest, actions = candidate.get("manifest"), candidate.get("actions")
+    if not isinstance(manifest, dict) or not isinstance(actions, list) or len(actions) != 1:
+        return None
+    action = actions[0]
+    executor = action.get("executor") if isinstance(action, dict) else None
+    if not isinstance(executor, dict):
+        return None
+    if (
+        manifest.get("validation_suite_ref") == "receipt.readback.v1"
+        and executor.get("kind") == "registered_tool"
+        and executor.get("ref") == "data.aggregate_csv"
+    ):
+        return True
+    if (
+        candidate.get("namespace") == REPORT_MANIFEST_NAMESPACE
+        and manifest.get("validation_suite_ref") == "source.conditional_report.v1"
+        and executor.get("kind") == "bounded_report"
+        and executor.get("ref") == "intern.conditional_report"
+    ):
+        return False
+    return None
 
 
 class ResourceInput(Strict):
@@ -429,7 +457,17 @@ def create_app(store=None, settings=None):
                 .mappings()
                 .all()
             )
-        return {"items": [{k: v for k, v in r.items() if k != "candidate"} for r in rows if not isinstance(r["candidate"], dict) or r["candidate"].get("namespace") != CONDITIONAL_APP_NAMESPACE], "state": "PREVIEW_ONLY", "publishable": False}
+        items = []
+        for r in rows:
+            candidate = r["candidate"]
+            if isinstance(candidate, dict) and candidate.get("namespace") == CONDITIONAL_APP_NAMESPACE:
+                continue
+            summary = {k: v for k, v in r.items() if k != "candidate"}
+            hint = _csv_instance_candidate(candidate)
+            if hint is not None:
+                summary["csv_instance_candidate"] = hint
+            items.append(summary)
+        return {"items": items, "state": "PREVIEW_ONLY", "publishable": False}
 
     @app.post("/api/projects/{pid}/apps/csv-preview", status_code=201)
     def create_csv_preview(pid: str, body: CsvDraftInput, user=user_dependency):
