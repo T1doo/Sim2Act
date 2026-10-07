@@ -426,3 +426,6 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 2026-10-07 agent结果回读oracle最小本地修正：基于精确82及原FAIL证据，仅新增当前iid/version/实际结果标题条数就绪helper并在原v1/v2检查前等待，12秒及150秒/4分钟/15分钟不变，所有原断言不改；产品、fixture、workflow、授权和证据出口不改。真实HTTP同型race原idle提前/新谓词pending false→同一回包释放true、10负例拒绝，独立PASS；Windows精确时序未抓到，新nativeNOT_RUN，不自动push/rerun。[事前范围](AgentCIResultReadinessPlan.md) / [证据](../evidence/agent-ci-result-readiness-20261007/README.md)。
 
 2026-10-07 父授权bd56f80精确普通push和唯一标准CI已闭合，冻结范围仍仅就绪oracle；新应用use1ebdb71/步骤9f/回读失败d069独立本地不混入。下一组合需保留clearApplicationUse与clearRunDetail、解决Plan/Log追加冲突并对精确组合验收；不得把此native结果借给组合或完整P-B。
+
+2026-10-07 冻结UI CI等待期间独立只读进度切片：base00a46969/dev/task-progress-local，仅普通成果画布追加最近20步/持久时间/有限等待原因/VERIFIED与已知无效计数，模型登记不代表发送，目标验收NOT_RUN。15投影专项、真实HTTP/DOM41项；2PASS专项、相关53PASS/1PGSKIP/2browserDESELECT，独立2PASS；0真实模型、不push/新CI，不改冻结37574285701，PG/新原生像素未测。[证据](../evidence/task-progress-local-20261007/README.md)。
+2026-10-07 CI等待期有界体验切片闭合：普通任务回读失败清空旧画布/命令/核对字段，区分读取失败与技术FAILED，停止失败详情自动回读，仅手动GET恢复；项目/身份/迟到回执守卫与旧按钮零写负例闭合。事前范围[TaskReadFailurePlan](TaskReadFailurePlan.md)列最多三类核心演示缺口，选择无需新增权限的画布修正；真实语言规划/语义验收、正式应用使用闭环仍开放。新切片仅本地，不混入已推精确82ffe61及唯一CI37576109066，原生/像素尚未测。[验证与失败记录](../evidence/task-read-failure-local-20261007/README.md)。

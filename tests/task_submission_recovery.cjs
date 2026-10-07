@@ -90,7 +90,7 @@ const switchProject=async(pid)=>{await evaluate(`$('project-select').value=${js(
  await submit('Accepted task with lost read','read-lost');await wait(async()=>await state()==='accepted-read-error','lost result read');
  check(await evaluate(`!$('run-submit-read').hidden&&$('run-submit-recover').hidden`),'accepted read failure offers GET recovery, not POST');
  const readId=await evaluate(`runSubmissionEntry().runId`);
- await evaluate(`$('run-submit-read').click()`);await wait(async()=>await state()==='accepted','read restored');
+ await evaluate(`$('run-submit-read').click()`);await wait(()=>evaluate(`runSubmissionEntry().state==='accepted'&&$('raw-result').textContent.includes(${js(readId)})`),'persistent read restored');
  check(await evaluate(`window.recoveryPosts.length===${postsBeforeRead+1}`),'re-reading accepted task sends no new POST');
  check(await evaluate(`activeRun===${js(readId)}`),'read recovery returns same accepted task');
  await wait(()=>evaluate(`$('run-submit-status').textContent.includes('目标已验收')`),'read status complete');
@@ -111,6 +111,8 @@ const switchProject=async(pid)=>{await evaluate(`$('project-select').value=${js(
  await evaluate(`showRun(${js(firstRun)})`);
  check(await evaluate(`$('result').textContent.includes('部分完成')&&$('result').textContent.includes('MOCK 工程样例')`),'restored task reads real Mock partial result with honest mode');
  check(await evaluate(`$('raw-result').textContent.includes('VERIFIED')`),'persisted read receipt visible after worker completion');
+ check(await evaluate(`$('run-progress').textContent.includes('任务已持久接受')&&$('run-progress').textContent.includes('后台已领取任务')&&$('run-progress').textContent.includes('工具效果已核验')`),'ordinary progress reads real persisted worker steps');
+ check(await evaluate(`$('run-progress').textContent.includes('1 项已核验')&&$('run-progress').textContent.includes('NOT_RUN')`),'verified effect count remains separate from target acceptance');
  // Hold an actual persisted list; a subsequent deliberate intent supplies newer data.
  await evaluate(String.raw`window.historyOriginalFetch=window.fetch;window.historyHoldMode='none';window.fetch=async(url,opts)=>{
  const target=new URL(url,location.href);const response=await window.historyOriginalFetch(url,opts);
