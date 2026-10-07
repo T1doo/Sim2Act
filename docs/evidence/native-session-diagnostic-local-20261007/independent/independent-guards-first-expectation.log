@@ -1,0 +1,122 @@
+.F.                                                                      [100%]
+=================================== FAILURES ===================================
+_______ test_independent_no_ack_and_owned_collection[wrong-source-hash] ________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-546/test_independent_no_ack_and_ow1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f17cf853980>
+mode = 'wrong-source-hash'
+
+    @pytest.mark.parametrize('mode',['slow-stop','wrong-source-hash'])
+    def test_independent_no_ack_and_owned_collection(tmp_path,monkeypatch,mode):
+        (tmp_path/'fresh').mkdir()
+        info={'port':12345,'project':'fresh-p','source':'fresh-s','bearer':'synthetic','initial_counts':{}}
+        for root in [tmp_path,tmp_path/'fresh']:
+            (root/'info.json').write_text(json.dumps(info))
+        real_spawn=subprocess.Popen
+        old=real_spawn([sys.executable,'-c','import time;time.sleep(30)'])
+        children=[];observations=[]
+        def spawn(command,**kwargs):
+            if '--action' in command:
+                assert old.poll() is not None
+                command=[sys.executable,'-c','import time;time.sleep(30)']
+            proc=real_spawn(command,**kwargs);children.append(proc);return proc
+        monkeypatch.setattr(rotation.subprocess,'Popen',spawn)
+        monkeypatch.setattr(rotation,'snapshot',lambda root:{'tables':{}})
+        real_stop=rotation.stop
+        def stop(proc):
+            if proc is old and mode=='slow-stop':
+                time.sleep(.4)
+                observations.append(children[0].poll())
+            real_stop(proc)
+        monkeypatch.setattr(rotation,'stop',stop)
+        monkeypatch.setattr(rotation.httpx,'get',lambda url,**kwargs:httpx.Response(200,json=[{'id':'fresh-s','hash':'0'*64}] if url.endswith('/resources') else {'status':'ok'}))
+        request=str(tmp_path/'fresh-request.json')
+        code=f'from pathlib import Path;import time;Path({request!r}).write_text(\'{json.dumps({"action":"fresh-protocol-fixture.v1"})}\');time.sleep(30)'
+        with pytest.raises(subprocess.TimeoutExpired):
+>           rotation.run_node([sys.executable,'-c',code,sys.executable],old,tmp_path,REPO,os.environ.copy(),timeout=.2)
+
+/tmp/native-session-failure-independent-review/test_independent_rotation.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command = ['/tmp/native-session-failure-independent-review/venv/bin/python', '-c', 'from pathlib import Path;import time;Path(\'...on": "fresh-protocol-fixture.v1"}\');time.sleep(30)', '/tmp/native-session-failure-independent-review/venv/bin/python']
+old_api = <Popen: returncode: -15 args: ['/tmp/native-session-failure-independent-revi...>
+old_root = PosixPath('/tmp/pytest-of-agent/pytest-546/test_independent_no_ack_and_ow1')
+repo = PosixPath('/workspace/Sim2Act-native-session-diagnostic')
+env = {'BROWSER_MANAGEMENT_SOCKET_PATH': '/home/agent/.local/run/browser-management/socket', 'CAAS_DIND_STORAGE_DRIVER': 'vf..._GIT_COMMIT_SHA': '8f4f3df6e62b78be6e6f4def1fdb1a1649eeddb7', 'CAAS_IMAGE_VERSION': '20260927172045-8f4f3df6e62b', ...}
+timeout = 0.2, stdout = None, stderr = None
+
+    def run_node(command, old_api, old_root, repo, env, timeout=150, stdout=None, stderr=None):
+        old_root = Path(old_root)
+        fresh = old_root / "fresh"
+        old_info = json.loads((old_root / "info.json").read_text(encoding="utf-8"))
+        fresh_info = json.loads((fresh / "info.json").read_text(encoding="utf-8"))
+        if fresh_info["port"] != old_info["port"] or old_api.poll() is not None:
+            raise ValueError("Existing owned same-port protocol API required")
+        request, response = old_root / "fresh-request.json", old_root / "fresh-response.json"
+        if request.exists() or response.exists():
+            raise ValueError("Owned transition must be fresh and single-use")
+        node = subprocess.Popen(command, cwd=repo, env=env, stdout=stdout, stderr=stderr)
+        replacement = None
+        switched = False
+        deadline = time.monotonic() + timeout
+        expired = threading.Event()
+    
+        def expire_node():
+            expired.set()
+            if node.poll() is None:
+                try:
+                    node.kill()
+                except ProcessLookupError:
+                    pass
+    
+        def check_deadline():
+            if expired.is_set() or time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(command, timeout)
+    
+        watchdog = threading.Timer(max(0, deadline - time.monotonic()), expire_node)
+        watchdog.start()
+        try:
+            while node.poll() is None:
+                check_deadline()
+                if request.exists() and not switched:
+                    if request.stat().st_size > 100:
+                        raise ValueError("Closed transition request exceeded bound")
+                    value = json.loads(request.read_text(encoding="utf-8"))
+                    if type(value) is not dict or value != {"action": "fresh-protocol-fixture.v1"}:
+                        raise ValueError("Closed transition action required")
+                    before = snapshot(old_root)
+                    check_deadline()
+                    baseline = snapshot(fresh)
+                    check_deadline()
+                    stop(old_api)
+                    if old_api.poll() is None:
+                        raise RuntimeError("Old owned protocol API not joined")
+                    check_deadline()
+                    with (fresh / "api.log").open("wb") as log:
+                        replacement = subprocess.Popen(
+                            [command[-1], "scripts/protocol-ui/fixture.py", "--root", str(fresh), "--action", "serve"],
+                            cwd=repo, env=env, stdout=log, stderr=log,
+                        )
+                    ready_deadline = min(deadline, time.monotonic() + 10)
+                    while time.monotonic() < ready_deadline:
+                        if replacement.poll() is not None:
+                            raise RuntimeError("Fresh owned protocol API exited before readiness")
+                        try:
+                            base = f"http://127.0.0.1:{old_info['port']}"
+                            metadata = httpx.get(base + f"/api/projects/{fresh_info['project']}/resources",
+                                                 headers={"Authorization": "Bearer " + fresh_info["bearer"]}, timeout=0.5)
+                            if metadata.status_code == 200 and any(
+                                r["id"] == fresh_info["source"] and r.get("hash") == SOURCE_HASH for r in metadata.json()
+                            ) and httpx.get(base + "/health", timeout=0.5).status_code == 200:
+                                break
+                        except httpx.HTTPError:
+                            pass
+                        time.sleep(0.02)
+                    else:
+>                       raise RuntimeError("Fresh owned protocol API not ready")
+E                       RuntimeError: Fresh owned protocol API not ready
+
+scripts/protocol-ui/rotation.py:101: RuntimeError
+=========================== short test summary info ============================
+FAILED ../../tmp/native-session-failure-independent-review/test_independent_rotation.py::test_independent_no_ack_and_owned_collection[wrong-source-hash]
+1 failed, 2 passed in 2.40s
