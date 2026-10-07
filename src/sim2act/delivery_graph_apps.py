@@ -4,6 +4,7 @@ import copy
 import hashlib
 from functools import wraps
 from pathlib import Path
+from typing import NoReturn
 
 from fastapi import Depends
 from pydantic import Field, ValidationError
@@ -43,7 +44,7 @@ class PlanInput(Strict):
     changes: list[core.Change] = Field(min_length=1, max_length=128)
 
 
-def conflict(detail="DeliveryGraph persistent binding changed"):
+def conflict(detail="DeliveryGraph persistent binding changed") -> NoReturn:
     raise DomainError("VERSION_CONFLICT", detail)
 
 
@@ -142,7 +143,7 @@ def load_family(store, c, user, pid, aid, limits):
 
 def logical(store, c, draft, manifest, rows):
     """Exactly mirror core logical keys; external definitions come from trusted state."""
-    keys = {}
+    keys: dict[str, int | None] = {}
     external = {}
     goal = "goal:" + manifest.goal_ref
     external[goal] = {
@@ -771,10 +772,12 @@ def plan(store, user, pid, aid, body, limits):
             body.expected_graph_fingerprint,
             request,
             saved["context"],
-            prior_answer["receipt"] if prior else None,
+            prior_answer["receipt"] if prior_answer is not None else None,
         )
         # Canonical fingerprint check defends strict bool/int even before core fix.
         if prior:
+            if prior_answer is None:
+                conflict("Missing persisted plan receipt")
             validate_plan_seal(c, user, aid, body.request_key, prior)
             verify_outer(prior_answer)
             if set(prior_answer) != set(metadata(saved)) | {
