@@ -15,7 +15,7 @@ from .contracts import Limits, Strict, validate_action_input, validate_value
 from .db import app_drafts, app_previews, fingerprint, new_id, task_extractions
 from .errors import DomainError
 from .preflight import preflight
-from .protocol_jobs import _plan, _public, enqueue, verified_pending
+from .protocol_jobs import _public, enqueue, verified_pending
 
 NAMESPACE = "bounded-report-manifest.v1"
 CHECK = "source.conditional_report.v1"
@@ -197,7 +197,7 @@ def scoped(store, c, user, aid, pid=None):
     return row[0]
 
 
-def load(store, c, user, aid, limits, pid=None):
+def _read_canonical(store, c, user, aid, limits, pid):
     pid = scoped(store, c, user, aid, pid)
     draft = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
     marker = (
@@ -243,12 +243,41 @@ def load(store, c, user, aid, limits, pid=None):
             raise ValueError("Invalid persisted origin")
     except (ValidationError, ValueError, TypeError):
         raise DomainError("VERSION_CONFLICT") from None
-    parent = named.load(store, c, user, pid, proof["named_app_id"])
+    return draft, marker, manifest, action, report, proof
+
+
+def _fresh_origin(store, c, user, pid, parent, plan):
+    """Immediately consume our private named validation; recheck mutable origin heads."""
+    origin = parent["candidate"]["origin"]
+    project = store.lock_project(c, user, pid)
+    job, run = verified_pending(store, c, user, origin["extraction_run_id"])
+    current = (job["result"] or {}).get("compiled_plan")
+    if job["phase"] != "extract" or run["status"] != "SUCCEEDED" or not isinstance(current, dict):
+        raise DomainError("VERIFICATION_FAILED", "Completed protocol extraction required")
     if (
-        parent["fingerprint"] != proof["expected_named_fingerprint"]
+        run["project_id"] != pid
+        or project["runtime_id"] != parent["runtime_id"]
+        or fingerprint(current) != fingerprint(plan)
+        or current.get("plan_fingerprint") != origin["expected_plan_fingerprint"]
+        or fingerprint({k: v for k, v in current.items() if k != "plan_fingerprint"})
+        != origin["expected_plan_fingerprint"]
+    ):
+        raise DomainError("VERSION_CONFLICT", "Validated extraction changed")
+    validate_snapshot(job["snapshot"])
+    _, source = verified_pending(store, c, user, plan["source_run_id"])
+    named._current_target(store, c, user, pid, project, origin)
+    return job, source
+
+
+def _validate_canonical(store, c, user, pid, parts, parent, plan):
+    draft, marker, manifest, action, report, proof = parts
+    if (
+        parent["id"] != proof["named_app_id"]
+        or parent["project_id"] != pid
+        or parent["fingerprint"] != proof["expected_named_fingerprint"]
         or draft["runtime_id"] != parent["runtime_id"]
         or proof["runtime_id"] != parent["runtime_id"]
-        or manifest.app_id != aid
+        or manifest.app_id != draft["id"]
         or draft["name"] != parent["name"]
         or marker["task_id"] != proof["extraction_run_id"]
     ):
@@ -263,11 +292,9 @@ def load(store, c, user, aid, limits, pid=None):
     ]:
         if proof[key] != origin[key]:
             raise DomainError("VERSION_CONFLICT")
-    plan = _plan(store, c, user, proof["extraction_run_id"], proof["expected_plan_fingerprint"])
-    extraction_job, _ = verified_pending(store, c, user, proof["extraction_run_id"])
+    extraction_job, source = _fresh_origin(store, c, user, pid, parent, plan)
     if fingerprint(proof["limits"]) != fingerprint(extraction_job["snapshot"]["limits"]):
         raise DomainError("VERSION_CONFLICT", "Frozen extraction budget cannot be rewritten")
-    _, source = verified_pending(store, c, user, plan["source_run_id"])
     if (
         proof["source_run_id"] != source["id"]
         or proof["source_resource_id"] != source["resource_refs"][0]
@@ -277,12 +304,23 @@ def load(store, c, user, aid, limits, pid=None):
     return draft, manifest, action, report
 
 
+def load(store, c, user, aid, limits, pid=None):
+    parts = _read_canonical(store, c, user, aid, limits, pid)
+    pid = parts[0]["project_id"]
+    parent, plan, _ = named._load_validated_origin(store, c, user, pid, parts[-1]["named_app_id"])
+    return _validate_canonical(store, c, user, pid, parts, parent, plan)
+
+
 def promote(store, user, pid, aid, body, limits):
     request = {"named_app_id": aid, **body.model_dump()}
     request_fp = fingerprint({"namespace": NAMESPACE, "project_id": pid, **request})
     with store.tx() as c:
-        parent = named.load(store, c, user, pid, aid)
-        if parent["fingerprint"] != body.expected_app_fingerprint:
+        parent, plan, _ = named._load_validated_origin(store, c, user, pid, aid)
+        if (
+            parent["id"] != aid
+            or parent["project_id"] != pid
+            or parent["fingerprint"] != body.expected_app_fingerprint
+        ):
             raise DomainError("VERSION_CONFLICT")
         origin = parent["candidate"]["origin"]
         old = (
@@ -299,13 +337,12 @@ def promote(store, user, pid, aid, body, limits):
         if old:
             if old["request_fingerprint"] != request_fp:
                 raise DomainError("VERSION_CONFLICT")
-            draft, manifest, action, report = load(store, c, user, old["app_id"], limits, pid)
+            parts = _read_canonical(store, c, user, old["app_id"], limits, pid)
+            draft, manifest, action, report = _validate_canonical(
+                store, c, user, pid, parts, parent, plan
+            )
             return {**metadata(draft, manifest, report), "cached": True}
-        plan = _plan(
-            store, c, user, origin["extraction_run_id"], origin["expected_plan_fingerprint"]
-        )
-        job, _ = verified_pending(store, c, user, origin["extraction_run_id"])
-        _, source = verified_pending(store, c, user, plan["source_run_id"])
+        job, source = _fresh_origin(store, c, user, pid, parent, plan)
         # Freeze original caps; shared preflight rejects a tightened platform before any write.
         caps = copy.deepcopy(job["snapshot"]["limits"])
         proof = {
