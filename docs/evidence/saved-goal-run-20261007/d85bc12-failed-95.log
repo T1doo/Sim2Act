@@ -1,0 +1,116 @@
+..............F...F.....................................s............... [ 75%]
+.......................                                                  [100%]
+=================================== FAILURES ===================================
+_ test_coherent_contract_tamper_does_not_relabel_original_acceptance[remove_source] _
+
+env = (<sim2act.db.Store object at 0x7f54e4dd7f20>, Settings(database_url='sqlite:////tmp/goal-card-runs-corrected-fixture/t...b6580a889d4998aac0ad8883939bef', 'user_22588e1c835e4025b4180acbd78b08c4', 'proj_d8c45c7b92524a959b81f4721882801b', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f54e4cb71a0>
+damage = 'remove_source'
+
+    @pytest.mark.parametrize("damage", ["other_card", "other_project", "remove_source", "accepted_anchor"])
+    def test_coherent_contract_tamper_does_not_relabel_original_acceptance(env, monkeypatch, damage):
+        store, settings, client, *_rest, pid, _rid = env
+        source, content = card(env)
+        content["resource_refs"] = []
+        source = client.post(f"/api/projects/{pid}/goal-cards", json=content).json()
+        rid = start(env, source).json()["run_id"]
+        other_pid = pid if damage != "other_project" else client.post("/api/projects", json={"name": "empty other"}).json()["id"]
+        other = client.post(f"/api/projects/{other_pid}/goal-cards", json=content).json()
+        with store.tx() as c:
+            value = copy.deepcopy(c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == rid)).scalar_one())
+            if damage == "remove_source":
+                value.pop("source_goal_card")
+            else:
+                value["source_goal_card"]["card_id"] = other["id"]
+                value["goal"]["goal_id"] = other["id"]
+            c.execute(update(run_contracts).where(run_contracts.c.run_id == rid).values(snapshot=value, fingerprint=fingerprint(value)))
+            if damage == "accepted_anchor":
+                forged = fingerprint({"goal": value["goal"]["goal"], "resource_refs": [],
+                    "policy": {k: value[k] for k in ("limits", "mode", "request_model")},
+                    "goal_source": value["source_goal_card"]})
+                context = dict(c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one())
+                context["saved_goal_input"] = forged
+                c.execute(update(runs).where(runs.c.id == rid).values(fingerprint=forged, context=context))
+        calls = []
+        monkeypatch.setattr(MockModel, "request", lambda *args: calls.append(args))
+        assert Worker(store, settings).once() and calls == []
+>       assert client.get(f"/api/runs/{rid}").status_code == 409
+E       AssertionError: assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+E        +    where <Response [200 OK]> = get('/api/runs/run_1b340e6380b543d49758aa337fc3cf42')
+E        +      where get = <starlette.testclient.TestClient object at 0x7f54e4acea80>.get
+
+tests/test_goal_card_runs.py:180: AssertionError
+___________________ test_saved_goal_execution_actual_http_ui ___________________
+
+env = (<sim2act.db.Store object at 0x7f54e47d7800>, Settings(database_url='sqlite:////tmp/goal-card-runs-corrected-fixture/t...4df8cf331549d7ab4cb4e84edadb77', 'user_71ba8d40923f44a7b63791e2f239e85e', 'proj_751ec972da2a4150a7a23944e28f6634', ...)
+tmp_path = PosixPath('/tmp/goal-card-runs-corrected-fixture/test_saved_goal_execution_actu0')
+
+    def test_saved_goal_execution_actual_http_ui(env, tmp_path):
+        import socket
+        import threading
+        import time
+    
+        import uvicorn
+        from sqlalchemy import select
+        from test_goal_cards import body
+    
+        from sim2act.api import create_app
+        from sim2act.db import grants, principals, runs
+        from sim2act.worker import Worker
+    
+        store, settings, client, _, _, project, resource = env
+        card = client.post(f"/api/projects/{project}/goal-cards", json=body(resource)).json()["id"]
+        with store.tx() as connection:
+            before = {table.name: [dict(row) for row in connection.execute(
+                select(table).order_by(table.c.id)
+            ).mappings()] for table in (grants, principals)}
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-goal-worker")
+        def work():
+            assert store.test_only and settings.mode == "mock"
+            if not Worker(store, settings).once():
+                raise AssertionError("Expected owned queued task")
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "project": project, "card": card,
+        }))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            result = subprocess.run(
+                ["node", "tests/goal_card_run_ui.cjs", str(tmp_path), "HTTP"],
+                capture_output=True, text=True, timeout=30,
+            )
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: HTTP actual tool receipts and NOT_RUN displayed
+E                 at check (/workspace/Sim2Act-bounded-product-candidate/tests/goal_card_run_ui.cjs:10:21)
+E                 at actualHttp (/workspace/Sim2Act-bounded-product-candidate/tests/goal_card_run_ui.cjs:28:317)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act-bounded-product-candidate/tests/goal_card_run_ui.cjs:33:31
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/goal_card_run_ui.cjs', '/tmp/goal-card-runs-corrected-fixture/test_saved_goal_ex...cess/task_queues:104:5)\n    at async /workspace/Sim2Act-bounded-product-candidate/tests/goal_card_run_ui.cjs:33:31\n').returncode
+
+tests/test_goal_card_run_ui.py:68: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_goal_card_runs.py::test_coherent_contract_tamper_does_not_relabel_original_acceptance[remove_source]
+FAILED tests/test_goal_card_run_ui.py::test_saved_goal_execution_actual_http_ui
+2 failed, 92 passed, 1 skipped, 1 warning in 21.21s

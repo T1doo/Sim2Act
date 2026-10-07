@@ -1,0 +1,15 @@
+# Saved-goal execution evidence
+
+Final execution source02ddcebf937e4264ac60c8b7da60455a5e2c6eab,253 tracked execution files. Actual101 unique collected cases match final JUnit:100 PASS1 isolated-PG-role SKIP/15.09s. See02ddceb-verification.json, source-hashes, collection, original log/XML. Offline only; no full/PG/native/LIVE/CI execution.
+
+Controlled full product DOM27 and actual loopback HTTP7 are separate receipts. HTTP uses production API/assets and normal defaultMock Worker; the test-only worker trigger is a fixture route, absent from product. Actual original assertion confirms1Run and complete sorted Principal/Grant equality. DB/authority rows NOT_EXPORTED. Onlyapp.js loaded-source hash is exported. Native pixels/PG concurrency NOT_RUN. MOCK/PARTIAL/goal NOT_RUN never become SUCCEEDED P-B provenance.
+
+Preserved: development12, mixed-source90 first HTTP fixture failure (freeze/UI timing overlap; not frozen PASS), exactd85bc12 failed95, immutable364caa0 staticBLOCK. Its missing-UI-project claim is corrected in later independent addendum: project guard existed, card-ID guard was added. Original bytes remain unchanged. Windows900 analysis is read-only based on old measured native jobs, not capacity proof for this source. Artifact hashes cover archived bytes; source hashes cover executed files. Overall R0/P-A/P-B NOT_ACCEPTED.
+
+Intermediatecf0ac19 targeted96 case run passed95/skip1 but independent16 later confirmed3 type/duplicate-key defects. Preserve its original results and independent actual probes; do not treat that green JUnit as source acceptance. Final02ddceb seals exact numeric types and strict resumed JSON. Final independent19 actual SQLite/ASGI/defaultWorker oracles all PASS,8 actualMOCK/0LIVE; independent UI/native/PG concurrency NOT_RUN. Static lock review is separate from concurrency qualification. Executed immutable archive paths and7 key source hashes are exported separately.
+
+[Final independent review](independent-final/final-review.json) binds19 actual cases to02ddceb,8Mock/0LIVE,15 zero-send/Attempt/Operation negatives and unchanged authority fingerprints. Source/permission/resume scope is limited; UI/native/PG concurrency remain independently NOT_RUN. Original364 UI-project observation is corrected separately without overwriting its report. Owned37 independent fixture DBs were removed. GET full-table equality assertions passed; original GET numeric digests NOT_RECORDED.
+
+Four original failed logs/XML retain28 traceback trailing-whitespace lines byte-for-byte, checked against originals and SHA in raw-evidence-whitespace-exceptions.json. They are deliberate raw-evidence exceptions; source and authored documentation pass whitespace checks. Post-execution manifest verification does not invent a separate pre-execution hash receipt.
+
+The independent authority CSV retains its original20 CRLF rows and SHA. Scoped Git attributes preserve all archived evidence bytes and recognize this CSV's CRLF terminators; they do not alter source or global whitespace policy.

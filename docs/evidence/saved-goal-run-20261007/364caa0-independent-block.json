@@ -1,0 +1,72 @@
+{
+  "decision": "STATIC_SOURCE_DEFECTS_DYNAMIC_PENDING",
+  "exact_reviewed_source": "364caa0ef2ee9c048801122f5a630e68d6ca0d49",
+  "source_hashes": {
+    "src/sim2act/api.py": "d39cdba6b2153054106f250a894d8713a570d987319df1e7e069b73338ad0f93",
+    "src/sim2act/contracts.py": "3f4bac9a8c94ae05ebb94489769e3a0410054c75512a7b7fcf76868e92bebefe",
+    "src/sim2act/db.py": "3265b019c9a33e32d4346b3101cb99041d50d9054a5ddbaee34445a701950067",
+    "src/sim2act/goal_runs.py": "a95de9a4dc158f32353f9d2e383c5a8bae457cb5f7c79bb433436b2ecaef1587",
+    "src/sim2act/web/app.js": "95f390e06b22a5c660cb06f2a34e3c931f176d672fcdff277ce40d972b194225",
+    "src/sim2act/web/index.html": "9c2bbfee6b20b23ba7339ff87de5868d1e4cd3e64e12271348e5d1d67839ae08",
+    "src/sim2act/worker.py": "612d0484b1aa014a249842d8d38599fe87c28fac271be46a605f982f768c5f80"
+  },
+  "findings": [
+    {
+      "id": "GOAL-ACCEPTED-ANCHOR",
+      "severity": "BLOCK",
+      "file": "src/sim2act/goal_runs.py",
+      "counterexample": "Sameproject identical cards A/B. Accepted A Run contract row can change source.card_id+goal.goal_id to B and rehash, while Run/ACCEPTED input fingerprint stay original. Existing verify predicates can all hold.",
+      "fix": "Goal-only reconstruct exact accepted request FP and compare Run+independent ACCEPTED input FP."
+    },
+    {
+      "id": "GOAL-FINISH-LOCK-ORDER",
+      "severity": "BLOCK lock order",
+      "file": "src/sim2act/worker.py",
+      "counterexample": "finish guard acquires Run and source Grant FORUPDATE then project; submit acquires project then same Grant, creating static project↔Grant cycle. No actualPG reproduced.",
+      "fix": "Goal-only identify scope then project→guard/authorization."
+    },
+    {
+      "id": "GOAL-RESUME-PROMPT",
+      "severity": "BLOCK source conditions in resume wire",
+      "file": "src/sim2act/worker.py",
+      "counterexample": "Nonempty persisted context.messages bypass initial saved_goal prompt construction. Altered first user hard conditions can still pass untouched contract/history checks yet feed changed conditions to actual model.",
+      "fix": "Goal-only validate canonical first system/user source prefix each request/resume; preserve subsequent verified tool history."
+    },
+    {
+      "id": "GOAL-UI-RESPONSE-SCOPE",
+      "severity": "Response-association gap",
+      "file": "src/sim2act/web/app.js",
+      "counterexample": "showGoalCard does not compare returned card.id/project_id to request/current scope; execute uses returned project for POST and only current() guards readback. Wrong self-consistent ownedB response on selectedA can sendB.",
+      "fix": "Check exact returnedcard id/pid/history binding before selection; malformed response zeroPOST."
+    }
+  ],
+  "known_parent_findings": [
+    "coherent crossproject emptyrefs missing sourcecard.project equality",
+    "late accepted ABA rerender recoverybutton"
+  ],
+  "actual_reproductions": "NOT_RUN; parent owner selectedtests in flight, independent testing not yet authorized",
+  "source_observation": {
+    "head_now": "364caa0ef2ee9c048801122f5a630e68d6ca0d49",
+    "working_files_changed_after_initial_read": [
+      "src/sim2act/goal_runs.py",
+      "src/sim2act/web/app.js",
+      "src/sim2act/worker.py"
+    ],
+    "note": "Final manifest first equality assertion caught parent beginning fixes after owner tests terminal; this report binds git364caa0 only, not new WIP fixes."
+  },
+  "accepted_boundaries": [
+    "Typed closed enqueue body/version/key; transactional source+current resource checks",
+    "Fresh prompt full saved goal includes known/assumptions/unresolved/constraints/acceptance",
+    "Read-only advertised+dispatch tool subset",
+    "Ordinary result PARTIAL/NOT_RUN/candidatefalse; no P-Bsuccess/publication",
+    "Samekey accepted historical version survives later legitimate edit",
+    "Optional None legacy preserved"
+  ],
+  "remaining": [
+    "New exact freeze/fixes actual independentHTTP+DOM pending",
+    "No tests/PG/full/CI/provider/network/source mutation by reviewer",
+    "No actual deadlock claim; static lock graph only",
+    "Model budget0/LIVEoff/newGrant0/semanticUNKNOWN"
+  ],
+  "actions": "Read-only diff/source and own /tmp JSON only"
+}

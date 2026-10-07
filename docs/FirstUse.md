@@ -60,3 +60,9 @@ PYTHONPATH=src NODE_PATH=/你的开发工具/node_modules python scripts/first-u
 ```
 
 Windows 开发者的等价环境设置为 `$env:PYTHONPATH=(Join-Path $PWD 'src')`、`$env:NODE_PATH='<自己的开发工具node_modules>'`，用仓库 Python 执行同一脚本；这个等价命令尚未 Win11 实测。脚本不会安装依赖、读 `.env`、接受真实 DSN/令牌或开通 provider，只创建自己临时 SQLite 测试库和固定合成身份，起自己的 loopback API/正常 Worker，完成后停止线程、删除临时库。它会保存新生成的合成 ID/结果及失败阶段，不输出凭据。缺 Node/jsdom 为 BLOCKED；真实 API/worker/JSDOM 断言失败为 FAIL；浏览器/像素/Win11 保持 NOT_RUN。
+
+## 已保存目标卡的普通任务入口（新增有限能力）
+
+在已有正常API/worker和项目授权材料的环境中，打开“项目”下的“目标卡与验收草案”，填写目标、已知、假设、未决项、硬条件、验收项并选择已授权材料，保存后重新打开该卡。确认保存版本，点击“按已保存 vX 执行任务”。按钮执行的是保存版本；刚修改但尚未保存的字段不会参与。接受后读当前任务与实际材料回执，刷新后从普通“任务历史”定位原Run。未知回执用原键恢复，已接受但读取失败只重新读取，不另建任务。
+
+当前默认MOCK只验证请求/工具接线，普通结果仍PARTIAL、目标验收NOT_RUN，未生成应用候选。它不能替代上面的CSV模板求和流程，也不能证明真实自然语言规划或目标达成。新增步骤仅完成本地实际HTTP/DOM与正常Mock Worker验证，原生像素/空环境安装/PG并发/Win11未测；[范围和失败历史](F2/GoalCardRunLog.md)。
