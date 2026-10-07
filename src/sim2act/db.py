@@ -634,7 +634,7 @@ class Store:
             )
         )
 
-    def submit(self, principal, project_id, goal, refs, key, *, policy=None):
+    def submit(self, principal, project_id, goal, refs, key, *, policy=None, goal_source=None):
         policy = policy or {
             "limits": Limits(
                 max_requests=4,
@@ -649,10 +649,26 @@ class Store:
         }
         if len(set(refs)) != len(refs):
             raise DomainError("INVALID_INPUT", "Duplicate input resource")
-        fp = fingerprint({"goal": goal, "resource_refs": refs, "policy": policy})
         try:
             with self.tx() as c:
                 p = self.lock_project(c, principal, project_id)
+                prior = c.execute(select(runs).where(
+                    runs.c.principal_id == principal, runs.c.project_id == project_id,
+                    runs.c.request_key == key,
+                )).mappings().first()
+                source = None
+                if goal_source is not None:
+                    from .goal_runs import resolve_source
+
+                    source = resolve_source(self, c, principal, p, goal_source, prior)
+                    goal = source.snapshot["content"]["goal"]
+                    refs = source.snapshot["content"]["resource_refs"]
+                    if len(set(refs)) != len(refs):
+                        raise DomainError("INVALID_INPUT", "Duplicate input resource")
+                request = {"goal": goal, "resource_refs": refs, "policy": policy}
+                if source is not None:
+                    request["goal_source"] = source.model_dump()
+                fp = fingerprint(request)
                 for rid in refs:
                     self.authorize(c, principal, p["runtime_id"], project_id, rid, "resource.read")
                     if c.execute(
@@ -684,14 +700,14 @@ class Store:
                     runtime_id=p["runtime_id"],
                     contract_version="F1.3",
                     goal=GoalSpec(
-                        goal_id=new_id("goal"),
+                        goal_id=source.card_id if source else new_id("goal"),
                         project_id=project_id,
                         owner_id=principal,
                         goal=goal,
-                        constraints=[],
+                        constraints=source.snapshot["content"]["constraints"] if source else [],
                         acceptance_version="F1-tool-chain.v1",
                         resource_refs=refs,
-                        unresolved=["Semantic goal acceptance NOT_RUN"],
+                        unresolved=source.snapshot["content"]["unresolved"] if source else ["Semantic goal acceptance NOT_RUN"],
                     ),
                     resources=[
                         ResourceSnapshot(
@@ -704,8 +720,9 @@ class Store:
                             select(resources).where(resources.c.id.in_(refs))
                         ).mappings()
                     ],
+                    source_goal_card=source,
                     **policy,
-                ).model_dump()
+                ).model_dump(exclude_none=True)
                 c.execute(
                     insert(run_contracts).values(
                         run_id=rid, snapshot=snapshot, fingerprint=fingerprint(snapshot)
@@ -740,7 +757,7 @@ class Store:
                 return rid
         except IntegrityError:
             # Concurrent duplicate submit: read winner; never create a second operation.
-            return self.submit(principal, project_id, goal, refs, key, policy=policy)
+            return self.submit(principal, project_id, goal, refs, key, policy=policy, goal_source=goal_source)
 
     def guard(self, c, run_id, fence):
         r = c.execute(select(runs).where(runs.c.id == run_id).with_for_update()).mappings().one()
@@ -795,6 +812,10 @@ class Store:
                 raise DomainError(
                     "VERSION_CONFLICT", "Input resource no longer matches frozen snapshot"
                 )
+        if contract.source_goal_card is not None:
+            from .goal_runs import verify_source
+
+            verify_source(self, c, run, contract)
         return contract
 
     def claim(self, worker_id, lease_seconds):
@@ -923,6 +944,11 @@ class Store:
             for rid in r["resource_refs"]:
                 self.authorize(c, principal, r["runtime_id"], r["project_id"], rid, "resource.read")
             self.authorize_receipts(c, r)
+            source_contract = c.execute(select(run_contracts.c.snapshot).where(
+                run_contracts.c.run_id == run_id,
+            )).scalar_one_or_none()
+            if source_contract and source_contract.get("source_goal_card") is not None:
+                self.frozen_contract(c, r)
             ev = (
                 c.execute(
                     select(events).where(events.c.run_id == run_id).order_by(events.c.created_at)

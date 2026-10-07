@@ -436,6 +436,17 @@ def create_app(store=None, settings=None):
             db, user, cid, body.model_dump(exclude={"expected_version"}), body.expected_version
         )
 
+    from .goal_runs import GoalRunInput, acceptance
+
+    @app.post("/api/projects/{pid}/goal-cards/{cid}/runs", status_code=202)
+    def run_saved_goal(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        rid = db.submit(user, pid, "", [], body.request_key, policy={
+            "limits": {**platform_limits.model_dump(), "max_repairs": 0},
+            "mode": s.mode, "request_model": s.model,
+        }, goal_source={"card_id": cid, "version": body.expected_version,
+                        "fingerprint": body.expected_fingerprint})
+        return acceptance(db, user, rid)
+
     @app.get("/api/goal-cards/{cid}/candidate-options")
     def goal_candidate_options(cid: str, user=user_dependency):
         return candidate_options(db, user, cid)

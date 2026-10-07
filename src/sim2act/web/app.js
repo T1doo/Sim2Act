@@ -97,17 +97,19 @@ function clearRunDetail() {
   $("reconcile-panel").hidden=true;
   $("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;
 }
-async function showRun(id, userSelection = true) {
+async function showRun(id, userSelection = true, selectionGuard = () => true, validateReceipt = null) {
+  if(!selectionGuard())return;
   if(userSelection)runUserSelectionGeneration++;
   if(userSelection){clearRunDetail();$("result").append(row("正在读取任务…"));}
   activeRun = id;
   if(typeof protocolSelectRun === "function")protocolSelectRun(id,userSelection);
   const project=$("project-select").value,identity=token,generation=++runSelectionGeneration;
-  const current=()=>activeRun===id && project===$("project-select").value && identity===token && generation===runSelectionGeneration;
+  const current=()=>activeRun===id && project===$("project-select").value && identity===token && generation===runSelectionGeneration && selectionGuard();
   let r,attempts;
   try {
     r = await api(`/api/runs/${id}`);
     if(!current())return;
+    if(validateReceipt)validateReceipt(r);
     if(typeof renderSelectedProtocol === "function" && r.namespace === "protocol_jobs.v1"){await renderSelectedProtocol(r,id,current);return;}
     if(typeof clearProtocolSelection === "function")clearProtocolSelection();
     attempts = r.namespace !== "INTERNAL_APPRUN" && ["WAITING_RESOURCE","RECONCILING"].includes(r.status) ? await api(`/api/runs/${id}/unresolved-attempts`) : [];
@@ -395,18 +397,76 @@ $("app-preview-form").onsubmit=safe(async()=>{
 });
 
 
+// Page memory only; accepted/uncertain goal execution never changes its original input.
+const goalRunRequests=new Map();
+const goalRunCanonical=value=>JSON.stringify(value,(key,item)=>item&&typeof item==="object"&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(k=>[k,item[k]])):item);
+let goalRunDisplayed=null;
+const goalRunKey=(card=activeGoalCard)=>card?JSON.stringify([token,$("project-select").value,card.id]):null;
+function renderGoalRun(){
+ const card=activeGoalCard,entry=goalRunRequests.get(goalRunKey());
+ $("goal-card-run").disabled=!card||goalCardLoading||goalCardSaving||["sending","unknown","accepted-read-error"].includes(entry?.state);
+ $("goal-card-run").textContent=card?`按已保存 v${card.version} 执行任务`:"按已保存版本执行任务";
+ $("goal-card-run-recover").hidden=!["unknown","accepted-read-error"].includes(entry?.state);
+ $("goal-card-run-recover").disabled=entry?.state==="sending";
+ $("goal-card-run-recover").textContent=entry?.state==="accepted-read-error"?"重新读取已接受任务（不提交）":"恢复原版本执行的同一回执";
+ $("goal-card-run-status").textContent=entry?.message||"执行已保存目标，不包含未保存编辑。目标验收 NOT_RUN；不会自动生成应用候选。";
+}
+async function readGoalRun(entry,current,selection){
+ try{
+  if(!current()||selection!==runUserSelectionGeneration)return;
+  goalRunDisplayed=entry.runId;
+  await showRun(entry.runId,true,()=>current()&&goalRunDisplayed===entry.runId,r=>{
+   const source=r.contract?.snapshot?.source_goal_card;
+   if(r.id!==entry.runId||!source||source.card_id!==activeGoalCard.id||source.version!==entry.body.expected_version||source.fingerprint!==entry.body.expected_fingerprint||source.snapshot?.schema_version!=="F2-goal-card.v1"||goalRunCanonical(source.snapshot)!==goalRunCanonical(entry.snapshot))throw Error("VERSION_CONFLICT");
+  });
+  if(!current())return;
+  entry.state="accepted";entry.message=`已接受保存 v${entry.body.expected_version} 的任务；目标验收 NOT_RUN，未生成候选。请查看实际技术状态与回执。`;
+ }catch(error){entry.state="accepted-read-error";entry.message="任务已接受；详情读取失败不能判断执行结果。只重新读取原 Run，不再提交。";}
+ finally{if(current())renderGoalRun();}
+}
+async function executeGoalCard(recover=false){
+ const card=activeGoalCard;if(!card||goalCardLoading||goalCardSaving)return;
+ const key=goalRunKey(card),generation=goalSelectionGeneration,identity=token,project=card.project_id,selection=runUserSelectionGeneration;
+ const current=()=>identity===token&&project===$("project-select").value&&generation===goalSelectionGeneration&&activeGoalCard?.id===card.id;
+ let entry=goalRunRequests.get(key);
+ if(entry?.state==="sending")return;
+ if(!recover){
+  if(["unknown","accepted-read-error"].includes(entry?.state))return;
+  entry={snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};goalRunRequests.set(key,entry);
+ }
+ if(!entry)return;
+ if(entry.state==="accepted-read-error"){await readGoalRun(entry,current,selection);return;}
+ entry.state="sending";entry.message=`正在确认已保存 v${entry.body.expected_version} 的执行回执。`;renderGoalRun();
+ try{
+  const receipt=await api(`/api/projects/${project}/goal-cards/${card.id}/runs`,"POST",entry.body);
+  if(!receipt||typeof receipt.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||receipt.status!=="ACCEPTED"||receipt.goal_card_id!==card.id||receipt.goal_version!==entry.body.expected_version||receipt.goal_fingerprint!==entry.body.expected_fingerprint||receipt.goal_acceptance!=="NOT_RUN"||receipt.candidate_generated!==false)throw Error("Invalid goal execution receipt");
+  entry.runId=receipt.run_id;entry.state="accepted-read-error";
+ }catch(error){
+  const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
+  entry.state=rejected?"rejected":"unknown";if(!rejected)entry.uncertain=true;
+  entry.message=rejected?`执行被拒绝：${error.message}`:"接受回执 UNKNOWN；请显式恢复原版本、原指纹与原请求键，不能另建重复任务。";
+  if(current())renderGoalRun();return;
+ }
+ if(current()&&selection===runUserSelectionGeneration)await readGoalRun(entry,current,selection);
+ if(current())renderGoalRun();
+}
+$("goal-card-run").onclick=safe(()=>executeGoalCard());
+$("goal-card-run-recover").onclick=safe(()=>executeGoalCard(true));
 const goalCardFields=["title","goal","known","assumptions","unresolved","constraints","acceptance_checks"];
 function updateGoalCardSave() {
   $("goal-card-save").disabled=goalCardLoading || goalCardSaving;
   updateCandidateCreate();
+  renderGoalRun();
 }
 function clearGoalCard() {
+  if(goalRunDisplayed && activeRun===goalRunDisplayed){activeRun=null;runSelectionGeneration++;clearRunDetail();}
+  goalRunDisplayed=null;
   clearApp(); // A goal selection also invalidates in-flight app readback/recovery.
   goalSelectionGeneration++;candidateSelectionGeneration++;candidatePanelReady=false;
   $("goal-candidate-form").hidden=true;$("goal-candidate-list").replaceChildren();
   $("goal-candidate-status").textContent="先打开已保存目标卡。";
   goalCardLoading=false;updateGoalCardSave();
-  activeGoalCard=null;$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
+  activeGoalCard=null;renderGoalRun();$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
   $("goal-card-history").replaceChildren();$("goal-card-history-detail").textContent="";
 }
 async function refreshGoalCards(pid) {
@@ -419,9 +479,9 @@ async function refreshGoalCards(pid) {
 async function showGoalCard(id, pid=$("project-select").value) {
   if(pid !== $("project-select").value)return;
   clearGoalCard();
-  const generation=goalSelectionGeneration;
+  const generation=goalSelectionGeneration,identity=token;
   goalCardLoading=true;updateGoalCardSave();$("goal-card-status").textContent="正在读取目标卡";
-  const current=()=>generation === goalSelectionGeneration && pid === $("project-select").value;
+  const current=()=>identity===token && generation === goalSelectionGeneration && pid === $("project-select").value;
   let card;
   try {
     card=await api(`/api/goal-cards/${id}`);
@@ -434,10 +494,13 @@ async function showGoalCard(id, pid=$("project-select").value) {
   } finally {
     if(current()){goalCardLoading=false;updateGoalCardSave();}
   }
-  activeGoalCard={id,version:card.version,project_id:card.project_id};
+  if(!Number.isInteger(card.version)||card.version<1||typeof card.fingerprint!=="string"||! /^[a-f0-9]{64}$/.test(card.fingerprint))throw Error("VERSION_CONFLICT");
+  activeGoalCard={id,version:card.version,fingerprint:card.fingerprint,project_id:card.project_id,snapshot:card.history.find(v=>v.version===card.version&&v.fingerprint===card.fingerprint)?.snapshot};
+  if(!activeGoalCard.snapshot){activeGoalCard=null;renderGoalRun();throw Error("VERSION_CONFLICT");}
+  renderGoalRun();
   goalCardFields.forEach(f=>{$(`goal-card-${f}`).value=Array.isArray(card.content[f]) ? card.content[f].join("\n") : card.content[f];});
   Array.from($("goal-card-resources").options).forEach(o=>o.selected=card.content.resource_refs.includes(o.value));
-  $("goal-card-status").textContent=`草案 v${card.version} · 未验收/不可执行 · 保存将建立新版本`;
+  $("goal-card-status").textContent=`草案 v${card.version} · 目标验收 NOT_RUN · 执行使用已保存版本；保存将建立新版本`;
   $("goal-card-history-detail").textContent="";
   $("goal-card-history").replaceChildren(...card.history.map(v=>row(`v${v.version} · ${v.snapshot.content.title}`,()=>{const labels={title:"名称",goal:"目标",known:"已知",assumptions:"假设",unresolved:"未决项",constraints:"硬条件",acceptance_checks:"验收检查"};$("goal-card-history-detail").textContent=goalCardFields.map(f=>`${labels[f]}：\n${Array.isArray(v.snapshot.content[f]) ? v.snapshot.content[f].join("\n") : v.snapshot.content[f]}`).join("\n\n")+`\n\n绑定材料 ${v.snapshot.resource_snapshots.length} 份 · 只读历史版本 v${v.version}`;},"回看版本")));
   await refreshGoalCandidates(id,pid,generation);

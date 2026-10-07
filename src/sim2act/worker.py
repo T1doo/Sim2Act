@@ -39,7 +39,7 @@ class Worker:
         self.protocol_clock = protocol_clock
         self.stop = threading.Event()
 
-    def reserve(self, run_id, fence, context, *, request_tools=None):
+    def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False):
         s = self.s
         protocol_request = request_tools is not None
         request_tools = definitions() if request_tools is None else request_tools
@@ -84,6 +84,8 @@ class Worker:
                 )
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
+            if verify_goal_source:
+                self.store.frozen_contract(c, run)
             if run["status"] != "RUNNING":
                 raise DomainError("VERSION_CONFLICT")
             for rid in run["resource_refs"]:
@@ -202,9 +204,12 @@ class Worker:
             context["tools"] = max(context["tools"], run["context"]["tools"])
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
 
-    def finish(self, run_id, fence, state, error=None, result=None):
+    def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False):
         with self.store.tx() as c:
             run = self.store.guard(c, run_id, fence)
+            if verify_goal_source:
+                self.store.lock_project(c, run["principal_id"], run["project_id"])
+                self.store.frozen_contract(c, run)
             if run["status"] == "CANCEL_REQUESTED":
                 state = "CANCELLED"
             elif run["status"] == "PAUSE_REQUESTED":
@@ -263,6 +268,10 @@ class Worker:
         )
         ctx = dict(run["context"])
         ctx["messages"] = list(ctx["messages"])
+        goal_tools = definitions()
+        if contract.source_goal_card is not None:
+            goal_tools = [t for t in goal_tools if t["function"]["name"] in
+                          {"resource.read", "data.aggregate_csv"}]
         if not ctx["messages"]:
             ctx["messages"] = [
                 {
@@ -272,7 +281,9 @@ class Worker:
                 {
                     "role": "user",
                     "content": json.dumps(
-                        {"goal": run["goal"], "resource_refs": run["resource_refs"]},
+                        {**{"goal": run["goal"], "resource_refs": run["resource_refs"]},
+                         **({"saved_goal": contract.source_goal_card.model_dump()}
+                            if contract.source_goal_card is not None else {})},
                         ensure_ascii=False,
                     ),
                 },
@@ -320,11 +331,11 @@ class Worker:
                     # A validated final response imported by reconciliation is already complete.
                     pending = []
                 else:
-                    aid = self.reserve(rid, fence, ctx)
+                    aid = self.reserve(rid, fence, ctx, verify_goal_source=contract.source_goal_card is not None)
                     start = time.monotonic()
                     raw = None
                     try:
-                        raw = self.model.request(ctx["messages"], definitions())
+                        raw = self.model.request(ctx["messages"], goal_tools)
                         msg, pending = parse_response(raw)
                         identity = returned_model_identity(
                             self.s.model, raw.get("model"), enforced=self.s.mode == "live"
@@ -396,6 +407,11 @@ class Worker:
                         raise
                 if time.time() - run["created_at"] > self.s.run_seconds:
                     raise DomainError("BUDGET_EXHAUSTED", "Run wall time exhausted before dispatch")
+                if contract.source_goal_card is not None:
+                    with self.store.tx() as c:
+                        self.store.frozen_contract(c, self.store.guard(c, rid, fence))
+                    if any(call["function"]["name"] not in {"resource.read", "data.aggregate_csv"} for call in pending):
+                        raise DomainError("UNSUPPORTED_CAPABILITY", "Saved-goal task is read-only")
                 if pending:
                     if ctx["tools"] + len(pending) > self.s.max_tools:
                         raise DomainError("BUDGET_EXHAUSTED")
@@ -405,6 +421,9 @@ class Worker:
                     for call in pending:
                         if call["id"] in completed_ids:
                             continue
+                        if contract.source_goal_card is not None:
+                            with self.store.tx() as c:
+                                self.store.frozen_contract(c, self.store.guard(c, rid, fence))
                         receipt = dispatch(self.store, rid, fence, call)
                         ctx["messages"].append(
                             {
@@ -440,7 +459,12 @@ class Worker:
                             "receipts": verified,
                             "goal_acceptance": "NOT_RUN",
                             "boundary": "F1 tool chain; application/semantic acceptance not yet implemented",
+                            **({"source_goal_card": {"card_id": contract.source_goal_card.card_id,
+                                 "version": contract.source_goal_card.version,
+                                 "fingerprint": contract.source_goal_card.fingerprint}}
+                               if contract.source_goal_card is not None else {}),
                         },
+                        verify_goal_source=contract.source_goal_card is not None,
                     )
                     return
             self.finish(rid, fence, "PAUSED")

@@ -165,6 +165,13 @@ class ResourceSnapshot(Strict):
     format: Literal["txt", "md", "csv", "json"]
 
 
+class GoalCardRunSource(Strict):
+    card_id: str = Field(pattern=r"^goal_[a-f0-9]{32}$")
+    version: int = Field(ge=1)
+    fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    snapshot: dict
+
+
 class FrozenRunContract(Strict):
     run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
     # Existing project runtime or existing declarative app runtime; neither creates a grant.
@@ -175,6 +182,7 @@ class FrozenRunContract(Strict):
     limits: Limits
     mode: Literal["mock", "live"]
     request_model: Literal["intern-s2"]
+    source_goal_card: GoalCardRunSource | None = None
 
 
 class Run(Strict):
