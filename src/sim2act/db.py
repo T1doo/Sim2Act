@@ -1487,3 +1487,56 @@ class Store:
                 "tools_dispatched": 0,
                 "known_effects": self.known_effects(c, run_id),
             }
+
+
+# DeliveryGraph application adapter: explicit migration only, never API DDL.
+delivery_graph_states = Table(
+    "delivery_graph_states", meta,
+    Column("app_id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("runtime_id", String, nullable=False),
+    Column("anchor_id", String, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+)
+delivery_graph_anchors = Table(
+    "delivery_graph_anchors", meta,
+    Column("id", String, primary_key=True),
+    Column("app_id", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    UniqueConstraint("app_id", "revision"),
+)
+delivery_graph_source_versions = Table(
+    "delivery_graph_source_versions", meta,
+    Column("app_id", String, primary_key=True),
+    Column("logical_key", String, primary_key=True),
+    Column("revision", Integer, primary_key=True),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+)
+delivery_graph_requests = Table(
+    "delivery_graph_requests", meta,
+    Column("app_id", String, primary_key=True),
+    Column("principal_id", String, primary_key=True),
+    Column("kind", String, primary_key=True),
+    Column("request_key", String, primary_key=True),
+    Column("request_fingerprint", String, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+)
+delivery_graph_scope_jobs = Table(
+    "delivery_graph_scope_jobs", meta,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("app_id", String, nullable=False),
+    Column("source_app_id", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("status", String, nullable=False),
+    UniqueConstraint("source_app_id", "principal_id", "request_key", "app_id"),
+)

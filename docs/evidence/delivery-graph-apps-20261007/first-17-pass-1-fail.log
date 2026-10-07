@@ -1,0 +1,67 @@
+.................F
+=================================== FAILURES ===================================
+___ test_persistent_coherent_tampering_is_typed_and_zero_write[seal_rehash] ____
+
+env = (<sim2act.db.Store object at 0x7f361cfd4800>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-554/test_pe...c11b4d2b6f49b884b7b7268a602c56', 'user_2bd65d43f8a44d6c97a86c87ff93a85d', 'proj_8e17037f0a654d398fc0990672579f09', ...)
+attack = 'seal_rehash'
+
+    @pytest.mark.parametrize(
+        "attack", ["state_rehash", "seal_rehash", "source_bool", "receipt_bool", "receipt_int", "job"]
+    )
+    def test_persistent_coherent_tampering_is_typed_and_zero_write(env, attack):
+        aid, _, graph = setup_graph(env)
+        body = change(graph)
+        answer = env[2].post(path(env, aid) + "/plans", json=body)
+        assert answer.status_code == 201, answer.text
+        with env[0].tx() as c:
+            table = (
+                states
+                if attack in {"state_rehash", "seal_rehash"}
+                else versions
+                if attack == "source_bool"
+                else jobs
+                if attack == "job"
+                else requests
+            )
+            query = select(table).where(table.c.app_id == aid)
+            if table is requests:
+                query = query.where(table.c.kind == "plan")
+            row = c.execute(query).mappings().first()
+            value = copy.deepcopy(row["snapshot"])
+            if attack in {"state_rehash", "seal_rehash"}:
+                value["graph_revision"] = True
+            elif attack == "source_bool":
+                value["revision"] = True
+            elif attack == "job":
+                value["status"] = "PASS"
+            else:
+                value["receipt"]["patch_executed"] = 0 if attack == "receipt_bool" else True
+            c.execute(
+                update(table)
+                .where(*(table.c[k.name] == row[k.name] for k in table.primary_key))
+                .values(snapshot=value, fingerprint=fingerprint(value))
+            )
+            if attack == "seal_rehash":
+                c.execute(
+                    update(anchors)
+                    .where(anchors.c.id == row["anchor_id"])
+                    .values(snapshot=value, fingerprint=fingerprint(value))
+                )
+        before = snapshot(env)
+        response = env[2].post(path(env, aid) + "/plans", json=body)
+>       assert response.status_code >= 400, response.text
+E       AssertionError: {"namespace":"delivery-graph-apps.v1","app_id":"app_ec5522c95eb9479c8168266faa288429","project_id":"proj_8e17037f0a654d398fc0990672579f09","runtime_id":"appruntime_c793744a64e841889e3591379f4bf71f","candidate_fingerprint":"dd9e525543142416e52612651d8dc24a9e783316c1f8d31488182135bbe4dfbf","graph_revision":1,"authorization_revision":1,"current_authorization_fingerprint":"5c892eecea88f101fc2dfb97c4ec4bb5413c40e8536460c0f27b87977f717b95","graph_fingerprint":"cec83f166eebda84f31e2631a4f9ae9f81fe53fb0689cc32b0365a0a137b73c2","state":"PLANNING_ONLY","semantic_status":"UNKNOWN","owner_acceptance":"PENDING","patch_executed":false,"business_write_performed":false,"publishable":false,"formal_publication_enabled":false,"receipt":{"schema_version":"delivery-change-plan.v1","graph_fingerprint":"cec83f166eebda84f31e2631a4f9ae9f81fe53fb0689cc32b0365a0a137b73c2","context_fingerprint":"5ee512c5428100af8504876414a4da442b12b68db9114ff5abf48e67abcb03ed","request_key":"change","request_fingerprint":"2c7b67245386e5a5d9dbfc885640cb10e501102a1d59ecda7213ab88651bee4d","changed_nodes":["res_765e1686e0904277a67aa9f0d6698c03"],"definite_impact":["res_765e1686e0904277a67aa9f0d6698c03"],"uncertain_impact":["action_fcda3fb0a0914c55adb0494cf36f8494","app_ec5522c95eb9479c8168266faa288429","goal_a0f462e17936458c9124d10b8545788e","node_0b142413974b469789cb3566aeb4ff8b","node_1a0ac91799af45d28c5e4735e2b382a0","node_5c147d94663e4cc58020c14139aaaf96","node_6e465471a9c74e52942fd93b78cb34af","node_7b0452269fbd4370a5ecb1bafb436be9","node_7ff0648e0a8846e7b138470bf558a4d2","node_c9a676910b5644c2850ef93fa752c878","node_db2073a2769e4b258d29a4c89c647271","node_e4a9d740a2b448bbac469676a245b7d3"],"revalidation_nodes":["action_fcda3fb0a0914c55adb0494cf36f8494","app_ec5522c95eb9479c8168266faa288429","goal_a0f462e17936458c9124d10b8545788e","node_0b142413974b469789cb3566aeb4ff8b","node_1a0ac91799af45d28c5e4735e2b382a0","node_5c147d94663e4cc58020c14139aaaf96","node_6e465471a9c74e52942fd93b78cb34af","node_7b0452269fbd4370a5ecb1bafb436be9","node_7ff0648e0a8846e7b138470bf558a4d2","node_c9a676910b5644c2850ef93fa752c878","node_db2073a2769e4b258d29a4c89c647271","node_e4a9d740a2b448bbac469676a245b7d3","res_765e1686e0904277a67aa9f0d6698c03"],"revalidation_scope":"APP","project_id":"proj_8e17037f0a654d398fc0990672579f09","app_id":"app_ec5522c95eb9479c8168266faa288429","revalidation_checks":["node_0b142413974b469789cb3566aeb4ff8b"],"invalidated_packages":["app_ec5522c95eb9479c8168266faa288429"],"retained_objects":[],"global_invariants":["current_authority","current_versions","strict_preflight","dependency_completeness","manual_locks"],"patch_executed":false,"business_write_performed":false,"publishable":false,"plan_fingerprint":"1037bbb267ff3f7678985fa800ce9a7f292f5321beaadae4080bab4b9491ef46"},"scope_jobs":[{"id":"scopejob_0121c12fb04b42eabc6aebd965ea81ca","project_id":"proj_8e17037f0a654d398fc0990672579f09","app_id":"app_ec5522c95eb9479c8168266faa288429","source_app_id":"app_ec5522c95eb9479c8168266faa288429","candidate_fingerprint":"dd9e525543142416e52612651d8dc24a9e783316c1f8d31488182135bbe4dfbf","request_key":"change","scope":"APP","reason":"Conservative declaration/semantic revalidation; no check or patch executed","status":"PENDING"}],"scope_expansion":{"status":"PENDING","omissions":[]},"cached":true}
+E       assert 201 >= 400
+E        +  where 201 = <Response [201 Created]>.status_code
+
+tests/test_delivery_graph_apps.py:216: AssertionError
+=============================== warnings summary ===============================
+../../tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_delivery_graph_apps.py::test_persistent_coherent_tampering_is_typed_and_zero_write[seal_rehash]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 17 passed, 1 warning in 6.01s
