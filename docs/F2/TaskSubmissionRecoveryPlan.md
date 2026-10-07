@@ -4,4 +4,6 @@
 
 实现：页面内冻结project/identity/goal/resource_refs/request_key；单一进行中/未决提交禁用新提交，明确“未确认”而非成功/失败；用户手动恢复同一POST/key/body，服务端既有幂等与当前权限校验负责拒绝重复/撤权。跨项目和任务重选隔离；迟到回执不抢画布。HTTP明确拒绝可重新提交修正输入，网络/5xx/响应异常保留原键。已收到run_id后的只读刷新失败单列“已接受，读取失败”，恢复仅GET，不重新POST。不开自动发送/模型重试，不增加表/DDL/Grant/认证或保存到浏览器磁盘。
 
-验收：真实HTTP接受后丢回执→原键恢复只有1Run；双击；冻结输入；切换项目及选择历史时迟到成功/失败；403/409等显式拒绝与5xx未知区分；accepted后读失败只能GET；刷新后无原内存快照明确提示查历史，不虚称跨页恢复。测试与实际受保护浏览器尝试单列；若现有Linux浏览器权限拒绝保留失败，不能no-sandbox/改系统。Mock演示与PARTIAL/语义NOT_RUN诚实标注，不签收完整PB/F1/Win11。当前真实窗口已过期，0模型/0凭据/不push/CI。
+验收：真实HTTP接受后丢回执→原键恢复只有1Run；双击；冻结输入；切换项目及选择历史时迟到成功/失败；403/409等显式拒绝与5xx未知区分；accepted后读失败只能GET；刷新后无原内存快照明确提示查历史，不虚称跨页恢复。测试与实际受保护浏览器尝试单列；若现有Linux浏览器权限拒绝保留失败，不能no-sandbox/改系统。Mock演示与PARTIAL/语义NOT_RUN诚实标注，不签收完整PB/F1/Win11。该产品切片0模型/0凭据/不push/CI；另一个工作副本随后单独获批的新真实窗口及实测不并入此口径。
+
+最终：实际HTTP/DOM24项、6持久Run/2MOCK Attempt，专项1PASS与相关47PASS；受保护Chromium实际启动BLOCKED（SUID所有者），无PNG/像素验收，PG/Windows未测。详见[证据](../evidence/task-submission-recovery-20261007/README.md)。本地提交，不push/CI。

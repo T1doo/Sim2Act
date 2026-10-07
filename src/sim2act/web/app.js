@@ -429,6 +429,8 @@ async function readAcceptedOrdinaryRun(entry, selection) {
   try {
     await refresh();
     if(current() && selection===runUserSelectionGeneration)await showRun(entry.runId);
+    entry.state="accepted";
+    entry.message=`任务已接受（${entry.runId.slice(0,16)}），可在任务历史查看。后台执行不等于目标已验收。`;
   } catch (_) {
     entry.state="accepted-read-error";
     entry.message=`任务已接受（${entry.runId.slice(0,16)}），读取暂时失败。重新读取不会提交新任务。`;
@@ -470,6 +472,7 @@ async function submitOrdinaryRun() {
   const old=runSubmissionEntry();
   if(old && ["sending","unknown"].includes(old.state)){renderRunSubmission();return;}
   const body=Object.freeze({goal:$("goal").value,resource_refs:Object.freeze([...refs]),request_key:crypto.randomUUID()});
+  runUserSelectionGeneration++;
   const entry={project,identity:token,body,state:"new",message:"",runId:null};
   if(!ordinarySubmissions.has(token))ordinarySubmissions.set(token,new Map());
   ordinarySubmissions.get(token).set(project,entry);

@@ -65,3 +65,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 
 
 2026-10-06 本轮真实入口阶段闭合：普通push精确源码 `447b597fefd6c2a191ef4e9ff6d4bf2f0c06d3d5`，唯一原标准CI [37476996252](https://github.com/T1doo/Sim2Act/actions/runs/37476996252) 首次SUCCESS，无重试。Windows工程564PASS/2SKIP；原Edge38、旧agent33、新registeredGeneration29分别PASS。真实受保护浏览器完成源amount3→服务端草案→既有授权新CSV→人工确认版本→新实例冷worker quantity15/resultVersion1，并实测回执恢复、撤权、篡改、旧响应、跨主体/项目、空目标及窄屏。两次capture及最终实际保护审计PASS。两原PNG按stdout字节/SHA/尺寸与里程碑核验，主审及独立实际像素复审接受本次健康历史展示范围；runtime NOT_REVIEWED保留、人工审查另存。Report/Cleanup成功。最短说明补明预览列与新任务列分别设置，每次新任务需选quantity，历史刷新后amount默认不改变既有quantity15结果。见[证据](evidence/registered-run-browser-20261006/README.md)及[使用说明](F2/RegisteredRunQuickstart.md)。此有限原生入口缺口闭合，不提升Win11、完整AT02/F1、语义或完整P-B；旧空白根因UNKNOWN、失败历史保留、模型请求0。
+
+2026-10-07 本地普通任务回执恢复切片：实际HTTP/DOM24项与相关47PASS，受保护Chromium启动BLOCKED且无截图；不push/CI、不带activation、不提升完整P-B/F1/Win11验收。[范围与限制](F2/TaskSubmissionRecoveryPlan.md)、[最终证据](evidence/task-submission-recovery-20261007/README.md)。
