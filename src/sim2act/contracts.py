@@ -51,7 +51,7 @@ class Limits(Strict):
 
 
 class Executor(Strict):
-    kind: Literal["registered_tool", "bounded_agent"]
+    kind: Literal["registered_tool", "bounded_agent", "bounded_report"]
     ref: str
     version: Literal["1"]
 
@@ -103,7 +103,7 @@ class DataBinding(Strict):
 
 
 class RuntimeIdentity(Strict):
-    mode: Literal["user_and_app_intersection"]
+    mode: Literal["user_and_app_intersection", "user_and_project_intersection"]
 
 
 class ActionSpec(Strict):
@@ -264,7 +264,9 @@ def resource_id(value: str):
 def schema_check(schema: dict, depth=0):
     if not isinstance(schema, dict) or depth > 8:
         raise DomainError("INVALID_MANIFEST", "Schema depth or shape invalid")
-    common = {"type", "enum"}
+    common = {"type", "enum", "nullable"}
+    if "nullable" in schema and (type(schema["nullable"]) is not bool or schema.get("type") not in {"boolean", "integer"}):
+        raise DomainError("INVALID_MANIFEST", "Only explicitly typed boolean/integer may be nullable")
     by_type = {
         "object": {"properties", "required", "additionalProperties"},
         "array": {"items", "maxItems"},
@@ -324,6 +326,10 @@ def schema_check(schema: dict, depth=0):
 
 def validate_value(schema: dict, value, path="input"):
     kind = schema["type"]
+    if value is None and schema.get("nullable") is True:
+        if "enum" not in schema or any(x is None for x in schema["enum"]):
+            return
+        raise DomainError("INVALID_INPUT", path + " outside enum")
     valid = {
         "object": isinstance(value, dict),
         "array": isinstance(value, list),
@@ -359,7 +365,7 @@ def validate_value(schema: dict, value, path="input"):
 def check_dependencies(dependencies):
     registry = {
         "tool": {"resource.read", "data.aggregate_csv", "artifact.save_text"},
-        "check": {"receipt.readback.v1", "source.literal_evidence.v1"},
+        "check": {"receipt.readback.v1", "source.literal_evidence.v1", "source.conditional_report.v1"},
         "prompt": {"intern.system.v1"},
     }
     seen = set()
@@ -377,7 +383,9 @@ def validate_action(raw: str):
     try:
         action = ActionSpec.model_validate(strict_json(raw))
         tools = {"resource.read", "data.aggregate_csv", "artifact.save_text"}
-        executors = tools if action.executor.kind == "registered_tool" else {"intern.agent"}
+        executors = tools if action.executor.kind == "registered_tool" else ({"intern.conditional_report"} if action.executor.kind == "bounded_report" else {"intern.agent"})
+        if action.executor.kind == "bounded_report" and action.allowed_tool_refs != ["resource.read"]:
+            raise ValueError("Report executor has only a fixed read capability")
         if (
             action.executor.ref not in executors
             or set(action.allowed_tool_refs) - tools
@@ -386,7 +394,7 @@ def validate_action(raw: str):
             raise ValueError("Unknown or duplicate registered reference")
         effective = (
             set(action.allowed_tool_refs)
-            if action.executor.kind == "bounded_agent"
+            if action.executor.kind in {"bounded_agent", "bounded_report"}
             else {action.executor.ref}
         )
         if action.executor.kind == "registered_tool" and set(action.allowed_tool_refs) - effective:
@@ -400,7 +408,8 @@ def validate_action(raw: str):
             raise ValueError("Effect must match registered capabilities")
         if action.idempotency != ("transactional" if writes else "read_only"):
             raise ValueError("Idempotency must match trusted effect")
-        if action.postcheck_refs not in [["receipt.readback.v1"], ["source.literal_evidence.v1"]]:
+        valid_checks = [["source.conditional_report.v1"]] if action.executor.kind == "bounded_report" else [["receipt.readback.v1"], ["source.literal_evidence.v1"]]
+        if action.postcheck_refs not in valid_checks:
             raise ValueError("Independent receipt check required")
         check_dependencies(action.dependencies)
         for req in action.permission_requirements:
@@ -481,7 +490,7 @@ def validate_manifest(raw: str):
         for view in manifest.views:
             if view.output_field not in manifest.output_schema.get("properties", {}):
                 raise ValueError("View references missing output")
-        if manifest.validation_suite_ref not in {"receipt.readback.v1", "source.literal_evidence.v1"}:
+        if manifest.validation_suite_ref not in {"receipt.readback.v1", "source.literal_evidence.v1", "source.conditional_report.v1"}:
             raise ValueError("Unknown independent check suite")
         return manifest
     except (ValueError, KeyError, TypeError, DomainError) as e:

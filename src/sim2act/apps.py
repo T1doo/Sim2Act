@@ -188,6 +188,10 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
 
 
 def compile_preview(candidate, platform_limits):
+    if isinstance(candidate, dict) and candidate.get("namespace") == "bounded-report-manifest.v1":
+        from .report_manifest_apps import compile_report
+
+        return compile_report(candidate, platform_limits)
     if (not isinstance(candidate, dict) or not isinstance(candidate.get("manifest"), dict)
             or not isinstance(candidate.get("actions"), list)
             or not 1 <= len(candidate["actions"]) <= 16):
@@ -483,6 +487,12 @@ def public_preview(row):
 
 
 def inspect_draft(store, user, aid, platform_limits):
+    with store.tx() as c:
+        candidate = c.execute(select(app_drafts.c.candidate).where(app_drafts.c.id == aid)).scalar()
+    if isinstance(candidate, dict) and candidate.get("namespace") == "bounded-report-manifest.v1":
+        from .report_manifest_apps import inspect
+
+        return inspect(store, user, aid, platform_limits)
     with store.tx() as c:
         draft, manifest, _, report = load_draft(store, c, user, aid, platform_limits)
         source = authorized_read(

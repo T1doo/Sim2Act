@@ -7,6 +7,8 @@ from pydantic import Field
 from sqlalchemy import select, update
 
 from .apps import create_csv_draft, inspect_draft, preview
+from .conditional_apps import NAMESPACE as CONDITIONAL_APP_NAMESPACE
+from .conditional_apps import mount as mount_conditional_apps
 from .conditional_checks import mount as mount_conditional_checks
 from .conditional_runs import mount as mount_conditional_runs
 from .config import Settings
@@ -48,6 +50,7 @@ from .preflight import preflight
 from .protocol_api import mount as mount_protocol_api
 from .protocol_recovery import mount as mount_protocol_recovery
 from .protocol_reviews import mount as mount_protocol_reviews
+from .report_manifest_apps import mount as mount_report_manifest_apps
 from .spec_checklists import SpecChecklistInput, complete_checklist, inspect_checklist
 
 
@@ -417,7 +420,7 @@ def create_app(store=None, settings=None):
         with db.tx() as c:
             rows = (
                 c.execute(
-                    select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id)
+                    select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id, app_drafts.c.candidate)
                     .join(projects, projects.c.id == app_drafts.c.project_id)
                     .where(projects.c.owner_id == user)
                     .order_by(app_drafts.c.created_at.desc())
@@ -425,7 +428,7 @@ def create_app(store=None, settings=None):
                 .mappings()
                 .all()
             )
-        return {"items": [dict(r) for r in rows], "state": "PREVIEW_ONLY", "publishable": False}
+        return {"items": [{k: v for k, v in r.items() if k != "candidate"} for r in rows if not isinstance(r["candidate"], dict) or r["candidate"].get("namespace") != CONDITIONAL_APP_NAMESPACE], "state": "PREVIEW_ONLY", "publishable": False}
 
     @app.post("/api/projects/{pid}/apps/csv-preview", status_code=201)
     def create_csv_preview(pid: str, body: CsvDraftInput, user=user_dependency):
@@ -492,6 +495,8 @@ def create_app(store=None, settings=None):
     mount_protocol_reviews(app, db, identity)
     mount_conditional_checks(app, db, identity)
     mount_conditional_runs(app, db, identity, platform_limits, s)
+    mount_conditional_apps(app, db, identity, platform_limits, s)
+    mount_report_manifest_apps(app, db, identity, platform_limits, s)
 
     web = Path(__file__).parent / "web"
 
@@ -514,6 +519,14 @@ def create_app(store=None, settings=None):
     @app.get("/conditional-runs.js")
     def conditional_runs_js():
         return FileResponse(web / "conditional-runs.js", media_type="text/javascript")
+
+    @app.get("/report-manifest.js")
+    def report_manifest_js():
+        return FileResponse(web / "report-manifest.js", media_type="text/javascript")
+
+    @app.get("/conditional-apps.js")
+    def conditional_apps_js():
+        return FileResponse(web / "conditional-apps.js", media_type="text/javascript")
 
     @app.get("/use.js")
     def use_js():

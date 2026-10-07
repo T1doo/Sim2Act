@@ -65,6 +65,14 @@ def envelope(**values):
 def mount(app, store, limits, identity):
     user_dependency = Depends(identity)
 
+    def supported_app(c, user, aid):
+        row = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().first()
+        pid = row["project_id"] if row else None
+        store.own_project(c, user, pid)
+        if isinstance(row["candidate"], dict) and row["candidate"].get("namespace") == "bounded-report-manifest.v1":
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Bounded Report manifests support private previews only")
+        return pid
+
     def scope_run(user, iid, rid):
         # Stop must remain possible after grant revocation; immutable binding/owner still required.
         with store.tx() as c:
@@ -80,6 +88,8 @@ def mount(app, store, limits, identity):
     def prepare(aid: str, body: PrepareInput, user=user_dependency):
         from .agent_apps import offline_replay_model
 
+        with store.tx() as c:
+            supported_app(c, user, aid)
         return lifecycle.prepare_release(
             store, user, aid, body.expected_draft_fingerprint, limits, body.sample_input,
             replay=offline_replay_model(body.offline_replay) if body.offline_replay is not None else None,
@@ -109,8 +119,7 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/apps/{aid}/releases")
     def releases(aid: str, user=user_dependency):
         with store.tx() as c:
-            pid = c.execute(select(app_drafts.c.project_id).where(app_drafts.c.id == aid)).scalar()
-            store.own_project(c, user, pid)
+            pid = supported_app(c, user, aid)
             ids = (
                 c.execute(
                     select(internal_releases.c.id, internal_releases.c.snapshot)
@@ -151,8 +160,7 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/apps/{aid}/instances")
     def instances(aid: str, user=user_dependency):
         with store.tx() as c:
-            pid = c.execute(select(app_drafts.c.project_id).where(app_drafts.c.id == aid)).scalar()
-            store.own_project(c, user, pid)
+            pid = supported_app(c, user, aid)
             ids = (
                 c.execute(
                     select(internal_instances.c.id)

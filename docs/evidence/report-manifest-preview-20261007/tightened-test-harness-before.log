@@ -1,0 +1,60 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_tightened_platform_refuses_promotion_before_write ____________
+
+env = (<sim2act.db.Store object at 0x7fb38eeb36e0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-551/test_ti...1aad4ccd064daaa434dfc16268e388', 'user_f75f6f55c2e24802a1b86771d55fe0d3', 'proj_106ec802f0304937a07c85ec295428ef', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-551/test_tightened_platform_refuse0')
+
+    def test_tightened_platform_refuses_promotion_before_write(env, tmp_path):
+        from sim2act.contracts import Limits
+        from sim2act.report_manifest_apps import PromoteRequest, promote
+    
+        parent, _, _ = saved(env, tmp_path)
+        with env[0].tx() as c:
+            before = (
+                c.execute(select(app_drafts)).mappings().all(),
+                c.execute(select(task_extractions)).mappings().all(),
+            )
+        with pytest.raises(DomainError):
+            promote(
+                env[0],
+                env[3],
+                env[5],
+                parent["id"],
+                PromoteRequest(expected_app_fingerprint=parent["fingerprint"], request_key="lower"),
+>               Limits(model_requests=1),
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+            )
+E           pydantic_core._pydantic_core.ValidationError: 7 validation errors for Limits
+E           max_requests
+E             Field required [type=missing, input_value={'model_requests': 1}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.12/v/missing
+E           max_tools
+E             Field required [type=missing, input_value={'model_requests': 1}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.12/v/missing
+E           max_repairs
+E             Field required [type=missing, input_value={'model_requests': 1}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.12/v/missing
+E           max_total_tokens
+E             Field required [type=missing, input_value={'model_requests': 1}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.12/v/missing
+E           max_output_tokens
+E             Field required [type=missing, input_value={'model_requests': 1}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.12/v/missing
+E           run_seconds
+E             Field required [type=missing, input_value={'model_requests': 1}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.12/v/missing
+E           model_requests
+E             Extra inputs are not permitted [type=extra_forbidden, input_value=1, input_type=int]
+E               For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+
+tests/test_report_manifest_apps.py:258: ValidationError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_manifest_apps.py::test_tightened_platform_refuses_promotion_before_write
+1 failed, 1 warning in 0.73s
