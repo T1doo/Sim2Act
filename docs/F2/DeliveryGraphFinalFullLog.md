@@ -1,0 +1,7 @@
+# Final full regression — running, not accepted
+
+Final execution freeze7854029d702769e26c9cd9cf2d4f22e2a97750ce. Driver12b normally merged;246 tracked src/tests/scripts/.github files exact. Four actual import checks (SQLite/PG parent and clean child) use the dedicated full worktree source. Actual full collection1309 unique nodes in0.38s, not inferred from previous local counts. One SQLite full is running with original JUnit/log and slow-case evidence. PostgreSQL has not been created: SQLite must naturally exit0 and its complete1309 unique JUnit match before the sole full PG run starts.
+
+No current full PASS is claimed. Original8c PG1278P4S1F,0c2/7cd Report timeout failures,old111 missing JUnit and first-use2P1JSDOMF remain preserved. The prior targeted Report49 at8d passed70.68s but is not a full replacement. Driver12b original29 business oracles+1teardown/original45 preserved,errors rejected; root source differs from8d only in that tested driver. No coverage/time/security/provider changes; no newCI/LIVE.
+
+Parallel R0 read-only database-readiness draft is isolated on dev/r0-db-readiness-local in another worktree and is not part of this frozen source. It is not merged into either full run or allowed to create PG/roles while they run. Normal developer save synchronization uses [skip ci] while Windows900 qualification is NO_GO. Terminal results/JUnit/source consistency/roles/skip/cleanup and original failures will be appended only when actually reached.
