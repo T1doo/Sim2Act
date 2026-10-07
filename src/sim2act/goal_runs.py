@@ -39,6 +39,12 @@ def resolve_source(store, c, user, project, requested, prior):
     return GoalCardRunSource(**requested, snapshot=saved["snapshot"])
 
 
+def has_goal_source(c, run_id):
+    return any("goal_source" in data for data in c.execute(select(events.c.data).where(
+        events.c.run_id == run_id, events.c.kind == "ACCEPTED",
+    )).scalars())
+
+
 def verify_source(store, c, run, contract):
     source = contract.source_goal_card
     if source is None:
@@ -77,7 +83,9 @@ def verify_source(store, c, run, contract):
         events.c.run_id == run["id"], events.c.kind == "ACCEPTED",
     )).scalars().all()
     if (run["fingerprint"] != expected or run["context"].get("saved_goal_input") != expected
-            or accepted != [{"input_fingerprint": expected}]):
+            or accepted != [{"input_fingerprint": expected,
+                             "goal_source": {"card_id": source.card_id, "version": source.version,
+                                             "fingerprint": source.fingerprint}}]):
         raise DomainError("VERSION_CONFLICT", "Goal source differs from original acceptance")
 
 

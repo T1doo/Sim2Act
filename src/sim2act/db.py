@@ -754,7 +754,11 @@ class Store:
                         cancel_intent=False,
                     )
                 )
-                self.event(c, rid, "ACCEPTED", {"input_fingerprint": fp})
+                self.event(c, rid, "ACCEPTED", {
+                    "input_fingerprint": fp,
+                    **({"goal_source": {"card_id": source.card_id, "version": source.version,
+                                        "fingerprint": source.fingerprint}} if source else {}),
+                })
                 return rid
         except IntegrityError:
             # Concurrent duplicate submit: read winner; never create a second operation.
@@ -783,8 +787,11 @@ class Store:
                 "Missing or modified frozen Run contract; legacy runs require explicit closure",
             )
         contract = FrozenRunContract.model_validate(saved["snapshot"])
-        if contract.source_goal_card is None and "saved_goal_input" in run["context"]:
-            raise DomainError("VERSION_CONFLICT", "Saved goal source was removed")
+        if contract.source_goal_card is None:
+            from .goal_runs import has_goal_source
+
+            if "saved_goal_input" in run["context"] or has_goal_source(c, run["id"]):
+                raise DomainError("VERSION_CONFLICT", "Saved goal source was removed")
         goal = contract.goal
         if (
             contract.run_id != run["id"]
@@ -950,7 +957,10 @@ class Store:
             source_contract = c.execute(select(run_contracts.c.snapshot).where(
                 run_contracts.c.run_id == run_id,
             )).scalar_one_or_none()
-            if source_contract and source_contract.get("source_goal_card") is not None:
+            from .goal_runs import has_goal_source
+
+            if (source_contract and source_contract.get("source_goal_card") is not None
+                    or "saved_goal_input" in r["context"] or has_goal_source(c, r["id"])):
                 self.frozen_contract(c, r)
             ev = (
                 c.execute(

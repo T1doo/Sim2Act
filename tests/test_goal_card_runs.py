@@ -150,7 +150,7 @@ def test_unadvertised_write_tool_rejected_without_authority_change(env, monkeypa
     assert authority(env[0]) == before and view["known_effects"] == []
 
 
-@pytest.mark.parametrize("damage", ["other_card", "other_project", "remove_source", "accepted_anchor"])
+@pytest.mark.parametrize("damage", ["other_card", "other_project", "remove_source", "remove_both", "accepted_anchor"])
 def test_coherent_contract_tamper_does_not_relabel_original_acceptance(env, monkeypatch, damage):
     store, settings, client, *_rest, pid, _rid = env
     source, content = card(env)
@@ -161,12 +161,16 @@ def test_coherent_contract_tamper_does_not_relabel_original_acceptance(env, monk
     other = client.post(f"/api/projects/{other_pid}/goal-cards", json=content).json()
     with store.tx() as c:
         value = copy.deepcopy(c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == rid)).scalar_one())
-        if damage == "remove_source":
+        if damage in {"remove_source", "remove_both"}:
             value.pop("source_goal_card")
         else:
             value["source_goal_card"]["card_id"] = other["id"]
             value["goal"]["goal_id"] = other["id"]
         c.execute(update(run_contracts).where(run_contracts.c.run_id == rid).values(snapshot=value, fingerprint=fingerprint(value)))
+        if damage == "remove_both":
+            context = dict(c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one())
+            context.pop("saved_goal_input")
+            c.execute(update(runs).where(runs.c.id == rid).values(context=context))
         if damage == "accepted_anchor":
             forged = fingerprint({"goal": value["goal"]["goal"], "resource_refs": [],
                 "policy": {k: value[k] for k in ("limits", "mode", "request_model")},
