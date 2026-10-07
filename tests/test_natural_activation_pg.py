@@ -57,29 +57,55 @@ def test_pg_two_workers_same_kind_charge_once(env, monkeypatch):
                for _ in range(2)]
     barrier = threading.Barrier(2)
     backend_ids = []
-    original = store.claim
-    def claim(worker_id, lease):
-        # Both real claim transactions are live before either takes the Run lock.
-        with store.engine.connect() as c:
+    original = store.lock_project
+    entered = set()
+    gate_lock = threading.Lock()
+    def project_lock(c, user, pid):
+        identity = threading.get_ident()
+        with gate_lock:
+            first = identity not in entered
+            entered.add(identity)
+        if first:
+            # These are the actual Worker planning transactions, not probe connections.
             backend_ids.append(c.execute(text("SELECT pg_backend_pid()")).scalar_one())
             barrier.wait(10)
-            return original(worker_id, lease)
-    monkeypatch.setattr(store, "claim", claim)
+        return original(c, user, pid)
+    monkeypatch.setattr(store, "lock_project", project_lock)
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert all(pool.map(lambda w: w.once(), workers))
-    monkeypatch.setattr(store, "claim", original)
+    monkeypatch.setattr(store, "lock_project", original)
     assert len(set(backend_ids)) == 2
     assert len(sent) == len(rows(store, attempts)) == len(rows(store, reservations)) == 1
     assert not rows(store, operations)
     info = client.get(f"/api/natural-activations/{session['id']}").json()
     assert info["charged_requests"] == 1 and 0 < info["reserved_tokens"] <= 11000
     states = [client.get(f"/api/runs/{rid}").json() for rid in accepted]
-    assert sorted(s["status"] for s in states) == ["FAILED", "WAITING_APPROVAL"]
+    assert sum(s["status"] == "WAITING_APPROVAL" for s in states) == 1
+    loser = next(s for s in states if s["status"] != "WAITING_APPROVAL")
+    assert (loser["status"], loser["error"]["code"]) in {
+        ("WAITING_RESOURCE", "OUTCOME_UNKNOWN"), ("FAILED", "BUDGET_EXHAUSTED")}
+    assert not workers[0].once()  # No automatic retry of either durable waiting state.
+    second = submit(value, session, "read_preview", "second-distinct-goal")
+    assert second.status_code == 202
+    def preview_handler(request):
+        sent.append(request.content)
+        return httpx.Response(200, json=response(wire(value, "read_preview")))
+    second_worker = Worker(store, settings, goal_planner_transport=httpx.MockTransport(preview_handler))
+    assert second_worker.once()
+    assert len(sent) == len(rows(store, attempts)) == len(rows(store, reservations)) == 2
+    full = client.get(f"/api/natural-activations/{session['id']}").json()
+    assert full["charged_requests"] == 2 and full["reserved_tokens"] <= 22000
+    extra = submit(value, session, key="third-budget-exhausted")
+    assert extra.status_code == 202 and second_worker.once()
+    assert len(sent) == len(rows(store, attempts)) == len(rows(store, reservations)) == 2
+    assert not rows(store, operations)
     assert all(r["lease_until"] == 0 for r in rows(store, runs))
     assert authority(store) == before
     evidence(value, "pg-two-workers", {"backend_ids": backend_ids, "wires": len(sent),
-             "attempts": 1, "reservations": 1, "operations": 0,
-             "charged_requests": 1, "statuses": [s["status"] for s in states]})
+             "first_phase_attempts": 1, "first_phase_reservations": 1, "operations": 0,
+             "final_attempts": 2, "final_charged_requests": full["charged_requests"],
+             "final_reserved_tokens": full["reserved_tokens"],
+             "statuses": [s["status"] for s in states]})
 
 
 @pytest.mark.parametrize("control", ["cancel", "revoke", "expire", "confirm-again"])
