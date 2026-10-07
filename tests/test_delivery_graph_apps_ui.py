@@ -37,7 +37,7 @@ def test_delivery_graph_actual_http_dom(env, tmp_path, family):
     with store.tx() as c:
         revoke = dict(c.execute(select(grants).where(grants.c.principal_id == owner,
                                                       grants.c.resource_id == resource)).mappings().first())
-        before = {name: [dict(r) for r in c.execute(select(table)).mappings()]
+        before = {name: [dict(r) for r in c.execute(select(table).order_by(table.c.id)).mappings()]
                   for name, table in [("grants", grants), ("principals", principals), ("attempts", attempts)]}
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -61,7 +61,7 @@ def test_delivery_graph_actual_http_dom(env, tmp_path, family):
         assert receipt["loaded_source_sha256"] == {name: hashlib.sha256((web / name).read_bytes()).hexdigest()
                                                     for name in receipt["loaded_source_sha256"]}
         with store.tx() as c:
-            after = {name: [dict(r) for r in c.execute(select(table)).mappings()]
+            after = {name: [dict(r) for r in c.execute(select(table).order_by(table.c.id)).mappings()]
                      for name, table in [("grants", grants), ("principals", principals), ("attempts", attempts)]}
         expected = json.loads(json.dumps(before))
         for row in expected["grants"]:
