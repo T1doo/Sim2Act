@@ -61,6 +61,33 @@ async function refresh() {
   if (!current()) return;
   $("grants").replaceChildren(...grants.map(g => row(`${g.tool_ref} · ${g.principal_id.startsWith("runtime_") ? "项目运行身份" : g.principal_id.startsWith("appruntime_") ? "应用预览身份" : "当前使用者"} · ${g.revoked ? "已撤回" : "有效至 " + new Date(g.expires_at * 1000).toLocaleString()}`, g.revoked ? null : async () => {await api(`/api/grants/${g.id}/revoke`, "POST", {command:"revoke",version:g.revision});activeRun=null;clearApp();$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();}, "撤回")));
 }
+function renderOrdinaryProgress(r, attempts) {
+  const section=document.createElement("section");section.id="run-progress";
+  const heading=document.createElement("h3");heading.textContent="执行记录（只读）";section.append(heading);
+  section.append(row("目标验收：当前普通任务尚未实现（NOT_RUN）。技术状态与工具核验不代表目标已完成。"));
+  const reasons={GRANT_REVOKED:"读取授权已撤回，请先核对授权。",RESOURCE_UNAVAILABLE:"所需资源当前不可用，请先核对材料。",RATE_LIMITED:"请求额度或速率受限，任务已停止等待。",OUTCOME_UNKNOWN:"已有请求或效果结果未知，请先核对既有回执，避免重复发送。"};
+  if(["WAITING_RESOURCE","RECONCILING"].includes(r.status)) {
+    const unknown=attempts.length>0 || r.error?.code==="OUTCOME_UNKNOWN";
+    section.append(row(unknown?(attempts.length?"等待核对：已有模型尝试结果未知。请使用下方核对入口；本页面不会自动重发。":"等待核对：已有请求或工具效果结果未知。请先核对既有回执；本页面不会自动重发。"):reasons[r.error?.code] || (r.status==="RECONCILING"?"技术状态待核对，具体原因尚未记录。请先检查已记录回执。":"任务正在等待资源或授权，具体原因尚未记录。")));
+  }
+  const effects=Array.isArray(r.known_effects)?r.known_effects:[];
+  const verified=effects.filter(e=>e && e.status==="VERIFIED").length;
+  const invalid=effects.filter(e=>e && e.status==="EFFECT_KNOWN_INVALID").length;
+  section.append(row(`已记录工具效果：${verified} 项已核验；${invalid} 项效果已知但核验失败。此计数不代表整体目标验收。`));
+  const names={ACCEPTED:"任务已持久接受",CLAIMED:"后台已领取任务",MODEL_RESERVED:"已登记一次模型尝试（不表示已发送或成功）",TOOL_VERIFIED:"工具效果已核验",STATE:"已保存技术状态",WORKER_LOST:"后台执行失联，需核对回执",RECONCILED:"已保存任务核对结果",ATTEMPT_RECONCILED:"已保存尝试核对结果",COMMAND:"已记录人工控制指令",CONTRACT_REJECTED:"冻结任务约束被拒绝"};
+  const events=(Array.isArray(r.events)?r.events:[]).filter(e=>e && typeof e.kind==="string" && Object.hasOwn(names,e.kind));
+  const list=document.createElement("ol");
+  for(const event of events.slice(-20)) {
+    const item=document.createElement("li");
+    const date=new Date(event.created_at*1000);
+    const time=Number.isFinite(event.created_at) && Number.isFinite(date.getTime())?date.toLocaleString():"时间未知";
+    const state=event.kind==="STATE" && ["QUEUED","RUNNING","PAUSED","CANCELLED","PARTIAL","FAILED","WAITING_RESOURCE","RECONCILING","SUCCEEDED"].includes(event.data?.status)?`（${event.data.status}）`:"";
+    item.textContent=`${time} · ${names[event.kind]}${state}`;list.append(item);
+  }
+  if(events.length){section.append(row(`最近 ${Math.min(events.length,20)} 条已记录步骤；完整回执保留在详情中。`));section.append(list);}
+  else section.append(row("尚无可展示的步骤记录；请查看持久状态或重新读取。"));
+  $("result").append(section);
+}
 async function showRun(id, userSelection = true) {
   if(userSelection)runUserSelectionGeneration++;
   activeRun = id;
@@ -86,6 +113,7 @@ async function showRun(id, userSelection = true) {
     $("result").append(row(`内部工程只读任务 · 0 模型请求 · 结果版本 ${r.result_version ?? "无"} · 正式发布关闭`));
     if(r.result)$("result").append(row(`${r.result.column} 合计 ${r.result.sum}，共 ${r.result.count} 条记录。`));
   }
+  if(!internal)renderOrdinaryProgress(r,attempts);
   if (r.result && !internal) {
     $("result").append(row(`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
     for (const receipt of r.result.receipts || []) {

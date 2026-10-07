@@ -111,6 +111,8 @@ const switchProject=async(pid)=>{await evaluate(`$('project-select').value=${js(
  await evaluate(`showRun(${js(firstRun)})`);
  check(await evaluate(`$('result').textContent.includes('部分完成')&&$('result').textContent.includes('MOCK 工程样例')`),'restored task reads real Mock partial result with honest mode');
  check(await evaluate(`$('raw-result').textContent.includes('VERIFIED')`),'persisted read receipt visible after worker completion');
+ check(await evaluate(`$('run-progress').textContent.includes('任务已持久接受')&&$('run-progress').textContent.includes('后台已领取任务')&&$('run-progress').textContent.includes('工具效果已核验')`),'ordinary progress reads real persisted worker steps');
+ check(await evaluate(`$('run-progress').textContent.includes('1 项已核验')&&$('run-progress').textContent.includes('NOT_RUN')`),'verified effect count remains separate from target acceptance');
  // Hold an actual persisted list; a subsequent deliberate intent supplies newer data.
  await evaluate(String.raw`window.historyOriginalFetch=window.fetch;window.historyHoldMode='none';window.fetch=async(url,opts)=>{
  const target=new URL(url,location.href);const response=await window.historyOriginalFetch(url,opts);
