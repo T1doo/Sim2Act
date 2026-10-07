@@ -1,6 +1,5 @@
 """Prepared owned PostgreSQL16 oracle. Inert until explicit parent GO/private config."""
 
-import copy
 import json
 import os
 import re
@@ -16,7 +15,7 @@ from sqlalchemy.schema import CreateTable
 from sim2act.db import Store, fingerprint, meta
 from sim2act.db_readiness import inspect_database
 
-CHECKER_SOURCE = "1bf24811c9e60718b33fc41f9433bab83856232c"
+CHECKER_SOURCE = "4591e91d7c2caf1c27411c236df73fc0bb99ea43"
 CASES = (
     "empty",
     "healthy",
@@ -427,7 +426,7 @@ def test_owned_postgresql_readiness_once_no_checker_mutation(case, tmp_path):
             event.remove(engine, "before_cursor_execute", only_select)
         after = ctx.snapshot()
         assert before == after
-        expected = "STRUCTURAL_READY" if case in {"healthy", "partition_parent"} else "BLOCKED"
+        expected = "STRUCTURAL_READY" if case == "healthy" else "BLOCKED"
         assert actual["status"] == expected
         blocked = {item["reason"] for item in actual["checks"] if item["status"] == "BLOCKED"}
         expected_reason = None
@@ -448,7 +447,13 @@ def test_owned_postgresql_readiness_once_no_checker_mutation(case, tmp_path):
             "session_create_setrole",
         }:
             expected_reason = "EXCESSIVE_AUTHORITY"
-        elif case in {"varchar_modifier", "missing_unique", "missing_primary", "view_kind"}:
+        elif case in {
+            "varchar_modifier",
+            "missing_unique",
+            "missing_primary",
+            "partition_parent",
+            "view_kind",
+        }:
             expected_reason = "SCHEMA_MISMATCH"
         elif case == "temporary_shadow":
             expected_reason = "SCHEMA_RESOLUTION_MISMATCH"
