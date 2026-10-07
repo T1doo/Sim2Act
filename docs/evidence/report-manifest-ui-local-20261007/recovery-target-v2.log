@@ -1,0 +1,61 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________________ test_report_manifest_real_http_dom ______________________
+
+env = (<sim2act.db.Store object at 0x7f413351a7b0>, Settings(database_url='sqlite:////tmp/report-manifest-ui-recovery-v2/tes...2920074f254672a9fe5b48e51d8648', 'user_2a1fd4778fff46e69eb8ee8b96ce211f', 'proj_4419818e8b3845caa1793f9992937808', ...)
+tmp_path = PosixPath('/tmp/report-manifest-ui-recovery-v2/test_report_manifest_real_http0')
+
+    def test_report_manifest_real_http_dom(env, tmp_path):
+        assert shutil.which("node"), "developer Node dependency required"
+        store, settings, _, owner, _, pid, _, _ = env
+        named, _, wires = saved(env, tmp_path)
+        other = store.project(owner, "Other own project")
+        before = authority(env)
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-manifest-worker/{phase}")
+        def worker(phase: str):
+            if phase == "allow":
+                report = independent_report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])
+            elif phase == "block":
+                report = independent_report(("TRUE", "TRUE", "TRUE"), "BLOCK", ["obtain_receipt", "obtain_prior_approval"])
+            else:
+                raise AssertionError("closed fixture")
+            values = [envelope(report)]
+            assert Worker(store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)).once()
+            assert not values
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": pid, "other": other, "named": named["id"]}))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            output = subprocess.run(["node", "tests/report_manifest_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
+>           assert output.returncode == 0, output.stdout + output.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: {"error":{"code":"INVALID_INPUT","message":"Malformed, duplicate or oversized JSON","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E                 at work (/workspace/Sim2Act-report-manifest-ui/tests/report_manifest_ui.cjs:24:109)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act-report-manifest-ui/tests/report_manifest_ui.cjs:31:445
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_manifest_ui.cjs', '/tmp/report-manifest-ui-recovery-v2/test_report_manife.../process/task_queues:104:5)\n    at async /workspace/Sim2Act-report-manifest-ui/tests/report_manifest_ui.cjs:31:445\n').returncode
+
+tests/test_report_manifest_apps_ui.py:59: AssertionError
+=============================== warnings summary ===============================
+../../tmp/native-budget-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/native-budget-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+1 failed, 1 warning in 5.64s
