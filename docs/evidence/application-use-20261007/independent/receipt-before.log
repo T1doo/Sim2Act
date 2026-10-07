@@ -1,0 +1,82 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________________ test_wrong_receipt_binding __________________________
+
+env = (<sim2act.db.Store object at 0x7f597d356d20>, Settings(database_url='sqlite:////tmp/sim2act-app-use-independent/receip...5dfcf1c45145d99bc9d6fa0b00bcb0', 'user_8086ffa0f5d74dd8b6bd89ad63bc74c1', 'proj_a5d8bd6a39ca4d92bd549bace2faf3e4', ...)
+tmp_path = PosixPath('/tmp/sim2act-app-use-independent/receipt-before-artifacts/test_wrong_receipt_binding0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f597cfa80e0>
+
+    def test_wrong_receipt_binding(env,tmp_path,monkeypatch):
+        original=subprocess.run
+        def run(command,**kwargs):
+            if len(command)>1 and command[1]=='tests/application_use.cjs':command=[command[0],'/tmp/sim2act-app-use-independent/receipt-driver.cjs',*command[2:]]
+            return original(command,**kwargs)
+        monkeypatch.setattr(subprocess,'run',run)
+>       original_test(env,tmp_path)
+
+/tmp/sim2act-app-use-independent/test_receipt.py:12: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f597d356d20>, Settings(database_url='sqlite:////tmp/sim2act-app-use-independent/receip...5dfcf1c45145d99bc9d6fa0b00bcb0', 'user_8086ffa0f5d74dd8b6bd89ad63bc74c1', 'proj_a5d8bd6a39ca4d92bd549bace2faf3e4', ...)
+tmp_path = PosixPath('/tmp/sim2act-app-use-independent/receipt-before-artifacts/test_wrong_receipt_binding0')
+
+    def test_application_use_actual_http(env, tmp_path):
+        store, settings, client, owner, other_owner, project, _ = env
+        if not shutil.which('node'):
+            pytest.skip('Developer Node required')
+        if subprocess.run(['node', '-e', "require.resolve('jsdom')"], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, timeout=10).returncode:
+            pytest.skip('Developer jsdom required')
+        resource = client.post(f'/api/projects/{project}/resources', json={
+            'name': 'synthetic-use.csv', 'format': 'csv', 'content': 'amount,tax,memo\n5,1,x\n7,2,y\n',
+        }).json()['id']
+        app_id = client.post(f'/api/projects/{project}/apps/csv-preview', json={
+            'name': 'Saved synthetic sum', 'resource_id': resource, 'goal': 'Sum either numeric column',
+        }).json()['id']
+        with store.tx() as c:
+            fp = c.execute(select(app_drafts.c.fingerprint).where(app_drafts.c.id == app_id)).scalar_one()
+        from test_internal_lifecycle import limits
+        rel, _, _ = release(env, app_id, fp)
+        instance = create_instance(store, owner, rel['id'], rel['fingerprint'], limits(env), request_key='existing-use-instance')
+        other = store.project(owner, 'Other owned project')
+        store.project(other_owner, 'Other identity project')
+        with store.tx() as c:
+            before = {name: [dict(r) for r in c.execute(select(table)).mappings()]
+                      for name, table in [('grants', grants), ('principals', principals)]}
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        (tmp_path / 'info.json').write_text(json.dumps({'base': f'http://127.0.0.1:{port}',
+            'project': project, 'other': other, 'app': app_id, 'instance': instance['id']}))
+        app = create_app(store, settings)
+    
+        @app.post('/test-only-worker')
+        def work():
+            class NoProvider:
+                def complete(self, *_args, **_kwargs):
+                    raise AssertionError('No model allowed')
+            assert Worker(store, settings, NoProvider()).once()
+            return {'test_only': True}
+    
+        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.time() + 10
+            while not server.started:
+                assert thread.is_alive() and time.time() < end
+                time.sleep(.01)
+            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)
+            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)
+>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: unbound valid-shaped run receipt cannot unlock a fresh duplicate intent
+E                 at check (/tmp/sim2act-app-use-independent/receipt-driver.cjs:4:25)
+E                 at /tmp/sim2act-app-use-independent/receipt-driver.cjs:25:298
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-app-use-independent/receipt-driver.cjs', '/tmp/sim2act-app-use-independen...act-app-use-independent/receipt-driver.cjs:4:25)\n    at /tmp/sim2act-app-use-independent/receipt-driver.cjs:25:298\n').returncode
+
+tests/test_application_use.py:68: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-app-use-independent/test_receipt.py::test_wrong_receipt_binding
+1 failed, 1 warning in 1.90s

@@ -1,0 +1,9 @@
+# Merge and application-use slice review
+
+Actual git merge-tree simulations run only in a shared local clone under this /tmp directory. Every simulation bd56f80+9f30cd2, bd56f80+b874124, bd56f80+d069e03 has exactly two content conflicts: docs/F2/Log.md and docs/F2/Plan.md. Source/scripts/tests auto-merge without textual conflict. Original worktrees and frozen CI source untouched; no checkout/reset/force/push/dispatch/rerun/model request.
+
+Prefer integrating read-failure tip d069e03 on a separate post-CI branch based on bd56f80: d069 already contains9f30cd2 and c041ace followup docs; c041ace tree equals b874124 exactly. Do not cherry-pick both equivalent followup-doc commits or duplicate the progress changes. CI readiness fix agent-ui.cjs remains unchanged in auto merged source.
+
+Both docs branches are append-only after shared00a4696 prefix. Suggested resolved-Plan.md and resolved-Log.md preserve common base, CI branch appended failure/readiness records, then progress/read-failure appended records. These are resolution suggestions, not committed product changes. Keep original dated outcomes and explicit exact source/scope; do not rewrite old failure as success or claim merged code native-verified from current bd CI.
+
+New independent CSV-instance use UI is a suitable bounded next product slice. See app-use-scope-review.json for exact existing backend guarantees and acceptance gaps. Resource binding stays frozen; new input means numeric-column parameterization, not replacing source CSV or authorizing another data source. Existing instance runtime/Grant and normal async worker suffice; no model or formal publish needed. After integrating UI snippets, run meaningful recovery/progress/read-failure/agent flows on exact merged source, then obtain separate native acceptance before claiming those merged flows passed Windows.

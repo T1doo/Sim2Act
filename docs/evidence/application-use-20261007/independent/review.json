@@ -1,0 +1,109 @@
+{
+  "status": "PASS_AFTER_INDEPENDENT_DEFECTS_FIXED",
+  "time": "2026-10-07T06:00:12.710294+00:00",
+  "base": "bd56f8080f7ffd96ce1c8e59d305e48a7ab84a74",
+  "source_sha256": {
+    "src/sim2act/web/use.js": "33640fa842692c7b50123814ee407a788862d6b4139677e3ca6840231e669704",
+    "src/sim2act/web/app.js": "f46780600aec9fda9402aa90121f810c3b32bbd3a585afebbc965a20dcf8bc70",
+    "src/sim2act/web/index.html": "1423f0f8d40bd3fa8e297c8b9904282a42df8c3ec29127798c94c7c6e6c03209",
+    "src/sim2act/api.py": "39a5a238e073632fd044592bceee4a7849283ddbbe9592eda84d6a7d8d79a291",
+    "tests/test_application_use.py": "c8bc73741be25bab0714b99acebc6cc4cb9bb560a2a02c753d37fec1a1f59804",
+    "tests/application_use.cjs": "0424469f4b0d6d00727dce999a03bf67608b3c153cc1238b3937b30a80b1381e"
+  },
+  "actual_independent_cases": {
+    "sending_previous_success": "PASS: held actual202 new tax request does not display previous amount12 as current",
+    "aba_pending_sync": "PASS: real202 held, A-B-A reopen, late original transport loss; recover shown and frozen tax displayed; recovery samebody/key",
+    "two_saved_instance_list": "PASS: after first use selection original list buttons switch to other existing fixture instance and back; no new authority",
+    "wrong_receipt_binding": "PASS: real202 with only legal-shaped but unbound runid substituted; stays accepted-read-error and locked, real1Run/0data",
+    "accepted_readonly_recovery": "PASS: actual202 then instance GET lost; known accepted recovery GET-only/sameRun",
+    "revocation_and_version": "PASS: temporary existing isolated fixture grants revoked, actual instance GET403 clears output/history/provenance; exact original fixture rows restored, then synthetic fingerprint mismatch200 rejected/cleared; 3Run/2data unchanged and all final Grant/Principal rows identical"
+  },
+  "logs": {
+    "sending-before.log": "//127.0.0.1:{port}',\n            'project': project, 'other': other, 'app': app_id, 'instance': instance['id']}))\n        app = create_app(store, settings)\n    \n        @app.post('/test-only-worker')\n        def work():\n            class NoProvider:\n                def complete(self, *_args, **_kwargs):\n                    raise AssertionError('No model allowed')\n            assert Worker(store, settings, NoProvider()).once()\n            return {'test_only': True}\n    \n        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))\n        thread = threading.Thread(target=server.run, daemon=True)\n        thread.start()\n        try:\n            end = time.time() + 10\n            while not server.started:\n                assert thread.is_alive() and time.time() < end\n                time.sleep(.01)\n            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)\n            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)\n>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr\nE           AssertionError: AssertionError [ERR_ASSERTION]: new sending intent does not label prior success as current result\nE                 at check (/tmp/sim2act-app-use-independent/sending-driver.cjs:4:25)\nE                 at /tmp/sim2act-app-use-independent/sending-driver.cjs:29:91\nE             \nE           assert 1 == 0\nE            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-app-use-independent/sending-driver.cjs', '/tmp/pytest-of-agent/pytest-454...2act-app-use-independent/sending-driver.cjs:4:25)\\n    at /tmp/sim2act-app-use-independent/sending-driver.cjs:29:91\\n').returncode\n\ntests/test_application_use.py:68: AssertionError\n=========================== short test summary info ============================\nFAILED ../../tmp/sim2act-app-use-independent/test_sending.py::test_sending_previous_success\n1 failed, 1 warning in 2.68s\n",
+    "aba-before.log": " f'http://127.0.0.1:{port}',\n            'project': project, 'other': other, 'app': app_id, 'instance': instance['id']}))\n        app = create_app(store, settings)\n    \n        @app.post('/test-only-worker')\n        def work():\n            class NoProvider:\n                def complete(self, *_args, **_kwargs):\n                    raise AssertionError('No model allowed')\n            assert Worker(store, settings, NoProvider()).once()\n            return {'test_only': True}\n    \n        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))\n        thread = threading.Thread(target=server.run, daemon=True)\n        thread.start()\n        try:\n            end = time.time() + 10\n            while not server.started:\n                assert thread.is_alive() and time.time() < end\n                time.sleep(.01)\n            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)\n            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)\n>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr\nE           AssertionError: AssertionError [ERR_ASSERTION]: reopened same pending intent exposes recovery after late original failure\nE                 at check (/tmp/sim2act-app-use-independent/aba-driver.cjs:4:25)\nE                 at /tmp/sim2act-app-use-independent/aba-driver.cjs:34:2\nE             \nE           assert 1 == 0\nE            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-app-use-independent/aba-driver.cjs', '/tmp/sim2act-app-use-independent/ab...(/tmp/sim2act-app-use-independent/aba-driver.cjs:4:25)\\n    at /tmp/sim2act-app-use-independent/aba-driver.cjs:34:2\\n').returncode\n\ntests/test_application_use.py:68: AssertionError\n=========================== short test summary info ============================\nFAILED ../../tmp/sim2act-app-use-independent/test_aba.py::test_aba_pending_view_sync\n1 failed, 1 warning in 2.29s\n",
+    "list-before.log": ": app_id, 'instance': instance['id']}))\n        app = create_app(store, settings)\n    \n        @app.post('/test-only-worker')\n        def work():\n            class NoProvider:\n                def complete(self, *_args, **_kwargs):\n                    raise AssertionError('No model allowed')\n            assert Worker(store, settings, NoProvider()).once()\n            return {'test_only': True}\n    \n        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))\n        thread = threading.Thread(target=server.run, daemon=True)\n        thread.start()\n        try:\n            end = time.time() + 10\n            while not server.started:\n                assert thread.is_alive() and time.time() < end\n                time.sleep(.01)\n            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)\n            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)\n>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr\nE           AssertionError: AssertionError [ERR_ASSERTION]: scope and publication boundary visible\nE                 at check (/tmp/sim2act-app-use-independent/list-driver.cjs:4:25)\nE                 at /tmp/sim2act-app-use-independent/list-driver.cjs:22:364\nE                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\nE             \nE           assert 1 == 0\nE            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-app-use-independent/list-driver.cjs', '/tmp/pytest-of-agent/pytest-455/te...ependent/list-driver.cjs:22:364\\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\\n').returncode\n\ntests/test_application_use.py:68: AssertionError\n=========================== short test summary info ============================\nFAILED ../../tmp/sim2act-app-use-independent/test_list.py::test_other_instance_button_remains_usable\n1 failed, 1 warning in 2.02s\n",
+    "receipt-before.log": "7.0.0.1:{port}',\n            'project': project, 'other': other, 'app': app_id, 'instance': instance['id']}))\n        app = create_app(store, settings)\n    \n        @app.post('/test-only-worker')\n        def work():\n            class NoProvider:\n                def complete(self, *_args, **_kwargs):\n                    raise AssertionError('No model allowed')\n            assert Worker(store, settings, NoProvider()).once()\n            return {'test_only': True}\n    \n        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))\n        thread = threading.Thread(target=server.run, daemon=True)\n        thread.start()\n        try:\n            end = time.time() + 10\n            while not server.started:\n                assert thread.is_alive() and time.time() < end\n                time.sleep(.01)\n            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)\n            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)\n>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr\nE           AssertionError: AssertionError [ERR_ASSERTION]: unbound valid-shaped run receipt cannot unlock a fresh duplicate intent\nE                 at check (/tmp/sim2act-app-use-independent/receipt-driver.cjs:4:25)\nE                 at /tmp/sim2act-app-use-independent/receipt-driver.cjs:25:298\nE             \nE           assert 1 == 0\nE            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-app-use-independent/receipt-driver.cjs', '/tmp/sim2act-app-use-independen...act-app-use-independent/receipt-driver.cjs:4:25)\\n    at /tmp/sim2act-app-use-independent/receipt-driver.cjs:25:298\\n').returncode\n\ntests/test_application_use.py:68: AssertionError\n=========================== short test summary info ============================\nFAILED ../../tmp/sim2act-app-use-independent/test_receipt.py::test_wrong_receipt_binding\n1 failed, 1 warning in 1.90s\n",
+    "first-fixed-checks.log": "{'base': f'http://127.0.0.1:{port}',\n            'project': project, 'other': other, 'app': app_id, 'instance': instance['id']}))\n        app = create_app(store, settings)\n    \n        @app.post('/test-only-worker')\n        def work():\n            class NoProvider:\n                def complete(self, *_args, **_kwargs):\n                    raise AssertionError('No model allowed')\n            assert Worker(store, settings, NoProvider()).once()\n            return {'test_only': True}\n    \n        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))\n        thread = threading.Thread(target=server.run, daemon=True)\n        thread.start()\n        try:\n            end = time.time() + 10\n            while not server.started:\n                assert thread.is_alive() and time.time() < end\n                time.sleep(.01)\n            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)\n            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)\n>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr\nE           AssertionError: AssertionError [ERR_ASSERTION]: reopened pending intent displays frozen tax parameter\nE                 at check (/tmp/sim2act-app-use-independent/aba-driver.cjs:4:25)\nE                 at /tmp/sim2act-app-use-independent/aba-driver.cjs:34:110\nE             \nE           assert 1 == 0\nE            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-app-use-independent/aba-driver.cjs', '/tmp/pytest-of-agent/pytest-456/tes...tmp/sim2act-app-use-independent/aba-driver.cjs:4:25)\\n    at /tmp/sim2act-app-use-independent/aba-driver.cjs:34:110\\n').returncode\n\ntests/test_application_use.py:68: AssertionError\n=========================== short test summary info ============================\nFAILED ../../tmp/sim2act-app-use-independent/test_aba.py::test_aba_pending_view_sync\n1 failed, 2 passed, 1 warning in 7.84s\n",
+    "second-fixed-checks.log": "...                                                                      [100%]\n3 passed, 1 warning in 8.08s\n",
+    "receipt-final.log": ".                                                                        [100%]\n1 passed, 1 warning in 1.74s\n",
+    "permissions.log": ".                                                                        [100%]\n1 passed, 1 warning in 3.37s\n",
+    "final-read-permission.log": "..                                                                       [100%]\n2 passed, 1 warning in 5.53s\n"
+  },
+  "failure_history": [
+    {
+      "name": "sending old success shown as current",
+      "result": "real HTTP negative FAIL before source correction",
+      "file": "sending-before.log"
+    },
+    {
+      "name": "ABA recovery hidden and frozen visible column wrong",
+      "result": "real HTTP negative FAIL before sync correction",
+      "file": "aba-before.log"
+    },
+    {
+      "name": "partial fix ABA visible frozen column still wrong",
+      "result": "1FAIL/2PASS before locked column sync",
+      "file": "first-fixed-checks.log"
+    },
+    {
+      "name": "unbound legal-shaped receipt accepted and unlocked",
+      "result": "real HTTP/synthetic receipt negative FAIL before binding check",
+      "file": "receipt-before.log"
+    },
+    {
+      "name": "first list independent driver",
+      "result": "helper timing FAIL after list source already changed: waited id but not completed form info; NOT proof of original list defect",
+      "file": "list-before.log"
+    }
+  ],
+  "permission_and_source": [
+    "reuse existing authenticated apps/internal instance/release/run routes; static use.js is sole new GET asset endpoint",
+    "read verifies instance project/source id/formalfalse/release fingerprint/frozen draft app id and current draft fingerprint",
+    "candidate.task_proof and candidate.extraction match actual inspect_draft candidate structure and original app.js; no top-level source invented",
+    "CSV registered aggregate gate only; existing backend trusted validation/provenance/current grants are authoritative",
+    "no DB/worker/API business DDL or new Grant/Principal; real provider requests0"
+  ],
+  "identity_and_async": [
+    "detail readGeneration + view identity/project/generation guards retained",
+    "list context boundary survives opening another instance, invalidated on identity/project reset",
+    "late pending settlement only updates currently matching identity/project/iid shared pending; no old view/data restoration",
+    "frozen sending/unknown/accepted-read-error column matches original body",
+    "fresh receipt missing instance run remains accepted-read-error; cannot silently unlock new duplicate intent",
+    "current FAILED/QUEUED/unknown does not display historical success as current"
+  ],
+  "checks": {
+    "independent_cases": "6 PASS across3 logs: second-fixed3,receipt-final1,final-read-permission2",
+    "node_syntax": "PASS",
+    "ruff": "PASS",
+    "diff_check": "PASS"
+  },
+  "limits": [
+    "local synthetic SQLite and normal registered CSV worker; no real model or experiment identity",
+    "version/receipt tampering are clearly synthetic payload negatives after real service responses",
+    "two-instance fixture is explicitly provisioned for oracle, not UI instance creation",
+    "grant revoke/restore are private isolated fixture faults only; UI did not grant/revoke",
+    "new PostgreSQL/native Edge/pixels NOT_RUN; simultaneous frozen CI does not sign this slice",
+    "formal publication, full P-B, autonomous planning/semantic validation remain incomplete"
+  ],
+  "repeatable_oracles": [
+    "test_sending.py",
+    "sending-driver.cjs",
+    "test_aba.py",
+    "aba-driver.cjs",
+    "test_list.py",
+    "list-driver.cjs",
+    "test_receipt_final.py",
+    "receipt-final-driver.cjs",
+    "test_permissions.py",
+    "permissions-driver.cjs",
+    "test_accepted_read.py",
+    "accepted-read-driver.cjs"
+  ],
+  "evidence_copy_boundary": "Copy listed logs/drivers/pytest wrappers/review.json and selected results JSON only. Do not copy fixture.db or entire artifact trees.",
+  "actions_excluded": [
+    "product modifications by reviewer",
+    "commit/push/CI/rerun",
+    "real model call",
+    "production/experiment identity"
+  ]
+}

@@ -507,6 +507,10 @@ def create_app(store=None, settings=None):
     def protocol_js():
         return FileResponse(web / "protocol.js", media_type="text/javascript")
 
+    @app.get("/use.js")
+    def use_js():
+        return FileResponse(web / "use.js", media_type="text/javascript")
+
     @app.get("/app.css")
     def css():
         return FileResponse(web / "app.css", media_type="text/css")

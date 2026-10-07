@@ -1,0 +1,89 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_other_instance_button_remains_usable ___________________
+
+env = (<sim2act.db.Store object at 0x7f4ee5d6ef00>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-455/test_ot...7304d393004fb3829bb40775a2d037', 'user_7185963ffbe1445799dff17ba77a07ae', 'proj_f8034ed68011459a9363fd9f0ac126a4', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-455/test_other_instance_button_rem0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4ee5b9b170>
+
+    def test_other_instance_button_remains_usable(env,tmp_path,monkeypatch):
+        normal_create=target.create_instance
+        def create(*args,**kwargs):
+            first=normal_create(*args,**kwargs)
+            second=normal_create(*args,**{**kwargs,'request_key':'independent-existing-second-instance'})
+            return first
+        monkeypatch.setattr(target,'create_instance',create)
+        normal=subprocess.run
+        def run(command,**kwargs):
+            if len(command)>1 and command[1]=='tests/application_use.cjs':command=[command[0],'/tmp/sim2act-app-use-independent/list-driver.cjs',*command[2:]]
+            return normal(command,**kwargs)
+        monkeypatch.setattr(subprocess,'run',run)
+>       target.test_application_use_actual_http(env,tmp_path)
+
+/tmp/sim2act-app-use-independent/test_list.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f4ee5d6ef00>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-455/test_ot...7304d393004fb3829bb40775a2d037', 'user_7185963ffbe1445799dff17ba77a07ae', 'proj_f8034ed68011459a9363fd9f0ac126a4', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-455/test_other_instance_button_rem0')
+
+    def test_application_use_actual_http(env, tmp_path):
+        store, settings, client, owner, other_owner, project, _ = env
+        if not shutil.which('node'):
+            pytest.skip('Developer Node required')
+        if subprocess.run(['node', '-e', "require.resolve('jsdom')"], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, timeout=10).returncode:
+            pytest.skip('Developer jsdom required')
+        resource = client.post(f'/api/projects/{project}/resources', json={
+            'name': 'synthetic-use.csv', 'format': 'csv', 'content': 'amount,tax,memo\n5,1,x\n7,2,y\n',
+        }).json()['id']
+        app_id = client.post(f'/api/projects/{project}/apps/csv-preview', json={
+            'name': 'Saved synthetic sum', 'resource_id': resource, 'goal': 'Sum either numeric column',
+        }).json()['id']
+        with store.tx() as c:
+            fp = c.execute(select(app_drafts.c.fingerprint).where(app_drafts.c.id == app_id)).scalar_one()
+        from test_internal_lifecycle import limits
+        rel, _, _ = release(env, app_id, fp)
+        instance = create_instance(store, owner, rel['id'], rel['fingerprint'], limits(env), request_key='existing-use-instance')
+        other = store.project(owner, 'Other owned project')
+        store.project(other_owner, 'Other identity project')
+        with store.tx() as c:
+            before = {name: [dict(r) for r in c.execute(select(table)).mappings()]
+                      for name, table in [('grants', grants), ('principals', principals)]}
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        (tmp_path / 'info.json').write_text(json.dumps({'base': f'http://127.0.0.1:{port}',
+            'project': project, 'other': other, 'app': app_id, 'instance': instance['id']}))
+        app = create_app(store, settings)
+    
+        @app.post('/test-only-worker')
+        def work():
+            class NoProvider:
+                def complete(self, *_args, **_kwargs):
+                    raise AssertionError('No model allowed')
+            assert Worker(store, settings, NoProvider()).once()
+            return {'test_only': True}
+    
+        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.time() + 10
+            while not server.started:
+                assert thread.is_alive() and time.time() < end
+                time.sleep(.01)
+            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)
+            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)
+>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: scope and publication boundary visible
+E                 at check (/tmp/sim2act-app-use-independent/list-driver.cjs:4:25)
+E                 at /tmp/sim2act-app-use-independent/list-driver.cjs:22:364
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-app-use-independent/list-driver.cjs', '/tmp/pytest-of-agent/pytest-455/te...ependent/list-driver.cjs:22:364\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+tests/test_application_use.py:68: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-app-use-independent/test_list.py::test_other_instance_button_remains_usable
+1 failed, 1 warning in 2.02s

@@ -429,3 +429,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 
 2026-10-07 冻结UI CI等待期间独立只读进度切片：base00a46969/dev/task-progress-local，仅普通成果画布追加最近20步/持久时间/有限等待原因/VERIFIED与已知无效计数，模型登记不代表发送，目标验收NOT_RUN。15投影专项、真实HTTP/DOM41项；2PASS专项、相关53PASS/1PGSKIP/2browserDESELECT，独立2PASS；0真实模型、不push/新CI，不改冻结37574285701，PG/新原生像素未测。[证据](../evidence/task-progress-local-20261007/README.md)。
 2026-10-07 CI等待期有界体验切片闭合：普通任务回读失败清空旧画布/命令/核对字段，区分读取失败与技术FAILED，停止失败详情自动回读，仅手动GET恢复；项目/身份/迟到回执守卫与旧按钮零写负例闭合。事前范围[TaskReadFailurePlan](TaskReadFailurePlan.md)列最多三类核心演示缺口，选择无需新增权限的画布修正；真实语言规划/语义验收、正式应用使用闭环仍开放。新切片仅本地，不混入已推精确82ffe61及唯一CI37576109066，原生/像素尚未测。[验证与失败记录](../evidence/task-read-failure-local-20261007/README.md)。
+
+2026-10-07 独立第二主线应用使用范围：冻结bd56f80之外本地，用户在应用页以数值列业务参数运行已有固定CSV实例，正常worker持久新AppRun/结果、手动读回/历史/冷会话；版本材料与未发布边界明示。只用已有授权与业务CRUD，不创建身份/Grant/Release/Instance/DDL，不调用模型或Replay。接受未知同键恢复、读取失败GET恢复、当前失败不冒历史成功、跨身份项目/ABA/来源版本负例；见[事前范围](ApplicationUsePlan.md)。新切片PG/native/正式发布均不得借bd CI升格。
