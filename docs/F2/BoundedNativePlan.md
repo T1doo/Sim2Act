@@ -13,3 +13,7 @@ Preserve 15-minute job, four-minute browser step, 150-second Node budget, existi
 ## Validation and handoff
 
 Run actual loopback HTTP/JSDOM against the exact shared native module with a fresh owned fixture, plus relevant fixture-session and existing conditional oracle regression. Keep failure logs and explicit source SHA, verify product/workflow/Windows PS/budget changes absent. Commit source locally, request independent review, then give root exact source and evidence for composed full regression. No full-suite execution here.
+
+## Independent review correction
+
+Independent actual HTTP probe found the fixture could consume an original protocol/source Run sharing project and kind. Prior local results do not close this boundary. Before Worker invocation require the durable accepted bounded namespace, canonical closed contract, accepted seal/fingerprint, existing owner/project/runtime/ref and current source/dependency proof using existing verified_pending and bounded validation. Add ordinary and optimized-Python permanent real original-namespace negative cases that assert every table fingerprint and attempts unchanged, plus retain both legitimate shared Run chains. No product or privilege expansion.
