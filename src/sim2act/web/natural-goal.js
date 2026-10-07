@@ -1,0 +1,172 @@
+"use strict";
+// Page-memory intent keys survive view changes; no credentials or data are persisted.
+const naturalGoalRequests = new Map(), naturalGoalConfirmations = new Map(), naturalGoalAcknowledgements = new Set(), naturalGoalCancellations = new Map();
+let naturalGoalGeneration = 0, naturalGoalDisplayed = null;
+const naturalGoalKey = (card=activeGoalCard) => card ? JSON.stringify([token,$("project-select").value,card.id]) : null;
+const naturalGoalFp = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+function clearNaturalGoal() {
+  naturalGoalGeneration++;
+  naturalGoalAcknowledgements.clear();
+  if(naturalGoalDisplayed && activeRun===naturalGoalDisplayed){activeRun=null;runSelectionGeneration++;clearRunDetail();}
+  naturalGoalDisplayed=null;
+  $("natural-goal-config").textContent="先保存并打开目标，再读取当前项目的规划配置。";
+  renderNaturalGoalControls();
+}
+function renderNaturalGoalControls(){
+  const card=activeGoalCard,entry=naturalGoalRequests.get(naturalGoalKey());
+  $("natural-goal-generate").disabled=!card||goalCardLoading||goalCardSaving||Boolean(entry && !["rejected"].includes(entry.state));
+  $("natural-goal-generate").textContent=card?`生成已保存 v${card.version} 的计划`:"生成已保存目标的计划";
+  $("natural-goal-recover").hidden=entry?.state!=="unknown";
+  $("natural-goal-read").hidden=!entry?.runId;
+  $("natural-goal-read").disabled=entry?.state==="sending";
+  $("natural-goal-new").hidden=!entry||!["accepted","rejected"].includes(entry.state);
+  $("natural-goal-status").textContent=entry?.message||"先保存目标。生成计划不会确认执行；结构校验也不代表目标语义验收。";
+}
+async function refreshNaturalGoalStatus(){
+  const project=$("project-select").value,identity=token,generation=naturalGoalGeneration;
+  if(!project)return;
+  const current=()=>project===$("project-select").value&&identity===token&&generation===naturalGoalGeneration;
+  $("natural-goal-config").textContent="正在读取项目规划配置…";
+  try {
+    const status=await api(`/api/projects/${project}/natural-planning-status`);
+    if(!current())return;
+    if(!["disabled","intern-s2"].includes(status.provider)||status.live_request_allowance!==0||status.available!==false||status.reason!==(status.provider==="disabled"?"PROVIDER_DISABLED":"LIVE_ALLOWANCE_ZERO"))throw Error("未知规划配置，不能判断可用性");
+    $("natural-goal-config").textContent=status.provider==="disabled"?"自然语言规划默认关闭：缺少显式模型配置与调用授权。可保存目标或提交持久规划请求；当前会等待资源，不会产生计划。":"已选择 Intern-S2，但真实调用授权为 0：当前不能调用真实模型。离线工程适配器不代表真实模型可用。";
+  } catch(error){if(current())$("natural-goal-config").textContent=`规划配置读取失败：${error.message}。不能判断模型可用性。`;}
+}
+async function readNaturalGoal(entry,current){
+  if(!current())return;
+  try {
+    naturalGoalDisplayed=entry.runId;
+    await showRun(entry.runId,true,()=>current()&&naturalGoalDisplayed===entry.runId,r=>{
+      const source=r.contract?.snapshot?.source_goal_card;
+      if(r.id!==entry.runId||!source||source.card_id!==entry.cardId||source.version!==entry.body.expected_version||source.fingerprint!==entry.body.expected_fingerprint||goalRunCanonical(source.snapshot)!==goalRunCanonical(entry.snapshot)||r.contract?.snapshot?.natural_planning?.require_confirmation!==true)throw Error("VERSION_CONFLICT");
+    });
+    if(!current())return;
+    if(activeRun!==entry.runId)throw Error("任务详情不可用");
+    entry.state="accepted";entry.message=`已接受保存 v${entry.body.expected_version} 的规划请求。请查看实际状态；计划、工具回执和语义验收分开记录。`;
+  } catch(error){entry.state="read-error";entry.message="规划请求已接受，但详情读取失败或版本不匹配。只能重读原任务，不能另建请求。";}
+  finally {if(current())renderNaturalGoalControls();}
+}
+async function generateNaturalGoal(recover=false){
+  const card=activeGoalCard;if(!card||goalCardLoading||goalCardSaving)return;
+  const key=naturalGoalKey(card),identity=token,project=card.project_id,generation=naturalGoalGeneration,selection=runUserSelectionGeneration;
+  const current=()=>identity===token&&project===$("project-select").value&&generation===naturalGoalGeneration&&activeGoalCard?.id===card.id;
+  let entry=naturalGoalRequests.get(key);
+  if(entry?.state==="sending")return;
+  if(!recover){
+    if(entry && entry.state!=="rejected")return;
+    entry={cardId:card.id,snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};naturalGoalRequests.set(key,entry);
+  }
+  if(!entry)return;
+  if(entry.runId){await readNaturalGoal(entry,current);return;}
+  entry.state="sending";entry.message="正在接受规划请求；不会自动确认执行。";renderNaturalGoalControls();
+  try {
+    const receipt=await api(`/api/projects/${project}/goal-cards/${entry.cardId}/planned-runs`,"POST",entry.body);
+    if(typeof receipt?.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||receipt.status!=="ACCEPTED"||receipt.goal_card_id!==entry.cardId||receipt.goal_version!==entry.body.expected_version||receipt.goal_fingerprint!==entry.body.expected_fingerprint||receipt.goal_acceptance!=="NOT_RUN"||receipt.candidate_generated!==false||receipt.planning_policy?.require_confirmation!==true)throw Error("未知规划接受回执");
+    entry.runId=receipt.run_id;entry.state="read-error";
+  } catch(error){
+    const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
+    entry.state=rejected?"rejected":"unknown";if(!rejected)entry.uncertain=true;
+    entry.message=rejected?`规划请求被拒绝：${error.message}`:"规划接受结果 UNKNOWN。请显式恢复原版本、原指纹和原请求键，不另建重复任务。";
+    if(current())renderNaturalGoalControls();return;
+  }
+  if(current()&&selection===runUserSelectionGeneration)await readNaturalGoal(entry,current);
+  if(current())renderNaturalGoalControls();
+}
+function naturalGoalPlanShape(r,n){
+  const plan=n?.plan,source=r.contract?.snapshot?.source_goal_card;
+  if(!plan||plan.version!=="natural-goal-plan.v1"||!naturalGoalFp(n.fingerprint)||typeof n.confirmed!=="boolean"||typeof n.confirmation_required!=="boolean"||!source||plan.source_goal_fingerprint!==source.fingerprint||Object.keys(plan).some(k=>!["version","source_goal_fingerprint","interpretation","steps"].includes(k)))throw Error("未知或不匹配的计划 schema");
+  const meaning=plan.interpretation;
+  if(!meaning||typeof meaning.objective!=="string"||!meaning.objective||Object.keys(meaning).some(k=>!["objective","assumptions","unresolved"].includes(k))||![meaning.assumptions,meaning.unresolved].every(v=>Array.isArray(v)&&v.length<=16&&v.every(x=>typeof x==="string"))||!Array.isArray(plan.steps)||!plan.steps.length||plan.steps.length>4)throw Error("未知计划结构");
+  const seen=new Set();
+  for(const step of plan.steps){
+    if(!step||Object.keys(step).some(k=>!["id","tool_ref","resource_id","column","depends_on"].includes(k))||typeof step.id!=="string"||!/^[a-z][a-z0-9_]{0,15}$/.test(step.id)||seen.has(step.id)||!["resource.read","data.aggregate_csv"].includes(step.tool_ref)||!source.snapshot?.content?.resource_refs?.includes(step.resource_id)||!Array.isArray(step.depends_on)||step.depends_on.length>4||new Set(step.depends_on).size!==step.depends_on.length||!step.depends_on.every(x=>seen.has(x))||(step.tool_ref==="data.aggregate_csv"?(typeof step.column!=="string"||!step.column):step.column!=null))throw Error("未知或越界计划步骤");
+    seen.add(step.id);
+  }
+  if(n.confirmation_required && r.contract.snapshot.natural_planning?.require_confirmation!==true)throw Error("确认策略不匹配");
+  if(r.status==="WAITING_APPROVAL"&&(!n.confirmation_required||n.confirmed||r.contract.snapshot.natural_planning?.require_confirmation!==true))throw Error("确认状态与计划策略矛盾");
+  return plan;
+}
+async function renderNaturalGoalRun(r,id,current){
+  if(!r.contract?.snapshot?.natural_planning)return;
+  const section=document.createElement("section");section.id="natural-goal-plan";$("result").append(section);
+  section.append(row("自然语言计划与确认"));
+  if(!r.natural_plan){
+    section.append(row(r.status==="WAITING_RESOURCE"?"当前等待规划配置、授权或可信回执；没有可确认的计划。":"尚无已校验计划；失败或未知结果不会被显示为规划成功。"));return;
+  }
+  let plan;
+  try {
+    plan=naturalGoalPlanShape(r,r.natural_plan);
+    const bytes=new TextEncoder().encode(goalRunCanonical(plan));
+    const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),b=>b.toString(16).padStart(2,"0")).join("");
+    if(!current())return;
+    if(hash!==r.natural_plan.fingerprint)throw Error("计划内容与指纹不匹配");
+  }
+  catch(error){if(current())section.append(row(`${error.message}。确认已关闭，请核对持久任务。`));return;}
+  section.append(row(`已通过结构与来源校验；目标语义 NOT_RUN，人工签收 PENDING。保存来源 v${r.contract.snapshot.source_goal_card.version}。`));
+  section.append(row(`计划目标：${plan.interpretation.objective}`));
+  section.append(row(`假设：${plan.interpretation.assumptions.join("；")||"无"}`),row(`未决项：${plan.interpretation.unresolved.join("；")||"无"}`));
+  const steps=document.createElement("ol");
+  for(const step of plan.steps){const li=document.createElement("li");li.textContent=`${step.id}：${step.tool_ref} · ${step.resource_id}${step.column?` · 列 ${step.column}`:""} · 依赖 ${step.depends_on.join(",")||"无"}`;steps.append(li);}section.append(steps);
+  section.append(row(r.result?.transport==="OFFLINE_MOCKTRANSPORT"||r.contract.snapshot.mode==="MOCK"?"离线 MOCK 工程记录，不代表真实模型验收。":"规划记录不是目标语义验收。"));
+  const n=r.natural_plan,key=JSON.stringify([token,$("project-select").value,id,n.fingerprint]),entry=naturalGoalConfirmations.get(key),cancelEntry=naturalGoalCancellations.get(key);
+  if(n.confirmed){if(entry)entry.state="accepted";section.append(row("该计划已有显式确认记录；实际执行状态与回执见本任务。"));return;}
+  if(!n.confirmation_required){section.append(row("历史工程任务未要求新确认门；本页不追认确认。"));return;}
+  if(r.status!=="WAITING_APPROVAL"){section.append(row("当前状态不可确认执行。"));return;}
+  section.append(row("等待显式确认：确认前工具操作为 0。确认会使用该任务冻结的材料、版本与参数；撤权或材料变化仍会阻止执行。"));
+  const label=document.createElement("label"),ack=document.createElement("input");ack.type="checkbox";ack.id="natural-goal-ack";const ackKey=JSON.stringify([key,r.version]);ack.checked=naturalGoalAcknowledgements.has(ackKey);label.append(ack," 我已阅读以上计划，确认执行这些只读步骤");section.append(label);
+  const confirm=document.createElement("button");confirm.id="natural-goal-confirm";confirm.textContent="确认此计划并执行";confirm.disabled=!ack.checked||Boolean(entry&&entry.state!=="rejected")||Boolean(cancelEntry);
+  ack.onchange=()=>{if(ack.checked)naturalGoalAcknowledgements.add(ackKey);else naturalGoalAcknowledgements.delete(ackKey);confirm.disabled=!ack.checked||Boolean(entry&&entry.state!=="rejected")||Boolean(cancelEntry);};
+  ack.disabled=Boolean(cancelEntry);
+  confirm.onclick=safe(()=>confirmNaturalGoal(r,n,key,current,false));section.append(confirm);
+  if(entry?.state==="unknown"||entry?.state==="sending"){
+    section.append(row("确认接受结果 UNKNOWN 或仍在提交。不要新建确认；只能核对任务或恢复原确认键。"));
+    const read=document.createElement("button");read.id="natural-goal-confirm-read-recover";read.textContent="核对确认状态（只读）";read.onclick=safe(()=>current()?showRun(id):undefined);section.append(read);
+    const retry=document.createElement("button");retry.id="natural-goal-confirm-retry";retry.textContent="显式恢复原确认回执";retry.disabled=entry.state==="sending";retry.onclick=safe(()=>confirmNaturalGoal(r,n,key,current,true));section.append(retry);
+  }
+  if(entry?.message)section.append(row(entry.message));
+  const cancel=document.createElement("button");cancel.id="natural-goal-cancel";cancel.textContent=cancelEntry?.state==="unknown"?"显式恢复原取消请求":"取消此任务";cancel.disabled=entry?.state==="sending"||cancelEntry?.state==="sending";
+  if(cancelEntry)section.append(row("已有取消意图，确认已关闭。取消接受不明时只能读取或显式恢复原版本取消。"));
+  cancel.onclick=safe(async()=>{
+    if(!current())return;
+    let attempt=naturalGoalCancellations.get(key);if(attempt?.state==="sending")return;
+    if(!attempt){attempt={body:{command:"cancel",version:r.version},state:"new"};naturalGoalCancellations.set(key,attempt);}
+    attempt.state="sending";cancel.disabled=true;confirm.disabled=true;ack.disabled=true;
+    try {await api(`/api/runs/${id}/commands`,"POST",attempt.body);attempt.state="accepted";}
+    catch(error){attempt.state="unknown";}
+    if(current())await showRun(id);
+  });section.append(cancel);
+}
+async function confirmNaturalGoal(r,n,key,current,recover){
+  if(!current()||naturalGoalCancellations.has(key))return;
+  let entry=naturalGoalConfirmations.get(key);
+  if(entry?.state==="sending")return;
+  if(!recover){
+    if(entry&&entry.state!=="rejected")return;
+    if(!$("natural-goal-ack")?.checked)return;
+    entry={body:{expected_version:r.version,expected_plan_fingerprint:n.fingerprint,request_key:crypto.randomUUID()},state:"new"};naturalGoalConfirmations.set(key,entry);
+  }
+  if(!entry)return;
+  entry.state="sending";
+  for(const id of ["natural-goal-confirm","natural-goal-ack","natural-goal-cancel","natural-goal-confirm-retry"]){if($(id))$(id).disabled=true;}
+  try {
+    const receipt=await api(`/api/runs/${r.id}/confirm-natural-plan`,"POST",entry.body);
+    if(receipt?.run_id!==r.id||receipt.plan_fingerprint!==n.fingerprint||receipt.confirmed!==true||!["QUEUED","RUNNING","PARTIAL","FAILED","WAITING_RESOURCE","PAUSED","CANCELLED","CANCEL_REQUESTED","RECONCILING"].includes(receipt.status))throw Error("未知确认回执");
+    entry.state="accepted";entry.message="确认已接受。请读取实际执行记录。";
+  } catch(error){
+    const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
+    entry.state=rejected?"rejected":"unknown";if(!rejected)entry.uncertain=true;
+    entry.message=rejected?`确认被拒绝：${error.message}。请重读当前计划和版本。`:`确认接受结果 UNKNOWN：${error.message}。保留原确认键，仅显式恢复。`;
+  }
+  if(current())await showRun(r.id);
+}
+$("natural-goal-generate").onclick=safe(()=>generateNaturalGoal());
+$("natural-goal-recover").onclick=safe(()=>generateNaturalGoal(true));
+$("natural-goal-read").onclick=safe(()=>generateNaturalGoal(true));
+$("natural-goal-back").onclick=()=>{clearNaturalGoal();renderNaturalGoalControls();};
+$("natural-goal-new").onclick=()=>{
+  const key=naturalGoalKey(),entry=naturalGoalRequests.get(key);
+  if(entry&&["accepted","rejected"].includes(entry.state)){naturalGoalRequests.delete(key);clearNaturalGoal();renderNaturalGoalControls();}
+};
+renderNaturalGoalControls();

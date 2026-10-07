@@ -62,6 +62,25 @@ def submit(value, key="nl", **extra):
     )
 
 
+def run_once_with_confirmation(value, worker, run_id):
+    """Preserve old receipt oracles, adding the new explicit server confirmation."""
+    worked = worker.once()
+    view = value[2].get(f"/api/runs/{run_id}")
+    if view.status_code == 200 and view.json()["status"] == "WAITING_APPROVAL":
+        pending = view.json()
+        assert rows(value[0], operations) == []
+        assert pending["natural_plan"]["confirmation_required"] is True
+        assert pending["natural_plan"]["confirmed"] is False
+        accepted = value[2].post(f"/api/runs/{run_id}/confirm-natural-plan", json={
+            "expected_version": pending["version"],
+            "expected_plan_fingerprint": pending["natural_plan"]["fingerprint"],
+            "request_key": "old-oracle-confirm-" + run_id,
+        })
+        assert accepted.status_code == 200, accepted.text
+        assert worker.once()
+    return worked
+
+
 def plan(value, tool="data.aggregate_csv"):
     return {
         "version": "natural-goal-plan.v1",
@@ -131,7 +150,7 @@ def test_actual_provider_selects_distinct_plan_then_real_read_only_task(env, mon
     accepted = submit(value)
     assert accepted.status_code == 202
     run_id = accepted.json()["run_id"]
-    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)), run_id)
     result = client.get(f"/api/runs/{run_id}").json()
     assert result["status"] == "PARTIAL" and result["result"]["goal_acceptance"] == "NOT_RUN"
     assert (
@@ -172,7 +191,7 @@ def test_production_selection_does_not_grant_live_or_mock_fallback(
     )
     monkeypatch.setattr(MockModel, "request", lambda *a, **k: pytest.fail("No fallback required"))
     run_id = submit(value).json()["run_id"]
-    assert Worker(store, settings).once()
+    assert run_once_with_confirmation(value, Worker(store, settings), run_id)
     view = client.get(f"/api/runs/{run_id}").json()
     assert view["status"] == "WAITING_RESOURCE"
     assert rows(store, attempts) == rows(store, operations) == []
@@ -237,7 +256,7 @@ def test_invalid_provider_result_dispatches_nothing_and_does_not_retry(env, dama
         lambda request: (wires.append(request.content), httpx.Response(200, json=raw))[1]
     )
     run_id = submit(value).json()["run_id"]
-    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=transport), run_id)
     assert len(wires) == len(rows(store, attempts)) == 1 and rows(store, operations) == []
     assert client.get(f"/api/runs/{run_id}").json()["status"] in {"FAILED", "WAITING_RESOURCE"}
     with store.tx() as c:
@@ -245,7 +264,7 @@ def test_invalid_provider_result_dispatches_nothing_and_does_not_retry(env, dama
         ctx = dict(current["context"])
         ctx["requests"] = 0
         c.execute(update(runs).where(runs.c.id == run_id).values(status="QUEUED", context=ctx))
-    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=transport), run_id)
     assert len(wires) == 1 and len(rows(store, attempts)) == 1 and authority(store) == before
     client.close()
 
@@ -274,7 +293,7 @@ def test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back(env, dam
             httpx.Response(200, json=response(plan(value))),
         )[1]
     )
-    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=transport), run_id)
     with store.tx() as c:
         current = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
         ctx = copy.deepcopy(current["context"])
@@ -317,7 +336,7 @@ def test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back(env, dam
             receipt["data"]["sum"] = "999"
             c.execute(update(operations).where(operations.c.id == op["id"]).values(receipt=receipt))
         c.execute(update(runs).where(runs.c.id == run_id).values(status="QUEUED", context=ctx))
-    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=transport), run_id)
     assert len(calls) == len(rows(store, attempts)) == len(rows(store, operations)) == 1
     assert rows(store, runs)[0]["status"] != "PARTIAL"
     client.close()
@@ -338,12 +357,12 @@ def test_two_step_plan_resumes_actual_receipts_without_new_provider(env):
             httpx.Response(200, json=response(proposed)),
         )[1]
     )
-    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=transport), run_id)
     initial = client.get(f"/api/runs/{run_id}").json()
     assert initial["status"] == "PARTIAL" and len(initial["result"]["receipts"]) == 2
     with store.tx() as c:
         c.execute(update(runs).where(runs.c.id == run_id).values(status="QUEUED", result=None))
-    assert Worker(store, settings).once()
+    assert run_once_with_confirmation(value, Worker(store, settings), run_id)
     assert client.get(f"/api/runs/{run_id}").json()["result"] == initial["result"]
     assert len(wires) == len(rows(store, attempts)) == 1 and len(rows(store, operations)) == 2
     client.close()
@@ -398,7 +417,7 @@ def test_boundary_limits_and_current_authorization(env, damage):
         return httpx.Response(200, json=raw)
 
     worker = Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler))
-    assert worker.once()
+    assert run_once_with_confirmation(value, worker, run_id)
     if damage == "result":
         with store.tx() as c:
             result = copy.deepcopy(
@@ -437,7 +456,7 @@ def test_original_wire_and_strict_budget_survive_coordinated_tamper(env, damage)
         )[1]
     )
     run_id = submit(value).json()["run_id"]
-    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=transport), run_id)
     with store.tx() as c:
         current = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
         ctx = copy.deepcopy(current["context"])
@@ -509,7 +528,7 @@ def test_original_wire_and_strict_budget_survive_coordinated_tamper(env, damage)
     assert view.json()["error"]["code"] == ("OUTCOME_UNKNOWN" if unknown else "VERSION_CONFLICT")
     with store.tx() as c:
         c.execute(update(runs).where(runs.c.id == run_id).values(status="QUEUED"))
-    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert run_once_with_confirmation(value, Worker(store, settings, goal_planner_transport=transport), run_id)
     assert len(calls) == len(rows(store, attempts)) == len(rows(store, operations)) == 1
     assert rows(store, runs)[0]["status"] != "PARTIAL"
     client.close()

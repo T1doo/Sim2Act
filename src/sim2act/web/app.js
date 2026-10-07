@@ -134,7 +134,7 @@ async function showRun(id, userSelection = true, selectionGuard = () => true, va
   const selectedAttempt = $("reconcile-attempt").value;
   $("reconcile-attempt").replaceChildren(...unresolvedAttempts.map(a => {const o=document.createElement("option");o.value=a.attempt_id;o.textContent=`${a.mode || "历史请求"} · ${a.attempt_id.slice(0,16)} · ${a.request_fingerprint ? a.request_fingerprint.slice(0,12) : "历史请求未绑定，只能结束"}`;o.title=a.request_fingerprint || "没有可恢复绑定";return o;}));
   if (unresolvedAttempts.some(a => a.attempt_id === selectedAttempt)) $("reconcile-attempt").value = selectedAttempt;
-  const labels = {QUEUED:"等待后台执行",RUNNING:"正在执行",PARTIAL:"部分完成",FAILED:"执行失败",WAITING_RESOURCE:"等待资源或授权",PAUSED:"已暂停",CANCELLED:"已取消"};
+  const labels = {QUEUED:"等待后台执行",RUNNING:"正在执行",PARTIAL:"部分完成",FAILED:"执行失败",WAITING_RESOURCE:"等待资源或授权",WAITING_APPROVAL:"等待确认计划",PAUSED:"已暂停",CANCELLED:"已取消"};
   $("result").replaceChildren(row(`${labels[r.status] || r.status}（${r.status}）`));
   if(internal){
     $("result").append(row(`内部工程只读任务 · 0 模型请求 · 结果版本 ${r.result_version ?? "无"} · 正式发布关闭`));
@@ -153,6 +153,8 @@ async function showRun(id, userSelection = true, selectionGuard = () => true, va
   if (r.error) $("result").append(row(`需要处理：${r.error.message || r.error.code}`));
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
   $("events").textContent = JSON.stringify(r.events, null, 2);
+  if(typeof renderNaturalGoalRun === "function")await renderNaturalGoalRun(r,id,current);
+  if(!current())return;
   const commands = ["QUEUED","RUNNING"].includes(r.status) ? ["pause","cancel"] : ["PAUSED","WAITING_RESOURCE"].includes(r.status) ? (unresolvedAttempts.length ? ["cancel"] : ["resume","cancel"]) : [];
   $("commands").replaceChildren(...commands.map(command => {const b = document.createElement("button"); b.textContent = {pause:"暂停",cancel:"取消",resume:"继续"}[command]; b.onclick = safe(async () => {if(!current())return;await api(`/api/runs/${id}/commands`, "POST", {command,version:r.version}); if(current())await showRun(id);}); return b;}));
 }
@@ -454,11 +456,13 @@ $("goal-card-run").onclick=safe(()=>executeGoalCard());
 $("goal-card-run-recover").onclick=safe(()=>executeGoalCard(true));
 const goalCardFields=["title","goal","known","assumptions","unresolved","constraints","acceptance_checks"];
 function updateGoalCardSave() {
+  if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();
   $("goal-card-save").disabled=goalCardLoading || goalCardSaving;
   updateCandidateCreate();
   renderGoalRun();
 }
 function clearGoalCard() {
+  if(typeof clearNaturalGoal === "function")clearNaturalGoal();
   if(goalRunDisplayed && activeRun===goalRunDisplayed){activeRun=null;runSelectionGeneration++;clearRunDetail();}
   goalRunDisplayed=null;
   clearApp(); // A goal selection also invalidates in-flight app readback/recovery.
@@ -466,7 +470,7 @@ function clearGoalCard() {
   $("goal-candidate-form").hidden=true;$("goal-candidate-list").replaceChildren();
   $("goal-candidate-status").textContent="先打开已保存目标卡。";
   goalCardLoading=false;updateGoalCardSave();
-  activeGoalCard=null;renderGoalRun();$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
+  activeGoalCard=null;renderGoalRun();if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
   $("goal-card-history").replaceChildren();$("goal-card-history-detail").textContent="";
 }
 async function refreshGoalCards(pid) {
@@ -498,6 +502,9 @@ async function showGoalCard(id, pid=$("project-select").value) {
   activeGoalCard={id,version:card.version,fingerprint:card.fingerprint,project_id:card.project_id,snapshot:card.history.find(v=>v.version===card.version&&v.fingerprint===card.fingerprint)?.snapshot};
   if(!activeGoalCard.snapshot){activeGoalCard=null;renderGoalRun();throw Error("VERSION_CONFLICT");}
   renderGoalRun();
+  if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();
+  if(typeof refreshNaturalGoalStatus === "function")await refreshNaturalGoalStatus();
+  if(!current())return;
   goalCardFields.forEach(f=>{$(`goal-card-${f}`).value=Array.isArray(card.content[f]) ? card.content[f].join("\n") : card.content[f];});
   Array.from($("goal-card-resources").options).forEach(o=>o.selected=card.content.resource_refs.includes(o.value));
   $("goal-card-status").textContent=`草案 v${card.version} · 目标验收 NOT_RUN · 执行使用已保存版本；保存将建立新版本`;
