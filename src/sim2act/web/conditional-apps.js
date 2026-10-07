@@ -7,6 +7,7 @@ const reportScope=()=>({identity:token,project:$("project-select").value});
 const reportScopeCurrent=c=>c.identity===token&&c.project===$("project-select").value;
 const reportCurrent=c=>reportAppContext===c&&c.epoch===reportAppEpoch&&reportScopeCurrent(c);
 function clearReportApps(clearList=true){
+ $("report-manifest-promote").hidden=true;$("report-manifest-promote-retry").hidden=true;$("report-manifest-status").textContent="";
  reportAppEpoch++;reportListGeneration++;reportAppContext=null;if(clearList)$("report-app-list").replaceChildren();$("report-app-form").hidden=true;$("report-app-name").textContent="选择保存的条件报告草案";$("report-app-output").replaceChildren();$("report-app-history").replaceChildren();$("report-app-origin").textContent="";$("report-app-retry").hidden=true;$("report-app-form").reset();
 }
 function clearReportSave(){reportSaveEpoch++;reportSaveContext=null;$("report-save-form").hidden=true;$("report-save-name").value="假设差旅条件报告";$("report-save-status").textContent="";$("report-save-retry").hidden=true;}
@@ -39,7 +40,7 @@ async function openReportApp(id){
  if(a.namespace!=="bounded-conditional-app.v1"||a.id!==id||a.project_id!==c.project)throw Error("VERSION_CONFLICT");c.app=a;
  c.pending=reportIntents.get(JSON.stringify([c.identity,c.project,c.id,a.fingerprint]));
  $("report-app-name").textContent=a.name;$("report-app-origin").textContent=JSON.stringify({state:a.state,authorization_domain:a.authorization_domain,runtime_id:a.runtime_id,origin:a.origin,semantic:a.semantic_status,owner:a.owner_acceptance},null,2);$("report-app-form").hidden=false;
- reportAppButtons(c);await readReportHistory(c);
+ reportAppButtons(c);if(typeof manifestPromotionButtons === "function")manifestPromotionButtons(c);await readReportHistory(c);
 }
 function reportAppButtons(c){if(!reportCurrent(c))return;for(const e of $("report-app-form").elements)e.disabled=c.busy||!!c.pending;$("report-app-retry").hidden=!c.pending;$("report-app-retry").disabled=c.busy;}
 async function readReportHistory(c=reportAppContext){

@@ -7,7 +7,8 @@ from pydantic import Field
 from sqlalchemy import select, update
 
 from .apps import create_csv_draft, inspect_draft, preview
-from .conditional_apps import NAMESPACE as CONDITIONAL_APP_NAMESPACE, mount as mount_conditional_apps
+from .conditional_apps import NAMESPACE as CONDITIONAL_APP_NAMESPACE
+from .conditional_apps import mount as mount_conditional_apps
 from .conditional_checks import mount as mount_conditional_checks
 from .conditional_runs import mount as mount_conditional_runs
 from .config import Settings
@@ -49,6 +50,7 @@ from .preflight import preflight
 from .protocol_api import mount as mount_protocol_api
 from .protocol_recovery import mount as mount_protocol_recovery
 from .protocol_reviews import mount as mount_protocol_reviews
+from .report_manifest_apps import mount as mount_report_manifest_apps
 from .spec_checklists import SpecChecklistInput, complete_checklist, inspect_checklist
 
 
@@ -494,6 +496,7 @@ def create_app(store=None, settings=None):
     mount_conditional_checks(app, db, identity)
     mount_conditional_runs(app, db, identity, platform_limits, s)
     mount_conditional_apps(app, db, identity, platform_limits, s)
+    mount_report_manifest_apps(app, db, identity, platform_limits, s)
 
     web = Path(__file__).parent / "web"
 
@@ -516,6 +519,10 @@ def create_app(store=None, settings=None):
     @app.get("/conditional-runs.js")
     def conditional_runs_js():
         return FileResponse(web / "conditional-runs.js", media_type="text/javascript")
+
+    @app.get("/report-manifest.js")
+    def report_manifest_js():
+        return FileResponse(web / "report-manifest.js", media_type="text/javascript")
 
     @app.get("/conditional-apps.js")
     def conditional_apps_js():

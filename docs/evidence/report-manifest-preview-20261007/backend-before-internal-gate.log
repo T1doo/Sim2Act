@@ -1,0 +1,60 @@
+..............F
+=================================== FAILURES ===================================
+__ test_projects_identity_versions_history_and_internal_release_are_separate ___
+
+env = (<sim2act.db.Store object at 0x7f1c56ad2300>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-549/test_pr...f8b31a9e2143c4a00d13a6f457a31f', 'user_2b693aa1438f436dbb748eb0d243d6fa', 'proj_e5d75e916ea6469786733bfdb13d5c98', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-549/test_projects_identity_version0')
+
+    def test_projects_identity_versions_history_and_internal_release_are_separate(env, tmp_path):
+        app, _, _, _, _ = promoted(env, tmp_path)
+        other = env[2].post("/api/projects", json={"name": "different own project"}).json()["id"]
+        assert env[2].get(f"/api/projects/{other}/apps/" + app["id"]).status_code == 403
+        request = {
+            "expected_candidate_fingerprint": app["fingerprint"],
+            "input": facts(500),
+            "request_key": "history",
+        }
+        assert (
+            env[2]
+            .post(f"/api/projects/{other}/apps/" + app["id"] + "/previews", json=request)
+            .status_code
+            == 403
+        )
+        env[2].headers.update({"Authorization": "Bearer synthetic-test-B"})
+        assert env[2].get("/api/apps/" + app["id"]).status_code == 403
+        env[2].headers.update({"Authorization": "Bearer synthetic-test-A"})
+        assert (
+            env[2]
+            .post(
+                preview_path(env, app["id"]),
+                json={**request, "expected_candidate_fingerprint": "0" * 64},
+            )
+            .status_code
+            == 409
+        )
+        first = env[2].post(preview_path(env, app["id"]), json=request).json()["run_id"]
+        second = (
+            env[2]
+            .post(preview_path(env, app["id"]), json={**request, "request_key": "second"})
+            .json()["run_id"]
+        )
+        assert first != second
+        with env[0].tx() as c:
+            c.execute(
+                update(app_previews)
+                .where(app_previews.c.app_id == app["id"], app_previews.c.request_key == "history")
+                .values(output={"namespace": NAMESPACE, "run_id": second})
+            )
+        assert env[2].get(f"/api/projects/{env[5]}/apps/" + app["id"] + "/history").status_code == 409
+        # Old internal lifecycle cannot treat this model-backed preview as CSV or Replay agent.
+>       assert env[2].get("/api/internal/apps/" + app["id"] + "/releases").status_code >= 400
+E       AssertionError: assert 200 >= 400
+E        +  where 200 = <Response [200 OK]>.status_code
+E        +    where <Response [200 OK]> = get((('/api/internal/apps/' + 'app_0a6dd1703b284525858b327eec1af222') + '/releases'))
+E        +      where get = <starlette.testclient.TestClient object at 0x7f1c583aa5d0>.get
+
+tests/test_report_manifest_apps.py:213: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_report_manifest_apps.py::test_projects_identity_versions_history_and_internal_release_are_separate
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 14 passed, 1 warning in 15.91s

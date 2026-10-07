@@ -15,6 +15,12 @@ def preflight(raw, candidates, platform_limits):
         if action_key in actions:
             raise DomainError("INVALID_MANIFEST", "Duplicate action revision")
         actions[action_key] = action
+    report_only = bool(actions) and all(a.executor.kind == "bounded_report" for a in actions.values())
+    if any(a.executor.kind == "bounded_report" for a in actions.values()):
+        if not report_only or manifest.runtime_identity_requirements.mode != "user_and_project_intersection" or manifest.validation_suite_ref != "source.conditional_report.v1":
+            raise DomainError("INVALID_MANIFEST", "Report preview has exact shared project runtime/check scope")
+    elif manifest.runtime_identity_requirements.mode != "user_and_app_intersection":
+        raise DomainError("INVALID_MANIFEST", "Existing families retain their application identity contract")
     bound = {}
     for binding in manifest.action_bindings:
         binding_key = (binding.action_id, binding.revision)
@@ -92,7 +98,7 @@ def preflight(raw, candidates, platform_limits):
         }
         effective_tools = (
             set(action.allowed_tool_refs)
-            if action.executor.kind == "bounded_agent"
+            if action.executor.kind in {"bounded_agent", "bounded_report"}
             else {action.executor.ref}
         )
         for tool in effective_tools:
