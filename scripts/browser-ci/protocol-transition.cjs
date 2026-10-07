@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 module.exports=async function transition(root){
  const request=path.join(root,'fresh-request.json'),response=path.join(root,'fresh-response.json');
  assert(!fs.existsSync(request)&&!fs.existsSync(response),'single-use owned protocol transition');
- fs.writeFileSync(request,JSON.stringify({action:'fresh-protocol-fixture.v1'}));
+ const requestTmp=request+'.tmp';fs.writeFileSync(requestTmp,JSON.stringify({action:'fresh-protocol-fixture.v1'}));fs.renameSync(requestTmp,request);
  const end=Date.now()+12000;while(!fs.existsSync(response)&&Date.now()<end)await new Promise(r=>setTimeout(r,20));
  assert(fs.existsSync(response),'owned same-port protocol transition deadline');
  const receipt=JSON.parse(fs.readFileSync(response,'utf8'));assert.equal(receipt.namespace,'owned-protocol-api-transition.v1');assert.equal(receipt.status,'READY');assert.equal(receipt.old_api_joined,true);assert.equal(receipt.max_concurrent_protocol_servers,1);

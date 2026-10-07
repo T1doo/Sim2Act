@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -43,10 +44,25 @@ def run_node(command, old_api, old_root, repo, env, timeout=150, stdout=None, st
     replacement = None
     switched = False
     deadline = time.monotonic() + timeout
+    expired = threading.Event()
+
+    def expire_node():
+        expired.set()
+        if node.poll() is None:
+            try:
+                node.kill()
+            except ProcessLookupError:
+                pass
+
+    def check_deadline():
+        if expired.is_set() or time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(command, timeout)
+
+    watchdog = threading.Timer(max(0, deadline - time.monotonic()), expire_node)
+    watchdog.start()
     try:
         while node.poll() is None:
-            if time.monotonic() >= deadline:
-                raise subprocess.TimeoutExpired(command, timeout)
+            check_deadline()
             if request.exists() and not switched:
                 if request.stat().st_size > 100:
                     raise ValueError("Closed transition request exceeded bound")
@@ -54,10 +70,13 @@ def run_node(command, old_api, old_root, repo, env, timeout=150, stdout=None, st
                 if type(value) is not dict or value != {"action": "fresh-protocol-fixture.v1"}:
                     raise ValueError("Closed transition action required")
                 before = snapshot(old_root)
+                check_deadline()
                 baseline = snapshot(fresh)
+                check_deadline()
                 stop(old_api)
                 if old_api.poll() is None:
                     raise RuntimeError("Old owned protocol API not joined")
+                check_deadline()
                 with (fresh / "api.log").open("wb") as log:
                     replacement = subprocess.Popen(
                         [command[-1], "scripts/protocol-ui/fixture.py", "--root", str(fresh), "--action", "serve"],
@@ -80,7 +99,9 @@ def run_node(command, old_api, old_root, repo, env, timeout=150, stdout=None, st
                     time.sleep(0.02)
                 else:
                     raise RuntimeError("Fresh owned protocol API not ready")
-                response.write_text(json.dumps({
+                check_deadline()
+                response_tmp = response.with_name(response.name + ".tmp")
+                response_tmp.write_text(json.dumps({
                     "namespace": "owned-protocol-api-transition.v1", "status": "READY",
                     "same_port": old_info["port"], "old_api_joined": True,
                     "old_api_exit": old_api.returncode, "max_concurrent_protocol_servers": 1,
@@ -90,13 +111,18 @@ def run_node(command, old_api, old_root, repo, env, timeout=150, stdout=None, st
                     "fresh_authority_baseline": fresh_info["initial_counts"],
                     "separate_authority_baselines": True,
                 }), encoding="utf-8")
+                check_deadline()
+                response_tmp.replace(response)
                 switched = True
             time.sleep(0.02)
+        check_deadline()
         if node.returncode:
             raise subprocess.CalledProcessError(node.returncode, command)
         if not switched:
             raise RuntimeError("Expected owned protocol transition never requested")
     finally:
+        watchdog.cancel()
+        watchdog.join()
         cleanup_error = None
         for owned in (node, replacement, old_api):
             try:

@@ -45,3 +45,62 @@ def test_owned_rotation_failure_is_closed_and_collects_children(tmp_path, monkey
                           Path.cwd(), os.environ.copy(), timeout=0.4)
     assert not (tmp_path / "fresh-response.json").exists()
     assert old.poll() is not None and all(child.poll() is not None for child in spawned)
+
+
+@pytest.mark.parametrize("blocked_phase", ["snapshot", "stop"])
+def test_owned_node_deadline_remains_active_during_blocked_lifecycle(tmp_path, monkeypatch, blocked_phase):
+    """A lifecycle operation cannot keep the actual Node child alive past its deadline."""
+    import time
+
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    info = {"port": 12345, "project": "p", "source": "s", "bearer": "synthetic"}
+    for root in (tmp_path, fresh):
+        (root / "info.json").write_text(json.dumps(info))
+    original = subprocess.Popen
+    old = original([sys.executable, "-c", "import time; time.sleep(30)"])
+    spawned = []
+    observations = []
+
+    def owned_spawn(command, **kwargs):
+        child = original(command, **kwargs)
+        spawned.append(child)
+        return child
+
+    def blocked_snapshot(root):
+        time.sleep(0.35)
+        observations.append(spawned[0].poll())
+        return {"tables": {}}
+
+    monkeypatch.setattr(rotation.subprocess, "Popen", owned_spawn)
+    real_stop = rotation.stop
+
+    def blocked_stop(child):
+        if child is old:
+            time.sleep(0.35)
+            observations.append(spawned[0].poll())
+        real_stop(child)
+
+    monkeypatch.setattr(rotation, "snapshot", blocked_snapshot if blocked_phase == "snapshot" else lambda root: {"tables": {}})
+    if blocked_phase == "stop":
+        monkeypatch.setattr(rotation, "stop", blocked_stop)
+    request = str(tmp_path / "fresh-request.json")
+    code = "from pathlib import Path;import time;Path(" + repr(request) + ").write_text('{\"action\":\"fresh-protocol-fixture.v1\"}');time.sleep(30)"
+    with pytest.raises(subprocess.TimeoutExpired):
+        rotation.run_node([sys.executable, "-c", code, sys.executable], old, tmp_path,
+                          Path.cwd(), os.environ.copy(), timeout=0.2)
+    assert observations and all(code is not None for code in observations)
+    assert len(spawned) == 1, "no replacement may start after deadline"
+    assert old.poll() is not None and spawned[0].poll() is not None
+    assert not (tmp_path / "fresh-response.json").exists()
+
+
+def test_transition_control_files_are_published_atomically():
+    """Both real implementations publish only completed same-directory files."""
+    source = Path("scripts/browser-ci/protocol-transition.cjs").read_text()
+    assert "fs.writeFileSync(requestTmp," in source
+    assert "fs.renameSync(requestTmp,request)" in source
+    source = Path("scripts/protocol-ui/rotation.py").read_text()
+    assert 'response.with_name(response.name + ".tmp")' in source
+    assert "response_tmp.write_text(" in source
+    assert "response_tmp.replace(response)" in source
