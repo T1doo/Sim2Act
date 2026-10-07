@@ -1,0 +1,116 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+___________________ test_delivery_graph_actual_http_dom[CSV] ___________________
+
+env = (<sim2act.db.Store object at 0x7f0593e82540>, Settings(database_url='sqlite:////tmp/delivery-graph-ui-first/test_deliv...b04abe720f44258de5e9a6916912bf', 'user_0f326389d14141318b9d18ce805a8b7d', 'proj_779221dfb9a647299943129c85885a19', ...)
+tmp_path = PosixPath('/tmp/delivery-graph-ui-first/test_delivery_graph_actual_htt0')
+family = 'CSV'
+
+    @pytest.mark.parametrize("family", ["CSV", "REPORT"])
+    def test_delivery_graph_actual_http_dom(env, tmp_path, family):
+        if family == "REPORT":
+            env = bounded_env.__wrapped__(env)
+            saved, _, _, _, wires = promoted(env, tmp_path)
+            aid = saved["id"]
+            assert len(wires) == 3
+        else:
+            aid = draft(env)
+        store, settings, client, owner, _, project, *_ = env
+        assert shutil.which("node"), "Developer Node required"
+        other = store.project(owner, "Other owned graph project")
+        inspected = client.get(f"/api/apps/{aid}").json()
+        resource = inspected["candidate"]["actions"][0]["permission_requirements"][0]["resource_ref"]
+        with store.tx() as c:
+            revoke = dict(c.execute(select(grants).where(grants.c.principal_id == owner,
+                                                          grants.c.resource_id == resource)).mappings().first())
+            before = {name: [dict(r) for r in c.execute(select(table)).mappings()]
+                      for name, table in [("grants", grants), ("principals", principals), ("attempts", attempts)]}
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": project, "other": other, "app": aid, "revoke": {"id": revoke["id"], "version": revoke["revision"]}}))
+        server = uvicorn.Server(uvicorn.Config(create_app(store, settings), host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            result = subprocess.run(["node", "tests/delivery_graph_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: {"check":1,"label":"opening generic app does not derive or plan","elapsed_ms":884}
+E             AssertionError [ERR_ASSERTION]: exact no-anchor read is empty without fake failure evidence
+E                 at check (/workspace/Sim2Act-delivery-graph-ui/tests/delivery_graph_ui.cjs:4:25)
+E                 at /workspace/Sim2Act-delivery-graph-ui/tests/delivery_graph_ui.cjs:18:189
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/delivery_graph_ui.cjs', '/tmp/delivery-graph-ui-first/test_delivery_graph_actual...ts/delivery_graph_ui.cjs:18:189\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+tests/test_delivery_graph_apps_ui.py:55: AssertionError
+_________________ test_delivery_graph_actual_http_dom[REPORT] __________________
+
+env = (<sim2act.db.Store object at 0x7f05937daea0>, Settings(database_url='sqlite:////tmp/delivery-graph-ui-first/test_deliv...70ffbc73424ba9b1c25a49bb55bf36', 'user_e7ddb2b4cb2f479fad2fc02275a09506', 'proj_d32804197b3b4676ae5a30c18ad49ada', ...)
+tmp_path = PosixPath('/tmp/delivery-graph-ui-first/test_delivery_graph_actual_htt1')
+family = 'REPORT'
+
+    @pytest.mark.parametrize("family", ["CSV", "REPORT"])
+    def test_delivery_graph_actual_http_dom(env, tmp_path, family):
+        if family == "REPORT":
+            env = bounded_env.__wrapped__(env)
+            saved, _, _, _, wires = promoted(env, tmp_path)
+            aid = saved["id"]
+            assert len(wires) == 3
+        else:
+            aid = draft(env)
+        store, settings, client, owner, _, project, *_ = env
+        assert shutil.which("node"), "Developer Node required"
+        other = store.project(owner, "Other owned graph project")
+        inspected = client.get(f"/api/apps/{aid}").json()
+        resource = inspected["candidate"]["actions"][0]["permission_requirements"][0]["resource_ref"]
+        with store.tx() as c:
+            revoke = dict(c.execute(select(grants).where(grants.c.principal_id == owner,
+                                                          grants.c.resource_id == resource)).mappings().first())
+            before = {name: [dict(r) for r in c.execute(select(table)).mappings()]
+                      for name, table in [("grants", grants), ("principals", principals), ("attempts", attempts)]}
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": project, "other": other, "app": aid, "revoke": {"id": revoke["id"], "version": revoke["revision"]}}))
+        server = uvicorn.Server(uvicorn.Config(create_app(store, settings), host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            result = subprocess.run(["node", "tests/delivery_graph_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: {"check":1,"label":"opening generic app does not derive or plan","elapsed_ms":1178}
+E             {"check":2,"label":"exact no-anchor read is empty without fake failure evidence","elapsed_ms":1492}
+E             {"check":3,"label":"lost accepted anchor retains immutable key","elapsed_ms":1853}
+E             {"check":4,"label":"malformed accepted anchor binding preserves key and clears evidence","elapsed_ms":2781}
+E             {"check":5,"label":"later422 cannot discard earlier unknown acceptance","elapsed_ms":2924}
+E             {"check":6,"label":"derive recovery uses exact same body/key","elapsed_ms":3700}
+E             AssertionError [ERR_ASSERTION]: derive accepted only after full saved graph readback
+E                 at check (/workspace/Sim2Act-delivery-graph-ui/tests/delivery_graph_ui.cjs:4:25)
+E                 at /workspace/Sim2Act-delivery-graph-ui/tests/delivery_graph_ui.cjs:18:1124
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/delivery_graph_ui.cjs', '/tmp/delivery-graph-ui-first/test_delivery_graph_actual.../tests/delivery_graph_ui.cjs:4:25)\n    at /workspace/Sim2Act-delivery-graph-ui/tests/delivery_graph_ui.cjs:18:1124\n').returncode
+
+tests/test_delivery_graph_apps_ui.py:55: AssertionError
+=============================== warnings summary ===============================
+../../tmp/native-budget-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/native-budget-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_delivery_graph_apps_ui.py::test_delivery_graph_actual_http_dom[CSV]
+FAILED tests/test_delivery_graph_apps_ui.py::test_delivery_graph_actual_http_dom[REPORT]
+2 failed, 1 warning in 9.31s
