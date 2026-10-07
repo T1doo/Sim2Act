@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 from sqlalchemy import select, update
@@ -102,14 +103,30 @@ def action(root, name):
         store.engine.dispose()
 
 
+def session_request(line):
+    request = json.loads(line)
+    if type(request) is not dict or set(request) != {"action"}:
+        raise ValueError("Expected one bounded fixture action")
+    if type(request["action"]) is not str or request["action"] not in {
+        "snapshot", "change", "restore", "revoke"
+    }:
+        raise ValueError("Unsupported fixture action")
+    return request["action"]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument(
-        "--action", choices=["snapshot", "change", "restore", "revoke"], required=True
-    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--action", choices=["snapshot", "change", "restore", "revoke"])
+    mode.add_argument("--session", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(action(args.root, args.action)))
+    if args.session:
+        # Same bounded actions and transactions; EOF from the owned caller ends the process.
+        for line in sys.stdin:
+            print(json.dumps(action(args.root, session_request(line))), flush=True)
+    else:
+        print(json.dumps(action(args.root, args.action)))
 
 
 if __name__ == "__main__":

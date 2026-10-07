@@ -95,3 +95,16 @@ def test_conditional_native_shared_module_existing_fixture(tmp_path):
             except subprocess.TimeoutExpired:
                 server.kill()
                 server.wait(timeout=5)
+
+
+@pytest.mark.parametrize("mode", ["omit", "fail"])
+def test_conditional_capture_optional_and_failure(tmp_path, monkeypatch, mode):
+    monkeypatch.setenv("SIM2ACT_CONDITIONAL_CAPTURE_TEST_MODE", mode)
+    if mode == "fail":
+        with pytest.raises(AssertionError, match="Synthetic capture callback failure"):
+            test_conditional_native_shared_module_existing_fixture(tmp_path)
+        assert not (tmp_path / "conditional-results.json").exists()
+    else:
+        test_conditional_native_shared_module_existing_fixture(tmp_path)
+        result = json.loads((tmp_path / "conditional-results.json").read_text())
+        assert result["screenshots"] == []
