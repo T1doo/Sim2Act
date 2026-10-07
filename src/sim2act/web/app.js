@@ -88,19 +88,41 @@ function renderOrdinaryProgress(r, attempts) {
   else section.append(row("尚无可展示的步骤记录；请查看持久状态或重新读取。"));
   $("result").append(section);
 }
+function clearRunDetail() {
+  unresolvedAttempts=[];reconcileVersion=null;
+  for(const name of ["result","events","raw-result","commands","reconcile-attempt"])$(name).replaceChildren();
+  $("reconcile-panel").hidden=true;
+  $("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;
+}
 async function showRun(id, userSelection = true) {
   if(userSelection)runUserSelectionGeneration++;
+  if(userSelection){clearRunDetail();$("result").append(row("正在读取任务…"));}
   activeRun = id;
   if(typeof protocolSelectRun === "function")protocolSelectRun(id,userSelection);
   const project=$("project-select").value,identity=token,generation=++runSelectionGeneration;
   const current=()=>activeRun===id && project===$("project-select").value && identity===token && generation===runSelectionGeneration;
-  const r = await api(`/api/runs/${id}`);
+  let r,attempts;
+  try {
+    r = await api(`/api/runs/${id}`);
+    if(!current())return;
+    if(typeof renderSelectedProtocol === "function" && r.namespace === "protocol_jobs.v1"){await renderSelectedProtocol(r,id,current);return;}
+    if(typeof clearProtocolSelection === "function")clearProtocolSelection();
+    attempts = r.namespace !== "INTERNAL_APPRUN" && ["WAITING_RESOURCE","RECONCILING"].includes(r.status) ? await api(`/api/runs/${id}/unresolved-attempts`) : [];
+  } catch(error) {
+    if(!current())return;
+    clearRunDetail();activeRun=null;
+    if(typeof clearProtocolSelection === "function")clearProtocolSelection();
+    const message=error.httpStatus===403?"当前身份没有读取此任务或核对回执的权限。":"任务详情或核对回执读取失败。";
+    const feedback=row(`${message} 无法判断任务当前技术状态；读取失败不表示任务执行失败。已停止此详情的自动回读。`,async()=>{
+      if(identity!==token || project!==$("project-select").value || generation!==runSelectionGeneration || activeRun!==null)return;
+      await showRun(id);
+    },"重新读取任务");
+    feedback.id="run-read-failure";$("result").append(feedback);
+    if(userSelection)throw error;
+    return;
+  }
   if(!current())return;
-  if(typeof renderSelectedProtocol === "function" && r.namespace === "protocol_jobs.v1"){await renderSelectedProtocol(r,id,current);return;}
-  if(typeof clearProtocolSelection === "function")clearProtocolSelection();
   const internal=r.namespace === "INTERNAL_APPRUN";
-  const attempts = !internal && ["WAITING_RESOURCE","RECONCILING"].includes(r.status) ? await api(`/api/runs/${id}/unresolved-attempts`) : [];
-  if(!current())return;
   reconcileVersion = r.version;
   unresolvedAttempts=attempts;
   $("reconcile-panel").hidden = unresolvedAttempts.length === 0;
@@ -140,6 +162,7 @@ async function loadProjects() {
 function clearIdentityView() {
   runHistoryGeneration++;runSelectionGeneration++;runUserSelectionGeneration++;
   activeRun=null;refs=[];unresolvedAttempts=[];reconcileVersion=null;
+  clearRunDetail();
   if(typeof clearProtocol === "function")clearProtocol();
   clearGoalCard();
   for(const id of ["runs","materials","grants","app-list","goal-card-list","result","commands","events","raw-result","resource-preview","run-history-status","run-submit-status","project-select","app-resource","goal-card-resources","capabilities"]){$(id).replaceChildren();}
@@ -162,7 +185,7 @@ $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").va
 $("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("run-history-refresh").onclick=safe(async()=>refresh());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();unresolvedAttempts=[];$("reconcile-panel").hidden=true;$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();});
+$("project-select").onchange = safe(async () => {runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => ["projects","apps","resources"].forEach(id => $(id).hidden=id!==b.dataset.tab));
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun,false);}}catch(e){$("health").textContent="后台不可用";}},2500);

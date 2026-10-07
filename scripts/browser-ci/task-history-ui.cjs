@@ -75,7 +75,7 @@ module.exports=async function taskHistoryUI({evaluate,reload,workerOnce,info,sna
  await submit('Accepted task with lost read','read-lost');await wait(async()=>await state()==='accepted-read-error','lost result read');
  check(await evaluate(`!$('run-submit-read').hidden&&$('run-submit-recover').hidden`),'accepted read failure offers GET recovery, not POST');
  const readId=await evaluate(`runSubmissionEntry().runId`);
- await evaluate(`$('run-submit-read').click()`);await wait(async()=>await state()==='accepted','read restored');
+ await evaluate(`$('run-submit-read').click()`);await wait(()=>evaluate(`runSubmissionEntry().state==='accepted'&&$('raw-result').textContent.includes(${js(readId)})`),'persistent read restored');
  check(await evaluate(`window.recoveryPosts.length===${postsBeforeRead+1}`),'re-reading accepted task sends no new POST');
  check(await evaluate(`activeRun===${js(readId)}`),'read recovery returns same accepted task');
  await wait(()=>evaluate(`$('run-submit-status').textContent.includes('目标已验收')`),'read status complete');
