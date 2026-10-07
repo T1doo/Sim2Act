@@ -22,6 +22,8 @@ from .db import (
     goal_cards,
     natural_activations,
     new_id,
+    quotas,
+    reservations,
     resources,
     run_contracts,
     runs,
@@ -33,7 +35,8 @@ from .model import InternModel
 CSV = "item,quantity_z\na,7\nb,12\n"
 CSV_HASH = hashlib.sha256(CSV.encode()).hexdigest()
 KINDS = ("read_preview", "sum_quantity_z")
-CAPS = {"requests": 2, "tokens": 22000, "output_tokens": 512, "ttl_seconds": 7200}
+LEGACY_CAPS = {"requests": 2, "tokens": 22000, "output_tokens": 512, "ttl_seconds": 7200}
+CAPS = {**LEGACY_CAPS, "rpm": 1}
 CONSENT = "APPROVE_EXACT_SYNTHETIC_SCOPE_NO_GENERAL_MODEL_AUTHORITY"
 
 
@@ -152,7 +155,7 @@ def _scope(store, c, user, pid, bindings, settings):
             {**b, "snapshot": saved["snapshot"], "resource_id": rid, "resource_hash": CSV_HASH}
         )
     return {
-        "version": "natural-activation.v1",
+        "version": "natural-activation.v2",
         "principal_id": user,
         "project_id": pid,
         "runtime_id": project["runtime_id"],
@@ -207,7 +210,7 @@ def _scope_shape(scope):
         "goals",
     }:
         raise ValueError()
-    if scope["version"] != "natural-activation.v1" or scope["mode"] not in {
+    if scope["version"] not in {"natural-activation.v1", "natural-activation.v2"} or scope["mode"] not in {
         "OFFLINE_TEST",
         "LIVE",
     }:
@@ -271,7 +274,7 @@ def _static(c, row, transition_attempt=None):
             fingerprint(_event_values(c, row["id"], "NL_ACTIVATION_CREATED"))
             != fingerprint([expected])
             or fingerprint(row["scope"]) != row["scope_fingerprint"]
-            or fingerprint(row["scope"]["caps"]) != fingerprint(CAPS)
+            or fingerprint(row["scope"]["caps"]) != fingerprint(LEGACY_CAPS if row["scope"]["version"] == "natural-activation.v1" else CAPS)
             or row["scope"]["principal_id"] != row["principal_id"]
             or row["scope"]["project_id"] != row["project_id"]
             or type(row["version"]) is not int
@@ -531,6 +534,8 @@ def _tokens(usage):
 
 def _active(store, c, row, settings):
     _enabled(settings)
+    if row["scope"]["version"] != "natural-activation.v2" or row["scope"]["caps"].get("rpm") != 1:
+        raise DomainError("VERSION_CONFLICT", "A new explicit rate-bound scope is required")
     if (
         row["status"] != "APPROVED"
         or now() >= row["approval"]["expires_at"]
@@ -862,6 +867,8 @@ def validate_run(store, c, run, settings=None, active=False, *, _transition_atte
         raise DomainError("VERSION_CONFLICT", "Accepted activation binding changed")
     if active:
         _active(store, c, row, settings)
+        from .goal_planner import check_run_deadline
+        check_run_deadline(store, c, run)
     return row
 
 
@@ -986,6 +993,22 @@ def mark_sending(store, c, run, fence, attempt_id, settings):
         )
     ):
         raise DomainError("OUTCOME_UNKNOWN", "Dispatch requires its sole unsent reservation")
+    subject = row["scope"]["provider"]["quota_subject"]
+    quota = c.execute(select(quotas).where(quotas.c.subject == subject).with_for_update()).mappings().first()
+    own = c.execute(select(reservations).where(reservations.c.id == attempt_id,
+                    reservations.c.subject == subject, reservations.c.run_id == run["id"])).mappings().first()
+    current = now()
+    recent = c.execute(select(reservations.c.id).where(
+        reservations.c.subject == subject, reservations.c.id != attempt_id,
+        reservations.c.created_at > current - 60)).first()
+    if not quota or not own:
+        raise DomainError("VERSION_CONFLICT", "Actual account reservation required")
+    if quota["blocked_until"] > current or recent:
+        raise DomainError("RATE_LIMITED", "Frozen activation account rate is one per minute")
+    # A delayed final guard starts a fresh account-wide window; reserve-time age is not a bypass.
+    c.execute(update(reservations).where(reservations.c.id == attempt_id).values(created_at=current))
+    store.event(c, row["id"], "NL_ACTIVATION_SEND_TIME",
+                {"attempt_id": attempt_id, "subject": subject, "sent_at": current, "rpm": 1})
     matching[0]["status"] = "SENDING"
     c.execute(
         update(natural_activations)

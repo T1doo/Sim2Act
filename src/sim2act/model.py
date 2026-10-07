@@ -1,6 +1,9 @@
 """Only Intern live transport, plus explicitly synthetic mock transport."""
 
+import asyncio
 import json
+import math
+import time
 
 import httpx
 
@@ -126,6 +129,10 @@ def normalize_usage(raw):
     }
 
 
+class _RequestDeadlineError(DomainError):
+    _received_response: dict | None = None
+
+
 class InternModel:
     ENDPOINT = "https://chat.intern-ai.org.cn/api/v1/chat/completions"
 
@@ -182,7 +189,13 @@ class InternModel:
                     content=body,
                 )
                 if wire_guard is not None:
-                    wire_guard(request)
+                    envelope = wire_guard(request)
+                    if envelope is not None:
+                        if (not isinstance(envelope, dict) or set(envelope) != {"deadline"}
+                                or type(envelope["deadline"]) not in {int, float}
+                                or not math.isfinite(envelope["deadline"])):
+                            raise DomainError("PERMISSION_DENIED", "Invalid total request deadline")
+                        return asyncio.run(self._deadline_request(request, envelope["deadline"]))
                 response = client.send(request)
                 if response.status_code == 429:
                     raise DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
@@ -193,6 +206,43 @@ class InternModel:
             raise DomainError(
                 "MODEL_TIMEOUT_OR_TRUNCATED", "Request failed; usage may be unknown"
             ) from e
+
+
+    async def _deadline_request(self, request, deadline):
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            raise DomainError("MODEL_TIMEOUT_OR_TRUNCATED", "Total request deadline elapsed")
+        payload = bytearray()
+        try:
+            # asyncio enforces one total deadline across pool/connect/write/headers/body,
+            # rather than resetting a 130-second timeout for every phase or read.
+            async with asyncio.timeout(remaining):
+                async with httpx.AsyncClient(timeout=min(130, remaining), transport=self.transport,
+                                             follow_redirects=False) as client:
+                    request.extensions["timeout"] = {k: min(130, remaining)
+                        for k in ("connect", "read", "write", "pool")}
+                    response = await client.send(request, stream=True)
+                    try:
+                        if response.status_code == 429:
+                            raise DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
+                        if response.status_code != 200:
+                            raise DomainError("RESOURCE_UNAVAILABLE", "Upstream rejected request")
+                        async for chunk in response.aiter_bytes():
+                            if len(payload) + len(chunk) > 131072:
+                                raise DomainError("MODEL_OUTPUT_INVALID", "Bounded response exceeded")
+                            payload.extend(chunk)
+                        return strict_json(bytes(payload), 131072)
+                    finally:
+                        await response.aclose()
+        except TimeoutError as error:
+            failure = _RequestDeadlineError("MODEL_TIMEOUT_OR_TRUNCATED", "Total request deadline elapsed; usage may be unknown")
+            try:
+                parsed = strict_json(bytes(payload), 131072)
+                if isinstance(parsed, dict):
+                    failure._received_response = parsed
+            except DomainError:
+                pass
+            raise failure from error
 
 
 class MockModel:

@@ -131,7 +131,13 @@ class Worker:
                 raise DomainError(
                     "RESOURCE_UNAVAILABLE", "Quota subject not initialized by migration role"
                 )
-            now = time.time()
+            activation_request = (planner_request and
+                self.store.frozen_contract(c, run).natural_planning.activation is not None)
+            if activation_request:
+                from .natural_activations import now as activation_now
+                now = activation_now()
+            else:
+                now = time.time()
             count = len(
                 c.execute(
                     select(reservations.c.id).where(
@@ -140,7 +146,7 @@ class Worker:
                     )
                 ).all()
             )
-            if q["blocked_until"] > now or count >= s.rpm:
+            if q["blocked_until"] > now or count >= (min(s.rpm, 1) if activation_request else s.rpm):
                 raise DomainError("RATE_LIMITED", "Account-wide quota waiting", retryable=True)
             aid = new_id("attempt")
             if protocol_request:

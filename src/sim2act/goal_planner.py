@@ -8,6 +8,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import threading
 import time
 from dataclasses import replace
@@ -92,8 +93,41 @@ def check_policy(worker, contract):
         raise DomainError("RESOURCE_UNAVAILABLE", "Natural goal planner is disabled")
 
 
+def check_run_deadline(store, c, run, *, active=True):
+    """Frozen acceptance time cannot be renewed by claim, resume or confirmation."""
+    contract = store.frozen_contract(c, run)
+    seals = c.execute(select(events.c.data).where(
+        events.c.run_id == run["id"], events.c.kind == "NL_RUN_DEADLINE_FROZEN"
+    )).scalars().all()
+    mirrored = run["context"].get("natural_run_deadline")
+    if not seals and mirrored is None:
+        if active:
+            raise DomainError("RESOURCE_UNAVAILABLE", "Frozen planning deadline required")
+        return None  # Historical reads do not invent a new deadline.
+    expected = {"run_id": run["id"],
+                "contract_fingerprint": fingerprint(contract.model_dump(exclude_none=True)),
+                "created_at": run["created_at"],
+                "deadline": run["created_at"] + contract.limits.run_seconds}
+    if (type(run["created_at"]) not in {int, float} or not math.isfinite(run["created_at"])
+            or fingerprint(seals) != fingerprint([expected])
+            or fingerprint(mirrored) != fingerprint(expected)):
+        raise DomainError("VERSION_CONFLICT", "Frozen planning deadline changed")
+    if contract.natural_planning.activation is not None:
+        from .natural_activations import now
+        current = now()
+    else:
+        current = time.time()
+    if active and (not math.isfinite(current) or current < run["created_at"]
+                   or current >= expected["deadline"]):
+        raise DomainError("BUDGET_EXHAUSTED", "Frozen planning deadline elapsed")
+    return expected["deadline"]
+
+
 def check_sender(worker, contract, c=None, run=None):
     check_policy(worker, contract)
+    if c is None or run is None:
+        raise DomainError("PERMISSION_DENIED", "Transactional planning deadline required")
+    check_run_deadline(worker.store, c, run)
     if contract.natural_planning.activation is not None:
         from .natural_activations import validate_run
 
@@ -327,6 +361,7 @@ def checked_usage(raw, limits, max_output, reserved):
 
 
 def verified_plan(store, c, run):
+    check_run_deadline(store, c, run, active=False)
     contract = store.frozen_contract(c, run)
     if contract.natural_planning and contract.natural_planning.activation is not None:
         from .natural_activations import validate_run
@@ -830,6 +865,7 @@ def process(worker, run, contract):
                         from .natural_activations import mark_sending
 
                         mark_sending(worker.store, c, current, fence, aid, worker.s)
+                    return {"deadline": check_run_deadline(worker.store, c, current)}
 
             raw = None
             received_message = None
@@ -899,6 +935,10 @@ def process(worker, run, contract):
                         },
                     )
             except Exception as error:
+                late = getattr(error, "_received_response", None)
+                if raw is None and isinstance(late, dict):
+                    raw = late
+                    received_message = safe_received_message(raw)
                 if not isinstance(error, DomainError) and contract.natural_planning.activation is None:
                     raise
                 exc = error if isinstance(error, DomainError) else DomainError(

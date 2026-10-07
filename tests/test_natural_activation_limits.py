@@ -10,7 +10,8 @@ import pytest
 from test_natural_activation_flow import approved, setup, submit, wire
 from test_natural_goal_planning import response, rows
 
-from sim2act import db, natural_activations as activation
+from sim2act import db
+from sim2act import natural_activations as activation
 from sim2act.db import attempts, operations, reservations, runs
 from sim2act.errors import DomainError
 from sim2act.model import InternModel

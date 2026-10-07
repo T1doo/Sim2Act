@@ -714,6 +714,7 @@ class Store:
                         )
                     return old["id"]
                 rid = new_id("run")
+                created_at = time.time()
                 snapshot = FrozenRunContract(
                     run_id=rid,
                     runtime_id=p["runtime_id"],
@@ -758,7 +759,7 @@ class Store:
                         request_key=key,
                         fingerprint=fp,
                         status="QUEUED",
-                        created_at=time.time(),
+                        created_at=created_at,
                         lease_until=0,
                         fence=0,
                         context={
@@ -773,6 +774,14 @@ class Store:
                         cancel_intent=False,
                     )
                 )
+                if snapshot.get("natural_planning") is not None:
+                    deadline = {"run_id": rid, "contract_fingerprint": fingerprint(snapshot),
+                                "created_at": created_at,
+                                "deadline": created_at + snapshot["limits"]["run_seconds"]}
+                    self.event(c, rid, "NL_RUN_DEADLINE_FROZEN", deadline)
+                    context = c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one()
+                    c.execute(update(runs).where(runs.c.id == rid).values(
+                        context={**context, "natural_run_deadline": deadline}))
                 self.event(c, rid, "ACCEPTED", {
                     "input_fingerprint": fp,
                     **({"goal_source": {"card_id": source.card_id, "version": source.version,
