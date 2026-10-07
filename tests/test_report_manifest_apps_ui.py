@@ -72,7 +72,7 @@ def test_report_manifest_real_http_dom(env, tmp_path):
         (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
         assert output.returncode == 0, output.stdout + output.stderr
         result = json.loads((tmp_path / "results.json").read_text())
-        assert result["status"] == "PASS" and len(result["checks"]) == 37
+        assert result["status"] == "PASS" and len(result["checks"]) == 46
         assert len(wires) == 7
         assert authority(env) == before
     finally:
