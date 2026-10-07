@@ -16,14 +16,23 @@ from pathlib import Path
 import httpx
 import psutil
 import uvicorn
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from sim2act import lifecycle
 from sim2act.api import create_app
 from sim2act.apps import create_csv_draft
 from sim2act.config import Settings
 from sim2act.contracts import Limits
-from sim2act.db import Store, fingerprint, internal_approvals
+from sim2act.db import (
+    Store,
+    attempts,
+    fingerprint,
+    grants,
+    internal_approvals,
+    operations,
+    principals,
+    runs,
+)
 from sim2act.process_env import system_environment
 from sim2act.worker import Worker
 
@@ -32,6 +41,20 @@ def fixture(root):
     store = Store("sqlite:///" + str(root / "fixture.db"), test_only=True)
     settings = Settings(str(store.engine.url), root, mode="mock")
     return store, settings
+
+
+def task_history_snapshot(store, info):
+    """Only read-only synthetic count/receipt metadata; never goal/key/credentials."""
+    assert store.test_only
+    with store.tx() as c:
+        ids = list(c.execute(select(runs.c.id).where(runs.c.project_id == info["project"])).scalars())
+        return {
+            "runs": ids,
+            "attempts": [dict(r) for r in c.execute(select(attempts.c.id, attempts.c.mode, attempts.c.status).where(attempts.c.run_id.in_(ids))).mappings()],
+            "operations": [dict(r) for r in c.execute(select(operations.c.id, operations.c.status).where(operations.c.run_id.in_(ids))).mappings()],
+            "grants": c.execute(select(func.count()).select_from(grants)).scalar_one(),
+            "principals": c.execute(select(func.count()).select_from(principals)).scalar_one(),
+        }
 
 
 def audit_processes(pids):
@@ -121,6 +144,8 @@ def main():
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--worker-once", action="store_true")
+    parser.add_argument("--task-history-snapshot", action="store_true")
+    parser.add_argument("--task-history-worker-once", type=str)
     parser.add_argument("--audit", type=Path)
     parser.add_argument("--incompatible-release", type=str)
     parser.add_argument("--next-short-switch-ttl", action="store_true")
@@ -133,6 +158,21 @@ def main():
         return
     store, settings = fixture(root)
     info_path = root / "info.json"
+    if args.task_history_snapshot or args.task_history_worker_once:
+        assert info_path.exists() and store.test_only and settings.mode == "mock"
+        binding = json.loads(info_path.read_text())["task_history"]
+        if args.task_history_worker_once:
+            with store.tx() as c:
+                selected = c.execute(select(runs).where(runs.c.id == args.task_history_worker_once)).mappings().one()
+                assert selected["project_id"] == binding["project"] and selected["status"] == "QUEUED"
+            # Normal worker with the ordinary MockModel: no injected terminal/result.
+            assert Worker(store, settings).once()
+            with store.tx() as c:
+                selected = c.execute(select(runs).where(runs.c.id == args.task_history_worker_once)).mappings().one()
+                assert selected["status"] == "PARTIAL"
+        print(json.dumps(task_history_snapshot(store, binding)))
+        store.engine.dispose()
+        return
     if args.next_short_switch_ttl or args.incompatible_release:
         assert info_path.exists() and store.test_only
         if args.next_short_switch_ttl:
@@ -189,11 +229,18 @@ def main():
         project = store.project(owner, title)
         resource = store.resource(owner, project, "synthetic.csv", "csv", content)
         create_csv_draft(store, owner, project, title, resource, "synthetic readonly sum", limits)
+    # Reuse only existing synthetic identities; do not alter legacy project/app fixtures.
+    task_owner = store.authenticate("synthetic-browser-A")
+    task_project = store.project(task_owner, "SYNTHETIC task history A")
+    task_other = store.project(task_owner, "SYNTHETIC task history other owned")
+    task_resource = store.resource(task_owner, task_project, "synthetic-task.csv", "csv", "amount\n10\n30\n")
+    task_binding = {"project": task_project, "other": task_other, "resource": task_resource,
+                    "other_identity_name": "SYNTHETIC browser B"}
     store.engine.dispose()
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    info = {"port": port, "commit": os.environ["GITHUB_SHA"], "inventory": json.loads((root / "inventory.json").read_text(encoding="utf-8-sig"))}
+    info = {"task_history": task_binding, "port": port, "commit": os.environ["GITHUB_SHA"], "inventory": json.loads((root / "inventory.json").read_text(encoding="utf-8-sig"))}
     (root / "info.json").write_text(json.dumps(info), encoding="utf-8")
     child_env = system_environment()
     child_env.update({key: os.environ[key] for key in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA", "USERPROFILE"] if key in os.environ})

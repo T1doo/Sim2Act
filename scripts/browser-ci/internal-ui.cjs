@@ -253,6 +253,65 @@ async function layout(page, label) {
   expectedErrorUrls.add(switchUrl);expectedErrorUrls.add(`${switchUrl}/${approval.id}/commit`);expectedErrorUrls.add(`${switchUrl}/${expired.id}/commit`);
   result.unexpectedConsoleErrors = result.consoleErrors.filter(e=>e.kind==='pageerror' || !expectedErrorUrls.has(e.url));
   check('no browser script/runtime errors beyond recorded expected HTTP negatives', result.unexpectedConsoleErrors.length===0);
+  // New ordinary history flow shares the already protected installed Edge.
+  // Preserve all preceding internal checks; final desktop/mobile slots now show this slice.
+  const historyInfo={...info.task_history,base};
+  const historyPage=desktop.p;activePage=historyPage;
+  await historyPage.addInitScript(()=>{window.setInterval=()=>0;});
+  await historyPage.goto(base,{waitUntil:'networkidle'});
+  const historyErrors=[];let historyOutsideRequests=0;
+  historyPage.on('pageerror',e=>historyErrors.push({kind:'pageerror',message:e.message}));
+  historyPage.on('console',m=>{if(m.type()==='error')historyErrors.push({kind:'console',message:m.text(),url:m.location().url});});
+  historyPage.on('request',r=>{if(!r.url().startsWith(base+'/'))historyOutsideRequests++;});
+  const auditHistory=async()=>{
+    const observed=(await cdp.send('SystemInfo.getProcessInfo')).processInfo.filter(p=>['browser','renderer'].includes(p.type));
+    const file=path.join(root,'owned-history-browser-pids.json');fs.writeFileSync(file,JSON.stringify(observed));
+    return JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--audit',file],{encoding:'utf8',timeout:10000}));
+  };
+  const assertHistorySandbox=(observed,label)=>{
+    check(`task history ${label} actual args preserve sandbox`,observed.length>0&&observed.every(p=>p.security_args_verified));
+    const renderers=observed.filter(p=>p.type==='renderer');
+    check(`task history ${label} actual renderer tokens remain protected`,renderers.length>0&&renderers.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)));
+    const main=observed.find(p=>p.type==='browser');
+    check(`task history ${label} SDK weakening remains absent`,!!main&&!main.command_switches.includes('--disable-features'));
+  };
+  const historyBefore=await auditHistory();assertHistorySandbox(historyBefore,'before');
+  result.taskHistory=await require('./task-history-ui.cjs')({
+    evaluate:code=>historyPage.evaluate(code),reload:()=>historyPage.reload({waitUntil:'networkidle'}),info:historyInfo,
+    workerOnce:async id=>{await execFileAsync(python,['scripts/windows_browser_ci.py','--root',root,'--task-history-worker-once',id],{encoding:'utf8',timeout:15000});},
+    snapshot:async()=>JSON.parse((await execFileAsync(python,['scripts/windows_browser_ci.py','--root',root,'--task-history-snapshot'],{encoding:'utf8',timeout:10000})).stdout)
+  });
+  const historyLayout=async(page,label)=>{
+    await page.locator('[data-tab="projects"]').click();
+    const measure=await page.evaluate(()=>({viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,
+      rows:document.querySelectorAll('#runs .row').length,goal:document.querySelector('#runs').textContent,
+      buttons:[...document.querySelectorAll('#run-form button,#runs button,#run-history-refresh')].filter(b=>b.getClientRects().length).map(b=>({left:b.getBoundingClientRect().left,right:b.getBoundingClientRect().right,height:b.getBoundingClientRect().height}))}));
+    check(`task history ${label} has real rows and no horizontal overflow`,measure.rows===7&&measure.documentWidth<=measure.viewport+1);
+    check(`task history ${label} readable controls fit viewport`,measure.buttons.length>0&&measure.buttons.every(b=>b.height>=40&&b.left>=0&&b.right<=measure.viewport+1));
+    await page.locator('#runs').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(root,`${label}.png`),fullPage:true});return measure;
+  };
+  result.taskHistory.desktop=await historyLayout(historyPage,'desktop');
+  activePage=mobile.p;
+  activePage.on('pageerror',e=>historyErrors.push({kind:'pageerror',message:e.message}));
+  activePage.on('console',m=>{if(m.type()==='error')historyErrors.push({kind:'console',message:m.text(),url:m.location().url});});
+  activePage.on('request',r=>{if(!r.url().startsWith(base+'/'))historyOutsideRequests++;});
+  await activePage.addInitScript(()=>{window.setInterval=()=>0;});
+  await activePage.goto(base,{waitUntil:'networkidle'});
+  await activePage.locator('#token').fill('synthetic-browser-A');await activePage.locator('#connect').click();
+  await activePage.locator('#login').waitFor({state:'hidden'});
+  await activePage.locator('#project-select').selectOption(historyInfo.project);
+  await until(activePage,()=>document.querySelector('#runs').textContent.includes('Newest history'));
+  check('task history cold narrow context locates persisted goal/mode without cached intent',await activePage.evaluate(()=>ordinarySubmissions.size===0&&document.querySelector('#runs').textContent.includes('提交模式 MOCK')));
+  await activePage.evaluate(id=>{const target=[...document.querySelectorAll('#runs .row')].find(r=>r.textContent.includes('Lost acceptance, preserve exact input'));if(!target)throw Error('Missing recovered history');target.querySelector('button').click();},result.taskHistory.bindings.firstRun);
+  await until(activePage,id=>document.querySelector('#raw-result').textContent.includes(id)&&document.querySelector('#result').textContent.includes('部分完成'),result.taskHistory.bindings.firstRun);
+  result.taskHistory.mobile=await historyLayout(activePage,'mobile');
+  result.taskHistory.sandboxBefore=historyBefore;result.taskHistory.sandboxAfter=await auditHistory();assertHistorySandbox(result.taskHistory.sandboxAfter,'after');
+  result.taskHistory.outsideRequests=historyOutsideRequests;
+  const expectedHistoryError=e=>{if(e.kind!=='console')return false;let u;try{u=new URL(e.url);}catch{return false;}return u.origin===new URL(base).origin&&((u.pathname==='/favicon.ico'&&e.message.includes('404'))||((u.pathname==='/api/projects'||u.pathname===`/api/projects/${historyInfo.project}/runs`)&&(e.message.includes('403')||e.message.includes('422'))));};
+  result.taskHistory.consoleErrors=historyErrors;result.taskHistory.unexpectedConsoleErrors=historyErrors.filter(e=>!expectedHistoryError(e));
+  check('task history no outside request or unexpected browser script error',historyOutsideRequests===0&&result.taskHistory.unexpectedConsoleErrors.length===0);
+  result.taskHistory.screenshots=['desktop.png','mobile.png'];result.taskHistory.visualReview='NOT_REVIEWED';
   result.status='PASS';
   result.syntheticBindings={app,first,second,cancelled,accepted};
   result.agent=await require('./agent-ui.cjs')({browser,root:path.join(root,'agent'),outputRoot:root,python,

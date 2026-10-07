@@ -1,4 +1,5 @@
 """Authorized, bounded persisted history projection; no model execution."""
+import pytest
 from sqlalchemy import delete, update
 
 from sim2act.contracts import Limits
@@ -51,3 +52,32 @@ def test_history_invalid_saved_mode_does_not_invent_mock(env):
     with store.tx() as c:
         c.execute(update(run_contracts).where(run_contracts.c.run_id == run).values(snapshot={'mode': []}))
     assert client.get(f'/api/projects/{project}/runs').json()[0]['mode'] == 'UNKNOWN'
+
+
+def test_history_application_role_route_and_no_ddl(env, runtime_role):
+    """Existing temporary non-superuser fixture reads the new joined projection."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    from sim2act.api import create_app
+    from sim2act.db import Store
+
+    store, settings, client, owner, _, project, resource = env
+    run = store.submit(owner, project, 'Application role persisted history', [resource], 'role-history')
+    application = Store(runtime_role)
+    try:
+        with TestClient(create_app(application, settings)) as app_client:
+            app_client.headers.update({'Authorization': 'Bearer synthetic-test-A'})
+            response = app_client.get(f'/api/projects/{project}/runs')
+            assert response.status_code == 200
+            assert response.json() == client.get(f'/api/projects/{project}/runs').json()
+            assert response.json()[0]['id'] == run and response.json()[0]['mode'] == 'MOCK'
+            app_client.headers.update({'Authorization': 'Bearer synthetic-test-B'})
+            assert app_client.get(f'/api/projects/{project}/runs').status_code == 403
+        with pytest.raises(DBAPIError) as denied:
+            with application.tx() as c:
+                c.execute(text('CREATE TABLE history_api_must_not_create (id integer)'))
+        assert getattr(denied.value.orig, 'sqlstate', None) == '42501'
+    finally:
+        application.engine.dispose()

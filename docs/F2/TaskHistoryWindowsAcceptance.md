@@ -11,3 +11,5 @@
 复用原命名browser-results.json/desktop.png/mobile.png输出槽，新增检查与截图画面纳入既有named stdout byte/SHA/2MB保护，不能增上传目的地或额外恢复包。原六PNG及历史记录保留，不覆盖历史证据；新证据按新的精确SHA存档。新桌面/窄屏PNG须实际像素检查并注明人工审查，不能把hash等同视觉PASS。Windows工程需含新API专项的实际PG路径及原有role smoke，明确SQLite/Mock/JS与PG口径；Win11/完整AT02/F1仍另行开放。
 
 下一独立产品切片为普通成果画布的可读步骤/等待原因；只读已有回执，保持真实技术终态与目标验收分离，不自动续跑/外发/发布。
+
+2026-10-07 本轮已获父明确授权实施接线、适用全量本地回归、独立检查后普通fast-forward同步既有开发分支并监督一次标准CI；原15分钟及保护/输出边界不变。已用独立owned PG17、现有临时fixture schema/应用角色验证新历史API与组合DOM：6PASS/1browserDESELECT；role路由与真实DDL42501拒绝PASS。API未DDL，未新增生产/模型/CI凭据。此为推进中的本地PG证据，未预写新Edge/CI/像素通过。全量源冻结后再记录。
