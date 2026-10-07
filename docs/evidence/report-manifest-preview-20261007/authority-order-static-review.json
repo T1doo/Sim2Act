@@ -1,0 +1,25 @@
+{
+  "decision": "STATIC_ORACLE_DEFECT_POSSIBLE_FAILURE_CAUSE_UNCONFIRMED",
+  "source_scope": "e4 source test files unchanged in observed1ae756a01e688aa1941b90159934ae0f56e8c700",
+  "files": {
+    "tests/test_conditional_apps.py": "ff273b50aa36e8c525465783ebe36eec1be5454f0b6acf67b83e3ec0b471339a",
+    "tests/test_conditional_apps_ui.py": "1fec76b21eacee1fa0e01def62e3fc8743a998ef6cbb5b4b1f7511c4c894a55d",
+    "src/sim2act/db.py": "2b62578f9faf7064c1f881983b37eeb47c26517a0ee69997a442ea2b4449b10d"
+  },
+  "finding": "authority selects full principals/grants without ORDER BY and final test compares Python lists positionally; a row update may alter PostgreSQL result order without any row field change. This is a valid static risk, not yet confirmed cause of current full failure.",
+  "minimal_fix": [
+    "select(principals).order_by(principals.c.id)",
+    "select(grants).order_by(grants.c.id)",
+    "Keep full dict rows and current exact tuple/list equality including expected revoked flag. No set/dict deduplication or column projection."
+  ],
+  "preserved_assertions": [
+    "Every principal/grant field: token_hash/expires_at/revision/revoked/project/resource/tool/ID unchanged except explicitly expected target revoked=True",
+    "Added/deleted Grant/Principal row or duplicated row count cannot pass full ordered list equality",
+    "Expected grant revocation still uses real matching runtime+target resource+resource.read rows, rather than normalizing/ignoring revoked",
+    "No permission list replacement with counts-only or ID-only assertions"
+  ],
+  "confirmation_required": "Natural full traceback should show failure at final equality and rows same after stable ID sort. If any field differs, ordering cannot explain that field discrepancy.",
+  "other_material_source_defects": "None identified in this limited read; fixture directly toggles revoked without revision by design and expected full-row oracle retains revision unchanged. Do not reinterpret fixture as production revoke API verification.",
+  "tests_or_pg_started": false,
+  "repository_edits": false
+}

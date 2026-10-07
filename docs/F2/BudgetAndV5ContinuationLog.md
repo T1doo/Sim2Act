@@ -11,3 +11,7 @@
 UI独审9a实测两处BLOCK（promotion未关联当前named来源；coherent历史来源篡改仍被接受），根owned135全量主动中断：SQLite152PASS2SKIP/exit2/87.73s，不是全集；PG NOT_RUN。失败回执和中断/清理证据保留。最小修复038df418：当前named/完整canonical候选关联后才确认保存，历史完整候选关联已打开对象；owner49检查PASS、独审13PASS，后台994不变。合并源码e4ea5dbf418ae32ddb4767855fa860e6940b4f6c，225源码文件一致、6动态来源probe/1104全集已重验，当前唯一自然SQLite→PG控制器在运行；尚未记全量PASS。
 
 e4新全集SQLite自然exit0：1063PASS41SKIP0FAIL0ERROR、3warnings、571.35s/1104。唯一PG full随后串行启动，新增minimumCRUD role将从该次JUnit实际核验；不能借SQLite skip或历史PG数字签此源。root当前HEAD2cad13a仅docs差异，源冻结未变。远端ls-remote再次确认dev/f1-foundation=e828c066、dev/install-preflight=e700；未push或启CI。
+
+PG full13%首次1F定位named Report DOM testcase；同次driver实际PASS18checks/6Mock/0LIVE/0outbound。root及独审确认authority helper无ORDER BY、最终全行列表按位置比较存在静态排序风险，但自然trace未到，不记为确定根因，不修改运行源码。保留本轮唯一PG继续自然终态，无并行新pytest/自动重试。后续修正必须保完整字段/行数/expected revoked值，不能用set或counts弱化oracle。
+
+e4 PG自然exit1：1098PASS4SKIP2FAIL/1warning/1253.38s/1104。新增Report minimumCRUD role实际PASS4.655s；nameddriver18P6Mock后在完整authority list位置比较失败，ReportUIcase92.070s遭既有Node90 subprocess TimeoutExpired。无results/driverfailure文件、最末HTTP内存数组和已dropfixture DB证据NOT_AVAILABLE；保留7RECEIVED本地模型账本观察，不能重构HTTP/DB终态。已仅修authority查询ORDER BY id，保持完整行/expectedrevoked/所有断言；并新增Node safe路径/状态/check序号/耗时进度JSONL（无body/response/credentials），budget90、checks49和14真实promotionPOST不变。原e4失败不覆盖；后续两casePG有界诊断待明确启动，最终整树新源全量另冻结。
