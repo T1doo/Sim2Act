@@ -27,11 +27,19 @@ from .tools import definitions, dispatch
 
 class Worker:
     def __init__(
-        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None
+        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
+        goal_planner_transport=None,
     ):
         self.store, self.s = store, settings
         self.id = new_id("worker")
         self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
+        if goal_planner_transport is not None:
+            import httpx
+
+            if (not store.test_only or settings.mode != "mock"
+                    or not isinstance(goal_planner_transport, httpx.MockTransport)):
+                raise DomainError("PERMISSION_DENIED", "Planner injection requires offline MockTransport")
+        self.goal_planner_transport = goal_planner_transport
         if protocol_runner_factory is not None and (not store.test_only or settings.mode != "mock"):
             raise DomainError("PERMISSION_DENIED", "Protocol injection is test-only and offline")
         self.protocol_runner_factory = protocol_runner_factory
@@ -40,9 +48,10 @@ class Worker:
         self.protocol_clock = protocol_clock
         self.stop = threading.Event()
 
-    def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False):
+    def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
+                planner_request=False):
         s = self.s
-        protocol_request = request_tools is not None
+        protocol_request = request_tools is not None and not planner_request
         request_tools = definitions() if request_tools is None else request_tools
         wire_seal = None
         # Conservative byte envelope, not a claim of actual tokenizer usage.
@@ -54,7 +63,7 @@ class Worker:
             )
             + s.max_output_tokens
         )
-        if protocol_request:
+        if protocol_request or planner_request:
             import httpx
 
             serialized = httpx.Request(
@@ -85,6 +94,13 @@ class Worker:
                 )
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
+            if planner_request:
+                from .goal_planner import check_sender, request_messages
+
+                check_sender(self, self.store.frozen_contract(c, run))
+                if (request_tools != [] or fingerprint(context["messages"])
+                        != fingerprint(request_messages(self.store, c, run))):
+                    raise DomainError("VERSION_CONFLICT", "Planner request changed")
             if verify_goal_source:
                 self.store.frozen_contract(c, run)
             if run["status"] != "RUNNING":
@@ -170,7 +186,8 @@ class Worker:
                                 "model": s.model,
                             }
                         ),
-                        **({"protocol_wire": wire_seal} if wire_seal is not None else {}),
+                        **({"planning_wire" if planner_request else "protocol_wire": wire_seal}
+                           if wire_seal is not None else {}),
                     },
                 )
             )
@@ -178,7 +195,7 @@ class Worker:
                 self.store.event(
                     c,
                     run_id,
-                    "PROTOCOL_WIRE_RESERVED",
+                    "NL_PLANNING_WIRE_RESERVED" if planner_request else "PROTOCOL_WIRE_RESERVED",
                     {"attempt_id": aid, "fence": fence, "wire": wire_seal},
                 )
             context["requests"] += 1
@@ -214,7 +231,11 @@ class Worker:
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
             if verify_goal_source:
-                self.store.frozen_contract(c, run)
+                frozen = self.store.frozen_contract(c, run)
+                if frozen.natural_planning is not None and result is not None:
+                    from .goal_planner import verify_result
+
+                    verify_result(self.store, c, run, result)
             if run["status"] == "CANCEL_REQUESTED":
                 state = "CANCELLED"
             elif run["status"] == "PAUSE_REQUESTED":
@@ -271,6 +292,11 @@ class Worker:
                 for key, value in contract.limits.model_dump().items()
             },
         )
+        if contract.natural_planning is not None:
+            from .goal_planner import process
+
+            process(self, run, contract)
+            return
         ctx = dict(run["context"])
         ctx["messages"] = list(ctx["messages"])
         goal_tools = definitions()

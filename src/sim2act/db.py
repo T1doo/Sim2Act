@@ -6,6 +6,7 @@ import time
 import uuid
 from contextlib import contextmanager
 
+from pydantic import ValidationError
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -758,6 +759,8 @@ class Store:
                     "input_fingerprint": fp,
                     **({"goal_source": {"card_id": source.card_id, "version": source.version,
                                         "fingerprint": source.fingerprint}} if source else {}),
+                    **({"natural_planning": policy["natural_planning"]}
+                       if policy.get("natural_planning") is not None else {}),
                 })
                 return rid
         except IntegrityError:
@@ -786,7 +789,10 @@ class Store:
                 "VERSION_CONFLICT",
                 "Missing or modified frozen Run contract; legacy runs require explicit closure",
             )
-        contract = FrozenRunContract.model_validate(saved["snapshot"])
+        try:
+            contract = FrozenRunContract.model_validate(saved["snapshot"])
+        except ValidationError as exc:
+            raise DomainError("VERSION_CONFLICT", "Frozen Run contract has invalid typed fields") from exc
         if contract.source_goal_card is None:
             from .goal_runs import has_goal_source
 
@@ -951,17 +957,23 @@ class Store:
             )
             if not r:
                 raise DomainError("PERMISSION_DENIED")
-            for rid in r["resource_refs"]:
-                self.authorize(c, principal, r["runtime_id"], r["project_id"], rid, "resource.read")
-            self.authorize_receipts(c, r)
             source_contract = c.execute(select(run_contracts.c.snapshot).where(
                 run_contracts.c.run_id == run_id,
             )).scalar_one_or_none()
+            if source_contract and source_contract.get("natural_planning") is not None:
+                self.lock_project(c, principal, r["project_id"])
+            for rid in r["resource_refs"]:
+                self.authorize(c, principal, r["runtime_id"], r["project_id"], rid, "resource.read")
+            self.authorize_receipts(c, r)
             from .goal_runs import has_goal_source
 
             if (source_contract and source_contract.get("source_goal_card") is not None
                     or "saved_goal_input" in r["context"] or has_goal_source(c, r["id"])):
-                self.frozen_contract(c, r)
+                contract = self.frozen_contract(c, r)
+                if contract.natural_planning is not None:
+                    from .goal_planner import inspect_plan
+
+                    inspect_plan(self, c, r)
             ev = (
                 c.execute(
                     select(events).where(events.c.run_id == run_id).order_by(events.c.created_at)

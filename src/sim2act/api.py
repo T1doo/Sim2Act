@@ -447,6 +447,18 @@ def create_app(store=None, settings=None):
                         "fingerprint": body.expected_fingerprint})
         return acceptance(db, user, rid)
 
+    @app.post("/api/projects/{pid}/goal-cards/{cid}/planned-runs", status_code=202)
+    def plan_saved_goal(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        from .goal_planner import policy
+
+        selected = policy(s.goal_planner_provider)
+        rid = db.submit(user, pid, "", [], body.request_key, policy={
+            "limits": {**platform_limits.model_dump(), "max_requests": 1, "max_repairs": 0},
+            "mode": s.mode, "request_model": s.model, "natural_planning": selected,
+        }, goal_source={"card_id": cid, "version": body.expected_version,
+                        "fingerprint": body.expected_fingerprint})
+        return {**acceptance(db, user, rid), "planning_policy": selected}
+
     @app.get("/api/goal-cards/{cid}/candidate-options")
     def goal_candidate_options(cid: str, user=user_dependency):
         return candidate_options(db, user, cid)

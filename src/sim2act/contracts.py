@@ -172,6 +172,15 @@ class GoalCardRunSource(Strict):
     snapshot: dict
 
 
+class NaturalPlanningPolicy(Strict):
+    version: Literal["natural-goal-planning.v1"]
+    provider: Literal["disabled", "intern-s2"]
+    schema_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    request_limit: int = Field(strict=True, ge=1, le=1)
+    repair_limit: int = Field(strict=True, ge=0, le=0)
+    live_request_allowance: int = Field(strict=True, ge=0, le=0)
+
+
 class FrozenRunContract(Strict):
     run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
     # Existing project runtime or existing declarative app runtime; neither creates a grant.
@@ -183,6 +192,7 @@ class FrozenRunContract(Strict):
     mode: Literal["mock", "live"]
     request_model: Literal["intern-s2"]
     source_goal_card: GoalCardRunSource | None = None
+    natural_planning: NaturalPlanningPolicy | None = None
 
 
 class Run(Strict):

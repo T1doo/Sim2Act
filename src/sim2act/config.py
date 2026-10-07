@@ -20,6 +20,7 @@ class Settings:
     max_output_tokens: int = 1024
     run_seconds: int = 300
     lease_seconds: int = 30
+    goal_planner_provider: str = "disabled"
 
     @classmethod
     def from_env(cls):
@@ -38,6 +39,7 @@ class Settings:
             or os.environ.get("INTERN_API_TOKEN", ""),
             quota_subject=os.environ.get("SIM2ACT_QUOTA_SUBJECT", "default-intern-account"),
             rpm=int(os.environ.get("SIM2ACT_RPM", "30")),
+            goal_planner_provider=os.environ.get("SIM2ACT_GOAL_PLANNER_PROVIDER", "disabled"),
             **{
                 k: int(os.environ.get("SIM2ACT_" + k.upper(), str(v)))
                 for k, v in {
@@ -52,6 +54,8 @@ class Settings:
         )
         if s.mode not in {"mock", "live"} or s.model != "intern-s2":
             raise ValueError("Only explicit mock or intern-s2 live is supported in F1")
+        if s.goal_planner_provider not in {"disabled", "intern-s2"}:
+            raise ValueError("Select disabled or intern-s2 goal planner explicitly")
         if not 1 <= s.rpm <= 30 or not s.quota_subject:
             raise ValueError("Unverified quota must be between 1 and 30 RPM")
         bounds = [
