@@ -180,6 +180,9 @@ async function captureRegistered(label,scope){
    const sandbox=await integrationAudit();await page.screenshot({path:path.join(outputRoot,label+'.png'),fullPage:true});
    result.integration.screenshots.push({name:label+'.png',scope:'integrated-cold-application-use',layout,sandbox,visualReview:'NOT_REVIEWED'});
   }
+  assert.equal(result.unexpectedPageErrors.length,0,'No integration errors through both captures');
+  assert.equal(integrationOutsideRequests,0,'No integration outside requests through both captures');
+  result.integration.outsideOriginRequests=integrationOutsideRequests;
   result.status='PASS';
  }catch(error){result.status='FAIL';result.error={name:error.name,message:error.message};if(page&&!page.isClosed()){try{await page.screenshot({path:path.join(outputRoot,'agent-failure.png'),fullPage:true});}catch{}}}
  finally{

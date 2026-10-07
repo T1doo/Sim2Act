@@ -11,3 +11,5 @@
 最终候选精确全量SQLite/PG将在源码freeze后重跑，另追加实际结果，不以首轮914签收新测试/fixture接线。新增bounded probe仅progress可选require.resolve改DEVNULL+10s，actualdriver捕获/30s/断言不变，6超时FAIL/缺依赖SKIP负例（原4+progress2）通过。新增native fixture测试是实际agent seed和FIFO正常worker，不是浏览器替代。独立shared-harness早退/ModuleNotFoundError原FAIL保留，修正确认results存在+16checks/模块路径/单次seed。
 
 本轮真实模型请求0，既有MOCK样例attempt与此前另记的1真实请求460token不是同一计数，历史不改、不refill。F1/完整AT02/Win11/目标语义/正式发布/通用应用/完整P-B不提升。下一核心缺口为固定内部使用到正式应用验收的衔接；现阶段只可信工具结果与固定CSV新column，没有目标语义签收。stage-only文档与候选本地保存，最终SHA及精确CI差异后返回父线程。
+
+冻结前独立审查进一步发现初始shared16的旧command与字段在showRun启动held之前已失效/清空，不能独立证明projecthandler。已先执行project-only转场，记录实际双清理与旧command0POST，再回原项目单独测试两latefailed200；原16check数量保留但必须两阶段各真实通过，最新canonical9PASS/5.65秒。捕获前与两截图后均强制pageerror/outsideorigin0，未放宽原保护或deadline。该审查口径修正保存，不借初始16结果证明未经独立触发的转场。
