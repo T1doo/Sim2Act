@@ -75,6 +75,8 @@ A,10
 B,20
 ```
 
+继续体验“私有草案 → 人工确认内部版本 → 独立实例 → 新 AppRun → 结果与冷会话历史”，请按 [第一次使用](FirstUse.md) 的实际按钮顺序操作；资源入口粘贴 CSV 文本，预览列与持久任务列必须分别选择。
+
 这是固定能力 CSV 本地预览，不代表自然语言生成、正式发布或完整 P-A/P-B 验收。已有成功内部 CSV 任务的有界复用路径另见 [RegisteredRunQuickstart](F2/RegisteredRunQuickstart.md)。
 
 完成后运行：
