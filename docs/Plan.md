@@ -1,5 +1,8 @@
 # Sim2Act 动态总入口
 
+2026-10-07 bounded natural-goal planning: final source `82a3ef838807c1b7540232671f68bf09408ffafd` adds the explicit saved-goal planned-runs API → frozen provider/schema/budget → strict received plan → durable registered read-only tools/receipts. Production provider defaults disabled; intern-s2 selection still has zero LIVE allowance. Final targeted 225 PASS/1 isolated-PG-role SKIP/226 unique, 41 new planning cases; independent21 PASS on eight byte-identical product files. Source/collection/JUnit/original failures retained. No new NL UI/browser, full/new NL PG/native/CI/LIVE or semantic/owner acceptance. Earlier full7854 is a different source and is not a full test of this addition. [Plan and log](F2/NaturalGoalPlanningLog.md); P-A/P-B/R0/F1/AT02/Win11 remain open. Optional metrics b89 is separately merged with no core/conftest/workflow changes; Windows900 remains NO_GO.
+
+
 当前基线：V5；F1 IN_PROGRESS，两个 MOCK 工程增量已验证，尚未通过阶段门。仓库开发分支：dev/f1-foundation。
 
 规范：[平台产品设计](平台产品设计.md)、[分阶段开发计划](分阶段开发计划.md)。

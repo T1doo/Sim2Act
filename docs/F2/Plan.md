@@ -1,5 +1,8 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-07 bounded natural-goal planning: final source `82a3ef838807c1b7540232671f68bf09408ffafd` adds the explicit saved-goal planned-runs API → frozen provider/schema/budget → strict received plan → durable registered read-only tools/receipts. Production provider defaults disabled; intern-s2 selection still has zero LIVE allowance. Final targeted 225 PASS/1 isolated-PG-role SKIP/226 unique, 41 new planning cases; independent21 PASS on eight byte-identical product files. Source/collection/JUnit/original failures retained. No new NL UI/browser, full/new NL PG/native/CI/LIVE or semantic/owner acceptance. Earlier full7854 is a different source and is not a full test of this addition. [Plan and log](NaturalGoalPlanningLog.md); P-A/P-B/R0/F1/AT02/Win11 remain open. Optional metrics b89 is separately merged with no core/conftest/workflow changes; Windows900 remains NO_GO.
+
+
 ## 2026-10-05 / P-B 可信预览回执提取（实施前冻结）
 
 基线9bd4bac，独立/workspace/Sim2Act-pb、dev/f1-foundation；原work树和旧任务不改。V5产品§4 P-B/F2-T03/AT-10要求从已完成任务的输入输出、工具与检查形成新输入应用；现F1 Run终态PARTIAL不可作成功来源。本轮只接受本地合成PREVIEW命名空间SUCCEEDED回执，不接受F1 Run，不改AT02。源声明式模板、输入指纹、输出、实际材料hash和独立Decimal oracle必须可重核；FAILED/UNKNOWN/PARTIAL、存储篡改、撤权、非可信模板拒绝。
