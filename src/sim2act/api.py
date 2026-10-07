@@ -16,7 +16,17 @@ from .contracts import (
     validate_action,
     validate_action_input,
 )
-from .db import Store, app_drafts, fingerprint, grants, heartbeats, projects, resources, runs
+from .db import (
+    Store,
+    app_drafts,
+    fingerprint,
+    grants,
+    heartbeats,
+    projects,
+    resources,
+    run_contracts,
+    runs,
+)
 from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
@@ -220,14 +230,27 @@ def create_app(store=None, settings=None):
     def list_runs(pid: str, user=user_dependency):
         with db.tx() as c:
             db.own_project(c, user, pid)
-            return [
-                dict(r)
-                for r in c.execute(
-                    select(runs.c.id, runs.c.status, runs.c.created_at)
-                    .where(runs.c.project_id == pid, runs.c.principal_id == user)
-                    .order_by(runs.c.created_at.desc())
-                ).mappings()
-            ]
+            items = []
+            for r in c.execute(
+                select(runs.c.id, runs.c.status, runs.c.created_at, runs.c.goal,
+                       runs.c.request_key, run_contracts.c.snapshot)
+                .outerjoin(run_contracts, run_contracts.c.run_id == runs.c.id)
+                .where(runs.c.project_id == pid, runs.c.principal_id == user)
+                .order_by(runs.c.created_at.desc(), runs.c.id.desc())
+            ).mappings():
+                goal = " ".join((r["goal"] or "").split())
+                snapshot = r["snapshot"] or {}
+                mode = snapshot.get("mode")
+                # Protocol providers have their own bound scope; the ordinary
+                # frozen contract's placeholder must not label them as MOCK.
+                if (r["request_key"] or "").startswith("protocol:"):
+                    mode = None
+                items.append({
+                    "id": r["id"], "status": r["status"], "created_at": r["created_at"],
+                    "goal_summary": goal[:160] + ("…" if len(goal) > 160 else ""),
+                    "mode": mode.upper() if isinstance(mode, str) and mode in {"mock", "live"} else "UNKNOWN",
+                })
+            return items
 
     @app.post("/api/projects/{pid}/runs", status_code=202)
     def create_run(pid: str, body: RunInput, user=user_dependency):

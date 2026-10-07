@@ -211,3 +211,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 2026-10-06 父授权后续纯文档同步：确认b9bb8e3祖先含未发布activation68443，另从正常fetch核对的0389创建dev/windows-evidence-docs-only，仅移本次Windows docs差异；Log追加冲突按0389原文+本次8行结果解决，不带activation日志/源码。发布状态文件明确源码仍0389、activation本地/NOT_RUN，docs workflow路径不触发原Windows门，无手动CI。精确推送结果后续核对。
 
 2026-10-07 普通任务提交回执恢复本地切片：冻结同一身份/项目/目标/材料/key，未决提交显式恢复，已接受读失败仅GET；迟到回执不抢项目/历史。真实HTTP/DOM24项、6持久Run/2MOCK Attempt（PARTIAL/VERIFIED），专项1PASS、相关47PASS；受保护Chromium实际启动因SUID helper所有者BLOCKED，无PNG/像素审查，PG/Windows/Win11未测。未增API/表/权限/真实模型请求；不push/CI，无activation祖先，不签收完整P-B。参见[范围](TaskSubmissionRecoveryPlan.md)和[证据](../evidence/task-submission-recovery-20261007/README.md)。下一有界切片为历史目标/时间/模式摘要，支持刷新后定位持久任务。
+
+2026-10-07 持久任务历史定位本地闭合：承接442e90b0，同授权列表补160字目标摘要、接受时间、冻结提交模式；协议/缺失mode为UNKNOWN。身份/项目/刷新代次隔离，独立复现两身份切换缺口并关闭。实际HTTP/DOM39项、7持久Run/2MOCK Attempt，API4项；专项5PASS/1sandboxSKIP、相关52PASS/2browserDESELECT、独立5PASS/1browserDESELECT。LinuxChromium实际启动BLOCKED无PNG，PG/Windows/Win11未测；0模型、不push/CI、不带activation。参见[证据](../evidence/task-history-20261007/README.md)和[既有Edge下一验收计划](TaskHistoryWindowsAcceptance.md)。下一只读产品切片为步骤/等待原因/技术终态与目标验收分离。

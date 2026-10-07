@@ -17,7 +17,7 @@ from sim2act.worker import Worker
 
 @pytest.mark.parametrize('engine', ['dom', 'chromium'])
 def test_task_submission_recovery_real_http(env, tmp_path, engine):
-    store, settings, client, owner, _, project, resource = env
+    store, settings, client, owner, other_owner, project, resource = env
     if not shutil.which('node'):
         pytest.skip('Node required for UI integration')
     dependency = 'jsdom' if engine == 'dom' else 'playwright-core'
@@ -25,6 +25,7 @@ def test_task_submission_recovery_real_http(env, tmp_path, engine):
     if probe.returncode:
         pytest.skip(f'{dependency} must be available in developer NODE_PATH')
     other = store.project(owner, 'Other owned project')
+    store.project(other_owner, 'Other identity project')
     with store.tx() as connection:
         before = {
             name: connection.execute(select(func.count()).select_from(table)).scalar_one()
