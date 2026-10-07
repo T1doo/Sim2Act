@@ -9,3 +9,5 @@ base5a49ea6；独立dev/bounded-semantic-suite-local，原工作树/历史/V5不
 API仅既有当前user/project/runtime resource.read交集，固定注册合同/版本/sourcehash，跨项目、撤权、来源变化、错误引用/决策/重复/缺规则/类型bool-as-int拒绝。真实HTTP+MockTransport手写报告（不从checker或gold造回应）、正常/未见/错误案例及全持久表无写核查，独立审查、相关SQLite/PG与Ruff/mypy。新原生/PNG没跑保持NOT_RUN。
 
 另新增一次性环境准备器：从固定公开资料及当前代码版本输出完整待批manifest/checklist，校验批准新鲜性/身份非撤销/来源hash/wire上限/预算/未知用量停/来源语义门/冷结果独立验/清理证据。它始终没有LIVE执行入口，不创建凭据/身份，不自动批准；默认PENDING/BLOCKED，只为下一次完整批准减少漏项。
+
+2026-10-07 base5a独立有界条件/例外核心切片：新增授权只读API逐R1/R2/R3适用/引用/决策/期限/行动检查，公开虚构资料+手写Mock，不从gold造答案，不将有限结构PASS当语义或owner确认。一次性准备器固定公开资料/代码scope/前中后清单及wire尺寸测量，无LIVE入口，默认BLOCKED/真实预算0。专项45PASS；相关SQLite319PASS1SKIP，PG321PASS0SKIP（含最小角色SELECT-only/无数据与schema变化），Ruff/mypy36/diff PASS；独立34HTTP+25准备+45专项通过。可变常量别名污染真实缺口已修，首轮测试错误日志保留；ownedPG schema/role残留0并删容器。产品本地未push/新CI，5a纯docs远端exact；新GUI/native/像素NOT_RUN，模型0/无真实身份或凭据，语义/完整P-B/F1/AT02不提升。[证据](../evidence/bounded-semantic-checks-20261007/README.md)。

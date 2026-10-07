@@ -435,3 +435,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 2026-10-07 整合三产品切片的阶段计划与边界：525纯docs同步，d069/1eb真实merge双清理保留，完整SQLite/PG及同会话跨片oracle，不累计单片为组合验收；新增共享16core的Edge同browser/API接线准备，保护/时限/限名不变。源码freeze后最终精确全量结果另记，产品候选不push/CI。[计划](ProductIntegrationPlan.md)。
 
 2026-10-07 三片整合精确20bb标准Windows验收闭合：工程907PASS11SKIP/918、真实组合16PASS与应用使用桌面/窄屏主审，原保护/时限/权限/输出不变。独立只读验收核对d464仅本地SQLite/PG，未混CI/未push；技术与语义/用户/发布边界保留。详见[整合终态](../evidence/windows-product-integration-20bbd5a-20261007/README.md)。
+
+2026-10-07 base5a独立有界条件/例外核心切片：新增授权只读API逐R1/R2/R3适用/引用/决策/期限/行动检查，公开虚构资料+手写Mock，不从gold造答案，不将有限结构PASS当语义或owner确认。一次性准备器固定公开资料/代码scope/前中后清单及wire尺寸测量，无LIVE入口，默认BLOCKED/真实预算0。专项45PASS；相关SQLite319PASS1SKIP，PG321PASS0SKIP（含最小角色SELECT-only/无数据与schema变化），Ruff/mypy36/diff PASS；独立34HTTP+25准备+45专项通过。可变常量别名污染真实缺口已修，首轮测试错误日志保留；ownedPG schema/role残留0并删容器。产品本地未push/新CI，5a纯docs远端exact；新GUI/native/像素NOT_RUN，模型0/无真实身份或凭据，语义/完整P-B/F1/AT02不提升。[证据](../evidence/bounded-semantic-checks-20261007/README.md)。
