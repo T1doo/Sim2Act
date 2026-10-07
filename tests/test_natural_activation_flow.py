@@ -265,8 +265,8 @@ def test_expiry_is_immediate_without_timer_and_cannot_renew(env, monkeypatch):
     retry = client.post(f"/api/natural-activations/{session['id']}/approve", json=approval_body)
     assert retry.status_code == 200 and retry.json()["approval"] == session["approval"]
     assert client.get(f"/api/runs/{rid}").status_code == 200
-    closed = client.post(f"/api/natural-activations/{session['id']}/close-expired")
-    assert closed.status_code == 200 and closed.json()["status"] == "EXPIRED"
+    closed = client.post(f"/api/natural-activations/{session['id']}/close-expired", json={})
+    assert closed.status_code == 200 and closed.json()["status"] == "EXPIRED", closed.text
     assert submit(value, session, "read_preview", "after-expiry").status_code == 403
     assert len(sent) == len(rows(store, attempts)) == 1 and not rows(store, operations)
 

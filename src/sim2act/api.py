@@ -57,6 +57,10 @@ from .report_manifest_apps import mount as mount_report_manifest_apps
 from .spec_checklists import SpecChecklistInput, complete_checklist, inspect_checklist
 
 
+class ExpireNaturalActivationInput(Strict):
+    pass
+
+
 class ProjectInput(Strict):
     name: str = Field(min_length=1, max_length=200)
 
@@ -493,7 +497,8 @@ def create_app(store=None, settings=None):
         return revoke(db, user, aid, body.model_dump(), s)
 
     @app.post("/api/natural-activations/{aid}/close-expired")
-    def close_expired_natural_activation(aid: str, user=user_dependency):
+    def close_expired_natural_activation(aid: str, body: ExpireNaturalActivationInput,
+                                         user=user_dependency):
         from .natural_activations import close_expired
 
         return close_expired(db, user, aid, s)

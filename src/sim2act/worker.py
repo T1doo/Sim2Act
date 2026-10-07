@@ -193,9 +193,10 @@ class Worker:
                 )
             )
             if planner_request and self.store.frozen_contract(c, run).natural_planning.activation is not None:
-                from .natural_activations import reserve_slot
+                from .natural_activations import reserve_slot as reserve_natural_slot
 
-                reserve_slot(self.store, c, run, fence, aid, envelope, wire_seal["sha256"], s)
+                assert wire_seal is not None
+                reserve_natural_slot(self.store, c, run, fence, aid, envelope, wire_seal["sha256"], s)
             if wire_seal is not None:
                 self.store.event(
                     c,
