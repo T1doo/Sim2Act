@@ -195,7 +195,16 @@ $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find
 $("project-select").onchange = safe(async () => {if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => ["projects","apps","resources"].forEach(id => $(id).hidden=id!==b.dataset.tab));
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
-setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun,false);}}catch(e){$("health").textContent="后台不可用";}},2500);
+let backgroundRefreshInFlight=false;
+setInterval(async () => {
+  if(backgroundRefreshInFlight)return;
+  backgroundRefreshInFlight=true;
+  try {
+    const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;
+    if(token){await refresh();if(activeRun)await showRun(activeRun,false);}
+  } catch(e) {$("health").textContent="后台不可用";}
+  finally {backgroundRefreshInFlight=false;}
+},2500);
 
 function clearApp() {
   if(typeof clearDeliveryGraph === "function")clearDeliveryGraph();
