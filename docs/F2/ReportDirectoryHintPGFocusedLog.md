@@ -1,0 +1,9 @@
+# 目录轻提示 PG focused 日志
+
+e7e8f9d准备先行，父GO后normalFF准确8d08fc92，246source逐字一致，父/clean-child actualimports本src。独占exactlabelPG与0600DSN，session53754/PID813567仅原Reportcase一次，Node90/49/14/7保持；不合后来application_use driverfix。
+
+自然exit0/1PASS1warning70.68秒，call70.12秒；JUnit unique1无fail/error/skip。actual49check、len(wires)7及原fullauthoritysortedtuple最终assertPASS，14次promotion精确body SHA相同。actual loadedindex.html+7JS全部match冻结file SHA。实际6旁账7RECEIVED0STARTED=source2extract1cold4，总known140，driver7常量不独作证据。730progress/fault_target/完整ra/slow30/JUnit/controller及安全结果保存。
+
+同环境paired旧genericdeepGET34sum44572/HTTPunion79707/40checks与新17sum16825/HTTPunion60372/49checks留存，仅观察不当独占因果或44秒墙时节约证明。旧失败与UNKNOWNcause均不覆盖。Workerwrappedtrace缺路由明确，以原wiresassert及实际sidecar阶段核。没有full/retry。
+
+自然终态后onlyownschema/role/table/controllerchildren0，exactselflabelcontainerdeleted/label0，privateURL/rawlogXML/fixturetmp删、其他owner/sharedvenv未触。source246仍exact8d，docs-only本地提交。无push/CI/LIVE/预算权限变更；等待根下一freezeGO不自动full。
