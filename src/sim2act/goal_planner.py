@@ -488,6 +488,10 @@ def process(worker, run, contract):
                 with worker.store.tx() as c:
                     current = locked(worker, c, rid, fence)
                     plan = parse_plan(worker.store, c, current, msg)
+                    if len(plan["steps"]) > worker.s.max_tools:
+                        raise DomainError(
+                            "BUDGET_EXHAUSTED", "Plan exceeds tightened worker tool limit"
+                        )
                     binding = {"attempt_id": aid, "plan": plan, "fingerprint": fingerprint(plan)}
                     ctx["natural_plan"] = binding
                     c.execute(
@@ -534,6 +538,8 @@ def process(worker, run, contract):
                     )
                 raise
         receipts = []
+        if len(binding["plan"]["steps"]) > worker.s.max_tools:
+            raise DomainError("BUDGET_EXHAUSTED", "Plan exceeds current worker tool limit")
         for step in binding["plan"]["steps"]:
             with worker.store.tx() as c:
                 current = locked(worker, c, rid, fence)
