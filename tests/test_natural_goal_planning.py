@@ -503,7 +503,10 @@ def test_original_wire_and_strict_budget_survive_coordinated_tamper(env, damage)
                 )
             )
         c.execute(update(runs).where(runs.c.id == run_id).values(context=ctx))
-    assert client.get(f"/api/runs/{run_id}").status_code == 409
+    view = client.get(f"/api/runs/{run_id}")
+    unknown = damage in {"coherent_unknown", "coherent_float"}
+    assert view.status_code == (400 if unknown else 409)
+    assert view.json()["error"]["code"] == ("OUTCOME_UNKNOWN" if unknown else "VERSION_CONFLICT")
     with store.tx() as c:
         c.execute(update(runs).where(runs.c.id == run_id).values(status="QUEUED"))
     assert Worker(store, settings, goal_planner_transport=transport).once()
