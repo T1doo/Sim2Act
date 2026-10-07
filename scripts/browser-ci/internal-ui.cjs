@@ -320,6 +320,8 @@ async function layout(page, label) {
       const file=path.join(root,'owned-agent-browser-pids.json');fs.writeFileSync(file,JSON.stringify(observed));
       return JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--audit',file],{encoding:'utf8',timeout:10000}));
     }});
+  result.taskHistory.screenshotsSupersededBy='agent.integration integrated-cold-application-use desktop/mobile; history layout checks retained';
+  result.taskHistory.screenshots=[];
   const protocolRoot=path.join(root,'protocol');
   const protocolInfo=JSON.parse(fs.readFileSync(path.join(protocolRoot,'info.json'),'utf8'));
   const protocolBase=`http://127.0.0.1:${protocolInfo.port}`;

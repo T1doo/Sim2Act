@@ -141,6 +141,45 @@ async function captureRegistered(label,scope){
   assert.equal(result.generationCaptureSandbox?.length,2,'Both actual generation capture stages audited');
   assert.equal(result.unexpectedPageErrors.length,0,'No new generation page runtime errors');
   assert.equal(result.screenshots.length,2,'Only the two named generation milestone screenshots');
+  // Separate integrated phase; original 33 agent and 29 generation assertions retain their scope.
+  let integrationOutsideRequests=0;
+  page.on('request',request=>{if(!request.url().startsWith(base+'/'))integrationOutsideRequests++;});
+  await page.addInitScript(()=>{window.setInterval=()=>0;});
+  await page.reload({waitUntil:'networkidle'});
+  const integrationBefore=JSON.parse(await action('integration-counts'));
+  const integrationAudit=async()=>{
+   const observed=await audit(),renderers=observed.filter(p=>p.type==='renderer');
+   assert.ok(observed.some(p=>p.type==='browser')&&observed.every(p=>p.security_args_verified),'Integration arguments preserve protection');
+   assert.ok(renderers.some(p=>!baselineRendererPids.has(p.pid)),'Integration has actual renderer beyond baseline');
+   assert.ok(renderers.length>0&&renderers.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)),'Integration renderer tokens remain protected');
+   return observed;
+  };
+  const integrationSandboxBefore=await integrationAudit();
+  result.integration=await require('./product-integration-ui.cjs')({evaluate:code=>page.evaluate(code),
+   reload:()=>page.reload({waitUntil:'networkidle'}),worker:id=>action('integration-worker',['--run-id',id]),info:info.integration});
+  assert.equal(result.integration.status,'PASS');assert.equal(result.integration.checks.length,16);
+  const integrationAfter=JSON.parse(await action('integration-counts'));
+  assert.equal(integrationBefore.authority_fingerprint,integrationAfter.authority_fingerprint,'Whole authority rows remain identical');
+  assert.equal(integrationAfter.application_runs-integrationBefore.application_runs,3);
+  assert.deepEqual(integrationAfter.data_versions,[1,2]);
+  assert.equal(integrationAfter.attempts.length,2);assert.ok(integrationAfter.attempts.every(a=>a.mode==='MOCK'&&a.status==='RECEIVED'));
+  result.integration.durable={before:integrationBefore,after:integrationAfter};
+  assert.equal(result.unexpectedPageErrors.length,0,'No integration runtime page errors');
+  assert.equal(integrationOutsideRequests,0,'Integration never requests another origin');
+  result.integration.outsideOriginRequests=integrationOutsideRequests;
+  result.integration.sandboxBefore=integrationSandboxBefore;result.integration.sandboxAfter=await integrationAudit();
+  result.integration.screenshots=[];
+  for(const [label,width] of [['desktop',1280],['mobile',390]]){
+   await page.setViewportSize({width,height:900});await page.locator('[data-tab="apps"]').click();
+   await page.evaluate(async()=>{await document.fonts.ready;scrollTo(0,0);await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));});
+   const layout=await page.evaluate(()=>({width:innerWidth,documentWidth:document.documentElement.scrollWidth,
+    visibleControls:[...document.querySelectorAll('#application-use button,#application-use select')].filter(e=>e.getClientRects().length).map(e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,height:r.height};}),
+    current:document.getElementById('use-output').textContent,history:document.getElementById('use-history').textContent}));
+   assert.ok(layout.documentWidth<=width+1&&layout.visibleControls.length>0&&layout.visibleControls.every(r=>r.left>=0&&r.right<=width+1&&r.height>=40),'Integration controls fit actual viewport');
+   assert.ok(layout.current.includes('本页尚未选择')&&layout.history.includes('历史结果 v1')&&layout.history.includes('历史结果 v2'));
+   const sandbox=await integrationAudit();await page.screenshot({path:path.join(outputRoot,label+'.png'),fullPage:true});
+   result.integration.screenshots.push({name:label+'.png',scope:'integrated-cold-application-use',layout,sandbox,visualReview:'NOT_REVIEWED'});
+  }
   result.status='PASS';
  }catch(error){result.status='FAIL';result.error={name:error.name,message:error.message};if(page&&!page.isClosed()){try{await page.screenshot({path:path.join(outputRoot,'agent-failure.png'),fullPage:true});}catch{}}}
  finally{

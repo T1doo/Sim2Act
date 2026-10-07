@@ -242,6 +242,8 @@ def seed(root, port):
             json.dumps(replay(ids[1], new_value).responses, ensure_ascii=False)
         )
     store.engine.dispose()
+    from integration_fixture import seed_integration
+    seed_integration(root)
     print("PASS synthetic fixture seeded; existing read Grants established before UI counters")
 
 
@@ -262,16 +264,27 @@ def main():
             "generation-corrupt",
             "generation-revoke",
             "generation-source-revoke",
+            "integration-worker",
+            "integration-counts",
         ],
         required=True,
     )
     parser.add_argument(
         "--app-id", help="Exact server-generated registered app for generation-corrupt"
     )
+    parser.add_argument("--run-id", help="Exact oldest queued integration AppRun")
     args = parser.parse_args()
     root = args.root
     if args.action == "seed":
         seed(root, args.port)
+        return
+    if args.action in {"integration-worker", "integration-counts"}:
+        from integration_fixture import integration_counts, integration_worker
+        if args.action == "integration-worker":
+            assert args.run_id, "Exact integration Run required"
+            print(json.dumps(integration_worker(root, args.run_id)))
+        else:
+            print(json.dumps(integration_counts(root)))
         return
     store, settings = context(root)
     info = json.loads((root / "info.json").read_text())

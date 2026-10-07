@@ -431,3 +431,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 2026-10-07 CI等待期有界体验切片闭合：普通任务回读失败清空旧画布/命令/核对字段，区分读取失败与技术FAILED，停止失败详情自动回读，仅手动GET恢复；项目/身份/迟到回执守卫与旧按钮零写负例闭合。事前范围[TaskReadFailurePlan](TaskReadFailurePlan.md)列最多三类核心演示缺口，选择无需新增权限的画布修正；真实语言规划/语义验收、正式应用使用闭环仍开放。新切片仅本地，不混入已推精确82ffe61及唯一CI37576109066，原生/像素尚未测。[验证与失败记录](../evidence/task-read-failure-local-20261007/README.md)。
 
 2026-10-07 独立第二主线应用使用范围：冻结bd56f80之外本地，用户在应用页以数值列业务参数运行已有固定CSV实例，正常worker持久新AppRun/结果、手动读回/历史/冷会话；版本材料与未发布边界明示。只用已有授权与业务CRUD，不创建身份/Grant/Release/Instance/DDL，不调用模型或Replay。接受未知同键恢复、读取失败GET恢复、当前失败不冒历史成功、跨身份项目/ABA/来源版本负例；见[事前范围](ApplicationUsePlan.md)。新切片PG/native/正式发布均不得借bd CI升格。
+
+2026-10-07 整合三产品切片的阶段计划与边界：525纯docs同步，d069/1eb真实merge双清理保留，完整SQLite/PG及同会话跨片oracle，不累计单片为组合验收；新增共享16core的Edge同browser/API接线准备，保护/时限/限名不变。源码freeze后最终精确全量结果另记，产品候选不push/CI。[计划](ProductIntegrationPlan.md)。
