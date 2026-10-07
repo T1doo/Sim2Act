@@ -47,6 +47,7 @@ class Catalog:
                         "privileged_member",
                         "database_owner",
                         "schema_owner",
+                        "schema_create_reachable",
                     )
                 }
             ],
@@ -94,6 +95,10 @@ class Catalog:
 
     def dispose(self):
         self.disposed = True
+        if self.fail == "dispose":
+            raise RuntimeError(
+                "CLEANUP_PRIVATE_SENTINEL postgresql://user:PRIVATE_PASSWORD@host/db"
+            )
 
     def execute(self, statement, parameters=None):
         sql = str(statement)
@@ -170,6 +175,7 @@ def test_each_crud_privilege_is_required_separately(privilege):
         "privileged_member",
         "database_owner",
         "schema_owner",
+        "schema_create_reachable",
     ],
 )
 def test_current_session_or_reachable_privileged_owner_is_blocked(key):
@@ -352,3 +358,42 @@ def test_doctor_bad_configuration_is_safe_json(monkeypatch, capsys):
     report = json.loads(capsys.readouterr().out)
     assert reasons(report) == {"CONFIGURATION_UNAVAILABLE"}
     assert "PRIVATE_PASSWORD" not in json.dumps(report) and report["database"] == "OFFLINE"
+
+
+def test_doctor_dispose_failure_is_safe_blocked_json(monkeypatch, capsys, tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "readiness_manage_dispose", Path(__file__).parents[1] / "scripts/manage.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    from sim2act import config, db
+
+    engine = Catalog()
+    engine.fail = "dispose"
+    monkeypatch.setattr(
+        config.Settings,
+        "from_env",
+        lambda: SimpleNamespace(database_url="PRIVATE_DSN", data_dir=tmp_path, mode="mock"),
+    )
+    monkeypatch.setattr(db, "Store", lambda _url: SimpleNamespace(engine=engine))
+    monkeypatch.setattr(module.sys, "argv", ["manage.py", "doctor"])
+    with pytest.raises(SystemExit) as error:
+        module.main()
+    assert error.value.code == 1
+    captured = capsys.readouterr()
+    assert all(
+        s not in captured.out + captured.err
+        for s in ("CLEANUP_PRIVATE_SENTINEL", "PRIVATE_PASSWORD", "PRIVATE_DSN", "postgresql://")
+    )
+    report = json.loads(captured.out)
+    assert report["status"] == "BLOCKED" and report["qualification"] == "NOT_ESTABLISHED"
+    assert reasons(report) == {"ENGINE_CLEANUP_FAILED"}
+    assert report["database"] == "UP"  # Connection succeeded; cleanup is independently BLOCKED.
+
+
+def test_reachable_create_sql_uses_exact_existing_member_scope():
+    assert "bool_or(pg_catalog.has_schema_privilege(r.oid, :schema, 'CREATE'))" in readiness.ROLES
+    assert "schema_create_reachable" in readiness.ROLES
+    assert "r.rolname IN (current_user, session_user)" in readiness.ROLES
+    assert "pg_catalog.pg_has_role(current_user, r.oid, 'MEMBER')" in readiness.ROLES
+    assert "pg_catalog.pg_has_role(session_user, r.oid, 'MEMBER')" in readiness.ROLES

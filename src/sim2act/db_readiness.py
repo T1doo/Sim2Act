@@ -20,6 +20,7 @@ SCHEMA = """SELECT pg_catalog.current_schema() AS schema_name,
 ROLES = """SELECT pg_catalog.bool_or(r.rolsuper) AS superuser,
     pg_catalog.bool_or(r.rolcreatedb) AS create_database, pg_catalog.bool_or(r.rolcreaterole) AS create_role,
     pg_catalog.bool_or(r.rolbypassrls) AS bypass_rls,
+    pg_catalog.bool_or(pg_catalog.has_schema_privilege(r.oid, :schema, 'CREATE')) AS schema_create_reachable,
     pg_catalog.bool_or(r.rolname IN ('pg_read_all_data', 'pg_write_all_data',
         'pg_read_server_files', 'pg_write_server_files', 'pg_execute_server_program',
         'pg_signal_backend', 'pg_checkpoint')) AS privileged_member,
@@ -92,6 +93,11 @@ def unavailable(reason="DATABASE_UNAVAILABLE"):
     return _report([_check("connection", False, reason)])
 
 
+def cleanup_failed(report):
+    """Engine cleanup is unconfirmed; preserve checked facts but never report readiness."""
+    return _report([*report["checks"], _check("cleanup", False, "ENGINE_CLEANUP_FAILED")])
+
+
 def _rows(c, query, schema, names):
     statement = text(query).bindparams(bindparam("names", expanding=True))
     return c.execute(statement, {"schema": schema, "names": names}).mappings().all()
@@ -119,6 +125,7 @@ def _validate_catalog(c):
         "privileged_member",
         "database_owner",
         "schema_owner",
+        "schema_create_reachable",
     }
     if set(roles) != role_keys or any(type(roles[k]) is not bool for k in role_keys):
         return [*checks, _check("role", False, "ROLE_INTROSPECTION_UNAVAILABLE")]

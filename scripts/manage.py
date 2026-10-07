@@ -93,7 +93,7 @@ def main():
     from sim2act.process_env import application_environment
 
     if args.command == "doctor":
-        from sim2act.db_readiness import inspect_database, unavailable
+        from sim2act.db_readiness import cleanup_failed, inspect_database, unavailable
 
         engine = None
         mode = "UNKNOWN"
@@ -109,7 +109,10 @@ def main():
             report = unavailable("CONFIGURATION_UNAVAILABLE")
         finally:
             if engine is not None:
-                engine.dispose()
+                try:
+                    engine.dispose()
+                except Exception:
+                    report = cleanup_failed(report)
         report.update(
             python=sys.version.split()[0],
             mode=mode,
