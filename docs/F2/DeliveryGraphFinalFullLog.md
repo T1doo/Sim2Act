@@ -21,3 +21,5 @@ Final execution freeze7854029d702769e26c9cd9cf2d4f22e2a97750ce. Driver12b normal
 No current full PASS is claimed. Original8c PG1278P4S1F,0c2/7cd Report timeout failures,old111 missing JUnit and first-use2P1JSDOMF remain preserved. The prior targeted Report49 at8d passed70.68s but is not a full replacement. Driver12b original29 business oracles+1teardown/original45 preserved,errors rejected; root source differs from8d only in that tested driver. No coverage/time/security/provider changes; no newCI/LIVE.
 
 Parallel R0 read-only database-readiness draft is isolated on dev/r0-db-readiness-local in another worktree and is not part of this frozen source. It is not merged into either full run or allowed to create PG/roles while they run. Normal developer save synchronization uses [skip ci] while Windows900 qualification is NO_GO. Terminal results/JUnit/source consistency/roles/skip/cleanup and original failures will be appended only when actually reached.
+
+原始受保护Chromium失败stderr安全副本在两phase各保留EOF空白行；`git diff --check`因此报告两个new blank line at EOF。这两项证据字节例外保留，不修剪日志或伪称整个证据范围空白检查全通过。原FirstUse JUnit五项既有trailing whitespace例外亦继续保留；源码及新增叙述文本无该例外。
