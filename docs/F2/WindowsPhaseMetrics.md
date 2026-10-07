@@ -82,3 +82,13 @@ while keeping its original cases, assertions and guards. Full Windows evidence
 must still measure the same qualified job, PostgreSQL fixture count/cost, browser
 completion and cleanup. This slice neither enables `checkfirst=False` nor permits
 test/browser overlap, extra privileges, or a CI budget change.
+
+## Subsequent mainline PG classification (2026-10-07)
+
+Integrated opt-in plugin b89dd986 by normal merge1c45795a06bc4f2e2d2210540520470582f64c72 after NL82 source freeze; only two new test/plugin source files, no core/conftest/workflow change. Merge self-tests5 PASS/3.00s and whole Ruff/mypy44 PASS. [Exact PG measurement](../evidence/windows-phase-metrics-pg-20261007/README.md) preserves257 source hashes and original two CSV cases: OFF2 PASS/2.487s and ON2 PASS/2.528s, no skips/retries. ON COMPLETE/pendingSQL0. Fresh synthetic PG from an existing local image; owner fixtures retain explicit schema/migration initialization and original assertions.
+
+Two initialize spans224.882ms within two env setups665.858ms (33.77%);80 has_table calls59.573ms (26.49% of initialize),80 existence cursor spans43.395ms,80 DDL spans115.889ms. Method and cursor spans overlap and omit different costs; do not sum them. OFF/ON wall delta40.783ms is one pair, not stable instrumentation overhead or causality. All owned schemas/extra roles/public tables/controllers/container cleared. Raw SHA and sanitized SHA were recorded (this export changed no bytes); a duplicate private-file unlink error in finalizer is separately retained and remaining cleanup completed without rerunning tests.
+
+Optimization decision: this small Linux sample identifies initialization as a measurable fixture component, but gives no full-job initialization count, Windows cost, absolute savings or coverage qualification for a behavior change. No fixture reuse/cache/checkfirst=False or overlapping test/browser execution was implemented. The next optimization must preserve fresh ownership and all original assertions, and obtain representative same-capacity counts and before/after evidence before claiming budget savings. Windows900/Edge240/Node150 remain unchanged NO_GO; no new CI. This PG sample does not qualify NL planning, production activation, semantic acceptance or R0.
+
+Independent measurement review LIMITED_PASS: all16 original exports,257 Git-bound source files and both actual per-node JUnits verified; ratios recomputed. Cleanup verified against owner receipts and local path absence, without independent Docker/PG census. Raw originals deleted after exporter recorded hashes; review rehashes safe exports and does not claim a new raw byte inspection. See independent-review.json in the PG evidence directory.
