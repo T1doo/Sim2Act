@@ -1,0 +1,47 @@
+{
+  "decision": "BLOCK_STATIC_UI_PROJECTION_RECEIPT_GAPS",
+  "observed_head": "6fbb29b7a09a7483e763692257ba9fec15eadcb3",
+  "wip_changes": [
+    " M src/sim2act/web/app.js",
+    " M src/sim2act/web/natural-goal.js",
+    " M tests/natural_goal_ui.cjs",
+    " M tests/test_natural_goal_ui.py"
+  ],
+  "hashes": {
+    "src/sim2act/web/natural-goal.js": "09daa7a907832b5c4c6aa8625165f1a000aef5d7af14786ca9c3e3bf7c377999",
+    "src/sim2act/web/app.js": "4d794f0fc08b1dd058a7bf46e72eb6eed32c2ea9b55b690b922d4172fe463c42",
+    "src/sim2act/web/index.html": "d925efb01c3af413bcdb988bb6e4642666d66cdecd48c2c972bc531eaf2ad4cb",
+    "tests/natural_goal_ui.cjs": "cac8bbf58b162f1c57ea1cdccf662d74f4708586249cb3ce06f3c5e06f365f4a"
+  },
+  "findings": [
+    {
+      "id": "VALIDATION_STATUS_NOT_CHECKED",
+      "file": "src/sim2act/web/natural-goal.js",
+      "function": "naturalGoalPlanShape",
+      "static_path": "Valid plan/hash with natural_plan.validation FAILED still renders already validated and allows WAITING_APPROVAL acknowledgement; r.version strict positive int also unchecked. confirmation_required false vs frozenpolicy true is not exact compared except WAITING_APPROVAL branch.",
+      "minimum_fix": "Require validation VALIDATED; strictpositive integer r.version; exact Boolean comparison to frozen confirmation policy."
+    },
+    {
+      "id": "CONTRADICTORY_CONFIRM_RECEIPT_ACCEPTED",
+      "file": "src/sim2act/web/natural-goal.js",
+      "function": "confirmNaturalGoal",
+      "static_path": "200 receipt correct run/plan/confirmed/status but malformed version or goal_acceptance PASS/candidate_generated true is accepted; entry accepted locks confirmation without UNKNOWN retry controls if subsequent GET still WAITING_APPROVAL.",
+      "minimum_fix": "Strictpositive integer receipt.version >= original expected_version+1; exact NOT_RUN and candidate_generated false; reject contradictory receipts before accepted state. Reverified GET may later establish actual confirmation."
+    }
+  ],
+  "safe_boundaries": [
+    "Canonical SHA256 awaited before controls, followed by showRun current generation guard; changed context cannot late append after hash",
+    "Original project+identity+card/generation check for accepted request read; unknown body/key retained across selection ABA in page-memory Map",
+    "First explicit4xx correctable while uncertain history remains UNKNOWN",
+    "Cancel during sending confirmation disabled; cancellation intent persists to block new confirmation; Back invokes view clear only, no POST",
+    "New field/history population moved before awaited config GET, removing old-edit/new-card interaction window",
+    "Default provider status explicit unavailable/zeroLIVE; no polling automatic POST; cold Run read is explicit GET",
+    "All interpretation/steps render textContent/row safe text"
+  ],
+  "limits": [
+    "Static only; no test/browser/PG/race execution",
+    "Owner tests viewed as coverage design only, not reviewer evidence",
+    "Backend0cab independent14-case evidence remains separate",
+    "No source files modified by reviewer"
+  ]
+}

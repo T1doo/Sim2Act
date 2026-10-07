@@ -1,5 +1,8 @@
 # Natural goal planning stage log
 
+2026-10-07 subsequent NL UI/confirmation: exact117bb5db2d2161e6a6f346eecd289cd6f1fc11bc connects saved goal→strict planned-runs→validated exact plan→explicit confirmation→actual durable receipts/history. New valid plans stop WAITING_APPROVAL0Operations; defaultdisabled or selected-but-LIVE0 is honestly blocked. Targeted250unique249PASS1explicitPGroleSKIP68.34s, five actualHTTP/fullDOM paths42/8/8/7/8 checks and9loadedJS hashes, independentbackend14actual LIMITEDPASS and corrected UI staticPASS. Protected Chromium aborted due installed SUID configuration; JSDOM is not native/visual evidence. No newLIVE/full/PG/native/CI or R0/P-A/P-B acceptance. [Stage log](NaturalGoalUILog.md) and [proposed two-hour real-model acceptance](NaturalGoalLiveAcceptanceProposal.md), not authorized/executed.
+
+
 Baseline d51c6781; plan ca903582; implementation f0928e9; tightened runtime tool cap e150b06; independent seal/result corrections a7943fc; test-only correction and final source 82a3ef838807c1b7540232671f68bf09408ffafd.
 
 The saved full goal version now enters POST /api/projects/{pid}/goal-cards/{cid}/planned-runs with expected_version, expected_fingerprint and request_key. Configure SIM2ACT_GOAL_PLANNER_PROVIDER=disabled (default) or intern-s2. Selection grants no LIVE allowance. Default worker returns WAITING_RESOURCE before Attempt/send; ordinary MOCK is not a planning fallback. Offline transport injection requires a test-only MOCK Store and explicit provider selection.

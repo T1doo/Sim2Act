@@ -1,5 +1,8 @@
 # P-B bounded engineering delivery — not accepted
 
+2026-10-07 subsequent NL UI/confirmation: exact117bb5db2d2161e6a6f346eecd289cd6f1fc11bc connects saved goal→strict planned-runs→validated exact plan→explicit confirmation→actual durable receipts/history. New valid plans stop WAITING_APPROVAL0Operations; defaultdisabled or selected-but-LIVE0 is honestly blocked. Targeted250unique249PASS1explicitPGroleSKIP68.34s, five actualHTTP/fullDOM paths42/8/8/7/8 checks and9loadedJS hashes, independentbackend14actual LIMITEDPASS and corrected UI staticPASS. Protected Chromium aborted due installed SUID configuration; JSDOM is not native/visual evidence. No newLIVE/full/PG/native/CI or R0/P-A/P-B acceptance. [Stage log](NaturalGoalUILog.md) and [proposed two-hour real-model acceptance](NaturalGoalLiveAcceptanceProposal.md), not authorized/executed.
+
+
 2026-10-07 bounded natural-goal planning: final source `82a3ef838807c1b7540232671f68bf09408ffafd` adds the explicit saved-goal planned-runs API → frozen provider/schema/budget → strict received plan → durable registered read-only tools/receipts. Production provider defaults disabled; intern-s2 selection still has zero LIVE allowance. Final targeted 225 PASS/1 isolated-PG-role SKIP/226 unique, 41 new planning cases; independent21 PASS on eight byte-identical product files. Source/collection/JUnit/original failures retained. No new NL UI/browser, full/new NL PG/native/CI/LIVE or semantic/owner acceptance. Earlier full7854 is a different source and is not a full test of this addition. [Plan and log](NaturalGoalPlanningLog.md); P-A/P-B/R0/F1/AT02/Win11 remain open. Optional metrics b89 is separately merged with no core/conftest/workflow changes; Windows900 remains NO_GO.
 
 
