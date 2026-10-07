@@ -186,6 +186,12 @@ def parse_plan(store, c, run, message):
             ):
                 raise DomainError("MODEL_OUTPUT_INVALID", "Column is outside frozen CSV schema")
             args["column"] = step.column
+            try:
+                read_data(c, step.resource_id, step.tool_ref, args)
+            except DomainError as exc:
+                raise DomainError(
+                    "MODEL_OUTPUT_INVALID", "CSV column cannot be safely aggregated"
+                ) from exc
         elif step.column is not None:
             raise DomainError("MODEL_OUTPUT_INVALID", "Read cannot carry aggregate parameters")
         validate_call(step.tool_ref, args)
@@ -210,8 +216,43 @@ def locked(worker, c, run_id, fence):
     return worker.store.guard(c, run_id, fence)
 
 
+def check_context(ctx):
+    if any(
+        type(ctx.get(key)) is not int or ctx[key] < 0
+        for key in ("requests", "tools", "repairs", "reserved_tokens")
+    ):
+        raise DomainError("VERSION_CONFLICT", "Invalid typed planning counters")
+
+
+def wire_body(messages, max_output):
+    return httpx.Request(
+        "POST",
+        "https://chat.intern-ai.org.cn/api/v1/chat/completions",
+        json={
+            "model": "intern-s2",
+            "messages": messages,
+            "tools": [],
+            "stream": False,
+            "max_tokens": max_output,
+        },
+    ).content
+
+
+def checked_usage(raw, limits, max_output, reserved):
+    usage = normalize_usage(raw)
+    if usage["status"] != "known":
+        raise DomainError("OUTCOME_UNKNOWN", "Planning usage cannot be safely accounted")
+    if (
+        usage["tokens"]["total_tokens"] > min(limits.max_total_tokens, reserved)
+        or usage["tokens"]["completion_tokens"] > max_output
+    ):
+        raise DomainError("BUDGET_EXHAUSTED", "Provider exceeded reserved planning budget")
+    return usage
+
+
 def verified_plan(store, c, run):
     ctx = run["context"]
+    check_context(ctx)
     bindings = (
         c.execute(
             select(events.c.data).where(
@@ -221,7 +262,11 @@ def verified_plan(store, c, run):
         .scalars()
         .all()
     )
-    if len(bindings) != 1 or fingerprint(bindings[0]) != fingerprint(ctx.get("natural_plan")):
+    if (
+        len(bindings) != 1
+        or not isinstance(bindings[0], dict)
+        or fingerprint(bindings[0]) != fingerprint(ctx.get("natural_plan"))
+    ):
         raise DomainError("VERSION_CONFLICT", "Plan seal missing or modified")
     binding = bindings[0]
     if (
@@ -246,9 +291,71 @@ def verified_plan(store, c, run):
         raise DomainError("OUTCOME_UNKNOWN", "Plan lacks received provider evidence")
     require_returned_model(returned_model_identity("intern-s2", attempt["response_model"]))
     messages = request_messages(store, c, run)
+    contract = store.frozen_contract(c, run)
+    parameters = attempt["parameters"]
+    if not isinstance(parameters, dict) or not isinstance(attempt["usage"], dict):
+        raise DomainError("OUTCOME_UNKNOWN", "Malformed planning evidence")
+    max_output, original_fence = parameters.get("max_tokens"), parameters.get("planning_fence")
+    if (
+        type(max_output) is not int
+        or not 1 <= max_output <= contract.limits.max_output_tokens
+        or type(original_fence) is not int
+        or not 1 <= original_fence <= run["fence"]
+        or parameters.get("stream") is not False
+    ):
+        raise DomainError("VERSION_CONFLICT", "Invalid original planning envelope")
+    body = wire_body(messages, max_output)
+    wire = {
+        "sha256": hashlib.sha256(body).hexdigest(),
+        "bytes": len(body),
+        "characters": len(body.decode()),
+    }
+    seals = (
+        c.execute(
+            select(events.c.data).where(
+                events.c.run_id == run["id"], events.c.kind == "NL_PLANNING_WIRE_RESERVED"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    reservations = (
+        c.execute(
+            select(events.c.data).where(
+                events.c.run_id == run["id"], events.c.kind == "MODEL_RESERVED"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if (
+        len(body) > 10000
+        or len(body.decode()) > 8000
+        or fingerprint(parameters.get("planning_wire")) != fingerprint(wire)
+        or fingerprint(seals)
+        != fingerprint([{"attempt_id": attempt["id"], "fence": original_fence, "wire": wire}])
+        or fingerprint(reservations)
+        != fingerprint(
+            [{"attempt_id": attempt["id"], "mode": contract.mode, "planning_fence": original_fence}]
+        )
+        or type(attempt["reserved_tokens"]) is not int
+        or attempt["reserved_tokens"] != len(body) + max_output
+        or ctx["requests"] != 1
+        or ctx["repairs"] != 0
+        or ctx["reserved_tokens"] != attempt["reserved_tokens"]
+    ):
+        raise DomainError("VERSION_CONFLICT", "Original wire or planning reservation changed")
+    usage = checked_usage(
+        {"usage": attempt["usage"].get("tokens")},
+        contract.limits,
+        max_output,
+        attempt["reserved_tokens"],
+    )
+    if fingerprint(usage) != fingerprint(attempt["usage"]):
+        raise DomainError("OUTCOME_UNKNOWN", "Stored planning usage is malformed")
     if (
         fingerprint(ctx.get("messages")) != fingerprint(messages)
-        or attempt["parameters"]["request_fingerprint"]
+        or parameters.get("request_fingerprint")
         != fingerprint({"messages": messages, "tools": [], "model": "intern-s2"})
         or fingerprint(parse_plan(store, c, run, attempt["response"])) != binding["fingerprint"]
     ):
@@ -379,8 +486,11 @@ def process(worker, run, contract):
         with worker.store.tx() as c:
             current = locked(worker, c, rid, fence)
             ctx = dict(current["context"])
+            check_context(ctx)
             if ctx.get("natural_plan") is not None:
                 binding = verified_plan(worker.store, c, current)
+                if current["result"] is not None:
+                    verify_result(worker.store, c, current, current["result"])
             else:
                 if (
                     ctx["requests"]
@@ -395,20 +505,17 @@ def process(worker, run, contract):
                         "OUTCOME_UNKNOWN", "Planning attempt is not automatically resent"
                     )
                 check_sender(worker, contract)
+                if (
+                    ctx.get("messages") != []
+                    or ctx["tools"]
+                    or ctx["repairs"]
+                    or ctx["reserved_tokens"]
+                ):
+                    raise DomainError("VERSION_CONFLICT", "New planner context is not empty")
                 ctx["messages"] = request_messages(worker.store, c, current)
                 binding = None
         if binding is None:
-            body = httpx.Request(
-                "POST",
-                "https://chat.intern-ai.org.cn/api/v1/chat/completions",
-                json={
-                    "model": "intern-s2",
-                    "messages": ctx["messages"],
-                    "tools": [],
-                    "stream": False,
-                    "max_tokens": worker.s.max_output_tokens,
-                },
-            ).content
+            body = wire_body(ctx["messages"], worker.s.max_output_tokens)
             if len(body) > 10000 or len(body.decode()) > 8000:
                 raise DomainError(
                     "BUDGET_EXHAUSTED", "Complete planning wire exceeds bounded geometry"
@@ -475,16 +582,12 @@ def process(worker, run, contract):
                     raise DomainError(
                         "MODEL_OUTPUT_INVALID", "Provider refused the planning request"
                     )
-                usage = normalize_usage(raw)
-                if usage["status"] != "known":
-                    raise DomainError(
-                        "OUTCOME_UNKNOWN", "Planning usage cannot be safely accounted"
-                    )
-                if (
-                    usage["tokens"]["total_tokens"] > worker.s.max_total_tokens
-                    or usage["tokens"]["completion_tokens"] > worker.s.max_output_tokens
-                ):
-                    raise DomainError("BUDGET_EXHAUSTED", "Provider exceeded frozen token limit")
+                usage = checked_usage(
+                    raw,
+                    contract.limits,
+                    worker.s.max_output_tokens,
+                    len(body) + worker.s.max_output_tokens,
+                )
                 with worker.store.tx() as c:
                     current = locked(worker, c, rid, fence)
                     plan = parse_plan(worker.store, c, current, msg)

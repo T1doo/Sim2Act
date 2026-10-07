@@ -779,6 +779,8 @@ class Store:
         return dict(r)
 
     def frozen_contract(self, c, run):
+        if not isinstance(run["context"], dict):
+            raise DomainError("VERSION_CONFLICT", "Invalid persisted Run context")
         saved = (
             c.execute(select(run_contracts).where(run_contracts.c.run_id == run["id"]))
             .mappings()

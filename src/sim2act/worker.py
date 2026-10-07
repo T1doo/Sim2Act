@@ -188,6 +188,7 @@ class Worker:
                         ),
                         **({"planning_wire" if planner_request else "protocol_wire": wire_seal}
                            if wire_seal is not None else {}),
+                        **({"planning_fence": fence} if planner_request else {}),
                     },
                 )
             )
@@ -201,7 +202,8 @@ class Worker:
             context["requests"] += 1
             context["reserved_tokens"] += envelope
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
-            self.store.event(c, run_id, "MODEL_RESERVED", {"attempt_id": aid, "mode": s.mode})
+            self.store.event(c, run_id, "MODEL_RESERVED", {"attempt_id": aid, "mode": s.mode,
+                **({"planning_fence": fence} if planner_request else {})})
             return aid
 
     def attempt_parameters(self, c, attempt_id, raw):

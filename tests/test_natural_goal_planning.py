@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 from sim2act.api import create_app
 from sim2act.db import (
     attempts,
+    events,
     fingerprint,
     grants,
     operations,
@@ -409,4 +410,103 @@ def test_boundary_limits_and_current_authorization(env, damage):
     else:
         assert rows(store, operations) == []
         assert len(wires) == (0 if damage in {"wire_size", "revoke", "policy_bool"} else 1)
+    client.close()
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "attempt_wire",
+        "wire_event",
+        "coherent_wire",
+        "coherent_unknown",
+        "coherent_float",
+        "request_counter",
+        "removed_seal",
+        "reserved_tokens",
+    ],
+)
+def test_original_wire_and_strict_budget_survive_coordinated_tamper(env, damage):
+    value = setup(env)
+    store, settings, client, *_ = value
+    calls = []
+    transport = httpx.MockTransport(
+        lambda request: (
+            calls.append(request.content),
+            httpx.Response(200, json=response(plan(value))),
+        )[1]
+    )
+    run_id = submit(value).json()["run_id"]
+    assert Worker(store, settings, goal_planner_transport=transport).once()
+    with store.tx() as c:
+        current = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
+        ctx = copy.deepcopy(current["context"])
+        if damage in {"attempt_wire", "coherent_wire"}:
+            parameters = copy.deepcopy(
+                c.execute(
+                    select(attempts.c.parameters).where(attempts.c.run_id == run_id)
+                ).scalar_one()
+            )
+            parameters["planning_wire"]["sha256"] = "0" * 64
+            c.execute(
+                update(attempts).where(attempts.c.run_id == run_id).values(parameters=parameters)
+            )
+        if damage in {"wire_event", "coherent_wire"}:
+            seal = copy.deepcopy(
+                c.execute(
+                    select(events.c.data).where(
+                        events.c.run_id == run_id, events.c.kind == "NL_PLANNING_WIRE_RESERVED"
+                    )
+                ).scalar_one()
+            )
+            seal["wire"]["sha256"] = "0" * 64
+            c.execute(
+                update(events)
+                .where(events.c.run_id == run_id, events.c.kind == "NL_PLANNING_WIRE_RESERVED")
+                .values(data=seal)
+            )
+        if damage in {"coherent_unknown", "coherent_float"}:
+            usage = (
+                {"status": "unknown", "tokens": None}
+                if damage == "coherent_unknown"
+                else {
+                    "status": "known",
+                    "tokens": {"prompt_tokens": 10.0, "completion_tokens": 20, "total_tokens": 30},
+                }
+            )
+            seal = copy.deepcopy(
+                c.execute(
+                    select(events.c.data).where(
+                        events.c.run_id == run_id, events.c.kind == "NL_PLAN_RECEIVED"
+                    )
+                ).scalar_one()
+            )
+            seal["usage"] = usage
+            c.execute(update(attempts).where(attempts.c.run_id == run_id).values(usage=usage))
+            c.execute(
+                update(events)
+                .where(events.c.run_id == run_id, events.c.kind == "NL_PLAN_RECEIVED")
+                .values(data=seal)
+            )
+        if damage == "request_counter":
+            ctx["requests"] = 0
+        if damage == "reserved_tokens":
+            c.execute(update(attempts).where(attempts.c.run_id == run_id).values(reserved_tokens=1))
+        if damage == "removed_seal":
+            from sqlalchemy import delete
+
+            ctx.pop("natural_plan")
+            ctx["requests"] = 0
+            c.execute(
+                delete(events).where(
+                    events.c.run_id == run_id, events.c.kind == "NL_PLAN_VALIDATED"
+                )
+            )
+        c.execute(update(runs).where(runs.c.id == run_id).values(context=ctx))
+    assert client.get(f"/api/runs/{run_id}").status_code == 409
+    with store.tx() as c:
+        c.execute(update(runs).where(runs.c.id == run_id).values(status="QUEUED"))
+    assert Worker(store, settings, goal_planner_transport=transport).once()
+    assert len(calls) == len(rows(store, attempts)) == len(rows(store, operations)) == 1
+    assert rows(store, runs)[0]["status"] != "PARTIAL"
     client.close()
