@@ -1,4 +1,8 @@
-# Final full regression — running, not accepted
+# Final full regression — PG running, not accepted
+
+Current actual status: SQLite naturally exited0 with1267 PASS42 SKIP2 warnings/599.26s. Its original1309-case JUnit was independently matched node-by-node to actual collection, with no missing/extra/duplicate cases;246 execution files and saved import origins match exact7854029. Independent [audit](../evidence/final-full-preparation-20261007/independent-sqlite/sqlite-independent-audit.json), SHA92bbdd1e60e5853eab06961f3f32f3bb6023a7f52c0d3510c3239f068fef6c71. Skip accounting:39 PG-only (including21 role cases),1 Windows,2 Chromium sandbox. These skips do not establish PG-role or native acceptance. Following this actual terminal gate, the sole PG full was started on the same freeze; its outcome,1309-case JUnit,actual roles/Report assertions and cleanup remain PENDING. No additional R0 PG or CI has run.
+
+Historical launch record (superseded status, preserved):
 
 Final execution freeze7854029d702769e26c9cd9cf2d4f22e2a97750ce. Driver12b normally merged;246 tracked src/tests/scripts/.github files exact. Four actual import checks (SQLite/PG parent and clean child) use the dedicated full worktree source. Actual full collection1309 unique nodes in0.38s, not inferred from previous local counts. One SQLite full is running with original JUnit/log and slow-case evidence. PostgreSQL has not been created: SQLite must naturally exit0 and its complete1309 unique JUnit match before the sole full PG run starts.
 
