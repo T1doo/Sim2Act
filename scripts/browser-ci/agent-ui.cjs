@@ -25,6 +25,13 @@ module.exports=async function runAgentChecks({browser,root,outputRoot,python,aud
 function check(name,value){assert.ok(value,name);result.checks.push({name,status:'PASS'});}
 async function action(name,args=[]){return (await execFileAsync(python,['scripts/agent-ui/fixture.py','--root',root,'--action',name,...args],{cwd:repo,env:{...process.env,PYTHONPATH:'src'},encoding:'utf8'})).stdout.trim();}
 async function idle(){await page.waitForFunction(()=>engineering && !engineering.busy);}
+async function instanceResultsReady(id,version){await page.waitForFunction(({id,version})=>{
+ const view=engineering,data=document.getElementById('internal-data');
+ const titles=Array.from(data.querySelectorAll('.agent-result > p:first-child'),p=>p.textContent);
+ return view && engineeringCurrent(view) && !view.busy && view.instance?.id===id && view.instance.data_version===version
+  && data.querySelectorAll('.agent-result').length===version
+  && Array.from({length:version},(_,i)=>i+1).every(v=>titles.some(t=>t.startsWith('历史结果 v'+v+' ·')));
+},{id,version});}
 async function open(id){await page.locator('#app-list .row').filter({hasText:id===info.derived_app?'已完成任务的 agent 候选':id===info.initial_app?'evidence app':'existing R0 app domain'}).getByRole('button').click();await page.waitForFunction(id=>activeApp===id && engineering?.app===id && engineering.project===document.getElementById('project-select').value && !engineering.busy && document.getElementById('internal-status').textContent==='内部历史已读回；正式发布与部署仍关闭。',id);}
 async function selectProject(pid){
  await page.locator('[data-tab="projects"]').click();await page.locator('#project-select').waitFor({state:'visible'});
@@ -79,7 +86,7 @@ async function captureRegistered(label,scope){
   await page.locator('#internal-releases button').last().click();await page.waitForFunction(()=>engineering.instance && !engineering.busy);
   const iid=await page.evaluate(()=>engineering.instance.id);
   await page.locator('#internal-run-form').waitFor({state:'visible'});await inputs('derived-replay.json',info.term_b);
-  await page.locator('#internal-run-submit').click();await idle();await action('worker');await page.locator('#internal-refresh').click();await idle();
+  await page.locator('#internal-run-submit').click();await idle();await action('worker');await page.locator('#internal-refresh').click();await idle();await instanceResultsReady(iid,1);
   check('cold default worker persisted independent result v1',(await page.locator('#internal-data').innerText()).includes('历史结果 v1'));
   check('literal citations and UNKNOWN shown',(await page.locator('#internal-data blockquote').count())>0&&(await page.locator('#internal-data').innerText()).includes('语义 UNKNOWN'));
   let deliveredLost;
@@ -92,7 +99,7 @@ async function captureRegistered(label,scope){
   await inputs('initial-replay.json','other-input');const beforeRetry=JSON.parse(await action('counts'));
   await page.locator('#internal-retry').click();await idle();const afterRetry=JSON.parse(await action('counts'));
   check('manual retry uses frozen accepted key/input/Replay without duplicate Run',afterRetry.internal_app_runs===beforeRetry.internal_app_runs&&await page.evaluate(()=>engineeringPending.size===0));
-  await action('worker');await page.locator('#internal-refresh').click();await idle();
+  await action('worker');await page.locator('#internal-refresh').click();await idle();await instanceResultsReady(iid,2);
   check('cold retry produces independent result v2 and retains v1',(await page.locator('#internal-data').innerText()).includes('历史结果 v2')&&await page.locator('#internal-data .agent-result').count()===2);
   await layout('agent-desktop');await page.setViewportSize({width:390,height:844});await layout('agent-narrow');await verifySandbox();
   await page.reload({waitUntil:'networkidle'});await verifySandbox();await page.locator('#token').fill('synthetic-agent-ui-A');await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});await selectProject(info.project);await open(info.derived_app);
