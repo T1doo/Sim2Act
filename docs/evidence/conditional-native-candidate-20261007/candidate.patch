@@ -1,0 +1,337 @@
+diff --git a/scripts/browser-ci/conditional-checks-ui.cjs b/scripts/browser-ci/conditional-checks-ui.cjs
+new file mode 100644
+index 0000000..dfbe3dd
+--- /dev/null
++++ b/scripts/browser-ci/conditional-checks-ui.cjs
+@@ -0,0 +1,55 @@
++'use strict';
++const assert=require('node:assert/strict');
++// Shared actual served UI oracle. Caller owns browser protection, fixture and transport.
++module.exports=async function conditionalChecks({evaluate,reload,info,action}){
++ const started=Date.now(),checks=[],json=JSON.stringify;
++ const result={status:'NOT_RUN',checks,real_model_requests:0,semanticStatus:'UNKNOWN',ownerAcceptance:'PENDING',formalPublication:false,browser:'CALLER_OWNED',visualReview:'NOT_REVIEWED',screenshots:[]};
++ const get=code=>evaluate(code),check=(ok,name)=>{assert.ok(ok,name);checks.push({name,status:'PASS'});};
++ const wait=async(fn,name)=>{const end=Date.now()+12000;while(Date.now()<end){if(await fn())return;await new Promise(r=>setTimeout(r,20));}throw Error('Timeout '+name);};
++ const watch=()=>get(String.raw`window.conditionObserved=[];window.conditionPosts=0;window.conditionOutside=0;window.conditionHeld=null;window.conditionHold=false;window.conditionFail=false;window.conditionOriginalFetch=window.fetch;
++ window.fetch=async(url,opts={})=>{const u=new URL(url,location.href);if(u.origin!==location.origin){window.conditionOutside++;throw Error('Outside origin');}window.conditionObserved.push({path:u.pathname,method:opts.method||'GET'});
++ if(u.pathname.endsWith('/conditional-checks')&&opts.method==='POST'){window.conditionPosts++;if(window.conditionFail){window.conditionFail=false;throw TypeError('Synthetic conditional transport read failure');}}
++ const r=await window.conditionOriginalFetch(url,opts);if(window.conditionHold&&u.pathname.endsWith('/conditional-checks')&&opts.method==='POST'){window.conditionHold=false;if(r.status!==200)throw Error('Expected actual200 held');await new Promise(resolve=>window.conditionHeld=resolve);}return r;};`);
++ const login=async()=>{await get(`$('token').value=${json(info.bearer)};$('connect').click()`);await wait(()=>get(`$('login').hidden&&$('token').value===''&&$('project-select').options.length>0`),'authenticated connection');await selectProject(info.project);await get(`document.querySelector('[data-tab="apps"]').click()`);};
++ const selectProject=async id=>{await get(`$('project-select').value=${json(id)};$('project-select').dispatchEvent(new Event('change'))`);await wait(()=>get(`$('project-select').value===${json(id)}&&$('run-history-status').textContent!==''&&!$('run-history-status').textContent.includes('正在')`),'current project ready');};
++ const open=async id=>{await get(`listConditionalSources()`);await get(`$('condition-resource').value=${json(id)};openConditionalSource()`);};
++ const manual=async unknown=>get(`for(const [k,v] of Object.entries(${json({trip:unknown?'':'true',amount:unknown?'':'680',receipt:unknown?'':'true',approved:unknown?'':'false',days:unknown?'':'2',R1:unknown?'UNKNOWN':'TRUE',R2:unknown?'UNKNOWN':'TRUE',R3:unknown?'UNKNOWN':'FALSE',decision:unknown?'UNKNOWN':'BLOCK',deadline:'10',date:'UNKNOWN',restart:'false',explanation:'Hand-entered synthetic report; free prose is not graded.'})}))$('condition-'+k).value=v;for(const o of $('condition-actions').options)o.selected=o.value===${json(unknown?'clarify_facts':'obtain_prior_approval')};void 0`);
++ const run=()=>get('runConditionalCheck()');
++ const tables=(before,after,allowed=[])=>Object.keys(before.tables).filter(k=>before.tables[k]!==after.tables[k]&&!allowed.includes(k));
++ await reload();await watch();await login();
++ const before=await action('snapshot');
++ check(await get(`!window.conditionObserved.some(r=>r.path.includes('/conditional-checks/sources/'))`),'conditional content is never automatically read');
++ await open(info.cold);check(await get(`$('condition-form').hidden&&$('condition-status').textContent.includes('VERSION_CONFLICT')&&!$('condition-source').textContent`),'unsupported source refused without substituting a gold answer');
++ await open(info.source);check(await get(`!$('condition-form').hidden&&$('condition-source').textContent.includes(${json(info.source)})&&$('condition-source').textContent.includes('SHA256')&&$('condition-source').textContent.includes('第4行')`),'authorized actual source hash contract version and quotes displayed');
++ await manual(false);await run();
++ check(await get(`$('condition-results').textContent.includes('报告核对 PASS')&&$('condition-results').textContent.includes('决策 BLOCK')&&$('condition-results').textContent.includes('R2：不满足')&&$('condition-results').textContent.includes('未核查报销单和收据是否已实际提交')`),'valid unmet-condition report separates PASS from submission BLOCK and completed obligations');
++ check(await get(`$('condition-results').textContent.includes('语义 UNKNOWN；用户确认 PENDING')&&$('condition-results').textContent.includes('NOT_CHECKED')`),'semantic owner and free prose are never promoted by a finite check');
++ // Preserve actual interval, unlike the old history helper's isolated polling mode.
++ const stable=await get(`$('condition-results').textContent`);await new Promise(r=>setTimeout(r,2700));
++ check(await get(`$('condition-amount').value==='680'&&$('condition-results').textContent===${json(stable)}`),'actual 2500ms poll retains unchanged inputs and evidence');
++ await get(`$('condition-amount').value='500';$('condition-amount').dispatchEvent(new Event('input',{bubbles:true}));void 0`);
++ check(await get(`!$('condition-results').textContent&&$('condition-recheck').hidden`),'editing facts immediately invalidates the old report');
++ await run();check(await get(`$('condition-results').textContent.includes('报告核对 FAIL')&&$('condition-results').textContent.includes('R2：不适用')&&$('condition-results').textContent.includes('语义 UNKNOWN；用户确认 PENDING')`),'incorrect hand report stays FAIL and never changes semantic or owner acceptance');
++ await manual(true);await run();check(await get(`$('condition-results').textContent.includes('报告核对 PASS')&&$('condition-results').textContent.includes('决策 UNKNOWN')&&$('condition-results').textContent.includes('R1：未知')`),'unknown facts remain UNKNOWN despite structurally correct report');
++ await get(`window.conditionFail=true;runConditionalCheck(true)`);check(await get(`!$('condition-results').textContent&&!$('condition-source').textContent&&$('condition-status').textContent.includes('请求失败不等于业务条件不满足')`),'technical failure clears evidence without declaring a business-rule failure');
++ await open(info.source);await manual(false);await run();
++ const readOnly=await action('snapshot');check(tables(before,readOnly).length===0,'all persistent tables unchanged by source reads and repeated check POSTs');
++ const changed=await action('change');check(tables(readOnly,changed,['resources']).length===0&&readOnly.tables.resources!==changed.tables.resources,'controlled version change alters only existing source resource');
++ await get('runConditionalCheck(true)');check(await get(`!$('condition-results').textContent&&!$('condition-source').textContent&&($('condition-status').textContent.includes('VERSION_CONFLICT')||$('condition-status').textContent.includes('旧证据失效'))`),'changed actual source version invalidates old PASS and quotes');
++ const restored=await action('restore');check(tables(before,restored).length===0,'exact original public source restored with all other tables intact');
++ await open(info.source);await manual(false);await get(`window.conditionHold=true;window.conditionLate=runConditionalCheck();void 0`);await wait(()=>get('!!window.conditionHeld'),'actual200 held');
++ await selectProject(info.other_project);await selectProject(info.project);await get('window.conditionHeld();window.conditionLate');
++ check(await get(`!$('condition-results').textContent&&!$('condition-source').textContent&&$('condition-form').hidden`),'project A-B-A cannot revive a held old report');
++ await reload();await watch();await login();check(await get(`window.conditionPosts===0&&$('condition-form').hidden&&!$('condition-results').textContent`),'cold actual document never submits or revives a prior report');
++ await open(info.source);await manual(false);await run();
++ const prior=await action('snapshot');check(tables(before,prior).length===0,'cold reopened report still makes no persisted changes');
++ const revoked=await action('revoke');check(tables(prior,revoked,['grants']).length===0&&prior.tables.grants!==revoked.tables.grants,'fixture revokes only an existing read grant and never creates authority');
++ await get('runConditionalCheck(true)');check(await get(`!$('condition-results').textContent&&!$('condition-source').textContent&&($('condition-status').textContent.includes('GRANT_REVOKED')||$('condition-status').textContent.includes('旧证据失效'))`),'actual revocation hides quotes and old evidence');
++ await get('listConditionalSources()');check(await get(`![...$('condition-resource').options].some(o=>o.value===${json(info.source)})`),'revoked source absent from authorized metadata choices');
++ const after=await action('snapshot');check(tables(revoked,after).length===0&&before.principals===after.principals&&json(before.grants)===json(after.grants),'all other durable records and existing authority identities retained');
++ check(await get(`window.conditionOutside===0&&!window.conditionObserved.some(r=>r.method==='POST'&&!r.path.endsWith('/conditional-checks'))`),'conditional UI creates no business Run Grant identity model or outside-origin request');
++ result.status='PASS';result.durationMs=Date.now()-started;result.durable={before,after};
++ result.expectedNegativeURLs=[`/api/projects/${info.project}/conditional-checks/sources/${info.cold}`,`/api/projects/${info.project}/conditional-checks`];
++ result.mutations=['only existing synthetic source content/hash changed and exactly restored','only one existing source user-read grant revoked; no grant restored or created'];
++ return result;
++};
+diff --git a/scripts/browser-ci/internal-ui.cjs b/scripts/browser-ci/internal-ui.cjs
+index 0778e45..40a1aa3 100644
+--- a/scripts/browser-ci/internal-ui.cjs
++++ b/scripts/browser-ci/internal-ui.cjs
+@@ -351,8 +351,23 @@ async function layout(page, label) {
+       const failedReceipt=e.message.includes('net::ERR_FAILED')&&(u.pathname===`/api/projects/${protocolInfo.project}/protocol/source`||/^\/api\/projects\/[^/]+\/protocol\/runs\/[^/]+\/recover$/.test(u.pathname));
+       const denied=e.message.includes('403')&&(u.pathname===`/api/projects/${protocolInfo.project}/protocol/contracts`||u.pathname===`/api/projects/${protocolInfo.other_project}/protocol/runs/${result.protocol.metadata.source?.id}`);
+       const missingIcon=e.message.includes('404')&&u.pathname==='/favicon.ico';
+-      return failedReceipt||denied||missingIcon;
++      const conditionalNegative=result.protocol.conditional?.expectedNegativeURLs.includes(u.pathname)&&(e.message.includes('403')||e.message.includes('409'));
++      return failedReceipt||denied||missingIcon||conditionalNegative;
+     };
++    // Additional phase reuses existing policy/identity and this protected context.
++    const conditionalAction=async name=>JSON.parse((await execFileAsync(python,['scripts/conditional-ui/fixture.py','--root',protocolRoot,'--action',name],{encoding:'utf8',timeout:10000,env:{...process.env,PYTHONPATH:'src'}})).stdout);
++    const conditionalSandboxBefore=await auditProtocol();
++    result.protocol.conditional=await require('./conditional-checks-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalAction});
++    result.protocol.conditional.sandboxBefore=conditionalSandboxBefore;
++    result.protocol.conditional.sandboxAfter=await auditProtocol();
++    for(const [label,observed] of [['before',conditionalSandboxBefore],['after',result.protocol.conditional.sandboxAfter]]){
++      check(`conditional ${label} actual args preserve existing browser protections`,observed.length>0&&observed.every(p=>p.security_args_verified));
++      const renderer=observed.filter(p=>p.type==='renderer');
++      check(`conditional ${label} renderer tokens remain protected`,renderer.length>0&&renderer.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)));
++      const main=observed.find(p=>p.type==='browser');
++      check(`conditional ${label} SDK weakening absent`,!!main&&!main.command_switches.includes('--disable-features'));
++    }
++    check('bounded conditional native phase passes without semantic promotion',result.protocol.conditional.status==='PASS'&&result.protocol.conditional.semanticStatus==='UNKNOWN'&&result.protocol.conditional.ownerAcceptance==='PENDING');
+     result.protocol.consoleErrors=protocolErrors;result.protocol.unexpectedConsoleErrors=protocolErrors.filter(e=>!expectedProtocolError(e));
+     check('protocol native has no unexpected script or console failures',result.protocol.unexpectedConsoleErrors.length===0);
+     fs.writeFileSync(path.join(protocolRoot,'protocol-results.json'),JSON.stringify(result.protocol,null,2)+'\n');
+diff --git a/scripts/conditional-ui/fixture.py b/scripts/conditional-ui/fixture.py
+new file mode 100644
+index 0000000..608487e
+--- /dev/null
++++ b/scripts/conditional-ui/fixture.py
+@@ -0,0 +1,116 @@
++"""Only mutate the existing owned synthetic protocol source; never create authority."""
++
++import argparse
++import hashlib
++import json
++from pathlib import Path
++
++from sqlalchemy import select, update
++
++from sim2act.conditional_checks import SOURCE_HASH
++from sim2act.db import Store, fingerprint, grants, meta, resources
++
++POLICY = (
++    Path(__file__).resolve().parents[2]
++    / "docs/evidence/model-protocol-preparation-20261006/materials/a-source/policy.txt"
++)
++
++
++def action(root, name):
++    root = root.resolve()
++    assert (root / "fixture.db").is_file() and (root / "info.json").is_file()
++    info = json.loads((root / "info.json").read_text(encoding="utf-8"))
++    assert info["bearer"] == "synthetic-protocol-browser-A"
++    store = Store("sqlite:///" + str(root / "fixture.db"), test_only=True)
++    original = POLICY.read_text(encoding="utf-8")
++    assert hashlib.sha256(original.encode()).hexdigest() == SOURCE_HASH
++    altered = original + "\nSynthetic native condition source version change."
++    altered_hash = hashlib.sha256(altered.encode()).hexdigest()
++    try:
++        with store.tx() as c:
++            row = (
++                c.execute(select(resources).where(resources.c.id == info["source"]))
++                .mappings()
++                .one()
++            )
++            assert row["project_id"] == info["project"] and row["format"] == "txt"
++            assert hashlib.sha256(row["content"].encode()).hexdigest() == row["hash"]
++            if name == "change":
++                assert row["hash"] == SOURCE_HASH and row["content"] == original
++                c.execute(
++                    update(resources)
++                    .where(resources.c.id == row["id"])
++                    .values(content=altered, hash=altered_hash)
++                )
++            elif name == "restore":
++                assert row["hash"] == altered_hash and row["content"] == altered
++                c.execute(
++                    update(resources)
++                    .where(resources.c.id == row["id"])
++                    .values(content=original, hash=SOURCE_HASH)
++                )
++            elif name == "revoke":
++                assert row["hash"] == SOURCE_HASH
++                existing = (
++                    c.execute(
++                        select(grants).where(
++                            grants.c.project_id == info["project"],
++                            grants.c.resource_id == row["id"],
++                            grants.c.principal_id == info["user"],
++                            grants.c.tool_ref == "resource.read",
++                        )
++                    )
++                    .mappings()
++                    .one()
++                )
++                assert not existing["revoked"]
++                c.execute(
++                    update(grants)
++                    .where(grants.c.id == existing["id"], grants.c.revision == existing["revision"])
++                    .values(revoked=True, revision=existing["revision"] + 1)
++                )
++            else:
++                assert name == "snapshot"
++            return {
++                "kind": "owned-conditional-native-fixture.v1",
++                "action": name,
++                "tables": {
++                    n: fingerprint(
++                        [
++                            dict(r)
++                            for r in c.execute(
++                                select(t).order_by(*t.primary_key.columns)
++                            ).mappings()
++                        ]
++                    )
++                    for n, t in meta.tables.items()
++                },
++                "grants": c.execute(select(grants.c.id)).scalars().all(),
++                "principals": fingerprint(
++                    [
++                        dict(r)
++                        for r in c.execute(
++                            select(meta.tables["principals"]).order_by(
++                                meta.tables["principals"].c.id
++                            )
++                        ).mappings()
++                    ]
++                ),
++                "real_model_requests": 0,
++            }
++    finally:
++        store.engine.dispose()
++
++
++def main():
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--root", type=Path, required=True)
++    parser.add_argument(
++        "--action", choices=["snapshot", "change", "restore", "revoke"], required=True
++    )
++    args = parser.parse_args()
++    print(json.dumps(action(args.root, args.action)))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/conditional_native_oracle.cjs b/tests/conditional_native_oracle.cjs
+new file mode 100644
+index 0000000..cbb2a6e
+--- /dev/null
++++ b/tests/conditional_native_oracle.cjs
+@@ -0,0 +1,16 @@
++'use strict';
++const fs=require('node:fs'),path=require('node:path'),{JSDOM}=require('jsdom'),{execFile}=require('node:child_process');
++const execute=require('node:util').promisify(execFile),assert=require('node:assert/strict');
++const root=process.argv[2],python=process.argv[3],repo=process.cwd(),info=JSON.parse(fs.readFileSync(path.join(root,'info.json'))),base=`http://127.0.0.1:${info.port}`;
++let dom,window;
++async function reload(){
++ dom?.window.close();dom=new JSDOM(await(await fetch(base)).text(),{url:base,runScripts:'dangerously'});window=dom.window;
++ window.fetch=(url,opts)=>fetch(new URL(url,base),opts);
++ for(const file of ['app.js','internal.js','protocol.js','use.js']){const script=window.document.createElement('script');script.textContent=await(await fetch(base+'/'+file)).text();window.document.body.append(script);}
++}
++(async()=>{try{
++ const result=await require('../scripts/browser-ci/conditional-checks-ui.cjs')({evaluate:code=>window.eval(code),reload,info,
++  action:async name=>JSON.parse((await execute(python,['scripts/conditional-ui/fixture.py','--root',root,'--action',name],{cwd:repo,env:{...process.env,PYTHONPATH:'src'},encoding:'utf8',timeout:10000})).stdout)});
++ assert.equal(result.status,'PASS');result.native='NOT_RUN';result.pixels='NOT_RUN';result.driver='same shared oracle / actual loopback HTTP and JSDOM / real poll';
++ fs.writeFileSync(path.join(root,'conditional-results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
++}catch(e){console.error(e.stack);process.exitCode=1;}finally{dom?.window.close();}})();
+diff --git a/tests/test_conditional_native_oracle.py b/tests/test_conditional_native_oracle.py
+new file mode 100644
+index 0000000..c4b9f57
+--- /dev/null
++++ b/tests/test_conditional_native_oracle.py
+@@ -0,0 +1,97 @@
++"""Exact future native module against existing owned protocol fixture and actual HTTP."""
++
++import json
++import os
++import shutil
++import socket
++import subprocess
++import sys
++import time
++from pathlib import Path
++
++import httpx
++import pytest
++
++
++def test_conditional_native_shared_module_existing_fixture(tmp_path):
++    if (
++        not shutil.which("node")
++        or subprocess.run(
++            ["node", "-e", "require.resolve('jsdom')"],
++            stdout=subprocess.DEVNULL,
++            stderr=subprocess.DEVNULL,
++            timeout=10,
++        ).returncode
++    ):
++        pytest.skip("Developer Node/jsdom required")
++    repo = Path(__file__).resolve().parents[1]
++    with socket.socket() as sock:
++        sock.bind(("127.0.0.1", 0))
++        port = sock.getsockname()[1]
++    child = {**os.environ, "PYTHONPATH": "src"}
++    seed = subprocess.run(
++        [
++            sys.executable,
++            "scripts/protocol-ui/fixture.py",
++            "--root",
++            str(tmp_path),
++            "--port",
++            str(port),
++            "--action",
++            "seed",
++        ],
++        env=child,
++        cwd=repo,
++        capture_output=True,
++        text=True,
++        timeout=30,
++    )
++    assert seed.returncode == 0, seed.stdout + seed.stderr
++    with (tmp_path / "api.log").open("wb") as log:
++        server = subprocess.Popen(
++            [
++                sys.executable,
++                "scripts/protocol-ui/fixture.py",
++                "--root",
++                str(tmp_path),
++                "--action",
++                "serve",
++            ],
++            env=child,
++            cwd=repo,
++            stdout=log,
++            stderr=log,
++        )
++    try:
++        end = time.monotonic() + 10
++        while time.monotonic() < end:
++            assert server.poll() is None
++            try:
++                if httpx.get(f"http://127.0.0.1:{port}/health", timeout=0.5).status_code == 200:
++                    break
++            except httpx.HTTPError:
++                pass
++            time.sleep(0.05)
++        else:
++            pytest.fail("Owned fixture API not ready")
++        out = subprocess.run(
++            ["node", "tests/conditional_native_oracle.cjs", str(tmp_path), sys.executable],
++            env=child,
++            cwd=repo,
++            capture_output=True,
++            text=True,
++            timeout=60,
++        )
++        (tmp_path / "driver.log").write_text(out.stdout + out.stderr)
++        assert out.returncode == 0, out.stdout + out.stderr
++        result = json.loads((tmp_path / "conditional-results.json").read_text())
++        assert result["status"] == "PASS" and result["real_model_requests"] == 0
++        assert len(result["checks"]) == 22
++    finally:
++        if server.poll() is None:
++            server.terminate()
++            try:
++                server.wait(timeout=10)
++            except subprocess.TimeoutExpired:
++                server.kill()
++                server.wait(timeout=5)
