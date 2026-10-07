@@ -1,0 +1,76 @@
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "en_US.utf8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are disabled.
+
+fixing permissions on existing directory /var/lib/postgresql/data ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default max_connections ... 100
+selecting default shared_buffers ... 128MB
+selecting default time zone ... Etc/UTC
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+
+
+Success. You can now start the database server using:
+
+    pg_ctl -D /var/lib/postgresql/data -l logfile start
+
+waiting for server to start....2026-10-07 21:26:36.420 UTC [59] LOG:  starting PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-07 21:26:36.420 UTC [59] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-07 21:26:36.423 UTC [62] LOG:  database system was shut down at 2026-10-07 21:26:36 UTC
+2026-10-07 21:26:36.427 UTC [59] LOG:  database system is ready to accept connections
+ done
+server started
+CREATE DATABASE
+
+
+/usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+
+waiting for server to shut down....2026-10-07 21:26:36.633 UTC [59] LOG:  received fast shutdown request
+2026-10-07 21:26:36.635 UTC [59] LOG:  aborting any active transactions
+2026-10-07 21:26:36.639 UTC [59] LOG:  background worker "logical replication launcher" (PID 65) exited with exit code 1
+2026-10-07 21:26:36.643 UTC [60] LOG:  shutting down
+2026-10-07 21:26:36.644 UTC [60] LOG:  checkpoint starting: shutdown immediate
+2026-10-07 21:26:36.797 UTC [78] FATAL:  the database system is shutting down
+2026-10-07 21:26:36.852 UTC [60] LOG:  checkpoint complete: wrote 926 buffers (5.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.038 s, sync=0.167 s, total=0.210 s; sync files=301, longest=0.005 s, average=0.001 s; distance=4273 kB, estimate=4273 kB; lsn=0/191F100, redo lsn=0/191F100
+2026-10-07 21:26:36.857 UTC [59] LOG:  database system is shut down
+ done
+server stopped
+
+PostgreSQL init process complete; ready for start up.
+
+initdb: warning: enabling "trust" authentication for local connections
+initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-10-07 21:26:36.953 UTC [1] LOG:  starting PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-07 21:26:36.954 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-07 21:26:36.954 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-10-07 21:26:36.955 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-07 21:26:36.958 UTC [82] LOG:  database system was shut down at 2026-10-07 21:26:36 UTC
+2026-10-07 21:26:36.961 UTC [1] LOG:  database system is ready to accept connections
+2026-10-07 21:26:46.347 UTC [157] ERROR:  permission denied for view pg_roles
+2026-10-07 21:26:46.347 UTC [157] STATEMENT:  SELECT pg_catalog.bool_or(r.rolsuper) AS superuser,
+	    pg_catalog.bool_or(r.rolcreatedb) AS create_database, pg_catalog.bool_or(r.rolcreaterole) AS create_role,
+	    pg_catalog.bool_or(r.rolbypassrls) AS bypass_rls,
+	    pg_catalog.bool_or(pg_catalog.has_schema_privilege(r.oid, $1, 'CREATE')) AS schema_create_reachable,
+	    pg_catalog.bool_or(r.rolname IN ('pg_read_all_data', 'pg_write_all_data',
+	        'pg_read_server_files', 'pg_write_server_files', 'pg_execute_server_program',
+	        'pg_signal_backend', 'pg_checkpoint')) AS privileged_member,
+	    EXISTS(SELECT 1 FROM pg_catalog.pg_database d WHERE d.datname = pg_catalog.current_database()
+	        AND (pg_catalog.pg_has_role(current_user, d.datdba, 'MEMBER')
+	        OR pg_catalog.pg_has_role(session_user, d.datdba, 'MEMBER'))) AS database_owner,
+	    EXISTS(SELECT 1 FROM pg_catalog.pg_namespace n WHERE n.nspname = $1
+	        AND (pg_catalog.pg_has_role(current_user, n.nspowner, 'MEMBER')
+	        OR pg_catalog.pg_has_role(session_user, n.nspowner, 'MEMBER'))) AS schema_owner
+	    FROM pg_catalog.pg_roles r WHERE r.rolname IN (current_user, session_user)
+	        OR pg_catalog.pg_has_role(current_user, r.oid, 'MEMBER')
+	        OR pg_catalog.pg_has_role(session_user, r.oid, 'MEMBER')
+2026-10-07 21:26:46.741 UTC [160] FATAL:  password authentication failed for user "<OWNED_IDENTIFIER>"
+2026-10-07 21:26:46.741 UTC [160] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"

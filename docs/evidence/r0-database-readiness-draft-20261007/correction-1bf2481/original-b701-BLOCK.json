@@ -1,0 +1,63 @@
+{
+  "decision": "STATIC_LIMITED_BLOCK_PENDING_SCOPE_CORRECTION",
+  "requested_product_source": "b701c751d2429a1177916662419b9cd0e35d55f4",
+  "observed_head": "afb58d5a743d8a36787f1f3decdd745ccb45f478",
+  "source_hashes": {
+    "src/sim2act/db_readiness.py": "c05533db7d016f22b2948df264b7e4bc72931ffc6381dcc2f7fd6bcd821c3cfb",
+    "scripts/manage.py": "2b5092d03f6575c1ae9406131fb54dd9577e9e6df95de8ad5fc1dea98227d1a7",
+    "tests/test_db_readiness.py": "3acceee919b7c6036737a917ca68893b79403382ecbbc80b6bdc54d8da6f6627",
+    "docs/Installation.md": "fd34a41d8a1ffc104a238595ea317d54c7ec8b211c0c1044eceae7bd18e8b06f",
+    "docs/F2/R0DatabaseReadinessPlan.md": "6e8d580979639f7c9d1c0aa1fdebac9e03bcf283f85dc5cfee9cdf176587037f",
+    "docs/F2/R0DatabaseReadinessLog.md": "82562843d7832b973b195a8f3d2c78b7eb8ee04319e6a909298cb258222e5a0a"
+  },
+  "findings": [
+    {
+      "id": "R0-SESSION-CREATE",
+      "file": "src/sim2act/db_readiness.py",
+      "lines": [
+        17,
+        19,
+        20,
+        21,
+        35,
+        121
+      ],
+      "severity": "BLOCK for stated current/session/reachable schema CREATE exclusion",
+      "observation": "SCHEMA only calls has_schema_privilege(current_user,current_schema,CREATE); ROLES checks current/session/membership owner/admin flags but not schema CREATE privileges of session_user/reachable roles.",
+      "static_counterexample": "Session login L has direct CREATE on selected schema but is neither owner nor admin; active SET ROLE A has only USAGE and CRUD, no CREATE. All role/ownership/catalog checks can pass, yielding STRUCTURAL_READY although RESET ROLE L can CREATE. This is a static logical counterexample, NOT actual PG execution.",
+      "minimum_change": "Either check CREATE of current+session+scope-defined reachable role set for effective schema, or explicitly limit qualification/docs to active current_user CREATE and cease claiming login/reachable least privilege."
+    },
+    {
+      "id": "R0-DISPOSE-ERROR",
+      "file": "scripts/manage.py",
+      "lines": [
+        107,
+        109,
+        110,
+        111
+      ],
+      "severity": "BLOCK for universal safe error output contract",
+      "observation": "engine.dispose() in finally is outside the exception catcher. If disposal/connection-close raises, the fixed JSON failure path is bypassed and an uncaught exception reaches stderr.",
+      "minimum_change": "Catch cleanup failure too; emit fixed safe unavailable/BLOCKED JSON without exception values or readiness success."
+    }
+  ],
+  "accepted_static_properties": [
+    "Only fixed SELECT SQL; no business rows/pg_authid data or DDL/DML/SET ROLE operations",
+    "PG functions/catalog relations explicitly qualified; unqualified expected table name resolution compared to selected schema object oid",
+    "Metadata table/column type/modifier/nullability and ordered primary/unique key sets required; unsupported catalog shapes fail closed",
+    "Current and session MEMBER checks conservative for owner/admin flags, no owner role impersonation",
+    "Known metadata table/privilege identifiers only in diagnostics; query/config exceptions normally reduced to fixed codes",
+    "STRUCTURAL_READY qualified CATALOG_ONLY and business writes/RLS/identity/worker/Windows NOT_RUN, R0NOT_ACCEPTED",
+    "Start/Status/Stop unaffected by draft except Doctor branch"
+  ],
+  "remaining_boundaries": [
+    "Actual PostgreSQL SQL compatibility/driver decoding/pg_has_role semantics NOT_RUN",
+    "NOINHERIT/PG16 SET-option behavior may conservatively overreject MEMBER roles; not an unsafe PASS finding",
+    "No claim to audit all elevated privileges on every schema/table, database TEMP, parameter privileges, predefined roles outside finite list",
+    "Custom triggers/RLS/generated defaults/collations/unique-index implementation not tested as writes; catalog-ready cannot prove CRUD succeeds",
+    "Catalog obtained via multiple READ COMMITTED statements can change during/following check; it is diagnosis not an authorization receipt",
+    "No runtime or synthetic tests performed in independent review; owner41 synthetic checks are owner evidence only"
+  ],
+  "actions": "Read-only source/git inspection and own /tmp report only; no DB connection/container/model/identity/network/full test",
+  "root_full_candidate": "Unchanged and this isolated R0 draft excluded"
+}

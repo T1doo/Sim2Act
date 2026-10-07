@@ -1,0 +1,38 @@
+{
+  "decision": "STATIC_CORRECTION_PASS_REAL_PG_NOT_RUN",
+  "exact_product_source": "1bf24811c9e60718b33fc41f9433bab83856232c",
+  "base_defect_source": "b701c751d2429a1177916662419b9cd0e35d55f4",
+  "original_block_report": "/tmp/r0-readiness-independent-static/review.json",
+  "original_block_sha256": "6b620c78ccf9c1f58d8f8743f7b0f76547fc63fdb7fa380ac7016e4621602a65",
+  "source_hashes": {
+    "src/sim2act/db_readiness.py": "b31e4722a8a77eac25d51c7c05bba07d3c74069a2147a6509f69b5724cbb8d0d",
+    "scripts/manage.py": "bcd3d6d81d63663daf2e1e86bd6082f07744b74988f79658717cccf41b422215",
+    "tests/test_db_readiness.py": "eb3c5a112849fadde5d107cce49f810a8a7c38348d98ec224adcd8c973cd931b"
+  },
+  "diff_sha256": "508bcdb1629638793aa1118c5ceb5764d76e24f6a23b845145eb419c12293b91",
+  "resolved": [
+    {
+      "id": "R0-SESSION-CREATE",
+      "resolution": "ROLES SELECT bool_or(has_schema_privilege(r.oid,:schema,CREATE)) over exact same current_user/session_user/MEMBER role set; strict bool shape required and any true blocks. Previously omitted login L schemaCREATE even while active A lacks CREATE is now included by construction.",
+      "verification": "Read-only SQL/role_keys/control-flow inspection; actual PG roles/SQL decoding NOT_RUN."
+    },
+    {
+      "id": "R0-DISPOSE-ERROR",
+      "resolution": "finally engine.dispose now separately catches Exception; cleanup_failed appends fixed ENGINE_CLEANUP_FAILED/BLOCKED and _report removes STRUCTURAL_READY qualification. Connection UP can remain as checked fact but exit1 follows status BLOCKED; raw exception discarded.",
+      "verification": "Read-only code path inspection; new controlled-sentinel owner unit is synthetic evidence, not independently executed."
+    }
+  ],
+  "new_tests_reviewed": {
+    "owner_count": 44,
+    "independent_executed": 0,
+    "coverage": "One additional schema_create_reachable parametrized flag + controlled dispose failure + exact query scope test; original41 kept"
+  },
+  "remaining": [
+    "Actual PostgreSQL compatibility, pg_has_role MEMBER/reachable CREATE behavior, driver bool decoding NOT_RUN",
+    "MEMBER scope deliberately conservatively rejects NOINHERIT/SET-inaccessible roles",
+    "Snapshot is time-of-read catalog diagnosis, not persistent future authority or permission proof",
+    "RLS/triggers/business writes/worker/identity/Win11/R0 NOT_ACCEPTED",
+    "No comprehensive all-schema/custom privileged capability audit claimed"
+  ],
+  "actions": "Only git/source read and own /tmp report; no tests/PG/container/provider/network and no root writes"
+}
