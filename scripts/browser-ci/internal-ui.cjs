@@ -351,8 +351,23 @@ async function layout(page, label) {
       const failedReceipt=e.message.includes('net::ERR_FAILED')&&(u.pathname===`/api/projects/${protocolInfo.project}/protocol/source`||/^\/api\/projects\/[^/]+\/protocol\/runs\/[^/]+\/recover$/.test(u.pathname));
       const denied=e.message.includes('403')&&(u.pathname===`/api/projects/${protocolInfo.project}/protocol/contracts`||u.pathname===`/api/projects/${protocolInfo.other_project}/protocol/runs/${result.protocol.metadata.source?.id}`);
       const missingIcon=e.message.includes('404')&&u.pathname==='/favicon.ico';
-      return failedReceipt||denied||missingIcon;
+      const conditionalNegative=result.protocol.conditional?.expectedNegativeURLs.includes(u.pathname)&&(e.message.includes('403')||e.message.includes('409'));
+      return failedReceipt||denied||missingIcon||conditionalNegative;
     };
+    // Additional phase reuses existing policy/identity and this protected context.
+    const conditionalAction=async name=>JSON.parse((await execFileAsync(python,['scripts/conditional-ui/fixture.py','--root',protocolRoot,'--action',name],{encoding:'utf8',timeout:10000,env:{...process.env,PYTHONPATH:'src'}})).stdout);
+    const conditionalSandboxBefore=await auditProtocol();
+    result.protocol.conditional=await require('./conditional-checks-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalAction});
+    result.protocol.conditional.sandboxBefore=conditionalSandboxBefore;
+    result.protocol.conditional.sandboxAfter=await auditProtocol();
+    for(const [label,observed] of [['before',conditionalSandboxBefore],['after',result.protocol.conditional.sandboxAfter]]){
+      check(`conditional ${label} actual args preserve existing browser protections`,observed.length>0&&observed.every(p=>p.security_args_verified));
+      const renderer=observed.filter(p=>p.type==='renderer');
+      check(`conditional ${label} renderer tokens remain protected`,renderer.length>0&&renderer.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)));
+      const main=observed.find(p=>p.type==='browser');
+      check(`conditional ${label} SDK weakening absent`,!!main&&!main.command_switches.includes('--disable-features'));
+    }
+    check('bounded conditional native phase passes without semantic promotion',result.protocol.conditional.status==='PASS'&&result.protocol.conditional.semanticStatus==='UNKNOWN'&&result.protocol.conditional.ownerAcceptance==='PENDING');
     result.protocol.consoleErrors=protocolErrors;result.protocol.unexpectedConsoleErrors=protocolErrors.filter(e=>!expectedProtocolError(e));
     check('protocol native has no unexpected script or console failures',result.protocol.unexpectedConsoleErrors.length===0);
     fs.writeFileSync(path.join(protocolRoot,'protocol-results.json'),JSON.stringify(result.protocol,null,2)+'\n');
