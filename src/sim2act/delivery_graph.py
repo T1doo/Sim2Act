@@ -125,6 +125,13 @@ def _parse(model, value):
         raise DomainError("INVALID_MANIFEST", "DeliveryGraph failed strict validation") from None
 
 
+def _source_versions(value):
+    versions = _json(value)
+    if not isinstance(versions, dict) or len(versions) > MAX_NODES:
+        raise DomainError("INVALID_MANIFEST", "Bounded source version mapping required")
+    return {key: _parse(SourceVersion, version).model_dump() for key, version in versions.items()}
+
+
 def _context(value):
     context = _parse(Context, value)
     if any(type(rev) is not int or rev < 1 for rev in context.node_revisions.values()):
@@ -240,7 +247,7 @@ def derive_manifest_graph(manifest, actions, source_versions, stable_ids, contex
         platform_limits.model_dump() if isinstance(platform_limits, Limits) else platform_limits,
     )
     m, report = preflight(json.dumps(manifest), actions, limits)
-    versions = _json(source_versions)
+    versions = _source_versions(source_versions)
     if versions != {k: v.model_dump() for k, v in ctx.source_versions.items()}:
         raise DomainError("VERSION_CONFLICT", "Source versions differ from trusted context")
     ids = _json(stable_ids)
