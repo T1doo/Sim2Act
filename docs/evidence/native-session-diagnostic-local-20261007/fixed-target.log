@@ -1,0 +1,232 @@
+FF..................                                                     [100%]
+=================================== FAILURES ===================================
+___________ test_conditional_bound_native_shared_actual_http[False] ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-540/test_conditional_bound_native_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f42af318200>
+optimized = False
+
+    @pytest.mark.parametrize("optimized", [False, True])
+    def test_conditional_bound_native_shared_actual_http(tmp_path, monkeypatch, optimized):
+        if optimized:
+            monkeypatch.setenv("PYTHONOPTIMIZE", "1")
+        if (
+            not shutil.which("node")
+            or subprocess.run(
+                ["node", "-e", "require.resolve('jsdom')"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            ).returncode
+        ):
+            pytest.skip("Developer Node/jsdom required")
+        repo = Path(__file__).resolve().parents[1]
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        child = {**os.environ, "PYTHONPATH": "src"}
+        seed = subprocess.run(
+            [
+                sys.executable,
+                "scripts/protocol-ui/fixture.py",
+                "--root",
+                str(tmp_path),
+                "--port",
+                str(port),
+                "--action",
+                "seed",
+            ],
+            env=child,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert seed.returncode == 0, seed.stdout + seed.stderr
+        with (tmp_path / "api.log").open("wb") as log:
+            server = subprocess.Popen(
+                [
+                    sys.executable,
+                    "scripts/protocol-ui/fixture.py",
+                    "--root",
+                    str(tmp_path),
+                    "--action",
+                    "serve",
+                ],
+                env=child,
+                cwd=repo,
+                stdout=log,
+                stderr=log,
+            )
+        try:
+            end = time.monotonic() + 10
+            while time.monotonic() < end:
+                assert server.poll() is None
+                try:
+                    if httpx.get(f"http://127.0.0.1:{port}/health", timeout=0.5).status_code == 200:
+                        break
+                except httpx.HTTPError:
+                    pass
+                time.sleep(0.05)
+            else:
+                pytest.fail("Owned fixture API not ready")
+            prepare(tmp_path)
+            out = subprocess.run(
+                ["node", "tests/conditional_runs_native.cjs", str(tmp_path), sys.executable],
+                env=child,
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(out.stdout + out.stderr)
+>           assert out.returncode == 0, out.stdout + out.stderr
+E           AssertionError: Error: Owned conditional fixture exited before reply; action=run-source; exit=1; category=RuntimeError; stderrBytes=867; truncated=false
+E                 at ChildProcess.<anonymous> (/workspace/Sim2Act-native-session-diagnostic/scripts/browser-ci/conditional-fixture-session.cjs:15:127)
+E                 at ChildProcess.emit (node:events:509:28)
+E                 at maybeClose (node:internal/child_process:1141:16)
+E                 at ChildProcess._handle.onexit (node:internal/child_process:306:5)
+E             node:internal/process/promises:394
+E                 triggerUncaughtException(err, true /* fromPromise */);
+E                 ^
+E             
+E             Error: Owned conditional fixture exited before reply; action=run-source; exit=1; category=RuntimeError; stderrBytes=867; truncated=false
+E                 at ChildProcess.<anonymous> (/workspace/Sim2Act-native-session-diagnostic/scripts/browser-ci/conditional-fixture-session.cjs:15:127)
+E                 at ChildProcess.emit (node:events:509:28)
+E                 at maybeClose (node:internal/child_process:1141:16)
+E                 at ChildProcess._handle.onexit (node:internal/child_process:306:5)
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/conditional_runs_native.cjs', '/tmp/pytest-of-agent/pytest-540/test_conditional_.../child_process:1141:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:306:5)\n\nNode.js v24.19.0\n').returncode
+
+tests/test_conditional_runs_native.py:91: AssertionError
+____________ test_conditional_bound_native_shared_actual_http[True] ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-540/test_conditional_bound_native_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f42ad1a3b90>
+optimized = True
+
+    @pytest.mark.parametrize("optimized", [False, True])
+    def test_conditional_bound_native_shared_actual_http(tmp_path, monkeypatch, optimized):
+        if optimized:
+            monkeypatch.setenv("PYTHONOPTIMIZE", "1")
+        if (
+            not shutil.which("node")
+            or subprocess.run(
+                ["node", "-e", "require.resolve('jsdom')"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            ).returncode
+        ):
+            pytest.skip("Developer Node/jsdom required")
+        repo = Path(__file__).resolve().parents[1]
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        child = {**os.environ, "PYTHONPATH": "src"}
+        seed = subprocess.run(
+            [
+                sys.executable,
+                "scripts/protocol-ui/fixture.py",
+                "--root",
+                str(tmp_path),
+                "--port",
+                str(port),
+                "--action",
+                "seed",
+            ],
+            env=child,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert seed.returncode == 0, seed.stdout + seed.stderr
+        with (tmp_path / "api.log").open("wb") as log:
+            server = subprocess.Popen(
+                [
+                    sys.executable,
+                    "scripts/protocol-ui/fixture.py",
+                    "--root",
+                    str(tmp_path),
+                    "--action",
+                    "serve",
+                ],
+                env=child,
+                cwd=repo,
+                stdout=log,
+                stderr=log,
+            )
+        try:
+            end = time.monotonic() + 10
+            while time.monotonic() < end:
+                assert server.poll() is None
+                try:
+                    if httpx.get(f"http://127.0.0.1:{port}/health", timeout=0.5).status_code == 200:
+                        break
+                except httpx.HTTPError:
+                    pass
+                time.sleep(0.05)
+            else:
+                pytest.fail("Owned fixture API not ready")
+            prepare(tmp_path)
+            out = subprocess.run(
+                ["node", "tests/conditional_runs_native.cjs", str(tmp_path), sys.executable],
+                env=child,
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(out.stdout + out.stderr)
+>           assert out.returncode == 0, out.stdout + out.stderr
+E           AssertionError: Error: Owned conditional fixture exited before reply; action=run-source; exit=1; category=RuntimeError; stderrBytes=867; truncated=false
+E                 at ChildProcess.<anonymous> (/workspace/Sim2Act-native-session-diagnostic/scripts/browser-ci/conditional-fixture-session.cjs:15:127)
+E                 at ChildProcess.emit (node:events:509:28)
+E                 at maybeClose (node:internal/child_process:1141:16)
+E                 at ChildProcess._handle.onexit (node:internal/child_process:306:5)
+E             node:internal/process/promises:394
+E                 triggerUncaughtException(err, true /* fromPromise */);
+E                 ^
+E             
+E             Error: Owned conditional fixture exited before reply; action=run-source; exit=1; category=RuntimeError; stderrBytes=867; truncated=false
+E                 at ChildProcess.<anonymous> (/workspace/Sim2Act-native-session-diagnostic/scripts/browser-ci/conditional-fixture-session.cjs:15:127)
+E                 at ChildProcess.emit (node:events:509:28)
+E                 at maybeClose (node:internal/child_process:1141:16)
+E                 at ChildProcess._handle.onexit (node:internal/child_process:306:5)
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/conditional_runs_native.cjs', '/tmp/pytest-of-agent/pytest-540/test_conditional_.../child_process:1141:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:306:5)\n\nNode.js v24.19.0\n').returncode
+
+tests/test_conditional_runs_native.py:91: AssertionError
+=============================== warnings summary ===============================
+../../tmp/native-session-diagnostic-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/native-session-diagnostic-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 15 durations =============================
+8.69s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[False]
+8.33s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[True]
+2.72s call     tests/test_bounded_native_guards.py::test_actual_original_namespace_refused_without_any_durable_change[original-True]
+2.49s call     tests/test_bounded_native_guards.py::test_optimized_run_control_refuses_invalid_owned_context[no-queued]
+2.44s call     tests/test_conditional_fixture_session.py::test_actual_owned_session_closed_exception_is_safe_and_preserves_tables
+2.35s call     tests/test_bounded_native_guards.py::test_actual_original_namespace_refused_without_any_durable_change[derived-True]
+2.12s call     tests/test_bounded_native_guards.py::test_optimized_run_control_refuses_invalid_owned_context[wrong-owner]
+1.73s call     tests/test_bounded_native_guards.py::test_actual_original_namespace_refused_without_any_durable_change[derived-False]
+1.38s call     tests/test_bounded_native_guards.py::test_actual_original_namespace_refused_without_any_durable_change[original-False]
+1.23s call     tests/test_bounded_native_guards.py::test_owned_worker_without_queued_run_refuses_without_preparation
+1.13s call     tests/test_bounded_native_guards.py::test_optimized_run_control_refuses_invalid_owned_context[missing-root]
+0.34s call     tests/test_conditional_fixture_session.py::test_protocol_is_closed_under_optimized_python
+0.15s call     tests/test_conditional_fixture_session.py::test_owned_session_child_failures_and_timeout
+0.06s call     tests/test_conditional_fixture_session.py::test_fixture_session_eof_exits_without_preparation
+0.02s call     tests/test_bounded_native_guards.py::test_buffered_emission_preserves_every_line_and_bound
+=========================== short test summary info ============================
+FAILED tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[False]
+FAILED tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[True]
+2 failed, 18 passed, 1 warning in 35.30s
