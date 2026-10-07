@@ -1,0 +1,9 @@
+# Independent frozen bd56f80 native/pixel review
+
+CI37577897873/job112650785554 exactbd56f8080f7ffd96ce1c8e59d305e48a7ab84a74. Independent emitted-file review:9files byte/SHA/<=2MB verified;agent/protocol standaloneJSON equals frozen browser embedded records. Native52legacy+39history+33agent+29registeredgeneration+26protocol checks allPASS. History7Run/2RECEIVEDMOCK/1VERIFIED,grants16->16/principals8->8. Protocol4Mock requests/network0/outside0,ownerPENDING/formalPublicationfalse. Thirteen actual audit groups verified protected renderer tokens and no sandbox-disabling/browserSDKweakening flags.
+
+All six actual PNGs inspected at original resolution with view_image. Historydesktop/mobile show7persisted summaries and selectedPARTIAL/MOCK result,goalsnotsemanticallyaccepted. Agentdesktop/narrow are finalregistered-generation captures,not priorReplayv1/v2:successfulsourceproof,newauthorizedCSVbinding,generatedRunSUCCEEDED,resultv1 quantity15,count2,history and unpublished/NOT_RUN labels. Protocoldesktop/narrow showcurrentcoldWAITING_APPROVAL/UNKNOWN/PENDING,source/extracttechnicalhistory,read-only recover controls andsource trace. No visible page overlap;390px layouts wrap into onecolumn;fullpages are long andboundedJSONdetails internallyscroll,notfullusability certification.
+
+Protocolsource metadata captures earlierWAITING_APPROVAL;finalsourcehistory technicalSUCCEEDED occurs afterindependentapproval;those are differentcapturetimes,notrewritten oldstate. Agentnext-input formamount versus currentquantityresult is explicitly identifiable but shouldnotbeclaimed newapplicationuseUI. ProducerNOT_REVIEWED fields left unchanged; independentpixelopinions in separatepixel-review.json.
+
+This evidence only signs exact frozenbd source.native/pixel flows;newapplicationuse,progress/read-failureintegration,Win11,physicalphones,LIVE semanticacceptance,formalpublication/fullF1/AT02/PB remainunsigned. No source/PNG modification,push,dispatch/rerun/modelrequest.
