@@ -1,0 +1,11 @@
+# Natural goal planning stage log
+
+Baseline d51c6781; plan ca903582; implementation f0928e9; tightened runtime tool cap e150b06; independent seal/result corrections a7943fc; test-only correction and final source 82a3ef838807c1b7540232671f68bf09408ffafd.
+
+The saved full goal version now enters POST /api/projects/{pid}/goal-cards/{cid}/planned-runs with expected_version, expected_fingerprint and request_key. Configure SIM2ACT_GOAL_PLANNER_PROVIDER=disabled (default) or intern-s2. Selection grants no LIVE allowance. Default worker returns WAITING_RESOURCE before Attempt/send; ordinary MOCK is not a planning fallback. Offline transport injection requires a test-only MOCK Store and explicit provider selection.
+
+The provider response supplies objective/assumptions/unresolved and bounded registered resource.read/data.aggregate_csv steps. Source fields and authorized material snapshots remain bound to the accepted Run. Strict schema, model identity, dependency ordering, actual CSV-column/numeric oracle and frozen/runtime budgets precede dispatch. Canonical request/wire, known usage, received plan/event and actual receipt seals are rechecked on inspect, resume, dispatch and terminal commit. Stable tool IDs reuse actual receipts; UNKNOWN is never resent. Terminal successful technical execution remains PARTIAL, semantics NOT_RUN and owner PENDING, with no reusable application publication.
+
+Independent e150b06 BLOCK found wire metadata and coherent unknown-usage downgrade; both were fixed, as was fake-result resume healing. Final root 225 PASS + 1 explicit PG role SKIP / 226 unique (46.74s), independent 21 PASS on byte-identical eight product files. Whole Ruff/mypy pass. Exact source, collections, JUnit, independent oracles and original failures are in ../evidence/natural-goal-planning-20261007/. New planning UI/browser, full/PG/native, LIVE, semantic correctness and P-A/P-B/R0 acceptance remain untested/open. No source migration or CI budget change. This is not full production planning acceptance.
+
+Optional Windows phase metrics is a separate additive plugin phase after this freeze. Its two original synthetic-PG CSV cases classify initialization costs only and cannot qualify natural-language planning or Windows900.

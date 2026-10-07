@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="25" time="8.588" timestamp="2026-10-07T22:17:37.992056+00:00" hostname="0af355134a6a"><testcase classname="tests.test_natural_goal_planning" name="test_actual_provider_selects_distinct_plan_then_real_read_only_task[resource.read]" time="0.407" /><testcase classname="tests.test_natural_goal_planning" name="test_actual_provider_selects_distinct_plan_then_real_read_only_task[data.aggregate_csv]" time="0.312" /><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[disabled-mock]" time="0.320" /><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[intern-s2-mock]" time="0.392" /><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[intern-s2-live]" time="0.345" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[unknown_field]" time="0.354" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[write]" time="0.318" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[outside]" time="0.325" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[column]" time="0.373" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[dependency]" time="0.299" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[duplicate_id]" time="0.290" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[wrong_goal]" time="0.365" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[bool_version]" time="0.297" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[duplicate_json]" time="0.369" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[wrong_model]" time="0.334" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[unknown_usage]" time="0.289" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[truncated]" time="0.385" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[refusal]" time="0.289" /><testcase classname="tests.test_natural_goal_planning" name="test_transport_injection_and_closed_input" time="0.250" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[policy]" time="0.423" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[plan]" time="0.389" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[attempt]" time="0.333"><failure message="AssertionError: assert 'PARTIAL' != 'PARTIAL'">env = (&lt;sim2act.db.Store object at 0x7f58067668a0&gt;, Settings(database_url='sqlite:////tmp/nl-planning-dev-v2-fixture/test_pe...482a2eecb543189e85f80322925dfc', 'user_20aad118416947e5a04283cf452c407b', 'proj_292943666105463fa8ec71e9aed20358', ...)
+damage = 'attempt'
+
+    @pytest.mark.parametrize("damage", ["policy", "plan", "attempt", "usage", "receipt", "counter"])
+    def test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back(env, damage):
+        value = setup(env)
+        store, settings, client, *_ = value
+        run_id = submit(value).json()["run_id"]
+        calls = []
+        transport = httpx.MockTransport(
+            lambda request: (
+                calls.append(request.content),
+                httpx.Response(200, json=response(plan(value))),
+            )[1]
+        )
+        assert Worker(store, settings, goal_planner_transport=transport).once()
+        with store.tx() as c:
+            current = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
+            ctx = copy.deepcopy(current["context"])
+            if damage == "plan":
+                ctx["natural_plan"]["plan"]["interpretation"]["objective"] = "forged"
+                ctx["natural_plan"]["fingerprint"] = fingerprint(ctx["natural_plan"]["plan"])
+            if damage == "counter":
+                ctx["tools"] = 0
+            if damage == "policy":
+                frozen = copy.deepcopy(
+                    c.execute(
+                        select(run_contracts.c.snapshot).where(run_contracts.c.run_id == run_id)
+                    ).scalar_one()
+                )
+                frozen.pop("natural_planning")
+                c.execute(
+                    update(run_contracts)
+                    .where(run_contracts.c.run_id == run_id)
+                    .values(snapshot=frozen, fingerprint=fingerprint(frozen))
+                )
+            if damage == "attempt":
+                result = copy.deepcopy(
+                    c.execute(
+                        select(attempts.c.response).where(attempts.c.run_id == run_id)
+                    ).scalar_one()
+                )
+                result["content"] = result["content"].replace("计算授权新列", "伪造目标")
+                c.execute(update(attempts).where(attempts.c.run_id == run_id).values(response=result))
+            if damage == "usage":
+                c.execute(
+                    update(attempts)
+                    .where(attempts.c.run_id == run_id)
+                    .values(usage={"status": "unknown", "tokens": None})
+                )
+            if damage == "receipt":
+                op = c.execute(select(operations).where(operations.c.run_id == run_id)).mappings().one()
+                receipt = copy.deepcopy(op["receipt"])
+                receipt["data"]["sum"] = "999"
+                c.execute(update(operations).where(operations.c.id == op["id"]).values(receipt=receipt))
+            c.execute(update(runs).where(runs.c.id == run_id).values(status="QUEUED", context=ctx))
+        assert Worker(store, settings, goal_planner_transport=transport).once()
+        assert len(calls) == len(rows(store, attempts)) == len(rows(store, operations)) == 1
+&gt;       assert rows(store, runs)[0]["status"] != "PARTIAL"
+E       AssertionError: assert 'PARTIAL' != 'PARTIAL'
+
+tests/test_natural_goal_planning.py:319: AssertionError</failure></testcase><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[usage]" time="0.395" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[receipt]" time="0.300" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[counter]" time="0.328" /></testsuite></testsuites>

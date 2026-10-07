@@ -1,0 +1,481 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="25" time="14.511" timestamp="2026-10-07T22:16:43.737740+00:00" hostname="0af355134a6a"><testcase classname="tests.test_natural_goal_planning" name="test_actual_provider_selects_distinct_plan_then_real_read_only_task[resource.read]" time="0.378"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7f6e7e836d80&gt;, Settings(database_url='sqlite:////tmp/nl-planning-dev-fixture/test_actua...bdc922f8d9405693cd6d582b8fb170', 'user_4eca5618c0004da3acb0dcd4897fbb66', 'proj_8ca698fa64474e57b610eb6c797c37c3', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f6e7e1747a0&gt;
+tool = 'resource.read'
+
+    @pytest.mark.parametrize("tool", ["resource.read", "data.aggregate_csv"])
+    def test_actual_provider_selects_distinct_plan_then_real_read_only_task(env, monkeypatch, tool):
+        value = setup(env)
+        store, settings, client, _, rid, card = value
+        before = authority(store)
+        expected = plan(value, tool)
+        wires = []
+    
+        def handler(request):
+            body = json.loads(request.content)
+            wires.append(body)
+            assert body["tools"] == [] and body["model"] == "intern-s2" and not body["stream"]
+            projected = json.loads(body["messages"][1]["content"])
+            assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+            assert projected["materials"][0]["columns"] == ["label", "novel_count"]
+            return httpx.Response(200, json=response(expected))
+    
+        monkeypatch.setattr(
+            MockModel, "request", lambda *args: pytest.fail("No MockModel planning fallback")
+        )
+        accepted = submit(value)
+        assert accepted.status_code == 202
+        run_id = accepted.json()["run_id"]
+&gt;       assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_goal_planning.py:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:534: in once
+    self.process(run)
+src/sim2act/worker.py:294: in process
+    process(self, run, contract)
+src/sim2act/goal_planner.py:401: in process
+    raw = provider.request_serialized(body, guard)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/model.py:159: in request_serialized
+    return self._request_serialized(body, wire_guard)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/model.py:184: in _request_serialized
+    response = client.send(request)
+               ^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_transports/mock.py:24: in handle_request
+    response = self.handler(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+request = &lt;Request('POST', 'https://chat.intern-ai.org.cn/api/v1/chat/completions')&gt;
+
+    def handler(request):
+        body = json.loads(request.content)
+        wires.append(body)
+        assert body["tools"] == [] and body["model"] == "intern-s2" and not body["stream"]
+        projected = json.loads(body["messages"][1]["content"])
+&gt;       assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+                                                                 ^^^^^^^^^^^^^^^
+E       KeyError: 'content'
+
+tests/test_natural_goal_planning.py:122: KeyError</failure></testcase><testcase classname="tests.test_natural_goal_planning" name="test_actual_provider_selects_distinct_plan_then_real_read_only_task[data.aggregate_csv]" time="0.246"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7f6e7cfc3590&gt;, Settings(database_url='sqlite:////tmp/nl-planning-dev-fixture/test_actua...27e22b285946e5a1526b53fa68b8a7', 'user_71cb0c48cc274e20b65c29da20576e4a', 'proj_6f1be9bc1e4d4b32a120876e50409cb3', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f6e7cce9be0&gt;
+tool = 'data.aggregate_csv'
+
+    @pytest.mark.parametrize("tool", ["resource.read", "data.aggregate_csv"])
+    def test_actual_provider_selects_distinct_plan_then_real_read_only_task(env, monkeypatch, tool):
+        value = setup(env)
+        store, settings, client, _, rid, card = value
+        before = authority(store)
+        expected = plan(value, tool)
+        wires = []
+    
+        def handler(request):
+            body = json.loads(request.content)
+            wires.append(body)
+            assert body["tools"] == [] and body["model"] == "intern-s2" and not body["stream"]
+            projected = json.loads(body["messages"][1]["content"])
+            assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+            assert projected["materials"][0]["columns"] == ["label", "novel_count"]
+            return httpx.Response(200, json=response(expected))
+    
+        monkeypatch.setattr(
+            MockModel, "request", lambda *args: pytest.fail("No MockModel planning fallback")
+        )
+        accepted = submit(value)
+        assert accepted.status_code == 202
+        run_id = accepted.json()["run_id"]
+&gt;       assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_goal_planning.py:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:534: in once
+    self.process(run)
+src/sim2act/worker.py:294: in process
+    process(self, run, contract)
+src/sim2act/goal_planner.py:401: in process
+    raw = provider.request_serialized(body, guard)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/model.py:159: in request_serialized
+    return self._request_serialized(body, wire_guard)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/model.py:184: in _request_serialized
+    response = client.send(request)
+               ^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_transports/mock.py:24: in handle_request
+    response = self.handler(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+request = &lt;Request('POST', 'https://chat.intern-ai.org.cn/api/v1/chat/completions')&gt;
+
+    def handler(request):
+        body = json.loads(request.content)
+        wires.append(body)
+        assert body["tools"] == [] and body["model"] == "intern-s2" and not body["stream"]
+        projected = json.loads(body["messages"][1]["content"])
+&gt;       assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+                                                                 ^^^^^^^^^^^^^^^
+E       KeyError: 'content'
+
+tests/test_natural_goal_planning.py:122: KeyError</failure></testcase><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[disabled-mock]" time="0.378"><failure message="Failed: Zero network required">env = (&lt;sim2act.db.Store object at 0x7f6e7cdcb560&gt;, Settings(database_url='sqlite:////tmp/nl-planning-dev-fixture/test_produ...fe5bd00f714652b54f1954f1c48798', 'user_c792b436d54a4e06a4d12f1350e38ad9', 'proj_ad97837f7fcf48f5ba9f23d994d44a2f', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f6e7ca0df70&gt;
+provider = 'disabled', mode = 'mock'
+
+    @pytest.mark.parametrize(
+        "provider,mode", [("disabled", "mock"), ("intern-s2", "mock"), ("intern-s2", "live")]
+    )
+    def test_production_selection_does_not_grant_live_or_mock_fallback(
+        env, monkeypatch, provider, mode
+    ):
+        value = setup(env, provider)
+        store, settings, client, *_ = value
+        settings = replace(settings, mode=mode, live_enabled=True, token="synthetic-never-send")
+        client.close()
+        client = TestClient(create_app(store, settings))
+        client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        value = (store, settings, client, *value[3:])
+        monkeypatch.setattr(httpx.Client, "send", lambda *a, **k: pytest.fail("Zero network required"))
+&gt;       run_id = submit(value).json()["run_id"]
+                 ^^^^^^^^^^^^^
+
+tests/test_natural_goal_planning.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_goal_planning.py:52: in submit
+    return client.post(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = (&lt;starlette.testclient.TestClient object at 0x7f6e7ca9bbf0&gt;, &lt;Request('POST', 'http://testserver/api/projects/proj_ad97837f7fcf48f5ba9f23d994d44a2f/goal-cards/goal_1859e810fdf0439ba59ec5096809025e/planned-runs')&gt;)
+k = {'auth': &lt;httpx._client.UseClientDefault object at 0x7f6e8060aab0&gt;, 'follow_redirects': &lt;httpx._client.UseClientDefault object at 0x7f6e8060aab0&gt;}
+
+&gt;   monkeypatch.setattr(httpx.Client, "send", lambda *a, **k: pytest.fail("Zero network required"))
+                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Zero network required
+
+tests/test_natural_goal_planning.py:166: Failed</failure></testcase><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[intern-s2-mock]" time="0.408"><failure message="Failed: Zero network required">env = (&lt;sim2act.db.Store object at 0x7f6e7ca229c0&gt;, Settings(database_url='sqlite:////tmp/nl-planning-dev-fixture/test_produ...801bd3eb0a410a9efc378724185634', 'user_ed82c1f4a9994fbe8c9569a01468008c', 'proj_c53ad8080a0845cca6f1b64a18eb3053', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f6e7ca75400&gt;
+provider = 'intern-s2', mode = 'mock'
+
+    @pytest.mark.parametrize(
+        "provider,mode", [("disabled", "mock"), ("intern-s2", "mock"), ("intern-s2", "live")]
+    )
+    def test_production_selection_does_not_grant_live_or_mock_fallback(
+        env, monkeypatch, provider, mode
+    ):
+        value = setup(env, provider)
+        store, settings, client, *_ = value
+        settings = replace(settings, mode=mode, live_enabled=True, token="synthetic-never-send")
+        client.close()
+        client = TestClient(create_app(store, settings))
+        client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        value = (store, settings, client, *value[3:])
+        monkeypatch.setattr(httpx.Client, "send", lambda *a, **k: pytest.fail("Zero network required"))
+&gt;       run_id = submit(value).json()["run_id"]
+                 ^^^^^^^^^^^^^
+
+tests/test_natural_goal_planning.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_goal_planning.py:52: in submit
+    return client.post(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = (&lt;starlette.testclient.TestClient object at 0x7f6e7cbb9100&gt;, &lt;Request('POST', 'http://testserver/api/projects/proj_c53ad8080a0845cca6f1b64a18eb3053/goal-cards/goal_135b13090b244f96aeea330b74c71ba6/planned-runs')&gt;)
+k = {'auth': &lt;httpx._client.UseClientDefault object at 0x7f6e8060aab0&gt;, 'follow_redirects': &lt;httpx._client.UseClientDefault object at 0x7f6e8060aab0&gt;}
+
+&gt;   monkeypatch.setattr(httpx.Client, "send", lambda *a, **k: pytest.fail("Zero network required"))
+                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Zero network required
+
+tests/test_natural_goal_planning.py:166: Failed</failure></testcase><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[intern-s2-live]" time="0.315"><failure message="Failed: Zero network required">env = (&lt;sim2act.db.Store object at 0x7f6e7c800e90&gt;, Settings(database_url='sqlite:////tmp/nl-planning-dev-fixture/test_produ...309234d2b346e3b4279b612f9bbf0f', 'user_68bfa1eea4df4d2d90d8891c27b3c8aa', 'proj_b167aedeeab84340ad4f938fc1fab375', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f6e7c86d190&gt;
+provider = 'intern-s2', mode = 'live'
+
+    @pytest.mark.parametrize(
+        "provider,mode", [("disabled", "mock"), ("intern-s2", "mock"), ("intern-s2", "live")]
+    )
+    def test_production_selection_does_not_grant_live_or_mock_fallback(
+        env, monkeypatch, provider, mode
+    ):
+        value = setup(env, provider)
+        store, settings, client, *_ = value
+        settings = replace(settings, mode=mode, live_enabled=True, token="synthetic-never-send")
+        client.close()
+        client = TestClient(create_app(store, settings))
+        client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        value = (store, settings, client, *value[3:])
+        monkeypatch.setattr(httpx.Client, "send", lambda *a, **k: pytest.fail("Zero network required"))
+&gt;       run_id = submit(value).json()["run_id"]
+                 ^^^^^^^^^^^^^
+
+tests/test_natural_goal_planning.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_goal_planning.py:52: in submit
+    return client.post(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-pb-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-pb-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = (&lt;starlette.testclient.TestClient object at 0x7f6e7e295fa0&gt;, &lt;Request('POST', 'http://testserver/api/projects/proj_b167aedeeab84340ad4f938fc1fab375/goal-cards/goal_3c9e9bacf63f4e5a94702dc5ee917f0b/planned-runs')&gt;)
+k = {'auth': &lt;httpx._client.UseClientDefault object at 0x7f6e8060aab0&gt;, 'follow_redirects': &lt;httpx._client.UseClientDefault object at 0x7f6e8060aab0&gt;}
+
+&gt;   monkeypatch.setattr(httpx.Client, "send", lambda *a, **k: pytest.fail("Zero network required"))
+                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Zero network required
+
+tests/test_natural_goal_planning.py:166: Failed</failure></testcase><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[unknown_field]" time="0.365" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[write]" time="0.297" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[outside]" time="0.294" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[column]" time="0.375" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[dependency]" time="0.516" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[duplicate_id]" time="0.348" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[wrong_goal]" time="0.448" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[bool_version]" time="0.393" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[duplicate_json]" time="0.328" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[wrong_model]" time="0.419" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[unknown_usage]" time="0.273" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[truncated]" time="0.316" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[refusal]" time="0.428" /><testcase classname="tests.test_natural_goal_planning" name="test_transport_injection_and_closed_input" time="0.267" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[policy]" time="0.301" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[plan]" time="0.403" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[attempt]" time="5.396"><failure message="sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked&#10;[SQL: BEGIN IMMEDIATE]&#10;(Background on this error at: https://sqlalche.me/e/20/e3q8)">self = &lt;sqlalchemy.engine.base.Connection object at 0x7f6e7d130740&gt;
+dialect = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f6e7c9fb3e0&gt;
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f6e7d0ecb60&gt;
+statement = 'BEGIN IMMEDIATE', parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f6e7c9fb3e0&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7f6e7e1f21c0&gt;
+statement = 'BEGIN IMMEDIATE', parameters = ()
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f6e7d0ecb60&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: database is locked
+
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7f6e7c9fa180&gt;, Settings(database_url='sqlite:////tmp/nl-planning-dev-fixture/test_persi...a9c670141f414ca401d38eecda740e', 'user_b1399495d53b429cb98502a56fb5b88f', 'proj_43ab1a81388b4a3baf140e20a37cc679', ...)
+damage = 'attempt'
+
+    @pytest.mark.parametrize("damage", ["policy", "plan", "attempt", "usage", "receipt", "counter"])
+    def test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back(env, damage):
+        value = setup(env)
+        store, settings, client, *_ = value
+        run_id = submit(value).json()["run_id"]
+        calls = []
+        transport = httpx.MockTransport(
+            lambda request: (
+                calls.append(request.content),
+                httpx.Response(200, json=response(plan(value))),
+            )[1]
+        )
+        assert Worker(store, settings, goal_planner_transport=transport).once()
+        with store.tx() as c:
+            current = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
+            ctx = copy.deepcopy(current["context"])
+            if damage == "plan":
+                ctx["natural_plan"]["plan"]["interpretation"]["objective"] = "forged"
+                ctx["natural_plan"]["fingerprint"] = fingerprint(ctx["natural_plan"]["plan"])
+            if damage == "counter":
+                ctx["tools"] = 0
+            if damage == "policy":
+                frozen = copy.deepcopy(
+                    c.execute(
+                        select(run_contracts.c.snapshot).where(run_contracts.c.run_id == run_id)
+                    ).scalar_one()
+                )
+                frozen.pop("natural_planning")
+                c.execute(
+                    update(run_contracts)
+                    .where(run_contracts.c.run_id == run_id)
+                    .values(snapshot=frozen, fingerprint=fingerprint(frozen))
+                )
+            if damage == "attempt":
+&gt;               result = copy.deepcopy(rows(store, attempts)[0]["response"])
+                                       ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_goal_planning.py:292: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_goal_planning.py:105: in rows
+    with store.tx() as c:
+         ^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/db.py:468: in tx
+    c.exec_driver_sql("BEGIN IMMEDIATE")
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f6e7c9fb3e0&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7f6e7e1f21c0&gt;
+statement = 'BEGIN IMMEDIATE', parameters = ()
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f6e7d0ecb60&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+E       [SQL: BEGIN IMMEDIATE]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+../sim2act-pb-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError</failure></testcase><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[usage]" time="0.371" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[receipt]" time="0.289" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[counter]" time="0.289" /></testsuite></testsuites>
