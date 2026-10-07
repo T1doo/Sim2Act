@@ -4,7 +4,7 @@ import re
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .errors import DomainError
 
@@ -179,6 +179,14 @@ class NaturalPlanningPolicy(Strict):
     request_limit: int = Field(strict=True, ge=1, le=1)
     repair_limit: int = Field(strict=True, ge=0, le=0)
     live_request_allowance: int = Field(strict=True, ge=0, le=0)
+    require_confirmation: Literal[True] | None = None
+
+    @field_validator("require_confirmation", mode="before")
+    @classmethod
+    def exact_confirmation_flag(cls, value):
+        if value is not None and value is not True:
+            raise ValueError("Confirmation flag must be true or absent")
+        return value
 
 
 class FrozenRunContract(Strict):

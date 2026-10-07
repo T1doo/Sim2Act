@@ -77,7 +77,7 @@ def verify_source(store, c, run, contract):
         "goal": contract.goal.goal, "resource_refs": contract.goal.resource_refs,
         "policy": {"limits": contract.limits.model_dump(), "mode": contract.mode,
                    "request_model": contract.request_model,
-                   **({"natural_planning": contract.natural_planning.model_dump()}
+                   **({"natural_planning": contract.natural_planning.model_dump(exclude_none=True)}
                       if contract.natural_planning is not None else {})},
         "goal_source": source.model_dump(),
     })
@@ -88,7 +88,7 @@ def verify_source(store, c, run, contract):
             or fingerprint(accepted) != fingerprint([{"input_fingerprint": expected,
                              "goal_source": {"card_id": source.card_id, "version": source.version,
                                              "fingerprint": source.fingerprint},
-                             **({"natural_planning": contract.natural_planning.model_dump()}
+                             **({"natural_planning": contract.natural_planning.model_dump(exclude_none=True)}
                                 if contract.natural_planning is not None else {})}])):
         raise DomainError("VERSION_CONFLICT", "Goal source differs from original acceptance")
 

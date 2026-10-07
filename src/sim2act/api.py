@@ -34,6 +34,7 @@ from .db import (
 from .delivery_graph_apps import mount as mount_delivery_graph_apps
 from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
+from .goal_planner import ConfirmNaturalPlanInput
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
 from .internal_api import mount as mount_internal_api
 from .local_tasks import (
@@ -459,6 +460,24 @@ def create_app(store=None, settings=None):
                         "fingerprint": body.expected_fingerprint})
         return {**acceptance(db, user, rid), "planning_policy": selected}
 
+    @app.post("/api/runs/{rid}/confirm-natural-plan")
+    def confirm_goal_plan(rid: str, body: ConfirmNaturalPlanInput, user=user_dependency):
+        from .goal_planner import confirm_natural_plan
+
+        return confirm_natural_plan(db, user, rid, body.model_dump())
+
+    @app.get("/api/projects/{pid}/natural-planning-status")
+    def natural_planning_status(pid: str, user=user_dependency):
+        with db.tx() as c:
+            db.own_project(c, user, pid)
+        return {
+            "project_id": pid, "provider": s.goal_planner_provider,
+            "live_request_allowance": 0, "available": False,
+            "reason": "PROVIDER_DISABLED" if s.goal_planner_provider == "disabled"
+                      else "LIVE_ALLOWANCE_ZERO",
+            "confirmation_required": True,
+        }
+
     @app.get("/api/goal-cards/{cid}/candidate-options")
     def goal_candidate_options(cid: str, user=user_dependency):
         return candidate_options(db, user, cid)
@@ -566,6 +585,10 @@ def create_app(store=None, settings=None):
     @app.get("/")
     def index():
         return FileResponse(web / "index.html")
+
+    @app.get("/natural-goal.js")
+    def natural_goal_script():
+        return FileResponse(web / "natural-goal.js", media_type="text/javascript")
 
     @app.get("/app.js")
     def js():

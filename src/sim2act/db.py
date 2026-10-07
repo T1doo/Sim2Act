@@ -976,6 +976,11 @@ class Store:
                     from .goal_planner import inspect_plan
 
                     inspect_plan(self, c, r)
+            natural_plan = None
+            if source_contract and source_contract.get("natural_planning") is not None:
+                from .goal_planner import plan_projection
+
+                natural_plan = plan_projection(self, c, r)
             ev = (
                 c.execute(
                     select(events).where(events.c.run_id == run_id).order_by(events.c.created_at)
@@ -992,6 +997,7 @@ class Store:
                 "events": [dict(x) for x in ev],
                 "contract": self.contract_metadata(c, r),
                 "known_effects": self.known_effects(c, run_id),
+                **({"natural_plan": natural_plan} if natural_plan is not None else {}),
             }
 
     def contract_metadata(self, c, run):
@@ -1077,6 +1083,20 @@ class Store:
         if is_app_job(self, run_id):
             return command_job(self, principal, run_id, command, version)
         with self.tx() as c:
+            # Natural-plan confirmation, worker and commands share project -> Run -> Grant.
+            # Ordinary historical commands retain their existing locking path.
+            source = c.execute(
+                select(runs.c.project_id, runs.c.context, run_contracts.c.snapshot)
+                .select_from(runs.outerjoin(run_contracts, run_contracts.c.run_id == runs.c.id))
+                .where(runs.c.id == run_id, runs.c.principal_id == principal)
+            ).mappings().first()
+            if source and (
+                isinstance(source["snapshot"], dict)
+                and source["snapshot"].get("natural_planning") is not None
+                or isinstance(source["context"], dict)
+                and source["context"].get("natural_plan") is not None
+            ):
+                self.lock_project(c, principal, source["project_id"])
             r = (
                 c.execute(
                     select(runs)
@@ -1099,6 +1119,7 @@ class Store:
                 "PAUSED",
                 "WAITING_RESOURCE",
                 "RECONCILING",
+                "WAITING_APPROVAL",
             }:
                 pending = self.has_unknown(c, run_id)
                 state = (
@@ -1113,7 +1134,12 @@ class Store:
                     self.authorize(
                         c, principal, r["runtime_id"], r["project_id"], rid, "resource.read"
                     )
-                self.frozen_contract(c, r)
+                contract = self.frozen_contract(c, r)
+                if (contract.natural_planning is not None
+                        and r["context"].get("natural_plan") is not None):
+                    from .goal_planner import verified_plan, verify_confirmation
+
+                    verify_confirmation(self, c, r, verified_plan(self, c, r))
                 self.authorize_receipts(c, r)
                 if self.has_unknown(c, run_id):
                     raise DomainError(
