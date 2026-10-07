@@ -1,0 +1,62 @@
+diff --git a/src/sim2act/web/use.js b/src/sim2act/web/use.js
+index afc945d..6065837 100644
+--- a/src/sim2act/web/use.js
++++ b/src/sim2act/web/use.js
+@@ -225,6 +225,7 @@ $("condition-recheck").onclick=safe(()=>runConditionalCheck(true));
+ $("condition-form").oninput=()=>{if(conditionalContext){conditionalContext.readGeneration=(conditionalContext.readGeneration||0)+1;conditionalContext.body=null;}$("condition-results").replaceChildren();$("condition-recheck").hidden=true;$("condition-status").textContent="输入已变化，旧证据失效；请重新核对。";};
+ 
+ function invalidateConditionalSource(reason){
++ if(typeof clearConditionalRuns==="function"){clearConditionalRuns();$("condition-run-status").textContent=`旧来源绑定证据失效：${reason}。请重新打开当前授权资料；已接受Run未取消，同键回执仍保留。`;}
+  if(!conditionalContext?.source)return;
+  clearConditionalChecks();$("condition-status").textContent=`旧证据失效：${reason}。请重新选择并核对授权资料。`;
+ }
+diff --git a/tests/conditional_run_product.cjs b/tests/conditional_run_product.cjs
+index a2ea5d8..49cd34f 100644
+--- a/tests/conditional_run_product.cjs
++++ b/tests/conditional_run_product.cjs
+@@ -46,6 +46,10 @@ const work=phase=>fetch(info.base+'/test-only-bounded-work/'+phase,{method:'POST
+  const metadata=await(await fetch(info.base+'/api/projects/'+info.project+'/resources',{headers:{Authorization:'Bearer synthetic-test-A'}})).json();w.reconcileConditionalSources(metadata);
+  check($('condition-run-plan').hidden&&$('condition-run-check-output').textContent===''&&$('condition-run-status').textContent.includes('版本已变化'),'real metadata version change clears bound candidate even after manual source context was cleared');
+  await fetch(info.base+'/test-only-bounded-source-version/restore',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});await open();facts('condition-run-source',680);await w.startBoundedSource();
++ await w.extractBoundedCandidate();await w.boundedAction(w.boundedRead);check(!$('condition-run-plan').hidden,'known source/plan can be recovered using same actual accepted receipts');
++ await fetch(info.base+'/test-only-bounded-metadata/fail',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});w.eval('conditionalContext.source=null');await assert.rejects(w.refresh(),/AUTH_LIST_UNAVAILABLE/);
++ check($('condition-run-output').textContent===''&&$('condition-run-plan-text').textContent===''&&$('condition-run-plan').hidden&&$('condition-run-extract').hidden&&$('condition-run-cold-form').hidden,'actual refresh HTTP503 clears real bound Report and sealed plan even with manual source empty');
++ await fetch(info.base+'/test-only-bounded-metadata/ok',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});await open();facts('condition-run-source',680);await w.startBoundedSource();
+  // ABA invalidates late check response even if identity/project return to same values.
+  mode='hold';const late=w.boundedAction(c=>w.checkBoundedRun(c,'source'));await wait(()=>release,'held check');
+  $('project-select').value=info.other;$('project-select').dispatchEvent(new w.Event('change'));await wait(()=>$('condition-run-source-form').hidden,'project clear');
+diff --git a/tests/test_conditional_run_product.py b/tests/test_conditional_run_product.py
+index 9018e2e..9cfc41e 100644
+--- a/tests/test_conditional_run_product.py
++++ b/tests/test_conditional_run_product.py
+@@ -10,6 +10,7 @@ import time
+ 
+ import pytest
+ import uvicorn
++from fastapi.responses import JSONResponse
+ from sqlalchemy import func, select, update
+ from test_conditional_run_bindings import POLICY, envelope, factory, report
+ 
+@@ -59,6 +60,22 @@ def test_source_bound_product_actual_http_dom(env, tmp_path):
+         ]
+     app = create_app(store, settings)
+     wires = []
++    metadata_fault = [False]
++
++    @app.middleware("http")
++    async def synthetic_metadata_failure(request, call_next):
++        if (
++            metadata_fault[0]
++            and request.method == "GET"
++            and request.url.path == f"/api/projects/{pid}/resources"
++        ):
++            return JSONResponse({"error": {"code": "AUTH_LIST_UNAVAILABLE"}}, status_code=503)
++        return await call_next(request)
++
++    @app.post("/test-only-bounded-metadata/{mode}")
++    def set_metadata_failure(mode: str):
++        metadata_fault[0] = mode == "fail"
++        return {"test_only": True}
+ 
+     @app.post("/test-only-bounded-work/{phase}")
+     def execute(phase: str):

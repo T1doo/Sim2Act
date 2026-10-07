@@ -1,0 +1,2214 @@
+diff --git a/src/sim2act/api.py b/src/sim2act/api.py
+index c723f8d..8c18116 100644
+--- a/src/sim2act/api.py
++++ b/src/sim2act/api.py
+@@ -8,6 +8,7 @@ from sqlalchemy import select, update
+ 
+ from .apps import create_csv_draft, inspect_draft, preview
+ from .conditional_checks import mount as mount_conditional_checks
++from .conditional_runs import mount as mount_conditional_runs
+ from .config import Settings
+ from .contracts import (
+     Limits,
+@@ -490,6 +491,7 @@ def create_app(store=None, settings=None):
+     mount_protocol_recovery(app, db, identity)
+     mount_protocol_reviews(app, db, identity)
+     mount_conditional_checks(app, db, identity)
++    mount_conditional_runs(app, db, identity, platform_limits, s)
+ 
+     web = Path(__file__).parent / "web"
+ 
+@@ -509,6 +511,10 @@ def create_app(store=None, settings=None):
+     def protocol_js():
+         return FileResponse(web / "protocol.js", media_type="text/javascript")
+ 
++    @app.get("/conditional-runs.js")
++    def conditional_runs_js():
++        return FileResponse(web / "conditional-runs.js", media_type="text/javascript")
++
+     @app.get("/use.js")
+     def use_js():
+         return FileResponse(web / "use.js", media_type="text/javascript")
+diff --git a/src/sim2act/conditional_checks.py b/src/sim2act/conditional_checks.py
+index 4952725..f3b5440 100644
+--- a/src/sim2act/conditional_checks.py
++++ b/src/sim2act/conditional_checks.py
+@@ -212,6 +212,15 @@ def evaluate(store, user, pid, body):
+     if request.expected_contract_fingerprint != fingerprint(CONTRACT):
+         raise DomainError("VERSION_CONFLICT", "Registered check contract changed")
+     source = read_source(store, user, pid, request.resource_id, request.expected_source_hash)
++    return evaluate_source(request, source)
++
++
++def evaluate_source(request, source):
++    """Shared finite oracle after the caller's independent authorized byte read."""
++    if source["hash"] != SOURCE_HASH or request.expected_contract_fingerprint != fingerprint(
++        CONTRACT
++    ):
++        raise DomainError("VERSION_CONFLICT")
+     lines = source["content"].splitlines()
+     expected, decision, actions, consistent = _conditions(request.scenario)
+     report = request.report
+diff --git a/src/sim2act/conditional_runs.py b/src/sim2act/conditional_runs.py
+new file mode 100644
+index 0000000..3289c74
+--- /dev/null
++++ b/src/sim2act/conditional_runs.py
+@@ -0,0 +1,563 @@
++"""Explicit bounded Report runs and candidate-only checks; never Run semantic approval."""
++
++import copy
++import json
++import re
++
++from fastapi import Depends
++from pydantic import Field, ValidationError
++from sqlalchemy import select
++
++from .conditional_checks import (
++    CONTRACT,
++    SOURCE_HASH,
++    CheckInput,
++    Report,
++    Scenario,
++    evaluate_source,
++)
++from .contracts import Strict, strict_json
++from .db import events, fingerprint, new_id
++from .errors import DomainError
++from .model_protocol import obj, validate_candidate
++from .tools import authorized_read
++
++NAMESPACE = "conditional-run-checks.v1"
++SOURCE = "bounded.conditional-report-source.v1"
++COLD = "bounded.conditional-report-cold.v1"
++GOAL = "只核对公开注册的A-S有限规则及显式假设事实，返回Report结构的条件、逐行引用、决策、行动、原期限和例外；说明文字不在验收范围，不执行业务动作。"
++CHECK_EVENT = "CONDITIONAL_RUN_CHECK"
++ANCHOR_EVENT = "CONDITIONAL_CHECK_ANCHOR"
++
++
++def report_schema():
++    text = {"type": "string", "maxLength": 1000}
++    finding = obj(
++        {
++            "rule_id": {"type": "string", "enum": ["R1", "R2", "R3"]},
++            "applies": {"type": "string", "enum": ["TRUE", "FALSE", "UNKNOWN"]},
++            "citation": obj(
++                {"line": {"type": "integer", "minimum": 1, "maximum": 200}, "quote": text}
++            ),
++        }
++    )
++    return obj(
++        {
++            "findings": {"type": "array", "items": finding, "maxItems": 3},
++            "decision": {"type": "string", "enum": ["ALLOW", "BLOCK", "UNKNOWN"]},
++            "next_actions": {
++                "type": "array",
++                "items": {
++                    "type": "string",
++                    "enum": [
++                        "wait_trip_end",
++                        "obtain_receipt",
++                        "obtain_prior_approval",
++                        "clarify_facts",
++                        "clarify_late_policy",
++                        "submit_claim_and_receipt",
++                    ],
++                },
++                "maxItems": 6,
++            },
++            "deadline_days": {"type": "integer", "minimum": 1, "maximum": 3650},
++            "absolute_date": {"type": "string", "maxLength": 40},
++            "receipt_restarts_deadline": {"type": "boolean"},
++            "explanation": text,
++        }
++    )
++
++
++def inputs_for(scenario):
++    try:
++        parsed = Scenario.model_validate(scenario).model_dump()
++    except ValidationError as exc:
++        raise DomainError("INVALID_INPUT", "Strict hypothetical facts required") from exc
++    return {
++        "scenario_json": json.dumps(parsed, sort_keys=True, ensure_ascii=False),
++        "report_schema_json": json.dumps(report_schema(), sort_keys=True, ensure_ascii=False),
++    }
++
++
++def scenario_from(inputs):
++    if not isinstance(inputs, dict) or set(inputs) != {"scenario_json", "report_schema_json"}:
++        raise DomainError("INVALID_INPUT")
++    scenario = strict_json(inputs["scenario_json"], 3000)
++    if inputs_for(scenario) != inputs:
++        raise DomainError(
++            "VERSION_CONFLICT", "Canonical facts and registered Report schema required"
++        )
++    return Scenario.model_validate(scenario)
++
++
++def contract_snapshot(contract_id, inputs):
++    if contract_id not in {SOURCE, COLD}:
++        raise DomainError("RESOURCE_UNAVAILABLE")
++    scenario_from(inputs)
++    value = {
++        "contract_id": contract_id,
++        "version": 1,
++        "checker": NAMESPACE,
++        "source_hash": SOURCE_HASH,
++        "public_goal": GOAL,
++        "resource_hashes": [SOURCE_HASH],
++        "output_schema": report_schema(),
++        "frozen_inputs": copy.deepcopy(inputs),
++        "expected_inputs_fingerprint": fingerprint(inputs),
++        "check_contract_fingerprint": fingerprint(CONTRACT),
++        "scope": "finite Report structure and explicit hypothetical facts only; explanation NOT_CHECKED",
++        "semantic_status": "UNKNOWN",
++        "owner_acceptance": "PENDING",
++    }
++    return {**value, "fingerprint": fingerprint(value)}
++
++
++def validate_snapshot(snapshot):
++    if snapshot.get("bounded_check_namespace") != NAMESPACE:
++        raise DomainError("PERMISSION_DENIED")
++    saved = snapshot.get("contract")
++    if not isinstance(saved, dict):
++        raise DomainError("VERSION_CONFLICT")
++    expected = contract_snapshot(saved.get("contract_id"), saved.get("frozen_inputs"))
++    if fingerprint(saved) != fingerprint(expected):
++        raise DomainError("VERSION_CONFLICT", "Bounded check registry changed")
++    role = "cold" if snapshot["phase"] == "cold" else "source"
++    if saved["contract_id"] != (COLD if role == "cold" else SOURCE):
++        raise DomainError("VERSION_CONFLICT")
++
++
++def candidate_for(contract, resource_id):
++    if not isinstance(contract, dict) or "frozen_inputs" not in contract:
++        raise DomainError("VERSION_CONFLICT")
++    if fingerprint(contract) != fingerprint(contract_snapshot(SOURCE, contract["frozen_inputs"])):
++        raise DomainError("VERSION_CONFLICT")
++    input_schema = obj(
++        {
++            "scenario_json": {"type": "string", "maxLength": 3000},
++            "report_schema_json": {"type": "string", "maxLength": 5000},
++        }
++    )
++    schema = report_schema()
++    return {
++        "schema_version": "model-protocol.v1",
++        "input_schema": input_schema,
++        "resources": {"rules": resource_id},
++        "steps": [
++            {
++                "id": "read_rules",
++                "kind": "registered_tool",
++                "depends_on": [],
++                "inputs": {
++                    "resource_id": {"source": "data", "ref": "rules", "field": "resource_id"}
++                },
++                "tool_ref": "resource.read",
++            },
++            {
++                "id": "check_report",
++                "kind": "language",
++                "depends_on": ["read_rules"],
++                "inputs": {
++                    "content": {"source": "step", "ref": "read_rules", "field": "content"},
++                    "scenario_json": {"source": "input", "ref": "input", "field": "scenario_json"},
++                    "report_schema_json": {
++                        "source": "input",
++                        "ref": "input",
++                        "field": "report_schema_json",
++                    },
++                },
++                "instruction": GOAL,
++                "output_schema": schema,
++            },
++        ],
++        "output_schema": schema,
++        "outputs": {
++            field: {"source": "step", "ref": "check_report", "field": field}
++            for field in schema["properties"]
++        },
++    }
++
++
++def validate_report(value):
++    try:
++        return Report.model_validate(value)
++    except ValidationError as exc:
++        raise DomainError(
++            "VERIFICATION_FAILED", "Actual Report violates the registered strict structure"
++        ) from exc
++
++
++def _current_check(store, c, user, pid, rid):
++    from .protocol_jobs import verified_pending
++
++    job, run = verified_pending(store, c, user, rid)
++    snapshot = job["snapshot"]
++    validate_snapshot(snapshot)
++    if run["project_id"] != pid:
++        raise DomainError("PERMISSION_DENIED")
++    if (
++        job["phase"] not in {"source", "cold"}
++        or run["status"] != "WAITING_APPROVAL"
++        or run["error"] is not None
++        or run["cancel_intent"]
++        or not job["result"]
++        or store.has_unknown(c, rid)
++    ):
++        raise DomainError(
++            "VERIFICATION_FAILED", "Known complete technical receipt required; not a successful Run"
++        )
++    complete = job["result"]
++    technical = complete["protocol_result"]
++    evidence = technical["evidence"]
++    if (
++        technical["status"] != "AWAITING_EVALUATION"
++        or technical["semantic_status"] != "UNKNOWN"
++        or complete["completed_run_version"] != run["version"]
++        or evidence["goal"] != GOAL
++        or evidence["inputs"] != snapshot["contract"]["frozen_inputs"]
++        or len(evidence["resource_ids"]) != 1
++    ):
++        raise DomainError("VERSION_CONFLICT")
++    scenario = scenario_from(evidence["inputs"])
++    rid_source = evidence["resource_ids"][0]
++    source = authorized_read(
++        store, c, user, run["runtime_id"], pid, "resource.read", {"resource_id": rid_source}
++    )
++    request = CheckInput(
++        resource_id=rid_source,
++        expected_source_hash=SOURCE_HASH,
++        expected_contract_fingerprint=fingerprint(CONTRACT),
++        scenario=scenario,
++        report=validate_report(evidence["output"]),
++    )
++    checked = evaluate_source(request, source)
++    eligible = (
++        checked["check_status"] == "PASS"
++        and checked["decision"] != "UNKNOWN"
++        and all(value is not None for value in scenario.model_dump().values())
++        and all(rule["satisfaction"] != "UNKNOWN" for rule in checked["rule_results"])
++    )
++    return (
++        job,
++        run,
++        {
++            "namespace": NAMESPACE,
++            "run_id": rid,
++            "project_id": pid,
++            "principal_id": user,
++            "runtime_id": run["runtime_id"],
++            "version": run["version"],
++            "fence": run["fence"],
++            "accepted_fingerprint": job["fingerprint"],
++            "result_fingerprint": job["result_fingerprint"],
++            "contract_fingerprint": snapshot["contract"]["fingerprint"],
++            "goal_fingerprint": fingerprint(evidence["goal"]),
++            "input_fingerprint": fingerprint(evidence["inputs"]),
++            "output_fingerprint": fingerprint(evidence["output"]),
++            "trace_fingerprint": fingerprint(evidence["tool_trace"]),
++            "checks": checked,
++            "candidate_eligible": eligible,
++            "overall_run_acceptance": "NOT_ACCEPTED",
++            "semantic_status": "UNKNOWN",
++            "owner_acceptance": "PENDING",
++            "formal_publication_enabled": False,
++        },
++    )
++
++
++class CheckRequest(Strict):
++    expected_result_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    expected_version: int = Field(strict=True, ge=1)
++    expected_fence: int = Field(strict=True, ge=1)
++    request_key: str = Field(min_length=1, max_length=100)
++
++
++def _check_request(value, *, stored=False):
++    try:
++        return CheckRequest.model_validate(value).model_dump()
++    except (ValidationError, TypeError, ValueError) as exc:
++        raise DomainError(
++            "VERSION_CONFLICT" if stored else "INVALID_INPUT", "Closed check request required"
++        ) from exc
++
++
++def check_run(store, user, pid, rid, body):
++    request = _check_request(body)
++    with store.tx() as c:
++        store.lock_project(c, user, pid)
++        job, run, value = _current_check(store, c, user, pid, rid)
++        if any(
++            request["expected_" + name] != value[name]
++            for name in ["result_fingerprint", "version", "fence"]
++        ):
++            raise DomainError("VERSION_CONFLICT")
++        value["request"] = request
++        records = list(
++            c.execute(
++                select(events.c.data).where(events.c.run_id == rid, events.c.kind == CHECK_EVENT)
++            ).scalars()
++        )
++        for record in records:
++            if (
++                not isinstance(record, dict)
++                or not isinstance(record.get("value"), dict)
++                or not isinstance(record["value"].get("request"), dict)
++            ):
++                raise DomainError("VERSION_CONFLICT", "Malformed stored check receipt")
++            if (
++                isinstance(record, dict)
++                and record.get("value", {}).get("request", {}).get("request_key")
++                == request["request_key"]
++            ):
++                reverify_check(store, c, user, pid, rid, record["fingerprint"])
++                if fingerprint(record["value"]) != fingerprint(value):
++                    raise DomainError("VERSION_CONFLICT")
++                return copy.deepcopy(record)
++        record = {"check_id": new_id("check"), "value": value, "fingerprint": fingerprint(value)}
++        store.event(c, rid, CHECK_EVENT, record)
++        store.event(c, record["check_id"], ANCHOR_EVENT, record)
++        return copy.deepcopy(record)
++
++
++def reverify_check(store, c, user, pid, rid, expected_fingerprint, *, eligible=False):
++    _, _, current = _current_check(store, c, user, pid, rid)
++    records = list(
++        c.execute(
++            select(events.c.data).where(events.c.run_id == rid, events.c.kind == CHECK_EVENT)
++        ).scalars()
++    )
++    matching = [
++        r for r in records if isinstance(r, dict) and r.get("fingerprint") == expected_fingerprint
++    ]
++    if len(matching) != 1:
++        raise DomainError("VERIFICATION_FAILED", "Unique current Run check binding required")
++    record = matching[0]
++    if (
++        set(record) != {"check_id", "value", "fingerprint"}
++        or not isinstance(record["check_id"], str)
++        or not re.fullmatch(r"check_[a-f0-9]{32}", record["check_id"])
++        or not isinstance(record["value"], dict)
++        or fingerprint(record["value"]) != expected_fingerprint
++    ):
++        raise DomainError("VERSION_CONFLICT")
++    anchors = list(
++        c.execute(
++            select(events.c.data).where(
++                events.c.run_id == record["check_id"], events.c.kind == ANCHOR_EVENT
++            )
++        ).scalars()
++    )
++    if fingerprint(anchors) != fingerprint([record]):
++        raise DomainError("VERSION_CONFLICT", "Independent check receipt anchor changed")
++    request = _check_request(record["value"].get("request"), stored=True)
++    current["request"] = request
++    if fingerprint(current) != expected_fingerprint or any(
++        request["expected_" + k] != current[k] for k in ["result_fingerprint", "version", "fence"]
++    ):
++        raise DomainError(
++            "VERSION_CONFLICT", "Stored check does not bind current actual Run evidence"
++        )
++    if eligible and not current["candidate_eligible"]:
++        raise DomainError(
++            "VERIFICATION_FAILED",
++            "UNKNOWN facts, failed checks or uncovered goal cannot authorize a candidate",
++        )
++    return copy.deepcopy(record)
++
++
++def source_completion(store, c, user, rid, expected_result, expected_check):
++    from .protocol_jobs import verified_pending
++
++    job, run = verified_pending(store, c, user, rid)
++    if job["phase"] != "source":
++        raise DomainError("VERIFICATION_FAILED")
++    check = reverify_check(store, c, user, run["project_id"], rid, expected_check, eligible=True)
++    if expected_result != job["result_fingerprint"]:
++        raise DomainError("VERSION_CONFLICT")
++    return {
++        "run_id": rid,
++        "result_fingerprint": expected_result,
++        "proof": check,
++        "proof_fingerprint": fingerprint(check),
++        "check_fingerprint": expected_check,
++        "overall_run_acceptance": "NOT_ACCEPTED",
++        "semantic_status": "UNKNOWN",
++    }
++
++
++def extract_candidate(store, run, snapshot, protocol):
++    """Compile only the public finite template from current trusted technical evidence."""
++    from .protocol_jobs import verified_pending
++
++    frozen = snapshot["source"]
++    with store.tx() as c:
++        current = source_completion(
++            store,
++            c,
++            run["principal_id"],
++            frozen["run_id"],
++            frozen["result_fingerprint"],
++            frozen["check_fingerprint"],
++        )
++        if current != frozen:
++            raise DomainError("VERSION_CONFLICT")
++        source_job, source_run = verified_pending(store, c, run["principal_id"], frozen["run_id"])
++        template = candidate_for(source_job["snapshot"]["contract"], source_run["resource_refs"][0])
++        output = copy.deepcopy(source_job["result"]["protocol_result"]["evidence"]["output"])
++    prompt = {
++        "public_template": template,
++        "actual_checked_report": output,
++        "technical_check_fingerprint": frozen["check_fingerprint"],
++        "overall_run_acceptance": "NOT_ACCEPTED",
++        "semantic_status": "UNKNOWN",
++    }
++    message, calls = protocol._call(
++        [
++            {
++                "role": "system",
++                "content": "Return exactly the public finite reusable declaration as JSON. The actual checked report is evidence only; never embed its answers or facts into the declaration. No code, authority, URLs or additional steps.",
++            },
++            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
++        ],
++        [],
++        [],
++    )
++    if calls:
++        raise DomainError("INVALID_MANIFEST")
++    candidate = strict_json(message["content"])
++    validate_candidate(candidate, protocol.scope)
++    if fingerprint(candidate) != fingerprint(template):
++        raise DomainError(
++            "INVALID_MANIFEST",
++            "Only the registered finite parameterized Report declaration is covered",
++        )
++    proof = frozen["proof"]
++    receipt = protocol.runner.accept_candidate(fingerprint(candidate), fingerprint(proof))
++    return {
++        "kind": "model-protocol.v1",
++        "candidate": candidate,
++        "candidate_fingerprint": fingerprint(candidate),
++        "source_proof": proof,
++        "source_proof_fingerprint": fingerprint(proof),
++        "candidate_receipt": receipt,
++        "executable_by_existing_apprun": False,
++        "semantic_status": "NOT_RUN",
++    }
++
++
++class StartRequest(Strict):
++    resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
++    expected_source_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
++    expected_contract_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    goal: str = Field(min_length=1, max_length=1000)
++    scenario: Scenario
++    request_key: str = Field(min_length=1, max_length=100)
++
++
++class ExtractRequest(Strict):
++    source_run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
++    expected_source_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    expected_check_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    request_key: str = Field(min_length=1, max_length=100)
++
++
++class ColdRequest(Strict):
++    extraction_run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
++    expected_plan_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
++    scenario: Scenario
++    request_key: str = Field(min_length=1, max_length=100)
++
++
++def mount(app, store, identity, limits, settings):
++    dependency = Depends(identity)
++
++    def offline():
++        if settings.mode != "mock":
++            raise DomainError(
++                "PERMISSION_DENIED", "Only explicit offline bounded validation exists"
++            )
++
++    @app.get("/api/projects/{pid}/conditional-runs/contract")
++    def contract(pid: str, user=dependency):
++        with store.tx() as c:
++            store.own_project(c, user, pid)
++        return {
++            "namespace": NAMESPACE,
++            "goal": GOAL,
++            "source_hash": SOURCE_HASH,
++            "check_contract_fingerprint": fingerprint(CONTRACT),
++            "report_schema": report_schema(),
++            "report_validation_schema": Report.model_json_schema(),
++            "scenario_schema": Scenario.model_json_schema(),
++            "semantic_status": "UNKNOWN",
++            "owner_acceptance": "PENDING",
++            "candidate_only": True,
++            "formal_publication_enabled": False,
++        }
++
++    @app.post("/api/projects/{pid}/conditional-runs/source", status_code=202)
++    def source(pid: str, body: StartRequest, user=dependency):
++        from .protocol_jobs import enqueue
++
++        offline()
++        if (
++            body.goal != GOAL
++            or body.expected_source_hash != SOURCE_HASH
++            or body.expected_contract_fingerprint != fingerprint(CONTRACT)
++        ):
++            raise DomainError("VERSION_CONFLICT", "Exact bounded goal and registry required")
++        payload = {
++            "goal": GOAL,
++            "inputs": inputs_for(body.scenario.model_dump()),
++            "resource_ids": [body.resource_id],
++            "contract_id": SOURCE,
++        }
++        return enqueue(store, user, pid, "source", payload, body.request_key, limits, bounded=True)
++
++    @app.post("/api/projects/{pid}/conditional-runs/{rid}/checks", status_code=201)
++    def check(pid: str, rid: str, body: CheckRequest, user=dependency):
++        offline()
++        return check_run(store, user, pid, rid, body.model_dump())
++
++    @app.post("/api/projects/{pid}/conditional-runs/extract", status_code=202)
++    def extract(pid: str, body: ExtractRequest, user=dependency):
++        from .protocol_jobs import enqueue
++
++        offline()
++        payload = body.model_dump()
++        key = payload.pop("request_key")
++        return enqueue(store, user, pid, "extract", payload, key, limits, bounded=True)
++
++    @app.post("/api/projects/{pid}/conditional-runs/cold", status_code=202)
++    def cold(pid: str, body: ColdRequest, user=dependency):
++        from .protocol_jobs import enqueue
++
++        offline()
++        return enqueue(
++            store,
++            user,
++            pid,
++            "cold",
++            {
++                "extraction_run_id": body.extraction_run_id,
++                "expected_plan_fingerprint": body.expected_plan_fingerprint,
++                "resource_bindings": {"rules": body.resource_id},
++                "inputs": inputs_for(body.scenario.model_dump()),
++                "contract_id": COLD,
++            },
++            body.request_key,
++            limits,
++            bounded=True,
++        )
++
++    @app.get("/api/projects/{pid}/conditional-runs/{rid}")
++    def inspect_run(pid: str, rid: str, user=dependency):
++        from .protocol_jobs import _public, verified_pending
++
++        with store.tx() as c:
++            store.own_project(c, user, pid)
++            job, run = verified_pending(store, c, user, rid)
++            if run["project_id"] != pid:
++                raise DomainError("PERMISSION_DENIED")
++            validate_snapshot(job["snapshot"])
++            return _public(job, run)
+diff --git a/src/sim2act/model_protocol.py b/src/sim2act/model_protocol.py
+index 1ebd8b4..f8249a3 100644
+--- a/src/sim2act/model_protocol.py
++++ b/src/sim2act/model_protocol.py
+@@ -578,6 +578,25 @@ class ModelProtocol:
+             is not True
+         ):
+             raise DomainError("VERIFICATION_FAILED", "Positive independent acceptance required")
++        return self._execute_declared(
++            candidate, inputs, resource_bindings, source["evidence"]["goal"]
++        )
++
++    @_guarded
++    def run_bounded_declaration(self, raw_candidate, inputs, resource_bindings, *, goal):
++        """Technical finite DAG only; host must reverify its bound check and receipt.
++
++        This deliberately creates no source-success proof or semantic acceptance.
++        HTTP callers cannot access this engine seam or submit a raw candidate.
++        """
++        if not self.defer_evaluation:
++            raise DomainError(
++                "PERMISSION_DENIED", "Bounded declaration requires independent pending evaluation"
++            )
++        candidate = validate_candidate(raw_candidate, self.scope)
++        return self._execute_declared(candidate, inputs, resource_bindings, goal)
++
++    def _execute_declared(self, candidate, inputs, resource_bindings, goal):
+         inputs, resource_bindings = _json(inputs), _json(resource_bindings)
+         _no_gold(inputs)
+         validate_value(candidate.input_schema, inputs)
+@@ -641,7 +660,7 @@ class ModelProtocol:
+         output = {field: resolve(binding) for field, binding in candidate.outputs.items()}
+         validate_value(candidate.output_schema, output)
+         evidence = {
+-            "goal": source["evidence"]["goal"],
++            "goal": goal,
+             "inputs": inputs,
+             "resource_ids": list(resource_bindings.values()),
+             "tool_trace": trace,
+diff --git a/src/sim2act/protocol_api.py b/src/sim2act/protocol_api.py
+index ec00f8b..41b45c0 100644
+--- a/src/sim2act/protocol_api.py
++++ b/src/sim2act/protocol_api.py
+@@ -63,6 +63,11 @@ def provider_stage(snapshot):
+         "protocol.synthetic.b-source.v1": "b",
+         "protocol.synthetic.b-cold.v1": "b",
+     }.get(contract_id)
++    if snapshot.get("bounded_check_namespace"):
++        from .conditional_runs import COLD, SOURCE, validate_snapshot
++
++        validate_snapshot(snapshot)
++        family = "a" if contract_id in {SOURCE, COLD} else None
+     phase = snapshot.get("phase")
+     if family is None or phase not in {"source", "extract", "cold"}:
+         raise DomainError("VERSION_CONFLICT", "Unregistered experiment stage")
+diff --git a/src/sim2act/protocol_jobs.py b/src/sim2act/protocol_jobs.py
+index d895539..9065572 100644
+--- a/src/sim2act/protocol_jobs.py
++++ b/src/sim2act/protocol_jobs.py
+@@ -189,12 +189,17 @@ def verified_pending(store, c, user, rid, *, stop_only=False):
+         return {**dict(job), "phase": job["kind"], "snapshot": snapshot, "result": None}, dict(run)
+     from .protocol_reviews import contract_snapshot
+ 
+-    if snapshot.get("contract") != contract_snapshot(
+-        snapshot.get("contract", {}).get("contract_id")
+-    ):
+-        raise DomainError("VERSION_CONFLICT", "Frozen evaluation registry changed")
++    if snapshot.get("bounded_check_namespace"):
++        from .conditional_runs import validate_snapshot
++
++        validate_snapshot(snapshot)
++    else:
++        if snapshot.get("contract") != contract_snapshot(
++            snapshot.get("contract", {}).get("contract_id")
++        ):
++            raise DomainError("VERSION_CONFLICT", "Frozen evaluation registry changed")
+     _authority(store, c, run, snapshot)
+-    if run["result"] is not None and (
++    if (run["result"] is not None or job["result_snapshot"] is not None) and (
+         job["result_snapshot"] != run["result"]
+         or job["result_fingerprint"] != fingerprint(run["result"])
+     ):
+@@ -296,11 +301,13 @@ def _completed(store, c, job, run):
+         .scalars()
+         .all()
+     )
+-    if len(seals) != 1 or seals[0] != {
+-        "result_fingerprint": fingerprint(result),
+-        "completed_fence": result["completed_fence"],
+-        "completed_run_version": result["completed_run_version"],
+-    }:
++    if len(seals) != 1 or fingerprint(seals[0]) != fingerprint(
++        {
++            "result_fingerprint": fingerprint(result),
++            "completed_fence": result["completed_fence"],
++            "completed_run_version": result["completed_run_version"],
++        }
++    ):
+         raise DomainError("VERSION_CONFLICT", "Independent completion seal changed")
+     if (
+         result["completed_fence"] != job["completed_fence"]
+@@ -481,12 +488,29 @@ def _completed(store, c, job, run):
+             )
+ 
+ 
+-def enqueue(store, user, pid, phase, payload, key, limits):
++def enqueue(store, user, pid, phase, payload, key, limits, *, bounded=False):
+     if not isinstance(key, str) or not 1 <= len(key) <= 100:
+         raise DomainError("INVALID_INPUT")
++    expected_check = None
++    if bounded and phase == "extract":
++        from .conditional_runs import ExtractRequest
++
++        closed = ExtractRequest.model_validate({**payload, "request_key": key}).model_dump()
++        closed.pop("request_key")
++        expected_check = closed.pop("expected_check_fingerprint")
++        payload = closed
+     payload = _closed(phase, payload)
++    if bounded and phase == "extract":
++        payload["expected_check_fingerprint"] = expected_check
+     limits = Limits.model_validate(limits.model_dump() if isinstance(limits, Limits) else limits)
+-    request_fp = fingerprint({"phase": phase, "payload": payload, "limits": limits.model_dump()})
++    request_fp = fingerprint(
++        {
++            "phase": phase,
++            "payload": payload,
++            "limits": limits.model_dump(),
++            **({"bounded": True} if bounded else {}),
++        }
++    )
+     table = _table()
+     with store.tx() as c:
+         project = store.lock_project(c, user, pid)
+@@ -494,9 +518,21 @@ def enqueue(store, user, pid, phase, payload, key, limits):
+         if phase == "source":
+             refs, goal = payload["resource_ids"], payload["goal"]
+         elif phase == "extract":
+-            source = _source(
+-                store, c, user, payload["source_run_id"], payload["expected_source_fingerprint"]
+-            )
++            if bounded:
++                from .conditional_runs import source_completion
++
++                source = source_completion(
++                    store,
++                    c,
++                    user,
++                    payload["source_run_id"],
++                    payload["expected_source_fingerprint"],
++                    payload["expected_check_fingerprint"],
++                )
++            else:
++                source = _source(
++                    store, c, user, payload["source_run_id"], payload["expected_source_fingerprint"]
++                )
+             _, parent = verified_pending(store, c, user, source["run_id"])
+             if parent["project_id"] != pid:
+                 raise DomainError("PERMISSION_DENIED")
+@@ -505,9 +541,23 @@ def enqueue(store, user, pid, phase, payload, key, limits):
+             compiled = _plan(
+                 store, c, user, payload["extraction_run_id"], payload["expected_plan_fingerprint"]
+             )
+-            source = _source(
+-                store, c, user, compiled["source_run_id"], compiled["source_result_fingerprint"]
+-            )
++            if bounded:
++                from .conditional_runs import source_completion
++
++                if not compiled.get("bounded_check_namespace"):
++                    raise DomainError("PERMISSION_DENIED")
++                source = source_completion(
++                    store,
++                    c,
++                    user,
++                    compiled["source_run_id"],
++                    compiled["source_result_fingerprint"],
++                    compiled["source_check_fingerprint"],
++                )
++            else:
++                source = _source(
++                    store, c, user, compiled["source_run_id"], compiled["source_result_fingerprint"]
++                )
+             _, parent = verified_pending(store, c, user, source["run_id"])
+             if parent["project_id"] != pid:
+                 raise DomainError("PERMISSION_DENIED")
+@@ -531,9 +581,24 @@ def enqueue(store, user, pid, phase, payload, key, limits):
+             material = list(
+                 c.execute(select(resources).where(resources.c.id.in_(actual_refs))).mappings()
+             )
+-            registered = freeze_contract(
+-                payload["contract_id"], phase, goal, [{"content_hash": r["hash"]} for r in material]
+-            )
++            if bounded:
++                from .conditional_runs import GOAL, contract_snapshot
++
++                registered = contract_snapshot(payload["contract_id"], payload["inputs"])
++                if (
++                    goal != GOAL
++                    or len(material) != 1
++                    or material[0]["hash"] != registered["source_hash"]
++                    or material[0]["format"] not in {"txt", "md"}
++                ):
++                    raise DomainError("PERMISSION_DENIED", "Exact bounded rules and goal required")
++            else:
++                registered = freeze_contract(
++                    payload["contract_id"],
++                    phase,
++                    goal,
++                    [{"content_hash": r["hash"]} for r in material],
++                )
+             if fingerprint(payload["inputs"]) != registered["expected_inputs_fingerprint"]:
+                 raise DomainError(
+                     "PERMISSION_DENIED", "Inputs differ from frozen evaluation contract"
+@@ -543,6 +608,8 @@ def enqueue(store, user, pid, phase, payload, key, limits):
+                 raise DomainError("VERIFICATION_FAILED")
+             source_job, _ = verified_pending(store, c, user, source["run_id"])
+             registered = copy.deepcopy(source_job["snapshot"]["contract"])
++            if bounded != bool(source_job["snapshot"].get("bounded_check_namespace")):
++                raise DomainError("PERMISSION_DENIED")
+         old = (
+             c.execute(
+                 select(runs).where(
+@@ -590,6 +657,10 @@ def enqueue(store, user, pid, phase, payload, key, limits):
+             "source": source,
+             "compiled_plan": compiled,
+         }
++        if bounded:
++            from .conditional_runs import NAMESPACE as CHECK_NAMESPACE
++
++            snapshot["bounded_check_namespace"] = CHECK_NAMESPACE
+         contract = FrozenRunContract(
+             run_id=rid,
+             runtime_id=project["runtime_id"],
+@@ -665,7 +736,12 @@ def enqueue(store, user, pid, phase, payload, key, limits):
+ 
+ def _public(job, run, *, cached=False):
+     return {
+-        "namespace": NAMESPACE,
++        "namespace": job["snapshot"].get("bounded_check_namespace", NAMESPACE),
++        **(
++            {"overall_run_acceptance": "NOT_ACCEPTED", "candidate_only": True}
++            if job["snapshot"].get("bounded_check_namespace")
++            else {}
++        ),
+         "semantic_status": "NOT_RUN" if job["phase"] == "extract" else "UNKNOWN",
+         "semantic_review": "NOT_RUN" if job["phase"] == "extract" else "WAITING_APPROVAL",
+         "owner_semantic_acceptance": "PENDING",
+@@ -698,7 +774,19 @@ def inspect(store, user, rid):
+ def _dependencies(store, c, user, snapshot):
+     source = snapshot["source"]
+     if source is not None:
+-        fresh = _source(store, c, user, source["run_id"], source["result_fingerprint"])
++        if snapshot.get("bounded_check_namespace"):
++            from .conditional_runs import source_completion
++
++            fresh = source_completion(
++                store,
++                c,
++                user,
++                source["run_id"],
++                source["result_fingerprint"],
++                source["check_fingerprint"],
++            )
++        else:
++            fresh = _source(store, c, user, source["run_id"], source["result_fingerprint"])
+         if fresh != source:
+             raise DomainError("VERSION_CONFLICT", "Source review changed")
+     if snapshot["phase"] == "cold":
+@@ -873,7 +961,7 @@ def process_job(worker, run):
+         payload, phase = snapshot["payload"], snapshot["phase"]
+         source_result = None
+         source_request_limit = None
+-        if snapshot["source"]:
++        if snapshot["source"] and not snapshot.get("bounded_check_namespace"):
+             with store.tx() as c:
+                 source_job, _ = verified_pending(
+                     store, c, run["principal_id"], snapshot["source"]["run_id"]
+@@ -901,7 +989,12 @@ def process_job(worker, run):
+                 payload["goal"], payload["inputs"], payload["resource_ids"]
+             )
+         elif phase == "extract":
+-            result = protocol.extract_candidate(source_result)
++            if snapshot.get("bounded_check_namespace"):
++                from .conditional_runs import extract_candidate
++
++                result = extract_candidate(store, run, snapshot, protocol)
++            else:
++                result = protocol.extract_candidate(source_result)
+             compiled = {
+                 "kind": "protocol-compiled-plan.v1",
+                 "compiler_version": COMPILER_VERSION,
+@@ -910,6 +1003,9 @@ def process_job(worker, run):
+                 "source_result_fingerprint": snapshot["source"]["result_fingerprint"],
+             }
+             compiled["kind"] = "protocol-compiled-plan.v1"
++            if snapshot.get("bounded_check_namespace"):
++                compiled["source_check_fingerprint"] = snapshot["source"]["check_fingerprint"]
++                compiled["bounded_check_namespace"] = snapshot["bounded_check_namespace"]
+             compiled["plan_fingerprint"] = fingerprint(compiled)
+         else:
+             plan = snapshot["compiled_plan"]
+@@ -926,9 +1022,41 @@ def process_job(worker, run):
+                 ]
+             }
+             extracted["kind"] = "model-protocol.v1"
+-            result = protocol.run_candidate(
+-                extracted, payload["inputs"], payload["resource_bindings"], source=source_result
+-            )
++            if snapshot.get("bounded_check_namespace"):
++                from .conditional_runs import candidate_for
++
++                with store.tx() as c:
++                    source_job, source_run = verified_pending(
++                        store, c, run["principal_id"], snapshot["source"]["run_id"]
++                    )
++                    template = candidate_for(
++                        source_job["snapshot"]["contract"], source_run["resource_refs"][0]
++                    )
++                if fingerprint(plan["candidate"]) != fingerprint(template):
++                    raise DomainError("INVALID_MANIFEST")
++                if (
++                    runner.verify_candidate_receipt(
++                        plan["candidate_receipt"],
++                        plan["candidate_fingerprint"],
++                        plan["source_proof_fingerprint"],
++                    )
++                    is not True
++                ):
++                    raise DomainError("VERIFICATION_FAILED")
++                result = protocol.run_bounded_declaration(
++                    plan["candidate"],
++                    payload["inputs"],
++                    payload["resource_bindings"],
++                    goal=payload.get("goal", run["goal"]),
++                )
++            else:
++                result = protocol.run_candidate(
++                    extracted, payload["inputs"], payload["resource_bindings"], source=source_result
++                )
++        if snapshot.get("bounded_check_namespace") and phase != "extract":
++            from .conditional_runs import validate_report
++
++            validate_report(result["evidence"]["output"])
+         with store.tx() as c:
+             verified_pending(store, c, run["principal_id"], rid)
+             current = store.guard(c, rid, fence)
+diff --git a/src/sim2act/web/conditional-runs.js b/src/sim2act/web/conditional-runs.js
+new file mode 100644
+index 0000000..1b7a2bb
+--- /dev/null
++++ b/src/sim2act/web/conditional-runs.js
+@@ -0,0 +1,137 @@
++"use strict";
++// Actual server Run evidence only. No client Report, provider, grant, or candidate construction.
++let boundedRunContext=null,boundedRunGeneration=0;
++const boundedRunRequests=new Map();
++const boundedRequestKey=()=>"bounded-"+Array.from(crypto.getRandomValues(new Uint32Array(4)),n=>n.toString(16)).join("-");
++const boundedHash=v=>typeof v==="string"&&/^[a-f0-9]{64}$/.test(v);
++function clearConditionalRuns(){
++ boundedRunGeneration++;boundedRunContext=null;
++ for(const id of ["source-form","refresh","retry","check","extract","plan","cold-form","cold-check"])$("condition-run-"+id).hidden=true;
++ for(const id of ["output","check-output","extract-output","plan-text","cold-output","cold-check-output"])$("condition-run-"+id).replaceChildren();
++ $("condition-run-status").textContent="旧来源绑定证据已清除；请显式打开当前授权资料。";
++ $("condition-run-source-form").reset();$("condition-run-cold-form").reset();
++}
++function boundedCurrent(c){return boundedRunContext===c&&c.identity===token&&c.project===$("project-select").value&&c.generation===boundedRunGeneration;}
++function showConditionalRuns(source){
++ clearConditionalRuns();boundedRunContext={identity:token,project:$("project-select").value,generation:boundedRunGeneration,source,busy:false,revision:0};
++ const pending=[...boundedRunRequests.values()].find(p=>p.state==="unknown"&&p.identity===token&&p.project===$("project-select").value);if(pending)boundedRunContext.pending=pending;
++ $("condition-run-source-form").hidden=false;$("condition-run-status").textContent="已核查授权资料；只提交显式假设，不提交人工报告。";boundedButtons();
++}
++function boundedFacts(prefix){
++ const bool=k=>$(prefix+"-"+k).value===""?null:$(prefix+"-"+k).value==="true";
++ const num=k=>$(prefix+"-"+k).value===""?null:Number($(prefix+"-"+k).value);
++ return {kind:"HYPOTHETICAL_EMPLOYEE",trip_ended:bool("trip"),amount:num("amount"),receipt_present:bool("receipt"),approved:bool("approved"),elapsed_days:num("days")};
++}
++function boundedButtons(){
++ const c=boundedRunContext;if(!c||!boundedCurrent(c))return;
++ const unresolved=c.pending?.state==="unknown",locked=c.busy||unresolved;
++ for(const id of ["start","check","extract","cold-start","cold-check","refresh"])$("condition-run-"+id).disabled=locked;
++ $("condition-run-retry").hidden=!unresolved;$("condition-run-retry").disabled=c.busy;
++ $("condition-run-check").hidden=c.sourceRun?.status!=="WAITING_APPROVAL"||!boundedHash(c.sourceRun?.result_fingerprint);
++ $("condition-run-extract").hidden=c.check?.value?.candidate_eligible!==true||c.check.value.result_fingerprint!==c.sourceRun?.result_fingerprint||!!c.extractRun;
++ $("condition-run-cold-check").hidden=c.coldRun?.status!=="WAITING_APPROVAL"||!boundedHash(c.coldRun?.result_fingerprint);
++ for(const form of ["source","cold"])for(const el of $("condition-run-"+form+"-form").elements)el.disabled=locked;
++}
++function boundedRenderRun(value,id){
++ const output=value.result?.protocol_result?.evidence?.output;
++ $(id).replaceChildren(row(`Run ${value.run_id} · ${value.phase} · 技术状态 ${value.status} · v${value.version}/fence${value.fence}`),row(`整体 ${value.overall_run_acceptance}；语义 ${value.semantic_status}；用户确认 PENDING；有限技术回执≠整体成功。`));
++ if(value.result?.protocol_result?.evidence?.inputs?.scenario_json)$(id).append(row("实际冻结假设："+value.result.protocol_result.evidence.inputs.scenario_json));
++ if(output){const pre=document.createElement("pre");pre.textContent=JSON.stringify(output,null,2);$(id).append(pre);}
++ if(value.status==="WAITING_RESOURCE")$(id).append(row("当前无可用的已批准 provider/资源；未完成报告，不可检查或提取。请联系本机控制器，不会自动启用模型。"));
++}
++function boundedRenderCheck(value,id){
++ const v=value.value;
++ $(id).replaceChildren(row(`绑定检查 ${value.check_id} · ${value.fingerprint} · Run ${v.run_id} · v${v.version}/fence${v.fence}`),row(`有限报告检查 ${v.checks.check_status} · 决策 ${v.checks.decision} · 可提取有限候选 ${v.candidate_eligible===true?"是":"否"}。整体 NOT_ACCEPTED；语义 UNKNOWN；说明文字 NOT_CHECKED；假设事实未核查。`),...v.checks.rule_results.map(r=>row(`${r.rule_id}：${r.satisfaction} · ${r.reason}`)));
++}
++function boundedPath(c){return `/api/projects/${c.project}/conditional-runs`;}
++async function boundedRead(c){
++ c.check=null;$("condition-run-check-output").replaceChildren();$("condition-run-cold-check-output").replaceChildren();
++ for(const [key,id]of [["sourceRun","output"],["extractRun","extract-output"],["coldRun","cold-output"]]){
++  if(!c[key])continue;const rid=c[key].run_id;const value=await api(boundedPath(c)+"/"+rid);if(!boundedCurrent(c))return;
++  if(value.namespace!=="conditional-run-checks.v1"||value.run_id!==rid||value.overall_run_acceptance!=="NOT_ACCEPTED")throw Error("VERSION_CONFLICT");
++  c[key]=value;if(id)boundedRenderRun(value,"condition-run-"+id);
++ }
++ const plan=c.extractRun?.status==="SUCCEEDED"&&c.extractRun.result?.compiled_plan;
++ $("condition-run-plan").hidden=!plan;$("condition-run-cold-form").hidden=!plan;
++ if(plan){
++  $("condition-run-plan-text").textContent=JSON.stringify(plan,null,2);
++  const resources=await api(`/api/projects/${c.project}/resources`);if(!boundedCurrent(c))return;
++  const old=$("condition-run-cold-resource").value;
++  $("condition-run-cold-resource").replaceChildren(new Option("请选择当前授权规则资料", ""),...resources.filter(r=>["txt","md"].includes(r.format)&&r.hash===c.source.hash).map(r=>new Option(`${r.name} · ${r.id} · ${r.hash.slice(0,12)}`,r.id)));
++  if([...$("condition-run-cold-resource").options].some(o=>o.value===old))$("condition-run-cold-resource").value=old;
++ }
++}
++async function boundedAction(fn){
++ const c=boundedRunContext;if(!c||!boundedCurrent(c)||c.busy)return;
++ c.busy=true;boundedButtons();
++ try{await fn(c);if(boundedCurrent(c))$("condition-run-status").textContent="已重新核查当前持久来源；每一步仍需显式操作，整体未验收。";}
++ catch(error){if(boundedCurrent(c)){
++  c.check=null;for(const id of ["output","check-output","extract-output","cold-output","cold-check-output","plan-text"])$("condition-run-"+id).replaceChildren();
++  $("condition-run-plan").hidden=true;$("condition-run-cold-form").hidden=true;
++  $("condition-run-status").textContent=c.pending?.state==="unknown"?"提交回执未知；只能显式恢复同一键，不能另建重复任务。":`来源或请求不可核验：${error.message}；旧检查与候选失效，不表示业务规则不满足。`;
++ }}finally{if(boundedCurrent(c)){c.busy=false;boundedButtons();}}
++}
++async function boundedSubmit(c,phase,body,retry=false){
++ const intent=JSON.stringify([c.identity,c.project,phase,body]);
++ let pending=retry?c.pending:boundedRunRequests.get(intent);
++ if(!pending){pending={phase,identity:c.identity,project:c.project,body:{...body,request_key:boundedRequestKey()},state:"new"};boundedRunRequests.set(intent,pending);}
++ c.pending=pending;const earlierUnknown=pending.state==="unknown"||pending.uncertain===true;pending.state="unknown";
++ let reply;
++ try{
++  reply=await api(boundedPath(c)+"/"+pending.phase,"POST",pending.body);
++  if(reply.namespace!=="conditional-run-checks.v1"||reply.phase!==pending.phase||typeof reply.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(reply.run_id)||!Number.isInteger(reply.version)||!Number.isInteger(reply.fence))throw Error("VERSION_CONFLICT");
++ }catch(error){
++  if(!earlierUnknown&&error.httpStatus>=400&&error.httpStatus<500){pending.state="rejected";}else{pending.uncertain=true;}
++  throw error;
++ }
++ pending.state="accepted";pending.runId=reply.run_id;pending.uncertain=false;boundedButtons();if(!boundedCurrent(c))return;
++ c[pending.phase+"Run"]=reply;
++ $("condition-run-refresh").hidden=false;await boundedRead(c);
++}
++async function startBoundedSource(){return boundedAction(async c=>{
++ const contract=await api(boundedPath(c)+"/contract");if(!boundedCurrent(c))return;
++ await boundedSubmit(c,"source",{resource_id:c.source.resource_id,expected_source_hash:c.source.hash,expected_contract_fingerprint:contract.check_contract_fingerprint,goal:contract.goal,scenario:boundedFacts("condition-run-source")});
++});}
++async function checkBoundedRun(c,phase){
++ await boundedRead(c);if(!boundedCurrent(c))return;
++ const run=c[phase+"Run"];if(run?.status!=="WAITING_APPROVAL"||!boundedHash(run.result_fingerprint))throw Error("VERIFICATION_FAILED");
++ const key=JSON.stringify([c.identity,c.project,run.run_id,run.result_fingerprint,run.version,run.fence,"check"]);
++ let pending=boundedRunRequests.get(key);if(!pending){pending={body:{expected_result_fingerprint:run.result_fingerprint,expected_version:run.version,expected_fence:run.fence,request_key:boundedRequestKey()}};boundedRunRequests.set(key,pending);}
++ const reply=await api(boundedPath(c)+"/"+run.run_id+"/checks","POST",pending.body);
++ pending.state="accepted";boundedButtons();if(!boundedCurrent(c))return;
++ if(reply.value?.run_id!==run.run_id||reply.value.result_fingerprint!==run.result_fingerprint||reply.value.version!==run.version||reply.value.fence!==run.fence)throw Error("VERSION_CONFLICT");
++ if(phase==="source")c.check=reply;boundedRenderCheck(reply,"condition-run-"+(phase==="source"?"check-output":"cold-check-output"));
++}
++async function extractBoundedCandidate(){return boundedAction(async c=>{
++ // No cached client eligible claim authorizes extraction: fresh actual Run/check first.
++ await checkBoundedRun(c,"source");if(!boundedCurrent(c))return;
++ if(c.check.value.candidate_eligible!==true)throw Error("VERIFICATION_FAILED");
++ await boundedSubmit(c,"extract",{source_run_id:c.sourceRun.run_id,expected_source_fingerprint:c.sourceRun.result_fingerprint,expected_check_fingerprint:c.check.fingerprint});
++});}
++async function startBoundedCold(){return boundedAction(async c=>{
++ await boundedRead(c);if(!boundedCurrent(c))return;
++ const plan=c.extractRun?.result?.compiled_plan;if(c.extractRun?.status!=="SUCCEEDED"||!boundedHash(plan?.plan_fingerprint))throw Error("VERIFICATION_FAILED");
++ await boundedSubmit(c,"cold",{extraction_run_id:c.extractRun.run_id,expected_plan_fingerprint:plan.plan_fingerprint,resource_id:$("condition-run-cold-resource").value,scenario:boundedFacts("condition-run-cold")});
++});}
++$("condition-run-source-form").onsubmit=safe(startBoundedSource);
++$("condition-run-refresh").onclick=safe(()=>boundedAction(boundedRead));
++$("condition-run-retry").onclick=safe(()=>boundedAction(c=>boundedSubmit(c,c.pending.phase,{},true)));
++$("condition-run-check").onclick=safe(()=>boundedAction(c=>checkBoundedRun(c,"source")));
++$("condition-run-extract").onclick=safe(extractBoundedCandidate);
++$("condition-run-cold-form").onsubmit=safe(startBoundedCold);
++$("condition-run-cold-check").onclick=safe(()=>boundedAction(c=>checkBoundedRun(c,"cold")));
++$("condition-run-source-form").oninput=()=>{
++ const c=boundedRunContext;if(!c)return;
++ const fields=[...$("condition-run-source-form").elements].filter(e=>e.id).map(e=>[e.id,e.value]);
++ const source=c.source;showConditionalRuns(source);for(const [id,value]of fields)$(id).value=value;$("condition-run-status").textContent="源假设已变化，旧来源绑定已失效；只可显式提交新假设。";
++};
++$("condition-run-cold-form").oninput=()=>{
++ const c=boundedRunContext;if(!c)return;
++ boundedRunContext={...c,generation:++boundedRunGeneration,busy:false,coldRun:null};$("condition-run-cold-output").replaceChildren();$("condition-run-cold-check-output").replaceChildren();boundedButtons();
++};
++
++function reconcileBoundedSources(items){
++ const c=boundedRunContext;if(!c||!boundedCurrent(c))return;
++ const item=items.find(r=>r.id===c.source.resource_id);
++ if(!item||item.hash!==c.source.hash||!["txt","md"].includes(item.format)){clearConditionalRuns();$("condition-run-status").textContent="来源授权或版本已变化，旧绑定检查与候选失效；请重新打开当前资料。";}
++}
+diff --git a/src/sim2act/web/index.html b/src/sim2act/web/index.html
+index 40271cb..060dab4 100644
+--- a/src/sim2act/web/index.html
++++ b/src/sim2act/web/index.html
+@@ -1,11 +1,11 @@
+ <!doctype html>
+-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sim2Act</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script><script src="/internal.js" defer></script><script src="/protocol.js" defer></script><script src="/use.js" defer></script></head>
++<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sim2Act</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script><script src="/internal.js" defer></script><script src="/protocol.js" defer></script><script src="/use.js" defer></script><script src="/conditional-runs.js" defer></script></head>
+ <body><header><strong>Sim2Act</strong><span>让想法成为会行动的应用</span><output id="health">正在检查后台</output></header>
+ <section id="login"><label>本机访问令牌 <input id="token" type="password" autocomplete="off"></label><button id="connect">连接</button><p>令牌仅保存在本页内存。当前为 F1 工程版本，MOCK 不能作为真实模型验收。</p></section>
+ <nav aria-label="工作区"><button data-tab="projects">项目</button><button data-tab="apps">应用</button><button data-tab="resources">资源</button></nav>
+ <main><p id="error" role="alert"></p>
+ <section id="projects"><h1>项目</h1><form id="project-form"><label>项目名称 <input id="project-name" required maxlength="200"></label><button>创建项目</button></form><label>当前项目 <select id="project-select"></select></label><div class="grid"><section><h2>指令区</h2><form id="run-form"><label>目标 <textarea id="goal" required maxlength="4000"></textarea></label><p>本增量读取当前项目已授权材料；未完成应用生成和目标语义验收。</p><button id="run-submit">提交持久任务</button><p id="run-submit-status" role="status" aria-live="polite"></p><button id="run-submit-recover" type="button" hidden>恢复同一提交的回执</button><button id="run-submit-read" type="button" hidden>重新读取已接受任务</button><p>任务在后台持久执行。刷新页面后请先查任务历史，避免另建重复任务。</p></form><h2>任务历史</h2><p>按目标摘要与接受时间定位原任务。提交模式不代表已调用模型或目标验收。</p><button id="run-history-refresh" type="button">刷新任务历史（只读）</button><p id="run-history-status" role="status" aria-live="polite"></p><div id="runs"></div></section><section><h2>成果画布</h2><div id="result">选择任务查看持久状态与成果。</div><div id="commands"></div><details><summary>事件、来源与完整回执</summary><pre id="events"></pre><pre id="raw-result"></pre></details></section></div><section id="protocol-panel"><h2>注册任务与可复用协议成果</h2><p>有限只读工程入口。独立注册核查与 owner 语义签收分开；不会自动核查或发布。默认协议 provider 未配置时等待资源。</p><form id="protocol-source-form"><label>已注册任务 <select id="protocol-contract" required></select></label><p id="protocol-source-goal"></p><div id="protocol-source-materials"></div><div id="protocol-inputs"></div><button id="protocol-source-submit" disabled>提交来源任务</button><p id="protocol-source-status" role="status"></p></form><section id="protocol-detail" hidden><h3>当前协议成果 <span id="protocol-run-id"></span></h3><p id="protocol-state" role="status" aria-live="polite"></p><button id="protocol-read" type="button">重新读取成果与核查状态</button><button id="protocol-extract" type="button" hidden>从已核查来源提取可复用协议草案</button><form id="protocol-cold-form" hidden><p>协议草案尚未发布，也不是既有应用清单。请选择与来源目标匹配的冷契约；服务端逐项复核，不匹配将拒绝。冷运行读取新材料，创建新任务；owner 语义签收仍为 PENDING。</p><label>冷输入注册契约 <select id="protocol-cold-contract" required></select></label><div id="protocol-cold-materials"></div><div id="protocol-cold-inputs"></div><button id="protocol-cold-submit">提交新材料冷运行</button></form><button id="protocol-recover" type="button">核对持久状态（不继续执行）</button><button id="protocol-recover-retry" type="button" hidden>用原核对键重读回执</button><details><summary>结果、来源、结构与已记录证据</summary><pre id="protocol-result"></pre></details></section></section><section id="goal-cards-panel"><h2>目标卡与验收草案</h2><p>人工草案，尚未验收，不会启动模型或执行。每次保存保留旧版本；旧窗口冲突时请重新打开目标卡。</p><button id="goal-card-new" type="button">新建目标卡</button><div class="grid"><section><form id="goal-card-form"><label>名称 <input id="goal-card-title" required maxlength="200"></label><label>目标 <textarea id="goal-card-goal" required maxlength="4000"></textarea></label><label>已知（每行一项）<textarea id="goal-card-known"></textarea></label><label>假设（每行一项）<textarea id="goal-card-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="goal-card-unresolved"></textarea></label><label>硬条件（每行一项）<textarea id="goal-card-constraints"></textarea></label><label>验收检查（每行一项）<textarea id="goal-card-acceptance_checks"></textarea></label><label>同项目授权材料（可多选，最多8份）<select id="goal-card-resources" multiple></select></label><p>每类最多16项，每项1000字。绑定材料版本；撤权或材料变更会阻止回读旧快照。</p><button id="goal-card-save">保存新版本</button><p id="goal-card-status" role="status">新建草案</p></form></section><section><h3>从已保存目标创建候选</h3><p>仅固定 CSV 数值列求和 · MOCK · 0 模型请求。使用已保存版本，未保存编辑不纳入候选；目标条件保留但尚未验收。</p><form id="goal-candidate-form" hidden><label>目标卡已绑定的 CSV <select id="goal-candidate-resource" required></select></label><label>可信能力 <select id="goal-candidate-capability" required></select></label><p>创建将授权候选应用读取和汇总所选材料24小时，不授权写入。</p><button id="goal-candidate-create">创建候选并授权预览</button><button id="goal-candidate-cancel" type="button">返回编辑 / 取消选择</button></form><p id="goal-candidate-status" role="status">先打开已保存目标卡。</p><div id="goal-candidate-list"></div><h3>目标卡</h3><div id="goal-card-list"></div><h3>版本历史（最近50版）</h3><div id="goal-card-history"></div><pre id="goal-card-history-detail"></pre></section></div></section></section>
+-<section id="apps" hidden><section id="application-use"><h2>使用已保存的本地应用</h2><p>仅已核查CSV实例；未发布内部版本，不新增授权。选择数值列会创建新的后台运行。材料固定，历史成功不代表本次结果。</p><div class="grid"><section><div id="use-list"></div></section><section><p id="use-info" role="status"></p><form id="use-form" hidden><label>本次数值列 <select id="use-column" required></select></label><button id="use-submit">运行此本地应用</button></form><button id="use-recover" type="button" hidden>恢复接受回执</button><button id="use-refresh" type="button" hidden>刷新本次状态与历史（只读）</button><div id="use-output" role="status" aria-live="polite"></div><h3>只读验收核对</h3><div id="use-acceptance" role="status" aria-live="polite"></div><h3>运行与结果历史</h3><div id="use-history"></div><details><summary>版本、材料与来源范围</summary><pre id="use-provenance"></pre></details></section></div></section><section id="conditional-panel"><h2>核对条件报告与规则资料</h2><p>仅人工注册的虚构差旅规则 A-S v1；不支持任意语言规则抽取。与上方 CSV 技术验收独立，不为所选应用自动签收。当前真实模型请求0；语义 UNKNOWN、用户确认 PENDING、发布关闭。</p><button id="condition-list" type="button">刷新当前授权规则资料（清除旧证据）</button><label>选择已有资料<select id="condition-resource"><option value="">请选择</option></select></label><button id="condition-open" type="button">打开并核查此资料版本</button><p id="condition-status" role="status" aria-live="polite">先选择并打开授权资料；不会自动读取内容。</p><div id="condition-source"></div><form id="condition-form" hidden><fieldset><legend>显式假设事实（不从材料案例自动填入）</legend><label>行程已结束<select id="condition-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-amount" type="number" min="0" max="1000000" step="1"></label><label>收据齐全<select id="condition-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>已取得主管批准<select id="condition-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>行程结束后的自然日数（空为未知）<input id="condition-days" type="number" min="0" max="3650" step="1"></label></fieldset><fieldset><legend>人工待核对报告（不会自动生成正确答案）</legend><label>R1 是否适用<select id="condition-R1"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R2 是否适用<select id="condition-R2"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R3 是否适用<select id="condition-R3"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><p>每条引用使用上方已授权原文行；引用位置匹配不代表开放语言理解。</p><label>报告决策<select id="condition-decision"><option>UNKNOWN</option><option>BLOCK</option><option>ALLOW</option></select></label><label>报告下一步（可多选）<select id="condition-actions" multiple required><option value="wait_trip_end">等待行程结束</option><option value="obtain_receipt">补齐收据</option><option value="obtain_prior_approval">先取得批准</option><option value="clarify_facts">澄清未知事实</option><option value="clarify_late_policy">澄清逾期规则</option><option value="submit_claim_and_receipt">提交报销单与收据</option></select></label><label>报告原始期限（自然日）<input id="condition-deadline" type="number" min="1" max="3650" required></label><label>报告绝对日期（资料未给出时填写 UNKNOWN）<input id="condition-date" maxlength="40" required></label><label>报告是否认为补齐收据重启期限<select id="condition-restart"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>报告说明（自由文字不评分）<textarea id="condition-explanation" maxlength="1000" required></textarea></label></fieldset><button id="condition-submit">核对此报告（不启动应用任务）</button></form><button id="condition-recheck" type="button" hidden>重新授权读取并核对此报告</button><div id="condition-results" role="status" aria-live="polite"></div></section><h1>应用草案预览</h1><p>内部工程草案 · CSV 可信汇总与 TXT/MD 字面证据 agent（仅离线 Replay），未发布。成功 CSV 任务可保存为可信模板草案；目标语义和真实模型自主生成尚未验收。</p><div class="grid"><section><h2>直接创建 CSV 固定模板草案</h2><form id="app-form"><label>应用名称 <input id="app-name" required maxlength="200" value="CSV 数值汇总"></label><label>目标说明 <textarea id="app-goal" required maxlength="4000">每次选择一个数值列，查看这份 CSV 的合计和记录数。</textarea></label><label>当前项目的 CSV 材料 <select id="app-resource" required></select></label><p>此入口不绑定目标卡版本。仅授权这个应用读取和汇总所选材料（24 小时），不授权写入。材料版本改变后需重新创建草案。</p><button id="app-create-submit">创建草案并授权读取</button><p id="app-create-status" role="status" aria-live="polite"></p></form><h2>当前项目草案</h2><div id="app-list"></div></section><section><h2 id="app-title">选择草案</h2><p id="app-origin" role="status"></p><details id="app-frozen-goal" hidden><summary>冻结目标条件与验收草案</summary><pre id="app-frozen-goal-text"></pre></details><button id="app-back-goal" type="button" hidden>返回来源目标卡</button><form id="app-preview-form" hidden><label id="app-column-label">数值列 <select id="app-column" required></select></label><label id="app-agent-term-label" hidden>样例字面检索词 <input id="app-agent-term" maxlength="80" autocomplete="off"></label><p id="app-input-hint" role="status"></p><button id="app-preview-submit">运行新预览</button></form><div id="app-output" role="status" aria-live="polite"></div><button id="app-read-retry" type="button" hidden>重新读取已保存记录</button><h2>预览历史</h2><div id="app-history"></div><section id="csv-extraction-panel"><h2>从已完成预览任务提取候选（P-B工程子集）</h2><p>来源限定本地合成PREVIEW成功回执，不代表F1 Run或目标语义成功；仅可信求和逻辑，不是通用应用验收。新CSV在创建时绑定，数值列为运行参数。源材料仍需可授权核查；未发布。</p><form id="extraction-form" hidden><label>成功源回执 <select id="extraction-preview" required></select></label><label>同项目的新CSV <select id="extraction-resource" required></select></label><label>候选名称 <input id="extraction-name" required maxlength="200" value="从已完成预览提取的汇总"></label><p>创建授权应用只读新材料24小时；已接受创建不能由页面导航撤销。</p><button id="extraction-create">提取并授权新材料预览</button></form><p id="extraction-status" role="status"></p></section><details><summary>声明式清单、来源与权限</summary><pre id="app-manifest"></pre></details></section></div></section>
++<section id="apps" hidden><section id="application-use"><h2>使用已保存的本地应用</h2><p>仅已核查CSV实例；未发布内部版本，不新增授权。选择数值列会创建新的后台运行。材料固定，历史成功不代表本次结果。</p><div class="grid"><section><div id="use-list"></div></section><section><p id="use-info" role="status"></p><form id="use-form" hidden><label>本次数值列 <select id="use-column" required></select></label><button id="use-submit">运行此本地应用</button></form><button id="use-recover" type="button" hidden>恢复接受回执</button><button id="use-refresh" type="button" hidden>刷新本次状态与历史（只读）</button><div id="use-output" role="status" aria-live="polite"></div><h3>只读验收核对</h3><div id="use-acceptance" role="status" aria-live="polite"></div><h3>运行与结果历史</h3><div id="use-history"></div><details><summary>版本、材料与来源范围</summary><pre id="use-provenance"></pre></details></section></div></section><section id="conditional-panel"><h2>核对条件报告与规则资料</h2><p>仅人工注册的虚构差旅规则 A-S v1；不支持任意语言规则抽取。与上方 CSV 技术验收独立，不为所选应用自动签收。当前真实模型请求0；语义 UNKNOWN、用户确认 PENDING、发布关闭。</p><button id="condition-list" type="button">刷新当前授权规则资料（清除旧证据）</button><label>选择已有资料<select id="condition-resource"><option value="">请选择</option></select></label><button id="condition-open" type="button">打开并核查此资料版本</button><p id="condition-status" role="status" aria-live="polite">先选择并打开授权资料；不会自动读取内容。</p><div id="condition-source"></div><section id="condition-run-panel"><h3>从真实任务回执绑定条件检查与有限候选</h3><p>此入口不使用下方人工报告。先显式打开上方已授权 A-S 资料，再提交假设事实。后台读取与模型结果必须有完整可信回执；有限检查 PASS 不代表真实事实、整体任务成功或用户签收。语义 UNKNOWN、整体 NOT_ACCEPTED、发布关闭。默认无已批准 provider 会停在 WAITING_RESOURCE；页面不会启用模型或准备器。</p><form id="condition-run-source-form" hidden><fieldset><legend>本次源任务的显式假设（不从人工报告复制）</legend><label>行程已结束<select id="condition-run-source-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-source-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-source-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-source-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-source-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-start">创建来源绑定任务</button></form><button id="condition-run-refresh" type="button" hidden>重新核查当前任务与来源（只读）</button><button id="condition-run-retry" type="button" hidden>恢复同一提交回执（同键，不另建任务）</button><p id="condition-run-status" role="status" aria-live="polite">先显式打开已授权规则资料。</p><div id="condition-run-output" role="status" aria-live="polite"></div><button id="condition-run-check" type="button" hidden>独立核对此 Run 的实际报告</button><div id="condition-run-check-output" role="status" aria-live="polite"></div><button id="condition-run-extract" type="button" hidden>提取当前检查绑定的有限候选</button><div id="condition-run-extract-output" role="status" aria-live="polite"></div><details id="condition-run-plan" hidden><summary>受限 DAG、候选回执与来源绑定</summary><pre id="condition-run-plan-text"></pre></details><form id="condition-run-cold-form" hidden><label>冷运行的当前授权规则资料<select id="condition-run-cold-resource" required></select></label><fieldset><legend>新 Scenario：不会复制旧结果</legend><label>行程已结束<select id="condition-run-cold-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-cold-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-cold-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-cold-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-cold-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-cold-start">用有限候选创建新假设冷运行</button></form><div id="condition-run-cold-output" role="status" aria-live="polite"></div><button id="condition-run-cold-check" type="button" hidden>独立核对此冷 Run 的新报告</button><div id="condition-run-cold-check-output" role="status" aria-live="polite"></div></section><h3>人工条件报告核对（不绑定任务来源）</h3><form id="condition-form" hidden><fieldset><legend>显式假设事实（不从材料案例自动填入）</legend><label>行程已结束<select id="condition-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-amount" type="number" min="0" max="1000000" step="1"></label><label>收据齐全<select id="condition-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>已取得主管批准<select id="condition-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>行程结束后的自然日数（空为未知）<input id="condition-days" type="number" min="0" max="3650" step="1"></label></fieldset><fieldset><legend>人工待核对报告（不会自动生成正确答案）</legend><label>R1 是否适用<select id="condition-R1"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R2 是否适用<select id="condition-R2"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R3 是否适用<select id="condition-R3"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><p>每条引用使用上方已授权原文行；引用位置匹配不代表开放语言理解。</p><label>报告决策<select id="condition-decision"><option>UNKNOWN</option><option>BLOCK</option><option>ALLOW</option></select></label><label>报告下一步（可多选）<select id="condition-actions" multiple required><option value="wait_trip_end">等待行程结束</option><option value="obtain_receipt">补齐收据</option><option value="obtain_prior_approval">先取得批准</option><option value="clarify_facts">澄清未知事实</option><option value="clarify_late_policy">澄清逾期规则</option><option value="submit_claim_and_receipt">提交报销单与收据</option></select></label><label>报告原始期限（自然日）<input id="condition-deadline" type="number" min="1" max="3650" required></label><label>报告绝对日期（资料未给出时填写 UNKNOWN）<input id="condition-date" maxlength="40" required></label><label>报告是否认为补齐收据重启期限<select id="condition-restart"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>报告说明（自由文字不评分）<textarea id="condition-explanation" maxlength="1000" required></textarea></label></fieldset><button id="condition-submit">核对此报告（不启动应用任务）</button></form><button id="condition-recheck" type="button" hidden>重新授权读取并核对此报告</button><div id="condition-results" role="status" aria-live="polite"></div></section><h1>应用草案预览</h1><p>内部工程草案 · CSV 可信汇总与 TXT/MD 字面证据 agent（仅离线 Replay），未发布。成功 CSV 任务可保存为可信模板草案；目标语义和真实模型自主生成尚未验收。</p><div class="grid"><section><h2>直接创建 CSV 固定模板草案</h2><form id="app-form"><label>应用名称 <input id="app-name" required maxlength="200" value="CSV 数值汇总"></label><label>目标说明 <textarea id="app-goal" required maxlength="4000">每次选择一个数值列，查看这份 CSV 的合计和记录数。</textarea></label><label>当前项目的 CSV 材料 <select id="app-resource" required></select></label><p>此入口不绑定目标卡版本。仅授权这个应用读取和汇总所选材料（24 小时），不授权写入。材料版本改变后需重新创建草案。</p><button id="app-create-submit">创建草案并授权读取</button><p id="app-create-status" role="status" aria-live="polite"></p></form><h2>当前项目草案</h2><div id="app-list"></div></section><section><h2 id="app-title">选择草案</h2><p id="app-origin" role="status"></p><details id="app-frozen-goal" hidden><summary>冻结目标条件与验收草案</summary><pre id="app-frozen-goal-text"></pre></details><button id="app-back-goal" type="button" hidden>返回来源目标卡</button><form id="app-preview-form" hidden><label id="app-column-label">数值列 <select id="app-column" required></select></label><label id="app-agent-term-label" hidden>样例字面检索词 <input id="app-agent-term" maxlength="80" autocomplete="off"></label><p id="app-input-hint" role="status"></p><button id="app-preview-submit">运行新预览</button></form><div id="app-output" role="status" aria-live="polite"></div><button id="app-read-retry" type="button" hidden>重新读取已保存记录</button><h2>预览历史</h2><div id="app-history"></div><section id="csv-extraction-panel"><h2>从已完成预览任务提取候选（P-B工程子集）</h2><p>来源限定本地合成PREVIEW成功回执，不代表F1 Run或目标语义成功；仅可信求和逻辑，不是通用应用验收。新CSV在创建时绑定，数值列为运行参数。源材料仍需可授权核查；未发布。</p><form id="extraction-form" hidden><label>成功源回执 <select id="extraction-preview" required></select></label><label>同项目的新CSV <select id="extraction-resource" required></select></label><label>候选名称 <input id="extraction-name" required maxlength="200" value="从已完成预览提取的汇总"></label><p>创建授权应用只读新材料24小时；已接受创建不能由页面导航撤销。</p><button id="extraction-create">提取并授权新材料预览</button></form><p id="extraction-status" role="status"></p></section><details><summary>声明式清单、来源与权限</summary><pre id="app-manifest"></pre></details></section></div></section>
+ <section id="internal-panel" hidden aria-labelledby="internal-title"><h2 id="internal-title">内部工程入口 · 只读运行</h2><p>仅已认证的本机工程验证：冻结只读清单、独立实例结果和持久后台任务。正式发布与部署仍关闭，不新增授权，0 网络模型请求。agent 仅接受明确提供的离线 Replay。</p><p id="internal-status" role="status" aria-live="polite"></p><section id="internal-agent" hidden><h3>有界 agent · 离线 Replay</h3><p>候选与响应由离线调用者提供，尚无真实模型自主生成。仅核查字面命中和引用定位；语义 UNKNOWN。绑定 TXT/MD 及当前授权不变，仅 resource.read。</p><label>离线 Replay JSON 文件（恰好两条 wire 响应，UTF-8 不超过 32000 字节）<input id="internal-replay-file" type="file" accept=".json,application/json"></label><p id="internal-replay-status" role="status" aria-live="polite"></p></section><div class="grid"><section><h3>冻结内部 Release</h3><p id="internal-prepare-hint">使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。</p><button id="internal-prepare" type="button">核查并准备内部快照</button><button id="internal-back" type="button">取消选择 / 返回预览</button><section id="internal-approval" hidden><p id="internal-approval-label"></p><details open><summary>待确认的冻结快照与检查证据</summary><pre id="internal-approval-detail"></pre></details><label><input id="internal-approval-ack" type="checkbox">我已检查上述精确快照；仅保存内部版本，不开通发布或授权。</label><button id="internal-commit" type="button" disabled>确认保存此内部 Release</button></section><h3>内部 Release 历史</h3><div id="internal-releases"></div><h3>独立实例</h3><div id="internal-instances"></div><button id="internal-refresh" type="button">重新读取内部历史</button></section><section><h3 id="internal-instance-title">选择内部实例</h3><p id="internal-instance-info"></p><section id="internal-switch" hidden><h3>切换内部版本 / 兼容回退</h3><p>保留实例结果与历史。回退版本不撤销数据或外部动作；已接受任务不会自动取消。不新增授权。</p><label>目标 Release <select id="internal-switch-target"><option value="">请手动选择目标版本</option></select></label><button id="internal-switch-prepare" type="button">核查兼容性与精确切换快照</button><button id="internal-switch-cancel" type="button">取消本页切换选择</button><p id="internal-switch-status" role="status" aria-live="polite"></p><section id="internal-switch-approval" hidden><p id="internal-switch-summary"></p><details><summary>精确切换指纹、版本与权限快照</summary><pre id="internal-switch-detail"></pre></details><label><input id="internal-switch-ack" type="checkbox">我已核对目标版本及保留数据范围，确认仅切换此内部实例。</label><button id="internal-switch-commit" type="button" disabled>确认切换到此精确版本</button></section><h4>实例版本切换历史</h4><div id="internal-switch-history"></div></section><form id="internal-run-form" hidden><label id="internal-column-label">冻结材料的数值列 <select id="internal-column" required></select></label><label id="internal-term-label" hidden>本次字面检索词 <input id="internal-term" maxlength="80" autocomplete="off"></label><button id="internal-run-submit">提交新持久 AppRun</button></form><button id="internal-retry" type="button" hidden>用原请求键恢复提交</button><button id="internal-new-intent" type="button" hidden>读回历史后结束本页旧请求重试</button><p id="internal-run-status" role="status" aria-live="polite"></p><div id="internal-controls"></div><section id="registered-extraction" hidden><button id="registered-extraction-open" type="button">将这次任务保存为可复用草案</button><form id="registered-extraction-form" hidden><p>服务端核查成功任务并生成可信 CSV 求和草案。仅沿用所选应用已有授权；撤权同时影响共享此授权域的草案。不创建授权，0 模型请求，目标语义条件未验收。</p><label>已有授权的新 CSV 应用 <select id="registered-extraction-target" required></select></label><label>草案名称 <input id="registered-extraction-name" required maxlength="200" value="从成功任务保存的汇总"></label><pre id="registered-extraction-proof"></pre><p id="registered-extraction-target-info"></p><button id="registered-extraction-submit">保存可复用草案</button><button id="registered-extraction-retry" type="button" hidden>用原请求键恢复生成回执</button></form><p id="registered-extraction-status" role="status" aria-live="polite"></p></section><h3>后台运行历史</h3><div id="internal-runs"></div><h3>实例结果版本（只读）</h3><div id="internal-data"></div><details><summary>状态、取消意图与事件</summary><pre id="internal-run-detail"></pre></details></section></div></section>
+ <section id="resources" hidden><h1>资源</h1><h2>材料</h2><form id="resource-form"><label>名称 <input id="resource-name" required maxlength="200"></label><label>类型 <select id="format"><option>txt</option><option>md</option><option>csv</option><option>json</option></select></label><label>授权给当前项目的文本 <textarea id="content" required maxlength="32768"></textarea></label><button>保存并授权项目内使用（24小时）</button></form><div id="materials"></div><pre id="resource-preview" hidden></pre><h2>可信能力与连接</h2><pre id="capabilities"></pre><h2>授权</h2><div id="grants"></div></section>
+ <section id="reconcile-panel" hidden><h2>核对未完成的模型请求</h2><p>这次请求可能已产生未知用量。记录已有完整响应后，任务会暂停，需另行点击继续；无法核对时可结束任务，保留未知成本和已有成果。</p><form id="reconcile-form"><label>待核对请求 <select id="reconcile-attempt"></select></label><label>处理方式 <select id="reconcile-decision"><option value="close_unknown">结束任务，保留未知成本</option><option value="record_response">记录已有完整响应，保持暂停</option></select></label><label>核对依据 <textarea id="reconcile-evidence" required maxlength="1000"></textarea></label><label>已有响应 JSON（仅记录响应时填写，不包含密钥或请求头）<textarea id="reconcile-response" maxlength="32768"></textarea></label><label><input id="reconcile-ack" type="checkbox" required>我确认上述依据对应所选请求，并理解其用量可能仍未知。</label><button>保存核对（不会自动继续）</button></form></section>
+diff --git a/src/sim2act/web/use.js b/src/sim2act/web/use.js
+index a7b25ce..6065837 100644
+--- a/src/sim2act/web/use.js
++++ b/src/sim2act/web/use.js
+@@ -159,6 +159,7 @@ $("use-refresh").onclick=safe(async()=>{const v=applicationUse;if(v&&application
+ let conditionalContext=null,conditionalGeneration=0;
+ function clearConditionalChecks(clearList=false){
+  conditionalGeneration++;conditionalContext=null;
++ if(typeof clearConditionalRuns==="function")clearConditionalRuns();
+  $("condition-form").hidden=true;$("condition-recheck").hidden=true;
+  $("condition-source").replaceChildren();$("condition-results").replaceChildren();
+  $("condition-status").textContent="旧证据已清除。请显式打开当前授权资料。";
+@@ -184,6 +185,7 @@ async function openConditionalSource(){
+   const source=await api(`/api/projects/${c.project}/conditional-checks/sources/${rid}`);if(!conditionCurrent(c))return;
+   if(source.resource_id!==rid||source.contract.source_hash!==source.hash)throw Error("VERSION_CONFLICT");
+   c.source=source;
++  if(typeof showConditionalRuns==="function")showConditionalRuns(source);
+   $("condition-source").replaceChildren(row(`资料 ${rid} · 内容 SHA256 ${source.hash} · 注册规则 ${source.contract.id} v${source.contract.version} · 合同 ${source.contract.fingerprint}`),...source.rules.map(r=>row(`${r.rule_id} · 第${r.line}行：${r.quote}`)));
+   $("condition-form").hidden=false;
+   $("condition-status").textContent="资料版本已核查。填写假设事实及人工报告；检查不确认真实事实。";
+@@ -223,10 +225,12 @@ $("condition-recheck").onclick=safe(()=>runConditionalCheck(true));
+ $("condition-form").oninput=()=>{if(conditionalContext){conditionalContext.readGeneration=(conditionalContext.readGeneration||0)+1;conditionalContext.body=null;}$("condition-results").replaceChildren();$("condition-recheck").hidden=true;$("condition-status").textContent="输入已变化，旧证据失效；请重新核对。";};
+ 
+ function invalidateConditionalSource(reason){
++ if(typeof clearConditionalRuns==="function"){clearConditionalRuns();$("condition-run-status").textContent=`旧来源绑定证据失效：${reason}。请重新打开当前授权资料；已接受Run未取消，同键回执仍保留。`;}
+  if(!conditionalContext?.source)return;
+  clearConditionalChecks();$("condition-status").textContent=`旧证据失效：${reason}。请重新选择并核对授权资料。`;
+ }
+ function reconcileConditionalSources(items){
++ if(typeof reconcileBoundedSources==="function")reconcileBoundedSources(items);
+  const c=conditionalContext;if(!c?.source||!conditionCurrent(c))return;
+  const item=items.find(r=>r.id===c.rid);
+  if(!item||item.hash!==c.source.hash||!["txt","md"].includes(item.format))invalidateConditionalSource("资料版本变化或授权撤销");
+diff --git a/tests/conditional_run_product.cjs b/tests/conditional_run_product.cjs
+new file mode 100644
+index 0000000..49cd34f
+--- /dev/null
++++ b/tests/conditional_run_product.cjs
+@@ -0,0 +1,64 @@
++'use strict';
++const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
++const root=process.argv[2],info=JSON.parse(fs.readFileSync(path.join(root,'info.json'))),checks=[],requests=[];
++let dom,w,$,mode='',release;
++const check=(ok,name)=>{assert(ok,name);checks.push(name);};
++const wait=async(fn,name)=>{const end=Date.now()+6000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,10));}throw Error('Timeout '+name);};
++async function setup(){
++ dom?.window.close();dom=new JSDOM(await(await fetch(info.base)).text(),{url:info.base,runScripts:'dangerously'});w=dom.window;$=id=>w.document.getElementById(id);
++ w.fetch=async(url,opts={})=>{const target=new URL(url,info.base);assert.equal(target.origin,info.base);const body=opts.body&&JSON.parse(opts.body);requests.push({path:target.pathname,method:opts.method||'GET',body});
++  const response=await fetch(target,opts);
++  if(mode==='bad-source'&&target.pathname.endsWith('/conditional-runs/source')){mode='';const bad=await response.json();bad.namespace='untrusted';return {ok:true,json:async()=>bad};}
++  if(mode==='lost-source'&&target.pathname.endsWith('/conditional-runs/source')){mode='';throw TypeError('Synthetic accepted reply loss');}
++  if(mode==='hold'&&target.pathname.includes('/conditional-runs/')&&opts.method==='POST'){mode='';await new Promise(r=>release=r);release=null;}
++  return response;};
++ for(const file of ['app.js','internal.js','protocol.js','use.js','conditional-runs.js']){const s=w.document.createElement('script');s.textContent=await(await fetch(info.base+'/'+file)).text();w.document.body.append(s);}
++ $('token').value='synthetic-test-A';$('connect').click();await wait(()=>$('project-select').value===info.project&&$('login').hidden,'connect');
++}
++async function open(){await w.listConditionalSources();$('condition-resource').value=info.resource;await w.openConditionalSource();check(!$('condition-run-source-form').hidden,'explicit authorized source enables separate Run form');}
++function facts(prefix,amount){for(const [id,value]of Object.entries({trip:'true',receipt:'true',approved:'false',amount:String(amount),days:'2'}))$(prefix+'-'+id).value=value;}
++const work=phase=>fetch(info.base+'/test-only-bounded-work/'+phase,{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}}).then(async r=>{assert(r.ok,await r.text());});
++(async()=>{try{
++ await setup();check(!requests.some(r=>r.path.includes('/conditional-runs')),'cold page creates no Run/check/model request');
++ await open();facts('condition-run-source',680);$('condition-run-source-days').value='1.5';await w.startBoundedSource();check(!$('condition-run-start').disabled&&$('condition-run-retry').hidden,'first actual 422 rejection allows correction without unknown acceptance lock');facts('condition-run-source',680);
++ // Deliberately wrong manual report fields cannot enter or replace actual source Run.
++ $('condition-decision').value='ALLOW';$('condition-explanation').value='Manual invented unrelated answer';
++ mode='lost-source';await w.startBoundedSource();check(!$('condition-run-retry').hidden&&$('condition-run-start').disabled,'unknown acceptance locks new creation and preserves explicit same-key recovery');
++ const original=requests.filter(r=>r.path.endsWith('/conditional-runs/source')).at(-1).body;
++ await w.boundedAction(c=>w.boundedSubmit(c,c.pending.phase,{},true));
++ const posts=requests.filter(r=>r.path.endsWith('/conditional-runs/source')&&r.body.scenario.elapsed_days===2);check(posts.length===2&&JSON.stringify(posts[0].body)===JSON.stringify(posts[1].body),'explicit retry uses exact same frozen body/key');
++ check(!('report' in original)&&!('candidate' in original)&&original.scenario.amount===680,'Run submission excludes manual Report/candidate/gold');
++ check($('condition-run-check').hidden&&$('condition-run-output').textContent.includes('QUEUED'),'queued receipt cannot enable independent check');
++ await work('source');await w.boundedAction(w.boundedRead);
++ check($('condition-run-output').textContent.includes('WAITING_APPROVAL')&&$('condition-run-output').textContent.includes('UNKNOWN')&&$('condition-run-output').textContent.includes('NOT_ACCEPTED')&&$('condition-run-output').textContent.includes('BLOCK'),'actual hand-authored Mock Report BLOCK visible with overall UNKNOWN and NOT_ACCEPTED');
++ await w.boundedAction(c=>w.checkBoundedRun(c,'source'));
++ check($('condition-run-check-output').textContent.includes('有限报告检查 PASS')&&!$('condition-run-extract').hidden,'independent current real-Run finite check enables candidate only');
++ const checksBefore=requests.filter(r=>r.path.endsWith('/checks')).length;
++ await w.extractBoundedCandidate();check(requests.filter(r=>r.path.endsWith('/checks')).length===checksBefore+1,'extract freshly reads/rechecks source instead of trusting cached client eligible');
++ await work('extract');await w.boundedAction(w.boundedRead);
++ check(!$('condition-run-plan').hidden&&$('condition-run-plan-text').textContent.includes('candidate_receipt')&&$('condition-run-plan-text').textContent.includes('read_rules')&&$('condition-run-plan-text').textContent.includes('check_report'),'sealed actual candidate receipt and finite registered DAG visible');
++ facts('condition-run-cold',500);$('condition-run-cold-resource').value=info.fresh;await w.startBoundedCold();await work('cold');await w.boundedAction(w.boundedRead);await w.boundedAction(c=>w.checkBoundedRun(c,'cold'));
++ check($('condition-run-cold-output').textContent.includes('ALLOW')&&$('condition-run-cold-output').textContent.includes('NOT_ACCEPTED')&&$('condition-run-cold-check-output').textContent.includes('有限报告检查 PASS'),'new resource/500 cold Report ALLOW checked independently while overall unaccepted');
++ mode='hold';const lateCold=w.boundedAction(c=>w.checkBoundedRun(c,'cold'));await wait(()=>release,'held cold check');$('condition-run-cold-amount').value='501';$('condition-run-cold-amount').dispatchEvent(new w.Event('input',{bubbles:true}));release();await lateCold;check($('condition-run-cold-output').textContent===''&&$('condition-run-cold-check-output').textContent===''&&$('condition-run-cold-check').hidden,'cold input epoch invalidates late checked Report');facts('condition-run-cold',500);$('condition-run-cold-resource').value=info.fresh;await w.startBoundedCold();
++ const cold=requests.find(r=>r.path.endsWith('/conditional-runs/cold')).body;check(cold.resource_id===info.fresh&&cold.scenario.amount===500&&!('report' in cold),'cold only binds explicit new facts/material and sealed extraction');
++ await w.boundedAction(w.boundedRead);check($('condition-run-check-output').textContent===''&&$('condition-run-extract').hidden,'read refresh drops cached check eligibility without automatic check/extract');
++ await fetch(info.base+'/test-only-bounded-source-version/change',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});w.eval('conditionalContext.source=null');
++ const metadata=await(await fetch(info.base+'/api/projects/'+info.project+'/resources',{headers:{Authorization:'Bearer synthetic-test-A'}})).json();w.reconcileConditionalSources(metadata);
++ check($('condition-run-plan').hidden&&$('condition-run-check-output').textContent===''&&$('condition-run-status').textContent.includes('版本已变化'),'real metadata version change clears bound candidate even after manual source context was cleared');
++ await fetch(info.base+'/test-only-bounded-source-version/restore',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});await open();facts('condition-run-source',680);await w.startBoundedSource();
++ await w.extractBoundedCandidate();await w.boundedAction(w.boundedRead);check(!$('condition-run-plan').hidden,'known source/plan can be recovered using same actual accepted receipts');
++ await fetch(info.base+'/test-only-bounded-metadata/fail',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});w.eval('conditionalContext.source=null');await assert.rejects(w.refresh(),/AUTH_LIST_UNAVAILABLE/);
++ check($('condition-run-output').textContent===''&&$('condition-run-plan-text').textContent===''&&$('condition-run-plan').hidden&&$('condition-run-extract').hidden&&$('condition-run-cold-form').hidden,'actual refresh HTTP503 clears real bound Report and sealed plan even with manual source empty');
++ await fetch(info.base+'/test-only-bounded-metadata/ok',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});await open();facts('condition-run-source',680);await w.startBoundedSource();
++ // ABA invalidates late check response even if identity/project return to same values.
++ mode='hold';const late=w.boundedAction(c=>w.checkBoundedRun(c,'source'));await wait(()=>release,'held check');
++ $('project-select').value=info.other;$('project-select').dispatchEvent(new w.Event('change'));await wait(()=>$('condition-run-source-form').hidden,'project clear');
++ $('project-select').value=info.project;$('project-select').dispatchEvent(new w.Event('change'));release();await late;
++ check($('condition-run-check-output').textContent===''&&$('condition-run-plan').hidden,'cross-project ABA late response cannot restore stale check/candidate');
++ await setup();check($('condition-run-plan').hidden&&$('condition-run-check-output').textContent===''&&!requests.slice(-5).some(r=>r.method==='POST'&&r.path.includes('/conditional-runs')),'cold reload does not restore candidate/PASS or auto-submit');
++ await open();facts('condition-run-source',501);mode='bad-source';await w.startBoundedSource();check($('condition-run-start').disabled&&!$('condition-run-retry').hidden,'malformed accepted HTTP200 receipt remains UNKNOWN and cannot unlock new submit');await w.boundedAction(c=>w.boundedSubmit(c,c.pending.phase,{},true));await work('no-provider');await w.boundedAction(w.boundedRead);
++ check($('condition-run-output').textContent.includes('WAITING_RESOURCE')&&$('condition-run-check').hidden&&$('condition-run-extract').hidden,'actual default no-provider waits without fictitious completion/check');
++ await fetch(info.base+'/test-only-bounded-revoke',{method:'POST',body:'{}',headers:{'Content-Type':'application/json'}});await w.boundedAction(w.boundedRead);
++ check($('condition-run-plan').hidden&&$('condition-run-plan-text').textContent===''&&$('condition-run-output').textContent===''&&$('condition-run-cold-output').textContent===''&&$('condition-run-check-output').textContent===''&&$('condition-run-status').textContent.includes('不可核验'),'revoked source refresh clears protected candidate/check evidence');
++ const result={status:'PASS',checks,requests,actual_mock_requests:4,live_requests:0,native:'NOT_RUN',pixels:'NOT_RUN'};fs.writeFileSync(path.join(root,'results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
++}catch(error){console.error(error.stack);process.exitCode=1;}finally{dom?.window.close();}})();
+diff --git a/tests/test_conditional_run_bindings.py b/tests/test_conditional_run_bindings.py
+new file mode 100644
+index 0000000..74f6d3b
+--- /dev/null
++++ b/tests/test_conditional_run_bindings.py
+@@ -0,0 +1,771 @@
++"""Actual HTTP/Intern MockTransport/Worker evidence, independently authored finite cases."""
++
++import copy
++import json
++from concurrent.futures import ThreadPoolExecutor
++from dataclasses import replace
++from pathlib import Path
++
++import httpx
++import pytest
++from sqlalchemy import delete, func, select, update
++
++from sim2act.conditional_checks import CONTRACT, SOURCE_HASH
++from sim2act.conditional_runs import (
++    ANCHOR_EVENT,
++    CHECK_EVENT,
++    GOAL,
++    SOURCE,
++    candidate_for,
++    contract_snapshot,
++    inputs_for,
++)
++from sim2act.db import (
++    attempts,
++    events,
++    fingerprint,
++    grants,
++    operations,
++    principals,
++    protocol_jobs,
++    protocol_request_pools,
++    protocol_request_slots,
++    runs,
++)
++from sim2act.model import InternModel
++from sim2act.model_budget import BudgetedProvider, initialize_ledger
++from sim2act.protocol_api import ProtocolAttemptRunner, provider_stage
++from sim2act.protocol_pool import initialize_pools
++from sim2act.worker import Worker
++
++POLICY = Path("docs/evidence/model-protocol-preparation-20261006/materials/a-source/policy.txt")
++
++
++@pytest.fixture
++def env(env):
++    initialize_pools(env[0], offline_limit=14)
++    ids = []
++    for name in ["bounded public rules", "fresh rules binding"]:
++        response = env[2].post(
++            f"/api/projects/{env[5]}/resources",
++            json={"name": name, "format": "txt", "content": POLICY.read_text()},
++        )
++        assert response.status_code == 201
++        ids.append(response.json()["id"])
++    return (*env[:6], *ids)
++
++
++def facts(amount=680, **changes):
++    return {
++        "kind": "HYPOTHETICAL_EMPLOYEE",
++        "trip_ended": True,
++        "amount": amount,
++        "receipt_present": True,
++        "approved": False,
++        "elapsed_days": 2,
++        **changes,
++    }
++
++
++def report(states=("TRUE", "TRUE", "FALSE"), decision="BLOCK", actions=None):
++    lines = POLICY.read_text().splitlines()
++    return {
++        "findings": [
++            {"rule_id": r, "applies": state, "citation": {"line": line, "quote": lines[line - 1]}}
++            for r, state, line in zip(["R1", "R2", "R3"], states, [3, 4, 5], strict=True)
++        ],
++        "decision": decision,
++        "next_actions": actions or ["obtain_prior_approval"],
++        "deadline_days": 10,
++        "absolute_date": "UNKNOWN",
++        "receipt_restarts_deadline": False,
++        "explanation": "Hand-authored mock response; explanation is NOT_CHECKED.",
++    }
++
++
++def envelope(value=None, resource=None):
++    message = {"role": "assistant", "content": json.dumps(value)}
++    if resource:
++        message = {
++            "role": "assistant",
++            "content": "",
++            "tool_calls": [
++                {
++                    "id": "read-current-rules",
++                    "type": "function",
++                    "function": {
++                        "name": "resource.read",
++                        "arguments": json.dumps({"resource_id": resource}),
++                    },
++                }
++            ],
++        }
++    return {
++        "model": "intern-s2",
++        "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
++        "choices": [{"finish_reason": "tool_calls" if resource else "stop", "message": message}],
++    }
++
++
++def base(env):
++    return f"/api/projects/{env[5]}/conditional-runs"
++
++
++def source_body(env, **changes):
++    return {
++        "resource_id": env[6],
++        "expected_source_hash": SOURCE_HASH,
++        "expected_contract_fingerprint": fingerprint(CONTRACT),
++        "goal": GOAL,
++        "scenario": facts(),
++        "request_key": "bounded-source",
++        **changes,
++    }
++
++
++def get(env, rid):
++    response = env[2].get(base(env) + "/" + rid)
++    assert response.status_code == 200, response.text
++    return response.json()
++
++
++def factory(env, tmp_path, responses, wires):
++    def build(worker, run, snapshot):
++        ledger = tmp_path / (run["id"] + ".json")
++        initialize_ledger(ledger, snapshot["scope"])
++        clock = [1000.0]
++
++        def handler(request):
++            wire = json.loads(request.content)
++            wires.append(wire)
++            assert str(request.url) == "https://chat.intern-ai.org.cn/api/v1/chat/completions"
++            assert wire["max_tokens"] == 1024 and wire["stream"] is False
++            assert len(request.content) <= 10000
++            clock[0] += 7
++            return httpx.Response(200, json=responses.pop(0))
++
++        model = InternModel(
++            replace(env[1], live_enabled=True, token="synthetic-offline"),
++            transport=httpx.MockTransport(handler),
++        )
++
++        def authorize(_):
++            with env[0].tx() as c:
++                env[0].guard(c, run["id"], run["fence"])
++                for ref in snapshot["scope"]["resource_ids"]:
++                    env[0].authorize(
++                        c,
++                        run["principal_id"],
++                        run["runtime_id"],
++                        run["project_id"],
++                        ref,
++                        "resource.read",
++                    )
++            return True
++
++        provider = BudgetedProvider(
++            model,
++            ledger,
++            snapshot["scope"],
++            provider_stage(snapshot),
++            authorize=authorize,
++            clock=lambda: clock[0],
++        )
++        return ProtocolAttemptRunner(worker, run, snapshot, provider)
++
++    return build
++
++
++def work(env, tmp_path, responses, wires):
++    worker = Worker(
++        env[0], env[1], protocol_runner_factory=factory(env, tmp_path, responses, wires)
++    )
++    assert worker.once()
++    assert responses == []
++
++
++def prepared(env, tmp_path, *, scenario=None, output=None, key="bounded-source"):
++    queued = env[2].post(
++        base(env) + "/source", json=source_body(env, scenario=scenario or facts(), request_key=key)
++    )
++    assert queued.status_code == 202, queued.text
++    rid = queued.json()["run_id"]
++    wires = []
++    work(env, tmp_path, [envelope(resource=env[6]), envelope(output or report())], wires)
++    result = get(env, rid)
++    assert result["status"] == "WAITING_APPROVAL", result
++    assert (
++        result["semantic_status"] == "UNKNOWN"
++        and result["overall_run_acceptance"] == "NOT_ACCEPTED"
++    )
++    check_body = {
++        "expected_result_fingerprint": result["result_fingerprint"],
++        "expected_version": result["version"],
++        "expected_fence": result["fence"],
++        "request_key": "finite-check",
++    }
++    response = env[2].post(base(env) + "/" + rid + "/checks", json=check_body)
++    assert response.status_code == 201, response.text
++    return rid, result, response.json(), wires, check_body
++
++
++def extract_body(rid, result, check, **changes):
++    return {
++        "source_run_id": rid,
++        "expected_source_fingerprint": result["result_fingerprint"],
++        "expected_check_fingerprint": check["fingerprint"],
++        "request_key": "bounded-extract",
++        **changes,
++    }
++
++
++def test_actual_source_check_extract_new_scenario_cold_chain_no_authority_or_success_promotion(
++    env, tmp_path
++):
++    with env[0].tx() as c:
++        before = fingerprint([dict(x) for x in c.execute(select(grants)).mappings()])
++        identities = c.execute(select(func.count()).select_from(principals)).scalar_one()
++    rid, source, checked, wires, check_body = prepared(env, tmp_path)
++    assert checked["value"]["checks"]["check_status"] == "PASS"
++    assert checked["value"]["candidate_eligible"] is True
++    assert checked["value"]["checks"]["decision"] == "BLOCK"
++    assert get(env, rid)["status"] == "WAITING_APPROVAL"
++    assert env[2].post(base(env) + "/" + rid + "/checks", json=check_body).json() == checked
++    assert env[2].post(base(env) + "/source", json=source_body(env)).json()["run_id"] == rid
++    # Original successful-source gate remains intact and cannot reinterpret finite checks as semantic PASS.
++    old = env[2].post(
++        f"/api/projects/{env[5]}/protocol/extract",
++        json={
++            "source_run_id": rid,
++            "expected_source_fingerprint": source["result_fingerprint"],
++            "request_key": "old-gate",
++        },
++    )
++    assert old.status_code == 400, old.text
++    response = env[2].post(base(env) + "/extract", json=extract_body(rid, source, checked))
++    assert response.status_code == 202, response.text
++    eid = response.json()["run_id"]
++    template = candidate_for(contract_snapshot(SOURCE, inputs_for(facts())), env[6])
++    work(env, tmp_path, [envelope(template)], wires)
++    compiled = get(env, eid)
++    assert compiled["status"] == "SUCCEEDED" and compiled["semantic_status"] == "NOT_RUN"
++    plan = compiled["result"]["compiled_plan"]
++    assert plan["source_check_fingerprint"] == checked["fingerprint"]
++    cold_body = {
++        "extraction_run_id": eid,
++        "expected_plan_fingerprint": plan["plan_fingerprint"],
++        "resource_id": env[7],
++        "scenario": facts(500),
++        "request_key": "new-scenario",
++    }
++    cold = env[2].post(base(env) + "/cold", json=cold_body)
++    assert cold.status_code == 202, cold.text
++    cid = cold.json()["run_id"]
++    cold_report = report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])
++    work(env, tmp_path, [envelope(cold_report)], wires)
++    actual = get(env, cid)
++    assert actual["status"] == "WAITING_APPROVAL" and actual["semantic_status"] == "UNKNOWN"
++    assert actual["result"]["protocol_result"]["evidence"]["output"] == cold_report
++    cold_check = env[2].post(
++        base(env) + "/" + cid + "/checks",
++        json={
++            "expected_result_fingerprint": actual["result_fingerprint"],
++            "expected_version": actual["version"],
++            "expected_fence": actual["fence"],
++            "request_key": "fresh-check",
++        },
++    )
++    assert cold_check.status_code == 201, cold_check.text
++    assert cold_check.json()["value"]["candidate_eligible"] is True
++    assert cold_check.json()["fingerprint"] != checked["fingerprint"]
++    assert len(wires) == 4
++    cold_wire = json.dumps(wires[-1], ensure_ascii=False)
++    assert (
++        env[6] not in cold_wire
++        and "obtain_prior_approval"
++        not in json.dumps(wires[-1]["messages"][-1].get("content", "")).split("report_schema_json")[
++            0
++        ]
++    )
++    assert "actual_checked_report" not in cold_wire
++    # The pinned public policy itself contains an original 680 case; cold facts
++    # are the separate explicit scenario, never the prior checked Report.
++    cold_node = json.loads(wires[-1]["messages"][-1]["content"])
++    assert json.loads(cold_node["inputs"]["scenario_json"])["amount"] == 500
++    assert not any("expected_output" in json.dumps(w) or "gold_sha" in json.dumps(w) for w in wires)
++    with env[0].tx() as c:
++        slots = list(c.execute(select(protocol_request_slots)).mappings())
++        actual_attempts = list(c.execute(select(attempts)).mappings())
++        assert len(slots) == len(actual_attempts) == 4
++        assert {x["attempt_id"] for x in slots} == {x["id"] for x in actual_attempts}
++        assert len({x["pool_id"] for x in slots}) == 1
++        assert {x["phase"] for x in slots} == {"source", "extract", "cold"}
++        assert c.execute(select(func.count()).select_from(operations)).scalar_one() == 2
++        assert fingerprint([dict(x) for x in c.execute(select(grants)).mappings()]) == before
++        assert c.execute(select(func.count()).select_from(principals)).scalar_one() == identities
++        assert (
++            c.execute(select(runs.c.status).where(runs.c.id == rid)).scalar_one()
++            == "WAITING_APPROVAL"
++        )
++        pool = (
++            c.execute(
++                select(protocol_request_pools).where(
++                    protocol_request_pools.c.id == slots[0]["pool_id"]
++                )
++            )
++            .mappings()
++            .one()
++        )
++        assert pool["request_limit"] == 14
++
++
++@pytest.mark.parametrize(
++    "scenario,output",
++    [
++        (
++            facts(500, approved=None),
++            report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"]),
++        ),
++        (
++            facts(500, elapsed_days=11),
++            report(("TRUE", "FALSE", "FALSE"), "UNKNOWN", ["clarify_late_policy"]),
++        ),
++        (facts(), report(("TRUE", "TRUE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])),
++    ],
++)
++def test_unknown_facts_uncovered_late_goal_and_wrong_report_cannot_extract(
++    env, tmp_path, scenario, output
++):
++    rid, result, checked, wires, _ = prepared(env, tmp_path, scenario=scenario, output=output)
++    assert checked["value"]["candidate_eligible"] is False
++    denied = env[2].post(base(env) + "/extract", json=extract_body(rid, result, checked))
++    assert denied.status_code == 400, denied.text
++    assert len(wires) == 2
++
++
++@pytest.mark.parametrize(
++    "field,value",
++    [
++        ("goal", "uncovered question"),
++        ("expected_source_hash", "0" * 64),
++        ("expected_contract_fingerprint", "0" * 64),
++        ("report", {}),
++        ("candidate", {}),
++        ("gold", {}),
++        ("decision", "PASS"),
++    ],
++)
++def test_closed_opt_in_scope_source_rejects_uncovered_and_caller_verdict(env, field, value):
++    response = env[2].post(base(env) + "/source", json=source_body(env, **{field: value}))
++    assert response.status_code in {403, 409, 422}
++    with env[0].tx() as c:
++        assert c.execute(select(func.count()).select_from(attempts)).scalar_one() == 0
++
++
++@pytest.mark.parametrize(
++    "change",
++    [
++        "wrong_check",
++        "wrong_run",
++        "old_result",
++        "version",
++        "fence",
++        "principal",
++        "project",
++        "revoked",
++        "check_payload",
++        "anchor",
++        "attempt_response",
++        "operation",
++    ],
++)
++def test_persisted_bound_checks_reject_replay_auth_and_technical_evidence_tamper(
++    env, tmp_path, change
++):
++    rid, result, checked, wires, check_body = prepared(env, tmp_path)
++    body = extract_body(rid, result, checked)
++    if change == "wrong_check":
++        body["expected_check_fingerprint"] = "0" * 64
++    elif change == "wrong_run":
++        body["source_run_id"] = "run_" + "a" * 32
++    elif change == "old_result":
++        body["expected_source_fingerprint"] = "0" * 64
++    elif change in {"version", "fence"}:
++        altered = {**check_body, "expected_" + change: result[change] + 1}
++        assert env[2].post(base(env) + "/" + rid + "/checks", json=altered).status_code == 409
++        return
++    elif change == "principal":
++        env[2].headers["Authorization"] = "Bearer synthetic-test-B"
++    elif change == "project":
++        pid = env[2].post("/api/projects", json={"name": "other own project"}).json()["id"]
++        response = env[2].post(f"/api/projects/{pid}/conditional-runs/extract", json=body)
++        assert response.status_code == 403
++        return
++    else:
++        with env[0].tx() as c:
++            if change == "revoked":
++                c.execute(
++                    delete(grants).where(
++                        grants.c.resource_id == env[6], grants.c.tool_ref == "resource.read"
++                    )
++                )
++            elif change == "check_payload":
++                record = copy.deepcopy(checked)
++                record["value"]["input_fingerprint"] = "0" * 64
++                record["fingerprint"] = fingerprint(record["value"])
++                # Coherently alter BOTH event rows; actual Run recomputation must still reject.
++                c.execute(
++                    update(events)
++                    .where(events.c.kind == CHECK_EVENT, events.c.run_id == rid)
++                    .values(data=record)
++                )
++                c.execute(
++                    update(events)
++                    .where(events.c.kind == ANCHOR_EVENT, events.c.run_id == record["check_id"])
++                    .values(data=record)
++                )
++                body["expected_check_fingerprint"] = record["fingerprint"]
++            elif change == "anchor":
++                c.execute(
++                    delete(events).where(
++                        events.c.run_id == checked["check_id"], events.c.kind == ANCHOR_EVENT
++                    )
++                )
++            elif change == "attempt_response":
++                row = (
++                    c.execute(
++                        select(attempts).where(
++                            attempts.c.run_id == rid, attempts.c.response.is_not(None)
++                        )
++                    )
++                    .mappings()
++                    .all()[-1]
++                )
++                modified = copy.deepcopy(row["response"])
++                modified["choices"][0]["message"]["content"] = json.dumps({"unrelated": True})
++                c.execute(
++                    update(attempts).where(attempts.c.id == row["id"]).values(response=modified)
++                )
++            else:
++                c.execute(
++                    update(operations)
++                    .where(operations.c.run_id == rid)
++                    .values(tool_ref="artifact.save_text")
++                )
++    response = env[2].post(base(env) + "/extract", json=body)
++    assert response.status_code in {400, 403, 409}, response.text
++    assert len(wires) == 2
++
++
++def test_concurrent_idempotent_checks_and_changed_key_request_reject(env, tmp_path):
++    rid, _, checked, _, request = prepared(env, tmp_path)
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        replies = list(
++            pool.map(
++                lambda _: env[2].post(base(env) + "/" + rid + "/checks", json=request), range(2)
++            )
++        )
++    assert all(r.status_code == 201 and r.json() == checked for r in replies)
++    with env[0].tx() as c:
++        assert (
++            c.execute(
++                select(func.count())
++                .select_from(events)
++                .where(events.c.kind == CHECK_EVENT, events.c.run_id == rid)
++            ).scalar_one()
++            == 1
++        )
++        assert (
++            c.execute(
++                select(func.count())
++                .select_from(events)
++                .where(events.c.kind == ANCHOR_EVENT, events.c.run_id == checked["check_id"])
++            ).scalar_one()
++            == 1
++        )
++    altered = {**request, "expected_result_fingerprint": "0" * 64}
++    assert env[2].post(base(env) + "/" + rid + "/checks", json=altered).status_code == 409
++
++
++@pytest.mark.parametrize(
++    "field,value",
++    [
++        ("findings", []),
++        ("findings", report()["findings"][:2]),
++        ("explanation", ""),
++        ("next_actions", []),
++        ("deadline_days", True),
++        ("unexpected", "data"),
++    ],
++)
++def test_invalid_actual_report_stops_before_completion_check_or_candidate(
++    env, tmp_path, field, value
++):
++    output = {**report(), field: value}
++    response = env[2].post(base(env) + "/source", json=source_body(env))
++    rid = response.json()["run_id"]
++    wires = []
++    work(env, tmp_path, [envelope(resource=env[6]), envelope(output)], wires)
++    actual = get(env, rid)
++    assert actual["status"] == "FAILED" and actual["result"] is None
++    assert actual["semantic_status"] == "UNKNOWN"
++    rejected = env[2].post(
++        base(env) + "/" + rid + "/checks",
++        json={
++            "expected_result_fingerprint": "0" * 64,
++            "expected_version": actual["version"],
++            "expected_fence": actual["fence"],
++            "request_key": "no-bad-report",
++        },
++    )
++    assert rejected.status_code in {400, 409}
++    with env[0].tx() as c:
++        assert (
++            c.execute(
++                select(func.count()).select_from(events).where(events.c.kind == CHECK_EVENT)
++            ).scalar_one()
++            == 0
++        )
++
++
++@pytest.mark.parametrize("mutation", ["instruction", "answer", "extra_step"])
++def test_model_candidate_without_exact_covered_template_stops_and_no_cold(env, tmp_path, mutation):
++    rid, result, checked, wires, _ = prepared(env, tmp_path)
++    queued = env[2].post(base(env) + "/extract", json=extract_body(rid, result, checked))
++    eid = queued.json()["run_id"]
++    candidate = candidate_for(contract_snapshot(SOURCE, inputs_for(facts())), env[6])
++    if mutation == "instruction":
++        candidate["steps"][1]["instruction"] = "Always return the prior BLOCK decision"
++    elif mutation == "answer":
++        candidate["steps"][1]["instruction"] += json.dumps(report())
++    else:
++        extra = copy.deepcopy(candidate["steps"][1])
++        extra["id"] = "uncovered_language"
++        candidate["steps"].append(extra)
++    work(env, tmp_path, [envelope(candidate)], wires)
++    failed = get(env, eid)
++    assert failed["status"] == "FAILED" and failed["result"] is None
++    assert get(env, rid)["status"] == "WAITING_APPROVAL"
++    with env[0].tx() as c:
++        assert c.execute(select(func.count()).select_from(attempts)).scalar_one() == 3
++
++
++def test_actual_other_run_check_cannot_replace_current_report_binding(env, tmp_path):
++    first, first_result, first_check, _, _ = prepared(env, tmp_path, key="first")
++    second, second_result, second_check, _, _ = prepared(env, tmp_path, key="second")
++    response = env[2].post(
++        base(env) + "/extract", json=extract_body(second, second_result, first_check)
++    )
++    assert response.status_code == 400
++    # Replay both sealed copies onto the other Run; source evidence remains bound to the original Run.
++    with env[0].tx() as c:
++        env[0].event(c, second, CHECK_EVENT, first_check)
++    response = env[2].post(
++        base(env) + "/extract", json=extract_body(second, second_result, first_check)
++    )
++    assert response.status_code == 409
++    assert (
++        first != second
++        and first_result["result_fingerprint"] != second_result["result_fingerprint"]
++    )
++    assert first_check["fingerprint"] != second_check["fingerprint"]
++
++
++def test_revoke_after_extract_enqueue_stops_before_new_model_request(env, tmp_path):
++    rid, result, checked, wires, _ = prepared(env, tmp_path)
++    queued = env[2].post(base(env) + "/extract", json=extract_body(rid, result, checked))
++    eid = queued.json()["run_id"]
++    with env[0].tx() as c:
++        c.execute(
++            delete(grants).where(
++                grants.c.resource_id == env[6], grants.c.tool_ref == "resource.read"
++            )
++        )
++    worker = Worker(env[0], env[1], protocol_runner_factory=factory(env, tmp_path, [], wires))
++    assert worker.once()
++    assert len(wires) == 2
++    with env[0].tx() as c:
++        assert c.execute(select(runs.c.status).where(runs.c.id == eid)).scalar_one() in {
++            "FAILED",
++            "WAITING_RESOURCE",
++        }
++        assert c.execute(select(func.count()).select_from(attempts)).scalar_one() == 2
++
++
++def test_legacy_catalog_and_namespace_reject_bounded_contract_and_caller_report(env):
++    assert len(env[2].get(f"/api/projects/{env[5]}/protocol/contracts").json()["items"]) == 4
++    response = env[2].post(
++        f"/api/projects/{env[5]}/protocol/source",
++        json={
++            "goal": GOAL,
++            "inputs": inputs_for(facts()),
++            "resource_ids": [env[6]],
++            "contract_id": SOURCE,
++            "request_key": "not-opt-in",
++        },
++    )
++    assert response.status_code == 400
++    queued = env[2].post(base(env) + "/source", json=source_body(env))
++    rid = queued.json()["run_id"]
++    response = env[2].post(
++        base(env) + "/" + rid + "/checks",
++        json={
++            "expected_result_fingerprint": "0" * 64,
++            "expected_version": 1,
++            "expected_fence": 1,
++            "request_key": "forged",
++            "report": report(),
++        },
++    )
++    assert response.status_code == 422
++    assert env[2].get(base(env) + "/" + rid).json()["status"] == "QUEUED"
++
++
++def test_application_role_actual_bound_chain_uses_existing_crud_only(env, runtime_role, tmp_path):
++    from fastapi.testclient import TestClient
++
++    from sim2act.api import create_app
++    from sim2act.db import Store
++
++    store = Store(runtime_role, test_only=True)  # Deliberately no initialize or migration.
++    settings = replace(env[1], database_url=runtime_role)
++    client = TestClient(create_app(store, settings))
++    client.headers["Authorization"] = "Bearer synthetic-test-A"
++    role_env = (store, settings, client, *env[3:])
++    try:
++        test_actual_source_check_extract_new_scenario_cold_chain_no_authority_or_success_promotion(
++            role_env, tmp_path
++        )
++    finally:
++        client.close()
++        store.engine.dispose()
++
++
++@pytest.mark.parametrize(
++    "mutation",
++    [
++        "FAILED",
++        "PARTIAL",
++        "RECONCILING",
++        "unknown_attempt",
++        "resource_hash",
++        "actual_report",
++        "tool_trace",
++        "completion_bool",
++    ],
++)
++def test_source_known_receipt_and_current_material_cannot_be_replaced(env, tmp_path, mutation):
++    from sim2act.db import resources
++
++    rid, result, checked, wires, _ = prepared(env, tmp_path)
++    with env[0].tx() as c:
++        if mutation in {"FAILED", "PARTIAL", "RECONCILING"}:
++            c.execute(update(runs).where(runs.c.id == rid).values(status=mutation))
++        elif mutation == "unknown_attempt":
++            c.execute(update(attempts).where(attempts.c.run_id == rid).values(status="STARTED"))
++        elif mutation == "resource_hash":
++            c.execute(update(resources).where(resources.c.id == env[6]).values(hash="0" * 64))
++        elif mutation == "completion_bool":
++            row = (
++                c.execute(
++                    select(events).where(
++                        events.c.run_id == rid, events.c.kind == "PROTOCOL_COMPLETED"
++                    )
++                )
++                .mappings()
++                .one()
++            )
++            seal = {**row["data"], "completed_fence": True}
++            c.execute(update(events).where(events.c.id == row["id"]).values(data=seal))
++        else:
++            row = (
++                c.execute(select(protocol_jobs).where(protocol_jobs.c.run_id == rid))
++                .mappings()
++                .one()
++            )
++            modified = copy.deepcopy(row["result_snapshot"])
++            evidence = modified["protocol_result"]["evidence"]
++            if mutation == "actual_report":
++                evidence["output"] = report(
++                    ("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"]
++                )
++            else:
++                evidence["tool_trace"] = []
++            # Coherent job+Run snapshot hash still lacks independent original completion anchor.
++            fp = fingerprint(modified)
++            c.execute(
++                update(protocol_jobs)
++                .where(protocol_jobs.c.run_id == rid)
++                .values(result_snapshot=modified, result_fingerprint=fp)
++            )
++            c.execute(update(runs).where(runs.c.id == rid).values(result=modified))
++    response = env[2].post(base(env) + "/extract", json=extract_body(rid, result, checked))
++    assert response.status_code in {400, 403, 409}, response.text
++    assert len(wires) == 2
++
++
++@pytest.mark.parametrize("phase", ["source", "extract", "cold"])
++def test_actual_completed_run_result_null_rejects_check_extract_and_cold(env, tmp_path, phase):
++    """A sealed job snapshot never substitutes a missing authoritative Run mirror."""
++    test_actual_source_check_extract_new_scenario_cold_chain_no_authority_or_success_promotion(
++        env, tmp_path
++    )
++    with env[0].tx() as c:
++        job = c.execute(select(protocol_jobs).where(protocol_jobs.c.kind == phase)).mappings().one()
++        source_job = (
++            c.execute(select(protocol_jobs).where(protocol_jobs.c.kind == "source"))
++            .mappings()
++            .one()
++        )
++        source_check = c.execute(
++            select(events.c.data).where(
++                events.c.run_id == source_job["run_id"], events.c.kind == CHECK_EVENT
++            )
++        ).scalar_one()
++        run = c.execute(select(runs).where(runs.c.id == job["run_id"])).mappings().one()
++        actual_attempts_before = c.execute(select(func.count()).select_from(attempts)).scalar_one()
++        c.execute(update(runs).where(runs.c.id == job["run_id"]).values(result=None))
++    # Job payload, hashes, completion/check seals, version/fence and Actual Attempt ledger remain untouched.
++    assert env[2].get(base(env) + "/" + job["run_id"]).status_code == 409
++    if phase in {"source", "cold"}:
++        response = env[2].post(
++            base(env) + "/" + job["run_id"] + "/checks",
++            json={
++                "expected_result_fingerprint": job["result_fingerprint"],
++                "expected_version": run["version"],
++                "expected_fence": run["fence"],
++                "request_key": "missing-primary-result",
++            },
++        )
++        assert response.status_code == 409, response.text
++    if phase == "source":
++        response = env[2].post(
++            base(env) + "/extract",
++            json=extract_body(
++                job["run_id"],
++                {"result_fingerprint": job["result_fingerprint"]},
++                source_check,
++                request_key="no-null-source",
++            ),
++        )
++        assert response.status_code == 409, response.text
++    if phase == "extract":
++        response = env[2].post(
++            base(env) + "/cold",
++            json={
++                "extraction_run_id": job["run_id"],
++                "expected_plan_fingerprint": job["result_snapshot"]["compiled_plan"][
++                    "plan_fingerprint"
++                ],
++                "resource_id": env[7],
++                "scenario": facts(500),
++                "request_key": "no-null-plan",
++            },
++        )
++        assert response.status_code == 409, response.text
++    with env[0].tx() as c:
++        assert (
++            c.execute(select(func.count()).select_from(attempts)).scalar_one()
++            == actual_attempts_before
++            == 4
++        )
+diff --git a/tests/test_conditional_run_product.py b/tests/test_conditional_run_product.py
+new file mode 100644
+index 0000000..9cfc41e
+--- /dev/null
++++ b/tests/test_conditional_run_product.py
+@@ -0,0 +1,201 @@
++"""Actual product DOM to HTTP/Worker/Mock binding; no gold or product provider activation."""
++
++import hashlib
++import json
++import shutil
++import socket
++import subprocess
++import threading
++import time
++
++import pytest
++import uvicorn
++from fastapi.responses import JSONResponse
++from sqlalchemy import func, select, update
++from test_conditional_run_bindings import POLICY, envelope, factory, report
++
++from sim2act.api import create_app
++from sim2act.conditional_runs import candidate_for
++from sim2act.db import (
++    attempts,
++    grants,
++    operations,
++    principals,
++    protocol_jobs,
++    protocol_request_slots,
++    resources,
++    runs,
++)
++from sim2act.protocol_pool import initialize_pools
++from sim2act.worker import Worker
++
++
++@pytest.fixture
++def env(env):
++    initialize_pools(env[0], offline_limit=14)
++    ids = []
++    for name in ["bounded public rules", "fresh rules binding"]:
++        reply = env[2].post(
++            f"/api/projects/{env[5]}/resources",
++            json={"name": name, "format": "txt", "content": POLICY.read_text()},
++        )
++        assert reply.status_code == 201
++        ids.append(reply.json()["id"])
++    return (*env[:6], *ids)
++
++
++def test_source_bound_product_actual_http_dom(env, tmp_path):
++    if (
++        not shutil.which("node")
++        or subprocess.run(
++            ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
++        ).returncode
++    ):
++        pytest.skip("Developer Node/jsdom required")
++    store, settings, _, owner, _, pid, source, fresh = env
++    other = store.project(owner, "Product source ABA project")
++    with store.tx() as c:
++        baseline = [
++            c.execute(select(func.count()).select_from(t)).scalar() for t in [principals, grants]
++        ]
++    app = create_app(store, settings)
++    wires = []
++    metadata_fault = [False]
++
++    @app.middleware("http")
++    async def synthetic_metadata_failure(request, call_next):
++        if (
++            metadata_fault[0]
++            and request.method == "GET"
++            and request.url.path == f"/api/projects/{pid}/resources"
++        ):
++            return JSONResponse({"error": {"code": "AUTH_LIST_UNAVAILABLE"}}, status_code=503)
++        return await call_next(request)
++
++    @app.post("/test-only-bounded-metadata/{mode}")
++    def set_metadata_failure(mode: str):
++        metadata_fault[0] = mode == "fail"
++        return {"test_only": True}
++
++    @app.post("/test-only-bounded-work/{phase}")
++    def execute(phase: str):
++        with store.tx() as c:
++            job = (
++                c.execute(
++                    select(protocol_jobs)
++                    .join(runs, runs.c.id == protocol_jobs.c.run_id)
++                    .where(runs.c.project_id == pid, runs.c.status == "QUEUED")
++                )
++                .mappings()
++                .one()
++            )
++        snapshot = job["accepted_snapshot"]
++        if phase == "source":
++            values = [envelope(resource=source), envelope(report())]
++        elif phase == "extract":
++            values = [envelope(candidate_for(snapshot["contract"], source))]
++        elif phase == "cold":
++            values = [
++                envelope(report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"]))
++            ]
++        else:
++            assert phase == "no-provider"
++            assert Worker(store, settings).once()
++            return {"test_only": True}
++        assert job["kind"] == phase
++        worker = Worker(
++            store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)
++        )
++        assert worker.once() and not values
++        return {"test_only": True}
++
++    @app.post("/test-only-bounded-source-version/{mode}")
++    def source_version(mode: str):
++        value = POLICY.read_text() + (
++            "\nChanged bounded source version." if mode == "change" else ""
++        )
++        with store.tx() as c:
++            c.execute(
++                update(resources)
++                .where(resources.c.id == source)
++                .values(content=value, hash=hashlib.sha256(value.encode()).hexdigest())
++            )
++        return {"test_only": True}
++
++    @app.post("/test-only-bounded-revoke")
++    def revoke():
++        with store.tx() as c:
++            c.execute(update(grants).where(grants.c.resource_id == source).values(revoked=True))
++        return {"test_only": True}
++
++    with socket.socket() as sock:
++        sock.bind(("127.0.0.1", 0))
++        port = sock.getsockname()[1]
++    (tmp_path / "info.json").write_text(
++        json.dumps(
++            {
++                "base": f"http://127.0.0.1:{port}",
++                "project": pid,
++                "other": other,
++                "resource": source,
++                "fresh": fresh,
++            }
++        )
++    )
++    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
++    thread = threading.Thread(target=server.run, daemon=True)
++    thread.start()
++    try:
++        end = time.time() + 10
++        while not server.started:
++            assert thread.is_alive() and time.time() < end
++            time.sleep(0.01)
++        out = subprocess.run(
++            ["node", "tests/conditional_run_product.cjs", str(tmp_path)],
++            capture_output=True,
++            text=True,
++            timeout=90,
++        )
++        (tmp_path / "dom-driver.log").write_text(out.stdout + out.stderr)
++        assert out.returncode == 0, out.stdout + out.stderr
++        result = json.loads((tmp_path / "results.json").read_text())
++        assert result["status"] == "PASS" and len(result["checks"]) >= 14
++        assert len(wires) == 4
++        with store.tx() as c:
++            assert c.execute(select(func.count()).select_from(attempts)).scalar() == 4
++            slots = list(c.execute(select(protocol_request_slots)).mappings())
++            assert len(slots) == 4 and len({v["pool_id"] for v in slots}) == 1
++            authority_after = [
++                c.execute(select(func.count()).select_from(t)).scalar()
++                for t in [principals, grants]
++            ]
++            assert authority_after == baseline
++            audit = {
++                "actual_attempts": [
++                    {"id": a["id"], "run_id": a["run_id"], "status": a["status"]}
++                    for a in c.execute(select(attempts)).mappings()
++                ],
++                "actual_operations": [
++                    {
++                        "id": o["id"],
++                        "run_id": o["run_id"],
++                        "status": o["status"],
++                        "tool_ref": o["tool_ref"],
++                    }
++                    for o in c.execute(select(operations)).mappings()
++                ],
++                "slots_count": len(slots),
++                "chain_pool_count": len({v["pool_id"] for v in slots}),
++                "authority_before": baseline,
++                "authority_after": authority_after,
++                "mock_wire_requests": len(wires),
++                "live_requests": 0,
++            }
++            (tmp_path / "actual-ledger.json").write_text(json.dumps(audit, indent=2))
++            (tmp_path / "mock-wires.json").write_text(
++                json.dumps(wires, ensure_ascii=False, indent=2)
++            )
++    finally:
++        server.should_exit = True
++        thread.join(10)
++        assert not thread.is_alive()
