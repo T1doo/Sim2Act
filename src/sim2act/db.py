@@ -748,6 +748,7 @@ class Store:
                             "tools": 0,
                             "repairs": 0,
                             "reserved_tokens": 0,
+                            **({"saved_goal_input": fp} if source is not None else {}),
                         },
                         version=1,
                         cancel_intent=False,
@@ -782,6 +783,8 @@ class Store:
                 "Missing or modified frozen Run contract; legacy runs require explicit closure",
             )
         contract = FrozenRunContract.model_validate(saved["snapshot"])
+        if contract.source_goal_card is None and "saved_goal_input" in run["context"]:
+            raise DomainError("VERSION_CONFLICT", "Saved goal source was removed")
         goal = contract.goal
         if (
             contract.run_id != run["id"]

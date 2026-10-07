@@ -74,7 +74,7 @@ class Worker:
             }
             envelope = len(serialized) + s.max_output_tokens
         with self.store.tx() as c:
-            if protocol_request:
+            if protocol_request or verify_goal_source:
                 owner = (
                     c.execute(
                         select(runs.c.principal_id, runs.c.project_id).where(runs.c.id == run_id)
@@ -206,9 +206,13 @@ class Worker:
 
     def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False):
         with self.store.tx() as c:
+            if verify_goal_source:
+                owner = c.execute(select(runs.c.principal_id, runs.c.project_id).where(
+                    runs.c.id == run_id,
+                )).mappings().one()
+                self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
             if verify_goal_source:
-                self.store.lock_project(c, run["principal_id"], run["project_id"])
                 self.store.frozen_contract(c, run)
             if run["status"] == "CANCEL_REQUESTED":
                 state = "CANCELLED"
@@ -269,9 +273,23 @@ class Worker:
         ctx = dict(run["context"])
         ctx["messages"] = list(ctx["messages"])
         goal_tools = definitions()
+        goal_input = {"goal": run["goal"], "resource_refs": run["resource_refs"]}
         if contract.source_goal_card is not None:
             goal_tools = [t for t in goal_tools if t["function"]["name"] in
                           {"resource.read", "data.aggregate_csv"}]
+            goal_input["saved_goal"] = contract.source_goal_card.model_dump()
+            if ctx["messages"]:
+                try:
+                    valid = (
+                        len(ctx["messages"]) >= 2
+                        and ctx["messages"][0] == {"role": "system", "content": SYSTEM_PROMPT}
+                        and ctx["messages"][1]["role"] == "user"
+                        and json.loads(ctx["messages"][1]["content"]) == goal_input
+                    )
+                except (KeyError, TypeError, ValueError):
+                    valid = False
+                if not valid:
+                    raise DomainError("VERSION_CONFLICT", "Resumed context lost frozen goal conditions")
         if not ctx["messages"]:
             ctx["messages"] = [
                 {
@@ -281,9 +299,7 @@ class Worker:
                 {
                     "role": "user",
                     "content": json.dumps(
-                        {**{"goal": run["goal"], "resource_refs": run["resource_refs"]},
-                         **({"saved_goal": contract.source_goal_card.model_dump()}
-                            if contract.source_goal_card is not None else {})},
+                        goal_input,
                         ensure_ascii=False,
                     ),
                 },

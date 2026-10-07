@@ -4,7 +4,7 @@ from pydantic import Field
 from sqlalchemy import select
 
 from .contracts import GoalCardRunSource, Strict
-from .db import fingerprint, goal_cards, run_contracts
+from .db import events, fingerprint, goal_card_versions, goal_cards, run_contracts
 from .errors import DomainError
 from .goals import GoalCardInput, validate_card_version
 
@@ -43,7 +43,18 @@ def verify_source(store, c, run, contract):
     source = contract.source_goal_card
     if source is None:
         return
-    saved = validate_card_version(store, c, run["principal_id"], source.card_id, source.version)
+    # Contract validation is structural. Existing send/read/effect gates check
+    # current authorization; do not acquire Grant locks under a worker Run lock.
+    card = c.execute(select(goal_cards).where(goal_cards.c.id == source.card_id)).mappings().first()
+    if not card or card["project_id"] != run["project_id"]:
+        raise DomainError("VERSION_CONFLICT", "Goal source project differs from task")
+    store.own_project(c, run["principal_id"], card["project_id"])
+    saved = c.execute(select(goal_card_versions).where(
+        goal_card_versions.c.card_id == source.card_id,
+        goal_card_versions.c.version == source.version,
+    )).mappings().first()
+    if not saved:
+        raise DomainError("VERSION_CONFLICT", "Missing frozen goal history")
     content = GoalCardInput.model_validate(source.snapshot.get("content")).model_dump()
     if (
         fingerprint(source.snapshot) != source.fingerprint
@@ -56,6 +67,18 @@ def verify_source(store, c, run, contract):
         or contract.goal.resource_refs != content["resource_refs"]
     ):
         raise DomainError("VERSION_CONFLICT", "Frozen task differs from its saved goal")
+    expected = fingerprint({
+        "goal": contract.goal.goal, "resource_refs": contract.goal.resource_refs,
+        "policy": {"limits": contract.limits.model_dump(), "mode": contract.mode,
+                   "request_model": contract.request_model},
+        "goal_source": source.model_dump(),
+    })
+    accepted = c.execute(select(events.c.data).where(
+        events.c.run_id == run["id"], events.c.kind == "ACCEPTED",
+    )).scalars().all()
+    if (run["fingerprint"] != expected or run["context"].get("saved_goal_input") != expected
+            or accepted != [{"input_fingerprint": expected}]):
+        raise DomainError("VERSION_CONFLICT", "Goal source differs from original acceptance")
 
 
 def acceptance(store, user, run_id):

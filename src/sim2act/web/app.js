@@ -444,11 +444,11 @@ async function executeGoalCard(recover=false){
  }catch(error){
   const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
   entry.state=rejected?"rejected":"unknown";if(!rejected)entry.uncertain=true;
-  entry.message=rejected?`执行被拒绝：${error.message}`:"接受回执 UNKNOWN；请显式恢复原版本、原指纹与原请求键，不能另建重复任务。";
-  if(current())renderGoalRun();return;
+  entry.message=rejected?`执行被拒绝：${error.message}`:`保存 v${entry.body.expected_version} 的接受回执 UNKNOWN；请显式恢复原版本、原指纹与原请求键，不能另建重复任务。`;
+  if(goalRunKey()===key)renderGoalRun();return;
  }
  if(current()&&selection===runUserSelectionGeneration)await readGoalRun(entry,current,selection);
- if(current())renderGoalRun();
+ if(goalRunKey()===key)renderGoalRun();
 }
 $("goal-card-run").onclick=safe(()=>executeGoalCard());
 $("goal-card-run-recover").onclick=safe(()=>executeGoalCard(true));
@@ -486,7 +486,7 @@ async function showGoalCard(id, pid=$("project-select").value) {
   try {
     card=await api(`/api/goal-cards/${id}`);
     if(!current())return;
-    if(card.project_id !== pid)throw Error("目标卡不属于当前项目，请重新选择");
+    if(card.id !== id || card.project_id !== pid)throw Error("目标卡不属于当前选择，请重新选择");
   } catch(e) {
     if(!current())return;
     $("goal-card-status").textContent="读取失败，请重新选择或新建";

@@ -6,8 +6,16 @@ import json
 import pytest
 from sqlalchemy import select, update
 
-from sim2act.db import fingerprint, goal_card_versions, grants, principals, resources, runs
-from sim2act.model import MockModel
+from sim2act.db import (
+    fingerprint,
+    goal_card_versions,
+    grants,
+    principals,
+    resources,
+    run_contracts,
+    runs,
+)
+from sim2act.model import SYSTEM_PROMPT, MockModel
 from sim2act.worker import Worker
 
 
@@ -140,3 +148,52 @@ def test_unadvertised_write_tool_rejected_without_authority_change(env, monkeypa
     view = env[2].get(f"/api/runs/{rid}").json()
     assert view["status"] == "FAILED" and view["error"]["code"] == "UNSUPPORTED_CAPABILITY"
     assert authority(env[0]) == before and view["known_effects"] == []
+
+
+@pytest.mark.parametrize("damage", ["other_card", "other_project", "remove_source", "accepted_anchor"])
+def test_coherent_contract_tamper_does_not_relabel_original_acceptance(env, monkeypatch, damage):
+    store, settings, client, *_rest, pid, _rid = env
+    source, content = card(env)
+    content["resource_refs"] = []
+    source = client.post(f"/api/projects/{pid}/goal-cards", json=content).json()
+    rid = start(env, source).json()["run_id"]
+    other_pid = pid if damage != "other_project" else client.post("/api/projects", json={"name": "empty other"}).json()["id"]
+    other = client.post(f"/api/projects/{other_pid}/goal-cards", json=content).json()
+    with store.tx() as c:
+        value = copy.deepcopy(c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == rid)).scalar_one())
+        if damage == "remove_source":
+            value.pop("source_goal_card")
+        else:
+            value["source_goal_card"]["card_id"] = other["id"]
+            value["goal"]["goal_id"] = other["id"]
+        c.execute(update(run_contracts).where(run_contracts.c.run_id == rid).values(snapshot=value, fingerprint=fingerprint(value)))
+        if damage == "accepted_anchor":
+            forged = fingerprint({"goal": value["goal"]["goal"], "resource_refs": [],
+                "policy": {k: value[k] for k in ("limits", "mode", "request_model")},
+                "goal_source": value["source_goal_card"]})
+            context = dict(c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one())
+            context["saved_goal_input"] = forged
+            c.execute(update(runs).where(runs.c.id == rid).values(fingerprint=forged, context=context))
+    calls = []
+    monkeypatch.setattr(MockModel, "request", lambda *args: calls.append(args))
+    assert Worker(store, settings).once() and calls == []
+    assert client.get(f"/api/runs/{rid}").status_code == 409
+
+
+def test_resume_cannot_strip_hard_conditions_from_model_context(env, monkeypatch):
+    source, _ = card(env)
+    rid = start(env, source).json()["run_id"]
+    saved = env[2].get(f"/api/runs/{rid}").json()["contract"]["snapshot"]["source_goal_card"]
+    changed = copy.deepcopy(saved)
+    changed["snapshot"]["content"]["constraints"] = []
+    with env[0].tx() as c:
+        context = dict(c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one())
+        context["messages"] = [{"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps({"goal": saved["snapshot"]["content"]["goal"],
+                "resource_refs": saved["snapshot"]["content"]["resource_refs"], "saved_goal": changed})}]
+        c.execute(update(runs).where(runs.c.id == rid).values(context=context))
+    calls = []
+    monkeypatch.setattr(MockModel, "request", lambda *args: calls.append(args))
+    assert Worker(env[0], env[1]).once() and calls == []
+    view = env[2].get(f"/api/runs/{rid}").json()
+    assert view["status"] == "FAILED" and view["error"]["code"] == "VERSION_CONFLICT"
