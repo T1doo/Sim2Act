@@ -97,7 +97,7 @@ class Worker:
             if planner_request:
                 from .goal_planner import check_sender, request_messages
 
-                check_sender(self, self.store.frozen_contract(c, run))
+                check_sender(self, self.store.frozen_contract(c, run), c, run)
                 if (request_tools != [] or fingerprint(context["messages"])
                         != fingerprint(request_messages(self.store, c, run))):
                     raise DomainError("VERSION_CONFLICT", "Planner request changed")
@@ -192,6 +192,10 @@ class Worker:
                     },
                 )
             )
+            if planner_request and self.store.frozen_contract(c, run).natural_planning.activation is not None:
+                from .natural_activations import reserve_slot
+
+                reserve_slot(self.store, c, run, fence, aid, envelope, wire_seal["sha256"], s)
             if wire_seal is not None:
                 self.store.event(
                     c,
@@ -237,6 +241,10 @@ class Worker:
                 if frozen.natural_planning is not None and result is not None:
                     from .goal_planner import verify_result
 
+                    if frozen.natural_planning.activation is not None:
+                        from .natural_activations import validate_run
+
+                        validate_run(self.store, c, run, self.s, active=True)
                     verify_result(self.store, c, run, result)
             if run["status"] == "CANCEL_REQUESTED":
                 state = "CANCELLED"

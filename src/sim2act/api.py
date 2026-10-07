@@ -464,7 +464,59 @@ def create_app(store=None, settings=None):
     def confirm_goal_plan(rid: str, body: ConfirmNaturalPlanInput, user=user_dependency):
         from .goal_planner import confirm_natural_plan
 
-        return confirm_natural_plan(db, user, rid, body.model_dump())
+        return confirm_natural_plan(db, user, rid, body.model_dump(), s)
+
+    from .natural_activations import ApproveInput, CreateInput, RevokeInput
+
+    @app.post("/api/projects/{pid}/natural-activations", status_code=201)
+    def create_natural_activation(pid: str, body: CreateInput, user=user_dependency):
+        from .natural_activations import create
+
+        return create(db, user, pid, body.model_dump(), s)
+
+    @app.get("/api/natural-activations/{aid}")
+    def inspect_natural_activation(aid: str, user=user_dependency):
+        from .natural_activations import inspect
+
+        return inspect(db, user, aid, s)
+
+    @app.post("/api/natural-activations/{aid}/approve")
+    def approve_natural_activation(aid: str, body: ApproveInput, user=user_dependency):
+        from .natural_activations import approve
+
+        return approve(db, user, aid, body.model_dump(), s)
+
+    @app.post("/api/natural-activations/{aid}/revoke")
+    def revoke_natural_activation(aid: str, body: RevokeInput, user=user_dependency):
+        from .natural_activations import revoke
+
+        return revoke(db, user, aid, body.model_dump(), s)
+
+    @app.post("/api/natural-activations/{aid}/close-expired")
+    def close_expired_natural_activation(aid: str, user=user_dependency):
+        from .natural_activations import close_expired
+
+        return close_expired(db, user, aid, s)
+
+    @app.post("/api/natural-activations/{aid}/goal-cards/{cid}/planned-runs", status_code=202)
+    def run_activated_goal(aid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        from .goal_planner import policy
+        from .natural_activations import binding_for_run, inspect
+
+        bound = binding_for_run(db, user, aid, cid, body.model_dump(), s)
+        pid = inspect(db, user, aid, s)["project_id"]
+        selected = policy(s.goal_planner_provider, activation=bound)
+        limits = platform_limits.model_dump()
+        for key, cap in {"max_requests": 1, "max_repairs": 0, "max_tools": 2,
+                         "max_total_tokens": 11000, "max_output_tokens": 512,
+                         "run_seconds": 120}.items():
+            limits[key] = min(limits[key], cap)
+        rid = db.submit(user, pid, "", [], body.request_key,
+                        policy={"limits": limits, "mode": s.mode, "request_model": s.model,
+                                "natural_planning": selected},
+                        goal_source={"card_id": cid, "version": body.expected_version,
+                                     "fingerprint": body.expected_fingerprint})
+        return {**acceptance(db, user, rid), "planning_policy": selected}
 
     @app.get("/api/projects/{pid}/natural-planning-status")
     def natural_planning_status(pid: str, user=user_dependency):

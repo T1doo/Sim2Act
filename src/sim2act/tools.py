@@ -16,6 +16,8 @@ from .db import (
     operations,
     resource_retirements,
     resources,
+    run_contracts,
+    runs,
 )
 from .errors import DomainError
 
@@ -64,13 +66,37 @@ def definitions():
     ]
 
 
-def dispatch(store, run_id, fence, call, *, crash_before_commit=False):
+def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
+             natural_activation_settings=None):
     """Authorization, local effect and receipt are one transaction, fenced by the Run row."""
     name, args = call["function"]["name"], call["args"]
     validate_call(name, args)
     fp = fingerprint({"tool": name, "args": args})
     with store.tx() as c:
+        source = c.execute(select(runs.c.principal_id, runs.c.project_id, run_contracts.c.snapshot)
+                           .join(run_contracts, run_contracts.c.run_id == runs.c.id)
+                           .where(runs.c.id == run_id)).mappings().first()
+        selected = source["snapshot"].get("natural_planning") if source else None
+        activated = isinstance(selected, dict) and selected.get("activation") is not None
+        if activated:
+            store.lock_project(c, source["principal_id"], source["project_id"])
         run = store.guard(c, run_id, fence)
+        if activated:
+            from .goal_planner import verified_plan, verify_confirmation
+            from .natural_activations import validate_run
+
+            validate_run(store, c, run, natural_activation_settings, active=True)
+            binding = verified_plan(store, c, run)
+            verify_confirmation(store, c, run, binding)
+            expected = []
+            for step in binding["plan"]["steps"]:
+                step_args = {"resource_id": step["resource_id"]}
+                if step["tool_ref"] == "data.aggregate_csv":
+                    step_args["column"] = step["column"]
+                expected.append({"id": "nl_" + binding["fingerprint"] + "_" + step["id"],
+                                 "name": step["tool_ref"], "args": step_args})
+            if {"id": call["id"], "name": name, "args": args} not in expected:
+                raise DomainError("PERMISSION_DENIED", "Operation is outside confirmed activation")
         if run["status"] != "RUNNING":
             raise DomainError("VERSION_CONFLICT", "Pause/cancel stops new dispatch")
         rid = args.get("resource_id", run["project_id"])
@@ -139,8 +165,6 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False):
             .values(status="VERIFIED", receipt=receipt)
         )
         ctx["tools"] += 1
-        from .db import runs
-
         c.execute(update(runs).where(runs.c.id == run_id).values(context=ctx))
         store.event(
             c, run_id, "TOOL_VERIFIED", {"operation_id": oid, "tool_ref": name, "source_ref": rid}
