@@ -325,3 +325,50 @@ def test_source_or_target_revoke_prevents_new_run_and_protected_history(env, tmp
     assert env[2].post(prefix(env) + "/" + draft["id"] + "/runs", json=request).status_code == 403
     assert env[2].get(prefix(env) + "/" + draft["id"] + "/history").status_code == 403
     assert len(wires) == 3
+
+
+@pytest.mark.parametrize("damage", ["row_key", "missing_origin_field", "boolean_wrapper_version"])
+def test_final_frozen_key_and_wrapper_hardening(env, tmp_path, damage):
+    from sim2act.db import fingerprint, task_extractions
+
+    draft, _, _ = saved(env, tmp_path)
+    if damage == "row_key":
+        request = {
+            "expected_app_fingerprint": draft["fingerprint"],
+            "scenario": facts(500),
+            "request_key": "original",
+        }
+        assert (
+            env[2].post(prefix(env) + "/" + draft["id"] + "/runs", json=request).status_code == 202
+        )
+        with env[0].tx() as c:
+            c.execute(
+                update(app_previews)
+                .where(app_previews.c.app_id == draft["id"])
+                .values(request_key="different-row-key")
+            )
+        response = env[2].get(prefix(env) + "/" + draft["id"] + "/history")
+    else:
+        with env[0].tx() as c:
+            row = (
+                c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"])).mappings().one()
+            )
+            bad = copy.deepcopy(row["candidate"])
+            if damage == "missing_origin_field":
+                del bad["origin"]["extraction_run_id"]
+            else:
+                bad["version"] = True
+            fp = fingerprint(bad)
+            c.execute(
+                update(app_drafts)
+                .where(app_drafts.c.id == draft["id"])
+                .values(candidate=bad, fingerprint=fp)
+            )
+            c.execute(
+                update(task_extractions)
+                .where(task_extractions.c.app_id == draft["id"])
+                .values(snapshot={"kind": NAMESPACE, "wrapper": bad, "wrapper_fingerprint": fp})
+            )
+        response = env[2].get(prefix(env) + "/" + draft["id"])
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "VERSION_CONFLICT"
