@@ -8,6 +8,6 @@
 
 根实际查看4张旧范围PNG的缩放overview，集成历史/未发布和注册CSV来源→候选可见；未作全分辨率像素签收，更不代表新增来源绑定/报告态两图。producer的NOT_REVIEWED保留，根review另存root-review.json。已有agent前后renderer记录AppContainer/restricted token/integrity0且无禁用sandbox参数；新增域及最终整轮保护回执不可用。
 
-Report/Cleanup步骤SUCCESS；原始日志明确Owned API/worker stopped，runner开始orphan cleanup。临时PostgreSQL停止由既有Cleanup实现及官方步骤成功支持，日志无完整nested UI children零残留/新域清理回执，不声称所有子进程0。数据库service/data preserved原日志原样保留；这不是额外外部发布或恢复包。
+Report/Cleanup步骤SUCCESS；原始日志明确Owned API/worker stopped，runner开始orphan cleanup。日志无明确PostgreSQL shutdown计数或完整nested UI children零残留/新域清理回执；Cleanup成功不替代这些独立回执，不声称数据库及所有子进程0。数据库service/data preserved原日志原样保留；这不是额外外部发布或恢复包。
 
 官方raw CRLF日志留本地/tmp，SHA见decode-output.json；仓库保存精确来源、官方终态/注解、受限解码器、自测12/12、5实际发射文件和安全摘录，不提交raw base64日志。真实provider/models请求0，无新增产品Principal/Grant，未部署/main合并。P-B整体、F1/AT02、Win11、用户/语义及正式发布仍未签收。当前剩余阻塞是原900秒预算内完成全部原生流程及新两图；此轮授权CI已自然结束，没有盲目再次运行。
