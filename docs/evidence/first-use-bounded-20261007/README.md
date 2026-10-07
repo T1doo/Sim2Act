@@ -16,7 +16,7 @@
 
 两项既有离线真实 API 验证 PASS：`test_app_previews::test_new_input_new_result_and_persisted_history_without_model_or_business_write`；`test_registered_run_generation_http::test_http_server_generated_candidate_cold_new_input_no_permissions`。后者从真实成功来源保存草案后 cold Store/新输入得到15，不复制旧来源4.00、无新增授权。不是报告/完整P-B验收。
 
-未改预检实现，原13项 unittest 全通过，见 install-preflight-tests.log。演示Python Ruff、Node语法、diff whitespace PASS；新演示缺JSDOM明确BLOCKED，见 missing-jsdom-result.json。没有扩大产品依赖或变更 lock；开发工具单独位于 `/workspace/Sim2Act-first-use-node`，Node24.19.0、jsdom26.1.0、playwright-core1.63.0，Python3.12.14/隔离31项Linux lock环境，实际 import 由 PYTHONPATH 指向当前src。
+未改预检实现，原13项 unittest 全通过，见 install-preflight-tests.log。演示Python Ruff、Node语法及源码/文档diff whitespace PASS；新演示缺JSDOM明确BLOCKED，见 missing-jsdom-result.json。没有扩大产品依赖或变更 lock；开发工具单独位于 `/workspace/Sim2Act-first-use-node`，Node24.19.0、jsdom26.1.0、playwright-core1.63.0，Python3.12.14/隔离31项Linux lock环境，实际 import 由 PYTHONPATH 指向当前src。
 
 可复跑开发核查：
 
@@ -37,6 +37,8 @@ NODE_PATH=/自己的开发工具/node_modules PYTHONPATH=src python scripts/firs
 
 ## 最终独立审查
 
-独立最新复跑 [independent-ui-result.json](independent-ui-result.json) PASS：真实预览30/2行；两不同Run30/v1与15/v2；17个冷页面API请求全GET、0POST；fresh Store确认2Run/2结果；临时库/自有线程清理完成。最终文档只读审查确认schema/固定合成身份边界、真实按钮及安装补链均正确，失败与未测范围保留，无剩余文档/工具阻塞。独审没有修改文件。Mypy新增演示1文件PASS，Ruff演示+原预检+原测试PASS，Node/diff PASS。
+独立最新复跑 [independent-ui-result.json](independent-ui-result.json) PASS：真实预览30/2行；两不同Run30/v1与15/v2；17个冷页面API请求全GET、0POST；fresh Store确认2Run/2结果；临时库/自有线程清理完成。最终文档只读审查确认schema/固定合成身份边界、真实按钮及安装补链均正确，失败与未测范围保留，无剩余文档/工具阻塞。独审没有修改文件。Mypy新增演示1文件PASS，Ruff演示+原预检+原测试PASS，Node语法PASS。
 
 artifact-hashes.json 覆盖本目录原始证据、指南、安装说明与两演示文件；不含自身。源码/测试/工作流没有更改，独立分支普通push不匹配仅监听dev/f1-foundation的CI。
+
+提交前全量 staged whitespace 检查另发现原始 existing-focused.xml 内5处pytest traceback行尾空格；为保持原始失败JUnit证据未改写它。源码、文档和演示文件的whitespace检查通过；全量检查存在这项已记录的原始artifact例外，不声明全量diff检查全绿。
