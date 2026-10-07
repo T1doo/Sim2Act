@@ -212,6 +212,15 @@ def evaluate(store, user, pid, body):
     if request.expected_contract_fingerprint != fingerprint(CONTRACT):
         raise DomainError("VERSION_CONFLICT", "Registered check contract changed")
     source = read_source(store, user, pid, request.resource_id, request.expected_source_hash)
+    return evaluate_source(request, source)
+
+
+def evaluate_source(request, source):
+    """Shared finite oracle after the caller's independent authorized byte read."""
+    if source["hash"] != SOURCE_HASH or request.expected_contract_fingerprint != fingerprint(
+        CONTRACT
+    ):
+        raise DomainError("VERSION_CONFLICT")
     lines = source["content"].splitlines()
     expected, decision, actions, consistent = _conditions(request.scenario)
     report = request.report
