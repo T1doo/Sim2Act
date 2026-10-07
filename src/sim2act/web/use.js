@@ -159,6 +159,7 @@ $("use-refresh").onclick=safe(async()=>{const v=applicationUse;if(v&&application
 let conditionalContext=null,conditionalGeneration=0;
 function clearConditionalChecks(clearList=false){
  conditionalGeneration++;conditionalContext=null;
+ if(typeof clearConditionalRuns==="function")clearConditionalRuns();
  $("condition-form").hidden=true;$("condition-recheck").hidden=true;
  $("condition-source").replaceChildren();$("condition-results").replaceChildren();
  $("condition-status").textContent="旧证据已清除。请显式打开当前授权资料。";
@@ -184,6 +185,7 @@ async function openConditionalSource(){
   const source=await api(`/api/projects/${c.project}/conditional-checks/sources/${rid}`);if(!conditionCurrent(c))return;
   if(source.resource_id!==rid||source.contract.source_hash!==source.hash)throw Error("VERSION_CONFLICT");
   c.source=source;
+  if(typeof showConditionalRuns==="function")showConditionalRuns(source);
   $("condition-source").replaceChildren(row(`资料 ${rid} · 内容 SHA256 ${source.hash} · 注册规则 ${source.contract.id} v${source.contract.version} · 合同 ${source.contract.fingerprint}`),...source.rules.map(r=>row(`${r.rule_id} · 第${r.line}行：${r.quote}`)));
   $("condition-form").hidden=false;
   $("condition-status").textContent="资料版本已核查。填写假设事实及人工报告；检查不确认真实事实。";
@@ -227,6 +229,7 @@ function invalidateConditionalSource(reason){
  clearConditionalChecks();$("condition-status").textContent=`旧证据失效：${reason}。请重新选择并核对授权资料。`;
 }
 function reconcileConditionalSources(items){
+ if(typeof reconcileBoundedSources==="function")reconcileBoundedSources(items);
  const c=conditionalContext;if(!c?.source||!conditionCurrent(c))return;
  const item=items.find(r=>r.id===c.rid);
  if(!item||item.hash!==c.source.hash||!["txt","md"].includes(item.format))invalidateConditionalSource("资料版本变化或授权撤销");

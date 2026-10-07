@@ -511,6 +511,10 @@ def create_app(store=None, settings=None):
     def protocol_js():
         return FileResponse(web / "protocol.js", media_type="text/javascript")
 
+    @app.get("/conditional-runs.js")
+    def conditional_runs_js():
+        return FileResponse(web / "conditional-runs.js", media_type="text/javascript")
+
     @app.get("/use.js")
     def use_js():
         return FileResponse(web / "use.js", media_type="text/javascript")
