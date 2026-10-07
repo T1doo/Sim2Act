@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="13" time="9.575" timestamp="2026-10-07T23:26:57.267166+00:00" hostname="0af355134a6a"><testcase classname="tests.test_natural_activation_flow" name="test_disabled_activation_has_zero_dml_and_network" time="0.510" /><testcase classname="tests.test_natural_activation_flow" name="test_two_fixed_goals_actual_slots_receipts_history_no_hidden_calls" time="3.112" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[before_guard]" time="0.601" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[in_flight]" time="0.511" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[before_confirm]" time="0.784" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[before_dispatch]" time="0.662" /><testcase classname="tests.test_natural_activation_flow" name="test_unexpected_provider_failure_retains_unknown_slot_no_retry" time="0.416" /><testcase classname="tests.test_natural_activation_flow" name="test_scope_caller_cannot_change_caps_clock_model_or_false_consent" time="0.315" /><testcase classname="tests.test_natural_activation_flow" name="test_expiry_is_immediate_without_timer_and_cannot_renew" time="0.543"><failure message="assert (400 == 200)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fc0afca04a0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-597/test_ex...3878935ffd45c6b68c243cf2ad2ebf', 'user_17047177017a4d6eb80316fd8ed3ebe0', 'proj_b19b00b419944628b68b8d4111bcba53', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fc0b5456870&gt;
+
+    def test_expiry_is_immediate_without_timer_and_cannot_renew(env, monkeypatch):
+        value = setup(env)
+        store, settings, client, *_ = value
+        clock = [activation.now()]
+        monkeypatch.setattr(activation, "now", lambda: clock[0])
+        session, approval_body = approved(value)
+        accepted = submit(value, session)
+        rid = accepted.json()["run_id"]
+        sent = []
+        def handler(request):
+            sent.append(request.content)
+            return httpx.Response(200, json=response(wire(value)))
+        worker = Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler))
+        assert worker.once()
+        body = confirmation(client, rid)
+        clock[0] = session["approval"]["expires_at"]
+        assert client.post(f"/api/runs/{rid}/confirm-natural-plan", json=body).status_code == 403
+        info = client.get(f"/api/natural-activations/{session['id']}").json()
+        assert not info["approved_not_expired"]
+        retry = client.post(f"/api/natural-activations/{session['id']}/approve", json=approval_body)
+        assert retry.status_code == 200 and retry.json()["approval"] == session["approval"]
+        assert client.get(f"/api/runs/{rid}").status_code == 200
+        closed = client.post(f"/api/natural-activations/{session['id']}/close-expired")
+&gt;       assert closed.status_code == 200 and closed.json()["status"] == "EXPIRED"
+E       assert (400 == 200)
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_natural_activation_flow.py:269: AssertionError</failure></testcase><testcase classname="tests.test_natural_activation_flow" name="test_duplicate_hidden_sender_guard_permits_exactly_one_offline_send" time="0.483" /><testcase classname="tests.test_natural_activation_flow" name="test_truncated_actual_response_keeps_bounded_text_model_known_usage" time="0.425" /><testcase classname="tests.test_natural_activation_flow" name="test_received_failure_cleans_lease_retains_usage_without_unsafe_text[partial_usage]" time="0.498" /><testcase classname="tests.test_natural_activation_flow" name="test_received_failure_cleans_lease_retains_usage_without_unsafe_text[invalid_unicode]" time="0.571" /></testsuite></testsuites>

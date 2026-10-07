@@ -1,0 +1,45 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_expiry_is_immediate_without_timer_and_cannot_renew ____________
+
+env = (<sim2act.db.Store object at 0x7f3980e28500>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-598/test_ex...15be479c1d487fa919f49647a2978f', 'user_bbd352f2d2a14aad82a4d645a3da0614', 'proj_3ac8c8c28e294b6b9871d7038dae4ff4', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3980ac6db0>
+
+    def test_expiry_is_immediate_without_timer_and_cannot_renew(env, monkeypatch):
+        value = setup(env)
+        store, settings, client, *_ = value
+        clock = [activation.now()]
+        monkeypatch.setattr(activation, "now", lambda: clock[0])
+        session, approval_body = approved(value)
+        accepted = submit(value, session)
+        rid = accepted.json()["run_id"]
+        sent = []
+        def handler(request):
+            sent.append(request.content)
+            return httpx.Response(200, json=response(wire(value)))
+        worker = Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler))
+        assert worker.once()
+        body = confirmation(client, rid)
+        clock[0] = session["approval"]["expires_at"]
+        assert client.post(f"/api/runs/{rid}/confirm-natural-plan", json=body).status_code == 403
+        info = client.get(f"/api/natural-activations/{session['id']}").json()
+        assert not info["approved_not_expired"]
+        retry = client.post(f"/api/natural-activations/{session['id']}/approve", json=approval_body)
+        assert retry.status_code == 200 and retry.json()["approval"] == session["approval"]
+        assert client.get(f"/api/runs/{rid}").status_code == 200
+        closed = client.post(f"/api/natural-activations/{session['id']}/close-expired")
+>       assert closed.status_code == 200 and closed.json()["status"] == "EXPIRED", closed.text
+E       AssertionError: {"error":{"code":"INVALID_INPUT","message":"Malformed, duplicate or oversized JSON","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (400 == 200)
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_natural_activation_flow.py:269: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_activation_flow.py::test_expiry_is_immediate_without_timer_and_cannot_renew
+1 failed, 1 warning in 0.79s
