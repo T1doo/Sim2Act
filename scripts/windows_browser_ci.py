@@ -270,6 +270,9 @@ def main():
         subprocess.run([sys.executable, "scripts/protocol-ui/fixture.py", "--root", str(protocol_root),
                         "--port", str(protocol_port), "--action", "seed"], cwd=repo,
                        env={**child_env, "PYTHONPATH": "src"}, check=True, timeout=30)
+        subprocess.run([sys.executable, "scripts/protocol-ui/fixture.py", "--root", str(protocol_root / "fresh"),
+                        "--port", str(protocol_port), "--action", "seed"], cwd=repo,
+                       env={**child_env, "PYTHONPATH": "src"}, check=True, timeout=30)
         with (protocol_root / "api.log").open("wb") as log:
             protocol_api = subprocess.Popen([sys.executable, "scripts/protocol-ui/fixture.py", "--root",
                                              str(protocol_root), "--action", "serve"], cwd=repo,
@@ -292,7 +295,21 @@ def main():
             time.sleep(0.2)
         else:
             raise RuntimeError("Synthetic API readiness deadline exceeded")
-        subprocess.run(["node", "scripts/browser-ci/internal-ui.cjs", str(root), sys.executable], cwd=repo, env=child_env, check=True, timeout=150)
+        sys.path.insert(0, str(repo / "scripts/protocol-ui"))
+        from rotation import run_node
+
+        try:
+            run_node(["node", "scripts/browser-ci/internal-ui.cjs", str(root), sys.executable],
+                     protocol_api, protocol_root, repo, child_env, timeout=150)
+        except Exception:
+            # Preserve FAIL even if an owned manager/cleanup fails after Node wrote PASS.
+            for output in (root / "browser-results.json", protocol_root / "protocol-results.json"):
+                if output.exists():
+                    saved = json.loads(output.read_text(encoding="utf-8"))
+                    saved["status"] = "FAIL"
+                    saved["fixtureLifecycleError"] = "OWNED_PROTOCOL_TRANSITION_FAILED"
+                    output.write_text(json.dumps(saved), encoding="utf-8")
+            raise
     finally:
         cleanup_error = None
         try:

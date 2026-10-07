@@ -353,14 +353,19 @@ async function layout(page, label) {
       const conditionalNegative=result.protocol.conditional?.expectedNegativeURLs.includes(u.pathname)&&(e.message.includes('403')||e.message.includes('409'));
       return failedReceipt||denied||missingIcon||conditionalNegative;
     };
-    // Additional phase reuses existing policy/identity and this protected context.
+    // Old sealed experiment DB is retained; one normally seeded independent test pool.
+    check('old protocol26 complete before independent test fixture transition',result.protocol.status==='PASS'&&result.protocol.checks.length===26);
+    await protocolPage.goto('about:blank');
+    const fresh=await require('./protocol-transition.cjs')(protocolRoot);
+    result.protocol.fixtureTransition=fresh.receipt;
+    await protocolPage.goto(protocolBase+'/',{waitUntil:'networkidle'});
     const conditionalSandboxBefore=await auditProtocol();
-    const conditionalFixture=require('./conditional-fixture-session.cjs')({python,root:protocolRoot});
+    const conditionalFixture=require('./conditional-fixture-session.cjs')({python,root:fresh.freshRoot});
     try{
-      result.protocol.boundRuns=await require('./conditional-runs-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalFixture.action});
+      result.protocol.boundRuns=await require('./conditional-runs-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.goto(protocolBase+'/',{waitUntil:'networkidle'}),info:fresh.info,action:conditionalFixture.action});
       result.protocol.boundRuns.sourceSHA256=require('node:crypto').createHash('sha256').update(fs.readFileSync('scripts/browser-ci/conditional-runs-ui.cjs')).digest('hex');
       check('actual bound Run source/check/extract/cold/check preserves UNKNOWN and NOT_ACCEPTED',result.protocol.boundRuns.status==='PASS'&&result.protocol.boundRuns.actual_mock_requests===4&&result.protocol.boundRuns.semanticStatus==='UNKNOWN'&&result.protocol.boundRuns.overallAcceptance==='NOT_ACCEPTED');
-      result.protocol.conditional=await require('./conditional-checks-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.reload({waitUntil:'networkidle'}),info:protocolInfo,action:conditionalFixture.action,
+      result.protocol.conditional=await require('./conditional-checks-ui.cjs')({evaluate:code=>protocolPage.evaluate(code),reload:()=>protocolPage.goto(protocolBase+'/',{waitUntil:'networkidle'}),info:fresh.info,action:conditionalFixture.action,
         capture:async(label,milestone)=>{
           const width=label==='protocol-desktop'?1280:390;
           await protocolPage.setViewportSize({width,height:label==='protocol-desktop'?1000:844});
@@ -374,7 +379,8 @@ async function layout(page, label) {
           return {label,scope:milestone.scope,milestone,bounds,emitted:false,visualReview:'NOT_REVIEWED',sandbox};
         }});
       result.protocol.conditional.fixtureTimings=conditionalFixture.timings;
-    }finally{await conditionalFixture.close();}
+    }finally{result.protocol.fixtureDiagnostics=conditionalFixture.diagnostics;await conditionalFixture.close();}
+    await require('./protocol-transition.cjs').verifyOld({root:protocolRoot,python,receipt:result.protocol.fixtureTransition});
     result.protocol.screenshotsSupersededBy='conditional-hand-report PASS/BLOCK desktop and PASS/UNKNOWN narrow; old protocol26 and layouts retained';
     result.protocol.screenshots=result.protocol.conditional.screenshots;
     result.protocol.conditional.sandboxBefore=conditionalSandboxBefore;
