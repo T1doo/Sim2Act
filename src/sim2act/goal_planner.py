@@ -123,6 +123,25 @@ def check_sender(worker, contract, c=None, run=None):
         raise DomainError("PERMISSION_DENIED", "Offline planner adapter required")
 
 
+def safe_received_message(raw):
+    """Retain bounded assistant text even when later parsing rejects truncation."""
+    if not isinstance(raw, dict):
+        return None
+    choices = raw.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+        return None
+    message = choices[0].get("message")
+    if (not isinstance(message, dict) or message.get("role") != "assistant"
+            or not isinstance(message.get("content"), str)):
+        return None
+    try:
+        if len(message["content"].encode("utf-8")) > 32768:
+            return None
+    except UnicodeError:
+        return None
+    return {"role": "assistant", "content": message["content"]}
+
+
 def configured_provider(worker):
     """Existing explicit Intern settings, with a separate synthetic adapter."""
     if worker.goal_planner_transport is None:
@@ -795,6 +814,7 @@ def process(worker, run, contract):
             try:
                 provider = configured_provider(worker)
                 raw = provider.request_serialized(body, guard)
+                received_message = safe_received_message(raw)
                 msg, calls = parse_response(raw)
                 received_message = msg
                 require_returned_model(returned_model_identity("intern-s2", raw.get("model")))
@@ -828,7 +848,9 @@ def process(worker, run, contract):
                             status="RECEIVED",
                             response_model=raw.get("model"),
                             response=msg,
-                            parameters=worker.attempt_parameters(c, aid, raw),
+                            parameters={**worker.attempt_parameters(c, aid, raw),
+                                        **({"planning_received_response_fingerprint": fingerprint(raw)}
+                                           if contract.natural_planning.activation is not None else {})},
                             usage=normalize_usage(raw),
                             elapsed=time.monotonic() - start,
                         )
@@ -869,6 +891,11 @@ def process(worker, run, contract):
                             status="FAILED",
                             error=exc.code,
                             response=received_message,
+                            parameters={**dict(c.execute(select(attempts.c.parameters).where(
+                                attempts.c.id == aid)).scalar_one()),
+                                **({"planning_received_response_fingerprint": fingerprint(raw)}
+                                   if isinstance(raw, dict)
+                                   and contract.natural_planning.activation is not None else {})},
                             response_model=raw.get("model") if isinstance(raw, dict) else None,
                             usage=normalize_usage(raw),
                             elapsed=time.monotonic() - start,

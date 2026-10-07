@@ -292,3 +292,27 @@ def test_duplicate_hidden_sender_guard_permits_exactly_one_offline_send(env, mon
     assert len(sent) == len(rows(store, attempts)) == 1 and not rows(store, operations)
     assert client.get(f"/api/runs/{rid}").json()["status"] == "WAITING_RESOURCE"
     assert not worker.once()
+
+
+def test_truncated_actual_response_keeps_bounded_text_model_known_usage(env):
+    value = setup(env)
+    store, settings, client, *_ = value
+    session, _ = approved(value)
+    rid = submit(value, session).json()["run_id"]
+    sent = []
+    def handler(request):
+        sent.append(request.content)
+        actual = response(wire(value))
+        actual["choices"][0]["finish_reason"] = "length"
+        actual["provider_private_metadata"] = "DO_NOT_PERSIST_METADATA"
+        return httpx.Response(200, json=actual)
+    worker = Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler))
+    assert worker.once()
+    attempt = rows(store, attempts)[0]
+    assert attempt["status"] == "FAILED" and attempt["response_model"] == "Intern-S2"
+    assert attempt["usage"]["tokens"]["total_tokens"] == 30
+    assert set(attempt["response"]) == {"role", "content"}
+    assert len(attempt["parameters"]["planning_received_response_fingerprint"]) == 64
+    assert "DO_NOT_PERSIST_METADATA" not in str(rows(store, attempts) + rows(store, events))
+    assert len(sent) == 1 and not rows(store, operations)
+    assert client.get(f"/api/runs/{rid}").json()["result"] is None
