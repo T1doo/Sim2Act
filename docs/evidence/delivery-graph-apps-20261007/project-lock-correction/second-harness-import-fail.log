@@ -1,0 +1,73 @@
+......................s.....F
+=================================== FAILURES ===================================
+_ test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_lock] _
+
+env = (<sim2act.db.Store object at 0x7f69ed45e630>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-561/test_pr...c362a34a3b4991990098a5867745a1', 'user_509ac21079e447e185afe8903fa980e6', 'proj_1122a426085a45d4910302b290610500', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-561/test_project_replay_and_histor2')
+attack = 'peer_lock'
+
+    @pytest.mark.parametrize(
+        "attack", ["peer_anchor", "peer_auth", "peer_lock", "membership", "peer_graph_bool"]
+    )
+    def test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership(
+        env, tmp_path, attack
+    ):
+        app, peer, peer_fp, peer_graph, graph = report_project(env, tmp_path)
+        body = change(graph)
+        accepted = env[2].post(path(env, app["id"]) + "/plans", json=body)
+        assert accepted.status_code == 201, accepted.text
+        value = accepted.json()
+        binding = next(v for v in value["scope_expansion"]["applications"] if v["app_id"] == peer)
+        assert binding["graph_fingerprint"] == peer_graph["graph_fingerprint"]
+        if attack == "peer_anchor":
+            with env[0].tx() as c:
+                c.execute(update(anchors).where(anchors.c.app_id == peer).values(fingerprint="0" * 64))
+        elif attack == "peer_auth":
+            with env[0].tx() as c:
+                runtime = c.execute(
+                    select(app_drafts.c.runtime_id).where(app_drafts.c.id == peer)
+                ).scalar_one()
+                row = (
+                    c.execute(select(grants).where(grants.c.principal_id == runtime)).mappings().first()
+                )
+                c.execute(
+                    update(grants)
+                    .where(grants.c.id == row["id"])
+                    .values(expires_at=row["expires_at"] + 1000)
+                )
+        elif attack == "peer_lock":
+>           lock_node(env, peer, peer_graph)
+
+tests/test_delivery_graph_apps.py:449: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f69ed45e630>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-561/test_pr...c362a34a3b4991990098a5867745a1', 'user_509ac21079e447e185afe8903fa980e6', 'proj_1122a426085a45d4910302b290610500', ...)
+aid = 'app_9b5af18dadad4cb2b73f09830d263445'
+graph = {'app_id': 'app_9b5af18dadad4cb2b73f09830d263445', 'authorization_revision': 1, 'business_write_performed': False, 'cached': False, ...}
+key = 'lock'
+
+    def lock_node(env, aid, graph, key="lock"):
+        from sim2act.delivery_graph_apps import set_lock
+    
+        body = change(graph)
+        value = dict(
+            expected_graph_fingerprint=graph["graph_fingerprint"],
+            request_key=key,
+            change=body["changes"][0],
+            locked=True,
+        )
+>       return set_lock(env[0], env[3], env[5], aid, value, limits(env))
+                                                            ^^^^^^
+E       NameError: name 'limits' is not defined
+
+tests/test_delivery_graph_apps.py:416: NameError
+=============================== warnings summary ===============================
+../../tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_lock]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 27 passed, 1 skipped, 1 warning in 17.97s
