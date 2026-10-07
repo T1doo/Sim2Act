@@ -1,0 +1,49 @@
+{
+  "status": "DETERMINISTIC_ACTUAL_HTTP_REPRODUCED",
+  "time": "2026-10-07T05:40:02.270980+00:00",
+  "head": "82ffe61d9f9d48a7179caa302aae0efbc8a69542",
+  "product_source_sha256": {
+    "src/sim2act/web/internal.js": "e67cd987d3559031f3e1280098362de9d027201a46ad1c9bf85aea6f995bfc19",
+    "scripts/browser-ci/agent-ui.cjs": "b1f7f357101df37e32a1b648448c2a05836b73bad957c18d4258312095983bc3"
+  },
+  "method": [
+    "original existing synthetic agent fixture initial app/instance with real offline Replay persisted v1",
+    "UI normal submitInternal POST -> actual QUEUED AppRun",
+    "normal local Worker + NeverProvider -> actual server SUCCEEDED v2; no model transport",
+    "invoke actual registered internal poll callback, hold actual instance GET200 after real backend response",
+    "manual refresh captures null instance after poll cleared it; refresh list reports version2 while blocked details pending",
+    "old actual idle condition engineering&&!busy resolves despite empty details",
+    "release original GET -> same instance restores v1/v2 two records and terminal run"
+  ],
+  "proof": "owned-v2/reproduction.json; blocked200 contains server version2 and 2 records; prior run actual SUCCEEDED; early idle true and0 detail records; after release2 records",
+  "cause": "showInternalRun terminal transition awaits showInternalInstance outside engineeringAction, so no busy=true during background result read; showInternalInstance synchronously clears instance/run/data before await. Concurrent manual refresh captures undefined id and completes only list refresh. Therefore !busy does not imply complete detail read.",
+  "minimum_oracle": "after second worker + refresh, wait until engineering current same iid with instance.data_version===2, internal-data contains actual v1 and v2 receipts and exactly2 agent-result elements (then retain original checks). Do not solely wait !busy or instance-list version2.",
+  "limits": [
+    "one deterministic eligible interleaving proves insufficient oracle and matches screenshot; cannot claim exact original Windows timing trace proven",
+    "does not prove renderer/pixel issues or provider incident",
+    "existing native gate/real browser protection untouched",
+    "actual fixture initial source v1 reused, rather than fully replaying original lost-acceptance test; same v2 ordinary agent AppRun terminal-read mechanism"
+  ],
+  "failure_history": [
+    {
+      "result": "FAIL helper-only initial POST400",
+      "reason": "test-private worker endpoint invoked without JSON; strict product HTTP middleware rejected before worker",
+      "file": "initial-helper-failure.log"
+    },
+    {
+      "result": "EXPECTED OLD ORACLE FAIL",
+      "file": "owned-v2/reproduction.json"
+    },
+    {
+      "result": "REPRODUCTION PASS",
+      "file": "controller-v2.log"
+    }
+  ],
+  "cleanup": "owned API server should_exit/join and store engine.dispose verified in finally; no long-lived API child",
+  "actions_excluded": [
+    "product edits",
+    "push/CI/rerun",
+    "real model requests",
+    "new production credentials"
+  ]
+}
