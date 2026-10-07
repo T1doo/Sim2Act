@@ -1,8 +1,10 @@
 """Browser fixture provisions initial CSV domains, never registered Run/generation gold."""
 
+import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,15 +25,32 @@ FIXTURE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FIXTURE)
 
 
+def fixture_files(root):
+    return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in root.rglob("*") if p.is_file()}
+
+
+@pytest.fixture(scope="module")
+def browser_seed(tmp_path_factory):
+    root = tmp_path_factory.mktemp("registered-generation-initial-seed")
+    FIXTURE.seed(root, 8073)
+    before = fixture_files(root)
+    yield root, before
+    assert fixture_files(root) == before, "immutable module seed must retain every baseline file"
+
+
 @pytest.fixture
-def browser_fixture(tmp_path):
-    FIXTURE.seed(tmp_path, 8073)
+def browser_fixture(tmp_path, browser_seed):
+    root, baseline = browser_seed
+    shutil.copytree(root, tmp_path, dirs_exist_ok=True)
+    assert fixture_files(tmp_path) == baseline, "each case starts with the exact independent seed snapshot"
     info = json.loads((tmp_path / "info.json").read_text())
     store, settings = FIXTURE.context(tmp_path)
     with TestClient(create_app(store, settings)) as client:
         client.headers["Authorization"] = "Bearer synthetic-agent-ui-A"
         yield tmp_path, info, store, client
     store.engine.dispose()
+    assert fixture_files(root) == baseline, "case mutations must not reach seed or another fixture"
 
 
 def action(root, name, *extra):
