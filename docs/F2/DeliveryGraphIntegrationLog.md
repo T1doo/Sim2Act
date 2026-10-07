@@ -29,3 +29,15 @@ python -m ruff check tests/delivery_graph_adapter_contract.py tests/test_deliver
 真实产品 API、DB 跨进程冷启动、并发提交、跨 principal 请求键隔离、实际 UI generation 策略、Windows、规则源码/FrozenGoalSpec 绑定、扩验检查实际执行与发布签收均 NOT_RUN。MemoryDriver 只用合成数据和 JSON 内存重建，不使用数据库/网络/模型；公开请求不能携带授权上下文，特权 transition 仅供隔离 fixture。主线按 Contract 文档适配真实 driver 后再运行，报告仍明确 product_acceptance=NOT_IMPLIED。
 
 最终独立审查：CLI 17/17 PASS、退出码 0、stderr 为空；self-tests 15 PASS/0.54 秒，确认 9 个不安全 mutant 被拒绝，Contract 文档证据界限明确，无剩余阻塞。审查没有修改文件；本 Log 是结论后的事实记录。
+
+## 主开发服务整合阶段回执（不替代上文支持包历史）
+
+主开发树 `/workspace/Sim2Act-bounded-product-candidate` 已正常快进为 `c51d6c9ca90308f8fddae28752ab04ef72d5085f`；独立集成树同 SHA。既有原始 main/work、旧失败树和远端均未重写。正常 ls-remote 当前 foundation 仍为 `e828c066ec63689fe5de5d66f650eda33c0086e8`，尚未 push。
+
+该组合已纳入显式迁移的可信图账本/独立锚/幂等回执/真实项目 peer 扩验等待项和内部 owner 锁；API 仅 CRUD、没有公开客户端授权上下文或 lock 冒充入口。UI 显式保存/读回/影响规划，无打开应用时自动图网络调用；失落回执保留同键/同 body，完整绑定当前项目、身份、候选、来源及双层指纹。只形成 PLANNING_ONLY / UNKNOWN / PENDING；不会执行补丁、调度检查或发布。
+
+原 peer 缓存/历史授权和锚漏验的真实失败已保留，新后台独审 9 项实际 HTTP/SQLite oracle 限定通过；坏 peer 新键可明确 BLOCKED_PARTIAL，未把合法 peer 的等待项冒称完整 PROJECT 已验。服务 driver 17 个真实黑盒检查全部到达，另冷 Store/撤权及 promoted Report 部分扩展 2 例，共 19 PASS。真实完整 PROJECT fixture 用现有声明式 bounded_agent/合法 CSV peer，不伪造该 agent 的来源任务终态。UI 4 项 HTTP/DOM PASS（图各 29、原 Report 49、原应用流程）；后续仅修权限快照排序，图 2 项重验 PASS。全 src mypy 41 文件通过，后台最后 34 PASS / 1 PG-role SKIP。初始 mypy 14 FAIL、原 UI 和 driver fixture 失败、独审脚本错误、旧 e4 PG 2 FAIL 均独立保留。各冻结、时间与导入见对应 evidence。
+
+组合全量仅准备：实际 1261 collected，独立 source-first 工作副本/清理方案已保存，未运行新版 full 或 PG。核心 `0836bf` 已拒绝历史回执 bool/int 协调篡改；但 `derive_manifest_graph` 原始 source_versions 在建模前仍以 Python dict 相等比较，独立实际 True/1.0 被接受，整体 BLOCK_UPSTREAM_RAW_SOURCE_VERSION。模块所有权按父既定分工交独立核心线，主开发不重复编辑；已请求可正常 fetch 的修复 SHA。收到后正常合入、最终冻结及 SQLite→PG 串行自然终态，实际执行两个最小 CRUD 角色用例，再普通同步既有 dev。
+
+图模型增量 0 / LIVE 0，不新增产品 Principal/Grant。受保护 Chromium 现有 SUID helper 阻塞未解除，HTTP/DOM 不等于浏览器像素通过。Windows 原 900 秒预算仍 NO_GO，不盲重跑；Win11/F1/AT02/owner/语义/完整 P-B 均未签收。所有本阶段资源已自然终态，尚需上游修复、最终 full/PG 和精确普通 push；没有额外上传目的地或恢复包。
