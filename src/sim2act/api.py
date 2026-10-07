@@ -8,6 +8,7 @@ from sqlalchemy import select, update
 
 from .apps import create_csv_draft, inspect_draft, preview
 from .conditional_checks import mount as mount_conditional_checks
+from .conditional_runs import mount as mount_conditional_runs
 from .config import Settings
 from .contracts import (
     Limits,
@@ -490,6 +491,7 @@ def create_app(store=None, settings=None):
     mount_protocol_recovery(app, db, identity)
     mount_protocol_reviews(app, db, identity)
     mount_conditional_checks(app, db, identity)
+    mount_conditional_runs(app, db, identity, platform_limits, s)
 
     web = Path(__file__).parent / "web"
 
@@ -508,6 +510,10 @@ def create_app(store=None, settings=None):
     @app.get("/protocol.js")
     def protocol_js():
         return FileResponse(web / "protocol.js", media_type="text/javascript")
+
+    @app.get("/conditional-runs.js")
+    def conditional_runs_js():
+        return FileResponse(web / "conditional-runs.js", media_type="text/javascript")
 
     @app.get("/use.js")
     def use_js():
