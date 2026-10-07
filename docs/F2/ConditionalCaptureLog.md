@@ -15,3 +15,5 @@
 终态：精确8d完整SQLite977项938PASS39SKIP0FAIL494.87s，旧967无删、新10guard。全套比基线多28.72s，不能宣称whole性能优化，更不能批准Windows900s；局部paired节省与新guard/并发重项成本分别记录。独立11PASS/close failure通过，源47ef到8d只有native-only textarea selector，实际几何仍未测。源码hash、全部nodeids、full/JUnit/top30/skip reasons/初失败和中止均保存docs/evidence/conditional-capture-local-20261007。无后续测试扩大、产品变更、push/CI/LIVE。
 
 最后独审追加：47ef→8d仅textarea selector一行，internalSHA b918f23cef0df313159899b1de06fcc83ce4bd5781f53debdb68a9f37942712e，其余冻结源码hash相同。保留11target和实际close-failure为47runtime证据，一行delta只静态审查，不借其验证geometry。
+
+收尾非测试只读：一次进程快照及其不可读PID的status/cmdline归属恢复，未检出可读本轮自有live controller/API/node/session（0）；19个可读其他scope进程排除、3个消失。全局663个zombie无cmdline/cwd，历史归属UNKNOWN，不能把它们伪称本轮0孤儿或操作其他树。没有发signal/terminate。独立venv/baseline checkout与fixture DB/失败中止记录保留，详cleanup.json。补fresh -I、minimalPATH import-only两子进程receipt，确认本树/基线分别加载自己的src，无旧editable/sharedvenv路径；不是测试、DB动作或真实请求。上述记录仅docs-only本地提交，无更多套件或CI。
