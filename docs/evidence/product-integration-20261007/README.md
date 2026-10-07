@@ -13,3 +13,9 @@
 本轮真实模型请求0，既有MOCK样例attempt与此前另记的1真实请求460token不是同一计数，历史不改、不refill。F1/完整AT02/Win11/目标语义/正式发布/通用应用/完整P-B不提升。下一核心缺口为固定内部使用到正式应用验收的衔接；现阶段只可信工具结果与固定CSV新column，没有目标语义签收。stage-only文档与候选本地保存，最终SHA及精确CI差异后返回父线程。
 
 冻结前独立审查进一步发现初始shared16的旧command与字段在showRun启动held之前已失效/清空，不能独立证明projecthandler。已先执行project-only转场，记录实际双清理与旧command0POST，再回原项目单独测试两latefailed200；原16check数量保留但必须两阶段各真实通过，最新canonical9PASS/5.65秒。捕获前与两截图后均强制pageerror/outsideorigin0，未放宽原保护或deadline。该审查口径修正保存，不借初始16结果证明未经独立触发的转场。
+
+最终冻结源码4c8fdaf25aa0dadd6c662588b617af3496be5da7完整918 collection：SQLite880PASS38SKIP0FAIL、280.96秒；PG配置914PASS4SKIP0FAIL、569.42秒，各2warnings，原始-rs全日志与SHA另存。PG配置中显式SQLite-only fixture仍为SQLite，不称914全部PG-native；4SKIP为Windows原生启动、2个协议SQLite-only subprocess、protected Chromium helper实际阻塞。SQLite38SKIP保留全日志原因。181源码/脚本/测试/workflow/lock文件冻结前后SHA全一致，独立复核canonical9PASS0SKIP5.54秒与16真实HTTP/DOM shared oracle、FIFO normal worker闭合。无新增浏览器截图或原生PASS。
+
+owned PG临时容器末次查询残test schema=0、test_app role=0，随后只删除sim2act-product-integration-pg，docker过滤确认不存在。最终证据提交仅docs，受测源码不变；精确CI差异见product-integration-ci-diff.json。仅纯docs525已push，候选产品未push、新CI未触发，下一阶段需在新源上验证实际保护Edge/两PNG/150秒deadline。保留早期harness失败日志（早退与模块路径错误，不作产品通过证据），不上传数据库或额外恢复包。
+
+早期final-verification原始失败日志含pytest尾部空白，为保持原字节采用final-verification.log.gz（gzip，mtime=0）；解压SHA256=635223d59a9e4ca110e99b0f09993338b0da56d540a9e4beab45de136a97016d。未删失败或改写测试输出。

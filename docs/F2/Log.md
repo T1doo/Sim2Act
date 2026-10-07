@@ -230,3 +230,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 独立复审最终6个HTTP oracle PASS，含双实例、接受后GET-only、实际撤权与版本负例；新源与d069有1handler+2docs冲突，安全保留双清理建议已存，组合未运行，不以bd CI签收组合。
 
 2026-10-07 稳定8bd整合首轮完整SQLite876PASS38SKIP/914/262.84秒、PG910PASS4SKIP/914/510.56秒，两个warnings/0FAIL。d069含9f及等价c041文档，1eb应用使用合并handler两清理+docs追加保留；临时缩进/marker提交立即amend未推，最终node/diff和独立source PASS。新shared16跨片HTTP/core、FIFO目标拒绝、canonical9target及PG8补充PASS；Edge接线同agentAPI/browser，33/29旧断言原样先验，继后新16phase与保护/整权限/3AppRun2data2MOCKoracle，main两PNG槽明确新cold-use范围，原workflow/PS/150s/12s/11slots2MB不变。最终源码精确全量另验；原生/PNG NOT_RUN，不借bd旧绿灯。纯docs525已普通同步exact，产品不push/CI；本轮真实0与此前1请求460token另计，预算不增加，正式发布/语义/完整P-B/F1/AT02不提升。[证据](../evidence/product-integration-20261007/README.md)。
+
+2026-10-07 整合最终冻结4c8fdaf完整918：SQLite880PASS38SKIP/280.96秒，PG配置914PASS4SKIP/569.42秒，均0FAIL、2warnings；显式SQLite-only fixture与Windows/Chromium阻塞SKIP逐条保留。181文件SHA无变，独立9PASS及16组合oracle/FIFO正常worker闭合。owned PG残test schema/role均0后只移除本轮容器并验证不存在。终态证据仅docs候选，产品未push/新CI未触发；新保护Edge/PNG/150秒运行时间NOT_RUN，0真实模型与历史1/460分别记载，正式发布/语义/完整P-B/F1/AT02不提升。[证据](../evidence/product-integration-20261007/README.md)。

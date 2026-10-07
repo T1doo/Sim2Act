@@ -1,0 +1,43 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________________ test_universal_integrated_same_session ____________________
+
+env = (<sim2act.db.Store object at 0x7f7517b860f0>, Settings(database_url='sqlite:////tmp/sim2act-product-integration-review...de15febe814eac92c14371f72d48a8', 'user_54b0fd760caf40049adb8c1b0b861afa', 'proj_676e3b100aba42ad823e07757ab41466', ...)
+tmp_path = PosixPath('/tmp/sim2act-product-integration-review/universal-v2/test_universal_integrated_same0')
+
+    def test_universal_integrated_same_session(env,tmp_path):
+     store,settings,client,owner,other_owner,project,original_resource=env
+     resource=client.post(f'/api/projects/{project}/resources',json={'name':'integrated.csv','format':'csv','content':'amount,tax,memo\n5,1,x\n7,2,y\n'}).json()['id']
+     appid=client.post(f'/api/projects/{project}/apps/csv-preview',json={'name':'Integrated synthetic sum','resource_id':resource,'goal':'Integrated two numerical inputs'}).json()['id']
+     with store.tx() as c:fp=c.execute(select(app_drafts.c.fingerprint).where(app_drafts.c.id==appid)).scalar_one()
+     rel,_,_=release(env,appid,fp);instance=create_instance(store,owner,rel['id'],rel['fingerprint'],limits(env),request_key='integration-existing-instance')
+     first=client.post(f'/api/projects/{project}/runs',json={'goal':'Integrated persisted ordinary source','resource_refs':[original_resource],'request_key':'integration-first'}).json()['run_id']
+     assert Worker(store,settings).once();assert client.get('/api/runs/'+first).json()['status']=='PARTIAL'
+     other=store.project(owner,'Other owned project');foreign=store.project(other_owner,'Other identity project')
+     def authority():
+      with store.tx() as c:return {name:[dict(r) for r in c.execute(select(table)).mappings()] for name,table in [('grants',grants),('principals',principals)]}
+     before=authority()
+     with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
+     (tmp_path/'info.json').write_text(json.dumps({'base':f'http://127.0.0.1:{port}','project':project,'other':other,'foreignProject':foreign,'app':appid,'instance':instance['id'],'first':first,'resource':original_resource}))
+     app=create_app(store,settings)
+     @app.post('/test-only-worker')
+     def work():
+      class NoProvider:
+       def complete(self,*_a,**_k):raise AssertionError('CSV oracle forbids model')
+      assert store.test_only and settings.mode=='mock';assert Worker(store,settings,NoProvider()).once();return {'synthetic_only':True}
+     server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=port,log_level='error'));thread=threading.Thread(target=server.run,daemon=True);thread.start()
+     try:
+      end=time.time()+10
+      while not server.started:assert thread.is_alive() and time.time()<end;time.sleep(.01)
+      result=subprocess.run(['node','/tmp/sim2act-product-integration-review/universal-jsdom-adapter.cjs',str(tmp_path)],capture_output=True,text=True,timeout=60);(tmp_path/'driver.log').write_text(result.stdout+result.stderr);assert result.returncode==0,result.stdout+result.stderr
+      assert authority()==before
+      with store.tx() as c:
+       ar=list(c.execute(select(internal_app_runs)).mappings());data=list(c.execute(select(internal_instance_data)).mappings());ats=list(c.execute(select(attempts)).mappings())
+>      assert len(ar)==3 and len(data)==2 and len(ats)==2
+E      AssertionError: assert (2 == 3)
+E       +  where 2 = len([{'id': 'iapprun_b2cfddcd4c2c407abe287d8d6bf6654d', 'instance_id': 'iinstance_fb7a95b7f4f5ad67d5eebde7e740aa1f', 'rele...source_hash': '0d1dcf30c89c3b143dd135c4a743e827dec7ebc30d57e517376ebee1664d76ee'}, 'error': None, 'result_version': 2}])
+
+/tmp/sim2act-product-integration-review/test_universal.py:41: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-product-integration-review/test_universal.py::test_universal_integrated_same_session
+1 failed, 1 warning in 2.78s

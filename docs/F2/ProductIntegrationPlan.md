@@ -7,3 +7,5 @@
 准备沿用既有保护Edge、同浏览器、loopback授权fixture、正常worker、4分钟browser/150秒helper/12秒DOM和既有11个限名≤2MB输出的新增整合流程，不改变workflow/角色/安全参数/真实请求。新source与Edge接线先本地冻结SHA及精确CI差异，真实Edge需父线程下一阶段安排，不自动dispatch。新PG业务CRUD仍由既有明确迁移/最小应用角色验证；不由API建表。
 
 下一核心缺口在既有范围内辨认：固定CSV内部使用已形成有界闭环，正式应用发布与目标语义仍未验收。本轮不增加发布开关或semantic虚假PASS；后续可基于可信来源与正常已保存结果，准备有界的只读业务结果验收入口/可核查oracle，先明确前置，不堆抽象。
+
+本地阶段终态：真实双merge、组合负例与独立审查、精确4c8fdaf源码918完整SQLite/PG配置回归均闭合（880/38与914/4，0FAIL）；owned PG已清理。保护Edge接线已准备，实际新原生与像素待父安排；不把NOT_RUN关闭为已完成，不自动产品push/CI。终态细项、源码SHA与CI差异见[证据](../evidence/product-integration-20261007/README.md)。
