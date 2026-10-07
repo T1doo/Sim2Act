@@ -550,6 +550,6 @@ def plan_change(
         "publishable": False,
     }
     receipt["plan_fingerprint"] = _hash(receipt)
-    if previous_receipt is not None and previous_receipt != receipt:
+    if previous_receipt is not None and _hash(previous_receipt) != _hash(receipt):
         raise DomainError("VERSION_CONFLICT", "Prior receipt differs from current authorized plan")
     return copy.deepcopy(receipt)
