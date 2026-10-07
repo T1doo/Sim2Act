@@ -160,7 +160,8 @@ def test_real_http_dom_generation_entry_and_lost_receipt(env):
         pytest.skip("Optional HTTP-backed DOM check requires Node; not a native browser check")
     dependency = subprocess.run(
         ["node", "-e", "require.resolve('jsdom')"],
-        capture_output=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         timeout=10,
         check=False,
     )

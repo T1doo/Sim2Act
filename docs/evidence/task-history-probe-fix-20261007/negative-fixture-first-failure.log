@@ -1,0 +1,44 @@
+.F.F...................                                                  [100%]
+=================================== FAILURES ===================================
+_________ test_optional_dom_probe_keeps_failure_boundary[timeout-http] _________
+
+env = (<sim2act.db.Store object at 0x7fd99b6c0ec0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-444/test_op...1f2a1b3f4346dbb65a28ca32745d61', 'user_79f3fb1e99be42b2b8ba84d60fc5d6cb', 'proj_88f99dc96a404e9cac4491595eb63e05', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-444/test_optional_dom_probe_keeps_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd99a4058b0>
+target = 'http', outcome = 'timeout'
+
+    @pytest.mark.parametrize('target', ['native', 'http'])
+    @pytest.mark.parametrize('outcome', ['timeout', 'missing'])
+    def test_optional_dom_probe_keeps_failure_boundary(env, tmp_path, monkeypatch, target, outcome):
+        filename = 'test_registered_generation_native_dom.py' if target == 'native' else 'test_registered_run_generation_http.py'
+        spec = importlib.util.spec_from_file_location('dependency_probe_' + target, Path(__file__).with_name(filename))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+>       monkeypatch.setattr(module.shutil, 'which', lambda _name: 'synthetic-node-present')
+                            ^^^^^^^^^^^^^
+E       AttributeError: module 'dependency_probe_http' has no attribute 'shutil'
+
+tests/test_optional_dom_dependency_probe.py:16: AttributeError
+_________ test_optional_dom_probe_keeps_failure_boundary[missing-http] _________
+
+env = (<sim2act.db.Store object at 0x7fd99a41bdd0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-444/test_op...acfe56e8fc4bf9b16d226ac57506c4', 'user_6b16819ca6954e40a662a1e5503a4063', 'proj_0c78268a1e2a4693bb4c3b30f442a3cc', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-444/test_optional_dom_probe_keeps_3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd99b540ef0>
+target = 'http', outcome = 'missing'
+
+    @pytest.mark.parametrize('target', ['native', 'http'])
+    @pytest.mark.parametrize('outcome', ['timeout', 'missing'])
+    def test_optional_dom_probe_keeps_failure_boundary(env, tmp_path, monkeypatch, target, outcome):
+        filename = 'test_registered_generation_native_dom.py' if target == 'native' else 'test_registered_run_generation_http.py'
+        spec = importlib.util.spec_from_file_location('dependency_probe_' + target, Path(__file__).with_name(filename))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+>       monkeypatch.setattr(module.shutil, 'which', lambda _name: 'synthetic-node-present')
+                            ^^^^^^^^^^^^^
+E       AttributeError: module 'dependency_probe_http' has no attribute 'shutil'
+
+tests/test_optional_dom_dependency_probe.py:16: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_optional_dom_dependency_probe.py::test_optional_dom_probe_keeps_failure_boundary[timeout-http]
+FAILED tests/test_optional_dom_dependency_probe.py::test_optional_dom_probe_keeps_failure_boundary[missing-http]
+2 failed, 21 passed, 1 warning in 32.56s

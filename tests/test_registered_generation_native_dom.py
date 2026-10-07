@@ -21,7 +21,8 @@ def test_registered_generation_direct_actual_http_dom(tmp_path, inject_poll_race
     if not shutil.which("node"):
         pytest.skip("Developer Node required for optional HTTP DOM module check")
     probe = subprocess.run(
-        ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
+        ["node", "-e", "require.resolve('jsdom')"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10
     )
     if probe.returncode:
         pytest.skip("Developer jsdom must be resolvable through NODE_PATH or Node module path")

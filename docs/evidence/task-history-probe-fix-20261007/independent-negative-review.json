@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "time": "2026-10-07T05:22:05.591796+00:00",
+  "test_sha256": "ac3fd86c450e7a3427fcd43ffc4df7c545fbd52d3ae2d752ef44cb45b8d5df79",
+  "method": "imports both actual existing test modules and invokes actual probe-bearing test functions; stdlib subprocess.run/shutil.which monkeypatched before invocation, covering function-local imports",
+  "cases": {
+    "native_timeout": "TimeoutExpired propagates; not SKIP",
+    "http_timeout": "TimeoutExpired propagates; not SKIP",
+    "native_missing": "nonzero probe retains original pytest.skip",
+    "http_missing": "nonzero probe retains original pytest.skip"
+  },
+  "oracle": [
+    "timeout keyword exactly10 checked in every case",
+    "seen command exactly one node -e require.resolve(jsdom)",
+    "no actual child process, HTTP driver, model call or external service",
+    "monkeypatch restores module-global stdlib functions automatically",
+    "existing product and HTTP/DOM actual-success assertions unchanged"
+  ],
+  "results": "4 PASS,1warning, see negative-tests.log",
+  "ruff": "PASS",
+  "diff_check": "PASS",
+  "limitations": [
+    "simulated timeout/nonzero validates classification only; does not reproduce Windows pipe latency",
+    "original helper setup failures retained by primary; no prior failure overwritten"
+  ]
+}
