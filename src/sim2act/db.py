@@ -88,6 +88,24 @@ runs = Table(
     Column("version", Integer, default=1),
     UniqueConstraint("principal_id", "project_id", "request_key"),
 )
+# Explicit migration only: no HTTP/runtime path creates or seeds activation tables.
+natural_activations = Table(
+    "natural_activations", meta,
+    Column("id", String, primary_key=True),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("status", String, nullable=False),
+    Column("scope", JSON, nullable=False),
+    Column("scope_fingerprint", String, nullable=False),
+    Column("approval", JSON),
+    Column("approval_fingerprint", String),
+    Column("ledger", JSON, nullable=False),
+    Column("created_at", Float, nullable=False),
+    UniqueConstraint("principal_id", "project_id", "request_key"),
+)
+
 run_contracts = Table(
     "run_contracts",
     meta,
