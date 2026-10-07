@@ -362,7 +362,7 @@ async function layout(page, label) {
           const width=label==='protocol-desktop'?1280:390;
           await protocolPage.setViewportSize({width,height:label==='protocol-desktop'?1000:844});
           const bounds=await protocolPage.evaluate(()=>({width:innerWidth,documentWidth:document.documentElement.scrollWidth,
-            overflow:[...document.querySelectorAll('#conditional-panel button,#conditional-panel select,#conditional-panel input,#condition-source,#condition-results')].filter(e=>e.getClientRects().length).filter(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth+1;}).length}));
+            overflow:[...document.querySelectorAll('#conditional-panel button,#conditional-panel select,#conditional-panel input,#conditional-panel textarea,#condition-source,#condition-results')].filter(e=>e.getClientRects().length).filter(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth+1;}).length}));
           check(`${label}: conditional report and controls fit actual viewport`,bounds.width===width&&bounds.documentWidth<=width+1&&bounds.overflow===0);
           const sandbox=await auditProtocol();
           require('./conditional-checks-ui.cjs').assertSandboxSafety(sandbox,check,`conditional ${label} capture`);
