@@ -92,6 +92,7 @@ function renderOrdinaryProgress(r, attempts) {
   $("result").append(section);
 }
 function clearRunDetail() {
+  if(typeof invalidateNaturalGoalAcknowledgements === "function")invalidateNaturalGoalAcknowledgements();
   unresolvedAttempts=[];reconcileVersion=null;
   for(const name of ["result","events","raw-result","commands","reconcile-attempt"])$(name).replaceChildren();
   $("reconcile-panel").hidden=true;
@@ -503,13 +504,13 @@ async function showGoalCard(id, pid=$("project-select").value) {
   if(!activeGoalCard.snapshot){activeGoalCard=null;renderGoalRun();throw Error("VERSION_CONFLICT");}
   renderGoalRun();
   if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();
-  if(typeof refreshNaturalGoalStatus === "function")await refreshNaturalGoalStatus();
-  if(!current())return;
   goalCardFields.forEach(f=>{$(`goal-card-${f}`).value=Array.isArray(card.content[f]) ? card.content[f].join("\n") : card.content[f];});
   Array.from($("goal-card-resources").options).forEach(o=>o.selected=card.content.resource_refs.includes(o.value));
   $("goal-card-status").textContent=`草案 v${card.version} · 目标验收 NOT_RUN · 执行使用已保存版本；保存将建立新版本`;
   $("goal-card-history-detail").textContent="";
   $("goal-card-history").replaceChildren(...card.history.map(v=>row(`v${v.version} · ${v.snapshot.content.title}`,()=>{const labels={title:"名称",goal:"目标",known:"已知",assumptions:"假设",unresolved:"未决项",constraints:"硬条件",acceptance_checks:"验收检查"};$("goal-card-history-detail").textContent=goalCardFields.map(f=>`${labels[f]}：\n${Array.isArray(v.snapshot.content[f]) ? v.snapshot.content[f].join("\n") : v.snapshot.content[f]}`).join("\n\n")+`\n\n绑定材料 ${v.snapshot.resource_snapshots.length} 份 · 只读历史版本 v${v.version}`;},"回看版本")));
+  if(typeof refreshNaturalGoalStatus === "function")await refreshNaturalGoalStatus();
+  if(!current())return;
   await refreshGoalCandidates(id,pid,generation);
 }
 $("goal-card-new").onclick=clearGoalCard;

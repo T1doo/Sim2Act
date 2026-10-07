@@ -4,6 +4,7 @@ const naturalGoalRequests = new Map(), naturalGoalConfirmations = new Map(), nat
 let naturalGoalGeneration = 0, naturalGoalDisplayed = null;
 const naturalGoalKey = (card=activeGoalCard) => card ? JSON.stringify([token,$("project-select").value,card.id]) : null;
 const naturalGoalFp = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+function invalidateNaturalGoalAcknowledgements(){naturalGoalAcknowledgements.clear();}
 function clearNaturalGoal() {
   naturalGoalGeneration++;
   naturalGoalAcknowledgements.clear();
@@ -76,6 +77,7 @@ async function generateNaturalGoal(recover=false){
 }
 function naturalGoalPlanShape(r,n){
   const plan=n?.plan,source=r.contract?.snapshot?.source_goal_card;
+  if(!Number.isSafeInteger(r.version)||r.version<1||n?.validation!=="VALIDATED"||n.confirmation_required!==(r.contract?.snapshot?.natural_planning?.require_confirmation===true)||Object.keys(n).some(k=>!["plan","fingerprint","validation","confirmation_required","confirmed"].includes(k)))throw Error("计划校验或确认元数据不可信");
   if(!plan||plan.version!=="natural-goal-plan.v1"||!naturalGoalFp(n.fingerprint)||typeof n.confirmed!=="boolean"||typeof n.confirmation_required!=="boolean"||!source||plan.source_goal_fingerprint!==source.fingerprint||Object.keys(plan).some(k=>!["version","source_goal_fingerprint","interpretation","steps"].includes(k)))throw Error("未知或不匹配的计划 schema");
   const meaning=plan.interpretation;
   if(!meaning||typeof meaning.objective!=="string"||!meaning.objective||Object.keys(meaning).some(k=>!["objective","assumptions","unresolved"].includes(k))||![meaning.assumptions,meaning.unresolved].every(v=>Array.isArray(v)&&v.length<=16&&v.every(x=>typeof x==="string"))||!Array.isArray(plan.steps)||!plan.steps.length||plan.steps.length>4)throw Error("未知计划结构");
@@ -103,7 +105,7 @@ async function renderNaturalGoalRun(r,id,current){
     if(!current())return;
     if(hash!==r.natural_plan.fingerprint)throw Error("计划内容与指纹不匹配");
   }
-  catch(error){if(current())section.append(row(`${error.message}。确认已关闭，请核对持久任务。`));return;}
+  catch(error){if(current()){invalidateNaturalGoalAcknowledgements();section.append(row(`${error.message}。确认已关闭，请核对持久任务。`));}return;}
   section.append(row(`已通过结构与来源校验；目标语义 NOT_RUN，人工签收 PENDING。保存来源 v${r.contract.snapshot.source_goal_card.version}。`));
   section.append(row(`计划目标：${plan.interpretation.objective}`));
   section.append(row(`假设：${plan.interpretation.assumptions.join("；")||"无"}`),row(`未决项：${plan.interpretation.unresolved.join("；")||"无"}`));
@@ -152,7 +154,7 @@ async function confirmNaturalGoal(r,n,key,current,recover){
   for(const id of ["natural-goal-confirm","natural-goal-ack","natural-goal-cancel","natural-goal-confirm-retry"]){if($(id))$(id).disabled=true;}
   try {
     const receipt=await api(`/api/runs/${r.id}/confirm-natural-plan`,"POST",entry.body);
-    if(receipt?.run_id!==r.id||receipt.plan_fingerprint!==n.fingerprint||receipt.confirmed!==true||!["QUEUED","RUNNING","PARTIAL","FAILED","WAITING_RESOURCE","PAUSED","CANCELLED","CANCEL_REQUESTED","RECONCILING"].includes(receipt.status))throw Error("未知确认回执");
+    if(receipt?.run_id!==r.id||receipt.plan_fingerprint!==n.fingerprint||receipt.confirmed!==true||!Number.isSafeInteger(receipt.version)||receipt.version<entry.body.expected_version+1||receipt.goal_acceptance!=="NOT_RUN"||receipt.candidate_generated!==false||!["QUEUED","RUNNING","PARTIAL","FAILED","WAITING_RESOURCE","PAUSED","CANCELLED","CANCEL_REQUESTED","RECONCILING"].includes(receipt.status))throw Error("未知确认回执");
     entry.state="accepted";entry.message="确认已接受。请读取实际执行记录。";
   } catch(error){
     const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);

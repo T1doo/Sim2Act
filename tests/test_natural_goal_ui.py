@@ -83,6 +83,7 @@ def test_natural_goal_actual_http_ui(env, tmp_path, case):
         "base": f"http://127.0.0.1:{port}", "project": project,
         "card": card["id"], "version": card["version"], "fingerprint": card["fingerprint"],
         "case": case, "resource": resource, "other_project": other,
+        "saved_title": card["content"]["title"], "saved_goal": card["content"]["goal"],
     }))
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
     thread = threading.Thread(target=server.run, daemon=True)
