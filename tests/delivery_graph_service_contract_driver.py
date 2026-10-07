@@ -15,9 +15,11 @@ from sqlalchemy import func, select, update
 
 from sim2act.api import create_app
 from sim2act.config import Settings
+from sim2act.contracts import Limits
 from sim2act.db import Store, app_drafts, fingerprint, grants, meta, resources
 from sim2act.db import delivery_graph_requests as requests
 from sim2act.db import delivery_graph_states as states
+from sim2act.delivery_graph_apps import LockInput, set_lock
 
 
 class ServiceDriver:
@@ -51,21 +53,57 @@ class ServiceDriver:
             env = (self.store, self.settings, self.client, user, other, pid, rid)
             self.controls = {"pid": pid, "user": user, "resource": rid}
             if scenario.startswith("project"):
-                from test_conditional_run_bindings import env as bounded_env
-                from test_report_manifest_apps import promoted
+                from test_bounded_agent_apps import setup
 
-                promoted_app, _, _, _, wires = promoted(bounded_env.__wrapped__(env), self.root)
-                primary = promoted_app["id"]
-                self.controls["fixed_mock_source_calls"] = len(wires)
+                _, _, _, primary, _, _, _, _ = setup(env)
+                with self.store.tx() as c:
+                    related = c.execute(
+                        select(app_drafts.c.id).where(
+                            app_drafts.c.project_id == pid, app_drafts.c.id != primary
+                        )
+                    ).scalar_one()
+                peer_resource = rid
+                self.controls["fixture_family"] = "initial-declarative-bounded-agent-plus-CSV"
             else:
-                primary = self._csv(pid, rid, "primary graph")
-            peer_resource = self._post(
-                f"/api/projects/{pid}/resources",
-                {"name": "peer.csv", "format": "csv", "content": "amount,quantity\n10,20\n30,40\n"},
-            )["id"]
-            related = self._csv(pid, peer_resource, "related graph")
+                if scenario == "report_partial":
+                    from test_conditional_run_bindings import env as bounded_env
+                    from test_report_manifest_apps import promoted
+
+                    promoted_app, _, _, _, wires = promoted(bounded_env.__wrapped__(env), self.root)
+                    primary = promoted_app["id"]
+                    self.controls["fixed_mock_source_calls"] = len(wires)
+                    self.controls["fixture_family"] = "fixed-MOCK-promoted-Report-partial"
+                else:
+                    primary = self._csv(pid, rid, "primary graph")
+                    self.controls["fixture_family"] = "CSV"
+                peer_resource = self._post(
+                    f"/api/projects/{pid}/resources",
+                    {
+                        "name": "peer.csv",
+                        "format": "csv",
+                        "content": "amount,quantity\n10,20\n30,40\n",
+                    },
+                )["id"]
+                related = self._csv(pid, peer_resource, "related graph")
+            if scenario.startswith("project"):
+                # Provision authority through the ordinary API before baseline.
+                # Quarantine only membership, not any accepted graph/context seal.
+                spare = self._csv(pid, peer_resource, "preauthorized membership fixture")
+                self._derive(pid, spare)
+                with self.store.tx() as c:
+                    c.execute(
+                        update(app_drafts)
+                        .where(app_drafts.c.id == spare)
+                        .values(project_id=foreign)
+                    )
+                self.controls["parked_related"] = spare
             first = self._derive(pid, primary)
             self._derive(pid, related)
+            self.controls.update(primary=primary, related=related)
+            if scenario == "target_locked":
+                first = self._lock(primary)
+            elif scenario == "project_locked":
+                self._lock(related)
             source = next(n for n in first["graph"]["nodes"] if n["kind"] == "SOURCE")
             alternate = next(n for n in first["graph"]["nodes"] if n["id"] != source["id"])
 
@@ -99,10 +137,6 @@ class ServiceDriver:
                 related_resource=peer_resource,
                 primary_resource=first["graph"]["resource_ids"][0],
             )
-            if scenario in {"target_locked", "project_locked"}:
-                self.unsupported.append(
-                    "No current service lock-control/consumption interface; initial lock not fabricated"
-                )
             self.authority_baseline = self._authority()
         except BaseException:
             self.close()
@@ -132,6 +166,34 @@ class ServiceDriver:
             {
                 "expected_candidate_fingerprint": draft.json()["fingerprint"],
                 "request_key": "fixture-real-derive-" + aid,
+            },
+        )
+
+    def _lock(self, aid):
+        pid = self.controls["pid"]
+        current = self.client.get(f"/api/projects/{pid}/apps/{aid}/delivery-graph")
+        assert current.status_code == 200
+        graph = current.json()
+        node = next(n for n in graph["graph"]["nodes"] if n["kind"] == "SOURCE")
+        body = LockInput(
+            expected_graph_fingerprint=graph["graph_fingerprint"],
+            request_key="fixture-lock-" + aid,
+            change={
+                "node_id": node["id"],
+                "expected_revision": node["revision"],
+                "expected_content_fingerprint": node["content_fingerprint"],
+            },
+            locked=True,
+        )
+        limits = Limits(**{k: getattr(self.settings, k) for k in Limits.model_fields})
+        set_lock(self.store, self.controls["user"], pid, aid, body, limits)
+        draft = self.client.get("/api/apps/" + aid)
+        assert draft.status_code == 200
+        return self._post(
+            f"/api/projects/{pid}/apps/{aid}/delivery-graph/derive",
+            {
+                "expected_candidate_fingerprint": draft.json()["fingerprint"],
+                "request_key": "fixture-after-lock-" + aid,
             },
         )
 
@@ -177,9 +239,22 @@ class ServiceDriver:
             }
         )
         if response.status_code in {200, 201}:
-            # Status normalization only. Do not construct expansion or outer seals
-            # from mutable observations: the server must persist/return them.
-            return {"status": 200, "data": value}
+            native = {k: v for k, v in value.items() if k != "cached"}
+            assert native["native_outer_fingerprint"] == fingerprint(
+                {k: v for k, v in native.items() if k != "native_outer_fingerprint"}
+            ), "Native server receipt seal mismatch"
+            data = {
+                "core": native["receipt"],
+                "expansion": native["expansion"],
+                "outer_fingerprint": native["outer_fingerprint"],
+            }
+            assert data["outer_fingerprint"] == fingerprint(
+                {k: v for k, v in data.items() if k != "outer_fingerprint"}
+            ), "Server public receipt seal mismatch"
+            assert native["scope_expansion"]["status"] != "BLOCKED_PARTIAL", (
+                "Real service expansion is BLOCKED_PARTIAL; cannot claim complete contract"
+            )
+            return {"status": 200, "data": data}
         error = value.get("error", {}) if isinstance(value, dict) else {}
         code = error.get("code") if isinstance(error, dict) else error
         if response.status_code == 422:
@@ -195,12 +270,19 @@ class ServiceDriver:
     def transition(self, event):
         aid = self.controls["related"] if event.endswith("related") else self.controls["primary"]
         if event == "add_related":
-            added = self._csv(self.controls["pid"], self.controls["related_resource"], "added peer")
+            added = self.controls["parked_related"]
+            with self.store.tx() as c:
+                c.execute(
+                    update(app_drafts)
+                    .where(app_drafts.c.id == added)
+                    .values(project_id=self.controls["pid"])
+                )
             self._derive(self.controls["pid"], added)
             assert self._authority() == self.authority_baseline
             return
         if event == "lock_related":
-            raise NotImplementedError("Service has no trusted lock transition interface")
+            self._lock(aid)
+            return
         with self.store.tx() as c:
             if event.startswith("revoke_"):
                 draft = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
@@ -248,7 +330,9 @@ class ServiceDriver:
                 if event == "tamper_core_receipt_types":
                     value["response"]["receipt"]["patch_executed"] = 0
                 elif event == "tamper_outer_receipt_types":
-                    value["response"]["authorization_revision"] = True
+                    value["response"]["expansion"]["applications"][0]["authorization_revision"] = (
+                        True
+                    )
                 elif event == "tamper_outer_receipt":
                     value["response"]["scope_expansion"]["status"] = "TAMPERED"
                 else:

@@ -21,7 +21,7 @@ def test_actual_http_and_cold_store_keep_full_database_and_authority():
         response = driver.plan(copy.deepcopy(driver.info["request"]))
         assert response["status"] == 200
         # Raw real response is intentionally not a manufactured contract envelope.
-        assert "receipt" in response["data"]
+        assert "core" in response["data"]
         after = driver.observe()
         assert after["receipt_count"] == before["receipt_count"] + 1
         assert after["domain_fingerprint"] == before["domain_fingerprint"]
@@ -29,7 +29,7 @@ def test_actual_http_and_cold_store_keep_full_database_and_authority():
         cold = driver.cold()
         assert cold.store is not driver.store and cold.client is not driver.client
         replay = cold.plan(copy.deepcopy(driver.info["request"]))
-        assert replay["status"] == 200 and replay["data"]["cached"] is True
+        assert replay == response
         assert cold.observe() == after
         driver.transition("revoke_primary")
         revoked = driver.observe()
@@ -39,4 +39,29 @@ def test_actual_http_and_cold_store_keep_full_database_and_authority():
     finally:
         if cold is not None:
             cold.close()
+        driver.close()
+
+
+def test_real_promoted_report_partial_parent_is_not_normalized_complete():
+    driver = factory("report_partial")
+    try:
+        before = driver.observe()
+        public = copy.deepcopy(driver.info["request"])
+        pid, aid = public.pop("project_id"), public.pop("app_id")
+        response = driver.client.post(
+            f"/api/projects/{pid}/apps/{aid}/delivery-graph/plans", json=public
+        )
+        assert response.status_code == 201
+        native = response.json()
+        assert native["receipt"]["revalidation_scope"] == "PROJECT"
+        assert native["scope_expansion"]["status"] == "BLOCKED_PARTIAL"
+        assert native["scope_expansion"]["omissions"]
+        assert len(native["expansion"]["applications"]) == 2
+        after = driver.observe()
+        assert before["domain_fingerprint"] == after["domain_fingerprint"]
+        assert before["authority_fingerprint"] == after["authority_fingerprint"]
+        with pytest.raises(AssertionError, match="BLOCKED_PARTIAL"):
+            driver.plan(copy.deepcopy(driver.info["request"]))
+        assert driver.observe() == after
+    finally:
         driver.close()
