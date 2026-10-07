@@ -22,6 +22,7 @@ from sim2act.db import attempts, grants, principals
 @pytest.mark.parametrize("family", ["CSV", "REPORT"])
 def test_delivery_graph_actual_http_dom(env, tmp_path, family):
     if family == "REPORT":
+        draft(env)  # Existing trusted CSV peer has no graph anchor: explicit partial scope.
         env = bounded_env.__wrapped__(env)
         saved, _, _, _, wires = promoted(env, tmp_path)
         aid = saved["id"]
@@ -41,7 +42,7 @@ def test_delivery_graph_actual_http_dom(env, tmp_path, family):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": project, "other": other, "app": aid, "revoke": {"id": revoke["id"], "version": revoke["revision"]}}))
+    (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": project, "other": other, "app": aid, "family": family, "revoke": {"id": revoke["id"], "version": revoke["revision"]}}))
     server = uvicorn.Server(uvicorn.Config(create_app(store, settings), host="127.0.0.1", port=port, log_level="error"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -55,7 +56,7 @@ def test_delivery_graph_actual_http_dom(env, tmp_path, family):
         assert result.returncode == 0, result.stdout + result.stderr
         receipt = json.loads((tmp_path / "results.json").read_text())
         assert receipt["status"] == "PASS" and receipt["live_requests"] == 0
-        assert len(receipt["checks"]) == 28
+        assert len(receipt["checks"]) == 29
         web = Path(__file__).parents[1] / "src/sim2act/web"
         assert receipt["loaded_source_sha256"] == {name: hashlib.sha256((web / name).read_bytes()).hexdigest()
                                                     for name in receipt["loaded_source_sha256"]}
