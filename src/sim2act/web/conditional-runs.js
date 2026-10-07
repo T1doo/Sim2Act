@@ -5,6 +5,7 @@ const boundedRunRequests=new Map();
 const boundedRequestKey=()=>"bounded-"+Array.from(crypto.getRandomValues(new Uint32Array(4)),n=>n.toString(16)).join("-");
 const boundedHash=v=>typeof v==="string"&&/^[a-f0-9]{64}$/.test(v);
 function clearConditionalRuns(){
+ if(typeof clearReportSave === "function")clearReportSave();
  boundedRunGeneration++;boundedRunContext=null;
  for(const id of ["source-form","refresh","retry","check","extract","plan","cold-form","cold-check"])$("condition-run-"+id).hidden=true;
  for(const id of ["output","check-output","extract-output","plan-text","cold-output","cold-check-output"])$("condition-run-"+id).replaceChildren();
@@ -59,6 +60,7 @@ async function boundedRead(c){
   const old=$("condition-run-cold-resource").value;
   $("condition-run-cold-resource").replaceChildren(new Option("请选择当前授权规则资料", ""),...resources.filter(r=>["txt","md"].includes(r.format)&&r.hash===c.source.hash).map(r=>new Option(`${r.name} · ${r.id} · ${r.hash.slice(0,12)}`,r.id)));
   if([...$("condition-run-cold-resource").options].some(o=>o.value===old))$("condition-run-cold-resource").value=old;
+  if(typeof prepareReportSave === "function" && (reportSaveContext?.bounded!==c||reportSaveContext?.plan?.plan_fingerprint!==plan.plan_fingerprint))await prepareReportSave(c,plan,resources);
  }
 }
 async function boundedAction(fn){
