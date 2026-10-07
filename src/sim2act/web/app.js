@@ -163,6 +163,8 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  if(typeof clearReportApps === "function")clearReportApps();
+  if(typeof clearReportSave === "function")clearReportSave();
   if(typeof clearApplicationUse === "function")clearApplicationUse(true);
   runHistoryGeneration++;runSelectionGeneration++;runUserSelectionGeneration++;
   activeRun=null;refs=[];unresolvedAttempts=[];reconcileVersion=null;
@@ -195,6 +197,7 @@ document.querySelector("#projects .grid > section:last-child").append($("reconci
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun,false);}}catch(e){$("health").textContent="后台不可用";}},2500);
 
 function clearApp() {
+  if(typeof clearReportApps === "function")clearReportApps();
   if(typeof clearApplicationUse === "function")clearApplicationUse();
   if(typeof clearInternal === "function")clearInternal();
   appReadRecovery=null;$("app-read-retry").hidden=true;
@@ -213,6 +216,7 @@ async function refreshApps() {
   $("app-list").replaceChildren(...items.map(x=>row(`${x.name} · 未发布草案`,()=>showApp(x.id),"打开预览")));
   if(!items.length)$("app-list").textContent="先保存 CSV 材料，再创建一个草案。";
   if(typeof refreshApplicationUse === "function")await refreshApplicationUse(items);
+  if(typeof refreshReportApps === "function")await refreshReportApps();
 }
 function previewText(r) {
   if(r.status === "FAILED")return `预览失败（FAILED）：${r.error?.message || r.error?.code} · 已保留这次历史`;
