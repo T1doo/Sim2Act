@@ -1,6 +1,6 @@
 # 第一次使用：从 CSV 到自己的运行与历史
 
-当前可体验的是固定 CSV 求和、私有草案、内部版本和本地运行；不是模型自主制作、正式发布或完整 P-B。本指南实际体验证据基线仍为 `de907327dd5b3105c169008a9fe0c90dcc353a8b`；后续冻结 `7854029` 的完整 SQLite/PG 回归已自然通过，并完成逐用例、来源和清理审计。当前原生预算门及 [P-B 状态](F2/PBBoundedDeliveryStatus.md) 仍为 NOT_ACCEPTED；旧指南失败记录按原样保留。
+当前可体验的是固定 CSV 求和、私有草案、内部版本和本地运行；不是模型自主制作、正式发布或完整 P-B。本指南实际体验证据基线仍为 `de907327dd5b3105c169008a9fe0c90dcc353a8b`；后续冻结 `7854029` 的完整 SQLite/PG 回归已自然通过，并完成逐用例、来源和清理审计。当前原生预算门仍为 NO_GO，[P-B 状态](F2/PBBoundedDeliveryStatus.md) 仍为 NOT_ACCEPTED；旧指南失败记录按原样保留。
 
 本说明的页面步骤已在 Linux 的干净合成 SQLite 测试库、真实 HTTP/product JS 和正常 Worker 上执行；仅预建测试 schema 和固定合成登录身份，不预置项目、候选、Release、Run 或结果。普通用户 PostgreSQL/PowerShell 安装、真实浏览器像素、Win11 首次体验 **未测**，不能据此签收。实际证据与失败见 [核查记录](evidence/first-use-bounded-20261007/README.md)。
 
