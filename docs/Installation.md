@@ -51,7 +51,7 @@ pwsh -NoProfile -File .\scripts\Setup.ps1 -Config migration.env -InitializeDatab
 pwsh -NoProfile -File .\scripts\Doctor.ps1 -Config .env
 ```
 
-Doctor 会实际连接应用角色数据库。它成功说明连接检查通过；仍不代表所有表、授权或产品验收完成。每次升级涉及新表时，由迁移角色显式迁移，再由管理员授予新增表 CRUD；API/worker 不自动建表。无需本机管理员权限即可使用已准备好的应用角色。
+Doctor 会实际连接应用角色数据库并只读查询 PostgreSQL 系统目录。此隔离草稿的输出 `STRUCTURAL_READY` 表示当前代码声明的表、列、主键/唯一键、有效 schema/名称解析及逐项 CRUD 权限匹配，且当前/登录身份及可达角色没有管理员、数据库/schema/业务表 owner 或 schema CREATE 能力；不是写入、RLS、身份、worker 或产品验收通过。`database=UP` 仅表示连接成功，不能代替 `status`；`BLOCKED` 返回非零退出码。SQLite/未知数据库不能建立 PostgreSQL 资格。输出不含数据库 URL、凭据或原始异常，也不读取用户业务行。每次升级涉及新表时，由迁移角色显式迁移，再由管理员授予新增表 CRUD；API/worker 不自动建表。Doctor 缺表/结构不符时交迁移操作者，缺权限或过高权限时交数据库管理员；它不执行迁移、授权、身份创建或自动修复。列/权限目录无法核实时也保持 BLOCKED。此检查的实际 PostgreSQL 权限、角色继承及 Win11 行为尚未验证；当前仅合成 catalog 单测，不能把结构检查当作实际业务写入证明。无需本机管理员权限即可使用已准备好的应用角色。 检查只给出读取时的目录诊断，不作为后续操作的授权凭证；操作仍走原有当前身份和权限校验。自定义触发器、RLS策略、业务写入、实际 PostgreSQL 角色继承和干净 Win11 尚未实测，不能由 `STRUCTURAL_READY` 推断通过。
 
 ## 3. 初始化本机身份与启动
 

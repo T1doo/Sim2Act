@@ -92,30 +92,46 @@ def main():
     from sim2act.db import Store
     from sim2act.process_env import application_environment
 
+    if args.command == "doctor":
+        from sim2act.db_readiness import inspect_database, unavailable
+
+        engine = None
+        mode = "UNKNOWN"
+        try:
+            if sys.version_info[:2] != (3, 12):
+                report = unavailable("PYTHON_UNSUPPORTED")
+            else:
+                settings = Settings.from_env()
+                mode = settings.mode.upper() if settings.mode in {"mock", "live"} else "UNKNOWN"
+                engine = Store(settings.database_url).engine
+                report = inspect_database(engine)
+        except Exception:
+            report = unavailable("CONFIGURATION_UNAVAILABLE")
+        finally:
+            if engine is not None:
+                engine.dispose()
+        report.update(
+            python=sys.version.split()[0],
+            mode=mode,
+            database=(
+                "UP"
+                if any(
+                    c["check"] == "connection" and c["status"] == "PASS" for c in report["checks"]
+                )
+                else "OFFLINE"
+            ),
+        )
+        print(json.dumps(report, ensure_ascii=False))
+        if report["status"] != "STRUCTURAL_READY":
+            raise SystemExit(1)
+        return
+
     settings = Settings.from_env()
     data = settings.data_dir
     state = data / "processes.json"
     records = json.loads(state.read_text()) if state.exists() else []
     url = f"http://127.0.0.1:{args.port}"
-    if args.command == "doctor":
-        if sys.version_info[:2] != (3, 12):
-            raise SystemExit("Python 3.12 required")
-        with Store(settings.database_url).engine.connect() as c:
-            from sqlalchemy import text
-
-            c.execute(text("SELECT 1"))
-        print(
-            json.dumps(
-                {
-                    "python": sys.version.split()[0],
-                    "database": "UP",
-                    "data_dir": str(data),
-                    "mode": settings.mode.upper(),
-                    "windows_native": "NOT_RUN",
-                }
-            )
-        )
-    elif args.command == "stop":
+    if args.command == "stop":
         stop(records)
         state.unlink(missing_ok=True)
         print("Owned API/worker stopped; database service and data preserved.")
