@@ -9,6 +9,7 @@ from dataclasses import replace
 from sqlalchemy import insert, select, update
 
 from .config import Settings
+from .contracts import strict_json
 from .db import Store, attempts, fingerprint, new_id, operations, quotas, reservations, runs
 from .errors import DomainError
 from .model import (
@@ -280,13 +281,16 @@ class Worker:
             goal_input["saved_goal"] = contract.source_goal_card.model_dump()
             if ctx["messages"]:
                 try:
+                    original_input = ctx["messages"][1]["content"]
                     valid = (
                         len(ctx["messages"]) >= 2
                         and ctx["messages"][0] == {"role": "system", "content": SYSTEM_PROMPT}
                         and ctx["messages"][1]["role"] == "user"
-                        and json.loads(ctx["messages"][1]["content"]) == goal_input
+                        and isinstance(original_input, str)
+                        and fingerprint(strict_json(original_input, max_bytes=len(original_input.encode())))
+                        == fingerprint(goal_input)
                     )
-                except (KeyError, TypeError, ValueError):
+                except (KeyError, IndexError, TypeError, ValueError, DomainError):
                     valid = False
                 if not valid:
                     raise DomainError("VERSION_CONFLICT", "Resumed context lost frozen goal conditions")

@@ -83,9 +83,9 @@ def verify_source(store, c, run, contract):
         events.c.run_id == run["id"], events.c.kind == "ACCEPTED",
     )).scalars().all()
     if (run["fingerprint"] != expected or run["context"].get("saved_goal_input") != expected
-            or accepted != [{"input_fingerprint": expected,
+            or fingerprint(accepted) != fingerprint([{"input_fingerprint": expected,
                              "goal_source": {"card_id": source.card_id, "version": source.version,
-                                             "fingerprint": source.fingerprint}}]):
+                                             "fingerprint": source.fingerprint}}])):
         raise DomainError("VERSION_CONFLICT", "Goal source differs from original acceptance")
 
 
