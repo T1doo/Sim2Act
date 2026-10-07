@@ -1,0 +1,13 @@
+# Catalog CSV routing UI oracle
+
+Parent's preimplementation scope is ReportUICumulativeTimeoutPlan (94f57f7); product owner implements routing hints/API and use.js. This tests-only slice owns no product modification. Development source is frozen b45b0ae951fe3249b9423b4bd777cf7e92dc1f44 (product 4d1a486 plus tests 65a5fd8).
+
+Full actual index.html, app.js and use.js are loaded as script elements. Synthesized API/deferred replies exercise actual discovery, explicit open, lost submission and clearing functions. The scheduler records original 2500ms registration; elapsed polling/HTTP/PG is not claimed. 24 assertions cover strict false zero inspect, true/absent/null/string/number/object/array full inspect fallback, active false/absent clearing all protected fields while preserving actual UNKNOWN request body/key, explicit full source/release inspect, project/identity ABA with late data/error, current error clearing and zero automatic POST.
+
+Old use.js (4d1a486 parent) RED fails first strict-false zero-inspect oracle. Frozen candidate GREEN passes all 24. Python launcher plus owner's actual API contract test: 2 PASS / 2.52s. Ruff and Node syntax pass. Actual hashes are in green/results.json. No original Report49 driver, 14 promotion POSTs, 7 fixed Mock fixture executions, Node90 timeout, background timer, authority or provider configuration changed by these tests.
+
+One frozen SQLite related execution started: actual HTTP Graph2, original Report49 and actual CSV application-use path. Terminal evidence follows. No PG/full/native/CI/LIVE executed by this slice. The original PG cumulative timeout remains historical FAILED; local success cannot prove Windows or PG budget.
+
+Frozen actual HTTP SQLite terminal: 4 PASS / 42.11s. Graph CSV and Report each retain 29 checks and HTTP loaded-source equality. Original Report retains 49 checks, exactly 7 fixed Mock wires, all authority rows equal and original 90s deadline. Actual CSV user path retains three persisted Runs/two successful result records, provider prohibited and unchanged authority rows. No synthetic driver results substitute for these HTTP checks. Receipt exports and source manifest identify precise tested b45b0ae source. The observed local cost is not a PG/Windows budget guarantee.
+
+Owned subprocess commands returned and every actual server's finally joined successfully (asserted by all four passing launchers). Temporary SQLite fixture directories are retained only under /tmp/catalog-routing-related for diagnostic reproducibility; no DB/info/bearer exported into repo. Development RED and GREEN preserved without overwriting failures.
