@@ -199,7 +199,7 @@ def test_persistent_coherent_tampering_is_typed_and_zero_write(env, attack):
         elif attack == "job":
             value["status"] = "PASS"
         else:
-            value["receipt"]["patch_executed"] = 0 if attack == "receipt_bool" else True
+            value["response"]["receipt"]["patch_executed"] = 0 if attack == "receipt_bool" else True
         c.execute(
             update(table)
             .where(*(table.c[k.name] == row[k.name] for k in table.primary_key))
@@ -214,6 +214,9 @@ def test_persistent_coherent_tampering_is_typed_and_zero_write(env, attack):
     before = snapshot(env)
     response = env[2].post(path(env, aid) + "/plans", json=body)
     assert response.status_code >= 400, response.text
+    assert snapshot(env) == before
+    history_reply = env[2].get(path(env, aid) + "/plans")
+    assert history_reply.status_code >= 400, history_reply.text
     assert snapshot(env) == before
 
 

@@ -215,7 +215,7 @@ def state(store, c, user, pid, aid):
     ):
         conflict("Independent graph anchor seal changed")
     accepted = lookup(c, user, aid, "derive", saved["derivation_key"])
-    answer = checked(accepted)
+    _, answer = checked_request(accepted)
     expected = {
         **metadata(saved),
         "graph": saved["graph"],
@@ -396,16 +396,38 @@ def lookup(c, user, aid, kind, key):
     return row
 
 
-def remember(c, user, aid, kind, key, body_fp, value):
+def checked_request(row):
+    stored = checked(row)
+    if set(stored) != {"request", "response"}:
+        conflict("Malformed request ledger")
+    model = DeriveInput if row["kind"] == "derive" else PlanInput
+    body = model.model_validate(stored["request"])
+    if (
+        body.request_key != row["request_key"]
+        or fingerprint(body.model_dump()) != row["request_fingerprint"]
+    ):
+        conflict("Accepted request parameters changed")
+    return body, stored["response"]
+
+
+def validate_plan_seal(c, user, aid, key, row):
+    seal = lookup(c, user, aid, "plan_seal", key)
+    checked_request(seal)
+    if fingerprint(checked(seal)) != fingerprint(checked(row)):
+        conflict("Independent accepted plan seal changed")
+
+
+def remember(c, user, aid, kind, key, body, value):
+    stored = {"request": body.model_dump(), "response": value}
     c.execute(
         insert(requests).values(
             app_id=aid,
             principal_id=user,
             kind=kind,
             request_key=key,
-            request_fingerprint=body_fp,
-            snapshot=value,
-            fingerprint=fingerprint(value),
+            request_fingerprint=fingerprint(body.model_dump()),
+            snapshot=stored,
+            fingerprint=fingerprint(stored),
         )
     )
 
@@ -422,7 +444,7 @@ def derive(store, user, pid, aid, body, limits):
         fp = fingerprint(body.model_dump())
         if prior:
             saved = current(store, c, user, pid, aid, limits)
-            answer = checked(prior)
+            _, answer = checked_request(prior)
             if (
                 prior["request_fingerprint"] != fp
                 or answer["graph_fingerprint"] != saved["graph"]["graph_fingerprint"]
@@ -445,7 +467,7 @@ def derive(store, user, pid, aid, body, limits):
                 "graph": old["graph"],
                 "source_versions": old["source_versions"],
             }
-            remember(c, user, aid, "derive", body.request_key, fp, answer)
+            remember(c, user, aid, "derive", body.request_key, body, answer)
             return {**answer, "cached": False}
         saved["derivation_key"] = body.request_key
         # All compile/source/auth/version checks finish before the first insert.
@@ -487,7 +509,7 @@ def derive(store, user, pid, aid, body, limits):
             "graph": saved["graph"],
             "source_versions": saved["source_versions"],
         }
-        remember(c, user, aid, "derive", body.request_key, fp, answer)
+        remember(c, user, aid, "derive", body.request_key, body, answer)
         return {**answer, "cached": False}
 
 
@@ -548,7 +570,7 @@ def plan(store, user, pid, aid, body, limits):
         )
         fp = fingerprint(body.model_dump())
         prior = lookup(c, user, aid, "plan", body.request_key)
-        prior_answer = checked(prior) if prior else None
+        prior_answer = checked_request(prior)[1] if prior else None
         if prior and prior["request_fingerprint"] != fp:
             conflict("Plan request key changed")
         receipt = core.plan_change(
@@ -560,6 +582,7 @@ def plan(store, user, pid, aid, body, limits):
         )
         # Canonical fingerprint check defends strict bool/int even before core fix.
         if prior:
+            validate_plan_seal(c, user, aid, body.request_key, prior)
             if set(prior_answer) != set(metadata(saved)) | {
                 "receipt",
                 "scope_jobs",
@@ -614,7 +637,8 @@ def plan(store, user, pid, aid, body, limits):
                     status="PENDING",
                 )
             )
-        remember(c, user, aid, "plan", body.request_key, fp, answer)
+        remember(c, user, aid, "plan", body.request_key, body, answer)
+        remember(c, user, aid, "plan_seal", body.request_key, body, answer)
         return {**answer, "cached": False}
 
 
@@ -649,7 +673,32 @@ def history(store, user, pid, aid, limits):
             )
             .order_by(requests.c.request_key)
         ).mappings():
-            value = checked(row)
+            body, value = checked_request(row)
+            validate_plan_seal(c, user, aid, row["request_key"], row)
+            historical_row = (
+                c.execute(
+                    select(anchors).where(
+                        anchors.c.app_id == aid, anchors.c.revision == value["graph_revision"]
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            historical = checked(historical_row)
+            SavedState.model_validate(historical)
+            request = {
+                "project_id": pid,
+                "app_id": aid,
+                "request_key": body.request_key,
+                "changes": [v.model_dump() for v in body.changes],
+            }
+            expected = core.plan_change(
+                historical["graph"], body.expected_graph_fingerprint, request, historical["context"]
+            )
+            if fingerprint(expected) != fingerprint(value["receipt"]) or fingerprint(
+                {k: value[k] for k in metadata(historical)}
+            ) != fingerprint(metadata(historical)):
+                conflict("Historical receipt no longer matches independent graph anchor")
             verify_jobs(c, user, aid, row["request_key"], value["scope_jobs"])
             public_jobs = []
             for job in value["scope_jobs"]:
