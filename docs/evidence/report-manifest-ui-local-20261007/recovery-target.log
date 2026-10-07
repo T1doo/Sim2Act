@@ -1,0 +1,60 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________________ test_report_manifest_real_http_dom ______________________
+
+env = (<sim2act.db.Store object at 0x7f36d3a58230>, Settings(database_url='sqlite:////tmp/report-manifest-ui-recovery/test_r...7d4faeeb214a98ac4bf050c3d4a61b', 'user_132d8c9980024e5bb9dbda54f764870b', 'proj_62d138d2dc734ba48213ea9ceb0bcb1b', ...)
+tmp_path = PosixPath('/tmp/report-manifest-ui-recovery/test_report_manifest_real_http0')
+
+    def test_report_manifest_real_http_dom(env, tmp_path):
+        assert shutil.which("node"), "developer Node dependency required"
+        store, settings, _, owner, _, pid, _, _ = env
+        named, _, wires = saved(env, tmp_path)
+        other = store.project(owner, "Other own project")
+        before = authority(env)
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-manifest-worker/{phase}")
+        def worker(phase: str):
+            if phase == "allow":
+                report = independent_report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])
+            elif phase == "block":
+                report = independent_report(("TRUE", "TRUE", "TRUE"), "BLOCK", ["obtain_receipt", "obtain_prior_approval"])
+            else:
+                raise AssertionError("closed fixture")
+            values = [envelope(report)]
+            assert Worker(store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)).once()
+            assert not values
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": pid, "other": other, "named": named["id"]}))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            output = subprocess.run(["node", "tests/report_manifest_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
+>           assert output.returncode == 0, output.stdout + output.stderr
+E           AssertionError: TypeError: Cannot read properties of undefined (reading 'id')
+E                 at /workspace/Sim2Act-report-manifest-ui/tests/report_manifest_ui.cjs:28:192
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_manifest_ui.cjs', '/tmp/report-manifest-ui-recovery/test_report_manifest_...s/report_manifest_ui.cjs:28:192\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n").returncode
+
+tests/test_report_manifest_apps_ui.py:58: AssertionError
+=============================== warnings summary ===============================
+../../tmp/native-budget-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/native-budget-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+1 failed, 1 warning in 3.34s
