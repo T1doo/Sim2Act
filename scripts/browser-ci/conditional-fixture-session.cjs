@@ -14,7 +14,7 @@ module.exports=function fixtureSession({python,root,cwd=process.cwd()}){
   catch(error){fail(error);request.reject(error);child.kill();}
  });
  return {timings,action(name){
-  if(!['snapshot','change','restore','revoke'].includes(name)||pending||ended||failure)return Promise.reject(failure||Error('Invalid conditional fixture action or lifecycle'));
+  if(!['snapshot','change','restore','revoke','run-source','run-extract','run-cold'].includes(name)||pending||ended||failure)return Promise.reject(failure||Error('Invalid conditional fixture action or lifecycle'));
   return new Promise((resolve,reject)=>{const start=Date.now();const timer=setTimeout(()=>{fail(Error('Conditional fixture action exceeded unchanged 10000ms limit'));child.kill();},10000);pending={name,start,timer,resolve,reject};child.stdin.write(JSON.stringify({action:name})+'\n');});
  },async close(){
   if(pending)fail(Error('Conditional fixture closed with pending action'));

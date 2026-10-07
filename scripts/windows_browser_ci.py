@@ -134,9 +134,11 @@ def emit(root):
         data = path.read_bytes()
         assert len(data) <= 2_000_000, "Synthetic evidence bound exceeded"
         encoded = base64.b64encode(data).decode()
-        print("SIM2ACT_BROWSER_FILE " + json.dumps({"name": name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "chunks": (len(encoded) + 3999) // 4000}), flush=True)
+        lines = ["SIM2ACT_BROWSER_FILE " + json.dumps({"name": name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "chunks": (len(encoded) + 3999) // 4000})]
         for n, start in enumerate(range(0, len(encoded), 4000)):
-            print(f"SIM2ACT_BROWSER_CHUNK {name} {n} {encoded[start:start + 4000]}", flush=True)
+            lines.append(f"SIM2ACT_BROWSER_CHUNK {name} {n} {encoded[start:start + 4000]}")
+        # Preserve every protocol line/byte/order; avoid flushing each chunk separately.
+        print("\n".join(lines), flush=True)
 
 
 def main():
