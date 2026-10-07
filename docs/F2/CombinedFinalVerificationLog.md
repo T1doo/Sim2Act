@@ -9,3 +9,5 @@
 等待期间另树保存命名持久 Report 草稿切片，分支 `bounded-named-report-draft`，文档 tip `3105aa743959d3962ed9a4a77ab93caa30b6b80b`、产品 `b326639b517a2dcfe37ca8360a4475a589c16b0f`：来源绑定命名保存、冷页列表/打开、输入新 Scenario、实际冷 Run 和历史。独立真实 HTTP 发现未知回执重试收到 422 后错误解锁可重复创建 Run，修复后同 key 两 POST 回同一 Run，失败证据保留。它是既有项目 runtime 的 PREVIEW_ONLY 声明式 wrapper，不是独立 AppPrincipal/AppManifest/Release；基于旧 fcea，仅批准新增切片，后续须先与修复来源正常整合并验证。该树未合入本次冻结源码，PG/full/native 未测，未 push。
 
 本轮真实 provider / models 请求0，无新增产品 Principal/Grant、部署或 main 合并。全局 P-B、F1/AT02、Win11、用户/语义和正式发布签收未提升。
+
+Windows 终态补记：11:35:18 UTC 为 FAILURE，job734秒，工程1017 PASS /18 SKIP /0 FAIL /0 ERROR（1035完整项，556.10秒，step567秒），受保护 Edge step105秒失败，Report/Cleanup成功。实际错误是 owned conditional fixture exited before reply，不是150秒超时；原session丢弃stderr，不能仅据日志确定child根因。仅6文件555chunks完整emit/bytes/SHA匹配，source-bound19/conditional22/protocol结果及两新PNG不可用；旧22历史不迁移。根实际查看4旧范围PNG，不作为新增报告态像素验收。step7曾因只看completed状态误报SUCCESS，已及时更正并以官方终态失败为准。完整失败、实际时间、decoder自测12/12、像素范围见 [本次Windows失败证据](../evidence/windows-bounded-native-e6c03-20261007/README.md)。未rerun；正在独立树复现旧protocol遗留QUEUE与新增严格FIFO组合，修复只限真实owner取消明确旧夹具意图与安全分类错误回执，需证明再验收。
