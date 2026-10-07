@@ -67,4 +67,9 @@ each followed by later retry422. They also prove first422 allows correction, a n
 while uncertainty remains, and eventual successful same-key receipt resolves exactly one cold Run.
 Two tests passed in 6.73s; each has seven assertions and records actual HTTP-loaded new UI hash,
 three existing source/extraction Mock requests and zero cold provider calls. Principal/Grant rows
-remain identical. No large suites were repeated. Final independent hash review is still pending.
+remain identical. No large suites were repeated. Independent final-hash actual HTTP recovery then passed (1 case, 3.62s; 2 POSTs, 1 real Run,
+no third key). Four independent controlled-DOM cases passed (malformed phase, first422 correction,
+list ABA and history authorization failure); these are explicitly separate from real HTTP evidence.
+Three previous independent backend attack probes remain applicable to the unchanged backend SHA.
+No remaining blocker was reported within this finite PREVIEW_ONLY slice. This does not establish
+full-suite, native, PG, AppManifest/AppPrincipal or owner semantic acceptance.
