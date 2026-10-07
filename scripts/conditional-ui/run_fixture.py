@@ -6,9 +6,10 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from sim2act.conditional_runs import candidate_for
+from sim2act.conditional_runs import GOAL, candidate_for, validate_snapshot
 from sim2act.config import Settings
 from sim2act.db import Store, protocol_jobs, runs
+from sim2act.protocol_jobs import verified_pending
 from sim2act.worker import Worker
 
 
@@ -32,9 +33,24 @@ def work(root, phase):
             job = c.execute(select(protocol_jobs).where(
                 protocol_jobs.c.run_id == oldest["id"]
             )).mappings().one()
-        if phase not in {"source", "extract", "cold"} or job["kind"] != phase:
-            raise ValueError("Requested phase does not match FIFO queued Run")
-        snapshot = job["accepted_snapshot"]
+            if phase not in {"source", "extract", "cold"} or job["kind"] != phase:
+                raise ValueError("Requested phase does not match FIFO queued Run")
+            snapshot = job["accepted_snapshot"]
+            # Canonical closed registry, not just the overlapping original protocol kind.
+            validate_snapshot(snapshot)
+            verified, current = verified_pending(store, c, info["user"], oldest["id"])
+            if (current["project_id"] != info["project"]
+                or current["principal_id"] != info["user"]
+                or current["resource_refs"] != [info["source"]]
+                or current["goal"] != GOAL
+                or verified["snapshot"] != snapshot):
+                raise ValueError("Queued bounded Run must bind existing owner project and source")
+            if phase == "source" and (snapshot["payload"]["resource_ids"] != [info["source"]]
+                                      or snapshot["payload"]["goal"] != GOAL
+                                      or snapshot["payload"]["inputs"] != snapshot["contract"]["frozen_inputs"]):
+                raise ValueError("Source request differs from accepted bounded contract")
+            if phase == "cold" and snapshot["payload"]["resource_bindings"] != {"rules": info["source"]}:
+                raise ValueError("Cold request must use same existing authorized source")
         if phase == "source":
             replies = [envelope(resource=info["source"]), envelope(report())]
         elif phase == "extract":
