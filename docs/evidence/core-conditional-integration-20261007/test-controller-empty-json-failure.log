@@ -1,0 +1,81 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_source_bound_product_actual_http_dom ___________________
+
+env = (<sim2act.db.Store object at 0x7f6834963aa0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-498/test_so...2e6c1c85534ec880090aa4d81d7833', 'user_13b32c51e3af4d93804b9f75510b3674', 'proj_f57700f26f524b5b905882b23c335931', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-498/test_source_bound_product_actu0')
+
+    def test_source_bound_product_actual_http_dom(env, tmp_path):
+        if not shutil.which("node") or subprocess.run(
+            ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
+        ).returncode:
+            pytest.skip("Developer Node/jsdom required")
+        store, settings, _, owner, _, pid, source, fresh = env
+        other = store.project(owner, "Product source ABA project")
+        with store.tx() as c:
+            baseline = [c.execute(select(func.count()).select_from(t)).scalar() for t in [principals, grants]]
+        app = create_app(store, settings)
+        wires = []
+    
+        @app.post("/test-only-bounded-work/{phase}")
+        def execute(phase: str):
+            with store.tx() as c:
+                job = c.execute(
+                    select(protocol_jobs).join(runs, runs.c.id == protocol_jobs.c.run_id)
+                    .where(runs.c.project_id == pid, runs.c.status == "QUEUED")
+                ).mappings().one()
+            snapshot = job["accepted_snapshot"]
+            if phase == "source":
+                values = [envelope(resource=source), envelope(report())]
+            elif phase == "extract":
+                values = [envelope(candidate_for(snapshot["contract"], source))]
+            elif phase == "cold":
+                values = [envelope(report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"]))]
+            else:
+                assert phase == "no-provider"
+                assert Worker(store, settings).once()
+                return {"test_only": True}
+            assert job["kind"] == phase
+            worker = Worker(store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires))
+            assert worker.once() and not values
+            return {"test_only": True}
+    
+        @app.post("/test-only-bounded-revoke")
+        def revoke():
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == source).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": pid, "other": other, "resource": source, "fresh": fresh}))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.time() + 10
+            while not server.started:
+                assert thread.is_alive() and time.time() < end
+                time.sleep(0.01)
+            out = subprocess.run(["node", "tests/conditional_run_product.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "dom-driver.log").write_text(out.stdout + out.stderr)
+>           assert out.returncode == 0, out.stdout + out.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: {"error":{"code":"INVALID_INPUT","message":"Malformed, duplicate or oversized JSON","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E                 at /workspace/Sim2Act-core-conditional-integration/tests/conditional_run_product.cjs:20:100
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act-core-conditional-integration/tests/conditional_run_product.cjs:32:2
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/conditional_run_product.cjs', '/tmp/pytest-of-agent/pytest-498/test_source_bound..._queues:104:5)\n    at async /workspace/Sim2Act-core-conditional-integration/tests/conditional_run_product.cjs:32:2\n').returncode
+
+tests/test_conditional_run_product.py:91: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_conditional_run_product.py::test_source_bound_product_actual_http_dom
+1 failed, 1 warning in 2.92s
