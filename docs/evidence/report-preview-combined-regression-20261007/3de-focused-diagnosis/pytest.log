@@ -1,0 +1,93 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0 -- /tmp/report-preview-combined-pg-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/Sim2Act-report-preview-combined-regression
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 2 items
+
+tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom PASSED [ 50%]
+tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom FAILED [100%]
+
+=================================== FAILURES ===================================
+______________________ test_report_manifest_real_http_dom ______________________
+
+env = (<sim2act.db.Store object at 0x7f67e8936f30>, Settings(database_url='[REDACTED_PG_DSN]', 'user_bae36fd3ecc248c883cfdd2fe54f8d97', 'proj_110ac8f0d50f4f2c87631b89533e25ef', ...)
+tmp_path = PosixPath('/tmp/report-preview-3de-focused-tests/test_report_manifest_real_http0')
+
+    def test_report_manifest_real_http_dom(env, tmp_path):
+        assert shutil.which("node"), "developer Node dependency required"
+        store, settings, _, owner, _, pid, source, fresh = env
+        wires = []
+        other = store.project(owner, "Other own project")
+        before = authority(env)
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-manifest-worker/{phase}")
+        def worker(phase: str):
+            with store.tx() as c:
+                job = c.execute(select(protocol_jobs).join(runs, runs.c.id == protocol_jobs.c.run_id)
+                                .where(runs.c.status == "QUEUED", runs.c.project_id == pid)).mappings().one()
+            if phase == "source":
+                values = [envelope(resource=source), envelope(source_report())]
+            elif phase == "extract":
+                values = [envelope(candidate_for(job["accepted_snapshot"]["contract"], source))]
+            elif phase == "allow":
+                report = independent_report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])
+            elif phase == "block":
+                report = independent_report(("TRUE", "TRUE", "TRUE"), "BLOCK", ["obtain_receipt", "obtain_prior_approval"])
+            elif phase == "unknown":
+                report = independent_report(("UNKNOWN", "UNKNOWN", "UNKNOWN"), "UNKNOWN", ["clarify_facts"])
+            else:
+                raise AssertionError("closed fixture")
+            if phase in {"allow", "block", "unknown"}:
+                values = [envelope(report)]
+            assert Worker(store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)).once()
+            assert not values
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": pid, "other": other, "source": source, "fresh": fresh}))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            output = subprocess.run(["node", "tests/report_manifest_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
+>           assert output.returncode == 0, output.stdout + output.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: Missing expected rejection.
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act-report-preview-combined-regression/tests/report_manifest_ui.cjs:50:18
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_manifest_ui.cjs', '/tmp/report-preview-3de-focused-tests/test_report_manifest_real_http0'], returncode=1, stdout='', stderr='AssertionError [ERR_ASSERTION]: Missing expected rejection.\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async /workspace/Sim2Act-report-preview-combined-regression/tests/report_manifest_ui.cjs:50:18\n').returncode
+
+tests/test_report_manifest_apps_ui.py:73: AssertionError
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+---- generated xml file: /tmp/report-preview-3de-focused-junit-private.xml -----
+============================= slowest 30 durations =============================
+51.60s call     tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+24.75s call     tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom
+0.57s setup    tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom
+0.28s setup    tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+0.11s teardown tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom
+0.03s teardown tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+=========================== short test summary info ============================
+FAILED tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom - AssertionError: AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async /workspace/Sim2Act-report-preview-combined-regression/tests/report_manifest_ui.cjs:50:18
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['node', 'tests/report_manifest_ui.cjs', '/tmp/report-preview-3de-focused-tests/test_report_manifest_real_http0'], returncode=1, stdout='', stderr='AssertionError [ERR_ASSERTION]: Missing expected rejection.\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async /workspace/Sim2Act-report-preview-combined-regression/tests/report_manifest_ui.cjs:50:18\n').returncode
+============== 1 failed, 1 passed, 1 warning in 77.56s (0:01:17) ===============
