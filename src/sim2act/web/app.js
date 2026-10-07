@@ -2,6 +2,7 @@
 let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
 let runSelectionGeneration = 0;
+let runUserSelectionGeneration = 0;
 let activeApp = null, activeGoalCard = null;
 let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false;
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
@@ -49,6 +50,7 @@ async function refresh() {
   $("grants").replaceChildren(...grants.map(g => row(`${g.tool_ref} · ${g.principal_id.startsWith("runtime_") ? "项目运行身份" : g.principal_id.startsWith("appruntime_") ? "应用预览身份" : "当前使用者"} · ${g.revoked ? "已撤回" : "有效至 " + new Date(g.expires_at * 1000).toLocaleString()}`, g.revoked ? null : async () => {await api(`/api/grants/${g.id}/revoke`, "POST", {command:"revoke",version:g.revision});activeRun=null;clearApp();$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();}, "撤回")));
 }
 async function showRun(id, userSelection = true) {
+  if(userSelection)runUserSelectionGeneration++;
   activeRun = id;
   if(typeof protocolSelectRun === "function")protocolSelectRun(id,userSelection);
   const project=$("project-select").value,identity=token,generation=++runSelectionGeneration;
@@ -91,14 +93,15 @@ async function loadProjects() {
   const ps = await api("/api/projects"); const old = $("project-select").value;
   $("project-select").replaceChildren(...ps.map(p => {const o = document.createElement("option"); o.value=p.id; o.textContent=p.name; return o;}));
   if (ps.some(p => p.id === old)) $("project-select").value = old;
+  renderRunSubmission();
   await refresh();
 }
 $("connect").onclick = safe(async () => {token=$("token").value; await loadProjects(); $("token").value=""; $("login").hidden=true; $("capabilities").textContent=JSON.stringify(await api("/api/capabilities"),null,2);});
 $("project-form").onsubmit = safe(async () => {await api("/api/projects","POST",{name:$("project-name").value}); await loadProjects();});
 $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").value;if(!pid)throw new Error("先选择项目");await api(`/api/projects/${pid}/resources`,"POST",{name:$("resource-name").value,format:$("format").value,content:$("content").value}); await refresh();});
-$("run-form").onsubmit = safe(async () => {const pid=$("project-select").value;if(!pid)throw new Error("先选择项目");const r=await api(`/api/projects/${pid}/runs`,"POST",{goal:$("goal").value,resource_refs:refs,request_key:crypto.randomUUID()});await refresh();await showRun(r.run_id);});
+$("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {activeRun=null;if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();unresolvedAttempts=[];$("reconcile-panel").hidden=true;$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();});
+$("project-select").onchange = safe(async () => {runUserSelectionGeneration++;activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();unresolvedAttempts=[];$("reconcile-panel").hidden=true;$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";$("resource-preview").textContent="";await refresh();});
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => ["projects","apps","resources"].forEach(id => $(id).hidden=id!==b.dataset.tab));
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
 setInterval(async () => {try {const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;if(token){await refresh();if(activeRun)await showRun(activeRun,false);}}catch(e){$("health").textContent="后台不可用";}},2500);
@@ -403,4 +406,84 @@ $("goal-candidate-form").onsubmit=safe(async()=>{
   } catch(e) {
     if(current())$("goal-candidate-status").textContent=`候选未打开：${e.message}。已保留编辑；可重试同一请求，或重新打开目标卡核对版本/候选列表。`;
   } finally {candidateBusy=false;updateCandidateCreate();}
+});
+
+// Page-memory only. Authentication and exact input stay out of browser storage.
+const ordinarySubmissions = new Map();
+function runSubmissionEntry() {
+  return ordinarySubmissions.get(token)?.get($("project-select").value);
+}
+function renderRunSubmission() {
+  const entry=runSubmissionEntry();
+  const blocked=entry && ["sending","unknown"].includes(entry.state);
+  $("run-submit").disabled=Boolean(blocked);
+  $("goal").readOnly=Boolean(blocked);
+  if(blocked)$("goal").value=entry.body.goal;
+  $("run-submit-recover").hidden=entry?.state!=="unknown";
+  $("run-submit-read").hidden=entry?.state!=="accepted-read-error";
+  $("run-submit-status").textContent=entry?.message || "";
+  $("run-submit-status").dataset.state=entry?.state==="sending"?"loading":entry?.state==="unknown" || entry?.state==="rejected"?"error":"";
+}
+async function readAcceptedOrdinaryRun(entry, selection) {
+  const current=()=>entry.identity===token && entry.project===$("project-select").value;
+  try {
+    await refresh();
+    if(current() && selection===runUserSelectionGeneration)await showRun(entry.runId);
+  } catch (_) {
+    entry.state="accepted-read-error";
+    entry.message=`任务已接受（${entry.runId.slice(0,16)}），读取暂时失败。重新读取不会提交新任务。`;
+  }
+  if(current())renderRunSubmission();
+}
+async function sendOrdinarySubmission(entry) {
+  if(entry.state==="sending")return;
+  const selection=runUserSelectionGeneration;
+  const current=()=>entry.identity===token && entry.project===$("project-select").value;
+  entry.state="sending";
+  entry.message=`正在确认提交。已冻结目标与 ${entry.body.resource_refs.length} 份材料；请勿另建重复任务。`;
+  if(current())renderRunSubmission();
+  let receipt;
+  try {
+    receipt=await api(`/api/projects/${entry.project}/runs`,"POST",entry.body);
+    if(typeof receipt.run_id!=="string" || !/^run_[a-f0-9]{32}$/.test(receipt.run_id))throw Error("Invalid receipt");
+  } catch (error) {
+    // Only a definite client rejection permits a changed new intent. Proxy/server
+    // failures and malformed replies can hide a durable accepted Run.
+    const rejected=!entry.wasUncertain && Number.isInteger(error.httpStatus) && error.httpStatus>=400 && error.httpStatus<500 && ![408,425,429].includes(error.httpStatus);
+    entry.state=rejected?"rejected":"unknown";
+    if(!rejected)entry.wasUncertain=true;
+    entry.message=rejected?`提交被拒绝（${error.message}）。修正输入或授权后再提交。`:"尚未确认任务是否已接受。输入已冻结；手动恢复将使用原提交键与原输入，不会重复创建任务。";
+    if(current())renderRunSubmission();
+    return;
+  }
+  entry.runId=receipt.run_id;
+  entry.state="accepted";
+  entry.message=`任务已接受（${entry.runId.slice(0,16)}），可在任务历史查看。后台执行不等于目标已验收。`;
+  if(current()) {
+    renderRunSubmission();
+    await readAcceptedOrdinaryRun(entry,selection);
+  }
+}
+async function submitOrdinaryRun() {
+  const project=$("project-select").value;
+  if(!project)throw Error("先选择项目");
+  const old=runSubmissionEntry();
+  if(old && ["sending","unknown"].includes(old.state)){renderRunSubmission();return;}
+  const body=Object.freeze({goal:$("goal").value,resource_refs:Object.freeze([...refs]),request_key:crypto.randomUUID()});
+  const entry={project,identity:token,body,state:"new",message:"",runId:null};
+  if(!ordinarySubmissions.has(token))ordinarySubmissions.set(token,new Map());
+  ordinarySubmissions.get(token).set(project,entry);
+  await sendOrdinarySubmission(entry);
+}
+$("run-submit-recover").onclick=safe(async()=>{
+  const entry=runSubmissionEntry();
+  if(entry?.state==="unknown")await sendOrdinarySubmission(entry);
+});
+$("run-submit-read").onclick=safe(async()=>{
+  const entry=runSubmissionEntry();
+  if(entry?.state!=="accepted-read-error")return;
+  entry.state="accepted";
+  entry.message=`任务已接受（${entry.runId.slice(0,16)}），正在重新读取。`;
+  renderRunSubmission();
+  await readAcceptedOrdinaryRun(entry,runUserSelectionGeneration);
 });
