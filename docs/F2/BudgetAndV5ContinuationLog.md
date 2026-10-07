@@ -11,3 +11,11 @@
 UI独审9a实测两处BLOCK（promotion未关联当前named来源；coherent历史来源篡改仍被接受），根owned135全量主动中断：SQLite152PASS2SKIP/exit2/87.73s，不是全集；PG NOT_RUN。失败回执和中断/清理证据保留。最小修复038df418：当前named/完整canonical候选关联后才确认保存，历史完整候选关联已打开对象；owner49检查PASS、独审13PASS，后台994不变。合并源码e4ea5dbf418ae32ddb4767855fa860e6940b4f6c，225源码文件一致、6动态来源probe/1104全集已重验，当前唯一自然SQLite→PG控制器在运行；尚未记全量PASS。
 
 e4新全集SQLite自然exit0：1063PASS41SKIP0FAIL0ERROR、3warnings、571.35s/1104。唯一PG full随后串行启动，新增minimumCRUD role将从该次JUnit实际核验；不能借SQLite skip或历史PG数字签此源。root当前HEAD2cad13a仅docs差异，源冻结未变。远端ls-remote再次确认dev/f1-foundation=e828c066、dev/install-preflight=e700；未push或启CI。
+
+PG full13%首次1F定位named Report DOM testcase；同次driver实际PASS18checks/6Mock/0LIVE/0outbound。root及独审确认authority helper无ORDER BY、最终全行列表按位置比较存在静态排序风险，但自然trace未到，不记为确定根因，不修改运行源码。保留本轮唯一PG继续自然终态，无并行新pytest/自动重试。后续修正必须保完整字段/行数/expected revoked值，不能用set或counts弱化oracle。
+
+e4 PG自然exit1：1098PASS4SKIP2FAIL/1warning/1253.38s/1104。新增Report minimumCRUD role实际PASS4.655s；nameddriver18P6Mock后在完整authority list位置比较失败，ReportUIcase92.070s遭既有Node90 subprocess TimeoutExpired。无results/driverfailure文件、最末HTTP内存数组和已dropfixture DB证据NOT_AVAILABLE；保留7RECEIVED本地模型账本观察，不能重构HTTP/DB终态。已仅修authority查询ORDER BY id，保持完整行/expectedrevoked/所有断言；并新增Node safe路径/状态/check序号/耗时进度JSONL（无body/response/credentials），budget90、checks49和14真实promotionPOST不变。原e4失败不覆盖；后续两casePG有界诊断待明确启动，最终整树新源全量另冻结。
+
+3de10一次PG定向自然1PASS1FAIL77.56s：ordered完整行named断言PASS25.436s；Report51.907s在bad-open预期拒绝缺失（38checks），本次未90超时。安全progress598行暴露同时background /api/apps/<id> GET；fixture原mode是在await HTTP后读取/清空，可能在途refreshApplicationUse消费显式showApp故障，尚不能据此给原e4超时定因。已仅修driver在matching request START捕获并保留fault、记录fault_target index/path/mode；不删backgroundpoll/负例/断言/14POST/49checks，不放宽90。Node syntax/diff PASS，新的功能验证待后续冻结，不自动重复旧全集。
+
+33a请求START fault绑定修后根SQLite专项1PASS0SKIP/21.38s，完整49检查/14真实promotionPOST/7固定Mock/0LIVE；7实际loadedJS哈希匹配。首次因根未设Node依赖path出现jsdom missing启动FAIL（0checks）保留，提供既有browser-tools/jsdom30.1.2后功能PASS，不改预算/断言。bad-open明确fault_target HTTPindex131/实际app GET，后台poll不再在response时争用全局fault。自有两SQLitefixture目录删除，PG未创建/其他owner0触碰；新源PG与新Graph整体full仍未测，旧e4 PG2F与3de1F不覆盖。

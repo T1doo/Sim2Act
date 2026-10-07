@@ -1,0 +1,280 @@
+........................................................................ [  6%]
+..........................................F............................. [ 13%]
+........................................................................ [ 19%]
+........................................................................ [ 26%]
+........................................................................ [ 32%]
+........................................................................ [ 39%]
+........................................................................ [ 45%]
+........................................................................ [ 52%]
+........................................................................ [ 58%]
+................s....................................................... [ 65%]
+........................................................................ [ 71%]
+........................................................................ [ 78%]
+........................................................................ [ 84%]
+...ss................................................................... [ 91%]
+................F....................................................... [ 97%]
+............s...........                                                 [100%]
+=================================== FAILURES ===================================
+____________________ test_named_report_draft_real_http_dom _____________________
+
+env = (<sim2act.db.Store object at 0x7efecd386420>, Settings(database_url='[REDACTED_PG_DSN]', 'user_0bf15b5ce9c1428ba61a87d7ec85399d', 'proj_8d16f3864b7b4379b52d8732b6fb87e3', ...)
+tmp_path = PosixPath('/tmp/report-preview-combined-e4ea5dbf418a-pg-tests/test_named_report_draft_real_h0')
+
+    def test_named_report_draft_real_http_dom(env, tmp_path):
+        if (
+            not shutil.which("node")
+            or subprocess.run(
+                ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
+            ).returncode
+        ):
+            pytest.skip("Explicit developer Node/jsdom dependency required")
+        store, settings, _, owner, _, pid, source, fresh = env
+        other = store.project(owner, "Other own project")
+        before = authority(env)
+        app = create_app(store, settings)
+        wires = []
+    
+        @app.post("/test-only-report-worker/{phase}")
+        def worker(phase: str):
+            with store.tx() as c:
+                job = (
+                    c.execute(
+                        select(protocol_jobs)
+                        .join(runs, runs.c.id == protocol_jobs.c.run_id)
+                        .where(runs.c.project_id == pid, runs.c.status == "QUEUED")
+                    )
+                    .mappings()
+                    .one()
+                )
+            snapshot = job["accepted_snapshot"]
+            if phase == "source":
+                values = [envelope(resource=source), envelope(report())]
+            elif phase == "extract":
+                values = [envelope(candidate_for(snapshot["contract"], source))]
+            elif phase == "allow":
+                values = [
+                    envelope(
+                        independent_report(
+                            ("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"]
+                        )
+                    )
+                ]
+            elif phase == "block":
+                values = [
+                    envelope(
+                        independent_report(
+                            ("TRUE", "TRUE", "TRUE"),
+                            "BLOCK",
+                            ["obtain_receipt", "obtain_prior_approval"],
+                        )
+                    )
+                ]
+            elif phase == "unknown":
+                values = [
+                    envelope(
+                        independent_report(("TRUE", "TRUE", "FALSE"), "UNKNOWN", ["clarify_facts"])
+                    )
+                ]
+            else:
+                raise AssertionError("closed fixture worker phases")
+            assert Worker(
+                store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)
+            ).once()
+            assert not values
+            return {"test_only": True}
+    
+        @app.post("/test-only-report-revoke-target")
+        def revoke_target():
+            with store.tx() as c:
+                runtime = c.execute(
+                    select(projects.c.runtime_id).where(projects.c.id == pid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(
+                        grants.c.resource_id == fresh,
+                        grants.c.principal_id == runtime,
+                        grants.c.tool_ref == "resource.read",
+                    )
+                    .values(revoked=True)
+                )
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                {
+                    "base": f"http://127.0.0.1:{port}",
+                    "project": pid,
+                    "other": other,
+                    "source": source,
+                    "fresh": fresh,
+                }
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(0.01)
+            out = subprocess.run(
+                ["node", "tests/conditional_apps_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(out.stdout + out.stderr)
+            assert out.returncode == 0, out.stdout + out.stderr
+            result = json.loads((tmp_path / "results.json").read_text())
+            assert result["status"] == "PASS" and len(result["checks"]) >= 12
+            assert len(wires) == 6
+            after = authority(env)
+            with store.tx() as c:
+                runtime = c.execute(
+                    select(projects.c.runtime_id).where(projects.c.id == pid)
+                ).scalar_one()
+            expected_grants = [
+                {**g, "revoked": True}
+                if g["resource_id"] == fresh
+                and g["principal_id"] == runtime
+                and g["tool_ref"] == "resource.read"
+                else g
+                for g in before[1]
+            ]
+>           assert after == (before[0], expected_grants)
+E           AssertionError: assert ([{'id': 'use...', ...}, ...]) == ([{'id': 'use...', ...}, ...])
+E             
+E             At index 1 diff: [{'id': 'grant_0618a7b049a641ee9b43ff54369cb7fd', 'principal_id': 'user_94299b000b004f269c91e73777192dc3', 'project_id': 'proj_8d16f3864b7b4379b52d8732b6fb87e3', 'resource_id': 'proj_8d16f3864b7b4379b52d8732b6fb87e3', 'tool_ref': 'artifact.save_text', 'expires_at': 1791468133.7735066, 'revision': 1, 'revoked': False}, {'id': 'grant_9fc208371dcb40bb81d04799d44954c5', 'principal_id': 'runtime_60e259b3de0e4de9a555e6712dc87c95', 'project_id': 'proj_8d16f3864b7b4379b52d8732b6fb87e3', 'resource_id': 'proj_8d16f3864b7b4379b52d8732b6fb87e3', 'tool_ref': 'artifa...
+E             
+E             ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_conditional_apps_ui.py:154: AssertionError
+______________________ test_report_manifest_real_http_dom ______________________
+
+env = (<sim2act.db.Store object at 0x7efecd2f7890>, Settings(database_url='[REDACTED_PG_DSN]', 'user_b2ade4cb16b04ddcab2360a40ad50cf3', 'proj_69e13c9a9a6241f7ac56bc3bd6dfac83', ...)
+tmp_path = PosixPath('/tmp/report-preview-combined-e4ea5dbf418a-pg-tests/test_report_manifest_real_http0')
+
+    def test_report_manifest_real_http_dom(env, tmp_path):
+        assert shutil.which("node"), "developer Node dependency required"
+        store, settings, _, owner, _, pid, source, fresh = env
+        wires = []
+        other = store.project(owner, "Other own project")
+        before = authority(env)
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-manifest-worker/{phase}")
+        def worker(phase: str):
+            with store.tx() as c:
+                job = c.execute(select(protocol_jobs).join(runs, runs.c.id == protocol_jobs.c.run_id)
+                                .where(runs.c.status == "QUEUED", runs.c.project_id == pid)).mappings().one()
+            if phase == "source":
+                values = [envelope(resource=source), envelope(source_report())]
+            elif phase == "extract":
+                values = [envelope(candidate_for(job["accepted_snapshot"]["contract"], source))]
+            elif phase == "allow":
+                report = independent_report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"])
+            elif phase == "block":
+                report = independent_report(("TRUE", "TRUE", "TRUE"), "BLOCK", ["obtain_receipt", "obtain_prior_approval"])
+            elif phase == "unknown":
+                report = independent_report(("UNKNOWN", "UNKNOWN", "UNKNOWN"), "UNKNOWN", ["clarify_facts"])
+            else:
+                raise AssertionError("closed fixture")
+            if phase in {"allow", "block", "unknown"}:
+                values = [envelope(report)]
+            assert Worker(store, settings, protocol_runner_factory=factory(env, tmp_path, values, wires)).once()
+            assert not values
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({"base": f"http://127.0.0.1:{port}", "project": pid, "other": other, "source": source, "fresh": fresh}))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+>           output = subprocess.run(["node", "tests/report_manifest_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_report_manifest_apps_ui.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['node', 'tests/report_manifest_ui.cjs', '/tmp/...>
+endtime = 166500.78598686, orig_timeout = 90, stdout_seq = [], stderr_seq = []
+skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['node', 'tests/report_manifest_ui.cjs', '/tmp/report-preview-combined-e4ea5dbf418a-pg-tests/test_report_manifest_real_http0']' timed out after 90 seconds
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:1253: TimeoutExpired
+=============================== warnings summary ===============================
+../sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-pb-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 30 durations =============================
+91.62s call     tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+31.73s call     tests/test_protocol_gated_execution.py::test_whole_package_actual_postgresql_two_forms
+31.26s call     tests/test_protocol_experiment.py::test_two_forms_real_worker_review_sequence_global_clock_and_shared_pool[False]
+30.87s call     tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom
+22.52s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[True]
+21.97s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[False]
+15.89s call     tests/test_conditional_run_product.py::test_source_bound_product_actual_http_dom
+13.87s call     tests/test_registered_generation_native_dom.py::test_registered_generation_direct_actual_http_dom[normal]
+13.63s call     tests/test_registered_generation_native_dom.py::test_registered_generation_direct_actual_http_dom[poll-refresh-order]
+13.30s call     tests/test_report_manifest_apps.py::test_real_common_manifest_compiler_catalog_and_two_actual_cold_scenarios
+13.15s call     tests/test_product_integration.py::test_integrated_same_session_source_and_recovery
+12.88s call     tests/test_protocol_gated_execution.py::test_whole_package_zero_network[None-8]
+10.88s call     tests/test_application_use.py::test_application_use_actual_http
+10.86s call     tests/test_conditional_apps.py::test_named_draft_two_actual_new_scenarios_history_and_recovery
+10.27s call     tests/test_conditional_native_oracle.py::test_conditional_capture_optional_and_failure[omit]
+9.46s call     tests/test_protocol_jobs.py::test_reviewed_source_model_extract_compiles_and_cold_reads_unseen_material[None]
+8.60s call     tests/test_conditional_apps.py::test_default_worker_has_no_provider_and_lost_receipt_recovery_sends_zero
+8.27s call     tests/test_lifecycle.py::test_AT05_real_process_stop_accept_restart_reopen
+7.56s call     tests/test_conditional_native_oracle.py::test_conditional_native_shared_module_existing_fixture
+7.35s setup    tests/test_global_experiment_gate.py::test_actual_global_seal_refuses_both_projects_under_optimized_python[False-original]
+7.15s call     tests/test_registered_run_generation_http.py::test_real_http_dom_generation_entry_and_lost_receipt
+6.57s call     tests/test_conditional_run_bindings.py::test_application_role_actual_bound_chain_uses_existing_crud_only
+6.32s call     tests/test_protocol_store_dryrun.py::test_two_forms_share_actual_database_pool_and_independent_reviews
+6.23s call     tests/test_protocol_jobs.py::test_reviewed_source_model_extract_compiles_and_cold_reads_unseen_material[cold_response]
+6.10s call     tests/test_conditional_native_oracle.py::test_conditional_capture_optional_and_failure[fail]
+6.09s call     tests/test_conditional_run_bindings.py::test_actual_completed_run_result_null_rejects_check_extract_and_cold[extract]
+5.96s call     tests/test_protocol_http.py::test_complete_authenticated_http_source_review_extract_cold_and_independent_review[False]
+5.78s call     tests/test_conditional_run_bindings.py::test_actual_completed_run_result_null_rejects_check_extract_and_cold[source]
+5.77s call     tests/test_conditional_apps_recovery.py::test_actual_prior_unknown_retry_422_keeps_original_intent[lost]
+5.73s call     tests/test_report_manifest_apps.py::test_projects_identity_versions_history_and_internal_release_are_separate
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_process_environment.py:73: Actual Windows PowerShell native launch required
+SKIPPED [2] tests/test_protocol_ui.py:25: Owned subprocess fixture currently SQLite only; no PG UI coverage claimed
+SKIPPED [1] tests/test_task_submission_recovery.py:64: Protected Chromium sandbox startup blocked; actual stderr retained in driver.log
+FAILED tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom
+FAILED tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+2 failed, 1098 passed, 4 skipped, 1 warning in 1253.38s (0:20:53)

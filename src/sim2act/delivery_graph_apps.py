@@ -14,6 +14,7 @@ from . import delivery_graph as core
 from .contracts import Strict
 from .db import app_drafts, fingerprint, grants, new_id, resources, runs
 from .db import delivery_graph_anchors as anchors
+from .db import delivery_graph_locks as locks
 from .db import delivery_graph_requests as requests
 from .db import delivery_graph_scope_jobs as jobs
 from .db import delivery_graph_source_versions as versions
@@ -27,6 +28,13 @@ HASH = r"^[a-f0-9]{64}$"
 class DeriveInput(Strict):
     expected_candidate_fingerprint: str = Field(pattern=HASH)
     request_key: str = Field(min_length=1, max_length=128)
+
+
+class LockInput(Strict):
+    expected_graph_fingerprint: str = Field(pattern=HASH)
+    request_key: str = Field(min_length=1, max_length=128)
+    change: core.Change
+    locked: bool
 
 
 class PlanInput(Strict):
@@ -259,6 +267,112 @@ def state(store, c, user, pid, aid):
     return saved
 
 
+def current_locks(c, user, pid, aid, ids):
+    locked = []
+    for row in c.execute(select(locks).where(locks.c.app_id == aid)).mappings():
+        value = checked(row)
+        if (
+            set(value)
+            != {
+                "project_id",
+                "app_id",
+                "principal_id",
+                "node_id",
+                "logical_key",
+                "locked",
+                "revision",
+                "request_key",
+            }
+            or type(value["locked"]) is not bool
+            or type(value["revision"]) is not int
+            or value["revision"] < 1
+        ):
+            conflict("Malformed trusted lock registry")
+        if (
+            value["app_id"] != aid
+            or value["project_id"] != pid
+            or value["principal_id"] != user
+            or row["node_id"] != value["node_id"]
+            or ids.get(value["logical_key"]) != value["node_id"]
+        ):
+            conflict("Trusted lock identity changed")
+        record = lookup(c, user, aid, "lock", value["request_key"])
+        request, response = checked_request(record)
+        if (
+            request.change.node_id != value["node_id"]
+            or request.locked is not value["locked"]
+            or request.request_key != value["request_key"]
+        ):
+            conflict("Accepted lock parameters changed")
+        if fingerprint(response["lock"]) != fingerprint(value):
+            conflict("Independent lock receipt changed")
+        if value["locked"]:
+            locked.append(value["node_id"])
+    return sorted(locked)
+
+
+@controlled
+def set_lock(store, user, pid, aid, body, limits):
+    """Internal explicit owner action; no public context/permission mutation API."""
+    if not isinstance(body, LockInput):
+        body = LockInput.model_validate(body)
+    with store.tx() as c:
+        saved = current(store, c, user, pid, aid, limits)
+        if saved["graph"]["graph_fingerprint"] != body.expected_graph_fingerprint:
+            conflict("Lock baseline changed")
+        node = next((n for n in saved["graph"]["nodes"] if n["id"] == body.change.node_id), None)
+        if (
+            not node
+            or node["revision"] != body.change.expected_revision
+            or node["content_fingerprint"] != body.change.expected_content_fingerprint
+        ):
+            conflict("Lock node version changed")
+        prior = lookup(c, user, aid, "lock", body.request_key)
+        if prior:
+            request, answer = checked_request(prior)
+            if fingerprint(request.model_dump()) != fingerprint(body.model_dump()):
+                conflict("Lock request key changed")
+            return {**answer, "cached": True}
+        row = (
+            c.execute(select(locks).where(locks.c.app_id == aid, locks.c.node_id == node["id"]))
+            .mappings()
+            .first()
+        )
+        old = checked(row) if row else None
+        value = dict(
+            project_id=pid,
+            app_id=aid,
+            principal_id=user,
+            node_id=node["id"],
+            logical_key=node["key"],
+            locked=body.locked,
+            revision=old["revision"] + 1 if old else 1,
+            request_key=body.request_key,
+        )
+        answer = {
+            "namespace": NAMESPACE,
+            "app_id": aid,
+            "project_id": pid,
+            "lock": value,
+            "needs_derive": True,
+            "patch_executed": False,
+            "publishable": False,
+        }
+        values = dict(
+            app_id=aid, node_id=node["id"], snapshot=value, fingerprint=fingerprint(value)
+        )
+        if row:
+            c.execute(
+                update(locks)
+                .where(locks.c.app_id == aid, locks.c.node_id == node["id"])
+                .values(**values)
+            )
+        else:
+            c.execute(insert(locks).values(**values))
+        remember(c, user, aid, "lock", body.request_key, body, answer)
+        return {**answer, "cached": False}
+
+
 def build(store, c, user, pid, aid, limits, previous=None):
     draft, manifest, action, _, rows, auth_fp = load_family(store, c, user, pid, aid, limits)
     keys, external = logical(store, c, draft, manifest, rows)
@@ -303,7 +417,7 @@ def build(store, c, user, pid, aid, limits, previous=None):
         node_revisions={
             k: rev if rev is not None else source_versions[k]["revision"] for k, rev in keys.items()
         },
-        locked_nodes=[],
+        locked_nodes=current_locks(c, user, pid, aid, active_ids),
         source_versions=source_versions,
         dependency_edges=[],
         unknown_dependencies=[
@@ -400,7 +514,13 @@ def checked_request(row):
     stored = checked(row)
     if set(stored) != {"request", "response"}:
         conflict("Malformed request ledger")
-    model = DeriveInput if row["kind"] == "derive" else PlanInput
+    model = (
+        DeriveInput
+        if row["kind"] == "derive"
+        else LockInput
+        if row["kind"] == "lock"
+        else PlanInput
+    )
     body = model.model_validate(stored["request"])
     if (
         body.request_key != row["request_key"]
@@ -536,26 +656,99 @@ def expansion(store, c, user, pid, aid, receipt, limits, key):
             ).scalars()
         )
     )
-    planned, omitted = [], []
+    planned, omitted, applications, membership = [], [], [], []
     for target in targets:
+        row = c.execute(
+            select(app_drafts.c.fingerprint).where(app_drafts.c.id == target)
+        ).scalar_one()
+        membership.append({"app_id": target, "candidate_fingerprint": row})
         try:
-            draft, *_ = load_family(store, c, user, pid, target, limits)
+            peer = current(store, c, user, pid, target, limits)
         except DomainError as exc:
-            omitted.append(dict(app_id=target, reason=exc.code))
+            reason = (
+                "GRAPH_NOT_DERIVED"
+                if exc.message == "DeliveryGraph anchor has not been derived"
+                else exc.code
+            )
+            omitted.append(dict(app_id=target, reason=reason))
             continue
-        value = dict(
-            id=new_id("scopejob"),
+        if peer["context"]["locked_nodes"]:
+            raise DomainError(
+                "LOCK_CONFLICT", "Project revalidation affects a manually locked graph"
+            )
+        binding = dict(
             project_id=pid,
             app_id=target,
-            source_app_id=aid,
-            candidate_fingerprint=draft["fingerprint"],
-            request_key=key,
-            scope=receipt["revalidation_scope"],
-            reason="Conservative declaration/semantic revalidation; no check or patch executed",
-            status="PENDING",
+            candidate_fingerprint=peer["candidate_fingerprint"],
+            graph_fingerprint=peer["graph"]["graph_fingerprint"],
+            authorization_revision=peer["authorization_revision"],
+            graph_revision=peer["graph_revision"],
+            locked_nodes=peer["context"]["locked_nodes"],
+            lock_fingerprint=fingerprint(
+                [
+                    checked(row)
+                    for row in c.execute(
+                        select(locks).where(locks.c.app_id == target).order_by(locks.c.node_id)
+                    ).mappings()
+                ]
+            ),
         )
-        planned.append(value)
-    return planned, omitted
+        applications.append(binding)
+        planned.append(
+            dict(
+                id=new_id("scopejob"),
+                **binding,
+                source_app_id=aid,
+                request_key=key,
+                scope=receipt["revalidation_scope"],
+                reason="Conservative declaration/semantic revalidation; no check or patch executed",
+                status="PENDING",
+            )
+        )
+    binding = dict(
+        scope=receipt["revalidation_scope"],
+        applications=applications,
+        snapshot_fingerprint=fingerprint(applications),
+        membership=membership,
+        membership_fingerprint=fingerprint(membership),
+        status="BLOCKED_PARTIAL" if omitted else "PENDING",
+        omissions=omitted,
+    )
+    return planned, binding
+
+
+def seal_outer(answer):
+    public_fields = (
+        "project_id",
+        "app_id",
+        "graph_fingerprint",
+        "authorization_revision",
+        "locked_nodes",
+    )
+    applications = [
+        {k: v[k] for k in public_fields} for v in answer["scope_expansion"]["applications"]
+    ]
+    expansion = {
+        "scope": answer["scope_expansion"]["scope"],
+        "applications": applications,
+        "snapshot_fingerprint": fingerprint(applications),
+    }
+    answer["expansion"] = expansion
+    answer["outer_fingerprint"] = fingerprint({"core": answer["receipt"], "expansion": expansion})
+    answer["native_outer_fingerprint"] = fingerprint(
+        {k: v for k, v in answer.items() if k != "native_outer_fingerprint"}
+    )
+    return answer
+
+
+def verify_outer(answer):
+    base = {
+        k: v
+        for k, v in answer.items()
+        if k not in {"expansion", "outer_fingerprint", "native_outer_fingerprint"}
+    }
+    if fingerprint(seal_outer(base)) != fingerprint(answer):
+        conflict("Outer receipt binding changed")
 
 
 @controlled
@@ -583,10 +776,14 @@ def plan(store, user, pid, aid, body, limits):
         # Canonical fingerprint check defends strict bool/int even before core fix.
         if prior:
             validate_plan_seal(c, user, aid, body.request_key, prior)
+            verify_outer(prior_answer)
             if set(prior_answer) != set(metadata(saved)) | {
                 "receipt",
                 "scope_jobs",
                 "scope_expansion",
+                "outer_fingerprint",
+                "native_outer_fingerprint",
+                "expansion",
             } or fingerprint({k: prior_answer[k] for k in metadata(saved)}) != fingerprint(
                 metadata(saved)
             ):
@@ -594,7 +791,7 @@ def plan(store, user, pid, aid, body, limits):
             if fingerprint(prior_answer["receipt"]) != fingerprint(receipt):
                 conflict("Persistent plan receipt changed")
             verify_jobs(c, user, aid, body.request_key, prior_answer["scope_jobs"])
-            latest_jobs, latest_omissions = expansion(
+            latest_jobs, latest_binding = expansion(
                 store, c, user, pid, aid, receipt, limits, body.request_key
             )
 
@@ -606,23 +803,17 @@ def plan(store, user, pid, aid, body, limits):
 
             if fingerprint(targets(latest_jobs)) != fingerprint(
                 targets(prior_answer["scope_jobs"])
-            ) or fingerprint(latest_omissions) != fingerprint(
-                prior_answer["scope_expansion"]["omissions"]
-            ):
+            ) or fingerprint(latest_binding) != fingerprint(prior_answer["scope_expansion"]):
                 conflict("Project revalidation membership or authority changed")
             return {**prior_answer, "cached": True}
-        scope_jobs, omissions = expansion(
-            store, c, user, pid, aid, receipt, limits, body.request_key
-        )
+        scope_jobs, binding = expansion(store, c, user, pid, aid, receipt, limits, body.request_key)
         answer = {
             **metadata(saved),
             "receipt": receipt,
             "scope_jobs": scope_jobs,
-            "scope_expansion": {
-                "status": "BLOCKED_PARTIAL" if omissions else "PENDING",
-                "omissions": omissions,
-            },
+            "scope_expansion": binding,
         }
+        seal_outer(answer)
         for value in scope_jobs:
             c.execute(
                 insert(jobs).values(
@@ -700,6 +891,12 @@ def history(store, user, pid, aid, limits):
             ) != fingerprint(metadata(historical)):
                 conflict("Historical receipt no longer matches independent graph anchor")
             verify_jobs(c, user, aid, row["request_key"], value["scope_jobs"])
+            _, binding = expansion(
+                store, c, user, pid, aid, value["receipt"], limits, row["request_key"]
+            )
+            verify_outer(value)
+            if fingerprint(binding) != fingerprint(value["scope_expansion"]):
+                conflict("Historical project graph/authority/lock membership changed")
             public_jobs = []
             for job in value["scope_jobs"]:
                 try:

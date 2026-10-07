@@ -25,8 +25,8 @@ def prefix(env):
 def authority(env):
     with env[0].tx() as c:
         return (
-            [dict(r) for r in c.execute(select(principals)).mappings()],
-            [dict(r) for r in c.execute(select(grants)).mappings()],
+            [dict(r) for r in c.execute(select(principals).order_by(principals.c.id)).mappings()],
+            [dict(r) for r in c.execute(select(grants).order_by(grants.c.id)).mappings()],
         )
 
 

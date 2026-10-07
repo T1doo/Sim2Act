@@ -1,0 +1,54 @@
+F
+=================================== FAILURES ===================================
+_______ test_csv_real_anchor_restart_idempotency_and_pending_scope_jobs ________
+
+env = (<sim2act.db.Store object at 0x7f7ead325940>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-560/test_cs...2cbaeba4c54d63a524820a96a19b04', 'user_4f70751562e443fcb436a449fa7c2dac', 'proj_25f3f365bd9740ca94629d6a13432e25', ...)
+
+    def test_csv_real_anchor_restart_idempotency_and_pending_scope_jobs(env):
+        aid, fp = setup_draft(env)
+        before = snapshot(env)
+        empty = env[2].get(path(env, aid))
+        assert empty.status_code == 409 and "has not been derived" in empty.text
+        assert snapshot(env) == before
+        body = dict(expected_candidate_fingerprint=fp, request_key="derive")
+        made = env[2].post(path(env, aid) + "/derive", json=body)
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        assert graph["namespace"] == "delivery-graph-apps.v1" and graph["state"] == "PLANNING_ONLY"
+        assert graph["owner_acceptance"] == "PENDING" and graph["semantic_status"] == "UNKNOWN"
+        assert env[2].get(path(env, aid)).json()["graph_fingerprint"] == graph["graph_fingerprint"]
+        frozen = snapshot(env)
+        fresh_store = Store(env[1].database_url, test_only=True)
+        # Same actual database/schema; this fixture's SQLite restart is independent Store.
+        if not env[0].sqlite:
+            fresh_store.engine.dispose()
+            fresh_store = env[0]
+        fresh = TestClient(create_app(fresh_store, env[1]))
+        fresh.headers["Authorization"] = "Bearer synthetic-test-A"
+        try:
+            assert fresh.post(path(env, aid) + "/derive", json=body).json()["cached"]
+            assert snapshot(env) == frozen
+            accepted = fresh.post(path(env, aid) + "/plans", json=change(graph))
+            assert accepted.status_code == 201, accepted.text
+            answer = accepted.json()
+            assert answer["receipt"]["patch_executed"] is False
+            assert answer["receipt"]["revalidation_scope"] == "APP"
+            assert [j["app_id"] for j in answer["scope_jobs"]] == [aid]
+            assert answer["scope_jobs"][0]["status"] == "PENDING"
+            after = snapshot(env)
+            retry = fresh.post(path(env, aid) + "/plans", json=change(graph))
+>           assert retry.status_code == 201 and retry.json()["cached"]
+E           assert (409 == 201)
+E            +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_delivery_graph_apps.py:90: AssertionError
+=============================== warnings summary ===============================
+../../tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/sim2act-delivery-adapter-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_delivery_graph_apps.py::test_csv_real_anchor_restart_idempotency_and_pending_scope_jobs
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 0.64s

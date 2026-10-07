@@ -1540,3 +1540,10 @@ delivery_graph_scope_jobs = Table(
     Column("status", String, nullable=False),
     UniqueConstraint("source_app_id", "principal_id", "request_key", "app_id"),
 )
+delivery_graph_locks = Table(
+    "delivery_graph_locks", meta,
+    Column("app_id", String, primary_key=True),
+    Column("node_id", String, primary_key=True),
+    Column("snapshot", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+)
