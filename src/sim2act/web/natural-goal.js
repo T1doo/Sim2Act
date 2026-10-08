@@ -11,6 +11,7 @@ function clearNaturalGoal() {
   naturalActivationGeneration++;
   if(naturalActivationContext && (naturalActivationContext.identity!==token || naturalActivationContext.project!==$("project-select").value))clearNaturalActivation();
   naturalGoalAcknowledgements.clear();
+  $("natural-fixed-acceptance").checked=false;
   if(naturalGoalDisplayed && activeRun===naturalGoalDisplayed){activeRun=null;runSelectionGeneration++;clearRunDetail();}
   naturalGoalDisplayed=null;
   $("natural-goal-config").textContent="先保存并打开目标，再读取当前项目的规划配置。";
@@ -19,6 +20,8 @@ function clearNaturalGoal() {
 function renderNaturalGoalControls(){
   const card=activeGoalCard,entry=naturalGoalRequests.get(naturalGoalKey());
   const selected=naturalActivationSelection?.row;
+  $("natural-fixed-acceptance").disabled=selected?.scope.mode!=="OFFLINE_TEST" || Boolean(entry && entry.state!=="rejected");
+  if(entry)$("natural-fixed-acceptance").checked=entry.acceptFixed===true;
   const bound=selected?.scope.goals.find(g=>g.card_id===card?.id && g.expected_version===card.version && g.expected_fingerprint===card.fingerprint);
   const unavailable=selected && (!selected.submission_available || !selected.approved_not_expired || !bound || selected.charged_requests>=2 || selected.charged_kinds.includes(bound.kind) || Date.now()>=selected.approval.expires_at*1000);
   $("natural-goal-generate").disabled=naturalActivationBlocked||unavailable||!card||goalCardLoading||goalCardSaving||Boolean(entry && !["rejected"].includes(entry.state));
@@ -69,7 +72,8 @@ async function generateNaturalGoal(recover=false){
     const selected=naturalActivationSelection?.row;
     if(naturalActivationBlocked)return;
     if(selected && (!selected.submission_available || !selected.approved_not_expired || selected.charged_requests>=2 || !selected.scope.goals.some(g=>g.card_id===card.id && g.expected_version===card.version && g.expected_fingerprint===card.fingerprint && !selected.charged_kinds.includes(g.kind))))return;
-    entry={endpoint:selected?`/api/natural-activations/${selected.id}/goal-cards/${card.id}/planned-runs`:`/api/projects/${project}/goal-cards/${card.id}/planned-runs`,activation:selected?{activation_id:selected.id,scope_fingerprint:selected.scope_fingerprint,approval_fingerprint:selected.approval_fingerprint}:null,cardId:card.id,snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};naturalGoalRequests.set(key,entry);
+    const acceptFixed=selected?.scope.mode==="OFFLINE_TEST" && $("natural-fixed-acceptance").checked;
+    entry={acceptFixed,endpoint:selected?`/api/natural-activations/${selected.id}/goal-cards/${card.id}/${acceptFixed?"fixed-goal-runs":"planned-runs"}`:`/api/projects/${project}/goal-cards/${card.id}/planned-runs`,activation:selected?{activation_id:selected.id,scope_fingerprint:selected.scope_fingerprint,approval_fingerprint:selected.approval_fingerprint}:null,cardId:card.id,snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};naturalGoalRequests.set(key,entry);
   }
   if(!entry)return;
   if(entry.runId){await readNaturalGoal(entry,current);return;}
@@ -78,6 +82,7 @@ async function generateNaturalGoal(recover=false){
     const receipt=await api(entry.endpoint,"POST",entry.body);
     if(typeof receipt?.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||receipt.status!=="ACCEPTED"||receipt.goal_card_id!==entry.cardId||receipt.goal_version!==entry.body.expected_version||receipt.goal_fingerprint!==entry.body.expected_fingerprint||receipt.goal_acceptance!=="NOT_RUN"||receipt.candidate_generated!==false||receipt.planning_policy?.require_confirmation!==true)throw Error("未知规划接受回执");
     if(entry.activation && goalRunCanonical(receipt.planning_policy.activation)!==goalRunCanonical(entry.activation))throw Error("会话绑定回执不匹配");
+    if(Boolean(receipt.planning_policy.goal_acceptance)!==entry.acceptFixed)throw Error("整体验收合同回执不匹配");
     entry.runId=receipt.run_id;entry.state="read-error";
   } catch(error){
     const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
@@ -128,7 +133,9 @@ async function renderNaturalGoalRun(r,id,current){
     if(hash!==r.natural_plan.fingerprint)throw Error("计划内容与指纹不匹配");
   }
   catch(error){if(current()){invalidateNaturalGoalAcknowledgements();section.append(row(`${error.message}。确认已关闭，请核对持久任务。`));}return;}
-  section.append(row(`已通过结构与来源校验；目标语义 NOT_RUN，人工签收 PENDING。保存来源 v${r.contract.snapshot.source_goal_card.version}。`));
+  const accepted=r.result?.task_acceptance;
+  if(r.contract.snapshot.natural_planning.goal_acceptance)section.append(row(`本次冻结固定目标契约 fixed-csv-goal-acceptance.v1：${accepted?.status||"等待全部检查"}；单步 ${accepted?.single_step_status||"未完成"}；限定整体 ${accepted?.whole_task_accepted===true?"PASS":"未通过"}；人工 PENDING，正式发布关闭。`));
+  section.append(row(`已通过结构与来源校验；通用目标语义 NOT_RUN，人工签收 PENDING。保存来源 v${r.contract.snapshot.source_goal_card.version}。`));
   section.append(row(`计划目标：${plan.interpretation.objective}`));
   section.append(row(`假设：${plan.interpretation.assumptions.join("；")||"无"}`),row(`未决项：${plan.interpretation.unresolved.join("；")||"无"}`));
   const steps=document.createElement("ol");
@@ -274,10 +281,11 @@ $("natural-activation-select").onchange=()=>{
 // Receipt-only candidate: this does not turn a PARTIAL Run into a successful task.
 const naturalReceiptIntents=new Map(), naturalReceiptChoices=new Map();
 async function renderNaturalReceiptCandidate(r,id,current){
-  if(!current() || r.status!=="PARTIAL" || !r.contract?.snapshot?.natural_planning?.activation)return;
+  if(!current() || !["PARTIAL","SUCCEEDED"].includes(r.status) || !r.contract?.snapshot?.natural_planning?.activation)return;
   const section=document.createElement("section");section.id="natural-receipt-candidate";
   $("result").append(section);
-  section.append(row("单项可信回执可形成待验收候选；来源 Run PARTIAL，整体目标 NOT_RUN，完整 P-B 未验收。"));
+  const whole=r.status==="SUCCEEDED" && r.result?.task_acceptance?.whole_task_accepted===true;
+  section.append(row(whole?"固定合成目标契约 PASS；来源 Run SUCCEEDED。人工适用范围 PENDING，候选未验收，完整 P-B 未验收。":"单项可信回执可形成待验收候选；来源 Run PARTIAL，整体目标 NOT_RUN，完整 P-B 未验收。"));
   const key=JSON.stringify([token,$("project-select").value,id]);
   let options;
   try {options=await api(`/api/runs/${id}/receipt-candidate-options`);}
@@ -316,7 +324,7 @@ async function renderNaturalReceiptCandidate(r,id,current){
       const made=await api(`/api/runs/${id}/receipt-candidates`,"POST",entry.body);
       const fields=["state","publishable","formal_publication_enabled","whole_task_accepted","source_run_status","semantic_goal_acceptance","owner_acceptance","generator","model_requests","id","candidate_fingerprint","cached","source_proof_fingerprint"];
       if(!made || Object.keys(made).sort().join()!==fields.sort().join() ||
-          made.state!=="CANDIDATE_ONLY" || made.whole_task_accepted!==false || made.source_run_status!=="PARTIAL" ||
+          made.state!=="CANDIDATE_ONLY" || made.whole_task_accepted!==whole || made.source_run_status!==r.status ||
           made.publishable!==false || made.formal_publication_enabled!==false || made.semantic_goal_acceptance!=="NOT_RUN" ||
           made.owner_acceptance!=="PENDING" || made.model_requests!==0 || typeof made.cached!=="boolean" ||
           made.generator!=="TRUSTED_OFFLINE_RECEIPT_CANDIDATE.v1" || !/^app_[a-f0-9]{32}$/.test(made.id) ||
@@ -331,7 +339,7 @@ async function renderNaturalReceiptCandidate(r,id,current){
           lineage?.generator!==made.generator || lineage.proof_fingerprint!==entry.body.expected_proof_fingerprint ||
           await digest(lineage.proof)!==entry.body.expected_proof_fingerprint ||
           lineage.target.app_id!==entry.body.target_app_id || lineage.target.fingerprint!==entry.body.expected_target_draft_fingerprint ||
-          lineage.proof.source_run_status!=="PARTIAL" || lineage.proof.whole_task_accepted!==false ||
+          lineage.proof.source_run_status!==r.status || lineage.proof.whole_task_accepted!==whole ||
           lineage.proof.semantic_goal_acceptance!=="NOT_RUN" || lineage.proof.owner_acceptance!=="PENDING")throw Error("保存候选与冻结回执来源不匹配");
       if(!current()){entry.state="unknown";return;}
       entry.id=made.id;entry.state="accepted";

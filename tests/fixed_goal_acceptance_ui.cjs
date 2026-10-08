@@ -1,0 +1,25 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),vm=require('node:vm'),crypto=require('node:crypto'),{JSDOM}=require('jsdom');
+const root=process.argv[2],info=JSON.parse(fs.readFileSync(path.join(root,'info.json'))),checks=[],requests=[],loaded={};let dom,w,drop=true;
+const check=(ok,label)=>{assert.ok(ok,label);checks.push(label);};const $=id=>w.document.getElementById(id);async function click(id){await $(id).onclick({preventDefault(){}});}
+async function load(){dom?.window.close();dom=new JSDOM(await(await fetch(info.base)).text(),{url:info.base,runScripts:'outside-only'});w=dom.window;w.setInterval=()=>0;w.structuredClone=structuredClone;w.TextEncoder=TextEncoder;Object.defineProperty(w.crypto,'subtle',{value:crypto.webcrypto.subtle});w.crypto.randomUUID=crypto.randomUUID;
+ w.fetch=async(url,opts={})=>{const u=new URL(url,info.base);assert.equal(u.origin,info.base);requests.push({path:u.pathname,method:opts.method||'GET',body:opts.body});const r=await fetch(u,opts);if(drop&&opts.method==='POST'&&u.pathname.endsWith('/fixed-goal-runs')){drop=false;assert.equal(r.status,202);await r.clone().json();throw Error('Owned fixed contract accepted response loss');}return r;};
+ for(const tag of w.document.querySelectorAll('script[src]')){const name=tag.getAttribute('src'),text=await(await fetch(info.base+name)).text();loaded[name]=crypto.createHash('sha256').update(text).digest('hex');vm.runInContext(text,dom.getInternalVMContext());}
+ $('token').value='synthetic-test-A';await click('connect');}
+const worker=async()=>assert.equal((await fetch(info.base+'/test-only-fixed-worker',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,200);
+const posts=()=>requests.filter(x=>x.method==='POST').length;
+(async()=>{try{
+ await load();check($('natural-fixed-acceptance').disabled&&!$('natural-fixed-acceptance').checked,'fixed acceptance initially default off');await click('natural-activation-refresh');$('natural-activation-select').value=info.session;$('natural-activation-select').onchange();await w.showGoalCard(info.card);
+ check(!$('natural-fixed-acceptance').disabled,'explicit fixed contract only available for offline selected scope');$('natural-fixed-acceptance').checked=true;await click('natural-goal-generate');
+ check($('natural-goal-status').textContent.includes('UNKNOWN')&&$('natural-fixed-acceptance').disabled,'lost accepted contract request freezes opt-in and recovery');await click('natural-goal-recover');
+ const sends=requests.filter(x=>x.path.endsWith('/fixed-goal-runs'));check(sends.length===2&&sends[0].body===sends[1].body,'same prospective endpoint and exact key/body recovered');check(!requests.some(x=>x.method==='POST'&&x.path.endsWith('/planned-runs')),'no legacy route fallback');
+ await worker();await click('natural-goal-read');check($('natural-goal-plan').textContent.includes('等待全部检查')&&$('natural-goal-plan').textContent.includes('工具操作为 0'),'whole goal not passed before explicit plan confirmation');
+ $('natural-goal-ack').checked=true;$('natural-goal-ack').onchange();await click('natural-goal-confirm');await worker();await click('natural-goal-read');
+ const rid=w.eval('activeRun');check($('raw-result').textContent.includes('"status": "SUCCEEDED"')&&$('raw-result').textContent.includes('PASS_FIXED_CONTRACT'),'fixed contract actual complete goal succeeds');check($('natural-goal-plan').textContent.includes('限定整体 PASS')&&$('natural-goal-plan').textContent.includes('人工 PENDING'),'single step and whole fixed goal separate, no owner signoff');
+ $('natural-receipt-target').value=info.target;await click('natural-receipt-extract');await click('natural-receipt-extract');const aid=w.eval('activeApp');check($('app-origin').textContent.includes('来源 Run SUCCEEDED')&&$('app-origin').textContent.includes('候选适用范围仍须人工'),'accepted finite source still yields unaccepted candidate');
+ $('app-column').value='quantity';await $('app-preview-form').onsubmit({preventDefault(){}});check($('app-output').textContent.includes('15'),'new data runs15 not old19');
+ const before=posts();await load();await w.showRun(rid);await w.showApp(aid);check(posts()===before,'cold task and candidate reads no POST');check($('app-origin').textContent.includes('未发布'),'cold candidate remains unpublished');
+ $('app-column').value='bad';await $('app-preview-form').onsubmit({preventDefault(){}});check($('app-output').dataset.state==='error','wrong input failure retains current failed outcome');
+ assert.equal((await fetch(info.base+'/test-only-fixed-revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,200);let denied=false;try{await w.showApp(aid);}catch(e){denied=true;}check(denied&&w.eval('activeApp===null'),'source revocation denies cold candidate');
+ fs.writeFileSync(path.join(root,'results.json'),JSON.stringify({status:'PASS',browser:'JSDOM_NOT_NATIVE',api:'ACTUAL_LOOPBACK_HTTP',checks,loaded_source_sha256:loaded,model_network:0},null,2));
+ }catch(e){console.error(e.stack);process.exitCode=1;}finally{dom?.window.close();}})();

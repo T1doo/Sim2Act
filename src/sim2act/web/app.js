@@ -146,7 +146,7 @@ async function showRun(id, userSelection = true, selectionGuard = () => true, va
   }
   if(!internal)renderOrdinaryProgress(r,attempts);
   if (r.result && !internal) {
-    $("result").append(row(`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
+    $("result").append(row(r.result.task_acceptance?.whole_task_accepted===true?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
     for (const receipt of r.result.receipts || []) {
       const data = receipt.data;
       if (typeof data.content === "string") {const pre=document.createElement("pre");pre.textContent=data.content;$("result").append(pre);}
@@ -261,7 +261,10 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;
   const taskProof=a.candidate.task_proof;
-  if(taskProof?.proof?.kind === "verified_natural_csv_receipt_only.v1"){
+  if(taskProof?.proof?.kind === "accepted_fixed_natural_goal.v1"){
+    $("app-origin").textContent="来源 Run SUCCEEDED · 固定合成目标契约 PASS · 新 CSV / column 候选适用范围仍须人工核对 · owner PENDING · 未发布，完整 P-B 未验收";
+    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);
+  } else if(taskProof?.proof?.kind === "verified_natural_csv_receipt_only.v1"){
     $("app-origin").textContent=`来源 Run PARTIAL · 单项 VERIFIED 求和回执候选 · 整体任务未验收 · 新 CSV 绑定 / column 变量 · 固定 aggregate_csv@1 只读步骤 · 人工适用范围 PENDING · 未发布，完整 P-B 未验收`;
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);
   } else if(taskProof?.proof?.kind === "completed_registered_csv_apprun.v1"){

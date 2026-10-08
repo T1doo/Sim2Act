@@ -178,6 +178,15 @@ class NaturalActivationBinding(Strict):
     approval_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class FixedGoalAcceptance(Strict):
+    version: Literal["fixed-csv-goal-acceptance.v1"]
+    kind: Literal["read_preview", "sum_quantity_z"]
+    resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
+    source_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    goal_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    check: Literal["csv.complete_preview.v1", "csv.exact_integer_sum.v1"]
+
+
 class NaturalPlanningPolicy(Strict):
     version: Literal["natural-goal-planning.v1"]
     provider: Literal["disabled", "intern-s2"]
@@ -187,6 +196,7 @@ class NaturalPlanningPolicy(Strict):
     live_request_allowance: int = Field(strict=True, ge=0, le=0)
     require_confirmation: Literal[True] | None = None
     activation: NaturalActivationBinding | None = None
+    goal_acceptance: FixedGoalAcceptance | None = None
 
     @field_validator("require_confirmation", mode="before")
     @classmethod

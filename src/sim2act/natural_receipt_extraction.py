@@ -25,7 +25,11 @@ def source(store, c, user, rid, limits):
     if not row or row["principal_id"] != user:
         raise DomainError("PERMISSION_DENIED")
     store.own_project(c, user, row["project_id"])
-    if row["status"] != "PARTIAL" or row["error"] is not None or row["cancel_intent"]:
+    if (
+        row["status"] not in {"PARTIAL", "SUCCEEDED"}
+        or row["error"] is not None
+        or row["cancel_intent"]
+    ):
         raise DomainError("VERIFICATION_FAILED", "Only intact terminal partial receipt candidate")
     contract = store.frozen_contract(c, row)
     if (
@@ -34,6 +38,9 @@ def source(store, c, user, rid, limits):
         or contract.mode != "mock"
     ):
         raise DomainError("UNSUPPORTED_CAPABILITY", "Approved offline fixed sum receipt only")
+    whole = contract.natural_planning.goal_acceptance is not None
+    if (row["status"] == "SUCCEEDED") != whole:
+        raise DomainError("VERIFICATION_FAILED", "PARTIAL cannot become whole-task source")
     session = validate_run(store, c, row)
     goals = [
         g for g in session["scope"]["goals"] if g["card_id"] == contract.source_goal_card.card_id
@@ -90,10 +97,11 @@ def source(store, c, user, rid, limits):
     candidate["manifest"]["goal_ref"] = contract.source_goal_card.card_id
     draft = {"project_id": row["project_id"], "candidate": candidate}
     proof = {
-        "kind": PROOF,
+        "kind": "accepted_fixed_natural_goal.v1" if whole else PROOF,
         "source_run_id": rid,
-        "source_run_status": "PARTIAL",
-        "whole_task_accepted": False,
+        "source_run_status": row["status"],
+        "whole_task_accepted": whole,
+        **({"task_acceptance": copy.deepcopy(result["task_acceptance"])} if whole else {}),
         "semantic_goal_acceptance": "NOT_RUN",
         "owner_acceptance": "PENDING",
         "model_requests": 0,
@@ -165,7 +173,13 @@ def options(store, user, rid, limits):
                 continue
         if not targets:
             raise DomainError("NEEDS_INPUT", "Existing authorized different CSV app required")
-        return envelope(proof=proof, source_proof_fingerprint=fingerprint(proof), targets=targets)
+        return envelope(
+            proof=proof,
+            source_proof_fingerprint=fingerprint(proof),
+            targets=targets,
+            whole_task_accepted=proof["whole_task_accepted"],
+            source_run_status=proof["source_run_status"],
+        )
 
 
 def request(rid, body):
@@ -235,6 +249,8 @@ def extract(store, user, rid, body, limits):
             id=draft["id"],
             candidate_fingerprint=draft["fingerprint"],
             cached=bool(old),
+            whole_task_accepted=proof["whole_task_accepted"],
+            source_run_status=proof["source_run_status"],
             source_proof_fingerprint=fingerprint(proof),
         )
 

@@ -237,6 +237,11 @@ class Worker:
 
     def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False):
         with self.store.tx() as c:
+            from .db import run_contracts
+            saved = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == run_id)).scalar_one_or_none()
+            if saved is not None and not isinstance(saved, dict):
+                raise DomainError("VERSION_CONFLICT", "Invalid frozen finalization contract")
+            verify_goal_source = verify_goal_source or bool(saved and saved.get("natural_planning"))
             if verify_goal_source:
                 owner = c.execute(select(runs.c.principal_id, runs.c.project_id).where(
                     runs.c.id == run_id,
@@ -245,6 +250,8 @@ class Worker:
             run = self.store.guard(c, run_id, fence)
             if verify_goal_source:
                 frozen = self.store.frozen_contract(c, run)
+                if frozen.natural_planning is not None and state in {"SUCCEEDED", "PARTIAL"} and result is None:
+                    raise DomainError("VERIFICATION_FAILED", "Goal finalization requires verified result")
                 if frozen.natural_planning is not None and result is not None:
                     from .goal_planner import verify_result
 
@@ -253,6 +260,9 @@ class Worker:
 
                         validate_run(self.store, c, run, self.s, active=True)
                     verify_result(self.store, c, run, result)
+                    accepted = result.get("task_acceptance", {}).get("whole_task_accepted") is True
+                    if state in {"SUCCEEDED", "PARTIAL"} and (state == "SUCCEEDED") != accepted:
+                        raise DomainError("VERIFICATION_FAILED", "Single-step success is not whole-goal acceptance")
             if run["status"] == "CANCEL_REQUESTED":
                 state = "CANCELLED"
             elif run["status"] == "PAUSE_REQUESTED":

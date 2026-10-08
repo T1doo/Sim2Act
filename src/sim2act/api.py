@@ -518,14 +518,20 @@ def create_app(store=None, settings=None):
 
         return close_expired(db, user, aid, s)
 
-    @app.post("/api/natural-activations/{aid}/goal-cards/{cid}/planned-runs", status_code=202)
-    def run_activated_goal(aid: str, cid: str, body: GoalRunInput, user=user_dependency):
+    def enqueue_activated_goal(aid, cid, body, user, accept_fixed=False):
         from .goal_planner import policy
         from .natural_activations import binding_for_run, inspect
 
         bound = binding_for_run(db, user, aid, cid, body.model_dump(), s)
-        pid = inspect(db, user, aid, s)["project_id"]
-        selected = policy(s.goal_planner_provider, activation=bound)
+        session = inspect(db, user, aid, s)
+        pid = session["project_id"]
+        fixed = None
+        if accept_fixed:
+            if s.mode != "mock" or session["scope"]["mode"] != "OFFLINE_TEST":
+                raise DomainError("UNSUPPORTED_CAPABILITY", "Only fixed offline acceptance supported")
+            from .task_acceptance import definition
+            fixed = definition(next(g for g in session["scope"]["goals"] if g["card_id"] == cid))
+        selected = policy(s.goal_planner_provider, activation=bound, goal_acceptance=fixed)
         limits = platform_limits.model_dump()
         for key, cap in {"max_requests": 1, "max_repairs": 0, "max_tools": 2,
                          "max_total_tokens": 11000, "max_output_tokens": 512,
@@ -537,6 +543,14 @@ def create_app(store=None, settings=None):
                         goal_source={"card_id": cid, "version": body.expected_version,
                                      "fingerprint": body.expected_fingerprint})
         return {**acceptance(db, user, rid), "planning_policy": selected}
+
+    @app.post("/api/natural-activations/{aid}/goal-cards/{cid}/planned-runs", status_code=202)
+    def run_activated_goal(aid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        return enqueue_activated_goal(aid, cid, body, user)
+
+    @app.post("/api/natural-activations/{aid}/goal-cards/{cid}/fixed-goal-runs", status_code=202)
+    def run_fixed_goal(aid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        return enqueue_activated_goal(aid, cid, body, user, True)
 
     @app.get("/api/projects/{pid}/natural-planning-status")
     def natural_planning_status(pid: str, user=user_dependency):
