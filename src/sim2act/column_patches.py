@@ -5,6 +5,7 @@ definition freezes one schema-checked parameter on the same aggregate node.
 """
 
 import copy
+import unicodedata
 from typing import Literal
 
 from fastapi import Depends
@@ -25,7 +26,7 @@ HISTORY_LIMIT = 50
 def validate_request_key(key):
     """One SQL-before boundary for JSON, decoded path and restored ledger keys."""
     if (not isinstance(key, str) or not 1 <= len(key) <= 128
-            or any(ord(ch) < 32 or ord(ch) == 127 for ch in key)):
+            or any(unicodedata.category(ch) in {"Cc", "Cs"} for ch in key)):
         raise DomainError("INVALID_INPUT", "Column patch request key must be bounded text without control characters")
     return key
 
