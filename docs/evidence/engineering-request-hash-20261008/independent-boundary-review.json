@@ -1,0 +1,55 @@
+{
+  "review_utc": "2026-10-08T05:54:55.515735+00:00",
+  "head": "48accbbea0fd90fc022abd049a92b2d6c16eeb52",
+  "scope": "Independent static read-only review, no tests/PG/product edits/push. No repeat deadlock acceptance.",
+  "reviewed_sha256": {
+    "src/sim2act/delivery_graph_apps.py": "be8573be336c4a8d67aa3039bfc13c70f02729109ee7f7f5997b760ae3e063a1",
+    "src/sim2act/protocol_jobs.py": "618d3e7ebd4fce397463f705217dcd32557b5cf61feb5019103873bbdb7434a7",
+    "src/sim2act/db.py": "89b5e9655ecd2be1a5dec680f117d0d7b3aedff2a48758efff68194b676ee260"
+  },
+  "recommendation": "Prefer only local duplicate snapshot fingerprint elimination. Do not implement broad load_family result reuse across state without additional proof of equivalent mutable-state and rejection behavior.",
+  "verified_pending": {
+    "location": "src/sim2act/protocol_jobs.py:167-173",
+    "facts": [
+      "The same local snapshot object is fingerprinted first as expected PROTOCOL_ACCEPTED seal value, then immediately in job fingerprint comparison.",
+      "Between the calls there is no SQL, external callback, await, write or snapshot mutation.",
+      "fingerprint defined at db.py:467 is deterministic JSON serialization (sort keys, UTF-8, disallow NaN) plus SHA256 and has no writes."
+    ],
+    "safe_scope": "Reuse only inside this invocation, never across verified_pending calls, requests, transactions or mutated snapshots.",
+    "preserve_order": [
+      "When accepted_seals length differs from1 original short-circuits before fingerprint. Preserve that early refusal and same Accepted protocol seal changed error.",
+      "On one seal, job[kind] is evaluated before fingerprint because it is first value in dict construction. Preserve that order, including KeyError vs serialization exception.",
+      "Wrong seal must still fail before protocol snapshot comparison, namespace checks, bounded validation, _authority, result checks and dependency checks.",
+      "Suggested two-line approach: bind local snapshot_fp at original fingerprint(snapshot) dictionary value using assignment expression; second comparison uses snapshot_fp. The variable cannot be unset on a continuing path, since a skipped first evaluation unconditionally raises.",
+      "Alternative explicit form: reject seal count first; construct expected_seal with phase before fingerprint as original; compare actual seal; compare expected_seal[fingerprint] to job fingerprint. Do not eagerly hash before seal count check."
+    ],
+    "provable_gain": "One JSON serialization+SHA256 removed per invocation that passes the accepted seal check; SQL/authorization counts unchanged. No measured elapsed saving yet.",
+    "worth_small_change": true,
+    "remaining_verification": "Measure direct fingerprint count/time with same input old/new and relevant protocol corruption/rejection cases; preserve original assertions. Existing hotspots observer has not instrumented protocol_jobs.verified_pending or its module-local fingerprint alias."
+  },
+  "delivery_graph_current": {
+    "locations": [
+      "delivery_graph_apps.py:485 first load_family",
+      "delivery_graph_apps.py:486 state",
+      "delivery_graph_apps.py:487 build",
+      "delivery_graph_apps.py:378 second load_family"
+    ],
+    "facts": [
+      "First load authorizes source/identity before protected saved ledger reads, as explicit comment requires. Removing first changes rejection/read order.",
+      "Second load recomputes current app origin, content hashes, grants and authorization fingerprint after state validates state/anchor/accepted receipt/source-version ledger.",
+      "state does not write but performs many SQL reads and fingerprint/schema checks, so elapsed time and database snapshots can differ before build.",
+      "Store.tx has ordinary c.begin() for PostgreSQL and no explicit stable snapshot isolation setting.",
+      "Store.authorize rechecks grant expires_at against time.time at db.py:625; even held grant rows do not freeze wall-clock expiry.",
+      "load_family resource selection at lines114-119 has no FOR UPDATE; project lock only coordinates participating app paths, not all direct role/admin data changes or same-transaction mutations."
+    ],
+    "unsafe_shortcut": "Passing first loaded family tuple through state and skipping second load would remove later expiry/source/identity/fresh-origin revalidation, although stale tuple could reconstruct an otherwise valid saved graph.",
+    "safe_reuse_boundary": "Pure immutable work within a contiguous validation step is preferable. Any retained family result would need explicit trusted private ownership and freshness checks equivalent to the later load for all mutable authority/origin/content inputs, and must not leak between requests/apps/users/projects/transactions. This proof is absent from present code.",
+    "potential_gain": "Statically avoids one expensive family load per current call, but nested profiling totals cannot serve as causal saving; safety and elapsed gain not established.",
+    "worth_small_change": false,
+    "tests_evidence": "tests/test_report_validated_origin.py:76-112 deliberately inject source/extraction/seal/grant/target mutation after origin validation in the same transaction; existing freshness tests constrain broader caching/reuse. They are not an executed test of this specific current/state boundary."
+  },
+  "limits": [
+    "No general speed claim, globaldeadlock claim, fullsuite or Windows/native conclusion.",
+    "Existing900/240/150 budgets and original assertions must remain."
+  ]
+}

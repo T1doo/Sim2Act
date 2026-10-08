@@ -455,3 +455,5 @@ Ordinary development integration may fast-forward this tested lineage plus this
 evidence-only commit, preserving skip-ci semantics and stopping on other changes/
 conflict/refusal. Main, original instance, LIVE0 and original900/240/150 untouched;
 native Windows capacity and Edge remain unverified/NO_GO.
+
+2026-10-08继续48accbb进行[请求内相邻指纹去重](../evidence/engineering-request-hash-20261008/README.md)：仅protocol_jobs两行复用同一snapshot的紧邻纯hash，保留所有SQL、授权、新鲜性和异常顺序；7个精确同输入9对阶段样本减少47.292%–50.858%，旧DOM第二hash累计143.371毫秒。固定27次历史读取hash1512→756；两个DOM原49检查/7MOCKwire均PASS，但进程39.490→40.551秒，不认领端到端提速。必要PG回归191PASS/0FAIL/0SKIP、ruff/mypy通过，未再全量或死锁验收。原284源码仅一文件两行变化，原断言/驱动/预算保留；独审及原生最小实测条件随证据保存。此小收益不能关闭Windows900/Edge240/Node150容量，NO_GO/LIVE0保持；不main/force/新CI，原实例未提交计划/日志未复制。

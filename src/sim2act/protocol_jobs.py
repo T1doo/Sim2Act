@@ -166,11 +166,11 @@ def verified_pending(store, c, user, rid, *, stop_only=False):
     )
     if len(accepted_seals) != 1 or accepted_seals[0] != {
         "phase": job["kind"],
-        "fingerprint": fingerprint(snapshot),
+        "fingerprint": (snapshot_fp := fingerprint(snapshot)),
     }:
         raise DomainError("VERSION_CONFLICT", "Accepted protocol seal changed")
     if (
-        fingerprint(snapshot) != job["fingerprint"]
+        snapshot_fp != job["fingerprint"]
         or job["fingerprint"] != run["fingerprint"]
         or snapshot.get("namespace") != NAMESPACE
         or any(
