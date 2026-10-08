@@ -261,3 +261,7 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 ## 2026-10-08 CSV候选与键边界开发基线整合
 
 按父线程明确授权，核远端foundation122不变后ff-only整合完整451候选历史；src/tests与独审f40d975一致，不含DAG。SQLite135 PASS，PG134 PASS/1旧SQLite历史NUL专属SKIP；哈希不变，Ruff/mypy48通过。第二reviewer闭合两个P2仅限键处理；原生Windows/Edge、gold/P-B/人工签收/正式发布未完成。证据见csv-foundation-integration-20261008；两阶段自有PG/schema/role/Node临时资源已清理。
+
+## 2026-10-08 受控条件分支候选（不整合）
+
+独立dev/controlled-branches-20261008/source041cf8e，落实原F2-T04有限条件：冻结输入/计划/版本、schema类型、跳过传播、精确确认、失效和冷恢复；必需报告跳过时PARTIAL。SQLite741P15S/PG755P1S，756唯一各端，0失败且源码不变；另真实子进程重领各1P（fence1→3、前缀保持、不重复），总757唯一。新页面每端6场景9实际Run99断言、原断言241文件保持、Ruff/mypy50通过。自有资源清理及原失败全部保存；候选普通push待独审，不合已验dev/main，不改变900/240/150、LIVE0和未验收标签。[详细日志](ControlledBranchesLog.md)。
