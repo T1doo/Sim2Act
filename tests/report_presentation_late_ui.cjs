@@ -24,7 +24,7 @@ async function reconnect(token,drain=true){$('login').hidden=false;$('token').va
  else if(info.action==='refresh'){await w.readManifestHistory();check(targetButton.isConnected===false,'same context history replaces original DOM');}
  else{w.clearApp();await w.showApp(info.app,info.project);check(texts().join('|')==='ALLOW','new same-app page history returned before release');}
  const postsBefore=requests.filter(r=>r.method==='POST').length,readsBefore=requests.length;
- if(info.action==='revoke'){const response=await fetch(info.base+'/test-only-revoke',{method:'POST',headers:{Authorization:'Bearer synthetic-test-A'}});assert(response.ok);}
+ if(info.action==='revoke'){const response=await fetch(info.base+'/test-only-revoke',{method:'POST',headers:{Authorization:'Bearer synthetic-test-A','Content-Type':'application/json'},body:'{}'});assert(response.ok);}
  if(info.action==='history_failure')historyFailure=true;
  release();release=null;await idle();check(requests.filter(r=>r.method==='POST').length===postsBefore,'late completion never repeats or continues a write');
  if(info.action==='other_app'||info.action==='identity'){check(!button()&&!texts().includes(info.explanation),'late old content never appears in foreign selection');check(!requests.slice(readsBefore).some(r=>r.path.includes('/apps/'+info.app+'/')),'foreign selection does not read old protected history');}
