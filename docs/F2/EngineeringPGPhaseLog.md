@@ -430,3 +430,28 @@ four owned runs have census0/0/0 and removed containers/volumes; compressed raw
 timelines, JUnit and artifacts are byte/hash verified. Original instance remains
 untouched, LIVE0/MOCK, no new CI/native/provider run. Windows900/Edge240/Node150
 and NO_GO remain.
+
+## Final frozen-fix complete regression
+
+Explicitly authorized one full run on d85f6f5, with no runtime/test/script/workflow
+change. [Final evidence](../evidence/engineering-pg-final-20261008/README.md):
+actual1591 collection preserves original1586 plus new5; exact collection/execution/
+JUnit match,1564PASS/27 identical originalSKIP, Ruff/mypy47 PASS. Pytest1086.70s,
+process1089.253s; Engineering Ruff+mypy+pytest1089.500s, excluding collection/prep/
+boot/cleanup. Setup221.214s, call847.252s, teardown16.810s;284 source hashes match
+before/after/current frozen bytes. No additional optimization or speed claim.
+
+PG log deadlocks0; pytest-process SQL40P01=0 and observed HTTP500=0. One actual
+HTTP503 is the original bounded-product metadata-failure middleware and JS refusal
+assertion, not a new fault.10775 FastAPI calls recorded;59 subprocess/driver logs
+contain no server-exception/HTTP500 signature, with incomplete subprocess response
+visibility explicitly retained.24 runtime_role-fixture nodes and all five new
+regressions pass, along with original role denial/CRUD and cancellation tests.
+Final schema/role/public census0/0/0; owned container/volume removal verified.
+
+Remote development baseline rechecked unchanged5c06520 after PASS. Core changes
+are2315fea andd85f6f5; intervening four evidence commits preserve published ancestry.
+Ordinary development integration may fast-forward this tested lineage plus this
+evidence-only commit, preserving skip-ci semantics and stopping on other changes/
+conflict/refusal. Main, original instance, LIVE0 and original900/240/150 untouched;
+native Windows capacity and Edge remain unverified/NO_GO.
