@@ -9,11 +9,11 @@ import httpx
 import pytest
 import uvicorn
 from test_column_patches import check_body, setup, url
+from test_internal_lifecycle import limits
 
 from sim2act.api import create_app
 from sim2act.column_patches import DefinitionInput, build
 from sim2act.delivery_graph_apps import remember
-from test_internal_lifecycle import limits
 
 
 @pytest.fixture
