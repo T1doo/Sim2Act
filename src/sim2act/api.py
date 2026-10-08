@@ -677,6 +677,9 @@ def create_app(store=None, settings=None):
     mount_conditional_runs(app, db, identity, platform_limits, s)
     mount_conditional_apps(app, db, identity, platform_limits, s)
     mount_report_manifest_apps(app, db, identity, platform_limits, s)
+    from .report_presentations import mount as mount_report_presentations
+
+    mount_report_presentations(app, db, identity, platform_limits, s)
     mount_delivery_graph_apps(app, db, identity, platform_limits, s)
     mount_csv_dag(app, db, s, identity, platform_limits)
 
