@@ -83,8 +83,11 @@ def test_pg_two_workers_same_kind_charge_once(env, monkeypatch):
     assert sum(s["status"] == "WAITING_APPROVAL" for s in states) == 1
     loser = next(s for s in states if s["status"] != "WAITING_APPROVAL")
     assert (loser["status"], loser["error"]["code"]) in {
-        ("WAITING_RESOURCE", "OUTCOME_UNKNOWN"), ("FAILED", "BUDGET_EXHAUSTED")}
+        ("WAITING_RESOURCE", "OUTCOME_UNKNOWN"), ("WAITING_RESOURCE", "RATE_LIMITED"),
+        ("FAILED", "BUDGET_EXHAUSTED")}
     assert not workers[0].once()  # No automatic retry of either durable waiting state.
+    current = activation.now()
+    monkeypatch.setattr(activation, "now", lambda: current + 60)
     second = submit(value, session, "read_preview", "second-distinct-goal")
     assert second.status_code == 202
     def preview_handler(request):
@@ -95,6 +98,7 @@ def test_pg_two_workers_same_kind_charge_once(env, monkeypatch):
     assert len(sent) == len(rows(store, attempts)) == len(rows(store, reservations)) == 2
     full = client.get(f"/api/natural-activations/{session['id']}").json()
     assert full["charged_requests"] == 2 and full["reserved_tokens"] <= 22000
+    monkeypatch.setattr(activation, "now", lambda: current + 120)
     extra = submit(value, session, key="third-budget-exhausted")
     assert extra.status_code == 202 and second_worker.once()
     assert len(sent) == len(rows(store, attempts)) == len(rows(store, reservations)) == 2

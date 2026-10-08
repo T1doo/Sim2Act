@@ -105,13 +105,16 @@ def test_disabled_activation_has_zero_dml_and_network(env):
     assert (rows(store, events), rows(store, runs), authority(store)) == before
 
 
-def test_two_fixed_goals_actual_slots_receipts_history_no_hidden_calls(env):
+def test_two_fixed_goals_actual_slots_receipts_history_no_hidden_calls(env, monkeypatch):
     value = setup(env)
     store, settings, client, *_ = value
     session, approval_body = approved(value)
     before = authority(store)
     sent = []
-    for kind in activation.KINDS:
+    for index, kind in enumerate(activation.KINDS):
+        if index:
+            current = activation.now()
+            monkeypatch.setattr(activation, "now", lambda: current + 60)
         accepted = submit(value, session, kind, kind)
         assert accepted.status_code == 202, accepted.text
         rid = accepted.json()["run_id"]
@@ -251,6 +254,7 @@ def test_expiry_is_immediate_without_timer_and_cannot_renew(env, monkeypatch):
     session, approval_body = approved(value)
     accepted = submit(value, session)
     rid = accepted.json()["run_id"]
+    clock[0] = max(clock[0], rows(store, runs)[0]["created_at"])
     sent = []
     def handler(request):
         sent.append(request.content)

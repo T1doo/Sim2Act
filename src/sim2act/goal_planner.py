@@ -104,6 +104,8 @@ def check_run_deadline(store, c, run, *, active=True):
         if active:
             raise DomainError("RESOURCE_UNAVAILABLE", "Frozen planning deadline required")
         return None  # Historical reads do not invent a new deadline.
+    if type(run["created_at"]) not in {int, float} or not math.isfinite(run["created_at"]):
+        raise DomainError("VERSION_CONFLICT", "Invalid frozen planning creation time")
     expected = {"run_id": run["id"],
                 "contract_fingerprint": fingerprint(contract.model_dump(exclude_none=True)),
                 "created_at": run["created_at"],

@@ -1007,6 +1007,7 @@ def mark_sending(store, c, run, fence, attempt_id, settings):
         raise DomainError("RATE_LIMITED", "Frozen activation account rate is one per minute")
     # A delayed final guard starts a fresh account-wide window; reserve-time age is not a bypass.
     c.execute(update(reservations).where(reservations.c.id == attempt_id).values(created_at=current))
+    c.execute(update(quotas).where(quotas.c.subject == subject).values(blocked_until=current + 60))
     store.event(c, row["id"], "NL_ACTIVATION_SEND_TIME",
                 {"attempt_id": attempt_id, "subject": subject, "sent_at": current, "rpm": 1})
     matching[0]["status"] = "SENDING"

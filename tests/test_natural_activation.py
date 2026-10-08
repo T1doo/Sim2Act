@@ -14,6 +14,7 @@ from sim2act.db import (
     grants,
     natural_activations,
     new_id,
+    reservations,
     runs,
 )
 from sim2act.errors import DomainError
@@ -139,6 +140,8 @@ def reserve(value, run, envelope=1000, fail=False):
                 parameters=params,
             )
         )
+        c.execute(insert(reservations).values(id=aid, subject=settings.quota_subject,
+                  created_at=activation.now(), run_id=run["id"]))
         activation.reserve_slot(store, c, current, run["fence"], aid, envelope, "b" * 64, settings)
         ctx = copy.deepcopy(current["context"])
         ctx["requests"] += 1
@@ -184,7 +187,7 @@ def test_default_disabled_and_closed_inputs_no_write(env):
         assert not c.execute(select(natural_activations)).first()
 
 
-def test_two_actual_runs_share_two_nonrefundable_slots_and_static_reads(env):
+def test_two_actual_runs_share_two_nonrefundable_slots_and_static_reads(env, monkeypatch):
     value = setup(env)
     store, _, user, _, _, _, _, _, approved = value
     for kind in activation.KINDS:
@@ -192,6 +195,8 @@ def test_two_actual_runs_share_two_nonrefundable_slots_and_static_reads(env):
         aid = reserve(value, run, envelope=10512)
         sending(value, run, aid)
         settle(value, run, aid)
+        current = activation.now()
+        monkeypatch.setattr(activation, "now", lambda current=current: current + 60)
     result = activation.inspect(store, user, approved["id"])
     assert result["charged_requests"] == 2 and result["reserved_tokens"] == 21024
     with store.tx() as c:
@@ -428,7 +433,7 @@ def test_exact_plan_kind_and_limits_guard(env):
             )
 
 
-def test_concurrent_two_goals_serialize_then_share_one_two_request_budget(env):
+def test_concurrent_two_goals_serialize_then_share_one_two_request_budget(env, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
 
     value = setup(env)
@@ -450,6 +455,8 @@ def test_concurrent_two_goals_serialize_then_share_one_two_request_budget(env):
     first, aid = succeeded[0]
     sending(value, first, aid)
     settle(value, first, aid)
+    current = activation.now()
+    monkeypatch.setattr(activation, "now", lambda: current + 60)
     second = denied[0][0]
     aid2 = reserve(value, second)
     sending(value, second, aid2)
