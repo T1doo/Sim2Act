@@ -9,6 +9,10 @@
 5. 页面中的暂停、继续、取消复用既有版本化命令。只在已提交步骤之间停止；明确继续不会重复已提交步骤。重开页面重新连接，再读历史、核对运行回执，无需另建计划或运行。
 6. 若接受响应丢失，使用恢复按钮保留原请求键、列和精确版本；不要更换键猜测是否成功。来源变化、撤权、锁或版本失效会拒绝原证明，页面清空旧结果；仅保留本人运行状态和停止控制。失效计划显示 INVALIDATED，不能把它当作当前结果。
 
+源码升级也会触发版本失效，不能承诺旧结果无缝升级。交付图依赖指纹目前覆盖除config.py外的全部服务端Python模块；本次DAG及P2源码更新可能使其他CSV/Report/agent交付图锚一起过期，即使输入文件未改变。旧图锚、定义、运行、回执和成功结果仍保留在数据库，不删除、不改签；旧DAG当前证明GET及旧键接受重放返回409，历史入口在重派生前也可能返回409。本人运行状态入口只返回NOT_VALIDATED、result=null、steps=[]，不把旧SUCCEEDED状态作为当前验证通过。
+
+升级后先按当前版本显式重派生图锚，再用新request_key保存计划，核对并明确确认新plan_fingerprint，用新的接受键执行检查。不能用旧确认指纹运行新计划，不能只改标签复用旧证明；已过期旧计划在新锚下显示INVALIDATED。原amount预览和quantity结果的历史行保留，新的检查另存。撤权、人工锁、未知依赖或其他冲突未解决时继续拒绝；正常源码升级不需要数据迁移或新权限。
+
 API 顺序为 `POST /api/projects/{pid}/apps/{aid}/csv-dag`（严格字段 `expected_candidate_fingerprint`、`expected_graph_fingerprint`、`column`、`request_key`），再 `POST .../csv-dag/{plan_key}/runs`（`expected_plan_fingerprint`、固定 consent `CONFIRM_EXACT_OFFLINE_CSV_DAG`、`request_key`）；GET 原计划和 `/api/csv-dag/runs/{run_id}` 重新核证明。GET `.../csv-dag` 读持久历史；GET `/api/csv-dag/runs/{run_id}/status` 仅返回 NOT_VALIDATED 控制元信息。计划和运行键限制 ASCII 字母、数字、下划线、连字符1–100字符；控制字符与坏代理字符在 SQL/框架编码之前拒绝。每应用至多50计划及50运行接受回执；旧记录不删除。
 
 这是一项固定、有界、受控 schema 的工程实现。任意 JSON 定义、代码、动态工具、循环、隐藏依赖、新权限都不能由客户端注入。纯文字投影执行器 `intern.csv_report.v1` 只接受精确聚合回执 schema，不能进入模型工具列表，不读取资源或保存 artifact。原普通单节点 CSV/Report 应用接口和交付图 PLANNING_ONLY 断言继续保留。
