@@ -478,6 +478,12 @@ def create_app(store=None, settings=None):
 
         return create(db, user, pid, body.model_dump(), s)
 
+    @app.get("/api/projects/{pid}/natural-activations")
+    def list_natural_activations(pid: str, user=user_dependency):
+        from .natural_activations import list_for_project
+
+        return list_for_project(db, user, pid, s)
+
     @app.get("/api/natural-activations/{aid}")
     def inspect_natural_activation(aid: str, user=user_dependency):
         from .natural_activations import inspect

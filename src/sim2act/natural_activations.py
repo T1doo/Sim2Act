@@ -660,6 +660,28 @@ def inspect(store, user, activation_id, settings=None):
         return _public(row)
 
 
+
+def list_for_project(store, user, pid, settings):
+    """Owner-scoped audited read; eligibility is not an approval or a model call."""
+    with store.tx() as c:
+        store.own_project(c, user, pid)
+        rows = c.execute(select(natural_activations).where(
+            natural_activations.c.project_id == pid,
+            natural_activations.c.principal_id == user,
+        ).order_by(natural_activations.c.created_at)).mappings().all()
+        items = []
+        for row in rows:
+            _static(c, row)
+            reason = None
+            try:
+                _active(store, c, row, settings)
+            except DomainError as error:
+                reason = error.code
+            items.append({**_public(row), "submission_available": reason is None,
+                          "blocked_reason": reason,
+                          "charged_kinds": [slot["charge"]["kind"] for slot in row["ledger"]]})
+        return {"project_id": pid, "items": items, "general_live_request_allowance": 0}
+
 def approve(store, user, activation_id, body, settings):
     _enabled(settings)
     req = _input(ApproveInput, body)

@@ -1004,10 +1004,23 @@ class Store:
 
                     inspect_plan(self, c, r)
             natural_plan = None
+            natural_deadline = None
             if source_contract and source_contract.get("natural_planning") is not None:
                 from .goal_planner import plan_projection
 
                 natural_plan = plan_projection(self, c, r)
+                from .goal_planner import check_run_deadline
+
+                deadline = check_run_deadline(self, c, r, active=False)
+                if deadline is not None:
+                    if source_contract["natural_planning"].get("activation") is not None:
+                        from .natural_activations import now
+                        server_time = now()
+                    else:
+                        server_time = time.time()
+                    natural_deadline = {"accepted_at": r["created_at"], "expires_at": deadline,
+                                        "run_seconds": source_contract["limits"]["run_seconds"],
+                                        "server_time": server_time}
             ev = (
                 c.execute(
                     select(events).where(events.c.run_id == run_id).order_by(events.c.created_at)
@@ -1025,6 +1038,7 @@ class Store:
                 "contract": self.contract_metadata(c, r),
                 "known_effects": self.known_effects(c, run_id),
                 **({"natural_plan": natural_plan} if natural_plan is not None else {}),
+                **({"natural_deadline": natural_deadline} if natural_deadline is not None else {}),
             }
 
     def contract_metadata(self, c, run):
