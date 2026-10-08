@@ -10,6 +10,8 @@
 
 [固定 CSV 三步 DAG](docs/F2/FixedCsvDagQuickstart.md)：在同一应用保存预览 → 求和 → 固定文字报告计划，复用既有 Worker 与持久步骤回执，支持精确确认和冷恢复。离线工程候选未验收。
 
+[三端口受限接线草案](docs/F2/CsvWiringPatchQuickstart.md)：服务端允许来源、新计划精确确认、实际前驱与来源证明；默认旧接线兼容，候选未验收、发布关闭。
+
 已成功内部 CSV 任务的有界复用入口：[最短上手说明](docs/F2/RegisteredRunQuickstart.md)。保持本机 MOCK，不代表完整 P-B 或正式发布。
 
 本增量支持：本地身份、三个工作区、项目内文本材料、异步持久任务、独立 API/worker、受控工具与回执、幂等提交、租约/fencing、暂停/取消、授权撤回、有限模型循环和跨进程配额账本。

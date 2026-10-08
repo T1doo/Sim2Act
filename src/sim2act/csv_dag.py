@@ -15,7 +15,7 @@ from fractions import Fraction
 from typing import Literal
 
 from fastapi import Depends
-from pydantic import Field
+from pydantic import Field, field_validator
 from sqlalchemy import insert, select, update
 
 from . import csv_reports as report
@@ -27,6 +27,7 @@ from .contracts import (
     GoalSpec,
     Limits,
     ResourceSnapshot,
+    Strict,
     validate_action_input,
     validate_value,
 )
@@ -49,6 +50,68 @@ PLAN = "fixed-csv-dag.v1"
 STEPS = ("preview", "aggregate", "report")
 READ_OUTPUT = report.obj({"resource_id": {"type": "string"}, "content": {"type": "string"},
                           "hash": {"type": "string"}, "format": {"type": "string"}})
+WIRING_VERSION = "csv.wiring.v1"
+# Semantic ports, not a string-to-string casting rule. Everything else is pinned.
+PORTS = {
+    ("aggregate", "resource_id"): ("resource_id", [
+        dict(source="step", ref="preview", field="resource_id"),
+        dict(source="data", ref="source", field="resource_id")]),
+    ("report", "resource_id"): ("resource_id", [
+        dict(source="step", ref="aggregate", field="resource_id"),
+        dict(source="step", ref="preview", field="resource_id")]),
+    ("report", "source_hash"): ("source_hash", [
+        dict(source="step", ref="aggregate", field="source_hash"),
+        dict(source="step", ref="preview", field="hash")]),
+}
+
+
+class SafeWire(Strict):
+    @field_validator("*", mode="before")
+    @classmethod
+    def valid_unicode(cls, value):
+        if isinstance(value, str):
+            try:
+                value.encode("utf-8")
+            except UnicodeEncodeError:
+                raise DomainError("INVALID_INPUT", "Invalid wiring Unicode") from None
+        return value
+
+
+class PortSource(SafeWire):
+    source: Literal["step", "data"]
+    ref: Literal["source", "preview", "aggregate"]
+    field: Literal["resource_id", "hash", "source_hash"]
+
+
+class WirePatch(SafeWire):
+    step_id: Literal["aggregate", "report"]
+    port: Literal["resource_id", "source_hash"]
+    source: PortSource
+
+
+def allowed_ports():
+    return [dict(step_id=step, port=port, semantic_type=role, sources=copy.deepcopy(sources))
+            for (step, port), (role, sources) in PORTS.items()]
+
+
+def apply_wiring(manifest, patches):
+    seen = set()
+    steps = {s["step_id"]: s for s in manifest["workflow"]}
+    for patch in patches or []:
+        key = (patch.step_id, patch.port)
+        value = patch.source.model_dump()
+        if key in seen or key not in PORTS or value not in PORTS[key][1]:
+            raise DomainError("INVALID_INPUT", "Unknown, duplicate or wrong semantic wiring port")
+        seen.add(key)
+        steps[patch.step_id]["inputs"][patch.port] = value
+    # Always keep the preview validation barrier, even with a direct data binding.
+    steps["aggregate"]["depends_on"] = ["preview"]
+    required = {"aggregate"} | {v["ref"] for v in steps["report"]["inputs"].values()
+                              if v["source"] == "step"}
+    steps["report"]["depends_on"] = [s for s in STEPS if s in required]
+    return dict(version=WIRING_VERSION,
+                inputs={s: copy.deepcopy(steps[s]["inputs"]) for s in STEPS},
+                depends_on={s: steps[s]["depends_on"][:] for s in STEPS})
 
 
 class PlanInput(KeyInput):
@@ -56,6 +119,9 @@ class PlanInput(KeyInput):
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
     column: str = Field(min_length=1, max_length=200)
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
+    # Keep legacy request dumps byte-compatible when the field was absent.
+    wiring_patch: list[WirePatch] | None = Field(default=None, max_length=3,
+                                               exclude_if=lambda value: value is None)
 
 
 class RunInput(KeyInput):
@@ -64,7 +130,7 @@ class RunInput(KeyInput):
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
-def canonical(candidate, column, limits):
+def canonical(candidate, column, limits, patches=None):
     """An exact fixed template, not a caller-supplied or model-produced DAG."""
     original = candidate["manifest"]
     rid = original["data_bindings"][0]["resource_ref"]
@@ -118,11 +184,12 @@ def canonical(candidate, column, limits):
         *[dict(kind="tool", ref=ref, version="1") for ref in ("resource.read", "data.aggregate_csv", report.REF)],
         dict(kind="check", ref="receipt.readback.v1", version="1"),
     ]
+    apply_wiring(manifest, patches)
     return dict(manifest=manifest, actions=actions)
 
 
-def compile_plan(candidate, column, limits):
-    expected = canonical(candidate, column, limits)
+def compile_plan(candidate, column, limits, patches=None):
+    expected = canonical(candidate, column, limits, patches)
     manifest, checked = preflight(json.dumps(expected["manifest"]), expected["actions"], limits)
     if checked["topological_order"] != list(STEPS):
         graph.conflict("Fixed DAG topology changed")
@@ -142,7 +209,7 @@ def build(store, c, user, pid, aid, body, limits):
     if (any(x["scope"] == "PROJECT" for x in saved["graph"]["unknown_dependencies"])
             or any(e["provenance"] == "MODEL_CANDIDATE" or e["type"] == "SEMANTIC" for e in saved["graph"]["edges"])):
         raise DomainError("UNSUPPORTED_CAPABILITY", "Unknown project/semantic dependencies are outside the fixed adapter")
-    template, _, checked = compile_plan(draft["candidate"], body.column, limits)
+    template, _, checked = compile_plan(draft["candidate"], body.column, limits, body.wiring_patch)
     value = dict(namespace=PLAN, project_id=pid, app_id=aid, runtime_id=draft["runtime_id"],
                  request_key=body.request_key, candidate_fingerprint=draft["fingerprint"],
                  graph_fingerprint=saved["graph"]["graph_fingerprint"],
@@ -151,6 +218,8 @@ def build(store, c, user, pid, aid, body, limits):
                  definition=template, preflight=checked, state="DRAFT_PLAN", model_generated=False,
                  model_requests=0, business_writes=0, publishable=False, formal_publication_enabled=False,
                  semantic_status="UNKNOWN", owner_acceptance="PENDING")
+    if body.wiring_patch is not None:
+        value["wiring"] = apply_wiring(copy.deepcopy(template["manifest"]), body.wiring_patch)
     return {**value, "plan_fingerprint": fingerprint(value)}
 
 
@@ -294,6 +363,10 @@ def resolve(step, plan, outputs):
     return args
 
 
+def wire_proof(plan, step):
+    return {"input_sources": copy.deepcopy(step["inputs"])} if "wiring" in plan else {}
+
+
 def oracle(content, value):
     """Independent reader and rational arithmetic; never uses the product aggregator."""
     try:
@@ -335,7 +408,8 @@ def receipts(store, c, job, plan, source):
             break
         args = resolve(step, plan, outputs)
         intent = dict(tool=action["executor"]["ref"], args=args, plan_fingerprint=plan["plan_fingerprint"],
-                      predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]])
+                      predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]],
+                      **wire_proof(plan, step))
         saved = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar()
         if fingerprint(saved) != fingerprint(intent) or op["fingerprint"] != fingerprint(intent) or op["tool_ref"] != intent["tool"]:
             graph.conflict("DAG operation input binding changed")
@@ -353,7 +427,8 @@ def receipts(store, c, job, plan, source):
                      predecessor_receipts=intent["predecessor_receipts"], source_hash=plan["source_hash"],
                      artifact_refs=[], check_results=[dict(check="receipt.readback.v1", status="PASS")],
                      actual_reads=[] if step["step_id"] == "report" else [dict(resource_id=source["resource_id"],
-                                 source_hash=source["hash"], tool_ref=intent["tool"])])
+                                 source_hash=source["hash"], tool_ref=intent["tool"])],
+                     **wire_proof(plan, step))
         if fingerprint(receipt) != fingerprint(check):
             raise DomainError("VERIFICATION_FAILED", "Actual DAG receipt differs from independent readback")
         outputs[step["step_id"]] = wanted
@@ -435,7 +510,8 @@ def advance(worker, run):
         # transaction, just like existing local-tool dispatch; no in-flight I/O.
         oid = new_id("op")
         intent = dict(tool=action["executor"]["ref"], args=args, plan_fingerprint=plan["plan_fingerprint"],
-                      predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]])
+                      predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]],
+                      **wire_proof(plan, step))
         c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
                    fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
         c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
@@ -456,7 +532,8 @@ def advance(worker, run):
                        predecessor_receipts=intent["predecessor_receipts"], source_hash=plan["source_hash"],
                        artifact_refs=[], check_results=[dict(check="receipt.readback.v1", status="PASS")],
                        actual_reads=[] if step["step_id"] == "report" else [dict(resource_id=source["resource_id"],
-                                    source_hash=source["hash"], tool_ref=intent["tool"])])
+                                    source_hash=source["hash"], tool_ref=intent["tool"])],
+                       **wire_proof(plan, step))
         c.execute(update(operations).where(operations.c.id == oid).values(status="VERIFIED", receipt=receipt))
         c.execute(update(runs).where(runs.c.id == job["id"]).values(context={**job["context"], "tools": index + 1}))
         store.event(c, job["id"], "CSV_DAG_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=run["fence"], receipt_fingerprint=fingerprint(receipt)))
@@ -606,6 +683,21 @@ def mount(app, store, settings, principal, limits):
     @app.get(base)
     def saved(pid: str, aid: str, user=dependency):
         return history(store, user, pid, aid, limits)
+
+    @app.get(base + "/options/wiring")
+    def options(pid: str, aid: str, user=dependency):
+        with store.tx() as c:
+            saved = graph.current(store, c, user, pid, aid, limits)
+            draft, _, action, _, _, _ = graph.load_family(store, c, user, pid, aid, limits)
+            if action.executor.kind != "registered_tool" or action.executor.ref != "data.aggregate_csv":
+                raise DomainError("UNSUPPORTED_CAPABILITY")
+            value = dict(version=WIRING_VERSION, app_id=aid, project_id=pid,
+                         candidate_fingerprint=draft["fingerprint"],
+                         graph_fingerprint=saved["graph"]["graph_fingerprint"],
+                         ports=allowed_ports(), fixed_steps=list(STEPS),
+                         barrier=["preview", "aggregate"], editable_dependencies=False,
+                         model_requests=0, business_writes=0, publishable=False)
+            return {**value, "options_fingerprint": fingerprint(value)}
 
     @app.get(base + "/{key}")
     def get(pid: str, aid: str, key: str, user=dependency):

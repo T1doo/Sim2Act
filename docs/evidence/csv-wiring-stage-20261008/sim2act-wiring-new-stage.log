@@ -1,0 +1,100 @@
+........................F............                                    [100%]
+=================================== FAILURES ===================================
+_ test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[surrogate] _
+
+env = (<sim2act.db.Store object at 0x7fe636e2e2a0>, Settings(database_url='sqlite:////tmp/sim2act-wiring-new-stage/test_clos...0e6bf790b44b2497f1c88187abfe14', 'user_173995d0af44425f80bf505eb9e25586', 'proj_10f2ca649e43469392e280ed40fde100', ...)
+attack = 'surrogate'
+
+    @pytest.mark.parametrize(
+        "attack",
+        [
+            "resource_from_hash",
+            "hash_from_resource",
+            "aggregate_hash_port",
+            "resource_ref",
+            "unknown_step",
+            "unknown_port",
+            "unknown_source",
+            "unknown_dependency",
+            "cycle",
+            "executor",
+            "schema",
+            "nodes",
+            "duplicate",
+            "oversize",
+            "surrogate",
+        ],
+    )
+    def test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write(
+        env, attack
+    ):
+        _, base, anchor, _, _, _ = setup(env)
+        patch = copy.deepcopy(PATCH)
+        if attack == "resource_from_hash":
+            patch[1]["source"]["field"] = "hash"
+        elif attack == "hash_from_resource":
+            patch[2]["source"]["field"] = "resource_id"
+        elif attack == "aggregate_hash_port":
+            patch[0]["port"] = "source_hash"
+        elif attack == "resource_ref":
+            patch[0]["source"]["ref"] = "aggregate"
+        elif attack == "unknown_step":
+            patch[0]["step_id"] = "other"
+        elif attack == "unknown_port":
+            patch[0]["port"] = "sum"
+        elif attack == "unknown_source":
+            patch[0]["source"]["ref"] = "foreign"
+        elif attack == "unknown_dependency":
+            patch[0]["depends_on"] = ["foreign"]
+        elif attack == "cycle":
+            patch[0]["source"]["ref"] = "report"
+        elif attack in {"executor", "schema", "nodes"}:
+            patch[0][attack] = {"ref": "arbitrary"}
+        elif attack == "duplicate":
+            patch[1] = copy.deepcopy(patch[0])
+        elif attack == "oversize":
+            patch.append(copy.deepcopy(patch[0]))
+        else:
+            patch[0]["source"]["ref"] = "\ud800"
+        before = snapshot(env)
+>       reply = propose(env, base, anchor, patch, "bad")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_wiring.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_csv_wiring.py:49: in propose
+    return env[2].post(
+.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:812: in request
+    request = self.build_request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:378: in build_request
+    return Request(
+.venv/lib/python3.12/site-packages/httpx/_models.py:408: in __init__
+    headers, stream = encode_request(
+.venv/lib/python3.12/site-packages/httpx/_content.py:216: in encode_request
+    return encode_json(json)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+json = {'column': 'quantity', 'expected_candidate_fingerprint': 'cddf178a4d1a5b89366f9b5d91354e551cbebb8f33db6912db7116795966...cted_graph_fingerprint': 'ffe5e53c59a00fc75e0f932caa09157bd59aa0c9ff02b5f4a379fcce34542cdd', 'request_key': 'bad', ...}
+
+    def encode_json(json: Any) -> tuple[dict[str, str], ByteStream]:
+        body = json_dumps(
+            json, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+>       ).encode("utf-8")
+          ^^^^^^^^^^^^^^^
+E       UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 330: surrogates not allowed
+
+.venv/lib/python3.12/site-packages/httpx/_content.py:179: UnicodeEncodeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_wiring.py::test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[surrogate]
+1 failed, 36 passed, 1 warning in 36.82s

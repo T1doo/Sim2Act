@@ -1,0 +1,2370 @@
+{
+  "expected": {
+    "amount": "30",
+    "quantity": "15"
+  },
+  "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+  "baseline": {
+    "namespace": "fixed-csv-dag.v1",
+    "project_id": "proj_76da509303544611809ab1599bc3a229",
+    "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+    "runtime_id": "appruntime_9efc9ea49a984c30bf7b2f78c01c9c21",
+    "request_key": "baseline-wire",
+    "candidate_fingerprint": "2869b939b68ee80a9ce23a96e56f79d1febef397fd2b87122c9c82433147ca2c",
+    "graph_fingerprint": "9c4f1ad62f95e9f4aceb65cf3a32a870a1738691c0b2046ae63c3eb23456895e",
+    "graph_revision": 1,
+    "authorization_fingerprint": "07357679453b839bf96f64a77f4bb0a06e96f76334f9106aa438093ac9c99f35",
+    "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+    "input": {
+      "column": "quantity"
+    },
+    "definition": {
+      "manifest": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+        "revision": 2,
+        "origin": "goal",
+        "goal_ref": "goal_43a755ab486d4968ab79115a81f377b0",
+        "source_run_ref": null,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string",
+              "enum": [
+                "quantity"
+              ]
+            }
+          },
+          "required": [
+            "column"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "sum": {
+              "type": "string"
+            },
+            "source_hash": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource_id",
+            "column",
+            "count",
+            "sum",
+            "source_hash",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "resource_id": {
+            "source": "step",
+            "ref": "report",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "report",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "report",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "report",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "report",
+            "field": "source_hash"
+          },
+          "text": {
+            "source": "step",
+            "ref": "report",
+            "field": "text"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "text"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "preview",
+            "binding_id": "preview",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "aggregate",
+            "binding_id": "aggregate",
+            "depends_on": [
+              "preview"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "preview",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "column"
+              }
+            }
+          },
+          {
+            "step_id": "report",
+            "binding_id": "report",
+            "depends_on": [
+              "aggregate"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "source_hash"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "preview",
+            "action_id": "action_d70fd79dd9c3d2c029a5d943f9a18047",
+            "revision": 2
+          },
+          {
+            "binding_id": "aggregate",
+            "action_id": "action_224c0cf9d9ae81a1d48fc658060c63bb",
+            "revision": 2
+          },
+          {
+            "binding_id": "report",
+            "action_id": "action_b6cbccf8516a51164c90c7423a57d000",
+            "revision": 2
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "source",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_app_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          },
+          {
+            "tool_ref": "data.aggregate_csv",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_1de351500e5441caa88ac707b0d334a6",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "actions": [
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_d70fd79dd9c3d2c029a5d943f9a18047",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "content",
+              "hash",
+              "format"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_1de351500e5441caa88ac707b0d334a6",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 21333,
+            "max_output_tokens": 1024,
+            "run_seconds": 100
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        },
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_224c0cf9d9ae81a1d48fc658060c63bb",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string",
+                "enum": [
+                  "quantity"
+                ]
+              }
+            },
+            "required": [
+              "resource_id",
+              "column"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_1de351500e5441caa88ac707b0d334a6",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+            },
+            {
+              "tool_ref": "data.aggregate_csv",
+              "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 21333,
+            "max_output_tokens": 1024,
+            "run_seconds": 100
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        },
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_b6cbccf8516a51164c90c7423a57d000",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [],
+          "permission_requirements": [],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 21333,
+            "max_output_tokens": 1024,
+            "run_seconds": 100
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        }
+      ]
+    },
+    "preflight": {
+      "state": "PREFLIGHTED_DRAFT",
+      "publishable": false,
+      "execution_performed": false,
+      "not_an_executable_plan": true,
+      "topological_order": [
+        "preview",
+        "aggregate",
+        "report"
+      ],
+      "budget_envelope": {
+        "max_requests": 3,
+        "max_tools": 3,
+        "max_repairs": 0,
+        "max_total_tokens": 63999,
+        "run_seconds": 300
+      },
+      "resource_refs": [
+        "res_1de351500e5441caa88ac707b0d334a6"
+      ],
+      "candidate_fingerprint_basis": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+        "revision": 2,
+        "origin": "goal",
+        "goal_ref": "goal_43a755ab486d4968ab79115a81f377b0",
+        "source_run_ref": null,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string",
+              "enum": [
+                "quantity"
+              ]
+            }
+          },
+          "required": [
+            "column"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "sum": {
+              "type": "string"
+            },
+            "source_hash": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource_id",
+            "column",
+            "count",
+            "sum",
+            "source_hash",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "resource_id": {
+            "source": "step",
+            "ref": "report",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "report",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "report",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "report",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "report",
+            "field": "source_hash"
+          },
+          "text": {
+            "source": "step",
+            "ref": "report",
+            "field": "text"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "text"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "preview",
+            "binding_id": "preview",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "aggregate",
+            "binding_id": "aggregate",
+            "depends_on": [
+              "preview"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "preview",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "ref": null,
+                "field": "column"
+              }
+            }
+          },
+          {
+            "step_id": "report",
+            "binding_id": "report",
+            "depends_on": [
+              "aggregate"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "source_hash"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "preview",
+            "action_id": "action_d70fd79dd9c3d2c029a5d943f9a18047",
+            "revision": 2
+          },
+          {
+            "binding_id": "aggregate",
+            "action_id": "action_224c0cf9d9ae81a1d48fc658060c63bb",
+            "revision": 2
+          },
+          {
+            "binding_id": "report",
+            "action_id": "action_b6cbccf8516a51164c90c7423a57d000",
+            "revision": 2
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "source",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_app_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          },
+          {
+            "tool_ref": "data.aggregate_csv",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_1de351500e5441caa88ac707b0d334a6",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      }
+    },
+    "state": "DRAFT_PLAN",
+    "model_generated": false,
+    "model_requests": 0,
+    "business_writes": 0,
+    "publishable": false,
+    "formal_publication_enabled": false,
+    "semantic_status": "UNKNOWN",
+    "owner_acceptance": "PENDING",
+    "wiring": {
+      "version": "csv.wiring.v1",
+      "inputs": {
+        "preview": {
+          "resource_id": {
+            "source": "data",
+            "ref": "source",
+            "field": "resource_id"
+          }
+        },
+        "aggregate": {
+          "resource_id": {
+            "source": "step",
+            "ref": "preview",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "input",
+            "field": "column"
+          }
+        },
+        "report": {
+          "resource_id": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "source_hash"
+          }
+        }
+      },
+      "depends_on": {
+        "preview": [],
+        "aggregate": [
+          "preview"
+        ],
+        "report": [
+          "aggregate"
+        ]
+      }
+    },
+    "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+    "cached": false
+  },
+  "wired": {
+    "namespace": "fixed-csv-dag.v1",
+    "project_id": "proj_76da509303544611809ab1599bc3a229",
+    "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+    "runtime_id": "appruntime_9efc9ea49a984c30bf7b2f78c01c9c21",
+    "request_key": "different-wire",
+    "candidate_fingerprint": "2869b939b68ee80a9ce23a96e56f79d1febef397fd2b87122c9c82433147ca2c",
+    "graph_fingerprint": "9c4f1ad62f95e9f4aceb65cf3a32a870a1738691c0b2046ae63c3eb23456895e",
+    "graph_revision": 1,
+    "authorization_fingerprint": "07357679453b839bf96f64a77f4bb0a06e96f76334f9106aa438093ac9c99f35",
+    "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+    "input": {
+      "column": "quantity"
+    },
+    "definition": {
+      "manifest": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+        "revision": 2,
+        "origin": "goal",
+        "goal_ref": "goal_43a755ab486d4968ab79115a81f377b0",
+        "source_run_ref": null,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string",
+              "enum": [
+                "quantity"
+              ]
+            }
+          },
+          "required": [
+            "column"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "sum": {
+              "type": "string"
+            },
+            "source_hash": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource_id",
+            "column",
+            "count",
+            "sum",
+            "source_hash",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "resource_id": {
+            "source": "step",
+            "ref": "report",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "report",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "report",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "report",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "report",
+            "field": "source_hash"
+          },
+          "text": {
+            "source": "step",
+            "ref": "report",
+            "field": "text"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "text"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "preview",
+            "binding_id": "preview",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "aggregate",
+            "binding_id": "aggregate",
+            "depends_on": [
+              "preview"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "column"
+              }
+            }
+          },
+          {
+            "step_id": "report",
+            "binding_id": "report",
+            "depends_on": [
+              "preview",
+              "aggregate"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "preview",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "preview",
+                "field": "hash"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "preview",
+            "action_id": "action_d70fd79dd9c3d2c029a5d943f9a18047",
+            "revision": 2
+          },
+          {
+            "binding_id": "aggregate",
+            "action_id": "action_224c0cf9d9ae81a1d48fc658060c63bb",
+            "revision": 2
+          },
+          {
+            "binding_id": "report",
+            "action_id": "action_b6cbccf8516a51164c90c7423a57d000",
+            "revision": 2
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "source",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_app_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          },
+          {
+            "tool_ref": "data.aggregate_csv",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_1de351500e5441caa88ac707b0d334a6",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "actions": [
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_d70fd79dd9c3d2c029a5d943f9a18047",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "content",
+              "hash",
+              "format"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_1de351500e5441caa88ac707b0d334a6",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 21333,
+            "max_output_tokens": 1024,
+            "run_seconds": 100
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        },
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_224c0cf9d9ae81a1d48fc658060c63bb",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string",
+                "enum": [
+                  "quantity"
+                ]
+              }
+            },
+            "required": [
+              "resource_id",
+              "column"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_1de351500e5441caa88ac707b0d334a6",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+            },
+            {
+              "tool_ref": "data.aggregate_csv",
+              "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 21333,
+            "max_output_tokens": 1024,
+            "run_seconds": 100
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        },
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_b6cbccf8516a51164c90c7423a57d000",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [],
+          "permission_requirements": [],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 21333,
+            "max_output_tokens": 1024,
+            "run_seconds": 100
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        }
+      ]
+    },
+    "preflight": {
+      "state": "PREFLIGHTED_DRAFT",
+      "publishable": false,
+      "execution_performed": false,
+      "not_an_executable_plan": true,
+      "topological_order": [
+        "preview",
+        "aggregate",
+        "report"
+      ],
+      "budget_envelope": {
+        "max_requests": 3,
+        "max_tools": 3,
+        "max_repairs": 0,
+        "max_total_tokens": 63999,
+        "run_seconds": 300
+      },
+      "resource_refs": [
+        "res_1de351500e5441caa88ac707b0d334a6"
+      ],
+      "candidate_fingerprint_basis": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+        "revision": 2,
+        "origin": "goal",
+        "goal_ref": "goal_43a755ab486d4968ab79115a81f377b0",
+        "source_run_ref": null,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string",
+              "enum": [
+                "quantity"
+              ]
+            }
+          },
+          "required": [
+            "column"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "sum": {
+              "type": "string"
+            },
+            "source_hash": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource_id",
+            "column",
+            "count",
+            "sum",
+            "source_hash",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "resource_id": {
+            "source": "step",
+            "ref": "report",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "report",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "report",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "report",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "report",
+            "field": "source_hash"
+          },
+          "text": {
+            "source": "step",
+            "ref": "report",
+            "field": "text"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "text"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "preview",
+            "binding_id": "preview",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "aggregate",
+            "binding_id": "aggregate",
+            "depends_on": [
+              "preview"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "ref": null,
+                "field": "column"
+              }
+            }
+          },
+          {
+            "step_id": "report",
+            "binding_id": "report",
+            "depends_on": [
+              "preview",
+              "aggregate"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "preview",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "preview",
+                "field": "hash"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "preview",
+            "action_id": "action_d70fd79dd9c3d2c029a5d943f9a18047",
+            "revision": 2
+          },
+          {
+            "binding_id": "aggregate",
+            "action_id": "action_224c0cf9d9ae81a1d48fc658060c63bb",
+            "revision": 2
+          },
+          {
+            "binding_id": "report",
+            "action_id": "action_b6cbccf8516a51164c90c7423a57d000",
+            "revision": 2
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "source",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_app_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          },
+          {
+            "tool_ref": "data.aggregate_csv",
+            "resource_ref": "res_1de351500e5441caa88ac707b0d334a6"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_1de351500e5441caa88ac707b0d334a6",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      }
+    },
+    "state": "DRAFT_PLAN",
+    "model_generated": false,
+    "model_requests": 0,
+    "business_writes": 0,
+    "publishable": false,
+    "formal_publication_enabled": false,
+    "semantic_status": "UNKNOWN",
+    "owner_acceptance": "PENDING",
+    "wiring": {
+      "version": "csv.wiring.v1",
+      "inputs": {
+        "preview": {
+          "resource_id": {
+            "source": "data",
+            "ref": "source",
+            "field": "resource_id"
+          }
+        },
+        "aggregate": {
+          "resource_id": {
+            "source": "data",
+            "ref": "source",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "input",
+            "field": "column"
+          }
+        },
+        "report": {
+          "resource_id": {
+            "source": "step",
+            "ref": "preview",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "aggregate",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "preview",
+            "field": "hash"
+          }
+        }
+      },
+      "depends_on": {
+        "preview": [],
+        "aggregate": [
+          "preview"
+        ],
+        "report": [
+          "preview",
+          "aggregate"
+        ]
+      }
+    },
+    "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+    "cached": false
+  },
+  "results": [
+    {
+      "namespace": "fixed-csv-dag.v1",
+      "id": "run_ec853953af5840dfa1e482df18d83dc2",
+      "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+      "project_id": "proj_76da509303544611809ab1599bc3a229",
+      "status": "SUCCEEDED",
+      "version": 2,
+      "result": {
+        "namespace": "fixed-csv-dag.v1",
+        "output": {
+          "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+          "column": "quantity",
+          "count": 2,
+          "sum": "15",
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "text": "\u5217 quantity\uff1b\u884c\u6570 2\uff1b\u5408\u8ba1 15"
+        },
+        "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+        "steps": [
+          {
+            "operation_id": "op_dc35290299f04f938b120f0e149fb893",
+            "step_id": "preview",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "content": "item,amount,quantity\nA,10,7\nB,20,8\n",
+              "hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "format": "csv"
+            },
+            "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+            "action_revision": 2,
+            "input_fingerprint": "1c26a4a3e8b307d70648eaf67e9f28ab5567b8a65a8ffd8045fa116abdd6bccc",
+            "output_fingerprint": "4a7076d0378ff90825b521fc347aae60578506d5f19336b5db363ce6c682c1f9",
+            "predecessor_receipts": [],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [
+              {
+                "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+                "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+                "tool_ref": "resource.read"
+              }
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "operation_id": "op_7ff6ab670d014681812ea87324f58e5f",
+            "step_id": "aggregate",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "column": "quantity",
+              "count": 2,
+              "sum": "15",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f"
+            },
+            "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+            "action_revision": 2,
+            "input_fingerprint": "095e914a1b9bb8f0829f873e268d40f73e567380f19276ceff34d6a17971cac6",
+            "output_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+            "predecessor_receipts": [
+              "788588631d1c72de41e8984af774b546d48b07eff87ee13b3f68fdae9098f744"
+            ],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [
+              {
+                "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+                "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+                "tool_ref": "data.aggregate_csv"
+              }
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "step",
+                "ref": "preview",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "column"
+              }
+            }
+          },
+          {
+            "operation_id": "op_62eff411cb0d44e4a717b5133e10e894",
+            "step_id": "report",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "column": "quantity",
+              "count": 2,
+              "sum": "15",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "text": "\u5217 quantity\uff1b\u884c\u6570 2\uff1b\u5408\u8ba1 15"
+            },
+            "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+            "action_revision": 2,
+            "input_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+            "output_fingerprint": "c85c8bb604663dc09b94a414ef41dd50fad337377fbd840cefb34589749f553f",
+            "predecessor_receipts": [
+              "2bb241f8824a3b67d8b56b57fec33bb5dec8116d367b271775d083c8f7703e14"
+            ],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [],
+            "input_sources": {
+              "resource_id": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "source_hash"
+              }
+            }
+          }
+        ],
+        "model_requests": 0,
+        "business_writes": 0,
+        "semantic_status": "UNKNOWN",
+        "owner_acceptance": "PENDING"
+      },
+      "error": null,
+      "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+      "steps": [
+        {
+          "operation_id": "op_dc35290299f04f938b120f0e149fb893",
+          "step_id": "preview",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+            "content": "item,amount,quantity\nA,10,7\nB,20,8\n",
+            "hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "format": "csv"
+          },
+          "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+          "action_revision": 2,
+          "input_fingerprint": "1c26a4a3e8b307d70648eaf67e9f28ab5567b8a65a8ffd8045fa116abdd6bccc",
+          "output_fingerprint": "4a7076d0378ff90825b521fc347aae60578506d5f19336b5db363ce6c682c1f9",
+          "predecessor_receipts": [],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [
+            {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "tool_ref": "resource.read"
+            }
+          ],
+          "input_sources": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            }
+          }
+        },
+        {
+          "operation_id": "op_7ff6ab670d014681812ea87324f58e5f",
+          "step_id": "aggregate",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f"
+          },
+          "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+          "action_revision": 2,
+          "input_fingerprint": "095e914a1b9bb8f0829f873e268d40f73e567380f19276ceff34d6a17971cac6",
+          "output_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+          "predecessor_receipts": [
+            "788588631d1c72de41e8984af774b546d48b07eff87ee13b3f68fdae9098f744"
+          ],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [
+            {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "tool_ref": "data.aggregate_csv"
+            }
+          ],
+          "input_sources": {
+            "resource_id": {
+              "source": "step",
+              "ref": "preview",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "input",
+              "field": "column"
+            }
+          }
+        },
+        {
+          "operation_id": "op_62eff411cb0d44e4a717b5133e10e894",
+          "step_id": "report",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "text": "\u5217 quantity\uff1b\u884c\u6570 2\uff1b\u5408\u8ba1 15"
+          },
+          "plan_fingerprint": "9b162503e5aad62dd02168c42d2a25e6373941c3aab2efdbef8c2fa1392d116a",
+          "action_revision": 2,
+          "input_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+          "output_fingerprint": "c85c8bb604663dc09b94a414ef41dd50fad337377fbd840cefb34589749f553f",
+          "predecessor_receipts": [
+            "2bb241f8824a3b67d8b56b57fec33bb5dec8116d367b271775d083c8f7703e14"
+          ],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [],
+          "input_sources": {
+            "resource_id": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "column"
+            },
+            "count": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "count"
+            },
+            "sum": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "sum"
+            },
+            "source_hash": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "source_hash"
+            }
+          }
+        }
+      ],
+      "pending_steps": [],
+      "model_requests": 0,
+      "business_writes": 0,
+      "publishable": false,
+      "formal_publication_enabled": false,
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING"
+    },
+    {
+      "namespace": "fixed-csv-dag.v1",
+      "id": "run_dac6f9727c7043e2a6468f11220a4fdf",
+      "app_id": "app_ee9a15198e7d4867b424028dccf9208b",
+      "project_id": "proj_76da509303544611809ab1599bc3a229",
+      "status": "SUCCEEDED",
+      "version": 2,
+      "result": {
+        "namespace": "fixed-csv-dag.v1",
+        "output": {
+          "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+          "column": "quantity",
+          "count": 2,
+          "sum": "15",
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "text": "\u5217 quantity\uff1b\u884c\u6570 2\uff1b\u5408\u8ba1 15"
+        },
+        "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+        "steps": [
+          {
+            "operation_id": "op_ed525fc66f3e44a38cdd8a8be2e2afb8",
+            "step_id": "preview",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "content": "item,amount,quantity\nA,10,7\nB,20,8\n",
+              "hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "format": "csv"
+            },
+            "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+            "action_revision": 2,
+            "input_fingerprint": "1c26a4a3e8b307d70648eaf67e9f28ab5567b8a65a8ffd8045fa116abdd6bccc",
+            "output_fingerprint": "4a7076d0378ff90825b521fc347aae60578506d5f19336b5db363ce6c682c1f9",
+            "predecessor_receipts": [],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [
+              {
+                "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+                "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+                "tool_ref": "resource.read"
+              }
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "operation_id": "op_b47250cfdc0744b0bdedd6bc278c5b8d",
+            "step_id": "aggregate",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "column": "quantity",
+              "count": 2,
+              "sum": "15",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f"
+            },
+            "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+            "action_revision": 2,
+            "input_fingerprint": "095e914a1b9bb8f0829f873e268d40f73e567380f19276ceff34d6a17971cac6",
+            "output_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+            "predecessor_receipts": [
+              "4fcc3b3bacb4e97139db0cb1d903c98e2807cdf9f4c75ee6020aec78c2c4fb8a"
+            ],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [
+              {
+                "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+                "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+                "tool_ref": "data.aggregate_csv"
+              }
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "column"
+              }
+            }
+          },
+          {
+            "operation_id": "op_35c3784b0b3b4418811ac22cbdea0db9",
+            "step_id": "report",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "column": "quantity",
+              "count": 2,
+              "sum": "15",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "text": "\u5217 quantity\uff1b\u884c\u6570 2\uff1b\u5408\u8ba1 15"
+            },
+            "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+            "action_revision": 2,
+            "input_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+            "output_fingerprint": "c85c8bb604663dc09b94a414ef41dd50fad337377fbd840cefb34589749f553f",
+            "predecessor_receipts": [
+              "4fcc3b3bacb4e97139db0cb1d903c98e2807cdf9f4c75ee6020aec78c2c4fb8a",
+              "ca13e2c63c17afaa178142bd414c57e6e8b2e33032be3815b944323fdaf03c45"
+            ],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [],
+            "input_sources": {
+              "resource_id": {
+                "source": "step",
+                "ref": "preview",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "aggregate",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "preview",
+                "field": "hash"
+              }
+            }
+          }
+        ],
+        "model_requests": 0,
+        "business_writes": 0,
+        "semantic_status": "UNKNOWN",
+        "owner_acceptance": "PENDING"
+      },
+      "error": null,
+      "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+      "steps": [
+        {
+          "operation_id": "op_ed525fc66f3e44a38cdd8a8be2e2afb8",
+          "step_id": "preview",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+            "content": "item,amount,quantity\nA,10,7\nB,20,8\n",
+            "hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "format": "csv"
+          },
+          "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+          "action_revision": 2,
+          "input_fingerprint": "1c26a4a3e8b307d70648eaf67e9f28ab5567b8a65a8ffd8045fa116abdd6bccc",
+          "output_fingerprint": "4a7076d0378ff90825b521fc347aae60578506d5f19336b5db363ce6c682c1f9",
+          "predecessor_receipts": [],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [
+            {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "tool_ref": "resource.read"
+            }
+          ],
+          "input_sources": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            }
+          }
+        },
+        {
+          "operation_id": "op_b47250cfdc0744b0bdedd6bc278c5b8d",
+          "step_id": "aggregate",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f"
+          },
+          "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+          "action_revision": 2,
+          "input_fingerprint": "095e914a1b9bb8f0829f873e268d40f73e567380f19276ceff34d6a17971cac6",
+          "output_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+          "predecessor_receipts": [
+            "4fcc3b3bacb4e97139db0cb1d903c98e2807cdf9f4c75ee6020aec78c2c4fb8a"
+          ],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [
+            {
+              "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "tool_ref": "data.aggregate_csv"
+            }
+          ],
+          "input_sources": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "input",
+              "field": "column"
+            }
+          }
+        },
+        {
+          "operation_id": "op_35c3784b0b3b4418811ac22cbdea0db9",
+          "step_id": "report",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1de351500e5441caa88ac707b0d334a6",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "text": "\u5217 quantity\uff1b\u884c\u6570 2\uff1b\u5408\u8ba1 15"
+          },
+          "plan_fingerprint": "d396fc6eb65c09272a7af21b3f74451037c1b5d454f6cd06f2eabcc740182d50",
+          "action_revision": 2,
+          "input_fingerprint": "ae91b3abcc13f5ffb5d06de6be7a03a88294a18b755cd8febb66d16f6fda3f03",
+          "output_fingerprint": "c85c8bb604663dc09b94a414ef41dd50fad337377fbd840cefb34589749f553f",
+          "predecessor_receipts": [
+            "4fcc3b3bacb4e97139db0cb1d903c98e2807cdf9f4c75ee6020aec78c2c4fb8a",
+            "ca13e2c63c17afaa178142bd414c57e6e8b2e33032be3815b944323fdaf03c45"
+          ],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [],
+          "input_sources": {
+            "resource_id": {
+              "source": "step",
+              "ref": "preview",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "column"
+            },
+            "count": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "count"
+            },
+            "sum": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "sum"
+            },
+            "source_hash": {
+              "source": "step",
+              "ref": "preview",
+              "field": "hash"
+            }
+          }
+        }
+      ],
+      "pending_steps": [],
+      "model_requests": 0,
+      "business_writes": 0,
+      "publishable": false,
+      "formal_publication_enabled": false,
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING"
+    }
+  ],
+  "unchanged_tables": [
+    "app_drafts",
+    "app_previews",
+    "attempts",
+    "delivery_graph_anchors",
+    "delivery_graph_locks",
+    "delivery_graph_scope_jobs",
+    "delivery_graph_source_versions",
+    "delivery_graph_states",
+    "events",
+    "goal_candidate_requests",
+    "goal_card_versions",
+    "goal_cards",
+    "grants",
+    "heartbeats",
+    "internal_app_runs",
+    "internal_approvals",
+    "internal_instance_data",
+    "internal_instances",
+    "internal_releases",
+    "internal_run_bindings",
+    "local_csv_tasks",
+    "local_effects",
+    "natural_activations",
+    "operation_intents",
+    "operations",
+    "preview_extractions",
+    "principals",
+    "projects",
+    "protocol_jobs",
+    "protocol_request_pools",
+    "protocol_request_slots",
+    "protocol_reviews",
+    "quotas",
+    "reservations",
+    "resource_retirements",
+    "resources",
+    "run_contracts",
+    "runs",
+    "spec_checklist_tasks",
+    "task_extractions"
+  ]
+}
