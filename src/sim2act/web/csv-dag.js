@@ -6,6 +6,7 @@ const csvDagKey = c => deliveryKey(c.parent);
 const csvDagBase = c => `/api/projects/${c.parent.project}/apps/${c.parent.id}/csv-dag`;
 function clearCsvDag() {
   csvDagContext = null;
+  $("csv-dag-mode").value="legacy";$("csv-dag-composition").hidden=true;$("csv-dag-nodes").replaceChildren();
   $("csv-dag-panel").hidden = true;
   $("csv-dag-definition").textContent = "";
   $("csv-dag-result").textContent = "";
@@ -28,6 +29,7 @@ function openCsvDag(parent) {
   $("csv-dag-column").replaceChildren(...(parent.app.input_guidance?.columns || []).filter(v => v.numeric).map(v => {
     const o = document.createElement("option"); o.value = v.name; o.textContent = v.name; return o;
   }));
+  csvDagCompositionInit(c);
   csvDagButtons(c);
 }
 function csvDagClearProof(c) {
@@ -45,6 +47,9 @@ function csvDagButtons(c = csvDagContext) {
   $("csv-dag-refresh").disabled = c.busy || (!c.job && !intent?.runId);
   $("csv-dag-history-read").disabled = c.busy || !!intent;
   $("csv-dag-column").disabled = locked;
+  $("csv-dag-mode").disabled=locked;
+  for(const control of $("csv-dag-nodes").querySelectorAll("input,select,button"))control.disabled=locked;
+  $("csv-dag-node-add").disabled=locked||$("csv-dag-nodes").children.length>=4;
   for (const id of ["target","op","source","value"]) $("csv-dag-branch-"+id).disabled = locked;
   $("csv-dag-branch-input").disabled = locked || !c.plan?.branch_semantics;
   $("csv-dag-wiring-read").disabled = locked;
@@ -56,6 +61,7 @@ function csvDagButtons(c = csvDagContext) {
   }
 }
 async function csvDagPlanSeal(p, c) {
+  if(p?.composition)return csvDagCompositionSeal(p,c);
   const a = c.parent.app, d = p?.definition;
   if (p?.namespace !== "fixed-csv-dag.v1" || p.project_id !== c.parent.project || p.app_id !== c.parent.id || p.runtime_id !== a.runtime_id || p.candidate_fingerprint !== a.fingerprint || p.source_hash !== a.candidate.source_hash || p.model_generated !== false || p.model_requests !== 0 || p.business_writes !== 0 || p.publishable !== false || p.formal_publication_enabled !== false || p.semantic_status !== "UNKNOWN" || p.owner_acceptance !== "PENDING" || !d || !Array.isArray(d.actions) || d.actions.length !== 3) return false;
   const {plan_fingerprint, cached, ...body} = p;
@@ -70,6 +76,7 @@ async function csvDagPlanSeal(p, c) {
   return Object.values(m.outputs).every(v => v.source === "step" && v.ref === "report");
 }
 async function csvDagJobSeal(job, c, plan) {
+  if(plan.composition)return csvDagCompositionJobSeal(job,c,plan);
   if (job.namespace !== "fixed-csv-dag.v1" || job.app_id !== c.parent.id || job.project_id !== c.parent.project || job.plan_fingerprint !== plan.plan_fingerprint || job.model_requests !== 0 || job.business_writes !== 0 || job.publishable !== false || job.formal_publication_enabled !== false || job.semantic_status !== "UNKNOWN" || job.owner_acceptance !== "PENDING" || !Array.isArray(job.steps) || job.steps.length > 3) return false;
   if (plan.branch_semantics && !csvDagBranchInputsSeal(job,plan)) return false;
   const rid = plan.definition.manifest.data_bindings[0].resource_ref, sourceHash = plan.source_hash, proved = [];
@@ -116,7 +123,7 @@ async function csvDagRead(c = csvDagContext, runId, plan = c?.plan) {
     $("csv-dag-confirm").checked = false;
     $("csv-dag-definition").textContent = JSON.stringify(plan,null,2);
     $("csv-dag-result").textContent = JSON.stringify(job,null,2);
-    $("csv-dag-status").textContent = `${job.status} · ${job.steps.length}/3 步已核执行／跳过证明${job.result?.output_status === "SKIPPED" ? " · 未产出报告" : ""} · 候选未验收 · 发布关闭`;
+    $("csv-dag-status").textContent = `${job.status} · ${job.steps.length}/${plan.definition.manifest.workflow.length} 步已核执行／跳过证明${job.result?.output_status === "SKIPPED" ? " · 未产出报告" : ""} · 候选未验收 · 发布关闭`;
     csvDagButtons(c); return job;
   } catch (e) {
     if (csvDagCurrent(c)) {
@@ -139,8 +146,9 @@ async function csvDagSubmit(kind, retry = false) {
     if (intent) throw Error("先恢复原接受回执");
     if (kind === "plan") {
       const column = $("csv-dag-column").value;
-      const branchPatch = csvDagBranchPatch();
-      const wiringPatch = c.wiringOptions ? Array.from($("csv-dag-wiring-ports").querySelectorAll("select"), select => ({step_id:select.dataset.step,port:select.dataset.port,source:JSON.parse(select.value)})) : null;
+      const composition = $("csv-dag-mode").value==="composition"?csvDagCompositionInput():null;
+      const branchPatch = composition?null:csvDagBranchPatch();
+      const wiringPatch = !composition && c.wiringOptions ? Array.from($("csv-dag-wiring-ports").querySelectorAll("select"), select => ({step_id:select.dataset.step,port:select.dataset.port,source:JSON.parse(select.value)})) : null;
       c.busy = true;csvDagButtons(c);
       try {
         const anchor = await api(deliveryBase(c.parent));
@@ -148,6 +156,7 @@ async function csvDagSubmit(kind, retry = false) {
         if (!await deliveryGraphSeal(anchor,c.parent)) throw Error("VERSION_CONFLICT");
         if (!csvDagCurrent(c)) {c.busy = false;return;}
         intent = {kind, body:{expected_candidate_fingerprint:c.parent.app.fingerprint,expected_graph_fingerprint:anchor.graph_fingerprint,column,request_key:crypto.randomUUID()}};
+        if(composition)intent.body.composition=composition;
         if (branchPatch) intent.body.branch_patch = branchPatch;
         if (wiringPatch) {
           if(c.wiringOptions.graph_fingerprint !== anchor.graph_fingerprint)throw Error("VERSION_CONFLICT");
@@ -174,11 +183,11 @@ async function csvDagSubmit(kind, retry = false) {
       const saved = await api(csvDagBase(c) + "/" + encodeURIComponent(intent.body.request_key));
       if (!csvDagCurrent(c)) return;
       const {cached,...receipt} = made;
-      if (!await csvDagPlanSeal(saved,c) || !deliverySame(receipt,saved) || saved.input.column !== intent.body.column || (intent.body.branch_patch && !intent.body.branch_patch.every(p=>deliverySame(saved.definition.manifest.workflow.find(s=>s.step_id===p.step_id).when,p.when))) || (intent.body.wiring_patch && !intent.body.wiring_patch.every(p => deliverySame(saved.definition.manifest.workflow.find(s => s.step_id===p.step_id).inputs[p.port],p.source)))) throw Error("VERSION_CONFLICT");
+      if (!await csvDagPlanSeal(saved,c) || !deliverySame(receipt,saved) || (intent.body.composition ? !deliverySame(saved.composition?.definition,intent.body.composition) : saved.input.column !== intent.body.column) || (intent.body.branch_patch && !intent.body.branch_patch.every(p=>deliverySame(saved.definition.manifest.workflow.find(s=>s.step_id===p.step_id).when,p.when))) || (intent.body.wiring_patch && !intent.body.wiring_patch.every(p => deliverySame(saved.definition.manifest.workflow.find(s => s.step_id===p.step_id).inputs[p.port],p.source)))) throw Error("VERSION_CONFLICT");
       if (!csvDagCurrent(c)) return;
       c.plan = saved; c.job = null;
       $("csv-dag-definition").textContent = JSON.stringify(saved,null,2); $("csv-dag-result").textContent = ""; $("csv-dag-confirm").checked = false;
-      $("csv-dag-status").textContent = "固定草案已读回 · 尚未运行 · 请核对精确版本";
+      $("csv-dag-status").textContent = "只读计划草案已读回 · 尚未运行 · 请核对精确版本";
     } else {
       if (made.plan_fingerprint !== intent.plan.plan_fingerprint || made.plan_key !== intent.plan.request_key) throw Error("VERSION_CONFLICT");
       intent.runId = made.run_id;
@@ -214,7 +223,7 @@ async function csvDagHistory() {
     if (!csvDagCurrent(c)) return;
     csvDagClearProof(c);
     for (const item of data.items) {
-      $("csv-dag-history").append(row(`${item.plan.input.column} · ${item.plan.plan_fingerprint} · 候选未验收`, async () => {
+      $("csv-dag-history").append(row(`${item.plan.composition ? "有限节点组合" : item.plan.input.column} · ${item.plan.plan_fingerprint} · 候选未验收`, async () => {
         if (!csvDagCurrent(c)) return;
         const plan = await api(csvDagBase(c) + "/" + encodeURIComponent(item.plan.request_key));
         if (!csvDagCurrent(c)) return;
@@ -323,3 +332,86 @@ async function csvDagBranchDecision(step,inputs,proved) {
   return {version:"typed-conditions.v1",condition,observation,passed,reason,skipped_predecessors:skipped,inputs_fingerprint:await deliveryDigest(inputs)};
 }
 $("csv-dag-branch-input").onchange=()=>{$("csv-dag-confirm").checked=false;csvDagButtons();};
+
+function csvDagCompositionInit(c) {
+  c.nodeSequence=0;
+  for(const [action,column,parent] of [["data.aggregate_csv","amount",null],["intern.csv_report.v1",null,"node_1"],["data.aggregate_csv","quantity",null],["intern.csv_report.v1",null,"node_3"]])csvDagNodeAdd(action,column,parent);
+}
+function csvDagNodeAdd(action="resource.read",column=null,parent=null) {
+  const c=csvDagContext;if(!c||$("csv-dag-nodes").children.length>=4)return;
+  const row=document.createElement("fieldset");row.dataset.step=`node_${++c.nodeSequence}`;
+  const legend=document.createElement("legend");legend.textContent=row.dataset.step;row.append(legend);
+  const select=(role,label,items)=>{const box=document.createElement("label"),s=document.createElement("select");box.textContent=label;s.dataset.role=role;for(const [value,text] of items){const o=document.createElement("option");o.value=value;o.textContent=text;s.append(o);}box.append(s);row.append(box);return s;};
+  const ref=select("action","动作",[["resource.read","读取 CSV"],["data.aggregate_csv","按列求和"],["intern.csv_report.v1","汇总为报告"]]);ref.value=action;
+  const col=select("column","求和列",(c.parent.app.input_guidance?.columns||[]).filter(v=>v.numeric).map(v=>[v.name,v.name]));if(column&&Array.from(col.options).some(o=>o.value===column))col.value=column;
+  select("source","读取／求和的来源",[["source","当前授权 CSV"]]);
+  select("aggregate","报告的求和前驱",[]);
+  const deps=select("dependencies","额外前驱",[]);deps.multiple=true;
+  select("condition","条件",[["","总是执行"],["eq","等于"],["in","属于"],["exists","有此输入／输出"]]);
+  select("condition-source","条件依据",[["input:include_report","本次是否包含报告"]]);
+  const label=document.createElement("label"),value=document.createElement("input");label.textContent="比较值（true、数字、带引号文本或列表）";value.dataset.role="condition-value";value.value="true";label.append(value);row.append(label);
+  const remove=document.createElement("button");remove.type="button";remove.textContent="删除此节点";remove.onclick=()=>{row.remove();csvDagNodesRefresh();csvDagClearProof(c);csvDagButtons(c);};row.append(remove);
+  $("csv-dag-nodes").append(row);csvDagNodesRefresh();
+  if(parent)row.querySelector('[data-role="aggregate"]').value=parent;
+  row.onchange=()=>{csvDagNodesRefresh();csvDagClearProof(c);csvDagButtons(c);};
+}
+function csvDagNodesRefresh() {
+  const rows=Array.from($("csv-dag-nodes").children);
+  const get=(r,role)=>r.querySelector(`[data-role="${role}"]`);
+  const fill=(s,items)=>{const selected=Array.from(s.selectedOptions).map(o=>o.value);s.replaceChildren(...items.map(([value,text])=>{const o=document.createElement("option");o.value=value;o.textContent=text;o.selected=selected.includes(value);return o;}));};
+  for(const row of rows){const action=get(row,"action").value,others=rows.filter(r=>r!==row);
+    fill(get(row,"source"),[["source","当前授权 CSV"],...others.filter(r=>get(r,"action").value!=="intern.csv_report.v1").map(r=>[r.dataset.step,r.dataset.step+" 的来源"])]);
+    fill(get(row,"aggregate"),others.filter(r=>get(r,"action").value==="data.aggregate_csv").map(r=>[r.dataset.step,r.dataset.step+" 的求和输出"]));
+    fill(get(row,"dependencies"),others.map(r=>[r.dataset.step,r.dataset.step]));
+    fill(get(row,"condition-source"),[["input:include_report","本次是否包含报告"],...others.flatMap(r=>(get(r,"action").value==="resource.read"?["format"]:["column","count","sum"]).map(f=>[r.dataset.step+":"+f,r.dataset.step+"."+f]))]);
+    get(row,"column").parentElement.hidden=action!=="data.aggregate_csv";get(row,"source").parentElement.hidden=action==="intern.csv_report.v1";get(row,"aggregate").parentElement.hidden=action!=="intern.csv_report.v1";
+  }
+}
+function csvDagCompositionInput() {
+  const nodes=Array.from($("csv-dag-nodes").children).map(row=>{
+    const get=role=>row.querySelector(`[data-role="${role}"]`),step_id=row.dataset.step,action=get("action").value;
+    const node={step_id,action,inputs:{},depends_on:Array.from(get("dependencies").selectedOptions).map(o=>o.value)};
+    if(action==="intern.csv_report.v1"){const ref=get("aggregate").value;if(!ref)throw Error("报告需要一个求和前驱");for(const field of ["resource_id","column","count","sum","source_hash"])node.inputs[field]={source:"step",ref,field};}
+    else{const ref=get("source").value;node.inputs.resource_id=ref==="source"?{source:"data",ref,field:"resource_id"}:{source:"step",ref,field:"resource_id"};if(action==="data.aggregate_csv"){node.column=get("column").value;node.inputs.column={source:"input",field:step_id+"_column"};}}
+    const op=get("condition").value;if(op){const [ref,field]=get("condition-source").value.split(":");node.when={op,source:ref==="input"?{source:"input",field}:{source:"step",ref,field}};if(op!=="exists")node.when.value=JSON.parse(get("condition-value").value);}
+    const refs=[...Object.values(node.inputs),...(node.when?[node.when.source]:[])].filter(s=>s.source==="step").map(s=>s.ref);node.depends_on=Array.from(new Set([...node.depends_on,...refs]));return node;
+  });
+  if(!nodes.length)throw Error("至少需要一个节点");return {version:"csv.composition.v1",nodes};
+}
+async function csvDagCompositionSeal(p,c) {
+  const a=c.parent.app,d=p.definition,m=d?.manifest,nodes=p.composition?.definition?.nodes;
+  if(p.namespace!=="fixed-csv-dag.v1"||p.project_id!==c.parent.project||p.app_id!==c.parent.id||p.runtime_id!==a.runtime_id||p.candidate_fingerprint!==a.fingerprint||p.source_hash!==a.candidate.source_hash||p.model_generated!==false||p.model_requests!==0||p.business_writes!==0||p.publishable!==false||p.formal_publication_enabled!==false||p.semantic_status!=="UNKNOWN"||p.owner_acceptance!=="PENDING"||p.composition.version!=="csv.composition.v1"||p.composition.definition.version!=="csv.composition.v1"||!Array.isArray(nodes)||nodes.length<1||nodes.length>4||d.actions.length!==nodes.length)return false;
+  const {plan_fingerprint,cached,...body}=p;if(await deliveryDigest(body)!==plan_fingerprint)return false;
+  if(m.app_id!==a.id||m.revision!==a.candidate.manifest.revision+1||!deliverySame(m.data_bindings,a.candidate.manifest.data_bindings)||!deliverySame(m.permission_requirements,a.candidate.manifest.permission_requirements)||!deliverySame(p.preflight.topological_order,m.workflow.map(s=>s.step_id)))return false;
+  const names=new Set(),all=new Map(nodes.map(n=>[n.step_id,n]));if(all.size!==nodes.length)return false;
+  for(let i=0;i<nodes.length;i++){const s=m.workflow[i],action=d.actions[i],n=all.get(s.step_id);if(!n||names.has(s.step_id)||s.depends_on.some(v=>!names.has(v))||!deliverySame(s.inputs,n.inputs)||!deliverySame(s.depends_on,n.depends_on)||!deliverySame(s.when||null,n.when||null)||action.executor.ref!==n.action||action.executor.kind!=="registered_tool"||action.executor.version!=="1"||!["resource.read","data.aggregate_csv","intern.csv_report.v1"].includes(n.action)||action.effect!=="read"||action.idempotency!=="read_only"||action.allowed_tool_refs.length)return false;
+    if(n.action==="intern.csv_report.v1"&&(action.permission_requirements.length||action.dependencies.length))return false;
+    if(n.action==="data.aggregate_csv"&&(p.input[s.step_id+"_column"]!==n.column||!deliverySame(s.inputs.column,{source:"input",field:s.step_id+"_column"})))return false;
+    names.add(s.step_id);
+  }
+  const sinks=nodes.filter(n=>!nodes.some(v=>v.depends_on.includes(n.step_id))).map(n=>n.step_id);
+  return deliverySame(p.composition.sinks,sinks)&&deliverySame(p.wiring,{version:"csv.composition.v1",inputs:Object.fromEntries(m.workflow.map(s=>[s.step_id,s.inputs])),depends_on:Object.fromEntries(m.workflow.map(s=>[s.step_id,s.depends_on]))})&&Object.values(m.outputs).every(v=>v.source==="step"&&sinks.includes(v.ref));
+}
+async function csvDagCompositionJobSeal(job,c,plan) {
+  const m=plan.definition.manifest,workflow=m.workflow;
+  if(job.namespace!=="fixed-csv-dag.v1"||job.app_id!==c.parent.id||job.project_id!==c.parent.project||job.plan_fingerprint!==plan.plan_fingerprint||job.model_requests!==0||job.business_writes!==0||job.publishable!==false||job.formal_publication_enabled!==false||job.semantic_status!=="UNKNOWN"||job.owner_acceptance!=="PENDING"||!Array.isArray(job.steps)||job.steps.length>workflow.length)return false;
+  if(plan.branch_semantics&&!csvDagBranchInputsSeal(job,plan))return false;
+  const rid=m.data_bindings[0].resource_ref,proved=[],outputs={},inputs=job.inputs||plan.input;
+  for(let i=0;i<job.steps.length;i++){
+    const r=job.steps[i],s=workflow[i],action=plan.definition.actions[i],ref=action.executor.ref,parents=await Promise.all(proved.filter(p=>s.depends_on.includes(p.step_id)).map(deliveryDigest)),decision=plan.branch_semantics?await csvDagBranchDecision(s,inputs,proved):null;
+    if(decision&&!deliverySame(r.branch_decision,decision))return false;
+    if(decision&&!decision.passed){if(!deliverySame(r,{step_id:s.step_id,status:"SKIPPED",data:null,plan_fingerprint:plan.plan_fingerprint,source_hash:plan.source_hash,action_revision:action.revision,predecessor_receipts:parents,artifact_refs:[],actual_reads:[],branch_decision:decision}))return false;proved.push(r);continue;}
+    const args=Object.fromEntries(Object.entries(s.inputs).map(([k,v])=>[k,v.source==="input"?inputs[v.field]:v.source==="data"?rid:outputs[v.ref]?.[v.field]]));
+    if(r.step_id!==s.step_id||r.status!=="VERIFIED"||r.plan_fingerprint!==plan.plan_fingerprint||r.source_hash!==plan.source_hash||r.data.resource_id!==rid||r.action_revision!==action.revision||r.artifact_refs.length||r.input_fingerprint!==await deliveryDigest(args)||r.output_fingerprint!==await deliveryDigest(r.data)||!deliverySame(r.input_sources,s.inputs)||!deliverySame(r.predecessor_receipts,parents)||!deliverySame(r.actual_reads,ref==="intern.csv_report.v1"?[]:[{resource_id:rid,source_hash:plan.source_hash,tool_ref:ref}]))return false;
+    if(ref==="resource.read"){const hash=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(r.data.content));if(BufferlessHex(hash)!==plan.source_hash||r.data.hash!==plan.source_hash||r.data.format!=="csv")return false;}
+    else if(r.data.source_hash!==plan.source_hash||!Number.isInteger(r.data.count)||typeof r.data.sum!=="string"||r.data.column!==args.column)return false;
+    if(ref==="intern.csv_report.v1"&&!deliverySame(r.data,{...args,text:`列 ${args.column}；行数 ${args.count}；合计 ${args.sum}`}))return false;
+    outputs[s.step_id]=r.data;proved.push(r);
+  }
+  if(!["SUCCEEDED","PARTIAL"].includes(job.status))return true;
+  const sinks=plan.composition.sinks,produced=sinks.filter(s=>Object.hasOwn(outputs,s)).length,status=produced===sinks.length?"PRODUCED":produced?"PARTIAL":"SKIPPED",output=Object.fromEntries(Object.entries(m.outputs).filter(([,v])=>Object.hasOwn(outputs,v.ref)).map(([k,v])=>[k,outputs[v.ref][v.field]]));
+  return proved.length===workflow.length&&job.status===(status==="PRODUCED"?"SUCCEEDED":"PARTIAL")&&job.result.output_status===status&&deliverySame(job.result.output,output)&&deliverySame(job.result.output_by_step,Object.fromEntries(sinks.map(s=>[s,outputs[s]||null])))&&deliverySame(job.result.steps,proved);
+}
+function BufferlessHex(buffer){return Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,"0")).join("");}
+$("csv-dag-mode").onchange=()=>{const c=csvDagContext;if(!c)return;$("csv-dag-composition").hidden=$("csv-dag-mode").value!=="composition";csvDagClearProof(c);csvDagButtons(c);};
+$("csv-dag-node-add").onclick=()=>{csvDagNodeAdd();if(csvDagContext)csvDagClearProof(csvDagContext);csvDagButtons();};

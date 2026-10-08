@@ -1,4 +1,4 @@
-"""Fixed offline three-step adapter on the existing Run/Operation/Worker ledger.
+"""Bounded offline CSV DAG adapter on the existing Run/Operation/Worker ledger.
 
 Immutable engineering plans extend an existing CSV draft without replacing it.
 No generic interpreter, model-generated plan, identity, Grant, Release or artifact.
@@ -32,6 +32,8 @@ from .contracts import (
     validate_action_input,
     validate_value,
 )
+from .csv_composition import VERSION as COMPOSITION_VERSION
+from .csv_composition import Composition, compile_closed
 from .db import (
     delivery_graph_requests,
     events,
@@ -136,6 +138,7 @@ class PlanInput(KeyInput):
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
     column: str = Field(min_length=1, max_length=200)
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
+    composition: Composition | None = Field(default=None, exclude_if=lambda value: value is None)
     branch_patch: list[BranchPatch] | None = Field(default=None, min_length=1, max_length=2,
         exclude_if=lambda value: value is None)
     # Keep legacy request dumps byte-compatible when the field was absent.
@@ -226,7 +229,7 @@ def compile_plan(candidate, column, limits, patches=None, branches=None):
 
 def build(store, c, user, pid, aid, body, limits):
     saved = graph.current(store, c, user, pid, aid, limits)
-    draft, _, action, _, _, _ = graph.load_family(store, c, user, pid, aid, limits)
+    draft, _, action, _, source_rows, _ = graph.load_family(store, c, user, pid, aid, limits)
     if action.executor.kind != "registered_tool" or action.executor.ref != "data.aggregate_csv":
         raise DomainError("UNSUPPORTED_CAPABILITY", "Only the existing fixed CSV application is supported")
     if (body.expected_candidate_fingerprint != draft["fingerprint"]
@@ -237,7 +240,25 @@ def build(store, c, user, pid, aid, body, limits):
     if (any(x["scope"] == "PROJECT" for x in saved["graph"]["unknown_dependencies"])
             or any(e["provenance"] == "MODEL_CANDIDATE" or e["type"] == "SEMANTIC" for e in saved["graph"]["edges"])):
         raise DomainError("UNSUPPORTED_CAPABILITY", "Unknown project/semantic dependencies are outside the fixed adapter")
-    template, _, checked = compile_plan(draft["candidate"], body.column, limits, body.wiring_patch, body.branch_patch)
+    composition_inputs, sinks = None, None
+    if body.composition is not None:
+        if body.wiring_patch is not None or body.branch_patch is not None:
+            raise DomainError("INVALID_INPUT", "Composition embeds its own wiring and conditions")
+        guide = csv_column_options(source_rows[0]["content"])
+        numeric = {column["name"] for column in guide["columns"] if column["numeric"]}
+        if guide["error"] or any(node.action == "data.aggregate_csv" and node.column not in numeric
+                                 for node in body.composition.nodes):
+            raise DomainError("INVALID_INPUT", "Composition requires current explicit numeric CSV columns")
+        template, composition_inputs, sinks = compile_closed(draft["candidate"], body.composition, limits, READ_OUTPUT)
+        _, checked = preflight(json.dumps(template["manifest"]), template["actions"], limits)
+        # Execute and verify in the same deterministic topological order.
+        order = checked["topological_order"]
+        workflow = {s["step_id"]: s for s in template["manifest"]["workflow"]}
+        actions = {b["binding_id"]: a for b, a in zip(template["manifest"]["action_bindings"], template["actions"], strict=True)}
+        template["manifest"]["workflow"] = [workflow[sid] for sid in order]
+        template["actions"] = [actions[sid] for sid in order]
+    else:
+        template, _, checked = compile_plan(draft["candidate"], body.column, limits, body.wiring_patch, body.branch_patch)
     value = dict(namespace=PLAN, project_id=pid, app_id=aid, runtime_id=draft["runtime_id"],
                  request_key=body.request_key, candidate_fingerprint=draft["fingerprint"],
                  graph_fingerprint=saved["graph"]["graph_fingerprint"],
@@ -246,7 +267,13 @@ def build(store, c, user, pid, aid, body, limits):
                  definition=template, preflight=checked, state="DRAFT_PLAN", model_generated=False,
                  model_requests=0, business_writes=0, publishable=False, formal_publication_enabled=False,
                  semantic_status="UNKNOWN", owner_acceptance="PENDING")
-    if body.branch_patch is not None:
+    if body.composition is not None:
+        value["composition"] = dict(version=COMPOSITION_VERSION, definition=body.composition.model_dump(exclude_none=True), sinks=sinks)
+        value["input"] = composition_inputs
+        value["wiring"] = dict(version=COMPOSITION_VERSION,
+            inputs={s["step_id"]: copy.deepcopy(s["inputs"]) for s in template["manifest"]["workflow"]},
+            depends_on={s["step_id"]: s["depends_on"][:] for s in template["manifest"]["workflow"]})
+    if body.branch_patch is not None or body.composition is not None and any(n.when is not None for n in body.composition.nodes):
         value["branch_semantics"] = "typed-conditions.v1"
     if body.wiring_patch is not None:
         value["wiring"] = apply_wiring(copy.deepcopy(template["manifest"]), body.wiring_patch)
@@ -267,6 +294,9 @@ def propose(store, user, pid, aid, body, limits):
         answer = build(store, c, user, pid, aid, body, limits)
         old = graph.lookup(c, user, aid, "csv_dag_plan", body.request_key)
         if old:
+            request, _ = read_pair(c, user, aid, "csv_dag_plan", body.request_key, PlanInput)
+            if request != body:
+                graph.conflict("DAG request key changed")
             if load_plan(store, c, user, pid, aid, body.request_key, limits) != answer:
                 graph.conflict("DAG request key changed")
         else:
@@ -294,7 +324,8 @@ def enqueue(store, user, pid, aid, plan_key, body, limits):
         require_capacity(c, user, aid, "csv_dag_run")
         rid = new_id("run")
         source_id = plan["definition"]["manifest"]["data_bindings"][0]["resource_ref"]
-        goal = "Fixed offline CSV preview, sum and deterministic report"
+        goal = ("Bounded offline CSV composition" if "composition" in plan else
+                "Fixed offline CSV preview, sum and deterministic report")
         contract = FrozenRunContract(
             run_id=rid, runtime_id=plan["runtime_id"], contract_version="F1.3",
             goal=GoalSpec(goal_id=new_id("goal"), project_id=pid, owner_id=user, goal=goal,
@@ -343,8 +374,8 @@ def check_quantities(job, *, context=True):
             or set(ctx) != {"kind", "messages", "requests", "tools", "repairs", "reserved_tokens"}
             or ctx["messages"] != [] or any(type(ctx[k]) is not int for k in ("requests", "tools", "repairs", "reserved_tokens"))
             or any(ctx[k] != 0 for k in ("requests", "repairs", "reserved_tokens"))
-            or not 0 <= ctx["tools"] <= 3):
-        graph.conflict("Fixed DAG has only three local operations and zero model usage")
+            or not 0 <= ctx["tools"] <= 4):
+        graph.conflict("Bounded DAG has at most four local operations and zero model usage")
 
 
 def row(c, user, rid):
@@ -367,6 +398,8 @@ def binding(store, c, job, limits, *, authorize=True):
         graph.conflict("Missing immutable DAG acceptance")
     value = accepted[0]
     check_quantities(job)
+    if job["context"]["tools"] > len(plan_steps(value["plan"])):
+        graph.conflict("Run counter exceeds frozen composition")
     if (job["context"].get("kind") != KIND or value["run_id"] != job["id"]
             or value["principal_id"] != job["principal_id"] or value["project_id"] != job["project_id"]
             or value["runtime_id"] != job["runtime_id"]):
@@ -439,10 +472,21 @@ def skip_receipt(plan, step, action, proof, parents):
         artifact_refs=[], actual_reads=[], **proof)
 
 
+def plan_steps(plan):
+    return [s["step_id"] for s in plan["definition"]["manifest"]["workflow"]]
+
+
 def final_result(plan, outputs, proved):
     result = dict(namespace=PLAN, output=outputs.get("report"), plan_fingerprint=plan["plan_fingerprint"],
         steps=proved, model_requests=0, business_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING")
-    if "branch_semantics" in plan:
+    if "composition" in plan:
+        sinks = plan["composition"]["sinks"]
+        result["output_by_step"] = {sid: outputs.get(sid) for sid in sinks}
+        produced = sum(sid in outputs for sid in sinks)
+        result["output_status"] = "PRODUCED" if produced == len(sinks) else "PARTIAL" if produced else "SKIPPED"
+        result["output"] = {key: outputs[src["ref"]][src["field"]]
+            for key, src in plan["definition"]["manifest"]["outputs"].items() if src["ref"] in outputs}
+    elif "branch_semantics" in plan:
         result["output_status"] = "PRODUCED" if "report" in outputs else "SKIPPED"
     return result
 
@@ -478,27 +522,30 @@ def oracle(content, value):
         raise DomainError("VERIFICATION_FAILED", "Independent exact CSV sum failed")
 
 
-def expected(step, args, source):
-    if step == "preview":
+def expected(tool, args, source):
+    if tool == "resource.read":
         guide = csv_column_options(source["content"])
         if source["format"] != "csv" or guide["error"]:
             raise DomainError("INVALID_INPUT", "Bounded valid CSV preview required")
         return source
-    if step == "aggregate":
+    if tool == "data.aggregate_csv":
         value = aggregate_csv_content(source["content"], args["resource_id"], args["column"])
         oracle(source["content"], value)
         return value
-    return report.render(args)
+    if tool == report.REF:
+        return report.render(args)
+    raise DomainError("UNSUPPORTED_CAPABILITY", "Unknown composition executor")
 
 
 def receipts(store, c, job, plan, source, inputs=None):
     ops = c.execute(select(operations).where(operations.c.run_id == job["id"])).mappings().all()
+    steps = plan_steps(plan)
     by_step = {op["call_id"]: op for op in ops}
-    if len(by_step) != len(ops) or set(by_step) - set(STEPS):
+    if len(by_step) != len(ops) or set(by_step) - set(steps):
         graph.conflict("Unknown/duplicate DAG operation")
     skips = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "CSV_DAG_STEP_SKIPPED")).scalars().all()
     by_skip = {s["step_id"]: s for s in skips}
-    if len(by_skip) != len(skips) or set(by_skip) - set(STEPS) or set(by_skip) & set(by_step) or (by_skip and "branch_semantics" not in plan):
+    if len(by_skip) != len(skips) or set(by_skip) - set(steps) or set(by_skip) & set(by_step) or (by_skip and "branch_semantics" not in plan):
         graph.conflict("Unknown or duplicate branch decision")
     inputs = inputs if inputs is not None else plan["input"]
     actual_plan = {**plan, "input": inputs}
@@ -507,7 +554,7 @@ def receipts(store, c, job, plan, source, inputs=None):
     for step, action in zip(plan["definition"]["manifest"]["workflow"], plan["definition"]["actions"], strict=True):
         op = by_step.get(step["step_id"])
         if not op and step["step_id"] not in by_skip:
-            if any(s in set(by_step) | set(by_skip) for s in STEPS[len(proved) + 1:]):
+            if any(s in set(by_step) | set(by_skip) for s in steps[len(proved) + 1:]):
                 graph.conflict("Missing predecessor receipt")
             break
         proof = decision(plan, step, inputs, outputs, proved)
@@ -535,14 +582,14 @@ def receipts(store, c, job, plan, source, inputs=None):
         # Validate the persisted output, not merely its recomputed counterpart.
         # Python equality would otherwise accept True==1 and 1.0==1.
         validate_value(action["output_schema"], receipt["data"])
-        wanted = expected(step["step_id"], args, source)
+        wanted = expected(action["executor"]["ref"], args, source)
         validate_value(action["output_schema"], wanted)
         check = dict(operation_id=op["id"], step_id=step["step_id"], status="VERIFIED", data=wanted,
                      plan_fingerprint=plan["plan_fingerprint"], action_revision=action["revision"],
                      input_fingerprint=fingerprint(args), output_fingerprint=fingerprint(wanted),
                      predecessor_receipts=intent["predecessor_receipts"], source_hash=plan["source_hash"],
                      artifact_refs=[], check_results=[dict(check="receipt.readback.v1", status="PASS")],
-                     actual_reads=[] if step["step_id"] == "report" else [dict(resource_id=source["resource_id"],
+                     actual_reads=[] if action["executor"]["ref"] == report.REF else [dict(resource_id=source["resource_id"],
                                  source_hash=source["hash"], tool_ref=intent["tool"])],
                      **wire_proof(plan, step), **proof)
         if fingerprint(receipt) != fingerprint(check):
@@ -605,13 +652,13 @@ def advance(worker, run):
         outputs, proved = receipts(store, c, job, plan, source, bound.get("inputs"))
         if job["context"]["tools"] != executed_count(proved):
             graph.conflict("Step counter differs from verified receipt ledger")
-        if len(proved) == 3:
+        if len(proved) == len(plan_steps(plan)):
             result = final_result(plan, outputs, proved)
             live = commit_guard(worker, c, run, plan)
             if live["status"] != "RUNNING" or worker.stop.is_set():
                 transition(store, c, live, stop_state(live, store.has_unknown(c, job["id"])))
             else:
-                state = "PARTIAL" if result.get("output_status") == "SKIPPED" else "SUCCEEDED"
+                state = "PARTIAL" if result.get("output_status") in {"SKIPPED", "PARTIAL"} else "SUCCEEDED"
                 transition(store, c, live, state, result=result)
             return False
         index = len(proved)
@@ -624,7 +671,7 @@ def advance(worker, run):
             commit_guard(worker, c, run, plan)
             store.event(c, job["id"], "CSV_DAG_STEP_SKIPPED", receipt)
             return True
-        if executed_count(proved) >= min(limits.max_tools, 3):
+        if executed_count(proved) >= min(limits.max_tools, len(plan_steps(plan))):
             raise DomainError("BUDGET_EXHAUSTED", "Executed tool budget exhausted")
         args = resolve(step, {**plan, "input": inputs}, outputs)
         from .contracts import validate_action
@@ -639,12 +686,12 @@ def advance(worker, run):
         c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
                    fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
         c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
-        if step["step_id"] == "aggregate":
+        if action["executor"]["ref"] == "data.aggregate_csv":
             value = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
                                     "data.aggregate_csv", args)
             oracle(source["content"], value)
         else:
-            value = expected(step["step_id"], args, source)
+            value = expected(action["executor"]["ref"], args, source)
         validate_value(action["output_schema"], value)
         # A lease/deadline can expire during local parsing; don't commit an old
         # ownership interval merely because it was valid at transaction entry.
@@ -655,7 +702,7 @@ def advance(worker, run):
                        input_fingerprint=fingerprint(args), output_fingerprint=fingerprint(value),
                        predecessor_receipts=intent["predecessor_receipts"], source_hash=plan["source_hash"],
                        artifact_refs=[], check_results=[dict(check="receipt.readback.v1", status="PASS")],
-                       actual_reads=[] if step["step_id"] == "report" else [dict(resource_id=source["resource_id"],
+                       actual_reads=[] if action["executor"]["ref"] == report.REF else [dict(resource_id=source["resource_id"],
                                     source_hash=source["hash"], tool_ref=intent["tool"])],
                        **wire_proof(plan, step), **proof)
         c.execute(update(operations).where(operations.c.id == oid).values(status="VERIFIED", receipt=receipt))
@@ -690,7 +737,20 @@ def process_job(worker, run):
                      "WAITING_RESOURCE" if exc.code in {"GRANT_REVOKED", "PERMISSION_DENIED", "RESOURCE_UNAVAILABLE", "OUTCOME_UNKNOWN", "VERSION_CONFLICT"} else "FAILED")
             completed = set(c.execute(select(operations.c.call_id).where(
                 operations.c.run_id == job["id"], operations.c.status == "VERIFIED")).scalars())
-            failed = next((s for s in STEPS if s not in completed), "final_check")
+            accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"],
+                events.c.kind == "CSV_DAG_ACCEPTED")).scalars().first()
+            # The acceptance may itself be what failed verification. Error
+            # recording must not trust its nested shape or expose its cells.
+            names = []
+            if isinstance(accepted, dict) and isinstance(accepted.get("plan"), dict):
+                definition = accepted["plan"].get("definition")
+                if isinstance(definition, dict) and isinstance(definition.get("manifest"), dict):
+                    workflow = definition["manifest"].get("workflow")
+                    if isinstance(workflow, list) and len(workflow) <= 4:
+                        names = [s["step_id"] for s in workflow if isinstance(s, dict)
+                                 and isinstance(s.get("step_id"), str) and s["step_id"].isascii()
+                                 and s["step_id"].replace("_", "").isalnum() and len(s["step_id"]) <= 64]
+            failed = next((s for s in names if s not in completed), "final_check")
             worker.store.event(c, job["id"], "CSV_DAG_STEP_BLOCKED", dict(step_id=failed, error=exc.public()))
             transition(worker.store, c, job, state, exc.public())
     finally:
@@ -709,15 +769,16 @@ def inspect_job(store, user, rid, limits):
         outputs, proved = receipts(store, c, job, bound["plan"], source, bound.get("inputs"))
         if job["context"]["tools"] != executed_count(proved):
             graph.conflict("Step counter no longer matches receipts")
-        terminal = job["status"] == "SUCCEEDED" or ("branch_semantics" in bound["plan"] and job["status"] == "PARTIAL")
+        terminal = job["status"] == "SUCCEEDED" or (("branch_semantics" in bound["plan"]
+                    or "composition" in bound["plan"]) and job["status"] == "PARTIAL")
         wanted = final_result(bound["plan"], outputs, proved)
-        if terminal and (len(proved) != 3 or fingerprint(job["result"]) != fingerprint(wanted)
-                or job["status"] != ("PARTIAL" if wanted.get("output_status") == "SKIPPED" else "SUCCEEDED")):
-            raise DomainError("VERIFICATION_FAILED", "Final result lacks all three checked receipts")
+        if terminal and (len(proved) != len(plan_steps(bound["plan"])) or fingerprint(job["result"]) != fingerprint(wanted)
+                or job["status"] != ("PARTIAL" if wanted.get("output_status") in {"SKIPPED", "PARTIAL"} else "SUCCEEDED")):
+            raise DomainError("VERIFICATION_FAILED", "Final result lacks all frozen checked receipts")
         answer = dict(namespace=PLAN, id=rid, app_id=bound["app_id"], project_id=job["project_id"],
                     status=job["status"], version=job["version"], result=job["result"], error=job["error"],
                     plan_fingerprint=bound["plan"]["plan_fingerprint"], steps=proved,
-                    pending_steps=list(STEPS[len(proved):]), model_requests=0, business_writes=0,
+                    pending_steps=plan_steps(bound["plan"])[len(proved):], model_requests=0, business_writes=0,
                     publishable=False, formal_publication_enabled=False, semantic_status="UNKNOWN", owner_acceptance="PENDING")
         if "branch_semantics" in bound["plan"]:
             answer["inputs"] = bound["inputs"]
