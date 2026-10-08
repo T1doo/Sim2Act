@@ -29,3 +29,5 @@ NODE_PATH='<自己的临时jsdom目录>/node_modules' SIM2ACT_LIVE_ENABLED=false
 ```
 
 PostgreSQL 只显式给自有隔离测试库 URL：既有 env fixture 建独立 test_* schema，结束删除。不要传用户数据数据库。实际本轮验证来源、精确 SHA、失败和清理见 [证据](../evidence/column-binding-patch-20261008/README.md)。Windows/受保护 Edge 本轮未运行，原 900/240/150 秒标准不变；旧全量 1591 的结果不能证明这个改动。
+
+本工程病例每应用最多保存 50 个列绑定定义和 50 个检查回执；超出时新请求在接受前明确拒绝，历史不删除，原键恢复仍可用。这个容量约束防止已接受回执被历史窗口静默遗漏。

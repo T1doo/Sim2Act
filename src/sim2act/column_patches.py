@@ -9,7 +9,7 @@ from typing import Literal
 
 from fastapi import Depends
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from . import delivery_graph as core
 from . import delivery_graph_apps as graph
@@ -18,6 +18,8 @@ from .db import delivery_graph_requests as requests
 from .db import fingerprint
 from .errors import DomainError
 from .tools import authorized_read, csv_column_options, validate_call
+
+HISTORY_LIMIT = 50
 
 
 class DefinitionInput(Strict):
@@ -115,6 +117,17 @@ def read_pair(c, user, aid, kind, key, model):
     return body, value["response"]
 
 
+def require_capacity(c, user, aid, kind):
+    # Shared project lock serializes this count with accepted inserts. Refuse
+    # extra definitions/checks before acceptance rather than hide their receipt
+    # outside the bounded history/readback window. Old keys remain recoverable.
+    count = c.execute(select(func.count()).select_from(requests).where(
+        requests.c.app_id == aid, requests.c.principal_id == user,
+        requests.c.kind == kind)).scalar_one()
+    if count >= HISTORY_LIMIT:
+        raise DomainError("INVALID_INPUT", "Offline engineering history capacity reached; old records are retained")
+
+
 def load(store, c, user, pid, aid, key, limits):
     # Current authority precedes reading protected saved definitions/results.
     saved = graph.current(store, c, user, pid, aid, limits)
@@ -137,6 +150,7 @@ def propose(store, user, pid, aid, body, limits):
             if fingerprint(old.model_dump()) != fingerprint(body.model_dump()):
                 graph.conflict("Column definition request key changed")
             return {**previous, "cached": True}
+        require_capacity(c, user, aid, "column_patch")
         graph.remember(c, user, aid, "column_patch", body.request_key, body, answer)
         graph.remember(c, user, aid, "column_patch_seal", body.request_key, body, answer)
         return {**answer, "cached": False}
@@ -212,6 +226,7 @@ def check(store, user, pid, aid, key, body, limits):
                 graph.conflict("Check belongs to another patch")
             verify_check(store, c, user, pid, aid, definition, patch, old, answer, limits)
             return {**answer, "cached": True}
+        require_capacity(c, user, aid, "column_check")
         answer = execute(store, c, user, pid, aid, definition, patch, limits)
         answer["request_key"] = body.request_key
         answer["check_fingerprint"] = fingerprint(answer)
@@ -227,7 +242,7 @@ def history(store, user, pid, aid, limits):
         items, invalidated = [], []
         rows = c.execute(select(requests.c.request_key).where(
             requests.c.app_id == aid, requests.c.principal_id == user,
-            requests.c.kind == "column_patch").order_by(requests.c.request_key).limit(50)).scalars()
+            requests.c.kind == "column_patch").order_by(requests.c.request_key).limit(HISTORY_LIMIT)).scalars()
         for key in rows:
             try:
                 definition, patch = load(store, c, user, pid, aid, key, limits)
@@ -239,7 +254,7 @@ def history(store, user, pid, aid, limits):
             checks = []
             for row in c.execute(select(requests.c.request_key).where(
                 requests.c.app_id == aid, requests.c.principal_id == user,
-                requests.c.kind == "column_check").order_by(requests.c.request_key).limit(50)).scalars():
+                requests.c.kind == "column_check").order_by(requests.c.request_key).limit(HISTORY_LIMIT)).scalars():
                 body, result = read_pair(c, user, aid, "column_check", row, CheckInput)
                 if result["patch_fingerprint"] == patch["patch_fingerprint"]:
                     verify_check(store, c, user, pid, aid, definition, patch, body, result, limits)

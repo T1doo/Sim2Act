@@ -47,7 +47,7 @@ def test_column_patch_actual_http_dom_recovery_exact_version_and_revocation(env,
         (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
         assert result.returncode == 0, result.stdout + result.stderr
         receipt = json.loads((tmp_path / "results.json").read_text())
-        assert receipt["status"] == "PASS" and len(receipt["checks"]) == 19
+        assert receipt["status"] == "PASS" and len(receipt["checks"]) == 20
         web = Path(__file__).parents[1] / "src/sim2act/web"
         assert receipt["loaded_source_sha256"] == {
             name: hashlib.sha256((web / name).read_bytes()).hexdigest()

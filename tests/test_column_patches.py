@@ -263,6 +263,33 @@ def test_coherently_resigned_saved_check_cannot_promote_false_result(env):
     assert snapshot(env) == before
 
 
+@pytest.mark.parametrize("kind", ["column_patch", "column_check"])
+def test_history_capacity_rejects_extra_acceptance_but_keeps_original_keys(env, monkeypatch, kind):
+    import sim2act.column_patches as patches
+    assert patches.HISTORY_LIMIT == 50
+    # Two real accepted records exercise the same serial capacity boundary;
+    # no forged fixture receipts and no change to the deployed limit of 50.
+    monkeypatch.setattr(patches, "HISTORY_LIMIT", 2)
+    aid, _, _, body, _ = setup(env)
+    patch = env[2].post(url(env, aid), json=body).json()
+    if kind == "column_patch":
+        assert env[2].post(url(env, aid), json={**body, "request_key": "second"}).status_code == 201
+        before = snapshot(env)
+        rejected = env[2].post(url(env, aid), json={**body, "request_key": "third"})
+        retry = env[2].post(url(env, aid), json=body)
+    else:
+        for key in ("checks", "second"):
+            assert env[2].post(url(env, aid) + "/new-definition/checks", json=check_body(patch, key)).status_code == 201
+        before = snapshot(env)
+        rejected = env[2].post(url(env, aid) + "/new-definition/checks", json=check_body(patch, "third"))
+        retry = env[2].post(url(env, aid) + "/new-definition/checks", json=check_body(patch))
+    assert rejected.status_code == 400 and rejected.json()["error"]["code"] == "INVALID_INPUT"
+    assert retry.json()["cached"] is True
+    assert snapshot(env) == before
+    history = env[2].get(url(env, aid)).json()
+    assert len(history["items"] if kind == "column_patch" else history["items"][0]["checks"]) == 2
+
+
 def test_project_unknown_dependencies_block_execution_without_rewriting(env, monkeypatch):
     from sim2act import delivery_graph_apps as adapter
     aid, _, _, body, _ = setup(env)

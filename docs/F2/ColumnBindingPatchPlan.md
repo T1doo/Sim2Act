@@ -16,6 +16,8 @@
 
 页面复用原 deliveryContext/generation/epoch、候选 pin 和原键恢复，不自动重发写操作。补丁、图节点、指纹及保持证明在接受回执前复核，并回读持久历史。明确 DRAFT_PATCH/NOT_RUN → CHECKED_CANDIDATE/有限检查 PASS；semantic UNKNOWN、owner PENDING、publishable/formal_publication_enabled=false、0 模型、0 业务写入始终保留。
 
-验证范围：新固定答案/API/冷 Store/全业务表保持、严格 schema 负例、撤权/来源/锁/旧版本/同键异参/协调重签结果、PROJECT 不确定依赖、并发；新实际 loopback HTTP/product JS 19 项及原 CSV/Report 29+29 项。原 JSDOM 驱动异步关闭失败另保存，最小复用已有 application_use.cjs 请求/事件 drain 助手，原 29 个断言/等待上限/90 秒 Python timeout 保留，定时刷新在此导航测试中关闭，不冒认后台轮询实测。
+验证范围：新固定答案/API/冷 Store/全业务表保持、严格 schema 负例、撤权/来源/锁/旧版本/同键异参/协调重签结果、PROJECT 不确定依赖、并发；新实际 loopback HTTP/product JS 20 项及原 CSV/Report 29+29 项。原 JSDOM 驱动异步关闭失败另保存，最小复用已有 application_use.cjs 请求/事件 drain 助手，原 29 个断言/等待上限/90 秒 Python timeout 保留，定时刷新在此导航测试中关闭，不冒认后台轮询实测。
 
 Windows 900 秒、Edge 240 秒、Node 150 秒的原 workflow/脚本/保护不改，不触发新 CI。LIVE=0；自有临时 SQLite/schema 与 `--network none` PostgreSQL 容器/本地 Unix socket 测试，结束核清理。正式发布、真实任务 gold、开放语义、完整 P-B、人工签收和原生 Win11/Edge 验收不属于本病例通过范围。独立答案与只读审计由本任务完成；没有第二人员/独立 agent 审查，不把同作者复核冒认独立审查人签收。
+
+本工程病例每应用最多保存 50 个列绑定定义和 50 个检查回执；超出时新请求在接受前明确拒绝，历史不删除，原键恢复仍可用。这个容量约束防止已接受回执被历史窗口静默遗漏。
