@@ -228,24 +228,29 @@ def test_bad_type_cold_recovery_never_reexecutes_or_commits_final_result(env, po
 def test_actual_wall_deadline_crossing_after_final_readback_rolls_back(env, monkeypatch):
     _, _, _, w, job = ready(env)
     now = time.time()
+    deadline = now + 1
     with env[0].tx() as c:
         c.execute(
             update(runs)
             .where(runs.c.id == job["id"])
-            .values(created_at=now - env[1].run_seconds + 0.5, lease_until=now + 30)
+            .values(created_at=deadline - env[1].run_seconds, lease_until=now + 30)
         )
     before = snapshot(env)
     real = dag.receipts
+    crossed = []
 
     def slow_read(*args):
+        entered = time.time()
         value = real(*args)
-        time.sleep(0.75)
+        time.sleep(1.25)
+        crossed.append((entered, time.time()))
         return value
 
     monkeypatch.setattr(dag, "receipts", slow_read)
     with pytest.raises(DomainError) as denied:
         dag.advance(w, job)
     assert denied.value.code == "BUDGET_EXHAUSTED"
+    assert len(crossed) == 1 and crossed[0][0] < deadline <= crossed[0][1]
     assert snapshot(env) == before and read_row(env, job)["status"] == "RUNNING"
     assert read_row(env, job)["result"] is None
 
