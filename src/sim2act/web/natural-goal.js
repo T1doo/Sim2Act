@@ -270,3 +270,72 @@ $("natural-activation-select").onchange=()=>{
   naturalActivationSelection=row?{identity:token,project:$("project-select").value,row}:null;
   naturalActivationBlocked=false;renderNaturalActivation();
 };
+
+// Receipt-only candidate: this does not turn a PARTIAL Run into a successful task.
+const naturalReceiptIntents=new Map(), naturalReceiptChoices=new Map();
+async function renderNaturalReceiptCandidate(r,id,current){
+  if(!current() || r.status!=="PARTIAL" || !r.contract?.snapshot?.natural_planning?.activation)return;
+  const section=document.createElement("section");section.id="natural-receipt-candidate";
+  $("result").append(section);
+  section.append(row("单项可信回执可形成待验收候选；来源 Run PARTIAL，整体目标 NOT_RUN，完整 P-B 未验收。"));
+  const key=JSON.stringify([token,$("project-select").value,id]);
+  let options;
+  try {options=await api(`/api/runs/${id}/receipt-candidate-options`);}
+  catch(error){if(current())section.append(row(`不能提取此回执：${error.message}`));return;}
+  if(!current())return;
+  section.append(row("变量：创建时绑定已有授权新 CSV；运行时 column。稳定逻辑：aggregate_csv@1 只读求和；适用范围须人工核对，不代表模型泛化。"));
+  const select=document.createElement("select");select.id="natural-receipt-target";
+  for(const target of options.targets){const choice=document.createElement("option");choice.value=target.id;choice.textContent=target.name;select.append(choice);}
+  const name=document.createElement("input");name.id="natural-receipt-name";name.maxLength=200;
+  const saved=naturalReceiptChoices.get(key);if(saved && options.targets.some(t=>t.id===saved.target))select.value=saved.target;
+  name.value=saved?.name||"可信求和回执候选（未验收）";
+  const remember=()=>naturalReceiptChoices.set(key,{target:select.value,name:name.value});select.onchange=remember;name.oninput=remember;
+  section.append(select,name);
+  const intent=naturalReceiptIntents.get(key),button=document.createElement("button");button.id="natural-receipt-extract";
+  button.textContent=intent?.state==="unknown"?"显式恢复原候选请求":intent?.state==="accepted"?"打开已保存候选":"保存单项回执候选（未验收）";
+  button.disabled=intent?.state==="sending";select.disabled=Boolean(intent);name.disabled=Boolean(intent);
+  if(intent?.state==="accepted")section.append(row("候选已保存；源 Run 状态及验收不改变。"));
+  if(intent?.state==="unknown")section.append(row("接受结果 UNKNOWN；只恢复原指纹、目标和请求键，不自动重发。"));
+  button.onclick=safe(async()=>{
+    if(!current())return;
+    let entry=naturalReceiptIntents.get(key);
+    if(entry?.state==="sending")return;
+    if(entry?.state==="accepted"){
+      if(await showApp(entry.id))selectWorkspace("apps");return;
+    }
+    if(!entry){
+      const target=options.targets.find(t=>t.id===select.value);
+      if(!target || !name.value.trim())return;
+      entry={state:"new",body:{expected_proof_fingerprint:options.source_proof_fingerprint,
+        target_app_id:target.id,expected_target_draft_fingerprint:target.fingerprint,
+        name:name.value.trim(),request_key:crypto.randomUUID()}};
+      naturalReceiptIntents.set(key,entry);
+    }
+    entry.state="sending";button.disabled=true;select.disabled=true;name.disabled=true;
+    try {
+      const made=await api(`/api/runs/${id}/receipt-candidates`,"POST",entry.body);
+      const fields=["state","publishable","formal_publication_enabled","whole_task_accepted","source_run_status","semantic_goal_acceptance","owner_acceptance","generator","model_requests","id","candidate_fingerprint","cached","source_proof_fingerprint"];
+      if(!made || Object.keys(made).sort().join()!==fields.sort().join() ||
+          made.state!=="CANDIDATE_ONLY" || made.whole_task_accepted!==false || made.source_run_status!=="PARTIAL" ||
+          made.publishable!==false || made.formal_publication_enabled!==false || made.semantic_goal_acceptance!=="NOT_RUN" ||
+          made.owner_acceptance!=="PENDING" || made.model_requests!==0 || typeof made.cached!=="boolean" ||
+          made.generator!=="TRUSTED_OFFLINE_RECEIPT_CANDIDATE.v1" || !/^app_[a-f0-9]{32}$/.test(made.id) ||
+          !naturalGoalFp(made.candidate_fingerprint) || made.source_proof_fingerprint!==entry.body.expected_proof_fingerprint)throw Error("候选回执范围不匹配");
+      if(!current()){entry.state="unknown";return;}
+      const draft=await api(`/api/apps/${made.id}`);
+      if(!current()){entry.state="unknown";return;}
+      const digest=async value=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");
+      const lineage=draft.candidate?.task_proof;
+      if(draft.id!==made.id || draft.project_id!==$("project-select").value || draft.fingerprint!==made.candidate_fingerprint ||
+          await digest(draft.candidate)!==made.candidate_fingerprint || draft.candidate.manifest.source_run_ref!==id ||
+          lineage?.generator!==made.generator || lineage.proof_fingerprint!==entry.body.expected_proof_fingerprint ||
+          await digest(lineage.proof)!==entry.body.expected_proof_fingerprint ||
+          lineage.target.app_id!==entry.body.target_app_id || lineage.target.fingerprint!==entry.body.expected_target_draft_fingerprint ||
+          lineage.proof.source_run_status!=="PARTIAL" || lineage.proof.whole_task_accepted!==false ||
+          lineage.proof.semantic_goal_acceptance!=="NOT_RUN" || lineage.proof.owner_acceptance!=="PENDING")throw Error("保存候选与冻结回执来源不匹配");
+      if(!current()){entry.state="unknown";return;}
+      entry.id=made.id;entry.state="accepted";
+    } catch(error){entry.state="unknown";}
+    if(current())await showRun(id);
+  });section.append(button);
+}

@@ -8,9 +8,16 @@
 PYTHONPATH=src python scripts/natural_activation_demo.py
 ```
 
+PowerShell 对应启动命令（未作 Windows 原生验收）：
+
+```powershell
+$env:PYTHONPATH = "src"
+python scripts/natural_activation_demo.py
+```
+
 终端显示 `http://127.0.0.1:<端口>` 与公开合成身份 `synthetic-offline-activation-demo`。打开普通首页，用此测试身份进入项目，然后：
 
-1. 只读刷新已有授权范围，选择标明 `OFFLINE_TEST` 的范围。页面显示两个冻结合成目标、来源/版本/指纹、最多 2 次调用、22,000 tokens、输出 512、RPM 1 和 7,200 秒范围期限；tokens 不是金额上限。
+1. 只读刷新已有授权范围，选择标明 `OFFLINE_TEST` 的范围。页面显示两个冻结合成目标、来源/版本/指纹、最多 2 次调用、22,000 tokens、RPM 1 和范围的绝对到期时间（后台严格校验输出 512 与范围 TTL 7,200 秒；页面未逐项显示这两个数值）；tokens 不是金额上限。
 2. 打开冻结的 CSV 预览或 `quantity_z` 求和目标，生成候选计划。这里使用两份固定手写离线响应，不是真实模型理解自然语言；实际 API/Worker、权限、计划校验及工具回执照常工作。
 3. 检查计划及原始受理时间起 120 秒期限，逐计划勾选确认。选择范围不会代替计划确认；确认前不执行工具。
 4. 查看真实注册只读工具回执，求和应为 19。记录仍为 `PARTIAL` / `goal_acceptance=NOT_RUN` / `candidate_generated=false`；这不是完整 P-B 生成和发布验收。

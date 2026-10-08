@@ -16,20 +16,13 @@ from .db import (
     runs,
 )
 from .errors import DomainError
+from .registered_run_extraction import RegisteredExtractionInput
 
 
 class PrepareInput(Strict):
     expected_draft_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     sample_input: dict
     offline_replay: list[dict] | None = Field(default=None, min_length=2, max_length=2)
-
-
-class RegisteredExtractionInput(Strict):
-    expected_proof_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
-    target_app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
-    expected_target_draft_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
-    name: str = Field(min_length=1, max_length=200)
-    request_key: str = Field(min_length=1, max_length=100)
 
 
 class ApprovalInput(Strict):

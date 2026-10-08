@@ -3,10 +3,11 @@
 import copy
 import time
 
+from pydantic import Field
 from sqlalchemy import insert, select
 
 from .apps import authorize_source, csv_candidate, load_draft
-from .contracts import validate_value
+from .contracts import Strict, validate_value
 from .db import (
     app_drafts,
     fingerprint,
@@ -21,6 +22,15 @@ from .errors import DomainError
 from .extraction import exact_sum_oracle
 from .lifecycle import NAMESPACE, data_rows, read_release
 from .tools import authorized_read
+
+
+class RegisteredExtractionInput(Strict):
+    expected_proof_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    target_app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
+    expected_target_draft_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    name: str = Field(min_length=1, max_length=200)
+    request_key: str = Field(min_length=1, max_length=100)
+
 
 KIND = "registered_csv_source.v1"
 PROOF = "completed_registered_csv_apprun.v1"

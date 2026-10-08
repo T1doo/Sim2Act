@@ -158,6 +158,7 @@ async function showRun(id, userSelection = true, selectionGuard = () => true, va
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
   $("events").textContent = JSON.stringify(r.events, null, 2);
   if(typeof renderNaturalGoalRun === "function")await renderNaturalGoalRun(r,id,current);
+  if(typeof renderNaturalReceiptCandidate === "function")await renderNaturalReceiptCandidate(r,id,current);
   if(!current())return;
   const commands = ["QUEUED","RUNNING"].includes(r.status) ? ["pause","cancel"] : ["PAUSED","WAITING_RESOURCE"].includes(r.status) ? (unresolvedAttempts.length ? ["cancel"] : ["resume","cancel"]) : [];
   $("commands").replaceChildren(...commands.map(command => {const b = document.createElement("button"); b.textContent = {pause:"暂停",cancel:"取消",resume:"继续"}[command]; b.onclick = safe(async () => {if(!current())return;await api(`/api/runs/${id}/commands`, "POST", {command,version:r.version}); if(current())await showRun(id);}); return b;}));
@@ -260,7 +261,10 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;
   const taskProof=a.candidate.task_proof;
-  if(taskProof?.proof?.kind === "completed_registered_csv_apprun.v1"){
+  if(taskProof?.proof?.kind === "verified_natural_csv_receipt_only.v1"){
+    $("app-origin").textContent=`来源 Run PARTIAL · 单项 VERIFIED 求和回执候选 · 整体任务未验收 · 新 CSV 绑定 / column 变量 · 固定 aggregate_csv@1 只读步骤 · 人工适用范围 PENDING · 未发布，完整 P-B 未验收`;
+    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);
+  } else if(taskProof?.proof?.kind === "completed_registered_csv_apprun.v1"){
     $("app-origin").textContent=`来源：已成功内部 CSV AppRun ${taskProof.proof.source_run_id || a.candidate.manifest.source_run_ref} · 可信求和/独立精确数值核查 · 新 CSV 绑定 + column 运行参数 · 0 模型请求 · 目标语义条件 NOT_RUN · 未发布`;
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);
   } else if(taskProof){

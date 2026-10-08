@@ -36,6 +36,7 @@ from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
 from .goal_planner import ConfirmNaturalPlanInput
 from .goals import GoalCardInput, GoalCardUpdate, create_card, inspect_card, list_cards, revise_card
+from .internal_api import RegisteredExtractionInput
 from .internal_api import mount as mount_internal_api
 from .local_tasks import (
     LocalTaskInput,
@@ -595,6 +596,16 @@ def create_app(store=None, settings=None):
     @app.post("/api/apps/{aid}/previews")
     def run_preview(aid: str, body: PreviewInput, user=user_dependency):
         return preview(db, user, aid, body.input, body.request_key, platform_limits)
+
+    @app.get("/api/runs/{rid}/receipt-candidate-options")
+    def receipt_candidate_options(rid: str, user=user_dependency):
+        from .natural_receipt_extraction import options
+        return options(db, user, rid, platform_limits)
+
+    @app.post("/api/runs/{rid}/receipt-candidates", status_code=201)
+    def receipt_candidate(rid: str, body: RegisteredExtractionInput, user=user_dependency):
+        from .natural_receipt_extraction import extract
+        return extract(db, user, rid, body.model_dump(), platform_limits)
 
     @app.post("/api/previews/{pid}/extract", status_code=201)
     def preview_to_candidate(pid: str, body: ExtractionInput, user=user_dependency):

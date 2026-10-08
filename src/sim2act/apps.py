@@ -264,7 +264,7 @@ def validate_source_family(c, user, draft):
                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
                 if isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
                     expected_field, expected_kind = "agent_provenance", "bounded_agent"
-                elif isinstance(snapshot, dict) and snapshot.get("kind") == "registered_csv_source.v1":
+                elif isinstance(snapshot, dict) and snapshot.get("kind") in {"registered_csv_source.v1", "natural_csv_receipt_candidate.v1"}:
                     expected_field, expected_kind = "task_proof", "registered_tool"
                 elif (
                     isinstance(snapshot, dict)
@@ -384,6 +384,10 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
             from .registered_run_extraction import validate_registered_candidate
 
             validate_registered_candidate(store, c, user, draft, platform_limits)
+        elif task_origin["snapshot"].get("kind") == "natural_csv_receipt_candidate.v1":
+            from .natural_receipt_extraction import validate_candidate
+
+            validate_candidate(store, c, user, draft, platform_limits)
         else:
             from .local_tasks import validate_task_candidate
 
