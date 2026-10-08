@@ -9,7 +9,7 @@ import unicodedata
 from typing import Literal
 
 from fastapi import Depends
-from pydantic import Field
+from pydantic import Field, field_validator
 from sqlalchemy import func, select
 
 from . import delivery_graph as core
@@ -31,7 +31,16 @@ def validate_request_key(key):
     return key
 
 
-class DefinitionInput(Strict):
+class KeyInput(Strict):
+    @field_validator("request_key", mode="before", check_fields=False)
+    @classmethod
+    def key_before_unicode_validation(cls, value):
+        # Otherwise the framework's default validation error echoes an invalid
+        # surrogate and fails to UTF-8 encode its own response (HTTP 500).
+        return validate_request_key(value) if isinstance(value, str) else value
+
+
+class DefinitionInput(KeyInput):
     expected_candidate_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
     request_key: str = Field(min_length=1, max_length=128)
@@ -41,7 +50,7 @@ class DefinitionInput(Strict):
     column: str = Field(min_length=1, max_length=200)
 
 
-class CheckInput(Strict):
+class CheckInput(KeyInput):
     expected_patch_fingerprint: str = Field(pattern=graph.HASH)
     request_key: str = Field(min_length=1, max_length=128)
 

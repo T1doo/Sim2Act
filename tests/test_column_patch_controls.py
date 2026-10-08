@@ -52,7 +52,7 @@ def test_shared_validator_all_ascii_controls_and_read_before_any_sql(char):
         lambda: load(object(), object(), "user", "project", "app", key, None),
         lambda: propose(object(), "user", "project", "app", SimpleNamespace(request_key=key), None),
         lambda: check(object(), "user", "project", "app", key, CheckInput(expected_patch_fingerprint="0" * 64, request_key="safe"), None),
-        lambda: check(object(), "user", "project", "app", "safe", CheckInput(expected_patch_fingerprint="0" * 64, request_key=key), None),
+        lambda: check(object(), "user", "project", "app", "safe", SimpleNamespace(request_key=key), None),
     ):
         with pytest.raises(DomainError) as error:
             call()
