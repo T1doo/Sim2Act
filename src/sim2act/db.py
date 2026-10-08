@@ -999,7 +999,22 @@ class Store:
                     .values(lease_until=time.time() + lease_seconds)
                 )
 
+    def require_run_owner(self, principal, run_id):
+        """Authorize the public dispatcher before reading job markers or ledgers.
+
+        Select only project identity, never a foreign Run's context/result. Family
+        handlers still perform their current source, authority and version checks.
+        """
+        with self.engine.connect() as c:
+            pid = c.execute(select(runs.c.project_id).where(
+                runs.c.id == run_id, runs.c.principal_id == principal,
+            )).scalar_one_or_none()
+            if pid is None:
+                raise DomainError("PERMISSION_DENIED")
+            self.own_project(c, principal, pid)
+
     def inspect(self, principal, run_id):
+        self.require_run_owner(principal, run_id)
         from .csv_dag import inspect_job as inspect_csv_dag
         from .csv_dag import is_job as is_csv_dag
 
@@ -1144,6 +1159,7 @@ class Store:
                 )
 
     def command(self, principal, run_id, command, version):
+        self.require_run_owner(principal, run_id)
         from .csv_dag import command_job as command_csv_dag
         from .csv_dag import is_job as is_csv_dag
 
@@ -1479,6 +1495,7 @@ class Store:
     def reconcile_operation(
         self, principal, run_id, operation_id, version, expected_fingerprint, evidence
     ):
+        self.require_run_owner(principal, run_id)
         from .csv_dag import is_job as is_csv_dag
         from .csv_dag import owner_lock, row
         from .protocol_jobs import is_protocol_job, verified_pending
