@@ -271,3 +271,6 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 
 
 2026-10-08 F2-T07明确授权最小人工编辑锁候选：合同1dc737f先冻结，执行de6ba39eae81abd138aa94cc87d1e083530056af，dev/manual-edit-locks-20261008。仅自己的固定CSV图既有单节点，精确图/节点/锁CAS与明确确认；原账本/页面，权限/安全不变。双端107冻结范围SQLite105P2S/PG107P，原断言/900-240-150保持；实际页面每端4病例92断言，真实双连接线程竞争。候选待独审、未入dev、LIVE0/发布关闭。[实证与缺口](ManualEditLocksLog.md)、[复现](ManualEditLocksQuickstart.md)。
+
+
+2026-10-08人工编辑锁候选独审限定通过后整合：source de6ba39，独审SQLite26P1PGskip/PG27P、每端15页面断言，独立105.50→13.875、旧包兼容/CRUD角色通过。dev72563fa快进执行2bde4eb，产品字节同已审版本，必要16例整合/旧源码升级，不重跑全量；跨进程/原生Edge/超过50历史未独审，整体F2-T07不签收。只归档并普通push，LIVE0/原900-240-150/权限不变。[范围与剩余短建议](ManualEditLockIntegrationLog.md)。
