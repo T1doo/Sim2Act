@@ -30,14 +30,18 @@ def raw_history_hashes(store, names):
     return result
 
 
-def test_actual_old_source_upgrade_retains_history_and_requires_new_exact_confirmation(env, tmp_path):
-    archive_path = os.environ.get("SIM2ACT_UPGRADE_OLD_ARCHIVE")
+@pytest.mark.parametrize("archive_env,archive_sha,module_hash", [
+    ("SIM2ACT_UPGRADE_OLD_ARCHIVE", "5a5543c902fbb78dd91c28c98386af51fb24dd67", "91efd66bd69498c0aa62eefa285112095383d4f950d6cab0c2fa017de0a02aa5"),
+    ("SIM2ACT_UPGRADE_CORE_ARCHIVE", "1b65e94ebd81c1e31091b3078b8223328b726294", "240c76f358870a9d933f94d129eeda362553092035044d6f306ee4dd7a58b3c0"),
+])
+def test_actual_old_source_upgrade_retains_history_and_requires_new_exact_confirmation(env, tmp_path, archive_env, archive_sha, module_hash):
+    archive_path = os.environ.get(archive_env)
     if not archive_path:
-        pytest.skip("Actual old-source upgrade requires an explicitly prepared owned 5a archive")
+        pytest.skip("Actual old-source upgrade requires an explicitly prepared owned source archive")
     archive = Path(archive_path)
     old_source = archive / "src/sim2act/csv_dag.py"
     assert old_source.exists() and old_source.read_bytes() != Path(csv_dag.__file__).read_bytes()
-    assert hashlib.sha256(old_source.read_bytes()).hexdigest() == "91efd66bd69498c0aa62eefa285112095383d4f950d6cab0c2fa017de0a02aa5"
+    assert hashlib.sha256(old_source.read_bytes()).hexdigest() == module_hash
     output = tmp_path / "old-source-proof.json"
     body = dict(database_url=env[1].database_url,
                 schema=env[0].engine.get_execution_options().get("schema_translate_map", {}).get(None),
@@ -99,7 +103,7 @@ def test_actual_old_source_upgrade_retains_history_and_requires_new_exact_confir
     raw_after = raw_history_hashes(env[0], immutable)
     assert all(set(raw_before[name]) <= set(raw_after[name]) for name in immutable)
     (tmp_path / "upgrade-proof.json").write_text(json.dumps(dict(
-        archive_sha="5a5543c902fbb78dd91c28c98386af51fb24dd67", old_module_sha256=old["old_module_sha256"],
+        archive_sha=archive_sha, old_module_sha256=old["old_module_sha256"],
         rejected=rejected, old_control=metadata.json(), history_after_new_anchor=history.json(),
         current=current.json(), preserved_historical_tables=immutable,
         old_snapshot_fingerprint=fingerprint(before), old_raw_json_hashes=raw_before,

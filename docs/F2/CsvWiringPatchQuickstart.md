@@ -26,4 +26,8 @@
 
 本分支显式依赖两项 DAG P2 修复：原候选源码 `4c7d81b80d2d81ce9471b185b09ac34fd7c74740`，在接线分支取入提交 `bd4c549`（保留wire_proof冲突解法）与 `e8c3678`。该依赖的原独立审查状态另由审查者判定；作者测试不能作为独立验收。最终提交重新核lease/deadline/有效预算；持久化输出严格类型与整份证明校验在新接线上同样生效。
 
+后续同一独立审查者限定通过接线源码645e494：SQLite/PG各32项，含实际HTTP及产品JS/DOM的17项断言；不是全八组合、原生Windows/Edge或通用P-B验收。dev整合保持该产品源码不变，另补八种选择各自的实际页面→计划→精确确认→Worker→回执端到端病例，并从旧5a及已整合DAG核心1b65源码实际生成记录复核升级行为。
+
+添加接线实现改变服务端源码依赖哈希，已保存的旧默认DAG记录也可能失效。未传wiring_patch的结构兼容不表示旧证明可跨源码升级继续使用；旧数据不删除、不改签，旧证明409/NOT_VALIDATED。按[源码升级说明](../evidence/csv-dag-integration-20261008/upgrade-behavior.md)重新派生新图锚、新键计划和精确确认。旧默认来源仍为preview→aggregate→report，新确认后的原默认执行继续支持。混合版本Worker、热部署或不中断升级未验证。
+
 运行 `tests/test_csv_wiring.py` 可复核所有八种合法组合、旧默认兼容、真实独立求和、拒绝项、精确确认、前驱来源、冷恢复、撤权和P2防护。双数据库/实际HTTP+jsdom证据另存 `docs/evidence/csv-wiring-final-20261008/`。原断言与 Windows900 / Edge240 / Node150 标准保留，原生Windows/Edge NOT_RUN，LIVE=0，无新CI、dev/main合并或部署。真实gold、通用P-B、人工签收未完成。
