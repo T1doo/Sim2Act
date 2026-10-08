@@ -1,0 +1,64 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________ test_actual_late_receipt_current_page_readback[same-checks] __________
+
+env = (<sim2act.db.Store object at 0x7f37afa4d7f0>, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...20b5b21166452ab90fff5409761f2d', 'user_61ac63dd90824922b0f81fd138f69892', 'proj_804a9758215249c4b9fb88de704cf5a5', ...)
+tmp_path = PosixPath('/tmp/sim2act-late-receipt-pg-old-final/test_actual_late_receipt_curre0')
+phase = 'checks', action = 'same'
+
+    @pytest.mark.parametrize("phase", ["checks", "definition"])
+    @pytest.mark.parametrize("action", ["same", "other_app", "identity", "revoke", "history_failure", "lost_response", "refresh"])
+    def test_actual_late_receipt_current_page_readback(env, tmp_path, phase, action):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        with env[0].tx() as c:
+            csv_id = c.execute(select(resources.c.id).where(resources.c.project_id == env[5], resources.c.format == "csv")).scalar_one()
+        peer, _ = setup_draft((*env[:6], csv_id))
+        env[0].project(env[4], "Other isolated identity project")
+        before = snapshot(env)
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+    
+        @env[2].app.post("/test-only-revoke")
+        def revoke():
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", app=app["id"], peer=peer, project=env[5],
+            explanation=output["explanation"], phase=phase, action=action)))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(["node", "tests/report_presentation_late_ui.cjs", str(tmp_path)],
+                                       capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: new page independently rereads protected presentation history
+E                 at check (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:32:7
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-old-final/test_a...t/tests/report_presentation_late_ui.cjs:5:29)\n    at /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:32:7\n').returncode
+
+tests/test_report_presentation_late_ui.py:67: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[same-checks]
+1 failed, 1 warning in 24.16s

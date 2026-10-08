@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="5" time="173.239" timestamp="2026-10-08T19:57:05.607776+00:00" hostname="58262d033e58"><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[same-checks]" time="41.396" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[same-definition]" time="56.707"><failure message="AssertionError: Error: Timeout held accepted selected response&#10;      at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)&#10;      at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:21:93&#10;  /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6&#10;  const wait=async(fn,label)=&gt;{const end=Date.now()+6000;while(Date.now()&lt;end){if(fn())return;await new Promise(r=&gt;setTimeout(r,10));}throw Error('Timeout '+label);};&#10;                                                                                                                                            ^&#10;  &#10;  Error: Timeout HTTP and actions drained&#10;      at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)&#10;      at async idle (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:7:22)&#10;      at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:41:54&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-sealed/test_actu..._late_ui.cjs:7:22)\n    at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:41:54\n\nNode.js v24.19.0\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7ffbe28a21e0&gt;, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...40d646bf9f48bfafc877ce05360244', 'user_0fe7cd0501714553b7fccd3290ee38a1', 'proj_e28f675b07164eba82130641af8e951e', ...)
+tmp_path = PosixPath('/tmp/sim2act-late-receipt-pg-sealed/test_actual_late_receipt_curre1')
+phase = 'definition', action = 'same'
+
+    @pytest.mark.parametrize("phase", ["checks", "definition"])
+    @pytest.mark.parametrize("action", ["same", "other_app", "identity", "revoke", "history_failure", "lost_response", "refresh"])
+    def test_actual_late_receipt_current_page_readback(env, tmp_path, phase, action):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        with env[0].tx() as c:
+            csv_id = c.execute(select(resources.c.id).where(resources.c.project_id == env[5], resources.c.format == "csv")).scalar_one()
+        peer, _ = setup_draft((*env[:6], csv_id))
+        env[0].project(env[4], "Other isolated identity project")
+        before = snapshot(env)
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+    
+        @env[2].app.post("/test-only-revoke")
+        def revoke():
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", app=app["id"], peer=peer, project=env[5],
+            explanation=output["explanation"], phase=phase, action=action)))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            completed = subprocess.run(["node", "tests/report_presentation_late_ui.cjs", str(tmp_path)],
+                                       capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+&gt;           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Timeout held accepted selected response
+E                 at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)
+E                 at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:21:93
+E             /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6
+E             const wait=async(fn,label)=&gt;{const end=Date.now()+6000;while(Date.now()&lt;end){if(fn())return;await new Promise(r=&gt;setTimeout(r,10));}throw Error('Timeout '+label);};
+E                                                                                                                                                       ^
+E             
+E             Error: Timeout HTTP and actions drained
+E                 at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)
+E                 at async idle (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:7:22)
+E                 at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:41:54
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-sealed/test_actu..._late_ui.cjs:7:22)\n    at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:41:54\n\nNode.js v24.19.0\n").returncode
+
+tests/test_report_presentation_late_ui.py:67: AssertionError</failure></testcase><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[other_app-checks]" time="22.435"><failure message="AssertionError: Error: Timeout HTTP and actions drained&#10;      at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)&#10;      at async idle (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:7:22)&#10;      at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:20:45&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-sealed/test_actu.../report_presentation_late_ui.cjs:7:22)\n    at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:20:45\n').returncode">env = (&lt;sim2act.db.Store object at 0x7ffbe89ae2d0&gt;, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...a678dbaafb47f8b0ee5287b0f34e4d', 'user_b893512ab06449abaf04c295396eca80', 'proj_d296b26067814373bb1850cbe080e926', ...)
+tmp_path = PosixPath('/tmp/sim2act-late-receipt-pg-sealed/test_actual_late_receipt_curre2')
+phase = 'checks', action = 'other_app'
+
+    @pytest.mark.parametrize("phase", ["checks", "definition"])
+    @pytest.mark.parametrize("action", ["same", "other_app", "identity", "revoke", "history_failure", "lost_response", "refresh"])
+    def test_actual_late_receipt_current_page_readback(env, tmp_path, phase, action):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        with env[0].tx() as c:
+            csv_id = c.execute(select(resources.c.id).where(resources.c.project_id == env[5], resources.c.format == "csv")).scalar_one()
+        peer, _ = setup_draft((*env[:6], csv_id))
+        env[0].project(env[4], "Other isolated identity project")
+        before = snapshot(env)
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+    
+        @env[2].app.post("/test-only-revoke")
+        def revoke():
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", app=app["id"], peer=peer, project=env[5],
+            explanation=output["explanation"], phase=phase, action=action)))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            completed = subprocess.run(["node", "tests/report_presentation_late_ui.cjs", str(tmp_path)],
+                                       capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+&gt;           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Timeout HTTP and actions drained
+E                 at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)
+E                 at async idle (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:7:22)
+E                 at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:20:45
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-sealed/test_actu.../report_presentation_late_ui.cjs:7:22)\n    at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:20:45\n').returncode
+
+tests/test_report_presentation_late_ui.py:67: AssertionError</failure></testcase><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[other_app-definition]" time="16.888" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[identity-checks]" time="23.616" /><testcase time="0.376" /></testsuite></testsuites>

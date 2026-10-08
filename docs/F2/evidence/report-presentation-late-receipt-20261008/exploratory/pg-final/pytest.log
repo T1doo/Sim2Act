@@ -1,0 +1,238 @@
+....F.FF....F.
+=================================== FAILURES ===================================
+_______ test_actual_late_receipt_current_page_readback[identity-checks] ________
+
+env = (<sim2act.db.Store object at 0x7f71a89d1ca0>, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...36e215bdcd47f9ab8ff6102ab891bc', 'user_a2384b6c3c174b74873d6ce10e35290f', 'proj_9f2879163f1f4482b909d575e5805998', ...)
+tmp_path = PosixPath('/tmp/sim2act-late-receipt-pg-final/test_actual_late_receipt_curre4')
+phase = 'checks', action = 'identity'
+
+    @pytest.mark.parametrize("phase", ["checks", "definition"])
+    @pytest.mark.parametrize("action", ["same", "other_app", "identity", "revoke", "history_failure", "lost_response", "refresh"])
+    def test_actual_late_receipt_current_page_readback(env, tmp_path, phase, action):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        with env[0].tx() as c:
+            csv_id = c.execute(select(resources.c.id).where(resources.c.project_id == env[5], resources.c.format == "csv")).scalar_one()
+        peer, _ = setup_draft((*env[:6], csv_id))
+        env[0].project(env[4], "Other isolated identity project")
+        before = snapshot(env)
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+    
+        @env[2].app.post("/test-only-revoke")
+        def revoke():
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", app=app["id"], peer=peer, project=env[5],
+            explanation=output["explanation"], phase=phase, action=action)))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(["node", "tests/report_presentation_late_ui.cjs", str(tmp_path)],
+                                       capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Timeout HTTP and actions drained
+E                 at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)
+E                 at async idle (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:7:22)
+E                 at async reconnect (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:10:167)
+E                 at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:23:36
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-final/test_actua...eport_presentation_late_ui.cjs:10:167)\n    at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:23:36\n').returncode
+
+tests/test_report_presentation_late_ui.py:67: AssertionError
+________ test_actual_late_receipt_current_page_readback[revoke-checks] _________
+
+env = (<sim2act.db.Store object at 0x7f71a85cb3e0>, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...117becd905421ebf6efaa809fa102a', 'user_385ffa21a2a94a87bf9d352896596fe4', 'proj_d81d6ee34dc94bdcadb7c77b2e009f32', ...)
+tmp_path = PosixPath('/tmp/sim2act-late-receipt-pg-final/test_actual_late_receipt_curre6')
+phase = 'checks', action = 'revoke'
+
+    @pytest.mark.parametrize("phase", ["checks", "definition"])
+    @pytest.mark.parametrize("action", ["same", "other_app", "identity", "revoke", "history_failure", "lost_response", "refresh"])
+    def test_actual_late_receipt_current_page_readback(env, tmp_path, phase, action):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        with env[0].tx() as c:
+            csv_id = c.execute(select(resources.c.id).where(resources.c.project_id == env[5], resources.c.format == "csv")).scalar_one()
+        peer, _ = setup_draft((*env[:6], csv_id))
+        env[0].project(env[4], "Other isolated identity project")
+        before = snapshot(env)
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+    
+        @env[2].app.post("/test-only-revoke")
+        def revoke():
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", app=app["id"], peer=peer, project=env[5],
+            explanation=output["explanation"], phase=phase, action=action)))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(["node", "tests/report_presentation_late_ui.cjs", str(tmp_path)],
+                                       capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+E             
+E               assert(response.ok)
+E             
+E                 at /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:27:153
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-final/test_actua...presentation_late_ui.cjs:27:153\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+tests/test_report_presentation_late_ui.py:67: AssertionError
+______ test_actual_late_receipt_current_page_readback[revoke-definition] _______
+
+env = (<sim2act.db.Store object at 0x7f71a811e1b0>, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...d29fa93ac54bd297833045bb7ee025', 'user_8514f29a57c34d068c249275b014326c', 'proj_52dc0260fb9946a7bb28f329d587c7cc', ...)
+tmp_path = PosixPath('/tmp/sim2act-late-receipt-pg-final/test_actual_late_receipt_curre7')
+phase = 'definition', action = 'revoke'
+
+    @pytest.mark.parametrize("phase", ["checks", "definition"])
+    @pytest.mark.parametrize("action", ["same", "other_app", "identity", "revoke", "history_failure", "lost_response", "refresh"])
+    def test_actual_late_receipt_current_page_readback(env, tmp_path, phase, action):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        with env[0].tx() as c:
+            csv_id = c.execute(select(resources.c.id).where(resources.c.project_id == env[5], resources.c.format == "csv")).scalar_one()
+        peer, _ = setup_draft((*env[:6], csv_id))
+        env[0].project(env[4], "Other isolated identity project")
+        before = snapshot(env)
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+    
+        @env[2].app.post("/test-only-revoke")
+        def revoke():
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", app=app["id"], peer=peer, project=env[5],
+            explanation=output["explanation"], phase=phase, action=action)))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(["node", "tests/report_presentation_late_ui.cjs", str(tmp_path)],
+                                       capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+E             
+E               assert(response.ok)
+E             
+E                 at /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:27:153
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-final/test_actua...presentation_late_ui.cjs:27:153\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+tests/test_report_presentation_late_ui.py:67: AssertionError
+________ test_actual_late_receipt_current_page_readback[refresh-checks] ________
+
+env = (<sim2act.db.Store object at 0x7f71a85735c0>, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...1bfc5052c94bfbba388a3e6ab116e9', 'user_1cb6e14c3eeb43dd93c04a6320c5eedb', 'proj_112de4a77a8c460f92952dd0cd0f9c14', ...)
+tmp_path = PosixPath('/tmp/sim2act-late-receipt-pg-final/test_actual_late_receipt_curre12')
+phase = 'checks', action = 'refresh'
+
+    @pytest.mark.parametrize("phase", ["checks", "definition"])
+    @pytest.mark.parametrize("action", ["same", "other_app", "identity", "revoke", "history_failure", "lost_response", "refresh"])
+    def test_actual_late_receipt_current_page_readback(env, tmp_path, phase, action):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        with env[0].tx() as c:
+            csv_id = c.execute(select(resources.c.id).where(resources.c.project_id == env[5], resources.c.format == "csv")).scalar_one()
+        peer, _ = setup_draft((*env[:6], csv_id))
+        env[0].project(env[4], "Other isolated identity project")
+        before = snapshot(env)
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+    
+        @env[2].app.post("/test-only-revoke")
+        def revoke():
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == env[5]).values(revoked=True))
+            return {"test_only": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", app=app["id"], peer=peer, project=env[5],
+            explanation=output["explanation"], phase=phase, action=action)))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(["node", "tests/report_presentation_late_ui.cjs", str(tmp_path)],
+                                       capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Timeout HTTP and actions drained
+E                 at wait (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:6:139)
+E                 at async idle (/workspace/Sim2Act/tests/report_presentation_late_ui.cjs:7:22)
+E                 at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:29:25
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_late_ui.cjs', '/tmp/sim2act-late-receipt-pg-final/test_actua.../report_presentation_late_ui.cjs:7:22)\n    at async /workspace/Sim2Act/tests/report_presentation_late_ui.cjs:29:25\n').returncode
+
+tests/test_report_presentation_late_ui.py:67: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[identity-checks]
+FAILED tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[revoke-checks]
+FAILED tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[revoke-definition]
+FAILED tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[refresh-checks]
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/selectors.py:415: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+4 failed, 10 passed, 1 warning in 444.90s (0:07:24)

@@ -20,20 +20,34 @@ DOM。每例核对加载脚本 SHA256、无自动续写、无旧内容混入及�
 表不变（专门撤权例仅排除自身 grants 修改）。旧源码负对照使用测试实例的
 既有静态路由替换，仅对自有夹具启用，不是产品输入或新产品接口。
 
-复现新矩阵及原两个 UI 回归：
+在冻结源码 `51487fd4787eae66f09f8ff2b01492d8f9c13503` 的干净工作副本中，
+沿用 README 的 Python 环境。创建自己的临时依赖与结果目录，复现新矩阵
+及原两个 UI 回归：
 
 ```bash
-LIVE=0 SIM2ACT_LIVE_ENABLED=false NODE_PATH=/path/to/private/node_modules \
+repro_root=$(mktemp -d /tmp/your-owned-report-late-XXXXXX)
+npm install --prefix "$repro_root/node" --cache "$repro_root/npm-cache" jsdom@30.1.2
+LIVE=0 SIM2ACT_LIVE_ENABLED=false NODE_PATH="$repro_root/node/node_modules" \
   .venv/bin/pytest -q tests/test_report_presentation_late_ui.py \
   tests/test_report_presentation_ui.py tests/test_report_manifest_apps_ui.py \
-  --basetemp=/tmp/your-owned-report-late-ui
+  --basetemp="$repro_root/sqlite"
 ```
 
 私有 Node 依赖为 jsdom 30.1.2。PostgreSQL 使用你自己的隔离测试数据库，
 设置 `SIM2ACT_TEST_DATABASE_URL`；夹具创建并删除自己的 test schema。
 旧负对照：用 `git show ffda5b00a9a1469b454728adb5a0005016cd0a55:src/sim2act/web/report-manifest.js`
 保存至自有临时文件，然后设置 `SIM2ACT_PRESENTATION_JS_BASELINE` 指向该文件，
-仅运行 `[same-checks]`；预期断言当前页面重新读取展示历史失败。
+仅运行 `[same-checks]`；预期断言当前页面重新读取展示历史失败：
+
+```bash
+git show ffda5b00a9a1469b454728adb5a0005016cd0a55:src/sim2act/web/report-manifest.js > "$repro_root/old.js"
+LIVE=0 SIM2ACT_LIVE_ENABLED=false NODE_PATH="$repro_root/node/node_modules" \
+  SIM2ACT_PRESENTATION_JS_BASELINE="$repro_root/old.js" .venv/bin/pytest -q \
+  'tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[same-checks]' \
+  --basetemp="$repro_root/old-negative"
+```
+
+核对输出并保存需要的证据后，删除自己创建的 `repro_root`；不要删除其他测试目录。
 
 原契约、canonical 图、历史、权限和业务/模型边界不变。本轮是合成工程病例，
 不是原生 Windows/Edge、后台轮询、真实任务 gold 或人工签收；PROJECT
