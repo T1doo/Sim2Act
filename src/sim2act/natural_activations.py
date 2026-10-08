@@ -1003,7 +1003,11 @@ def mark_sending(store, c, run, fence, attempt_id, settings):
         reservations.c.created_at > current - 60)).first()
     if not quota or not own:
         raise DomainError("VERSION_CONFLICT", "Actual account reservation required")
-    if quota["blocked_until"] > current or recent:
+    pending = c.execute(select(attempts.c.id).join(
+        reservations, reservations.c.id == attempts.c.id).where(
+        reservations.c.subject == subject, attempts.c.id != attempt_id,
+        attempts.c.status == "STARTED")).first()
+    if quota["blocked_until"] > current or recent or pending:
         raise DomainError("RATE_LIMITED", "Frozen activation account rate is one per minute")
     # A delayed final guard starts a fresh account-wide window; reserve-time age is not a bypass.
     c.execute(update(reservations).where(reservations.c.id == attempt_id).values(created_at=current))

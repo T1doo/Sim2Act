@@ -71,3 +71,49 @@ def test_model_request_has_total_deadline_not_repeated_phase_timeout(env):
                                     lambda request: {"deadline": time.time() + .05})
     assert error.value.code == "MODEL_TIMEOUT_OR_TRUNCATED"
     assert time.monotonic() - started < .5 and observed == ["started"]
+
+
+def test_stalled_body_and_slow_cleanup_are_bounded(env):
+    settings = replace(env[1], live_enabled=True, token="synthetic-offline-only")
+    observed = []
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            observed.append("reading")
+            await asyncio.sleep(1)
+            yield b"{}"
+        async def aclose(self):
+            observed.append("closing")
+            await asyncio.sleep(1)
+            observed.append("closed")
+    async def handler(request):
+        return httpx.Response(200, stream=Stream())
+    provider = InternModel(settings, transport=httpx.MockTransport(handler))
+    started = time.monotonic()
+    with pytest.raises(DomainError) as error:
+        provider.request_serialized(b'{"model":"intern-s2"}',
+                                    lambda request: {"deadline": time.time() + .05})
+    assert error.value.code == "MODEL_TIMEOUT_OR_TRUNCATED"
+    assert time.monotonic() - started < .3
+    assert observed == ["reading", "closing"]
+
+
+def test_aged_other_account_attempt_blocks_final_activated_send(env):
+    from sqlalchemy import insert
+    from test_natural_activation import make_run, reserve, sending
+    from test_natural_activation import setup as unit_setup
+
+    from sim2act.db import new_id
+    value = unit_setup(env)
+    store, settings, *_ = value
+    run = make_run(value, "read_preview")
+    aid = reserve(value, run)
+    other = new_id("attempt")
+    with store.tx() as c:
+        c.execute(insert(attempts).values(id=other, run_id="other-owned-synthetic-run",
+                  status="STARTED", created_at=time.time()-65))
+        c.execute(insert(reservations).values(id=other, run_id="other-owned-synthetic-run",
+                  subject=settings.quota_subject, created_at=time.time()-65))
+    with pytest.raises(DomainError) as error:
+        sending(value, run, aid)
+    assert error.value.code == "RATE_LIMITED"
+    assert rows(store, activation.natural_activations)[0]["ledger"][0]["status"] == "STARTED"

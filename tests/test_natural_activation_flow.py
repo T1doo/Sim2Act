@@ -3,13 +3,14 @@
 import copy
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from test_natural_goal_planning import authority, response, rows
 
-from sim2act import goal_planner
+from sim2act import db, goal_planner
 from sim2act import natural_activations as activation
 from sim2act.api import create_app
 from sim2act.db import attempts, events, natural_activations, operations, reservations, runs
@@ -114,7 +115,8 @@ def test_two_fixed_goals_actual_slots_receipts_history_no_hidden_calls(env, monk
     for index, kind in enumerate(activation.KINDS):
         if index:
             current = activation.now()
-            monkeypatch.setattr(activation, "now", lambda: current + 60)
+            monkeypatch.setattr(activation, "now", lambda current=current: current + 60)
+            monkeypatch.setattr(db, "time", SimpleNamespace(time=activation.now))
         accepted = submit(value, session, kind, kind)
         assert accepted.status_code == 202, accepted.text
         rid = accepted.json()["run_id"]
@@ -145,6 +147,9 @@ def test_two_fixed_goals_actual_slots_receipts_history_no_hidden_calls(env, monk
     retry = client.post(f"/api/natural-activations/{session['id']}/approve", json=approval_body)
     assert retry.status_code == 200 and retry.json()["approval"] == session["approval"]
     # Existing key replay is a readback; new key cannot reset the per-goal slot.
+    current = activation.now()
+    monkeypatch.setattr(activation, "now", lambda: current + 60)
+    monkeypatch.setattr(db, "time", SimpleNamespace(time=activation.now))
     rejected = submit(value, session, key="extra")
     assert rejected.status_code == 202, rejected.text
     assert worker.once()

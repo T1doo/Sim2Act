@@ -213,27 +213,24 @@ class InternModel:
         if remaining <= 0:
             raise DomainError("MODEL_TIMEOUT_OR_TRUNCATED", "Total request deadline elapsed")
         payload = bytearray()
+        client = httpx.AsyncClient(timeout=min(130, remaining), transport=self.transport,
+                                  follow_redirects=False)
+        response = None
         try:
-            # asyncio enforces one total deadline across pool/connect/write/headers/body,
-            # rather than resetting a 130-second timeout for every phase or read.
+            # One deadline covers headers and every body read, without phase resets.
             async with asyncio.timeout(remaining):
-                async with httpx.AsyncClient(timeout=min(130, remaining), transport=self.transport,
-                                             follow_redirects=False) as client:
-                    request.extensions["timeout"] = {k: min(130, remaining)
-                        for k in ("connect", "read", "write", "pool")}
-                    response = await client.send(request, stream=True)
-                    try:
-                        if response.status_code == 429:
-                            raise DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
-                        if response.status_code != 200:
-                            raise DomainError("RESOURCE_UNAVAILABLE", "Upstream rejected request")
-                        async for chunk in response.aiter_bytes():
-                            if len(payload) + len(chunk) > 131072:
-                                raise DomainError("MODEL_OUTPUT_INVALID", "Bounded response exceeded")
-                            payload.extend(chunk)
-                        return strict_json(bytes(payload), 131072)
-                    finally:
-                        await response.aclose()
+                request.extensions["timeout"] = {k: min(130, remaining)
+                    for k in ("connect", "read", "write", "pool")}
+                response = await client.send(request, stream=True)
+                if response.status_code == 429:
+                    raise DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
+                if response.status_code != 200:
+                    raise DomainError("RESOURCE_UNAVAILABLE", "Upstream rejected request")
+                async for chunk in response.aiter_bytes():
+                    if len(payload) + len(chunk) > 131072:
+                        raise DomainError("MODEL_OUTPUT_INVALID", "Bounded response exceeded")
+                    payload.extend(chunk)
+                return strict_json(bytes(payload), 131072)
         except TimeoutError as error:
             failure = _RequestDeadlineError("MODEL_TIMEOUT_OR_TRUNCATED", "Total request deadline elapsed; usage may be unknown")
             try:
@@ -243,6 +240,15 @@ class InternModel:
             except DomainError:
                 pass
             raise failure from error
+        finally:
+            # Cleanup has its own small grace, outside the cancelled request context.
+            # Only the trusted cancellation-cooperative HTTP transport is supported.
+            for closer in ([response.aclose] if response is not None else []) + [client.aclose]:
+                try:
+                    await asyncio.wait_for(closer(), timeout=.025)
+                except (TimeoutError, httpx.HTTPError):
+                    pass
+
 
 
 class MockModel:
