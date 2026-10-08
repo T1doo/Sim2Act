@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, Request
+from fastapi import Depends, FastAPI, Header, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import Field
 from sqlalchemy import select, update
@@ -312,8 +312,16 @@ def create_app(store=None, settings=None):
         }
 
     @app.get("/api/runs/{rid}")
-    def inspect_run(rid: str, user=user_dependency):
-        return db.inspect(user, rid)
+    def inspect_run(rid: str, response: Response, user=user_dependency):
+        result = db.inspect(user, rid)
+        if result.get("natural_deadline") is not None:
+            if result["contract"]["snapshot"]["natural_planning"].get("activation") is not None:
+                from .natural_activations import now
+                server_time = now()
+            else:
+                server_time = time.time()
+            response.headers["X-Sim2Act-Server-Time"] = str(server_time)
+        return result
 
     @app.post("/api/runs/{rid}/commands")
     def command(rid: str, body: CommandInput, user=user_dependency):

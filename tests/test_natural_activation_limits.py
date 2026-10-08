@@ -130,7 +130,8 @@ def test_paired_queued_deadline_tamper_is_not_readable_or_sendable(env):
     session, _ = approved(value)
     rid = submit(value, session).json()["run_id"]
     with store.tx() as c:
-        run = next(r for r in rows(store, runs) if r["id"] == rid)
+        from sqlalchemy import select
+        run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
         context = copy.deepcopy(run["context"])
         context["natural_run_deadline"]["deadline"] += 1
         c.execute(update(runs).where(runs.c.id == rid).values(context=context))

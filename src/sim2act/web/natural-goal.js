@@ -110,8 +110,8 @@ async function renderNaturalGoalRun(r,id,current){
   let deadline=null;
   if(r.natural_deadline){
     const d=r.natural_deadline,seals=r.events.filter(e=>e.kind==="NL_RUN_DEADLINE_FROZEN");
-    if(![d.accepted_at,d.expires_at,d.server_time,d.run_seconds].every(Number.isFinite) || d.run_seconds!==r.contract.snapshot.limits.run_seconds || Math.abs(d.expires_at-d.accepted_at-d.run_seconds)>.001 || seals.length!==1 || seals[0].data.created_at!==d.accepted_at || seals[0].data.deadline!==d.expires_at || seals[0].data.contract_fingerprint!==r.contract.fingerprint){section.append(row("冻结确认期限不匹配，确认关闭。"));return;}
-    deadline=Date.now()+(d.expires_at-d.server_time)*1000;
+    if(![d.accepted_at,d.expires_at,d.run_seconds].every(Number.isFinite) || d.run_seconds!==r.contract.snapshot.limits.run_seconds || Math.abs(d.expires_at-d.accepted_at-d.run_seconds)>.001 || seals.length!==1 || seals[0].data.created_at!==d.accepted_at || seals[0].data.deadline!==d.expires_at || seals[0].data.contract_fingerprint!==r.contract.fingerprint){section.append(row("冻结确认期限不匹配，确认关闭。"));return;}
+    deadline=Date.now()+(d.expires_at-(Number.isFinite(r.naturalServerTime)?r.naturalServerTime:Date.now()/1000))*1000;
     section.append(row(`任务接受：${new Date(d.accepted_at*1000).toISOString()}；确认和执行截止：${new Date(d.expires_at*1000).toISOString()}（原接受起 ${d.run_seconds} 秒，不随刷新续期）。`));
     if(deadline<=Date.now())section.append(row("任务确认期限已过；会话批准不能延长此任务。历史仍可读取。"));
   }
@@ -218,7 +218,7 @@ function renderNaturalActivation(){
   $("natural-activation-goals").replaceChildren();
   if(!selected){$("natural-activation-status").textContent="未选择会话。读取和选择不创建或批准会话；真实调用默认0。";renderNaturalGoalControls();return;}
   const expires=selected.approval?.expires_at;
-  $("natural-activation-status").textContent=`${selected.scope.mode=== "OFFLINE_TEST"?"离线测试会话，不代表真实模型":"LIVE范围记录，不代表当前已启用发送"} · ${selected.status} · 请求已占 ${selected.charged_requests}/2 · token已预留 ${selected.reserved_tokens}/22000（不是金额上限） · RPM1 · ${expires?"批准到期 "+new Date(expires*1000).toISOString():"未批准"} · ${selected.submission_available&&selected.approved_not_expired&&selected.charged_requests<2&&selected.reserved_tokens<22000?"可提交冻结目标，发送仍由Worker复核":"不可提交："+(selected.blocked_reason||(selected.charged_requests>=2?"预算已用尽":"批准已过期"))} · scope ${selected.scope_fingerprint}`;
+  $("natural-activation-status").textContent=`${selected.scope.mode=== "OFFLINE_TEST"?"离线测试会话，不代表真实模型":"LIVE范围记录，不代表当前已启用发送"} · ${selected.status} · 请求已占 ${selected.charged_requests}/2 · token已预留 ${selected.reserved_tokens}/22000（不是金额上限） · ${selected.scope.version==="natural-activation.v2"?"RPM1":"旧scope未冻结RPM，不能新执行"} · ${expires?"批准到期 "+new Date(expires*1000).toISOString():"未批准"} · ${selected.submission_available&&selected.approved_not_expired&&selected.charged_requests<2&&selected.reserved_tokens<22000?"可提交冻结目标，发送仍由Worker复核":"不可提交："+(selected.blocked_reason||(selected.charged_requests>=2?"预算已用尽":"批准已过期"))} · scope ${selected.scope_fingerprint}`;
   for(const goal of selected.scope.goals){
     const node=row(`${goal.kind==="read_preview"?"合成CSV预览":"合成quantity_z求和，独立oracle19"} · 目标 v${goal.expected_version} · 材料hash ${goal.resource_hash}`,async()=>{
       const state=naturalActivationSelection;if(!state||state.row.id!==selected.id || state.identity!==token || state.project!==$("project-select").value)return;
@@ -244,6 +244,17 @@ async function refreshNaturalActivations(){
     for(const item of body.items){
       if(!/^nlactivation_[a-f0-9]{32}$/.test(item.id)||item.project_id!==project||!naturalGoalFp(item.scope_fingerprint)||!item.scope||!["OFFLINE_TEST","LIVE"].includes(item.scope.mode)||!Array.isArray(item.scope.goals)||!item.scope.goals.length||item.scope.goals.length>2||item.scope.goals.some(g=>!["read_preview","sum_quantity_z"].includes(g.kind)||!/^goal_[a-f0-9]{32}$/.test(g.card_id)||!naturalGoalFp(g.expected_fingerprint))||item.scope.caps.requests!==2||item.scope.caps.tokens!==22000||!Number.isSafeInteger(item.charged_requests)||item.charged_requests<0||item.charged_requests>2||!Number.isSafeInteger(item.reserved_tokens)||!Array.isArray(item.charged_kinds)||typeof item.submission_available!=="boolean"||typeof item.approved_not_expired!=="boolean"||(item.status==="APPROVED"&&(!naturalGoalFp(item.approval_fingerprint)||!Number.isFinite(item.approval?.expires_at))))throw Error("会话范围或额度不可信");
     }
+    const digest=async value=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");
+    const closed=(value,keys)=>value && typeof value==="object" && !Array.isArray(value) && Object.keys(value).sort().join(",")===[...keys].sort().join(",");
+    for(const item of body.items){
+      const scope=item.scope,v2=scope.version==="natural-activation.v2";
+      if(!["natural-activation.v1","natural-activation.v2"].includes(scope.version) || !closed(scope,["version","principal_id","project_id","runtime_id","mode","provider","caps","goals"]) || scope.project_id!==project || !closed(scope.caps,v2?["requests","tokens","output_tokens","ttl_seconds","rpm"]:["requests","tokens","output_tokens","ttl_seconds"]) || scope.caps.output_tokens!==512 || scope.caps.ttl_seconds!==7200 || (v2?scope.caps.rpm!==1:item.submission_available!==false) || !closed(scope.provider,["model","endpoint","quota_subject"]) || scope.provider.model!=="intern-s2" || scope.provider.endpoint!=="https://chat.intern-ai.org.cn/api/v1/chat/completions" || typeof scope.provider.quota_subject!=="string" || !scope.provider.quota_subject || new Set(scope.goals.map(g=>g.kind)).size!==scope.goals.length || new Set(scope.goals.map(g=>g.card_id)).size!==scope.goals.length || item.reserved_tokens<0 || item.reserved_tokens>22000 || item.charged_kinds.length!==item.charged_requests || item.charged_kinds.some(k=>!scope.goals.some(g=>g.kind===k)))throw Error("未知或越界的冻结会话scope");
+      for(const goal of scope.goals){
+        if(!closed(goal,["kind","card_id","expected_version","expected_fingerprint","snapshot","resource_id","resource_hash"]) || !Number.isSafeInteger(goal.expected_version) || goal.expected_version<1 || !/^resource_[a-f0-9]{32}$/.test(goal.resource_id) || goal.resource_hash!=="5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e" || await digest(goal.snapshot)!==goal.expected_fingerprint)throw Error("冻结目标来源或版本不可信");
+      }
+      if(await digest(scope)!==item.scope_fingerprint || (item.approval!==null && await digest(item.approval)!==item.approval_fingerprint))throw Error("冻结会话内容与指纹不匹配");
+    }
+    if(!current())return;
     const prior=naturalActivationSelection;
     naturalActivationRows=body.items;
     $("natural-activation-select").replaceChildren(new Option("未选择；沿用默认关闭的普通规划",""),...body.items.map(r=>new Option(`${r.scope.mode} · ${r.status} · ${r.id}`,r.id)));

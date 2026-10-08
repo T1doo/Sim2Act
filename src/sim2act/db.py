@@ -1013,14 +1013,8 @@ class Store:
 
                 deadline = check_run_deadline(self, c, r, active=False)
                 if deadline is not None:
-                    if source_contract["natural_planning"].get("activation") is not None:
-                        from .natural_activations import now
-                        server_time = now()
-                    else:
-                        server_time = time.time()
                     natural_deadline = {"accepted_at": r["created_at"], "expires_at": deadline,
-                                        "run_seconds": source_contract["limits"]["run_seconds"],
-                                        "server_time": server_time}
+                                        "run_seconds": source_contract["limits"]["run_seconds"]}
             ev = (
                 c.execute(
                     select(events).where(events.c.run_id == run_id).order_by(events.c.created_at)
