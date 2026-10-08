@@ -19,7 +19,7 @@ async function openReportManifest(a,generation){
 function manifestButtons(c){if(!manifestCurrent(c))return;c.pending=manifestIntents.get(manifestIntentKey(c));const sending=c.busy||!!c.pending?.sending;for(const e of $("manifest-report-form").elements)e.disabled=sending||!!c.pending;$("manifest-report-retry").hidden=!c.pending;$("manifest-report-retry").disabled=sending;$("manifest-report-refresh").disabled=sending;}
 async function readManifestHistory(c=manifestContext){
  if(!c||!manifestCurrent(c))return;
- let data;try{data=await api(`/api/projects/${c.project}/apps/${c.id}/history`);}catch(e){if(manifestCurrent(c))clearApp();throw e;}
+ let data;try{data=await api(`/api/projects/${c.project}/apps/${c.id}/history`);}catch(e){if(manifestCurrent(c)){clearApp();e.manifestReadCleared=c;}throw e;}
  if(!manifestCurrent(c))return;if(!manifestValid(data,c.project,c.id)||data.fingerprint!==c.app.fingerprint||data.runtime_id!==c.app.runtime_id||!manifestSameValue(data.candidate,c.app.candidate)||!Array.isArray(data.history)||data.history.some(item=>!item||item.namespace!==manifestNamespace||!manifestRunReceipt(item.run))){clearApp();throw Error("VERSION_CONFLICT");}
  await readPresentationHistory(c,data.history);if(!manifestCurrent(c))return;
  $("app-history").replaceChildren(...data.history.map(item=>{const section=document.createElement("section");section.append(row(`实际 Run ${item.run.run_id} · ${item.run.status} · 整体 NOT_ACCEPTED · 语义 UNKNOWN · 用户确认 PENDING`));const pre=document.createElement("pre");pre.textContent=JSON.stringify({input:item.input,result:item.run.result?.protocol_result?.evidence?.output||null},null,2);section.append(pre,presentationControls(c,item));return section;}));
@@ -55,6 +55,14 @@ function presentationPatch(v,c,r){return presentationFlags(v,c)&&v.namespace==="
 function presentationCheck(v,c,r,p){return presentationFlags(v,c)&&v.namespace==="report-presentation-readback.v1"&&boundedHash(v.check_fingerprint)&&v.patch_fingerprint===p.patch_fingerprint&&v.slot_id===p.definition.slot_id&&v.display_readback_status==="PASS"&&v.project_revalidation_status===p.project_revalidation_status&&manifestSameValue(v.result_binding,p.result_binding)&&manifestSameValue(v.view,p.definition.view)&&typeof v.text==="string"&&v.text===r.result?.protocol_result?.evidence?.output?.explanation&&v.baseline_text===r.result?.protocol_result?.evidence?.output?.decision;}
 function presentationText(text,label,slot){const section=document.createElement("section");section.className="report-text-presentation";section.dataset.slot=slot;section.append(row(label));const content=document.createElement("p");content.className="report-view-text";content.textContent=text;section.append(content);return section;}
 function repaintPresentationButtons(){for(const box of document.querySelectorAll(".report-presentation-controls"))box.repaint?.();}
+async function reconcilePresentationIntent(c,intent,box){
+ intent.busy=false;repaintPresentationButtons();
+ const current=manifestContext;
+ // A new selection must read its own current authority/result/history. Never
+ // render an old closure's output or resume its next write after navigation.
+ if(!current||(current===c&&box.isConnected)||!manifestCurrent(current)||current.identity!==c.identity||current.project!==c.project||current.id!==c.id||current.app.fingerprint!==c.app.fingerprint)return;
+ try{await readManifestHistory(current);}catch(e){const cleared=e.manifestReadCleared===current&&manifestContext===null&&activeApp===null&&appSelectionGeneration===current.generation+1;if(current.identity!==token||current.project!==$("project-select").value||(!manifestCurrent(current)&&!cleared))return;$("error").textContent=e.message+"；当前展示回读失败，请重新打开或刷新；不使用旧回执内容。";}
+}
 function presentationControls(c,item){
  const r=item.run,box=document.createElement("section");box.className="report-presentation-controls";
  const original=r.result?.protocol_result?.evidence?.output;if(typeof original?.decision==="string")box.append(presentationText(original.decision,"原版本 · text / decision","view:text:decision"));
@@ -71,19 +79,19 @@ function presentationControls(c,item){
    if(!intent.plan){const slot=intent.graph.graph.nodes.find(n=>n.kind==="VIEW"&&n.key==="view:text:decision");if(!slot)throw Error("VERSION_CONFLICT");const p=await api(graphURL+"/plans","POST",{expected_graph_fingerprint:intent.graph.graph_fingerprint,request_key:intent.planKey,changes:[{node_id:slot.id,expected_revision:slot.revision,expected_content_fingerprint:slot.content_fingerprint}]});if(!manifestCurrent(c))return;if(p.project_id!==c.project||p.app_id!==c.id||p.receipt?.revalidation_scope!=="PROJECT"||!boundedHash(p.native_outer_fingerprint)||p.receipt.patch_executed!==false)throw Error("VERSION_CONFLICT");intent.plan=p;}
    intent.body=intent.body||{expected_candidate_fingerprint:c.app.fingerprint,expected_graph_fingerprint:intent.graph.graph_fingerprint,plan_key:intent.planKey,expected_plan_fingerprint:intent.plan.native_outer_fingerprint,run_id:r.run_id,expected_run_version:r.version,expected_run_fence:r.fence,expected_result_fingerprint:r.result_fingerprint,view:{component_ref:"text",output_field:"explanation"},request_key:intent.definitionKey};
    const p=await api(presentationBase(c),"POST",intent.body);if(!presentationPatch(p,c,r)||p.request_key!==intent.definitionKey||p.baseline_graph_fingerprint!==intent.graph.graph_fingerprint||p.impact_plan.native_outer_fingerprint!==intent.plan.native_outer_fingerprint)throw Error("VERSION_CONFLICT");intent.patch=p;if(manifestCurrent(c))status.textContent=`已保存展示草案 ${p.patch_fingerprint}；PROJECT ${p.project_revalidation_status}；实际材料 PENDING，未验收、未发布。`;
-  }catch(e){if(manifestCurrent(c))status.textContent=e.message+"；保留原键恢复。";}finally{intent.busy=false;repaintPresentationButtons();}
+  }catch(e){if(manifestCurrent(c))status.textContent=e.message+"；保留原键恢复。";}finally{await reconcilePresentationIntent(c,intent,box);}
  });
  confirm.onclick=safe(async()=>{
   if(!manifestCurrent(c)||!intent?.patch||intent.busy||intent.checked)return;intent.busy=true;intent.checkUnknown=true;paint();
   try{const v=await api(presentationBase(c)+`/${encodeURIComponent(intent.definitionKey)}/checks`,"POST",{expected_patch_fingerprint:intent.patch.patch_fingerprint,request_key:intent.checkKey});if(!presentationCheck(v,c,r,intent.patch)||v.request_key!==intent.checkKey)throw Error("VERSION_CONFLICT");intent.checked=v;if(manifestCurrent(c)){versions.replaceChildren(presentationText(v.text,`新展示版本 · text / explanation · 文本回读 PASS · PROJECT ${v.project_revalidation_status} · 实际材料 PENDING · NOT_ACCEPTED`,v.slot_id));status.textContent="仅历史结果展示预览；原计算结果和 canonical 图保留。";}}
-  catch(e){if(manifestCurrent(c))status.textContent=e.message+"；用原键恢复精确版本文本检查。";}finally{intent.busy=false;repaintPresentationButtons();}
+  catch(e){if(manifestCurrent(c))status.textContent=e.message+"；用原键恢复精确版本文本检查。";}finally{await reconcilePresentationIntent(c,intent,box);}
  });
  if(intent?.checked&&presentationPatch(intent.patch,c,r)&&presentationCheck(intent.checked,c,r,intent.patch))versions.append(presentationText(intent.checked.text,`新展示版本 · text / explanation · 文本回读 PASS · PROJECT ${intent.checked.project_revalidation_status} · 实际材料 PENDING · NOT_ACCEPTED`,intent.checked.slot_id));
  return box;
 }
 async function readPresentationHistory(c,items){
  if(!items.some(item=>item.run.result))return;
- let data;try{data=await api(presentationBase(c));}catch(e){if(e.httpStatus===409&&e.detail?.includes("has not been derived"))return;if(manifestCurrent(c))clearApp();throw e;}
+ let data;try{data=await api(presentationBase(c));}catch(e){if(e.httpStatus===409&&e.detail?.includes("has not been derived"))return;if(manifestCurrent(c)){clearApp();e.manifestReadCleared=c;}throw e;}
  if(!manifestCurrent(c))return;if(!presentationFlags(data,c)||data.namespace!=="report-presentation-history.v1"||!Array.isArray(data.items)){clearApp();throw Error("VERSION_CONFLICT");}
  for(const item of data.items){const p=item.patch,r=items.find(x=>x.run.run_id===p?.result_binding?.run_id)?.run;if(!r||!presentationPatch(p,c,r)||!Array.isArray(item.checks)||item.checks.some(v=>!presentationCheck(v,c,r,p))){clearApp();throw Error("VERSION_CONFLICT");}const key=presentationKey(c,r),old=presentationIntents.get(key);if(!old?.busy)presentationIntents.set(key,{...old,definitionKey:p.request_key,patch:p,checkKey:item.checks.at(-1)?.request_key||old?.checkKey||reportKey(),checked:item.checks.at(-1)});}
 }
