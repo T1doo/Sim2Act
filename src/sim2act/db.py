@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -20,6 +21,7 @@ from sqlalchemy import (
     create_engine,
     insert,
     select,
+    text,
     update,
 )
 from sqlalchemy.exc import IntegrityError
@@ -494,9 +496,38 @@ class Store:
                 c.rollback()
                 raise
 
-    def initialize(self, quota_subject="default-intern-account"):
+    def initialize(self, quota_subject="default-intern-account", *, fresh_test_schema=None):
         # Explicit migration command only, never implicitly from API/worker.
-        meta.create_all(self.engine)
+        if fresh_test_schema is None:
+            meta.create_all(self.engine)
+        else:
+            # Owner-created random fixture schemas only. Ordinary migrations retain checkfirst.
+            schema_map = self.engine.get_execution_options().get("schema_translate_map", {})
+            if (
+                not self.test_only
+                or self.sqlite
+                or not isinstance(fresh_test_schema, str)
+                or not re.fullmatch(r"test_[0-9a-f]{32}", fresh_test_schema)
+                or schema_map.get(None) != fresh_test_schema
+                # SQLAlchemy adds this internal alias when compiling unqualified tables.
+                or any(
+                    k not in (None, "_none") or v != fresh_test_schema
+                    for k, v in schema_map.items()
+                )
+            ):
+                raise ValueError("Fresh initialization requires an owned isolated PG test schema")
+            with self.tx() as c:
+                row = c.execute(
+                    text(
+                        "SELECT n.nspowner = (SELECT oid FROM pg_roles WHERE rolname = current_user) "
+                        "AS owned, NOT EXISTS (SELECT 1 FROM pg_class r WHERE r.relnamespace = n.oid) "
+                        "AS empty FROM pg_namespace n WHERE n.nspname = :schema"
+                    ),
+                    {"schema": fresh_test_schema},
+                ).first()
+                if row is None or not row.owned or not row.empty:
+                    raise ValueError("Fresh initialization requires an owned empty PG test schema")
+                meta.create_all(c, checkfirst=False)
         with self.tx() as c:
             if not c.execute(select(quotas).where(quotas.c.subject == quota_subject)).first():
                 c.execute(insert(quotas).values(subject=quota_subject, blocked_until=0))

@@ -21,7 +21,7 @@ def env(tmp_path):
         with store.engine.begin() as c:
             c.execute(text('CREATE SCHEMA "' + schema + '"'))
         store.engine = store.engine.execution_options(schema_translate_map={None: schema})
-    store.initialize()
+    store.initialize(fresh_test_schema=None if store.sqlite else schema)
     # Explicit synthetic identities, never production secrets.
     a = store.user("fixture A", "synthetic-test-A")
     b = store.user("fixture B", "synthetic-test-B")
