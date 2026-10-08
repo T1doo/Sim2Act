@@ -1,0 +1,275 @@
+{
+  "review_utc": "2026-10-08T05:02:29.792818+00:00",
+  "base_head": "0f11dcd6e4fcb6bbc004ea30e0e8cc154727c440",
+  "verdict": "APPROVE_MINIMAL_PRODUCT_CHANGE_NO_BLOCKERS_FOUND; focused execution verified read-only",
+  "scope": "Independent read-only review. No tests, containers, source edits, network changes or pushes executed by reviewer. JSON receipt in /tmp only.",
+  "product_change": "list_resources own_project -> lock_project before resource enumeration/authorization, with explanatory comment",
+  "authorization": [
+    "lock_project uses identical project_id and owner_id predicates, same PERMISSION_DENIED error as own_project.",
+    "Resource read checks still execute for owner and runtime identities and retain expiry/revocation checks and DomainError omission. No exception suppression added.",
+    "Project lock is transaction scoped in existing db.tx; list returns same columns, rows and filtered identities.",
+    "Existing runtime_role and Windows provisioned CRUD roles grant UPDATE on projects as well as SELECT, supporting SELECT FOR UPDATE. Dedicated new real-PG role test checks capability flags, SELECT-only statements, foreign owner403, both identities revoked/expired omission, restored full business snapshot and schema objects. Static review passes; root-produced PASS JUnit verified read-only."
+  ],
+  "ordering": [
+    "REPORT load_family already obtains project lock before per-resource grants. New endpoint acquires same project lock first, so REPORT plan/history and resources cannot form the observed opposite grant traversal cycle.",
+    "Other examined ordinary reads/revoke use own_project plain SELECT after grants; they do not request this project row lock. Existing project-first workflow paths remain unchanged. No new inversion located within inspected scope; global deadlock freedom not claimed.",
+    "Same-project listing now serializes with project-locked operations, so lock wait latency is a tradeoff. No cache, polling change, fresh-head validation change or retry introduced."
+  ],
+  "regression_review": [
+    "Four tests cover plan/history and resources/graph first; holds occur only after real authorize, original returned authorization is preserved.",
+    "Real physical backend IDs and pg_blocking_pids verify second request waits on project before taking grants under candidate. Old path permits both real grant sets and creates actual 40P01 cycle.",
+    "SET LOCAL statement_timeout7s applies only owned test transactions. Barriers released in finally, SQL event listeners removed, receipt saved.",
+    "Original DOM drivers, Python tests, Windows scripts and CI bytes match frozen HEAD. Added five nodes do not imply speed gains or replace original assertions."
+  ],
+  "old_regression_receipts": [
+    {
+      "receipt": "/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_0/resources-graph-pg-lock.json",
+      "first": "resources",
+      "operation": "plan",
+      "backends": {
+        "resources": 92,
+        "graph": 93
+      },
+      "statuses": {
+        "resources": 200,
+        "graph": 500
+      },
+      "sqlstates": [
+        "40P01"
+      ],
+      "grant_wait_observed": true,
+      "source_mutation_absent": true
+    },
+    {
+      "receipt": "/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_1/resources-graph-pg-lock.json",
+      "first": "resources",
+      "operation": "history",
+      "backends": {
+        "resources": 95,
+        "graph": 96
+      },
+      "statuses": {
+        "resources": 200,
+        "graph": 500
+      },
+      "sqlstates": [
+        "40P01"
+      ],
+      "grant_wait_observed": true,
+      "source_mutation_absent": true
+    },
+    {
+      "receipt": "/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_2/resources-graph-pg-lock.json",
+      "first": "graph",
+      "operation": "plan",
+      "backends": {
+        "graph": 98,
+        "resources": 99
+      },
+      "statuses": {
+        "graph": 500,
+        "resources": 200
+      },
+      "sqlstates": [
+        "40P01"
+      ],
+      "grant_wait_observed": true,
+      "source_mutation_absent": true
+    },
+    {
+      "receipt": "/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_3/resources-graph-pg-lock.json",
+      "first": "graph",
+      "operation": "history",
+      "backends": {
+        "graph": 101,
+        "resources": 102
+      },
+      "statuses": {
+        "graph": 200,
+        "resources": 500
+      },
+      "sqlstates": [
+        "40P01"
+      ],
+      "grant_wait_observed": true,
+      "source_mutation_absent": true
+    }
+  ],
+  "original_files_unchanged": {
+    "tests/test_delivery_graph_apps_ui.py": true,
+    "tests/delivery_graph_ui.cjs": true,
+    "tests/test_report_manifest_apps_ui.py": true,
+    "tests/report_manifest_ui.cjs": true,
+    "scripts/WindowsCI.ps1": true,
+    "scripts/windows_browser_ci.py": true,
+    ".github/workflows/windows-native-mock.yml": true
+  },
+  "reviewed_sha256": {
+    "src/sim2act/api.py": "875893975fb3e40390520c696e8cfca40e055bb7e343a42c9abbced7d1e991cf",
+    "tests/test_resources_project_lock.py": "0fc8b99bd872a73739a992148327be6c208c6cb58f8e0e4153c95a4a9064f616",
+    "tests/test_delivery_graph_apps_ui.py": "4a89cc60067793950d8c7c70b8e81bf6777c97d4af8d0cf9c15c55d5c192f887",
+    "tests/delivery_graph_ui.cjs": "bf0c565c22c3819a0fb02843f44c25027e2fb7e60edf5ef1860d680a9507826e",
+    "tests/test_report_manifest_apps_ui.py": "6263eeb1fda15602cdf0c5a238181ac7b1e481438b04dee9061ea960f93cc317",
+    "tests/report_manifest_ui.cjs": "1fe9b168345250af5909948e54afc99c1a444cea401aba413cd0ff3f3bb7f56e",
+    "scripts/WindowsCI.ps1": "200f71a664870f930f43c03dac2a3c3b680e1d4eaf53a11bdec3adb4a6fe6005",
+    "scripts/windows_browser_ci.py": "75bbc3dc1230a5d4211e861a1ee3bca39698d8ca2e08dc19fbc4f3658db56098",
+    ".github/workflows/windows-native-mock.yml": "1e8194bf9113dc4eae957ec0ba3fd8bf790fd82e15ed098650d4522c21144828"
+  },
+  "baseline_actual_dom": "REPORT node has5 resource GET SQLstate40P01 entries and5 corresponding Node HTTP500; report-manifest node has none. Original DOM still passes, demonstrating background error can be hidden by success assertions.",
+  "candidate_original_dom": "Controller pytest_exit_code0 complete; both original nodes PASS. Python timeline contains0 sql_error entries. Candidate call seconds REPORT29.400834811 vs baseline32.686207430; reportmanifest37.427405688 vs36.594566813. One observed pair is insufficient for general timing improvement claim.",
+  "practical_limits": [
+    "Original historical full3 deadlocks have temporal/schema attribution but lacked request parameters; exact old historical backend/request correspondence remains inference unless separate evidence reconstructs it.",
+    "No new full-suite, Windows/Edge/native acceptance or global deadlock safety inferred;900/240/150 and existing NO_GO retained."
+  ],
+  "executed_validation_attestation": {
+    "review_utc": "2026-10-08T05:05:35.999620+00:00",
+    "JUnit": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "91",
+      "time": "150.013",
+      "timestamp": "2026-10-08T05:02:02.950398+00:00",
+      "hostname": "04525f2cceff"
+    },
+    "all91_success": true,
+    "new5": [
+      {
+        "classname": "tests.test_resources_project_lock",
+        "name": "test_pg_resources_graph_share_project_first_lock[resources-plan]",
+        "time": "3.665"
+      },
+      {
+        "classname": "tests.test_resources_project_lock",
+        "name": "test_pg_resources_graph_share_project_first_lock[resources-history]",
+        "time": "4.533"
+      },
+      {
+        "classname": "tests.test_resources_project_lock",
+        "name": "test_pg_resources_graph_share_project_first_lock[graph-plan]",
+        "time": "3.418"
+      },
+      {
+        "classname": "tests.test_resources_project_lock",
+        "name": "test_pg_resources_graph_share_project_first_lock[graph-history]",
+        "time": "4.564"
+      },
+      {
+        "classname": "tests.test_resources_project_lock",
+        "name": "test_pg_resource_list_crud_role_retains_owner_runtime_and_expiry_filters",
+        "time": "0.359"
+      }
+    ],
+    "four_real_PG_receipts": [
+      {
+        "file": "/tmp/sim2act-hotspots-validation-20261008/fixtures/test_pg_resources_graph_share_0/resources-graph-pg-lock.json",
+        "sha256": "54f54d30346a608cd7e201b257d6f33440be25c0010acd1fbd19c7adfef2ca61",
+        "first": "resources",
+        "operation": "plan",
+        "pids": {
+          "resources": 92,
+          "graph": 93
+        },
+        "statuses": {
+          "resources": 200,
+          "graph": 201
+        },
+        "project_first_observed": true,
+        "sql_errors": []
+      },
+      {
+        "file": "/tmp/sim2act-hotspots-validation-20261008/fixtures/test_pg_resources_graph_share_1/resources-graph-pg-lock.json",
+        "sha256": "622a0f313167618df6f327dab582068a16a2a074cf292d746da07c2b0bdb28a1",
+        "first": "resources",
+        "operation": "history",
+        "pids": {
+          "resources": 95,
+          "graph": 96
+        },
+        "statuses": {
+          "resources": 200,
+          "graph": 200
+        },
+        "project_first_observed": true,
+        "sql_errors": []
+      },
+      {
+        "file": "/tmp/sim2act-hotspots-validation-20261008/fixtures/test_pg_resources_graph_share_2/resources-graph-pg-lock.json",
+        "sha256": "4790c7d67426c20472c0a9805394e05e3eaf728d36642b6cbb6e125f203aeb9f",
+        "first": "graph",
+        "operation": "plan",
+        "pids": {
+          "graph": 98,
+          "resources": 99
+        },
+        "statuses": {
+          "graph": 201,
+          "resources": 200
+        },
+        "project_first_observed": true,
+        "sql_errors": []
+      },
+      {
+        "file": "/tmp/sim2act-hotspots-validation-20261008/fixtures/test_pg_resources_graph_share_3/resources-graph-pg-lock.json",
+        "sha256": "4d53164cda6251c73d6d79ad1a13a28d6e82b977e8e1552e3656ddb5a9127cd8",
+        "first": "graph",
+        "operation": "history",
+        "pids": {
+          "graph": 101,
+          "resources": 102
+        },
+        "statuses": {
+          "graph": 200,
+          "resources": 200
+        },
+        "project_first_observed": true,
+        "sql_errors": []
+      }
+    ],
+    "crud_role_filter_test_pass": true,
+    "census_before": {
+      "test_schemas": 0,
+      "test_roles": 0,
+      "public_tables": 0
+    },
+    "census_after": {
+      "test_schemas": 0,
+      "test_roles": 0,
+      "public_tables": 0
+    },
+    "cleanup": {
+      "container_id": "4bc5430e4614a1f864373e49ec0c016004b8f5573aef113b258f5b34525a8478",
+      "owner_label_verified": true,
+      "owned_mounts": [
+        {
+          "Destination": "/var/lib/postgresql/data",
+          "Driver": "local",
+          "Mode": "",
+          "Name": "c8474427267af254c026f5f87a7c18949a76addfed919c58f4ca10a870503d3f",
+          "Propagation": "",
+          "RW": true,
+          "Source": "/var/lib/docker/volumes/c8474427267af254c026f5f87a7c18949a76addfed919c58f4ca10a870503d3f/_data",
+          "Type": "volume"
+        }
+      ],
+      "owned_container_absent": true,
+      "owned_volume_absence": [
+        {
+          "name": "c8474427267af254c026f5f87a7c18949a76addfed919c58f4ca10a870503d3f",
+          "absent": true
+        }
+      ],
+      "attached_process_exit": 137
+    },
+    "pytest_wall_seconds": 151.31167465199997,
+    "export_bytes_equal": {
+      "engineering.xml": true,
+      "result.json": true,
+      "census-before.json": true,
+      "census-after.json": true,
+      "cleanup.json": true
+    },
+    "limits": "Reviewer did not execute tests or containers; verified root-produced JUnit and receipts. No full suite/native/Windows/general performance inference."
+  }
+}

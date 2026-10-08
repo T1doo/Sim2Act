@@ -48,3 +48,19 @@ NO_GO; no native/Win11/real-provider/owner/P-A/P-B/F1/F3/R0 acceptance is claime
 The historical Windows critical path remains 55 + 741 + at least 110 incomplete
 Edge + 6 = 912 seconds, with unfinished Edge cost and current native PG attribution
 unknown. No blind CI retry or extra permissions.
+
+## Completed hotspot follow-up and next evidence boundary
+
+The complete original PG gate and then one controlled hotspot follow-up are
+recorded in EngineeringPGPhaseLog. [Hotspot results](../evidence/engineering-pg-hotspots-20261008/README.md)
+prove the resource-list/REPORT graph grant lock race and validate one minimal
+project-first lock fix, original two-DOM old/new measurement, four request
+schedules and related91PASS. Original assertions/budgets stay intact; five
+new regression nodes add coverage, never evidence of faster original selection.
+
+Next performance candidate is repeated current/load_family/build validation
+and current report history rereads. Their calls are measured, but removal must
+preserve same-transaction origin/grant changes and later request revalidation.
+Do not cache, reduce polling or rerun complete/native stages without concrete
+evidence and the applicable task authorization. Current localized sample change
+is not a stable speed guarantee; native capacity900 remains NO_GO.

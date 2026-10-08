@@ -1,0 +1,903 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_______ test_pg_resources_graph_share_project_first_lock[resources-plan] _______
+
+env = (<sim2act.db.Store object at 0x7f64c3ef8800>, Settings(database_url='postgresql+psycopg://postgres:abe34f86d467b9e420c...4afb345cc74eba8b154d9a7fc9c6f4', 'user_b42d90f75a5e4a8385aacd467a652019', 'proj_b3f295a4ba9c4eaca0dc3bddcf9a0d1a', ...)
+tmp_path = PosixPath('/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f64c21f35c0>
+operation = 'plan', first = 'resources'
+
+    @pytest.mark.parametrize("operation", ["plan", "history"])
+    @pytest.mark.parametrize("first", ["resources", "graph"])
+    def test_pg_resources_graph_share_project_first_lock(env, tmp_path, monkeypatch, operation, first):
+        store, settings, _, owner, _, pid, csv = env
+        if store.sqlite:
+            pytest.skip("Real PG multi-resource lock ordering regression")
+        # Same trusted initial CSV peer + Report origins as actual REPORT DOM test.
+        draft(env)
+        bounded = bounded_env.__wrapped__(env)
+        saved, _, _, _, wires = promoted(bounded, tmp_path)
+        aid = saved["id"]
+        base = path(env, aid)
+        made = env[2].post(
+            base + "/derive",
+            json={
+                "expected_candidate_fingerprint": saved["fingerprint"],
+                "request_key": "barrier-derive",
+            },
+        )
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        body = change(graph, "barrier-plan")
+        if operation == "history":
+            seeded = env[2].post(base + "/plans", json=body)
+            assert seeded.status_code == 201, seeded.text
+            assert seeded.json()["receipt"]["revalidation_scope"] == "PROJECT"
+        before = snapshot(env)
+        source = saved["candidate"]["report_proof"]["source_resource_id"]
+        target = saved["candidate"]["report_proof"]["target_resource_id"]
+        assert len({csv, source, target}) == 3
+        assert len(wires) == 3
+    
+        tag = contextvars.ContextVar("pg_resource_graph_request", default=None)
+        reached = {name: threading.Event() for name in ("resources", "graph")}
+        release = {name: threading.Event() for name in reached}
+        request_started = {name: threading.Event() for name in reached}
+        data_lock = threading.Lock()
+        records, errors, pids = [], [], {}
+        real_authorize = store.authorize
+    
+        def gated_authorize(c, principal, runtime, project_id, rid, tool):
+            # Original DB authorization executes before the passive hold: no granted
+            # identity, permission, query ordering, or application return is faked.
+            result = real_authorize(c, principal, runtime, project_id, rid, tool)
+            name = tag.get()
+            at_gate = (name == "resources" and rid == csv) or (name == "graph" and rid == source)
+            if at_gate and project_id == pid and tool == "resource.read" and not reached[name].is_set():
+                reached[name].set()
+                assert release[name].wait(8), "test barrier was not released"
+            return result
+    
+        monkeypatch.setattr(store, "authorize", gated_authorize)
+        app = create_app(store, settings)
+    
+        @app.middleware("http")
+        async def request_tag(request, call_next):
+            name = request.headers.get("x-test-lock-request")
+            token = tag.set(name if name in reached else None)
+            if name in request_started:
+                request_started[name].set()
+            try:
+                return await call_next(request)
+            finally:
+                tag.reset(token)
+    
+        def before_cursor(conn, cursor, statement, parameters, context, executemany):
+            name = tag.get()
+            if name not in reached:
+                return
+            # Authentication and application transactions can use different pool
+            # connections: associate the current SQL with its actual physical backend.
+            # A driver cursor avoids SQLAlchemy event recursion. This test-only
+            # observer is intentionally excluded from performance comparisons.
+            with conn.connection.cursor() as raw:
+                raw.execute("SELECT pg_backend_pid()")
+                backend = raw.fetchone()[0]
+                # Only this owned test transaction: no server/security config change.
+                # Bounds abnormal SQL waits so executor shutdown cannot strand.
+                raw.execute("SET LOCAL statement_timeout = '7000ms'")
+            with data_lock:
+                pids[name] = backend
+            if "FOR UPDATE" in statement and ("grants" in statement or "projects" in statement):
+                with data_lock:
+                    records.append(
+                        {
+                            "request": name,
+                            "backend": pids[name],
+                            "time": time.monotonic(),
+                            "kind": "project" if "projects" in statement else "grant",
+                            "statement": statement,
+                            "parameters": repr(parameters),
+                        }
+                    )
+    
+        def handle_error(context):
+            name = tag.get()
+            if name in reached:
+                original = context.original_exception
+                with data_lock:
+                    errors.append(
+                        {
+                            "request": name,
+                            "backend": pids.get(name),
+                            "sqlstate": getattr(original, "sqlstate", None),
+                            "message": str(original),
+                        }
+                    )
+    
+        event.listen(store.engine, "before_cursor_execute", before_cursor)
+        event.listen(store.engine, "handle_error", handle_error)
+    
+        def observe_blocked(waiter, holder, seconds=2):
+            deadline = time.monotonic() + seconds
+            observations = []
+            while time.monotonic() < deadline:
+                if waiter in pids and holder in pids:
+                    with store.engine.connect() as c:
+                        row = (
+                            c.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(:pid) AS blockers, "
+                                    "(SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid) AS wait_type, "
+                                    "(SELECT query FROM pg_stat_activity WHERE pid=:pid) AS query"
+                                ),
+                                {"pid": pids[waiter]},
+                            )
+                            .mappings()
+                            .one()
+                        )
+                    value = {"waiter": waiter, "holder": holder, "time": time.monotonic(), **dict(row)}
+                    observations.append(value)
+                    if pids[holder] in value["blockers"]:
+                        return value, observations
+                time.sleep(0.01)
+            return None, observations
+    
+        def request(name):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(
+                    {"Authorization": "Bearer synthetic-test-A", "x-test-lock-request": name}
+                )
+                if name == "resources":
+                    return client.get(f"/api/projects/{pid}/resources")
+                if operation == "plan":
+                    return client.post(base + "/plans", json=body)
+                return client.get(base + "/plans")
+    
+        second = "graph" if first == "resources" else "resources"
+        receipt = {
+            "first": first,
+            "operation": operation,
+            "resource_ids": {"csv": csv, "source": source, "target": target},
+            "paths": {"resources": f"/api/projects/{pid}/resources", "graph": base + "/plans"},
+            "old_cycle_observed": False,
+            "project_first_observed": False,
+            "blocking": [],
+        }
+        futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    futures[first] = pool.submit(request, first)
+                    assert reached[first].wait(8), "first request did not acquire expected real grants"
+                    futures[second] = pool.submit(request, second)
+                    assert request_started[second].wait(5), "second HTTP request not started"
+                    # Candidate must stop at project lock. Baseline instead reaches
+                    # its grants gate, so exact same inputs can expose the old cycle.
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() < deadline and not reached[second].is_set():
+                        blocked, observations = observe_blocked(second, first, seconds=0.05)
+                        receipt["blocking"].extend(observations)
+                        if blocked:
+                            receipt["project_first_observed"] = (
+                                "projects" in blocked["query"]
+                                and "FOR UPDATE" in blocked["query"]
+                                and not any(
+                                    r["request"] == second and r["kind"] == "grant" for r in records
+                                )
+                            )
+                            if receipt["project_first_observed"]:
+                                break
+                    if reached[second].is_set():
+                        # Both real grant sets are held on old code. Let resource
+                        # listing next seek source while graph still holds source.
+                        release["resources"].set()
+                        blocked, observations = observe_blocked("resources", "graph")
+                        receipt["blocking"].extend(observations)
+                        receipt["source_wait_observed"] = bool(blocked and "grants" in blocked["query"])
+                        # Graph now reaches CSV in PROJECT expansion: detector
+                        # resolves cycle; either victim is legitimate old evidence.
+                        release["graph"].set()
+                    else:
+                        release[first].set()
+                    # Never wait/join while a Python barrier remains held.
+                    for gate in release.values():
+                        gate.set()
+                    replies = {name: future.result(timeout=10) for name, future in futures.items()}
+                    receipt["statuses"] = {name: reply.status_code for name, reply in replies.items()}
+                    receipt["old_cycle_observed"] = any(e["sqlstate"] == "40P01" for e in errors)
+                finally:
+                    for gate in release.values():
+                        gate.set()
+            after = snapshot(env)
+            receipt["source_mutation_absent"] = all(
+                before[k] == after[k] for k in before if not k.startswith("delivery_graph_")
+            )
+            receipt["wires"] = len(wires)
+>           assert receipt["project_first_observed"], receipt
+E           AssertionError: {'blocking': [{'blockers': [], 'holder': 'resources', 'query': "SET LOCAL statement_timeout = '7000ms'", 'time': 5995.... FOR UPDATE', 'time': 5995.20907653, ...}], 'first': 'resources', 'old_cycle_observed': True, 'operation': 'plan', ...}
+E           assert False
+
+tests/test_resources_project_lock.py:231: AssertionError
+_____ test_pg_resources_graph_share_project_first_lock[resources-history] ______
+
+env = (<sim2act.db.Store object at 0x7f64bbed6060>, Settings(database_url='postgresql+psycopg://postgres:abe34f86d467b9e420c...a2724d85ed4c1cad95d51d55a8e843', 'user_33701833e0a64f09bbb047f626b3cbd7', 'proj_0763ed5d772f4fd882cabf948bbd67e8', ...)
+tmp_path = PosixPath('/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f64bbd7fcb0>
+operation = 'history', first = 'resources'
+
+    @pytest.mark.parametrize("operation", ["plan", "history"])
+    @pytest.mark.parametrize("first", ["resources", "graph"])
+    def test_pg_resources_graph_share_project_first_lock(env, tmp_path, monkeypatch, operation, first):
+        store, settings, _, owner, _, pid, csv = env
+        if store.sqlite:
+            pytest.skip("Real PG multi-resource lock ordering regression")
+        # Same trusted initial CSV peer + Report origins as actual REPORT DOM test.
+        draft(env)
+        bounded = bounded_env.__wrapped__(env)
+        saved, _, _, _, wires = promoted(bounded, tmp_path)
+        aid = saved["id"]
+        base = path(env, aid)
+        made = env[2].post(
+            base + "/derive",
+            json={
+                "expected_candidate_fingerprint": saved["fingerprint"],
+                "request_key": "barrier-derive",
+            },
+        )
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        body = change(graph, "barrier-plan")
+        if operation == "history":
+            seeded = env[2].post(base + "/plans", json=body)
+            assert seeded.status_code == 201, seeded.text
+            assert seeded.json()["receipt"]["revalidation_scope"] == "PROJECT"
+        before = snapshot(env)
+        source = saved["candidate"]["report_proof"]["source_resource_id"]
+        target = saved["candidate"]["report_proof"]["target_resource_id"]
+        assert len({csv, source, target}) == 3
+        assert len(wires) == 3
+    
+        tag = contextvars.ContextVar("pg_resource_graph_request", default=None)
+        reached = {name: threading.Event() for name in ("resources", "graph")}
+        release = {name: threading.Event() for name in reached}
+        request_started = {name: threading.Event() for name in reached}
+        data_lock = threading.Lock()
+        records, errors, pids = [], [], {}
+        real_authorize = store.authorize
+    
+        def gated_authorize(c, principal, runtime, project_id, rid, tool):
+            # Original DB authorization executes before the passive hold: no granted
+            # identity, permission, query ordering, or application return is faked.
+            result = real_authorize(c, principal, runtime, project_id, rid, tool)
+            name = tag.get()
+            at_gate = (name == "resources" and rid == csv) or (name == "graph" and rid == source)
+            if at_gate and project_id == pid and tool == "resource.read" and not reached[name].is_set():
+                reached[name].set()
+                assert release[name].wait(8), "test barrier was not released"
+            return result
+    
+        monkeypatch.setattr(store, "authorize", gated_authorize)
+        app = create_app(store, settings)
+    
+        @app.middleware("http")
+        async def request_tag(request, call_next):
+            name = request.headers.get("x-test-lock-request")
+            token = tag.set(name if name in reached else None)
+            if name in request_started:
+                request_started[name].set()
+            try:
+                return await call_next(request)
+            finally:
+                tag.reset(token)
+    
+        def before_cursor(conn, cursor, statement, parameters, context, executemany):
+            name = tag.get()
+            if name not in reached:
+                return
+            # Authentication and application transactions can use different pool
+            # connections: associate the current SQL with its actual physical backend.
+            # A driver cursor avoids SQLAlchemy event recursion. This test-only
+            # observer is intentionally excluded from performance comparisons.
+            with conn.connection.cursor() as raw:
+                raw.execute("SELECT pg_backend_pid()")
+                backend = raw.fetchone()[0]
+                # Only this owned test transaction: no server/security config change.
+                # Bounds abnormal SQL waits so executor shutdown cannot strand.
+                raw.execute("SET LOCAL statement_timeout = '7000ms'")
+            with data_lock:
+                pids[name] = backend
+            if "FOR UPDATE" in statement and ("grants" in statement or "projects" in statement):
+                with data_lock:
+                    records.append(
+                        {
+                            "request": name,
+                            "backend": pids[name],
+                            "time": time.monotonic(),
+                            "kind": "project" if "projects" in statement else "grant",
+                            "statement": statement,
+                            "parameters": repr(parameters),
+                        }
+                    )
+    
+        def handle_error(context):
+            name = tag.get()
+            if name in reached:
+                original = context.original_exception
+                with data_lock:
+                    errors.append(
+                        {
+                            "request": name,
+                            "backend": pids.get(name),
+                            "sqlstate": getattr(original, "sqlstate", None),
+                            "message": str(original),
+                        }
+                    )
+    
+        event.listen(store.engine, "before_cursor_execute", before_cursor)
+        event.listen(store.engine, "handle_error", handle_error)
+    
+        def observe_blocked(waiter, holder, seconds=2):
+            deadline = time.monotonic() + seconds
+            observations = []
+            while time.monotonic() < deadline:
+                if waiter in pids and holder in pids:
+                    with store.engine.connect() as c:
+                        row = (
+                            c.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(:pid) AS blockers, "
+                                    "(SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid) AS wait_type, "
+                                    "(SELECT query FROM pg_stat_activity WHERE pid=:pid) AS query"
+                                ),
+                                {"pid": pids[waiter]},
+                            )
+                            .mappings()
+                            .one()
+                        )
+                    value = {"waiter": waiter, "holder": holder, "time": time.monotonic(), **dict(row)}
+                    observations.append(value)
+                    if pids[holder] in value["blockers"]:
+                        return value, observations
+                time.sleep(0.01)
+            return None, observations
+    
+        def request(name):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(
+                    {"Authorization": "Bearer synthetic-test-A", "x-test-lock-request": name}
+                )
+                if name == "resources":
+                    return client.get(f"/api/projects/{pid}/resources")
+                if operation == "plan":
+                    return client.post(base + "/plans", json=body)
+                return client.get(base + "/plans")
+    
+        second = "graph" if first == "resources" else "resources"
+        receipt = {
+            "first": first,
+            "operation": operation,
+            "resource_ids": {"csv": csv, "source": source, "target": target},
+            "paths": {"resources": f"/api/projects/{pid}/resources", "graph": base + "/plans"},
+            "old_cycle_observed": False,
+            "project_first_observed": False,
+            "blocking": [],
+        }
+        futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    futures[first] = pool.submit(request, first)
+                    assert reached[first].wait(8), "first request did not acquire expected real grants"
+                    futures[second] = pool.submit(request, second)
+                    assert request_started[second].wait(5), "second HTTP request not started"
+                    # Candidate must stop at project lock. Baseline instead reaches
+                    # its grants gate, so exact same inputs can expose the old cycle.
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() < deadline and not reached[second].is_set():
+                        blocked, observations = observe_blocked(second, first, seconds=0.05)
+                        receipt["blocking"].extend(observations)
+                        if blocked:
+                            receipt["project_first_observed"] = (
+                                "projects" in blocked["query"]
+                                and "FOR UPDATE" in blocked["query"]
+                                and not any(
+                                    r["request"] == second and r["kind"] == "grant" for r in records
+                                )
+                            )
+                            if receipt["project_first_observed"]:
+                                break
+                    if reached[second].is_set():
+                        # Both real grant sets are held on old code. Let resource
+                        # listing next seek source while graph still holds source.
+                        release["resources"].set()
+                        blocked, observations = observe_blocked("resources", "graph")
+                        receipt["blocking"].extend(observations)
+                        receipt["source_wait_observed"] = bool(blocked and "grants" in blocked["query"])
+                        # Graph now reaches CSV in PROJECT expansion: detector
+                        # resolves cycle; either victim is legitimate old evidence.
+                        release["graph"].set()
+                    else:
+                        release[first].set()
+                    # Never wait/join while a Python barrier remains held.
+                    for gate in release.values():
+                        gate.set()
+                    replies = {name: future.result(timeout=10) for name, future in futures.items()}
+                    receipt["statuses"] = {name: reply.status_code for name, reply in replies.items()}
+                    receipt["old_cycle_observed"] = any(e["sqlstate"] == "40P01" for e in errors)
+                finally:
+                    for gate in release.values():
+                        gate.set()
+            after = snapshot(env)
+            receipt["source_mutation_absent"] = all(
+                before[k] == after[k] for k in before if not k.startswith("delivery_graph_")
+            )
+            receipt["wires"] = len(wires)
+>           assert receipt["project_first_observed"], receipt
+E           AssertionError: {'blocking': [{'blockers': [], 'holder': 'resources', 'query': 'SELECT test_3c0fb50f60fe436c95f80e653de5efab.task_extr... UPDATE', 'time': 6000.109342104, ...}], 'first': 'resources', 'old_cycle_observed': True, 'operation': 'history', ...}
+E           assert False
+
+tests/test_resources_project_lock.py:231: AssertionError
+_________ test_pg_resources_graph_share_project_first_lock[graph-plan] _________
+
+env = (<sim2act.db.Store object at 0x7f64ba7aed20>, Settings(database_url='postgresql+psycopg://postgres:abe34f86d467b9e420c...0c4c245ea0491bac5e63b39bf14e7b', 'user_da44dd54a3b547c794280064060a9818', 'proj_70dbd327d39d4deea06da8c60eb59ffd', ...)
+tmp_path = PosixPath('/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f64bbd099d0>
+operation = 'plan', first = 'graph'
+
+    @pytest.mark.parametrize("operation", ["plan", "history"])
+    @pytest.mark.parametrize("first", ["resources", "graph"])
+    def test_pg_resources_graph_share_project_first_lock(env, tmp_path, monkeypatch, operation, first):
+        store, settings, _, owner, _, pid, csv = env
+        if store.sqlite:
+            pytest.skip("Real PG multi-resource lock ordering regression")
+        # Same trusted initial CSV peer + Report origins as actual REPORT DOM test.
+        draft(env)
+        bounded = bounded_env.__wrapped__(env)
+        saved, _, _, _, wires = promoted(bounded, tmp_path)
+        aid = saved["id"]
+        base = path(env, aid)
+        made = env[2].post(
+            base + "/derive",
+            json={
+                "expected_candidate_fingerprint": saved["fingerprint"],
+                "request_key": "barrier-derive",
+            },
+        )
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        body = change(graph, "barrier-plan")
+        if operation == "history":
+            seeded = env[2].post(base + "/plans", json=body)
+            assert seeded.status_code == 201, seeded.text
+            assert seeded.json()["receipt"]["revalidation_scope"] == "PROJECT"
+        before = snapshot(env)
+        source = saved["candidate"]["report_proof"]["source_resource_id"]
+        target = saved["candidate"]["report_proof"]["target_resource_id"]
+        assert len({csv, source, target}) == 3
+        assert len(wires) == 3
+    
+        tag = contextvars.ContextVar("pg_resource_graph_request", default=None)
+        reached = {name: threading.Event() for name in ("resources", "graph")}
+        release = {name: threading.Event() for name in reached}
+        request_started = {name: threading.Event() for name in reached}
+        data_lock = threading.Lock()
+        records, errors, pids = [], [], {}
+        real_authorize = store.authorize
+    
+        def gated_authorize(c, principal, runtime, project_id, rid, tool):
+            # Original DB authorization executes before the passive hold: no granted
+            # identity, permission, query ordering, or application return is faked.
+            result = real_authorize(c, principal, runtime, project_id, rid, tool)
+            name = tag.get()
+            at_gate = (name == "resources" and rid == csv) or (name == "graph" and rid == source)
+            if at_gate and project_id == pid and tool == "resource.read" and not reached[name].is_set():
+                reached[name].set()
+                assert release[name].wait(8), "test barrier was not released"
+            return result
+    
+        monkeypatch.setattr(store, "authorize", gated_authorize)
+        app = create_app(store, settings)
+    
+        @app.middleware("http")
+        async def request_tag(request, call_next):
+            name = request.headers.get("x-test-lock-request")
+            token = tag.set(name if name in reached else None)
+            if name in request_started:
+                request_started[name].set()
+            try:
+                return await call_next(request)
+            finally:
+                tag.reset(token)
+    
+        def before_cursor(conn, cursor, statement, parameters, context, executemany):
+            name = tag.get()
+            if name not in reached:
+                return
+            # Authentication and application transactions can use different pool
+            # connections: associate the current SQL with its actual physical backend.
+            # A driver cursor avoids SQLAlchemy event recursion. This test-only
+            # observer is intentionally excluded from performance comparisons.
+            with conn.connection.cursor() as raw:
+                raw.execute("SELECT pg_backend_pid()")
+                backend = raw.fetchone()[0]
+                # Only this owned test transaction: no server/security config change.
+                # Bounds abnormal SQL waits so executor shutdown cannot strand.
+                raw.execute("SET LOCAL statement_timeout = '7000ms'")
+            with data_lock:
+                pids[name] = backend
+            if "FOR UPDATE" in statement and ("grants" in statement or "projects" in statement):
+                with data_lock:
+                    records.append(
+                        {
+                            "request": name,
+                            "backend": pids[name],
+                            "time": time.monotonic(),
+                            "kind": "project" if "projects" in statement else "grant",
+                            "statement": statement,
+                            "parameters": repr(parameters),
+                        }
+                    )
+    
+        def handle_error(context):
+            name = tag.get()
+            if name in reached:
+                original = context.original_exception
+                with data_lock:
+                    errors.append(
+                        {
+                            "request": name,
+                            "backend": pids.get(name),
+                            "sqlstate": getattr(original, "sqlstate", None),
+                            "message": str(original),
+                        }
+                    )
+    
+        event.listen(store.engine, "before_cursor_execute", before_cursor)
+        event.listen(store.engine, "handle_error", handle_error)
+    
+        def observe_blocked(waiter, holder, seconds=2):
+            deadline = time.monotonic() + seconds
+            observations = []
+            while time.monotonic() < deadline:
+                if waiter in pids and holder in pids:
+                    with store.engine.connect() as c:
+                        row = (
+                            c.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(:pid) AS blockers, "
+                                    "(SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid) AS wait_type, "
+                                    "(SELECT query FROM pg_stat_activity WHERE pid=:pid) AS query"
+                                ),
+                                {"pid": pids[waiter]},
+                            )
+                            .mappings()
+                            .one()
+                        )
+                    value = {"waiter": waiter, "holder": holder, "time": time.monotonic(), **dict(row)}
+                    observations.append(value)
+                    if pids[holder] in value["blockers"]:
+                        return value, observations
+                time.sleep(0.01)
+            return None, observations
+    
+        def request(name):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(
+                    {"Authorization": "Bearer synthetic-test-A", "x-test-lock-request": name}
+                )
+                if name == "resources":
+                    return client.get(f"/api/projects/{pid}/resources")
+                if operation == "plan":
+                    return client.post(base + "/plans", json=body)
+                return client.get(base + "/plans")
+    
+        second = "graph" if first == "resources" else "resources"
+        receipt = {
+            "first": first,
+            "operation": operation,
+            "resource_ids": {"csv": csv, "source": source, "target": target},
+            "paths": {"resources": f"/api/projects/{pid}/resources", "graph": base + "/plans"},
+            "old_cycle_observed": False,
+            "project_first_observed": False,
+            "blocking": [],
+        }
+        futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    futures[first] = pool.submit(request, first)
+                    assert reached[first].wait(8), "first request did not acquire expected real grants"
+                    futures[second] = pool.submit(request, second)
+                    assert request_started[second].wait(5), "second HTTP request not started"
+                    # Candidate must stop at project lock. Baseline instead reaches
+                    # its grants gate, so exact same inputs can expose the old cycle.
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() < deadline and not reached[second].is_set():
+                        blocked, observations = observe_blocked(second, first, seconds=0.05)
+                        receipt["blocking"].extend(observations)
+                        if blocked:
+                            receipt["project_first_observed"] = (
+                                "projects" in blocked["query"]
+                                and "FOR UPDATE" in blocked["query"]
+                                and not any(
+                                    r["request"] == second and r["kind"] == "grant" for r in records
+                                )
+                            )
+                            if receipt["project_first_observed"]:
+                                break
+                    if reached[second].is_set():
+                        # Both real grant sets are held on old code. Let resource
+                        # listing next seek source while graph still holds source.
+                        release["resources"].set()
+                        blocked, observations = observe_blocked("resources", "graph")
+                        receipt["blocking"].extend(observations)
+                        receipt["source_wait_observed"] = bool(blocked and "grants" in blocked["query"])
+                        # Graph now reaches CSV in PROJECT expansion: detector
+                        # resolves cycle; either victim is legitimate old evidence.
+                        release["graph"].set()
+                    else:
+                        release[first].set()
+                    # Never wait/join while a Python barrier remains held.
+                    for gate in release.values():
+                        gate.set()
+                    replies = {name: future.result(timeout=10) for name, future in futures.items()}
+                    receipt["statuses"] = {name: reply.status_code for name, reply in replies.items()}
+                    receipt["old_cycle_observed"] = any(e["sqlstate"] == "40P01" for e in errors)
+                finally:
+                    for gate in release.values():
+                        gate.set()
+            after = snapshot(env)
+            receipt["source_mutation_absent"] = all(
+                before[k] == after[k] for k in before if not k.startswith("delivery_graph_")
+            )
+            receipt["wires"] = len(wires)
+>           assert receipt["project_first_observed"], receipt
+E           AssertionError: {'blocking': [{'blockers': [], 'holder': 'graph', 'query': 'SELECT test_2e43b29093ed4594876f41a2c20feca7.grants.id, te....id FOR UPDATE', 'time': 6004.497065299, ...}], 'first': 'graph', 'old_cycle_observed': True, 'operation': 'plan', ...}
+E           assert False
+
+tests/test_resources_project_lock.py:231: AssertionError
+_______ test_pg_resources_graph_share_project_first_lock[graph-history] ________
+
+env = (<sim2act.db.Store object at 0x7f64c1d269c0>, Settings(database_url='postgresql+psycopg://postgres:abe34f86d467b9e420c...938f20a8b144e49feda584f5e488a0', 'user_d8810f5fee224e3daee629ac143e2910', 'proj_f6f379a1da8c421a806f29354dfb7e71', ...)
+tmp_path = PosixPath('/tmp/sim2act-hotspots-old-regression-20261008/fixtures/test_pg_resources_graph_share_3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f64bbef7b90>
+operation = 'history', first = 'graph'
+
+    @pytest.mark.parametrize("operation", ["plan", "history"])
+    @pytest.mark.parametrize("first", ["resources", "graph"])
+    def test_pg_resources_graph_share_project_first_lock(env, tmp_path, monkeypatch, operation, first):
+        store, settings, _, owner, _, pid, csv = env
+        if store.sqlite:
+            pytest.skip("Real PG multi-resource lock ordering regression")
+        # Same trusted initial CSV peer + Report origins as actual REPORT DOM test.
+        draft(env)
+        bounded = bounded_env.__wrapped__(env)
+        saved, _, _, _, wires = promoted(bounded, tmp_path)
+        aid = saved["id"]
+        base = path(env, aid)
+        made = env[2].post(
+            base + "/derive",
+            json={
+                "expected_candidate_fingerprint": saved["fingerprint"],
+                "request_key": "barrier-derive",
+            },
+        )
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        body = change(graph, "barrier-plan")
+        if operation == "history":
+            seeded = env[2].post(base + "/plans", json=body)
+            assert seeded.status_code == 201, seeded.text
+            assert seeded.json()["receipt"]["revalidation_scope"] == "PROJECT"
+        before = snapshot(env)
+        source = saved["candidate"]["report_proof"]["source_resource_id"]
+        target = saved["candidate"]["report_proof"]["target_resource_id"]
+        assert len({csv, source, target}) == 3
+        assert len(wires) == 3
+    
+        tag = contextvars.ContextVar("pg_resource_graph_request", default=None)
+        reached = {name: threading.Event() for name in ("resources", "graph")}
+        release = {name: threading.Event() for name in reached}
+        request_started = {name: threading.Event() for name in reached}
+        data_lock = threading.Lock()
+        records, errors, pids = [], [], {}
+        real_authorize = store.authorize
+    
+        def gated_authorize(c, principal, runtime, project_id, rid, tool):
+            # Original DB authorization executes before the passive hold: no granted
+            # identity, permission, query ordering, or application return is faked.
+            result = real_authorize(c, principal, runtime, project_id, rid, tool)
+            name = tag.get()
+            at_gate = (name == "resources" and rid == csv) or (name == "graph" and rid == source)
+            if at_gate and project_id == pid and tool == "resource.read" and not reached[name].is_set():
+                reached[name].set()
+                assert release[name].wait(8), "test barrier was not released"
+            return result
+    
+        monkeypatch.setattr(store, "authorize", gated_authorize)
+        app = create_app(store, settings)
+    
+        @app.middleware("http")
+        async def request_tag(request, call_next):
+            name = request.headers.get("x-test-lock-request")
+            token = tag.set(name if name in reached else None)
+            if name in request_started:
+                request_started[name].set()
+            try:
+                return await call_next(request)
+            finally:
+                tag.reset(token)
+    
+        def before_cursor(conn, cursor, statement, parameters, context, executemany):
+            name = tag.get()
+            if name not in reached:
+                return
+            # Authentication and application transactions can use different pool
+            # connections: associate the current SQL with its actual physical backend.
+            # A driver cursor avoids SQLAlchemy event recursion. This test-only
+            # observer is intentionally excluded from performance comparisons.
+            with conn.connection.cursor() as raw:
+                raw.execute("SELECT pg_backend_pid()")
+                backend = raw.fetchone()[0]
+                # Only this owned test transaction: no server/security config change.
+                # Bounds abnormal SQL waits so executor shutdown cannot strand.
+                raw.execute("SET LOCAL statement_timeout = '7000ms'")
+            with data_lock:
+                pids[name] = backend
+            if "FOR UPDATE" in statement and ("grants" in statement or "projects" in statement):
+                with data_lock:
+                    records.append(
+                        {
+                            "request": name,
+                            "backend": pids[name],
+                            "time": time.monotonic(),
+                            "kind": "project" if "projects" in statement else "grant",
+                            "statement": statement,
+                            "parameters": repr(parameters),
+                        }
+                    )
+    
+        def handle_error(context):
+            name = tag.get()
+            if name in reached:
+                original = context.original_exception
+                with data_lock:
+                    errors.append(
+                        {
+                            "request": name,
+                            "backend": pids.get(name),
+                            "sqlstate": getattr(original, "sqlstate", None),
+                            "message": str(original),
+                        }
+                    )
+    
+        event.listen(store.engine, "before_cursor_execute", before_cursor)
+        event.listen(store.engine, "handle_error", handle_error)
+    
+        def observe_blocked(waiter, holder, seconds=2):
+            deadline = time.monotonic() + seconds
+            observations = []
+            while time.monotonic() < deadline:
+                if waiter in pids and holder in pids:
+                    with store.engine.connect() as c:
+                        row = (
+                            c.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(:pid) AS blockers, "
+                                    "(SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid) AS wait_type, "
+                                    "(SELECT query FROM pg_stat_activity WHERE pid=:pid) AS query"
+                                ),
+                                {"pid": pids[waiter]},
+                            )
+                            .mappings()
+                            .one()
+                        )
+                    value = {"waiter": waiter, "holder": holder, "time": time.monotonic(), **dict(row)}
+                    observations.append(value)
+                    if pids[holder] in value["blockers"]:
+                        return value, observations
+                time.sleep(0.01)
+            return None, observations
+    
+        def request(name):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(
+                    {"Authorization": "Bearer synthetic-test-A", "x-test-lock-request": name}
+                )
+                if name == "resources":
+                    return client.get(f"/api/projects/{pid}/resources")
+                if operation == "plan":
+                    return client.post(base + "/plans", json=body)
+                return client.get(base + "/plans")
+    
+        second = "graph" if first == "resources" else "resources"
+        receipt = {
+            "first": first,
+            "operation": operation,
+            "resource_ids": {"csv": csv, "source": source, "target": target},
+            "paths": {"resources": f"/api/projects/{pid}/resources", "graph": base + "/plans"},
+            "old_cycle_observed": False,
+            "project_first_observed": False,
+            "blocking": [],
+        }
+        futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    futures[first] = pool.submit(request, first)
+                    assert reached[first].wait(8), "first request did not acquire expected real grants"
+                    futures[second] = pool.submit(request, second)
+                    assert request_started[second].wait(5), "second HTTP request not started"
+                    # Candidate must stop at project lock. Baseline instead reaches
+                    # its grants gate, so exact same inputs can expose the old cycle.
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() < deadline and not reached[second].is_set():
+                        blocked, observations = observe_blocked(second, first, seconds=0.05)
+                        receipt["blocking"].extend(observations)
+                        if blocked:
+                            receipt["project_first_observed"] = (
+                                "projects" in blocked["query"]
+                                and "FOR UPDATE" in blocked["query"]
+                                and not any(
+                                    r["request"] == second and r["kind"] == "grant" for r in records
+                                )
+                            )
+                            if receipt["project_first_observed"]:
+                                break
+                    if reached[second].is_set():
+                        # Both real grant sets are held on old code. Let resource
+                        # listing next seek source while graph still holds source.
+                        release["resources"].set()
+                        blocked, observations = observe_blocked("resources", "graph")
+                        receipt["blocking"].extend(observations)
+                        receipt["source_wait_observed"] = bool(blocked and "grants" in blocked["query"])
+                        # Graph now reaches CSV in PROJECT expansion: detector
+                        # resolves cycle; either victim is legitimate old evidence.
+                        release["graph"].set()
+                    else:
+                        release[first].set()
+                    # Never wait/join while a Python barrier remains held.
+                    for gate in release.values():
+                        gate.set()
+                    replies = {name: future.result(timeout=10) for name, future in futures.items()}
+                    receipt["statuses"] = {name: reply.status_code for name, reply in replies.items()}
+                    receipt["old_cycle_observed"] = any(e["sqlstate"] == "40P01" for e in errors)
+                finally:
+                    for gate in release.values():
+                        gate.set()
+            after = snapshot(env)
+            receipt["source_mutation_absent"] = all(
+                before[k] == after[k] for k in before if not k.startswith("delivery_graph_")
+            )
+            receipt["wires"] = len(wires)
+>           assert receipt["project_first_observed"], receipt
+E           AssertionError: {'blocking': [{'blockers': [], 'holder': 'graph', 'query': 'SELECT test_20c92ccb6cea4fc4bbbaef4704c98d14.grants.id, te... FOR UPDATE', 'time': 6009.542355631, ...}], 'first': 'graph', 'old_cycle_observed': True, 'operation': 'history', ...}
+E           assert False
+
+tests/test_resources_project_lock.py:231: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 30 durations =============================
+4.72s call     tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-history]
+4.71s call     tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-history]
+4.02s call     tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-plan]
+3.98s call     tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-plan]
+0.30s setup    tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-plan]
+0.27s setup    tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-history]
+0.25s setup    tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-plan]
+0.23s setup    tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-history]
+0.02s teardown tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-history]
+0.01s teardown tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-history]
+0.01s teardown tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-plan]
+0.01s teardown tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-plan]
+=========================== short test summary info ============================
+FAILED tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-plan]
+FAILED tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[resources-history]
+FAILED tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-plan]
+FAILED tests/test_resources_project_lock.py::test_pg_resources_graph_share_project_first_lock[graph-history]
+4 failed, 1 warning in 18.63s

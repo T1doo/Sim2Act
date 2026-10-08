@@ -396,3 +396,37 @@ original27 skips. Native Windows/Win11/Edge/real-provider/owner/F1/F3/R0 accepta
 is not claimed. **Windows900/Edge240/Node150 remain unchanged and NO_GO.**
 Full artifacts, commands, JUnit, measured rankings, optimization limits and
 ownership receipts are under `docs/evidence/engineering-pg-phase-20261008/full-verification/`.
+
+## Grant deadlock and two DOM hotspot follow-up
+
+Frozen old source0f11dcd; [complete hotspot evidence](../evidence/engineering-pg-hotspots-20261008/README.md).
+The original three server deadlocks align with the REPORT DOM call by retained
+phase timing, but old logs lack exact HTTP/bind-parameter linkage. New original
+REPORT DOM reproduction records five resource-list40P01/HTTP500 and their
+competing graph plan/history requests. These are real multi-resource lock races,
+not expected test refusals; background error handling can allow final DOM PASS.
+
+Resource listing now takes the existing project lock before authorization,
+matching REPORT's project-before-grants order. Owner/runtime checks, expiry,
+revocation, return shape and fresh-source validation remain. Four bounded real
+PG request schedules fail on old code with40P01/500 and pass on fixed code with
+different backends, project-first waiting and200/201. One added actual CRUD-role
+test confirms nonprivileged SELECT-only listing, foreign-owner403 and both
+identities' revoke/expiry omission without authority/schema mutation.
+
+Identically observed two original DOM nodes pass old/new. REPORT call32.686→29.401s;
+report-manifest36.595→37.427s. The latter's27 history reads total12.058s, while
+REPORT's8 graph-history reads total9.805s, with overlapping requests/functions.
+Each node initializes only once (~.06–.07s). Repeated load_family/source checks
+and2.5s background polling are measured, but no safe cache or polling reduction
+is established. Single paired samples do not prove general or stable speedup.
+
+Fixed related selection91PASS/0FAIL/0SKIP, pytest150.13s/wall151.312s; Ruff/mypy47
+PASS. Original1586 nodes and all original test/web/script/workflow bytes retained;
+default collection now1591 solely through five added regressions. No new full
+run; the previous1559PASS/27SKIP remains evidence for its earlier frozen source.
+Independent read-only review passes and validates the five new receipts. All
+four owned runs have census0/0/0 and removed containers/volumes; compressed raw
+timelines, JUnit and artifacts are byte/hash verified. Original instance remains
+untouched, LIVE0/MOCK, no new CI/native/provider run. Windows900/Edge240/Node150
+and NO_GO remain.

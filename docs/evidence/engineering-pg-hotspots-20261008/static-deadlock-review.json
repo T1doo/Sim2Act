@@ -1,0 +1,95 @@
+{
+  "reviewer": "grant_deadlock_review",
+  "frozen_sha": "0f11dcd6e4fcb6bbc004ea30e0e8cc154727c440",
+  "scope": "Read-only static source and retained-server-log review; no container, tests, source edits, or pushes.",
+  "observed_log": {
+    "path": "docs/evidence/engineering-pg-phase-20261008/full-verification/server-attached.stderr.log",
+    "times_utc": [
+      "2026-10-08 04:24:26.134",
+      "2026-10-08 04:24:31.138",
+      "2026-10-08 04:24:33.640"
+    ],
+    "backends": [
+      345,
+      346
+    ],
+    "schema": "test_4714fe2c9dbe463082e853cbc01a33e9",
+    "query_shape": "grants filtered identity/project/resource/tool ORDER BY id FOR UPDATE",
+    "limitation": "No bind parameters or HTTP request/backend linkage retained, so historical exact endpoints cannot be established from these log statements alone."
+  },
+  "classification": {
+    "expected_negative_test": false,
+    "basis": "The actual HTTP DOM test expects 29 successful behavioral checks, uses no deadlock injection/expectation, and its only deliberate database mutation revokes a single known grant. API handles DomainError only; SQLAlchemy deadlock errors are not a designed authorization refusal. Background refresh catches failed requests and can hide a transient 500 from final PASS. The actual historical error is therefore not an established expected rejection.",
+    "concurrency_risk": "Concrete opposing multi-resource grant lock order exists in normal product read paths; reproduced attribution remains pending root diagnostic."
+  },
+  "request_paths": [
+    {
+      "request": "GET /api/projects/{pid}/resources",
+      "source": "src/sim2act/api.py:230-250",
+      "path": [
+        "Store.tx()",
+        "own_project (no lock)",
+        "select resources with no ORDER BY",
+        "authorize each resource, locking owner grants then project-runtime grants"
+      ],
+      "locks": "Retains all prior resource grant locks until request transaction completes."
+    },
+    {
+      "request": "POST delivery-graph/plans or GET delivery-graph/plans",
+      "source": "src/sim2act/delivery_graph_apps.py:757,859",
+      "path": [
+        "current(REPORT)",
+        "load_family -> lock_project",
+        "report_manifest_apps.load -> conditional_apps._load_validated_origin -> verified_pending(extraction/source) -> protocol_jobs._authority -> authorize report source",
+        "_current_target -> authorize report target",
+        "PROJECT expansion -> current(CSV peer) -> authorize CSV"
+      ],
+      "locks": "Starts by report-source grants and then acquires trusted CSV peer grants later in same transaction."
+    },
+    {
+      "request": "2.5 second background refresh",
+      "source": "src/sim2act/web/app.js:208-217",
+      "path": [
+        "health",
+        "refresh()",
+        "resources",
+        "goal cards",
+        "apps",
+        "conditional apps",
+        "protocol",
+        "runs",
+        "grants"
+      ],
+      "guard": "backgroundRefreshInFlight serializes only other background refreshes, not concurrent explicit graph/history requests."
+    }
+  ],
+  "opposing_order": {
+    "fixture": "test_delivery_graph_apps_ui.py creates CSV peer before adding bounded source and target; initial CSV is conftest env resource. Resource heap-order listing can therefore encounter CSV before report source; SQL row order is not guaranteed.",
+    "cycle": "Trefresh owns CSV grant locks and waits for report-source grant. Tgraph owns report-source grants and later waits for CSV grants in PROJECT expansion. Tgraph project lock cannot exclude Trefresh because resources listing never acquires it.",
+    "single_query_order_limitation": "ORDER BY grants.id deterministically orders one identity/resource/tool subset; it does not sort all locks across multiple Store.authorize calls or different resources."
+  },
+  "candidate_minimal_fix": {
+    "location": "src/sim2act/api.py:list_resources",
+    "proposal": "Change the initial own_project call to lock_project before any grant authorization. No source edits made by this review.",
+    "reason": "Join the existing project -> entity -> grant transaction ordering used by report and delivery graph operations. Two competing requests cannot acquire opposing grant sets while both serialize at project first.",
+    "preservation": "Keep current per-resource authorization, DomainError filtering, owner/runtime intersection, expiry/revocation checks, existing data return shape and all original DOM assertions.",
+    "risk": "Serializes resource-list reads per project; avoid claiming latency improvement until same-input measurements. This is a localized fix to this competing endpoint, not a proof of all global grant-order safety.",
+    "alternatives_rejected": [
+      "Sort resource rows alone: report traverses root source before peers and dynamic traversal order can differ.",
+      "Remove FOR UPDATE or relax current-authority validation: would weaken revoke/expiry synchronization.",
+      "Suppress or retry deadlocks without order repair: can hide errors and costs."
+    ]
+  },
+  "required_regressions": [
+    "Real isolated PG deterministic two-request barrier: resource listing and REPORT PROJECT graph plan/history, both scheduling orders; record backend IDs, pg_blocking_pids, SQL params/request path, and exact expected statuses.",
+    "Old same-input run should expose concrete lock cycle (40P01) with bounded release and clean rollback. New run must show second request waiting on project lock before grant acquisition, followed by both correct results after first releases; never await while leaving barriers stranded.",
+    "Existing actual HTTP DOM REPORT and CSV tests unchanged, including 29 checks, exact loaded web hashes, single grant revocation and no other authority mutation.",
+    "Unauthorized owner, revoked/expired owner grant, revoked/expired runtime grant and resource-list filtering still refuse or omit as before. Verify no extra grants/principals/attempts and owned schema cleanup.",
+    "Same frozen old/new inputs/environment measurement: request spans and SQL wait times; report wall-time differences as observed samples, not sums of nested fixture totals or Windows qualification."
+  ],
+  "phase_split_hypotheses_only": [
+    "current() calls load_family then build(), which calls load_family again; history also invokes PROJECT expansion and load_family for public jobs. Repeated origin validation is visible statically but removing it requires evidence that mutable authority/seal checks remain equivalent; not recommended as first fix.",
+    "DOM intentional hold gates and 10ms bounded waits have maximum 6s but no fixed sleep delay except polling intervals. Profile exact awaited HTTP calls, driver checks and SQL to distinguish business validation, network/DOM work, and grant waits."
+  ],
+  "conclusion": "A small resources-list project lock is a strong correctness-preserving candidate if controlled diagnostic confirms the suspected opposing request pair. Historical three-deadlock attribution is not yet proved by retained data."
+}

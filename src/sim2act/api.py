@@ -230,7 +230,9 @@ def create_app(store=None, settings=None):
     @app.get("/api/projects/{pid}/resources")
     def list_resources(pid: str, user=user_dependency):
         with db.tx() as c:
-            p = db.own_project(c, user, pid)
+            # Graph reads also authorize multiple resources. Serialize at the
+            # project before grants so their traversal order cannot deadlock.
+            p = db.lock_project(c, user, pid)
             rows = (
                 c.execute(
                     select(
