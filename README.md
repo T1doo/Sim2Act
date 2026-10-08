@@ -6,6 +6,8 @@
 
 [本机安装与只读预检](docs/Installation.md)：MOCK 工程体验；真实 Win11 普通用户首次启动仍未测。
 
+[CSV 列绑定局部修改](docs/F2/ColumnBindingPatchQuickstart.md)：同一求和节点 amount → quantity 新草案、精确版本确认、实际只读检查和无关对象保持证明。离线工程候选未验收，旧应用不覆盖，正式发布关闭。
+
 已成功内部 CSV 任务的有界复用入口：[最短上手说明](docs/F2/RegisteredRunQuickstart.md)。保持本机 MOCK，不代表完整 P-B 或正式发布。
 
 本增量支持：本地身份、三个工作区、项目内文本材料、异步持久任务、独立 API/worker、受控工具与回执、幂等提交、租约/fencing、暂停/取消、授权撤回、有限模型循环和跨进程配额账本。

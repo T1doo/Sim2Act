@@ -923,6 +923,9 @@ def history(store, user, pid, aid, limits):
 
 
 def mount(app, store, identity, limits, settings=None):
+    from .column_patches import mount as mount_column_patches
+
+    mount_column_patches(app, store, identity, limits)
     dependency = Depends(identity)
     base = "/api/projects/{pid}/apps/{aid}/delivery-graph"
 

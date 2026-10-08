@@ -560,3 +560,39 @@ def plan_change(
     if previous_receipt is not None and _hash(previous_receipt) != _hash(receipt):
         raise DomainError("VERSION_CONFLICT", "Prior receipt differs from current authorized plan")
     return copy.deepcopy(receipt)
+
+
+def column_binding_patch(graph, node_id, binding):
+    """Immutable CSV binding overlay; preserve all non-descendant object versions.
+
+    Authority, schema and baseline validation belong to the existing service adapter.
+    Unknown dependencies expand checks, never the set of definitions rewritten here.
+    This overlay is a preview definition, not a canonical AppManifest or Release.
+    """
+    g = _validate_graph(graph)
+    nodes = {n.id: n for n in g.nodes}
+    if node_id not in nodes or nodes[node_id].key != "action:aggregate":
+        raise DomainError("UNSUPPORTED_CAPABILITY", "Only the CSV aggregate binding is supported")
+    affected = {node_id}
+    while True:
+        expanded = affected | {e.downstream for e in g.edges if e.upstream in affected}
+        if expanded == affected:
+            break
+        affected = expanded
+    for nid in affected:
+        nodes[nid].revision += 1
+    nodes[node_id].definition["column_binding"] = copy.deepcopy(binding)
+    package = next(n for n in g.nodes if n.kind == "MANIFEST")
+    package.definition["preview_column_binding"] = copy.deepcopy(binding)
+    sealed: dict[str, Node] = {}
+    for nid in _topology(g.nodes, g.edges):
+        node = nodes[nid]
+        node.content_fingerprint = _node_hash(node, g.edges, sealed)
+        sealed[nid] = node
+    value = g.model_dump(exclude={"graph_fingerprint"})
+    # Bind overlay context to the original trusted context and exact new binding.
+    value["context_fingerprint"] = _hash(
+        {"baseline_context": g.context_fingerprint, "column_binding": binding}
+    )
+    value["graph_fingerprint"] = _hash(value)
+    return _validate_graph(value).model_dump()
