@@ -714,6 +714,10 @@ def create_app(store=None, settings=None):
     def delivery_graph_js():
         return FileResponse(web / "delivery-graph.js", media_type="text/javascript")
 
+    @app.get("/csv-dag.js")
+    def csv_dag_js():
+        return FileResponse(web / "csv-dag.js", media_type="text/javascript")
+
     @app.get("/conditional-apps.js")
     def conditional_apps_js():
         return FileResponse(web / "conditional-apps.js", media_type="text/javascript")

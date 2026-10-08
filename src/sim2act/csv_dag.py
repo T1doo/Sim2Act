@@ -20,13 +20,12 @@ from sqlalchemy import insert, select, update
 from . import csv_reports as report
 from . import delivery_graph_apps as graph
 from .app_jobs import lock_live, stop_state
-from .column_patches import read_pair, require_capacity
+from .column_patches import KeyInput, read_pair, require_capacity
 from .contracts import (
     FrozenRunContract,
     GoalSpec,
     Limits,
     ResourceSnapshot,
-    Strict,
     validate_action_input,
     validate_value,
 )
@@ -51,14 +50,14 @@ READ_OUTPUT = report.obj({"resource_id": {"type": "string"}, "content": {"type":
                           "hash": {"type": "string"}, "format": {"type": "string"}})
 
 
-class PlanInput(Strict):
+class PlanInput(KeyInput):
     expected_candidate_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
     column: str = Field(min_length=1, max_length=200)
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
-class RunInput(Strict):
+class RunInput(KeyInput):
     expected_plan_fingerprint: str = Field(pattern=graph.HASH)
     consent: Literal["CONFIRM_EXACT_OFFLINE_CSV_DAG"]
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")

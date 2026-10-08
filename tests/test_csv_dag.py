@@ -113,6 +113,9 @@ def test_invalidation_between_preview_and_sum_preserves_only_preview(env, kind):
 
 
 class NoModel:
+    def request(self, *args, **kwargs):
+        raise AssertionError("Fixed CSV DAG must never call any model")
+
     def complete(self, *args, **kwargs):
         raise AssertionError("Fixed CSV DAG must never call any model")
 
@@ -228,7 +231,7 @@ def test_closed_api_confirmation_and_request_key_conflicts(env, mutation):
         else:
             changed["expected_plan_fingerprint"] = "f" * 64
         reply = env[2].post(base + "/plan/runs", json=changed)
-    assert reply.status_code in {409, 422}
+    assert reply.status_code in {400, 409, 422}
     assert step_ids(env, job) == set()
 
 
