@@ -1,0 +1,15 @@
+# Bounded natural activation PG evidence
+
+Baseline ebf822396523160ab4824d0e8fea0803acf6b4e2. Final execution source334fae229f48984111c604a33d72f6be45adb3e2. This follow-up repairs offline activation approval blockers; it does not accept complete natural-language/P-A/P-B, F1/AT02, native Windows or LIVE.
+
+stages.json contains actual JUnit collection and per-stage pass/fail/skip/node lists; every stage preserves its source-before.json file hashes and source-after.json equality result. Earlier WIP run's Git HEAD is not claimed as its exact byte source. target-log.json is a lossless text wrapper with original log SHA; raw/sanitized hash files disclose URI sanitization before raw deletion. source-patch.json is the exact product/test patch from baseline, wrapped to preserve whitespace. No private DSN or Authorization is exported.
+
+The final root suite uses existing pytest conftest with a private process-only SIM2ACT_TEST_DATABASE_URL pointing to the recorded owned loopback cached ephemeral PG17.11. Each case explicitly migrates a unique schema. The original runtime_role fixture creates only an owned temporary CRUD-only role and cleans it; API/Worker never create schema/tables. Model responses all come from MockTransport; model-network calls0.
+
+PG proof files record actual distinct planning/control transaction backend IDs, charge/reservation/effect counts, source/authority comparison and leases. They are not probe-only backend IDs. The two-worker first phase has one wire/Attempt/reservation, a later distinct goal contributes the second slot; total at most2. Confirmation CAS races honestly retain200/403/409 depending on actor/control ordering rather than pretending a stale cancellation succeeded. Repeated confirmation writes one event; sum oracle19 comes from actual tool receipt. Rollback fault is placed after actual charge/reservation within Worker.reserve, leaving no half-commits. Role test denies CREATE TABLE.
+
+The independent review retains its frozen-source inspections and actual failing read oracle, corrected single-case rerun, and a separately classified follow-up NameError in its external harness. It is not counted as root coverage or silently discarded. Its337 tests are not relabeled as334 executions.
+
+No new native browser or ServerCI run was launched: existing Windows900/Edge240/Node150 remain NO_GO. The LIVE readiness JSON/proposal is blocked by unverified monetary amount/currency/billing/provider hard spending cap and production prerequisites; current allowance0. cleanup.json records owned schema/role/public-table census, exact container removal and private DSN/fixtures deletion. Safe evidence remains only in the existing Git project; no recovery bundle/other destination.
+
+Failed root JUnit XML containing diagnostic trailing whitespace is stored in lossless `junit-xml.json` wrappers; lossless-xml-wrappers.json maps original names and byte SHA. Decode the text field to reconstruct the exact safe XML. No whitespace check is suppressed. Independent delivery byte hashes remain unchanged.
