@@ -268,7 +268,8 @@ def test_old_partial_status_only_upgrade_is_rejected_by_cold_inspection(env):
     assert table_snapshot(store) == before
 
 
-def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, tmp_path):
+@pytest.mark.parametrize("fake", ["lost", "wrong_contract"])
+def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, tmp_path, fake):
     import json
     import socket
     import subprocess
@@ -324,6 +325,7 @@ def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, t
                 "session": session["id"],
                 "card": cards["sum_quantity_z"]["id"],
                 "target": target,
+                "fake": fake,
             }
         )
     )
@@ -356,3 +358,21 @@ def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, t
         server.should_exit = True
         thread.join(10)
         assert not thread.is_alive()
+
+
+@pytest.mark.parametrize("fixed", [False, True])
+def test_terminal_missing_result_is_not_cold_success(env, fixed):
+    if fixed:
+        value, _, rid, *_ = prepared(env)
+    else:
+        from test_natural_receipt_candidate import prepare
+
+        context = prepare(env)
+        value, _, rid, *_ = context
+    store, _, client, *_ = value
+    with store.tx() as c:
+        c.execute(update(runs).where(runs.c.id == rid).values(result=None))
+    before = table_snapshot(store)
+    assert client.get("/api/runs/" + rid).status_code == 400
+    assert client.get("/api/runs/" + rid + "/receipt-candidate-options").status_code in {400, 409}
+    assert table_snapshot(store) == before

@@ -53,6 +53,7 @@ async function readNaturalGoal(entry,current){
       const binding=r.contract?.snapshot?.natural_planning?.activation;
       if(entry.activation && goalRunCanonical(binding)!==goalRunCanonical(entry.activation))throw Error("VERSION_CONFLICT");
       if(!entry.activation && binding)throw Error("VERSION_CONFLICT");
+      if(goalRunCanonical(r.contract?.snapshot?.natural_planning?.goal_acceptance||null)!==goalRunCanonical(entry.fixedSpec||null))throw Error("验收契约绑定不匹配");
       if(r.id!==entry.runId||!source||source.card_id!==entry.cardId||source.version!==entry.body.expected_version||source.fingerprint!==entry.body.expected_fingerprint||goalRunCanonical(source.snapshot)!==goalRunCanonical(entry.snapshot)||r.contract?.snapshot?.natural_planning?.require_confirmation!==true)throw Error("VERSION_CONFLICT");
     });
     if(!current())return;
@@ -73,7 +74,9 @@ async function generateNaturalGoal(recover=false){
     if(naturalActivationBlocked)return;
     if(selected && (!selected.submission_available || !selected.approved_not_expired || selected.charged_requests>=2 || !selected.scope.goals.some(g=>g.card_id===card.id && g.expected_version===card.version && g.expected_fingerprint===card.fingerprint && !selected.charged_kinds.includes(g.kind))))return;
     const acceptFixed=selected?.scope.mode==="OFFLINE_TEST" && $("natural-fixed-acceptance").checked;
-    entry={acceptFixed,endpoint:selected?`/api/natural-activations/${selected.id}/goal-cards/${card.id}/${acceptFixed?"fixed-goal-runs":"planned-runs"}`:`/api/projects/${project}/goal-cards/${card.id}/planned-runs`,activation:selected?{activation_id:selected.id,scope_fingerprint:selected.scope_fingerprint,approval_fingerprint:selected.approval_fingerprint}:null,cardId:card.id,snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};naturalGoalRequests.set(key,entry);
+    const fixedGoal=selected?.scope.goals.find(g=>g.card_id===card.id);
+    const fixedSpec=acceptFixed?{version:"fixed-csv-goal-acceptance.v1",kind:fixedGoal.kind,resource_id:fixedGoal.resource_id,source_hash:fixedGoal.resource_hash,goal_fingerprint:fixedGoal.expected_fingerprint,check:fixedGoal.kind==="read_preview"?"csv.complete_preview.v1":"csv.exact_integer_sum.v1"}:null;
+    entry={acceptFixed,fixedSpec,endpoint:selected?`/api/natural-activations/${selected.id}/goal-cards/${card.id}/${acceptFixed?"fixed-goal-runs":"planned-runs"}`:`/api/projects/${project}/goal-cards/${card.id}/planned-runs`,activation:selected?{activation_id:selected.id,scope_fingerprint:selected.scope_fingerprint,approval_fingerprint:selected.approval_fingerprint}:null,cardId:card.id,snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};naturalGoalRequests.set(key,entry);
   }
   if(!entry)return;
   if(entry.runId){await readNaturalGoal(entry,current);return;}
@@ -82,7 +85,7 @@ async function generateNaturalGoal(recover=false){
     const receipt=await api(entry.endpoint,"POST",entry.body);
     if(typeof receipt?.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||receipt.status!=="ACCEPTED"||receipt.goal_card_id!==entry.cardId||receipt.goal_version!==entry.body.expected_version||receipt.goal_fingerprint!==entry.body.expected_fingerprint||receipt.goal_acceptance!=="NOT_RUN"||receipt.candidate_generated!==false||receipt.planning_policy?.require_confirmation!==true)throw Error("未知规划接受回执");
     if(entry.activation && goalRunCanonical(receipt.planning_policy.activation)!==goalRunCanonical(entry.activation))throw Error("会话绑定回执不匹配");
-    if(Boolean(receipt.planning_policy.goal_acceptance)!==entry.acceptFixed)throw Error("整体验收合同回执不匹配");
+    if(goalRunCanonical(receipt.planning_policy.goal_acceptance||null)!==goalRunCanonical(entry.fixedSpec||null))throw Error("整体验收合同回执不匹配");
     entry.runId=receipt.run_id;entry.state="read-error";
   } catch(error){
     const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);

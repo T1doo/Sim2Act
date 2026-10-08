@@ -752,6 +752,8 @@ def verify_result(store, c, run, result):
 
 
 def inspect_plan(store, c, run):
+    if run["status"] in {"SUCCEEDED", "PARTIAL"} and run["result"] is None:
+        raise DomainError("VERIFICATION_FAILED", "Terminal goal result is missing")
     check_run_deadline(store, c, run, active=False)
     recorded = c.execute(
         select(events.c.id).where(
