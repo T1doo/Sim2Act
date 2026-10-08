@@ -2,7 +2,7 @@
 
 import json
 
-from .contracts import validate_action, validate_manifest
+from .contracts import validate_action, validate_manifest, validate_value
 from .csv_reports import REF as CSV_REPORT
 from .errors import DomainError
 
@@ -52,7 +52,7 @@ def preflight(raw, candidates, platform_limits):
         ["max_requests", "max_tools", "max_repairs", "max_total_tokens", "run_seconds"], 0
     )
 
-    def source_schema(source, predecessors):
+    def source_schema(source, predecessors, *, optional=False):
         if source.source == "input":
             if source.ref is not None:
                 raise DomainError("INVALID_MANIFEST", "Input reference must omit ref")
@@ -69,7 +69,7 @@ def preflight(raw, candidates, platform_limits):
                 raise DomainError("INVALID_MANIFEST", "Unresolved data binding")
             props = {"resource_id": {"type": "string"}}
             required = {"resource_id"}
-        if source.field not in props or source.field not in required:
+        if source.field not in props or (not optional and source.field not in required):
             raise DomainError("INVALID_MANIFEST", "Source field missing or not guaranteed")
         return props[source.field]
 
@@ -85,6 +85,22 @@ def preflight(raw, candidates, platform_limits):
         for field, source in step.inputs.items():
             if source_schema(source, set(step.depends_on)) != props[field]:
                 raise DomainError("INVALID_MANIFEST", "Schema edge mismatch; no implicit coercion")
+        if step.when is not None:
+            condition = step.when
+            if condition.source.source not in {"input", "step"}:
+                raise DomainError("INVALID_MANIFEST", "Conditions require input or verified predecessor")
+            schema = source_schema(condition.source, set(step.depends_on), optional=True)
+            if schema.get("type") not in {"boolean", "integer", "number", "string"} or schema.get("nullable"):
+                raise DomainError("INVALID_MANIFEST", "Conditions require non-null scalar schemas")
+            if condition.op == "exists":
+                if "value" in condition.model_fields_set:
+                    raise DomainError("INVALID_MANIFEST", "Exists omits value")
+            else:
+                values = condition.value if condition.op == "in" else [condition.value]
+                if not isinstance(values, list) or not 1 <= len(values) <= 20:
+                    raise DomainError("INVALID_MANIFEST", "Membership must be a bounded nonempty list")
+                for value in values:
+                    validate_value(schema, value)
         required_locks.update((d.kind, d.ref, d.version) for d in action.dependencies)
         resources.update(d.ref for d in action.dependencies if d.kind == "resource")
         required_locks.add(

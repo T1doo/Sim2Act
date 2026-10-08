@@ -2,9 +2,9 @@ import json
 import math
 import re
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .errors import DomainError
 
@@ -84,11 +84,26 @@ class FieldSource(Strict):
     field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 
 
+class BranchCondition(Strict):
+    op: Literal["eq", "in", "exists"]
+    source: FieldSource
+    value: str | bool | int | float | Annotated[list[str | bool | int | float], Field(min_length=1, max_length=20)] | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @model_validator(mode="after")
+    def closed_value(self):
+        if self.op == "exists" and "value" in self.model_fields_set:
+            raise DomainError("INVALID_INPUT", "Exists condition must omit value")
+        if self.op != "exists" and ("value" not in self.model_fields_set or self.value is None):
+            raise DomainError("INVALID_INPUT", "Comparison requires a non-null value")
+        return self
+
+
 class WorkflowStep(Strict):
     step_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     binding_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     depends_on: list[str] = Field(max_length=16)
     inputs: dict[str, FieldSource] = Field(default_factory=dict, max_length=32)
+    when: BranchCondition | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ActionBinding(Strict):

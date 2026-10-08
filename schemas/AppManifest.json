@@ -27,6 +27,71 @@
       "title": "ActionBinding",
       "type": "object"
     },
+    "BranchCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "enum": [
+            "eq",
+            "in",
+            "exists"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/FieldSource"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "op",
+        "source"
+      ],
+      "title": "BranchCondition",
+      "type": "object"
+    },
     "DataBinding": {
       "additionalProperties": false,
       "properties": {
@@ -198,7 +263,10 @@
       "additionalProperties": false,
       "properties": {
         "mode": {
-          "const": "user_and_app_intersection",
+          "enum": [
+            "user_and_app_intersection",
+            "user_and_project_intersection"
+          ],
           "title": "Mode",
           "type": "string"
         }
@@ -262,6 +330,17 @@
           "maxProperties": 32,
           "title": "Inputs",
           "type": "object"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BranchCondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

@@ -107,6 +107,8 @@ def compile_agent(candidate, manifest, actions, report):
     if len(actions) != 1 or len(manifest.workflow) != 1 or len(manifest.data_bindings) != 1:
         raise DomainError("UNSUPPORTED_CAPABILITY", "Single R0 agent node only")
     action, step = actions[0], manifest.workflow[0]
+    if step.when is not None:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "Agent preview does not execute workflow conditions")
     rid = manifest.data_bindings[0].resource_ref
     expected_inputs = {
         "resource_id": {
