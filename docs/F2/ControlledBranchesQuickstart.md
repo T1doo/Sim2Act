@@ -1,6 +1,6 @@
 # 受控条件分支候选复现
 
-仅离线工程，沿用现有配置与已授权 CSV 应用，不新增迁移、Grant 或身份。LIVE=0/mock；正式发布关闭。候选 dev/controlled-branches-20261008，待独审，不合入已验 dev。
+仅离线工程，沿用现有配置与已授权 CSV 应用，不新增迁移、Grant 或身份。LIVE=0/mock；正式发布关闭。已在 dev/f1-foundation 整合，所有权P2独审限定闭合；原候选分支保留。整合范围与未验收项见[最新整合记录](ControlledOwnerIntegrationLog.md)。
 
 1. 打开已有 CSV 应用，使用原“保存派生图锚”。在原三节点运行区选择求和列。
 2. “可选受控条件”选节点 report、op=eq、引用本次输入 include_report、JSON值 true，然后保存草案。核对保存的 when、来源、版本和 plan_fingerprint，确认框不会自动勾选。

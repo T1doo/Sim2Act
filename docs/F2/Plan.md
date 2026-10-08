@@ -461,3 +461,6 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 ## 2026-10-08 受控条件分支独立候选
 
 原F2-T04/产品§5.3的后续授权切片，source041cf8ec5fbfeffde6ee3103bba8a4188eb08861，dev/controlled-branches-20261008。原运行账本/API/UI接入eq/in/exists、输入或已核直接前驱、持久执行/跳过证明；未产出必需报告PARTIAL。独立候选待审，不合已验dev，原阶段准入不提升。[冻结语义](ControlledBranchesPlan.md)、[日志](ControlledBranchesLog.md)、[复现](ControlledBranchesQuickstart.md)、[实际证据](../evidence/controlled-branches-20261008/README.md)。双端756冻结范围及额外1真实子进程重领均通过，无新CI/LIVE/发布/权限扩张；Win11/语义/完整P-B/人工签收仍开放。
+
+
+2026-10-08受控分支＋所有权P2修复整合：父线程独审source6181bf7限定闭合（双端各28P、39拒绝轨迹）；原dev5bbc快进AEA，产品字节同已审版本，无新逻辑。冻结必要整合/三种真实旧源码升级40例每端40P0F0S，历史JSON字节保留，旧证明失效并重新精确确认；旧候选/失败证据保留，不机械重跑757/跨源码认证。额外旧清理目录查询失败限制及最低角色/原生/真实并发转移独审缺口保留；LIVE0、原900/240/150、新权限/部署/新CI均不变。开发整合不等于业务/人工/F1/P-B验收。[最新范围与指南](ControlledOwnerIntegrationLog.md)。

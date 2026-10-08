@@ -85,3 +85,6 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 2026-10-07 saved bounded activation stage: source9406e4e,304unique targeted303PASS/1PG-roleSKIP,19 independent local actual cases on byte-identical productc51. Default0LIVE persists; immutable exact synthetic scope/two-call budget/expiry/revoke code is verified offline. Migration/PG production concurrency, protected native, Windows900 CI NO_GO, full owner/semantic P-A/P-B/AT02/F1 remain open. No real-model approval is inferred; see docs/F2/NaturalGoalActivationLog.md and its conditional acceptance proposal.
 
 2026-10-08受控条件分支独立候选：原F2-T04/产品§5.3，执行源码041cf8ec5fbfeffde6ee3103bba8a4188eb08861。既有只读Run/Worker/Operation及页面新增typed eq/in/exists、输入/已核前驱、持久跳过与冷重领；未产出必需报告PARTIAL。756冻结范围SQLite741P15S/PG755P1S，另实际子进程各1P；源码不变，候选待独审，不合已验dev，不签收通用运行器/原生/语义/完整P-B/owner/发布。LIVE0/原900-240-150/依赖/断言保持，无新CI/新权限。[范围与日志](F2/ControlledBranchesLog.md)。
+
+
+2026-10-08受控分支＋所有权P2修复整合：父线程独审source6181bf7限定闭合（双端各28P、39拒绝轨迹）；原dev5bbc快进AEA，产品字节同已审版本，无新逻辑。冻结必要整合/三种真实旧源码升级40例每端40P0F0S，历史JSON字节保留，旧证明失效并重新精确确认；旧候选/失败证据保留，不机械重跑757/跨源码认证。额外旧清理目录查询失败限制及最低角色/原生/真实并发转移独审缺口保留；LIVE0、原900/240/150、新权限/部署/新CI均不变。开发整合不等于业务/人工/F1/P-B验收。[最新范围与指南](F2/ControlledOwnerIntegrationLog.md)。

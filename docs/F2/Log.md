@@ -265,3 +265,6 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 ## 2026-10-08 受控条件分支候选（不整合）
 
 独立dev/controlled-branches-20261008/source041cf8e，落实原F2-T04有限条件：冻结输入/计划/版本、schema类型、跳过传播、精确确认、失效和冷恢复；必需报告跳过时PARTIAL。SQLite741P15S/PG755P1S，756唯一各端，0失败且源码不变；另真实子进程重领各1P（fence1→3、前缀保持、不重复），总757唯一。新页面每端6场景9实际Run99断言、原断言241文件保持、Ruff/mypy50通过。自有资源清理及原失败全部保存；候选普通push待独审，不合已验dev/main，不改变900/240/150、LIVE0和未验收标签。[详细日志](ControlledBranchesLog.md)。
+
+
+2026-10-08受控分支＋所有权P2修复整合：父线程独审source6181bf7限定闭合（双端各28P、39拒绝轨迹）；原dev5bbc快进AEA，产品字节同已审版本，无新逻辑。冻结必要整合/三种真实旧源码升级40例每端40P0F0S，历史JSON字节保留，旧证明失效并重新精确确认；旧候选/失败证据保留，不机械重跑757/跨源码认证。额外旧清理目录查询失败限制及最低角色/原生/真实并发转移独审缺口保留；LIVE0、原900/240/150、新权限/部署/新CI均不变。开发整合不等于业务/人工/F1/P-B验收。[最新范围与指南](ControlledOwnerIntegrationLog.md)。
