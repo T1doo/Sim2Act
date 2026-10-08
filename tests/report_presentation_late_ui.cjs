@@ -7,7 +7,7 @@ const wait=async(fn,label)=>{const end=Date.now()+6000;while(Date.now()<end){if(
 const idle=async()=>{await wait(()=>page.requests===0&&page.actions.size===0,'HTTP and actions drained');await new Promise(r=>setImmediate(r));if(page.errors.length)throw page.errors[0];};
 function track(window){for(const name of ['onclick','onchange','onsubmit']){const d=Object.getOwnPropertyDescriptor(window.HTMLElement.prototype,name);Object.defineProperty(window.HTMLElement.prototype,name,{...d,set(fn){d.set.call(this,typeof fn==='function'?function(...args){const r=fn.apply(this,args);if(r?.then){page.actions.add(r);r.then(()=>page.actions.delete(r),e=>{page.errors.push(e);page.actions.delete(r);});}return r;}:fn);}});}window.addEventListener('error',e=>page.errors.push(e.error||Error(e.message)));}
 const button=()=>w.document.querySelector('.report-presentation-propose'),confirm=()=>w.document.querySelector('.report-presentation-confirm'),texts=()=>[...w.document.querySelectorAll('.report-view-text')].map(n=>n.textContent);
-async function reconnect(token){$('login').hidden=false;$('token').value=token;$('connect').click();await wait(()=>$('login').hidden,'real identity connect handler');await idle();}
+async function reconnect(token,drain=true){$('login').hidden=false;$('token').value=token;$('connect').click();await wait(()=>$('login').hidden,'real identity connect handler');if(drain)await idle();else await wait(()=>held&&page.requests===1&&page.actions.size===1,'identity requests drained except deliberately held receipt');}
 (async()=>{try{
  dom=new JSDOM(await(await fetch(info.base)).text(),{url:info.base,runScripts:'dangerously'});w=dom.window;$=id=>w.document.getElementById(id);page={requests:0,actions:new Set(),errors:[]};track(w);w.setInterval=()=>0;
  w.fetch=async(url,opts={})=>{page.requests++;try{const target=new URL(url,info.base);assert.equal(target.origin,info.base);const entry={path:target.pathname,method:opts.method||'GET',body:opts.body&&JSON.parse(opts.body)};requests.push(entry);const response=await fetch(target,opts);entry.status=response.status;
@@ -20,7 +20,7 @@ async function reconnect(token){$('login').hidden=false;$('token').value=token;$
  if(info.phase==='checks'){button().click();await idle();check(confirm()&&!confirm().disabled,'exact saved definition ready');}
  const targetButton=info.phase==='checks'?confirm():button();hold=true;targetButton.click();await wait(()=>held,'held accepted selected response');
  if(info.action==='other_app'){await w.showApp(info.peer,info.project);check(!button(),'other application is selected');}
- else if(info.action==='identity'){await reconnect('synthetic-test-B');check(!button(),'different identity clears Report controls');}
+ else if(info.action==='identity'){await reconnect('synthetic-test-B',false);check(!button(),'different identity clears Report controls');}
  else if(info.action==='refresh'){await w.readManifestHistory();check(targetButton.isConnected===false,'same context history replaces original DOM');}
  else{w.clearApp();await w.showApp(info.app,info.project);check(texts().join('|')==='ALLOW','new same-app page history returned before release');}
  const postsBefore=requests.filter(r=>r.method==='POST').length,readsBefore=requests.length;
