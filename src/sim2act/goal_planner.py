@@ -745,6 +745,7 @@ def verify_result(store, c, run, result):
 
 
 def inspect_plan(store, c, run):
+    check_run_deadline(store, c, run, active=False)
     recorded = c.execute(
         select(events.c.id).where(
             events.c.run_id == run["id"], events.c.kind == "NL_PLAN_VALIDATED"

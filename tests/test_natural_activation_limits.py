@@ -117,3 +117,32 @@ def test_aged_other_account_attempt_blocks_final_activated_send(env):
         sending(value, run, aid)
     assert error.value.code == "RATE_LIMITED"
     assert rows(store, activation.natural_activations)[0]["ledger"][0]["status"] == "STARTED"
+
+
+def test_paired_queued_deadline_tamper_is_not_readable_or_sendable(env):
+    import copy
+
+    from sqlalchemy import update
+
+    from sim2act.db import events
+    value = setup(env)
+    store, settings, client, *_ = value
+    session, _ = approved(value)
+    rid = submit(value, session).json()["run_id"]
+    with store.tx() as c:
+        run = next(r for r in rows(store, runs) if r["id"] == rid)
+        context = copy.deepcopy(run["context"])
+        context["natural_run_deadline"]["deadline"] += 1
+        c.execute(update(runs).where(runs.c.id == rid).values(context=context))
+        c.execute(update(events).where(events.c.run_id == rid,
+                  events.c.kind == "NL_RUN_DEADLINE_FROZEN").values(
+                  data=context["natural_run_deadline"]))
+    denied = client.get(f"/api/runs/{rid}")
+    assert denied.status_code == 409 and denied.json()["error"]["code"] == "VERSION_CONFLICT"
+    sent = []
+    def handler(request):
+        sent.append(request.content)
+        return httpx.Response(200, json=response(wire(value)))
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+    assert not sent and not rows(store, attempts) and not rows(store, reservations)
+    assert not rows(store, operations)
