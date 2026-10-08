@@ -150,6 +150,13 @@ def propose(store, user, pid, aid, body, limits):
             if fingerprint(old.model_dump()) != fingerprint(body.model_dump()):
                 graph.conflict("Column definition request key changed")
             return {**previous, "cached": True}
+        # Path keys may contain slashes/Unicode/percent signs and must be URL
+        # encoded by callers. Reject new control/dot-segment keys before saving:
+        # HTTP paths cannot reliably round-trip them. Persisted legacy models
+        # remain unchanged so accepted addressable keys retain their receipts.
+        if (any(ord(ch) < 32 or ord(ch) == 127 for ch in body.request_key)
+                or any(part in {".", ".."} for part in body.request_key.split("/"))):
+            raise DomainError("INVALID_INPUT", "Definition request key cannot contain controls or URL dot segments")
         require_capacity(c, user, aid, "column_patch")
         graph.remember(c, user, aid, "column_patch", body.request_key, body, answer)
         graph.remember(c, user, aid, "column_patch_seal", body.request_key, body, answer)
@@ -272,7 +279,7 @@ def mount(app, store, identity, limits):
     def definition(pid: str, aid: str, body: DefinitionInput, user=dependency):
         return propose(store, user, pid, aid, body, limits)
 
-    @app.post(base + "/{key}/checks", status_code=201)
+    @app.post(base + "/{key:path}/checks", status_code=201)
     def confirm(pid: str, aid: str, key: str, body: CheckInput, user=dependency):
         return check(store, user, pid, aid, key, body, limits)
 
