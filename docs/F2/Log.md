@@ -257,3 +257,7 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 # 2026-10-08 CSV 列绑定局部修改候选
 
 基于 `122b2e6f25402e5d693da05c945727b7cbf4ceeb` 的独立分支 `dev/offline-column-patch-20261008`，冻结源码 `2e66fb0b7ba58a978d777ad19ac5d68033d5f73a`。在既有 DeliveryGraph 页面/API/账本和可信 CSV 读取链上实现 amount→quantity 类型化新定义、不可变草案图、精确版本确认的实际只读检查及无关对象保持；独立读合成 CSV 得 30/15。旧 canonical 应用/源/输入 schema/布局/历史不覆盖，0真实模型/0业务写入、正式发布关闭。最终实际359唯一定向用例：SQLite355PASS4PG专用SKIP，PG17.9 359PASS0SKIP，无FAIL/ERROR，两边源码前后哈希一致；新真实HTTP-JSDOM20、原CSV/Report各29保留通过，Ruff/mypy48通过。源码前期失败、容量上限与来源绑定修正、清理及精确证据见[候选记录](../evidence/column-binding-patch-20261008/README.md)，[复现指南](ColumnBindingPatchQuickstart.md)。原Windows900/Edge240/Node150/workflow/依赖逐字节不改，无新CI；原生Windows/Edge NOT_RUN。独立答案和同作者只读复核不当第二审查人，独审NOT_PERFORMED待父线程安排；候选普通push，不合回dev/main，不宣布最终验收、gold、完整P-B或人工签收。
+
+## 2026-10-08 CSV候选与键边界开发基线整合
+
+按父线程明确授权，核远端foundation122不变后ff-only整合完整451候选历史；src/tests与独审f40d975一致，不含DAG。SQLite135 PASS，PG134 PASS/1旧SQLite历史NUL专属SKIP；哈希不变，Ruff/mypy48通过。第二reviewer闭合两个P2仅限键处理；原生Windows/Edge、gold/P-B/人工签收/正式发布未完成。证据见csv-foundation-integration-20261008；两阶段自有PG/schema/role/Node临时资源已清理。
