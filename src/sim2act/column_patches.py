@@ -143,6 +143,9 @@ def load(store, c, user, pid, aid, key, limits):
 
 @graph.controlled
 def propose(store, user, pid, aid, body, limits):
+    # Validate before SQL: PostgreSQL text parameters cannot contain NUL.
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in body.request_key):
+        raise DomainError("INVALID_INPUT", "Definition request key cannot contain control characters")
     with store.tx() as c:
         answer = build(store, c, user, pid, aid, body, limits)
         if graph.lookup(c, user, aid, "column_patch", body.request_key):
@@ -154,8 +157,7 @@ def propose(store, user, pid, aid, body, limits):
         # encoded by callers. Reject new control/dot-segment keys before saving:
         # HTTP paths cannot reliably round-trip them. Persisted legacy models
         # remain unchanged so accepted addressable keys retain their receipts.
-        if (any(ord(ch) < 32 or ord(ch) == 127 for ch in body.request_key)
-                or any(part in {".", ".."} for part in body.request_key.split("/"))):
+        if any(part in {".", ".."} for part in body.request_key.split("/")):
             raise DomainError("INVALID_INPUT", "Definition request key cannot contain controls or URL dot segments")
         require_capacity(c, user, aid, "column_patch")
         graph.remember(c, user, aid, "column_patch", body.request_key, body, answer)
