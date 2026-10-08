@@ -2,6 +2,7 @@
 let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
 let runSelectionGeneration = 0;
+let foregroundRunRead = null;
 let runUserSelectionGeneration = 0;
 let runHistoryGeneration = 0;
 let identityConnectionGeneration = 0;
@@ -102,6 +103,15 @@ function clearRunDetail() {
   $("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;
 }
 async function showRun(id, userSelection = true, selectionGuard = () => true, validateReceipt = null) {
+  if(!selectionGuard())return;
+  const project=$("project-select").value,identity=token;
+  if(!userSelection && foregroundRunRead?.id===id && foregroundRunRead.project===project && foregroundRunRead.identity===identity)return;
+  const read=userSelection?{id,project,identity}:null;
+  if(read)foregroundRunRead=read;
+  try {return await readRunDetail(id,userSelection,selectionGuard,validateReceipt);}
+  finally {if(read && foregroundRunRead===read)foregroundRunRead=null;}
+}
+async function readRunDetail(id, userSelection, selectionGuard, validateReceipt) {
   if(!selectionGuard())return;
   if(userSelection)runUserSelectionGeneration++;
   if(userSelection){clearRunDetail();$("result").append(row("正在读取任务…"));}
