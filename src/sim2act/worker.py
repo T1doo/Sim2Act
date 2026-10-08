@@ -294,6 +294,14 @@ class Worker:
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
 
     def process(self, run):
+        from .csv_dag import is_job as is_csv_dag
+        from .csv_dag import process_job as process_csv_dag
+
+        if is_csv_dag(self.store, run["id"]):
+            if self.s.mode != "mock" or self.s.live_enabled:
+                raise DomainError("PERMISSION_DENIED", "CSV DAG is offline engineering only")
+            process_csv_dag(self, run)
+            return
         from .protocol_jobs import is_protocol_job
         from .protocol_jobs import process_job as process_protocol_job
 

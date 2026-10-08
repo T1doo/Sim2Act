@@ -406,8 +406,10 @@ def validate_value(schema: dict, value, path="input"):
 
 
 def check_dependencies(dependencies):
+    from .csv_reports import REF
+
     registry = {
-        "tool": {"resource.read", "data.aggregate_csv", "artifact.save_text"},
+        "tool": {"resource.read", "data.aggregate_csv", "artifact.save_text", REF},
         "check": {"receipt.readback.v1", "source.literal_evidence.v1", "source.conditional_report.v1"},
         "prompt": {"intern.system.v1"},
     }
@@ -423,10 +425,14 @@ def check_dependencies(dependencies):
 
 
 def validate_action(raw: str):
+    from .csv_reports import REF, check_action
+
     try:
         action = ActionSpec.model_validate(strict_json(raw))
         tools = {"resource.read", "data.aggregate_csv", "artifact.save_text"}
-        executors = tools if action.executor.kind == "registered_tool" else ({"intern.conditional_report"} if action.executor.kind == "bounded_report" else {"intern.agent"})
+        executors = tools | {REF} if action.executor.kind == "registered_tool" else ({"intern.conditional_report"} if action.executor.kind == "bounded_report" else {"intern.agent"})
+        if action.executor.ref == REF:
+            check_action(action)
         if action.executor.kind == "bounded_report" and action.allowed_tool_refs != ["resource.read"]:
             raise ValueError("Report executor has only a fixed read capability")
         if (

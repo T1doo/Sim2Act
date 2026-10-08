@@ -1000,6 +1000,11 @@ class Store:
                 )
 
     def inspect(self, principal, run_id):
+        from .csv_dag import inspect_job as inspect_csv_dag
+        from .csv_dag import is_job as is_csv_dag
+
+        if is_csv_dag(self, run_id):
+            return inspect_csv_dag(self, principal, run_id, None)
         from .protocol_jobs import inspect as inspect_protocol_job
         from .protocol_jobs import is_protocol_job
 
@@ -1139,6 +1144,11 @@ class Store:
                 )
 
     def command(self, principal, run_id, command, version):
+        from .csv_dag import command_job as command_csv_dag
+        from .csv_dag import is_job as is_csv_dag
+
+        if is_csv_dag(self, run_id):
+            return command_csv_dag(self, principal, run_id, command, version)
         from .protocol_jobs import command_job as command_protocol_job
         from .protocol_jobs import is_protocol_job
 

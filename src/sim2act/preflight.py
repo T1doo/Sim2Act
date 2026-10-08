@@ -3,6 +3,7 @@
 import json
 
 from .contracts import validate_action, validate_manifest
+from .csv_reports import REF as CSV_REPORT
 from .errors import DomainError
 
 
@@ -101,6 +102,10 @@ def preflight(raw, candidates, platform_limits):
             if action.executor.kind in {"bounded_agent", "bounded_report"}
             else {action.executor.ref}
         )
+        if action.executor.kind == "registered_tool" and action.executor.ref == CSV_REPORT:
+            # validate_action enforces the exact pure schema, empty read/write
+            # scope and no delegated tools. Other capability checks stay intact.
+            effective_tools = set()
         for tool in effective_tools:
             if tool == "artifact.save_text":
                 if not any(t == tool and ref.startswith("proj_") for t, ref in action_permissions):

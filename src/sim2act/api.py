@@ -32,6 +32,7 @@ from .db import (
     runs,
 )
 from .delivery_graph_apps import mount as mount_delivery_graph_apps
+from .csv_dag import mount as mount_csv_dag
 from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
 from .goal_planner import ConfirmNaturalPlanInput
@@ -677,6 +678,7 @@ def create_app(store=None, settings=None):
     mount_conditional_apps(app, db, identity, platform_limits, s)
     mount_report_manifest_apps(app, db, identity, platform_limits, s)
     mount_delivery_graph_apps(app, db, identity, platform_limits, s)
+    mount_csv_dag(app, db, s, identity, platform_limits)
 
     web = Path(__file__).parent / "web"
 
