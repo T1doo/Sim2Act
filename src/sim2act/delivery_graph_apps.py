@@ -334,44 +334,50 @@ def set_lock(store, user, pid, aid, body, limits):
             if fingerprint(request.model_dump()) != fingerprint(body.model_dump()):
                 conflict("Lock request key changed")
             return {**answer, "cached": True}
-        row = (
-            c.execute(select(locks).where(locks.c.app_id == aid, locks.c.node_id == node["id"]))
-            .mappings()
-            .first()
+        return write_lock(c, user, pid, aid, body, node)
+
+
+def write_lock(c, user, pid, aid, body, node):
+    """Shared write within an already authorized project-serialized transaction."""
+    row = (
+        c.execute(select(locks).where(locks.c.app_id == aid, locks.c.node_id == node["id"]))
+        .mappings()
+        .first()
+    )
+    old = checked(row) if row else None
+    value = dict(
+        project_id=pid,
+        app_id=aid,
+        principal_id=user,
+        node_id=node["id"],
+        logical_key=node["key"],
+        locked=body.locked,
+        revision=old["revision"] + 1 if old else 1,
+        request_key=body.request_key,
+    )
+    answer = {
+        "namespace": NAMESPACE,
+        "app_id": aid,
+        "project_id": pid,
+        "lock": value,
+        "needs_derive": True,
+        "patch_executed": False,
+        "publishable": False,
+    }
+    values = dict(
+        app_id=aid, node_id=node["id"], snapshot=value, fingerprint=fingerprint(value)
+    )
+    if row:
+        c.execute(
+            update(locks)
+            .where(locks.c.app_id == aid, locks.c.node_id == node["id"])
+            .values(**values)
         )
-        old = checked(row) if row else None
-        value = dict(
-            project_id=pid,
-            app_id=aid,
-            principal_id=user,
-            node_id=node["id"],
-            logical_key=node["key"],
-            locked=body.locked,
-            revision=old["revision"] + 1 if old else 1,
-            request_key=body.request_key,
-        )
-        answer = {
-            "namespace": NAMESPACE,
-            "app_id": aid,
-            "project_id": pid,
-            "lock": value,
-            "needs_derive": True,
-            "patch_executed": False,
-            "publishable": False,
-        }
-        values = dict(
-            app_id=aid, node_id=node["id"], snapshot=value, fingerprint=fingerprint(value)
-        )
-        if row:
-            c.execute(
-                update(locks)
-                .where(locks.c.app_id == aid, locks.c.node_id == node["id"])
-                .values(**values)
-            )
-        else:
-            c.execute(insert(locks).values(**values))
-        remember(c, user, aid, "lock", body.request_key, body, answer)
-        return {**answer, "cached": False}
+    else:
+        c.execute(insert(locks).values(**values))
+    remember(c, user, aid, "lock", body.request_key, body, answer)
+    return {**answer, "cached": False}
+
 
 
 def build(store, c, user, pid, aid, limits, previous=None):
@@ -924,8 +930,10 @@ def history(store, user, pid, aid, limits):
 
 def mount(app, store, identity, limits, settings=None):
     from .column_patches import mount as mount_column_patches
+    from .manual_locks import mount as mount_manual_locks
 
     mount_column_patches(app, store, identity, limits)
+    mount_manual_locks(app, store, identity, limits)
     dependency = Depends(identity)
     base = "/api/projects/{pid}/apps/{aid}/delivery-graph"
 
