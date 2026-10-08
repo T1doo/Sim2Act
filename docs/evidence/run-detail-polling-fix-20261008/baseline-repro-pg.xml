@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="3.293" timestamp="2026-10-08T16:24:00.375299+00:00" hostname="58262d033e58"><testcase classname="tests.test_run_detail_polling" name="test_background_read_cannot_interrupt_explicit_plan_read" time="3.178"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: actual background timer cannot send a superseding Run read during explicit read&#10;      at check (/workspace/Sim2Act/tests/run_detail_polling.cjs:6:28)&#10;      at /workspace/Sim2Act/tests/run_detail_polling.cjs:33:3&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/run_detail_polling.cjs', '/tmp/sim2act-convergence-repro-pg/test_background_read...(/workspace/Sim2Act/tests/run_detail_polling.cjs:6:28)\n    at /workspace/Sim2Act/tests/run_detail_polling.cjs:33:3\n').returncode">env = (&lt;sim2act.db.Store object at 0x7f511b16c650&gt;, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...31e35718064e1ebea67242d4bec077', 'user_288cb0245428485dab32ebc53b06dbbe', 'proj_307d314e14db4a6eb9ca74645a5d912d', ...)
+tmp_path = PosixPath('/tmp/sim2act-convergence-repro-pg/test_background_read_cannot_in0')
+
+    def test_background_read_cannot_interrupt_explicit_plan_read(env, tmp_path):
+        if not shutil.which("node") or subprocess.run(
+            ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
+        ).returncode:
+            pytest.skip("Developer Node and jsdom required for actual DOM oracle")
+        value = setup(env)
+        store, settings, client, project, _, _ = value
+        rid = submit(value, key="foreground-polling").json()["run_id"]
+        calls = []
+    
+        def provider(request):
+            calls.append(str(request.url))
+            assert request.url.host == "chat.intern-ai.org.cn"
+            return httpx.Response(200, json=response(plan(value)))
+    
+        assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(provider)).once()
+        assert client.get(f"/api/runs/{rid}").json()["status"] == "WAITING_APPROVAL"
+        before = authority(store)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "project": project, "run_id": rid,
+        }))
+        server = uvicorn.Server(uvicorn.Config(create_app(store, settings),
+                                             host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            result = subprocess.run(["node", "tests/run_detail_polling.cjs", str(tmp_path)],
+                                    capture_output=True, text=True, timeout=60)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+&gt;           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: actual background timer cannot send a superseding Run read during explicit read
+E                 at check (/workspace/Sim2Act/tests/run_detail_polling.cjs:6:28)
+E                 at /workspace/Sim2Act/tests/run_detail_polling.cjs:33:3
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/run_detail_polling.cjs', '/tmp/sim2act-convergence-repro-pg/test_background_read...(/workspace/Sim2Act/tests/run_detail_polling.cjs:6:28)\n    at /workspace/Sim2Act/tests/run_detail_polling.cjs:33:3\n').returncode
+
+tests/test_run_detail_polling.py:57: AssertionError</failure></testcase></testsuite></testsuites>
