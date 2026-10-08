@@ -19,6 +19,12 @@ See [result and remaining gates](../../F2/EngineeringPGPhaseLog.md) and
   deterministic SQLite lease2PASS, exact raw review reports/commands/JUnit/logs,
   retained Docker events and SHA256 manifest. No PG/full rerun. Historical startup
   root cause is unresolved; the explicit restart condition is not met.
+- `single-start/`: subsequent explicit one-start diagnostic authorization on
+  f701159; full stdout/stderr captured before start, container State, readiness
+  and first-connect timeline, exact pinned-image entrypoint, minimal SELECT and
+  four-module58PASS targeted PG/preflight run. Exact58 baseline nodes and283
+  source hashes match; owned schema/role/container/volume cleanup verified.
+  Prior failure's cause remains unresolved. No full suite or Windows qualification.
 - `assertion-preservation.json`: all137 original assertion ASTs in modified
   tests are preserved. `postfix-source-current-equality.json` verifies283 source
   files against candidate preparation bytes, without inventing a SQLite
@@ -41,3 +47,7 @@ are statically reviewed, not newly runtime-PG validated. No test/timeout/securit
 gate was relaxed. Export manifests contain raw/export hashes and URL-redaction
 counts; originals remain in this run's /tmp log roots after fixture deletion.
 The installed venv and owned Node dependencies remain in the new instance.
+
+Single-start server stdout is preserved byte-for-byte, including blank lines and
+Docker timestamp-prefix trailing spaces. `git diff --check` reports only these
+two raw stdout files; excluding exactly those files passes. They were not trimmed.

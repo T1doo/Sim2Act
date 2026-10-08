@@ -188,3 +188,76 @@ Windows900/Edge240/Node150 evidence is still missing; **NO_GO** remains.
 Exact review JSON, commands, targeted JUnit/logs, deterministic check source,
 Docker events, timing denominators and SHA256 manifest are retained in
 `docs/evidence/engineering-pg-phase-20261008/independent-review/`.
+
+## One explicitly authorized captured startup and focused PG validation
+
+After the independent review, the user authorized exactly one new diagnostic
+startup to fill the missing boot evidence. Source freeze:
+`f70115955a90d7b45a59569534796b09493127c9`; its283 runtime/source bytes remain
+identical to reviewed f904. No product/test/workflow change was made.
+
+Actual command (exit0):
+
+```bash
+.venv/bin/python docs/evidence/engineering-pg-phase-20261008/single-start-diagnostic.py /tmp/sim2act-single-start-20261008
+```
+
+The helper opens separate server stdout/stderr files before the only attached
+`docker start -a`. It preserves pre-start, ready and pre-cleanup container State
+(including OOMKilled), exact labelled ownership/mounts, timestamped full server
+streams, every readiness result and the first authenticated host-connect timeline.
+The existing pinned image ID327daa8f/RepoDigest2d2b8998 is used with pull=never;
+no network/security/credential settings, permissions or unknown resources change.
+The exact image entrypoint was also read from this owned running container and
+retained with its SHA256. No restart occurred.
+
+TCP readiness returned2,2,2,2,0. One authenticated localhost connection and
+`SELECT 1, pg_backend_pid(), pg_postmaster_start_time(), version()` succeeded;
+start-issued to successful SELECT1.671s, connect+SELECT0.014777s. No business
+table/data was used for that probe. Logs show the socket-only bootstrap server
+ready at04:10:19.019UTC, its fast shutdown at04:10:19.121, and the permanent TCP
+server ready at04:10:19.262. This proves the current captured transition and
+healthy TCP startup, not the old uncaptured failure's cause. Historical resource,
+transport or transition attribution remains unresolved.
+
+Only the explicit four-module affected/related collection then ran once, with
+MOCK/LIVE0 and `--durations=30` retained:
+
+|Module|Cases|Outcome|
+|---|---:|---|
+|test_fixed_goal_acceptance|16|PASS|
+|test_natural_receipt_candidate|22|PASS|
+|test_natural_activation_pg|7|PASS|
+|test_install_preflight|13|PASS; no database dependency|
+
+58PASS/0FAIL/0SKIP,1 warning, pytest116.17s; process wall117.383s, exit0.
+The58-node multiset exactly matches those modules in the complete baseline;
+all seven original failure cases are included. The45 DB-related cases use the
+explicit owned PG fixture; preflight13 is backend-independent. Setup7.421s
+(6.322%), call108.016s(92.020%), teardown0.604s(0.515%), remaining1.341s(1.143%).
+Existing metric scope COMPLETE/pendingSQL0 is pytest-process-only; this selected
+run is not a full cost envelope, a before/after speedup or Windows qualification.
+
+The unchanged actual-PG cancel test used distinct backends157/158; confirmation
+won(200), stale cancellation failed(409), then fresh cancellation reached the
+original CANCELLED/lease0 assertion. No operations, unchanged authority, and one
+mock wire were recorded. Revoke, expire and confirm-again also used distinct
+backends and passed; their fixture JSON, two-worker/rollback/CRUD-role evidence
+are exported. The expected CRUD-role CREATE TABLE permission denial is an asserted
+negative test, not a startup error. No real provider request occurred.
+
+Before/after census each: test schemas0, test roles0, public tables0. Source
+before/after/current283-file hashes match. Before cleanup the container was
+Running with OOMKilled=false and Error empty. Exact owner label verified;
+`docker rm -f -v` removed only this container and its anonymous volume, both
+absence checks pass. Attached exit137 follows this deliberate cleanup; it is not
+an OOM/startup-failure result. Seven fixture PG receipts were verified/exported
+before deleting only this run's fixture directory. Raw logs remain in owned /tmp;
+31 exported artifacts have matching hashes and0 URL-credential redactions.
+
+Recommendation: one complete actual-PG Engineering verification of the same
+runtime source is now worthwhile, using capture from before startup and retaining
+all original collection/stages. **It was not run in this round.** Current native
+PG attribution, complete Edge tail and Windows900/240/150 still lack evidence;
+NO_GO remains. All original failed-attempt evidence is preserved. Full records:
+`docs/evidence/engineering-pg-phase-20261008/single-start/`.
