@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="23.562" timestamp="2026-10-08T17:35:31.693551+00:00" hostname="58262d033e58"><testcase classname="tests.test_report_presentation_ui" name="test_archived_report_presentation_actual_http_dom" time="23.397"><failure message="AssertionError: assert ('PASS' == 'PASS'&#10;  &#10;    PASS and 26 == 27)&#10; +  where 26 = len(['original declared decision text rendered', 'project navigation clears old result', 'late derive cannot continue plan...ther project', 'late plan after identity change cannot submit definition', 'late plan cannot repaint cleared app', ...])">env = (&lt;sim2act.db.Store object at 0x7f1c7c5fe150&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-view-sqlite-final-e...8472dc797c42958bc0f5cbc2268abd', 'user_1a74b37b2ed346769e2318ff93e0c06b', 'proj_37009d095b7644fcba8391b10fc93d9f', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-view-sqlite-final-extra/test_archived_report_presentat0')
+
+    def test_archived_report_presentation_actual_http_dom(env, tmp_path):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        other = env[0].project(env[3], "Other owned DOM project")
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "app": app["id"],
+            "project": env[5], "other": other, "explanation": output["explanation"],
+        }))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            output = subprocess.run(["node", "tests/report_presentation_ui.cjs", str(tmp_path)],
+                                    capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
+            assert output.returncode == 0, output.stdout + output.stderr
+            result = json.loads((tmp_path / "results.json").read_text())
+&gt;           assert result["status"] == "PASS" and len(result["checks"]) == 27
+E           AssertionError: assert ('PASS' == 'PASS'
+E             
+E               PASS and 26 == 27)
+E            +  where 26 = len(['original declared decision text rendered', 'project navigation clears old result', 'late derive cannot continue plan...ther project', 'late plan after identity change cannot submit definition', 'late plan cannot repaint cleared app', ...])
+
+tests/test_report_presentation_ui.py:45: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="8.874" timestamp="2026-10-08T17:51:01.561097+00:00" hostname="58262d033e58"><testcase classname="tests.test_report_presentation_ui" name="test_archived_report_presentation_actual_http_dom" time="8.769"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: late same-app completion reconciles new controls&#10;      at check (/workspace/Sim2Act/tests/report_presentation_ui.cjs:5:29)&#10;      at /workspace/Sim2Act/tests/report_presentation_ui.cjs:22:390&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_ui.cjs', '/tmp/sim2act-report-view-sqlite-aba-counterexample...e/Sim2Act/tests/report_presentation_ui.cjs:5:29)\n    at /workspace/Sim2Act/tests/report_presentation_ui.cjs:22:390\n').returncode">env = (&lt;sim2act.db.Store object at 0x7fb1d7419100&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-view-sqlite-aba-cou...0e6d15cc654735b6346fe4da7eeed5', 'user_d30feb6e4b004065a9011775aa75c8f6', 'proj_9697bd7a54e041efac37b7831a194680', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-view-sqlite-aba-counterexample/test_archived_report_presentat0')
+
+    def test_archived_report_presentation_actual_http_dom(env, tmp_path):
+        app, _, _, _, output, _ = prepared(env, tmp_path)
+        other = env[0].project(env[3], "Other owned DOM project")
+        baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+        if baseline:
+            # Trusted local counterexample fixture only; no product input/route added.
+            from fastapi.responses import Response
+            code = Path(baseline).read_text()
+            route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+            route.dependant.call = lambda: Response(code, media_type="application/javascript")
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "app": app["id"],
+            "project": env[5], "other": other, "explanation": output["explanation"],
+        }))
+        server = uvicorn.Server(uvicorn.Config(env[2].app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            output = subprocess.run(["node", "tests/report_presentation_ui.cjs", str(tmp_path)],
+                                    capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
+&gt;           assert output.returncode == 0, output.stdout + output.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: late same-app completion reconciles new controls
+E                 at check (/workspace/Sim2Act/tests/report_presentation_ui.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/report_presentation_ui.cjs:22:390
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_presentation_ui.cjs', '/tmp/sim2act-report-view-sqlite-aba-counterexample...e/Sim2Act/tests/report_presentation_ui.cjs:5:29)\n    at /workspace/Sim2Act/tests/report_presentation_ui.cjs:22:390\n').returncode
+
+tests/test_report_presentation_ui.py:51: AssertionError</failure></testcase></testsuite></testsuites>
