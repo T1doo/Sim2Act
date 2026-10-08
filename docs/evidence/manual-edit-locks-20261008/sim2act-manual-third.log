@@ -1,0 +1,52 @@
+.....................Fs.                                                 [100%]
+=================================== FAILURES ===================================
+___ test_cold_store_recovery_after_derive_and_source_new_anchor_invalidates ____
+
+env = (<sim2act.db.Store object at 0x7fd2bb024080>, Settings(database_url='sqlite:////tmp/sim2act-manual-third/test_cold_sto...49e0541655476fa037db3ef8b9a50e', 'user_10437cb28c4646edb78a3671328802b0', 'proj_68b178019217484e9699a1816e1d2afa', ...)
+
+    def test_cold_store_recovery_after_derive_and_source_new_anchor_invalidates(env):
+        import hashlib
+    
+        from sim2act.db import Store
+    
+        aid, rid, anchor, _, _ = setup(env)
+        request = body(anchor)
+        locks.submit(env[0], env[3], env[5], aid, request, limits(env))
+        derive(env, aid, "cold-locked")
+        store = Store(env[1].database_url, test_only=True)
+        store.engine = store.engine.execution_options(**env[0].engine.get_execution_options())
+        try:
+            before = snapshot(env)
+            result = locks.submit(store, env[3], env[5], aid, request, limits(env))
+            assert result["cached"] and result["is_current"]
+            assert fingerprint(before) == fingerprint(snapshot(env))
+        finally:
+            store.engine.dispose()
+        with env[0].tx() as c:
+            text = "amount,quantity\n30,25\n"
+            c.execute(update(resources).where(resources.c.id == rid).values(content=text, hash=hashlib.sha256(text.encode()).hexdigest()))
+>       derive(env, aid, "changed-source")
+
+tests/test_manual_locks.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7fd2bb024080>, Settings(database_url='sqlite:////tmp/sim2act-manual-third/test_cold_sto...49e0541655476fa037db3ef8b9a50e', 'user_10437cb28c4646edb78a3671328802b0', 'proj_68b178019217484e9699a1816e1d2afa', ...)
+aid = 'app_65af9c9c53f449e2989b614c774dd43d', key = 'changed-source'
+
+    def derive(env, aid, key):
+        draft = env[2].get(f"/api/apps/{aid}").json()
+        reply = env[2].post(url(env, aid).removesuffix("column-patches") + "derive",
+>           json=dict(expected_candidate_fingerprint=draft["fingerprint"], request_key=key))
+                                                     ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'fingerprint'
+
+tests/test_manual_locks.py:32: KeyError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_manual_locks.py::test_cold_store_recovery_after_derive_and_source_new_anchor_invalidates
+1 failed, 22 passed, 1 skipped, 1 warning in 19.13s

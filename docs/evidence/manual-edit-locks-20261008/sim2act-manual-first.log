@@ -1,0 +1,39 @@
+F.................                                                       [100%]
+=================================== FAILURES ===================================
+________ test_real_lock_conflict_unlock_new_exact_plan_and_read_checks _________
+
+env = (<sim2act.db.Store object at 0x7f6d3ef74e30>, Settings(database_url='sqlite:////tmp/sim2act-manual-first/test_real_loc...fb65fadfaf45ee9aa28463b025bc82', 'user_ce41c62f20834a9da756337d6f0e755a', 'proj_55690ee108cd440c97e6a7c31fa5054e', ...)
+
+    def test_real_lock_conflict_unlock_new_exact_plan_and_read_checks(env):
+        aid, _, anchor, patch, _ = setup(env)
+        before = snapshot(env)
+        request = body(anchor)
+        reply = env[2].post(base(env, aid), json=request)
+        assert reply.status_code == 201, reply.text
+        assert reply.json()["lock"]["revision"] == 1
+        for table in before:
+            if table not in {"delivery_graph_locks", "delivery_graph_requests"}:
+                assert fingerprint(before[table]) == fingerprint(snapshot(env)[table]), table
+        after = snapshot(env)
+        assert env[2].post(base(env, aid), json=request).json()["cached"]
+        assert env[2].get(base(env, aid) + "/receipt", params={"request_key": request["request_key"]}).json()["is_current"]
+        assert fingerprint(after) == fingerprint(snapshot(env))
+        locked = derive(env, aid, "locked-anchor")
+        patch["expected_graph_fingerprint"] = locked["graph_fingerprint"]
+        patch["change"] = body(locked)["change"]
+        before = snapshot(env)
+        denied = env[2].post(url(env, aid), json=patch)
+>       assert denied.status_code == 409 and denied.json()["error"]["code"] == "LOCK_CONFLICT"
+E       assert (400 == 409)
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_manual_locks.py:56: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_manual_locks.py::test_real_lock_conflict_unlock_new_exact_plan_and_read_checks
+1 failed, 17 passed, 1 warning in 10.91s

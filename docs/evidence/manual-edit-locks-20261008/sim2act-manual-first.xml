@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="18" time="10.905" timestamp="2026-10-08T13:09:44.619510+00:00" hostname="58262d033e58"><testcase classname="tests.test_manual_locks" name="test_real_lock_conflict_unlock_new_exact_plan_and_read_checks" time="1.382"><failure message="assert (400 == 409)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f6d3ef74e30&gt;, Settings(database_url='sqlite:////tmp/sim2act-manual-first/test_real_loc...fb65fadfaf45ee9aa28463b025bc82', 'user_ce41c62f20834a9da756337d6f0e755a', 'proj_55690ee108cd440c97e6a7c31fa5054e', ...)
+
+    def test_real_lock_conflict_unlock_new_exact_plan_and_read_checks(env):
+        aid, _, anchor, patch, _ = setup(env)
+        before = snapshot(env)
+        request = body(anchor)
+        reply = env[2].post(base(env, aid), json=request)
+        assert reply.status_code == 201, reply.text
+        assert reply.json()["lock"]["revision"] == 1
+        for table in before:
+            if table not in {"delivery_graph_locks", "delivery_graph_requests"}:
+                assert fingerprint(before[table]) == fingerprint(snapshot(env)[table]), table
+        after = snapshot(env)
+        assert env[2].post(base(env, aid), json=request).json()["cached"]
+        assert env[2].get(base(env, aid) + "/receipt", params={"request_key": request["request_key"]}).json()["is_current"]
+        assert fingerprint(after) == fingerprint(snapshot(env))
+        locked = derive(env, aid, "locked-anchor")
+        patch["expected_graph_fingerprint"] = locked["graph_fingerprint"]
+        patch["change"] = body(locked)["change"]
+        before = snapshot(env)
+        denied = env[2].post(url(env, aid), json=patch)
+&gt;       assert denied.status_code == 409 and denied.json()["error"]["code"] == "LOCK_CONFLICT"
+E       assert (400 == 409)
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_manual_locks.py:56: AssertionError</failure></testcase><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_graph_revision-True]" time="0.363" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_lock_revision-True]" time="0.408" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_lock_revision-9]" time="0.364" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_graph_revision-9]" time="0.355" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[consent-]" time="0.430" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[locked-1]" time="0.416" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[request_key-bad\x00key]" time="0.298" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_graph_fingerprint-0000000000000000000000000000000000000000000000000000000000000000]" time="0.793" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[foreign]" time="0.413" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[transfer]" time="0.421" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[revoke]" time="1.040" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[source]" time="0.451" /><testcase classname="tests.test_manual_locks" name="test_same_key_changed_body_and_aba_cas_preserve_history" time="1.062" /><testcase classname="tests.test_manual_locks" name="test_actual_concurrent_lock_modify_unlock[lock-lock]" time="0.414" /><testcase classname="tests.test_manual_locks" name="test_actual_concurrent_lock_modify_unlock[lock-modify]" time="0.402" /><testcase classname="tests.test_manual_locks" name="test_actual_concurrent_lock_modify_unlock[unlock-unlock]" time="0.846" /><testcase classname="tests.test_manual_locks" name="test_old_internal_lock_compatible_public_unlock_and_noop_rejected" time="0.748" /></testsuite></testsuites>

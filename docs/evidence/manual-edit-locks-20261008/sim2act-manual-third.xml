@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="1" tests="24" time="19.125" timestamp="2026-10-08T13:13:41.511140+00:00" hostname="58262d033e58"><testcase classname="tests.test_manual_locks" name="test_real_lock_conflict_unlock_new_exact_plan_and_read_checks" time="1.774" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_graph_revision-True]" time="0.460" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_lock_revision-True]" time="0.401" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_lock_revision-9]" time="0.436" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_graph_revision-9]" time="0.572" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[consent-]" time="0.317" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[locked-1]" time="0.333" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[request_key-bad\x00key]" time="0.511" /><testcase classname="tests.test_manual_locks" name="test_bad_versions_confirmation_and_keys_zero_writes[expected_graph_fingerprint-0000000000000000000000000000000000000000000000000000000000000000]" time="0.434" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[foreign]" time="0.418" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[transfer]" time="0.554" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[revoke]" time="0.420" /><testcase classname="tests.test_manual_locks" name="test_current_authority_and_source_gate_precede_recovery[source]" time="0.599" /><testcase classname="tests.test_manual_locks" name="test_same_key_changed_body_and_aba_cas_preserve_history" time="1.240" /><testcase classname="tests.test_manual_locks" name="test_actual_concurrent_lock_modify_unlock[lock-lock]" time="0.433" /><testcase classname="tests.test_manual_locks" name="test_actual_concurrent_lock_modify_unlock[lock-modify]" time="0.666" /><testcase classname="tests.test_manual_locks" name="test_actual_concurrent_lock_modify_unlock[unlock-unlock]" time="0.655" /><testcase classname="tests.test_manual_locks" name="test_old_internal_lock_compatible_public_unlock_and_noop_rejected" time="0.892" /><testcase classname="tests.test_manual_locks" name="test_tampered_accepted_lock_ledger_is_not_current_proof[manual_edit_lock]" time="0.406" /><testcase classname="tests.test_manual_locks" name="test_tampered_accepted_lock_ledger_is_not_current_proof[manual_edit_lock_seal]" time="0.400" /><testcase classname="tests.test_manual_locks" name="test_tampered_accepted_lock_ledger_is_not_current_proof[lock]" time="0.496" /><testcase classname="tests.test_manual_locks" name="test_cold_store_recovery_after_derive_and_source_new_anchor_invalidates" time="0.640"><failure message="KeyError: 'fingerprint'">env = (&lt;sim2act.db.Store object at 0x7fd2bb024080&gt;, Settings(database_url='sqlite:////tmp/sim2act-manual-third/test_cold_sto...49e0541655476fa037db3ef8b9a50e', 'user_10437cb28c4646edb78a3671328802b0', 'proj_68b178019217484e9699a1816e1d2afa', ...)
+
+    def test_cold_store_recovery_after_derive_and_source_new_anchor_invalidates(env):
+        import hashlib
+    
+        from sim2act.db import Store
+    
+        aid, rid, anchor, _, _ = setup(env)
+        request = body(anchor)
+        locks.submit(env[0], env[3], env[5], aid, request, limits(env))
+        derive(env, aid, "cold-locked")
+        store = Store(env[1].database_url, test_only=True)
+        store.engine = store.engine.execution_options(**env[0].engine.get_execution_options())
+        try:
+            before = snapshot(env)
+            result = locks.submit(store, env[3], env[5], aid, request, limits(env))
+            assert result["cached"] and result["is_current"]
+            assert fingerprint(before) == fingerprint(snapshot(env))
+        finally:
+            store.engine.dispose()
+        with env[0].tx() as c:
+            text = "amount,quantity\n30,25\n"
+            c.execute(update(resources).where(resources.c.id == rid).values(content=text, hash=hashlib.sha256(text.encode()).hexdigest()))
+&gt;       derive(env, aid, "changed-source")
+
+tests/test_manual_locks.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fd2bb024080&gt;, Settings(database_url='sqlite:////tmp/sim2act-manual-third/test_cold_sto...49e0541655476fa037db3ef8b9a50e', 'user_10437cb28c4646edb78a3671328802b0', 'proj_68b178019217484e9699a1816e1d2afa', ...)
+aid = 'app_65af9c9c53f449e2989b614c774dd43d', key = 'changed-source'
+
+    def derive(env, aid, key):
+        draft = env[2].get(f"/api/apps/{aid}").json()
+        reply = env[2].post(url(env, aid).removesuffix("column-patches") + "derive",
+&gt;           json=dict(expected_candidate_fingerprint=draft["fingerprint"], request_key=key))
+                                                     ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'fingerprint'
+
+tests/test_manual_locks.py:32: KeyError</failure></testcase><testcase classname="tests.test_manual_locks" name="test_pg_minimum_crud_role_manual_lock_and_cold_receipt" time="0.154"><skipped type="pytest.skip" message="Application-role subprocess regression requires explicit isolated PostgreSQL">/workspace/Sim2Act/tests/test_manual_locks.py:238: Application-role subprocess regression requires explicit isolated PostgreSQL</skipped></testcase><testcase classname="tests.test_manual_locks_ui" name="test_manual_lock_actual_http_dom" time="5.675" /></testsuite></testsuites>

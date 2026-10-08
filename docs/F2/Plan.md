@@ -464,3 +464,6 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 
 
 2026-10-08受控分支＋所有权P2修复整合：父线程独审source6181bf7限定闭合（双端各28P、39拒绝轨迹）；原dev5bbc快进AEA，产品字节同已审版本，无新逻辑。冻结必要整合/三种真实旧源码升级40例每端40P0F0S，历史JSON字节保留，旧证明失效并重新精确确认；旧候选/失败证据保留，不机械重跑757/跨源码认证。额外旧清理目录查询失败限制及最低角色/原生/真实并发转移独审缺口保留；LIVE0、原900/240/150、新权限/部署/新CI均不变。开发整合不等于业务/人工/F1/P-B验收。[最新范围与指南](ControlledOwnerIntegrationLog.md)。
+
+
+2026-10-08 F2-T07明确授权最小人工编辑锁候选：合同1dc737f先冻结，执行de6ba39eae81abd138aa94cc87d1e083530056af，dev/manual-edit-locks-20261008。仅自己的固定CSV图既有单节点，精确图/节点/锁CAS与明确确认；原账本/页面，权限/安全不变。双端107冻结范围SQLite105P2S/PG107P，原断言/900-240-150保持；实际页面每端4病例92断言，真实双连接线程竞争。候选待独审、未入dev、LIVE0/发布关闭。[实证与缺口](ManualEditLocksLog.md)、[复现](ManualEditLocksQuickstart.md)。
