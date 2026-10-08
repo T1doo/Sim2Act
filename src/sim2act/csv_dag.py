@@ -22,11 +22,23 @@ from . import delivery_graph_apps as graph
 from .app_jobs import lock_live, stop_state
 from .column_patches import read_pair, require_capacity
 from .contracts import (
-    FrozenRunContract, GoalSpec, Limits, ResourceSnapshot, Strict,
-    validate_action_input, validate_value,
+    FrozenRunContract,
+    GoalSpec,
+    Limits,
+    ResourceSnapshot,
+    Strict,
+    validate_action_input,
+    validate_value,
 )
 from .db import (
-    events, fingerprint, new_id, operation_intents, operations, run_contracts, runs,
+    delivery_graph_requests,
+    events,
+    fingerprint,
+    new_id,
+    operation_intents,
+    operations,
+    run_contracts,
+    runs,
 )
 from .errors import DomainError
 from .preflight import preflight
@@ -43,13 +55,13 @@ class PlanInput(Strict):
     expected_candidate_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
     column: str = Field(min_length=1, max_length=200)
-    request_key: str = Field(min_length=1, max_length=100)
+    request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
 class RunInput(Strict):
     expected_plan_fingerprint: str = Field(pattern=graph.HASH)
     consent: Literal["CONFIRM_EXACT_OFFLINE_CSV_DAG"]
-    request_key: str = Field(min_length=1, max_length=100)
+    request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
 def canonical(candidate, column, limits):
@@ -234,6 +246,12 @@ def binding(store, c, job, limits, *, authorize=True):
     if len(accepted) != 1 or fingerprint(accepted[0]) != job["fingerprint"]:
         graph.conflict("Missing immutable DAG acceptance")
     value = accepted[0]
+    ctx = job["context"]
+    if (set(ctx) != {"kind", "messages", "requests", "tools", "repairs", "reserved_tokens"}
+            or ctx["messages"] != [] or any(type(ctx[k]) is not int for k in ("requests", "tools", "repairs", "reserved_tokens"))
+            or any(ctx[k] != 0 for k in ("requests", "repairs", "reserved_tokens"))
+            or not 0 <= ctx["tools"] <= 3):
+        graph.conflict("Fixed DAG has only three local operations and zero model usage")
     if (job["context"].get("kind") != KIND or value["run_id"] != job["id"]
             or value["principal_id"] != job["principal_id"] or value["project_id"] != job["project_id"]
             or value["runtime_id"] != job["runtime_id"]):
@@ -293,7 +311,8 @@ def receipts(store, c, job, plan, source):
     by_step = {op["call_id"]: op for op in ops}
     if len(by_step) != len(ops) or set(by_step) - set(STEPS):
         graph.conflict("Unknown/duplicate DAG operation")
-    outputs, proved = {}, []
+    outputs: dict[str, dict] = {}
+    proved: list[dict] = []
     for step, action in zip(plan["definition"]["manifest"]["workflow"], plan["definition"]["actions"], strict=True):
         op = by_step.get(step["step_id"])
         if not op:
@@ -339,6 +358,7 @@ def transition(store, c, job, state, error=None, result=None):
     store.event(c, job["id"], "STATE", dict(status=state, error=error))
 
 
+@graph.controlled
 def advance(worker, run):
     """One bounded local step and its receipt commit atomically under existing fencing."""
     store = worker.store
@@ -358,12 +378,14 @@ def advance(worker, run):
         if source["hash"] != plan["source_hash"]:
             graph.conflict("CSV changed between steps")
         outputs, proved = receipts(store, c, job, plan, source)
+        if job["context"]["tools"] != len(proved):
+            graph.conflict("Step counter differs from verified receipt ledger")
         if len(proved) == 3:
             result = dict(namespace=PLAN, output=outputs["report"], plan_fingerprint=plan["plan_fingerprint"],
                           steps=proved, model_requests=0, business_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING")
             transition(store, c, job, "SUCCEEDED", result=result)
             return False
-        if job["context"]["tools"] != len(proved) or len(proved) >= min(limits.max_tools, 3):
+        if len(proved) >= min(limits.max_tools, 3):
             raise DomainError("BUDGET_EXHAUSTED", "Step budget/counter mismatch")
         index = len(proved)
         step, action = plan["definition"]["manifest"]["workflow"][index], plan["definition"]["actions"][index]
@@ -373,6 +395,12 @@ def advance(worker, run):
         validate_action_input(validate_action(json.dumps(action)), args)
         # Registered local implementations only. The bounded step is one short
         # transaction, just like existing local-tool dispatch; no in-flight I/O.
+        oid = new_id("op")
+        intent = dict(tool=action["executor"]["ref"], args=args, plan_fingerprint=plan["plan_fingerprint"],
+                      predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]])
+        c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
+                   fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
+        c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
         if step["step_id"] == "aggregate":
             value = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
                                     "data.aggregate_csv", args)
@@ -380,12 +408,11 @@ def advance(worker, run):
         else:
             value = expected(step["step_id"], args, source)
         validate_value(action["output_schema"], value)
-        oid = new_id("op")
-        intent = dict(tool=action["executor"]["ref"], args=args, plan_fingerprint=plan["plan_fingerprint"],
-                      predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]])
-        c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
-                   fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
-        c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
+        # A lease/deadline can expire during local parsing; don't commit an old
+        # ownership interval merely because it was valid at transaction entry.
+        store.guard(c, job["id"], run["fence"])
+        if time.time() - job["created_at"] > min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"]):
+            raise DomainError("BUDGET_EXHAUSTED")
         # Reconstruct/verify the exact receipt using the same cold readback contract.
         receipt = dict(operation_id=oid, step_id=step["step_id"], status="VERIFIED", data=value,
                        plan_fingerprint=plan["plan_fingerprint"], action_revision=action["revision"],
@@ -424,6 +451,10 @@ def process_job(worker, run):
                 return
             state = (stop_state(job, worker.store.has_unknown(c, job["id"])) if job["status"] != "RUNNING" else
                      "WAITING_RESOURCE" if exc.code in {"GRANT_REVOKED", "PERMISSION_DENIED", "RESOURCE_UNAVAILABLE", "OUTCOME_UNKNOWN", "VERSION_CONFLICT"} else "FAILED")
+            completed = set(c.execute(select(operations.c.call_id).where(
+                operations.c.run_id == job["id"], operations.c.status == "VERIFIED")).scalars())
+            failed = next((s for s in STEPS if s not in completed), "final_check")
+            worker.store.event(c, job["id"], "CSV_DAG_STEP_BLOCKED", dict(step_id=failed, error=exc.public()))
             transition(worker.store, c, job, state, exc.public())
     finally:
         stopped.set()
@@ -439,13 +470,58 @@ def inspect_job(store, user, rid, limits):
         bound = binding(store, c, job, limits)
         source = read_source(store, c, job)
         outputs, proved = receipts(store, c, job, bound["plan"], source)
-        if job["status"] == "SUCCEEDED" and (len(proved) != 3 or job["result"]["output"] != outputs["report"]):
+        if job["context"]["tools"] != len(proved):
+            graph.conflict("Step counter no longer matches receipts")
+        if job["status"] == "SUCCEEDED" and (len(proved) != 3 or job["result"] != dict(
+                namespace=PLAN, output=outputs["report"], plan_fingerprint=bound["plan"]["plan_fingerprint"],
+                steps=proved, model_requests=0, business_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING")):
             raise DomainError("VERIFICATION_FAILED", "Final result lacks all three checked receipts")
         return dict(namespace=PLAN, id=rid, app_id=bound["app_id"], project_id=job["project_id"],
                     status=job["status"], version=job["version"], result=job["result"], error=job["error"],
                     plan_fingerprint=bound["plan"]["plan_fingerprint"], steps=proved,
                     pending_steps=list(STEPS[len(proved):]), model_requests=0, business_writes=0,
                     publishable=False, formal_publication_enabled=False, semantic_status="UNKNOWN", owner_acceptance="PENDING")
+
+
+@graph.controlled
+def status(store, user, rid):
+    """Own-run control metadata only; never returns protected/stale proof or cells."""
+    with store.tx() as c:
+        owner_lock(store, c, user, rid)
+        job = row(c, user, rid)
+        binding(store, c, job, None, authorize=False)
+        return dict(namespace=PLAN, id=rid, status=job["status"], version=job["version"],
+                    proof_status="NOT_VALIDATED", error=job["error"], result=None, steps=[])
+
+
+@graph.controlled
+def history(store, user, pid, aid, limits):
+    with store.tx() as c:
+        graph.current(store, c, user, pid, aid, limits)
+        keys = c.execute(select(delivery_graph_requests.c.request_key).where(
+            delivery_graph_requests.c.app_id == aid, delivery_graph_requests.c.principal_id == user,
+            delivery_graph_requests.c.kind == "csv_dag_plan").order_by(delivery_graph_requests.c.request_key)).scalars().all()
+        items, expired = [], []
+        for key in keys:
+            try:
+                plan = load_plan(store, c, user, pid, aid, key, limits)
+            except DomainError as exc:
+                if exc.code != "VERSION_CONFLICT":
+                    raise
+                expired.append(dict(request_key=key, state="INVALIDATED"))
+                continue
+            accepted = []
+            run_keys = c.execute(select(delivery_graph_requests.c.request_key).where(
+                delivery_graph_requests.c.app_id == aid, delivery_graph_requests.c.principal_id == user,
+                delivery_graph_requests.c.kind == "csv_dag_run").order_by(delivery_graph_requests.c.request_key)).scalars().all()
+            for run_key in run_keys:
+                _, receipt = read_pair(c, user, aid, "csv_dag_run", run_key, RunInput)
+                if receipt["plan_key"] == key:
+                    job = row(c, user, receipt["run_id"])
+                    binding(store, c, job, limits)
+                    accepted.append(dict(id=job["id"], status=job["status"], version=job["version"], proof_status="NOT_VALIDATED"))
+            items.append(dict(plan=plan, runs=accepted))
+        return dict(namespace=PLAN, app_id=aid, project_id=pid, items=items, invalidated=expired)
 
 
 def command_job(store, user, rid, command, version):
@@ -483,24 +559,33 @@ def command_job(store, user, rid, command, version):
 
 def mount(app, store, settings, principal, limits):
     base = "/api/projects/{pid}/apps/{aid}/csv-dag"
+    dependency = Depends(principal)
 
     @app.post(base, status_code=201)
-    def save(pid: str, aid: str, body: PlanInput, user=Depends(principal)):
+    def save(pid: str, aid: str, body: PlanInput, user=dependency):
         if settings.mode != "mock" or settings.live_enabled:
             raise DomainError("PERMISSION_DENIED", "Offline CSV DAG only")
         return propose(store, user, pid, aid, body, limits)
 
+    @app.get(base)
+    def saved(pid: str, aid: str, user=dependency):
+        return history(store, user, pid, aid, limits)
+
     @app.get(base + "/{key}")
-    def get(pid: str, aid: str, key: str, user=Depends(principal)):
+    def get(pid: str, aid: str, key: str, user=dependency):
         with store.tx() as c:
             return load_plan(store, c, user, pid, aid, key, limits)
 
     @app.post(base + "/{key}/runs", status_code=202)
-    def start(pid: str, aid: str, key: str, body: RunInput, user=Depends(principal)):
+    def start(pid: str, aid: str, key: str, body: RunInput, user=dependency):
         if settings.mode != "mock" or settings.live_enabled:
             raise DomainError("PERMISSION_DENIED", "Offline CSV DAG only")
         return enqueue(store, user, pid, aid, key, body, limits)
 
     @app.get("/api/csv-dag/runs/{rid}")
-    def inspect(rid: str, user=Depends(principal)):
+    def inspect(rid: str, user=dependency):
         return inspect_job(store, user, rid, limits)
+
+    @app.get("/api/csv-dag/runs/{rid}/status")
+    def controls(rid: str, user=dependency):
+        return status(store, user, rid)

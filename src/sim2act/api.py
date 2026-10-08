@@ -20,6 +20,7 @@ from .contracts import (
     validate_action,
     validate_action_input,
 )
+from .csv_dag import mount as mount_csv_dag
 from .db import (
     Store,
     app_drafts,
@@ -32,7 +33,6 @@ from .db import (
     runs,
 )
 from .delivery_graph_apps import mount as mount_delivery_graph_apps
-from .csv_dag import mount as mount_csv_dag
 from .errors import DomainError
 from .extraction import ExtractionInput, extract_preview
 from .goal_planner import ConfirmNaturalPlanInput

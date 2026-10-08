@@ -11,6 +11,7 @@ function clearCsvDag() {
   $("csv-dag-result").textContent = "";
   $("csv-dag-status").textContent = "";
   $("csv-dag-confirm").checked = false;
+  $("csv-dag-history").replaceChildren();
 }
 function openCsvDag(parent) {
   clearCsvDag();
@@ -27,6 +28,7 @@ function openCsvDag(parent) {
 function csvDagClearProof(c) {
   c.plan = null; c.job = null;
   $("csv-dag-definition").textContent = ""; $("csv-dag-result").textContent = ""; $("csv-dag-confirm").checked = false;
+  $("csv-dag-history").replaceChildren();
 }
 function csvDagButtons(c = csvDagContext) {
   if (!c || !csvDagCurrent(c)) return;
@@ -36,6 +38,7 @@ function csvDagButtons(c = csvDagContext) {
   $("csv-dag-retry").hidden = !intent;
   $("csv-dag-retry").disabled = c.busy;
   $("csv-dag-refresh").disabled = c.busy || (!c.job && !intent?.runId);
+  $("csv-dag-history-read").disabled = c.busy || !!intent;
   $("csv-dag-column").disabled = locked;
   $("csv-dag-confirm").disabled = locked || !c.plan;
   for (const command of ["pause", "resume", "cancel"]) {
@@ -93,7 +96,18 @@ async function csvDagRead(c = csvDagContext, runId, plan = c?.plan) {
     $("csv-dag-result").textContent = JSON.stringify(job,null,2);
     $("csv-dag-status").textContent = `${job.status} · ${job.steps.length}/3 步已核回执 · 候选未验收 · 发布关闭`;
     csvDagButtons(c); return job;
-  } catch (e) { if (csvDagCurrent(c)) csvDagClearProof(c); throw e; }
+  } catch (e) {
+    if (csvDagCurrent(c)) {
+      csvDagClearProof(c);
+      const metadata = await api(`/api/csv-dag/runs/${runId}/status`);
+      if (csvDagCurrent(c) && metadata.id === runId && metadata.proof_status === "NOT_VALIDATED" && metadata.result === null && deliverySame(metadata.steps, [])) {
+        c.job = metadata;
+        $("csv-dag-status").textContent = `${metadata.status} · 来源／权限／版本证明失效；仅保留停止控制信息`;
+        csvDagButtons(c);
+      }
+    }
+    throw e;
+  }
 }
 async function csvDagSubmit(kind, retry = false) {
   const c = csvDagContext; if (!c || !csvDagCurrent(c) || c.busy) return;
@@ -102,9 +116,15 @@ async function csvDagSubmit(kind, retry = false) {
   if (!retry) {
     if (intent) throw Error("先恢复原接受回执");
     if (kind === "plan") {
-      const anchor = await api(deliveryBase(c.parent)); if (!csvDagCurrent(c)) return;
-      if (!await deliveryGraphSeal(anchor,c.parent)) throw Error("VERSION_CONFLICT");
-      intent = {kind, body:{expected_candidate_fingerprint:c.parent.app.fingerprint,expected_graph_fingerprint:anchor.graph_fingerprint,column:$("csv-dag-column").value,request_key:crypto.randomUUID()}};
+      const column = $("csv-dag-column").value;
+      c.busy = true;csvDagButtons(c);
+      try {
+        const anchor = await api(deliveryBase(c.parent));
+        if (!csvDagCurrent(c)) {c.busy = false;return;}
+        if (!await deliveryGraphSeal(anchor,c.parent)) throw Error("VERSION_CONFLICT");
+        if (!csvDagCurrent(c)) {c.busy = false;return;}
+        intent = {kind, body:{expected_candidate_fingerprint:c.parent.app.fingerprint,expected_graph_fingerprint:anchor.graph_fingerprint,column,request_key:crypto.randomUUID()}};
+      } catch(e) {c.busy = false;csvDagButtons(c);throw e;}
     } else {
       if (!c.plan || !$("csv-dag-confirm").checked) throw Error("请确认精确计划");
       intent = {kind,plan:c.plan,body:{expected_plan_fingerprint:c.plan.plan_fingerprint,consent:"CONFIRM_EXACT_OFFLINE_CSV_DAG",request_key:crypto.randomUUID()}};
@@ -142,13 +162,44 @@ async function csvDagSubmit(kind, retry = false) {
 async function csvDagCommand(command) {
   const c = csvDagContext; if (!c?.job || !csvDagCurrent(c)) return;
   const id = c.job.id, plan = c.plan;
-  await api(`/api/runs/${id}/commands`,"POST",{command,version:c.job.version});
-  if (csvDagCurrent(c)) await csvDagRead(c,id,plan);
+  let commandError;
+  try {await api(`/api/runs/${id}/commands`,"POST",{command,version:c.job.version});}
+  catch(e) {commandError=e;}
+  if (csvDagCurrent(c)) {
+    if (plan) await csvDagRead(c,id,plan);
+    else {c.job = await api(`/api/csv-dag/runs/${id}/status`);if(csvDagCurrent(c))csvDagButtons(c);}
+  }
+  if(commandError)throw commandError;
+}
+async function csvDagHistory() {
+  const c = csvDagContext; if (!c || !csvDagCurrent(c)) return;
+  try {
+    const data = await api(csvDagBase(c));
+    if (!csvDagCurrent(c)) return;
+    if (data.namespace !== "fixed-csv-dag.v1" || data.app_id !== c.parent.id || data.project_id !== c.parent.project || !Array.isArray(data.items) || !Array.isArray(data.invalidated)) throw Error("VERSION_CONFLICT");
+    for (const item of data.items) if (!await csvDagPlanSeal(item.plan,c) || !Array.isArray(item.runs)) throw Error("VERSION_CONFLICT");
+    if (!csvDagCurrent(c)) return;
+    csvDagClearProof(c);
+    for (const item of data.items) {
+      $("csv-dag-history").append(row(`${item.plan.input.column} · ${item.plan.plan_fingerprint} · 候选未验收`, async () => {
+        if (!csvDagCurrent(c)) return;
+        const plan = await api(csvDagBase(c) + "/" + encodeURIComponent(item.plan.request_key));
+        if (!csvDagCurrent(c)) return;
+        if (!await csvDagPlanSeal(plan,c) || !deliverySame(plan,item.plan)) throw Error("VERSION_CONFLICT");
+        if (!csvDagCurrent(c)) return;
+        c.plan = plan;c.job = null;$("csv-dag-confirm").checked = false;$("csv-dag-definition").textContent = JSON.stringify(plan,null,2);$("csv-dag-result").textContent = "";csvDagButtons(c);
+      }, "读回精确计划"));
+      for (const job of item.runs) $("csv-dag-history").append(row(`${job.id} · ${job.status} · 回执尚未重新核对`, () => csvDagRead(c,job.id,item.plan), "核对运行回执"));
+    }
+    for (const stale of data.invalidated) $("csv-dag-history").append(row(`${stale.request_key} · INVALIDATED`));
+    csvDagButtons(c);
+  } catch(e) {if(csvDagCurrent(c))csvDagClearProof(c);throw e;}
 }
 $("csv-dag-plan").onclick = safe(() => csvDagSubmit("plan"));
 $("csv-dag-run").onclick = safe(() => csvDagSubmit("run"));
 $("csv-dag-retry").onclick = safe(() => csvDagSubmit(null,true));
 $("csv-dag-refresh").onclick = safe(() => csvDagRead());
+$("csv-dag-history-read").onclick = safe(csvDagHistory);
 $("csv-dag-confirm").onchange = () => csvDagButtons();
 $("csv-dag-column").onchange = () => { if(csvDagContext)csvDagClearProof(csvDagContext);csvDagButtons(); };
 for(const command of ["pause","resume","cancel"])$("csv-dag-"+command).onclick = safe(() => csvDagCommand(command));

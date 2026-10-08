@@ -1479,8 +1479,16 @@ class Store:
     def reconcile_operation(
         self, principal, run_id, operation_id, version, expected_fingerprint, evidence
     ):
+        from .csv_dag import is_job as is_csv_dag
+        from .csv_dag import owner_lock, row
         from .protocol_jobs import is_protocol_job, verified_pending
         from .tools import reconcile_readback
+
+        if is_csv_dag(self, run_id):
+            with self.tx() as c:
+                owner_lock(self, c, principal, run_id)
+                row(c, principal, run_id)
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Fixed DAG uses atomic local receipts and cold step checks; generic tool evidence cannot replace them")
 
         if is_protocol_job(self, run_id):
             with self.tx() as c:
