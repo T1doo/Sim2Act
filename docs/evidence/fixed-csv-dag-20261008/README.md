@@ -19,4 +19,4 @@
 
 原断言、scripts/.github/.gitattributes、Windows900 / Edge240 / Node150与依赖锁不改，无新CI/main/forcepush/部署/真实模型或凭据配置。LIVE=0。semantic UNKNOWN、owner PENDING、publishable/formal_publication_enabled=false；原生Windows/Edge、真实任务gold、完整P-B、人工验收、DAG独审均未完成，旧1591全量不用于本改动证明。
 
-PG为自有network none、无TCP、私有/tmp socket、无PGDATA宿主挂载；既有fixture按用例创建/销毁临时schema及最小应用角色。DAG回归结束后保存结果，暂留PG/Node隔离基础设施供紧接的授权CSV开发基线整合回归；最终cleanup证据在两阶段结束后补齐，开发.venv保留。DAG不混入CSV基线整合。
+PG为自有network none、无TCP、私有/tmp socket、无PGDATA宿主挂载；既有fixture按用例创建/销毁临时schema及最小应用角色。DAG回归完成保存868fcd7后，按父线程新授权单独ff-only整合CSV/key候选到开发基线16041ec12790aa1a2c09905e42ca40966a893e13，重新验证451源码SQLite135 PASS/PG134 PASS+1历史SQLite SKIP并普通推送；未混入DAG。本候选src/tests与e8b1ed4仍完全一致。两阶段结束实际PG test schema=0/test role=0，正常停止--rm容器、正常移除镜像与自有卷，49个自有/tmp路径含PG/Node/npm/全部测试DB已清理，cleanup.json及pg-final-clean-query.json为共享实际清理证据；开发.venv保留。
