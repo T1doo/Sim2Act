@@ -234,7 +234,7 @@ async function csvDagWiringRead() {
   const c=csvDagContext;if(!c||!csvDagCurrent(c)||c.busy||csvDagIntents.has(csvDagKey(c)))return;
   c.busy=true;csvDagButtons(c);
   try {
-    const data=await api(csvDagBase(c)+"/wiring-options");if(!csvDagCurrent(c))return;
+    const data=await api(csvDagBase(c)+"/options/wiring");if(!csvDagCurrent(c))return;
     const {options_fingerprint,...body}=data;
     if(data.version!=="csv.wiring.v1"||data.app_id!==c.parent.id||data.project_id!==c.parent.project||data.candidate_fingerprint!==c.parent.app.fingerprint||data.editable_dependencies!==false||!deliverySame(data.barrier,["preview","aggregate"])||!deliverySame(data.fixed_steps,["preview","aggregate","report"])||!deliverySame(data.ports,csvDagPortOptions())||await deliveryDigest(body)!==options_fingerprint)throw Error("VERSION_CONFLICT");
     if(!csvDagCurrent(c))return;

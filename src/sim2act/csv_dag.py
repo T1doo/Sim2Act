@@ -684,7 +684,7 @@ def mount(app, store, settings, principal, limits):
     def saved(pid: str, aid: str, user=dependency):
         return history(store, user, pid, aid, limits)
 
-    @app.get(base + "/wiring-options")
+    @app.get(base + "/options/wiring")
     def options(pid: str, aid: str, user=dependency):
         with store.tx() as c:
             saved = graph.current(store, c, user, pid, aid, limits)

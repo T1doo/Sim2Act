@@ -5,6 +5,7 @@ import csv
 import hashlib
 import io
 import json
+import time
 from fractions import Fraction
 
 import pytest
@@ -48,13 +49,14 @@ PATCH = [
 def propose(env, base, anchor, patch, key):
     return env[2].post(
         base,
-        json=dict(
+        content=json.dumps(dict(
             expected_candidate_fingerprint=anchor["candidate_fingerprint"],
             expected_graph_fingerprint=anchor["graph_fingerprint"],
             column="quantity",
             request_key=key,
             wiring_patch=patch,
-        ),
+        ), ensure_ascii=True),
+        headers={"Content-Type": "application/json"},
     )
 
 
@@ -72,8 +74,8 @@ def start(env, base, plan, key):
     return worker, job, body
 
 
-def wired(env):
-    rid, base, anchor, _, worker, old = setup(env)
+def wired(env, content=None):
+    rid, base, anchor, _, worker, old = setup(env, content) if content else setup(env)
     worker.model = NoModel()
     worker.process(old)
     reply = propose(env, base, anchor, PATCH, "wired")
@@ -86,7 +88,7 @@ def wired(env):
 def test_server_options_authority_seal_exact_ports_and_no_write(env):
     _, base, anchor, _, _, _ = setup(env)
     before = snapshot(env)
-    reply = env[2].get(base + "/wiring-options")
+    reply = env[2].get(base + "/options/wiring")
     assert reply.status_code == 200, reply.text
     answer = reply.json()
     assert answer["ports"] == dag.allowed_ports()
@@ -100,7 +102,43 @@ def test_server_options_authority_seal_exact_ports_and_no_write(env):
     assert answer["graph_fingerprint"] == anchor["graph_fingerprint"]
     assert answer["editable_dependencies"] is False and snapshot(env) == before
     env[2].headers["Authorization"] = "Bearer synthetic-test-B"
-    assert env[2].get(base + "/wiring-options").status_code == 403
+    assert env[2].get(base + "/options/wiring").status_code == 403
+
+
+def test_old_legal_wiring_options_request_key_remains_readable(env):
+    _, base, anchor, _, _, _ = setup(env)
+    body = dict(expected_candidate_fingerprint=anchor["candidate_fingerprint"],
+                expected_graph_fingerprint=anchor["graph_fingerprint"],
+                column="quantity", request_key="wiring-options")
+    made = env[2].post(base, json=body)
+    assert made.status_code == 201, made.text
+    assert "wiring" not in made.json()
+    saved = env[2].get(base + "/wiring-options")
+    assert saved.status_code == 200
+    assert saved.json() == {k: v for k, v in made.json().items() if k != "cached"}
+    assert env[2].get(base + "/options/wiring").json()["ports"] == dag.allowed_ports()
+
+
+@pytest.mark.parametrize("kind", ["lock", "unknown"])
+def test_wired_new_definition_and_exact_replay_respect_existing_blockers(env, monkeypatch, kind):
+    _, base, anchor, _, _, _, body = wired(env)
+    real = dag.graph.current
+
+    def blocked(*args, **kwargs):
+        saved = copy.deepcopy(real(*args, **kwargs))
+        if kind == "lock":
+            saved["context"]["locked_nodes"] = ["owned-original-node"]
+        else:
+            saved["graph"]["unknown_dependencies"] = [{"scope": "PROJECT"}]
+        return saved
+
+    monkeypatch.setattr(dag.graph, "current", blocked)
+    before = snapshot(env)
+    new = propose(env, base, anchor, PATCH, "blocked")
+    replay = env[2].post(base + "/wired/runs", json=body)
+    assert new.status_code == replay.status_code == 400
+    assert new.json()["error"]["code"] == ("LOCK_CONFLICT" if kind == "lock" else "UNSUPPORTED_CAPABILITY")
+    assert snapshot(env) == before
 
 
 def test_different_legal_wires_same_independent_answer_and_unchanged_objects(env, tmp_path):
@@ -396,4 +434,66 @@ def test_wired_report_rechecks_source_and_authority_and_keeps_upstream(env, kind
     }
     assert env[2].get(f"/api/csv-dag/runs/{job['id']}").status_code in {403, 409}
     assert env[2].post(base + "/wired/runs", json=body).status_code in {403, 409}
-    assert env[2].get(base + "/wiring-options").status_code in {403, 409}
+    assert env[2].get(base + "/options/wiring").status_code in {403, 409}
+
+
+@pytest.mark.parametrize("step", ["aggregate", "report"])
+@pytest.mark.parametrize("wrong", [True, 1.0])
+def test_wired_actual_count_type_tamper_keeps_fingerprint_but_is_denied(env, step, wrong):
+    _, _, _, _, w, job, _ = wired(env, "item,amount,quantity\nA,10,7\n")
+    w.process(job)
+    with env[0].tx() as c:
+        op = c.execute(select(operations).where(
+            operations.c.run_id == job["id"], operations.c.call_id == step)).mappings().one()
+        value = copy.deepcopy(op["receipt"])
+        assert type(value["data"]["count"]) is int and value["data"]["count"] == 1
+        value["data"]["count"] = wrong
+        c.execute(update(operations).where(operations.c.id == op["id"]).values(receipt=value))
+    before = snapshot(env)
+    assert env[2].get(f"/api/csv-dag/runs/{job['id']}").status_code in {400, 409}
+    assert snapshot(env) == before
+
+
+def test_wired_actual_wall_deadline_cannot_commit_after_readback(env, monkeypatch):
+    _, _, _, _, w, job, _ = wired(env)
+    for _ in range(3):
+        assert dag.advance(w, job)
+    now = time.time()
+    deadline = now + 1
+    with env[0].tx() as c:
+        c.execute(update(runs).where(runs.c.id == job["id"]).values(
+            created_at=deadline - env[1].run_seconds, lease_until=now + 30))
+    before = snapshot(env)
+    real = dag.receipts
+    crossed = []
+
+    def slow_read(*args):
+        entered = time.time()
+        value = real(*args)
+        time.sleep(1.25)
+        crossed.append((entered, time.time()))
+        return value
+
+    monkeypatch.setattr(dag, "receipts", slow_read)
+    with pytest.raises(DomainError) as denied:
+        dag.advance(w, job)
+    assert denied.value.code == "BUDGET_EXHAUSTED"
+    assert len(crossed) == 1 and crossed[0][0] < deadline <= crossed[0][1]
+    assert snapshot(env) == before and read_row(env, job)["result"] is None
+
+
+def test_wired_unknown_outcome_never_executes_report_or_reconciles_as_generic(env):
+    _, _, _, _, w, job, _ = wired(env)
+    assert dag.advance(w, job)
+    with env[0].tx() as c:
+        op = c.execute(select(operations).where(operations.c.run_id == job["id"])).mappings().one()
+        c.execute(update(operations).where(operations.c.id == op["id"]).values(status="OUTCOME_UNKNOWN"))
+    w.process(job)
+    state = read_row(env, job)
+    assert state["status"] == "WAITING_RESOURCE" and step_ids(env, job) == {"preview"}
+    with pytest.raises(DomainError) as denied:
+        env[0].command(env[3], job["id"], "resume", state["version"])
+    assert denied.value.code == "OUTCOME_UNKNOWN"
+    with pytest.raises(DomainError) as denied:
+        env[0].reconcile_operation(env[3], job["id"], op["id"], state["version"], fingerprint({}), {})
+    assert denied.value.code == "UNSUPPORTED_CAPABILITY"
