@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import socket
 import subprocess
 import threading
@@ -22,6 +23,13 @@ def env(env):
 def test_archived_report_presentation_actual_http_dom(env, tmp_path):
     app, _, _, _, output, _ = prepared(env, tmp_path)
     other = env[0].project(env[3], "Other owned DOM project")
+    baseline = os.environ.get("SIM2ACT_PRESENTATION_JS_BASELINE")
+    if baseline:
+        # Trusted local counterexample fixture only; no product input/route added.
+        from fastapi.responses import Response
+        code = Path(baseline).read_text()
+        route = next(r for r in env[2].app.routes if getattr(r, "path", None) == "/report-manifest.js")
+        route.dependant.call = lambda: Response(code, media_type="application/javascript")
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -42,7 +50,7 @@ def test_archived_report_presentation_actual_http_dom(env, tmp_path):
         (tmp_path / "driver.log").write_text(output.stdout + output.stderr)
         assert output.returncode == 0, output.stdout + output.stderr
         result = json.loads((tmp_path / "results.json").read_text())
-        assert result["status"] == "PASS" and len(result["checks"]) == 27
+        assert result["status"] == "PASS" and len(result["checks"]) == 30
         for name, digest in result["hashes"].items():
             assert hashlib.sha256((Path("src/sim2act/web") / name).read_bytes()).hexdigest() == digest
         assert len(result["hashes"]) == 7
