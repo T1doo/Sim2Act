@@ -22,6 +22,14 @@ from .tools import authorized_read, csv_column_options, validate_call
 HISTORY_LIMIT = 50
 
 
+def validate_request_key(key):
+    """One SQL-before boundary for JSON, decoded path and restored ledger keys."""
+    if (not isinstance(key, str) or not 1 <= len(key) <= 128
+            or any(ord(ch) < 32 or ord(ch) == 127 for ch in key)):
+        raise DomainError("INVALID_INPUT", "Column patch request key must be bounded text without control characters")
+    return key
+
+
 class DefinitionInput(Strict):
     expected_candidate_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
@@ -103,6 +111,7 @@ def build(store, c, user, pid, aid, body, limits):
 
 
 def read_pair(c, user, aid, kind, key, model):
+    validate_request_key(key)
     row = graph.lookup(c, user, aid, kind, key)
     seal = graph.lookup(c, user, aid, kind + "_seal", key)
     if not row or not seal:
@@ -129,6 +138,7 @@ def require_capacity(c, user, aid, kind):
 
 
 def load(store, c, user, pid, aid, key, limits):
+    validate_request_key(key)
     # Current authority precedes reading protected saved definitions/results.
     saved = graph.current(store, c, user, pid, aid, limits)
     body, answer = read_pair(c, user, aid, "column_patch", key, DefinitionInput)
@@ -143,9 +153,7 @@ def load(store, c, user, pid, aid, key, limits):
 
 @graph.controlled
 def propose(store, user, pid, aid, body, limits):
-    # Validate before SQL: PostgreSQL text parameters cannot contain NUL.
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in body.request_key):
-        raise DomainError("INVALID_INPUT", "Definition request key cannot contain control characters")
+    validate_request_key(body.request_key)
     with store.tx() as c:
         answer = build(store, c, user, pid, aid, body, limits)
         if graph.lookup(c, user, aid, "column_patch", body.request_key):
@@ -223,6 +231,8 @@ def verify_check(store, c, user, pid, aid, definition, patch, body, answer, limi
 
 @graph.controlled
 def check(store, user, pid, aid, key, body, limits):
+    validate_request_key(key)
+    validate_request_key(body.request_key)
     with store.tx() as c:
         definition, patch = load(store, c, user, pid, aid, key, limits)
         if patch["patch_fingerprint"] != body.expected_patch_fingerprint:
@@ -248,11 +258,26 @@ def check(store, user, pid, aid, key, body, limits):
 def history(store, user, pid, aid, limits):
     with store.tx() as c:
         graph.current(store, c, user, pid, aid, limits)
-        items, invalidated = [], []
+        items, invalidated, unsupported = [], [], []
         rows = c.execute(select(requests.c.request_key).where(
             requests.c.app_id == aid, requests.c.principal_id == user,
-            requests.c.kind == "column_patch").order_by(requests.c.request_key).limit(HISTORY_LIMIT)).scalars()
+            requests.c.kind == "column_patch").order_by(requests.c.request_key).limit(HISTORY_LIMIT)).scalars().all()
+        check_keys = c.execute(select(requests.c.request_key).where(
+            requests.c.app_id == aid, requests.c.principal_id == user,
+            requests.c.kind == "column_check").order_by(requests.c.request_key).limit(HISTORY_LIMIT)).scalars().all()
+        supported_checks = []
+        for key in check_keys:
+            try:
+                validate_request_key(key)
+                supported_checks.append(key)
+            except DomainError:
+                unsupported.append(dict(kind="column_check", request_key=key, state="UNSUPPORTED_KEY", reason="INVALID_INPUT"))
         for key in rows:
+            try:
+                validate_request_key(key)
+            except DomainError:
+                unsupported.append(dict(kind="column_patch", request_key=key, state="UNSUPPORTED_KEY", reason="INVALID_INPUT"))
+                continue
             try:
                 definition, patch = load(store, c, user, pid, aid, key, limits)
             except DomainError as exc:
@@ -261,16 +286,15 @@ def history(store, user, pid, aid, limits):
                 invalidated.append(dict(request_key=key, state="INVALIDATED", reason=exc.code))
                 continue
             checks = []
-            for row in c.execute(select(requests.c.request_key).where(
-                requests.c.app_id == aid, requests.c.principal_id == user,
-                requests.c.kind == "column_check").order_by(requests.c.request_key).limit(HISTORY_LIMIT)).scalars():
+            for row in supported_checks:
                 body, result = read_pair(c, user, aid, "column_check", row, CheckInput)
                 if result["patch_fingerprint"] == patch["patch_fingerprint"]:
                     verify_check(store, c, user, pid, aid, definition, patch, body, result, limits)
                     checks.append(result)
             items.append(dict(patch=patch, checks=checks))
         return dict(namespace="csv-column-patch-history.v1", project_id=pid, app_id=aid,
-                    items=items, invalidated=invalidated)
+                    items=items, invalidated=invalidated,
+                    **({"unsupported_keys": unsupported} if unsupported else {}))
 
 
 def mount(app, store, identity, limits):
