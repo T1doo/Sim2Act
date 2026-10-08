@@ -1,0 +1,115 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__ test_fixed_dag_actual_http_dom_exact_confirmation_recovery_and_revocation ___
+
+env = (<sim2act.db.Store object at 0x7f1f8de675f0>, Settings(database_url='sqlite:////tmp/sim2act-dag-ui-stage/test_fixed_da...b42f206d2448b4a4e94f0505f2e3f6', 'user_5c436eb10a924371a4a98e6bfaa24f80', 'proj_ef4b4a2a07eb41779501e85b97bfa285', ...)
+tmp_path = PosixPath('/tmp/sim2act-dag-ui-stage/test_fixed_dag_actual_http_dom0')
+
+    def test_fixed_dag_actual_http_dom_exact_confirmation_recovery_and_revocation(env, tmp_path):
+        store, settings, client, owner, _, pid, _ = env
+        rid = client.post(f"/api/projects/{pid}/resources", json=dict(name="page-dag.csv", format="csv", content=CSV.read_text())).json()["id"]
+        aid = client.post(f"/api/projects/{pid}/apps/csv-preview", json=dict(name="page DAG", goal="engineering only", resource_id=rid)).json()["id"]
+        app_info = client.get(f"/api/apps/{aid}").json()
+        client.post(f"/api/projects/{pid}/apps/{aid}/delivery-graph/derive", json=dict(expected_candidate_fingerprint=app_info["fingerprint"], request_key="page-source"))
+        other = store.project(owner, "owned navigation project")
+        with store.tx() as c:
+            revoke = dict(c.execute(select(grants).where(grants.c.resource_id == rid, grants.c.principal_id == owner)).mappings().first())
+        app = create_app(store, settings)
+        worker = Worker(store, settings, NoModel())
+        jobs = {}
+    
+        # Owned test-only HTTP hook; not mounted by product create_app.
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            with store.tx() as c:
+                state = c.execute(select(runs.c.status).where(runs.c.id == body["run_id"])).scalar()
+            if state == "QUEUED":
+                claimed = store.claim(worker.id, settings.lease_seconds)
+                assert claimed["id"] == body["run_id"]
+                jobs[body["run_id"]] = claimed
+            job = jobs[body["run_id"]]
+            if body["one_step"]:
+                dag.advance(worker, job)
+            else:
+                worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}", project=pid,
+            other=other, app=aid, revoke=dict(id=revoke["id"], version=revoke["revision"]))))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < end
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/csv_dag_ui.cjs", str(tmp_path)], capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: http://127.0.0.1:47965/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:274:10)
+E                 at HTMLScriptElementImpl._innerEval (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:207:5)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:124:12)
+E                 at HTMLScriptElementImpl._eval (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:198:12)
+E                 at HTMLScriptElementImpl._postConnectionSteps (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:46:12)
+E                 at HTMLBodyElementImpl._insert (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:1121:16)
+E                 at HTMLBodyElementImpl._preInsert (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:1006:10)
+E             http://127.0.0.1:47965/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:274:10)
+E                 at HTMLScriptElementImpl._innerEval (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:207:5)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:124:12)
+E                 at HTMLScriptElementImpl._eval (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:198:12)
+E                 at HTMLScriptElementImpl._postConnectionSteps (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:46:12)
+E                 at HTMLBodyElementImpl._insert (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:1121:16)
+E                 at HTMLBodyElementImpl._preInsert (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:1006:10)
+E             http://127.0.0.1:47965/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:274:10)
+E                 at HTMLScriptElementImpl._innerEval (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:207:5)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:124:12)
+E                 at HTMLScriptElementImpl._eval (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:198:12)
+E                 at HTMLScriptElementImpl._postConnectionSteps (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:46:12)
+E                 at HTMLBodyElementImpl._insert (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:1121:16)
+E                 at HTMLBodyElementImpl._preInsert (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:1006:10)
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_ui.cjs', '/tmp/sim2act-dag-ui-stage/test_fixed_dag_actual_http_dom0'], r...reInsert (/tmp/sim2act-dag-node/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:1006:10)\n\nNode.js v24.19.0\n').returncode
+
+tests/test_csv_dag_ui.py:69: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_dag_ui.py::test_fixed_dag_actual_http_dom_exact_confirmation_recovery_and_revocation
+1 failed, 1 warning in 2.87s
