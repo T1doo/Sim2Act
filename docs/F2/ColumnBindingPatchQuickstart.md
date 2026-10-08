@@ -23,6 +23,8 @@ API 复现同一页面链路：先 `GET /api/apps/{aid}`、`POST /api/projects/{
 
 原键路由修复候选为 `dev/column-patch-key-fix-20261008`，原冻结分支不改动。定义键可包含 `/`、Unicode、空格及字面 `%`，放入 URL 时对完整键编码一次（Python `urllib.parse.quote(key, safe="")`、浏览器 `encodeURIComponent(key)`）；不要双重编码。`independent/key` 的原路径与 `independent%2Fkey` 编码路径都定位同一草案，`independent%252Fkey` 定位字面 `%2F` 键，不能代替前者。新的控制字符或 `.` / `..` 路径段键在持久化前返回 INVALID_INPUT；已有可定位原键的定义/检查幂等、指纹及历史结构保持。新增真实 HTTP 回归为 `tests/test_column_patch_keys.py`。
 
+后续完整控制字符修复候选为 `dev/column-patch-control-fix-20261008`：定义、检查 body、解码路径和恢复读取共用 SQL 前校验，键为 1–128 个字符，拒绝 Unicode 控制字符和无法编码的代理字符。控制字符不得通过 JSON 或 URL 编码绕过；原始 HTTP 非法目标由 HTTP 解析器拒绝，编码换行也可能在路由层返回 404，均不会保存回执。合法字面 `%00` 仍可使用，路径须编码成 `%2500`；检查 body 原键保持字面内容，不另做 URL 解码。旧 SQLite 异常键记录不会删除：授权历史读返回 `unsupported_keys` 元数据（UNSUPPORTED_KEY），页面标明保留但不作为当前证明；合法特殊字符、原键指纹与幂等冷读继续保持。
+
 开发者定向验证（Node/JSDOM 只供工程测试，产品无 Node 依赖）：
 
 ```bash

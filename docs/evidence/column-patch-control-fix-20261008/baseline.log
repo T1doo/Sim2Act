@@ -1,0 +1,241 @@
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/api.py", line 169, in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 676, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 697, in app
+    await route.handle(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 282, in handle
+    await self.app(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 326, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/column_patches.py", line 286, in confirm
+    return check(store, user, pid, aid, key, body, limits)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/delivery_graph_apps.py", line 55, in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/column_patches.py", line 230, in check
+    if graph.lookup(c, user, aid, "column_check", body.request_key):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/delivery_graph_apps.py", line 500, in lookup
+    c.execute(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+[SQL: SELECT test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.app_id, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.principal_id, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.kind, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.request_key, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.request_fingerprint, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.snapshot, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.fingerprint 
+FROM test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests 
+WHERE test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.app_id = %(app_id_1)s::VARCHAR AND test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.principal_id = %(principal_id_1)s::VARCHAR AND test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.kind = %(kind_1)s::VARCHAR AND test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.request_key = %(request_key_1)s::VARCHAR]
+[parameters: {'app_id_1': 'app_eff129e0aa884f49960a56c114089787', 'principal_id_1': 'user_dacf79f1b6e54950a0fdb7277f543e05', 'kind_1': 'column_check', 'request_key_1': 'nul\x00check'}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/api.py", line 169, in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 676, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 697, in app
+    await route.handle(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 282, in handle
+    await self.app(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 326, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/column_patches.py", line 286, in confirm
+    return check(store, user, pid, aid, key, body, limits)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/delivery_graph_apps.py", line 55, in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/column_patches.py", line 227, in check
+    definition, patch = load(store, c, user, pid, aid, key, limits)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/column_patches.py", line 134, in load
+    body, answer = read_pair(c, user, aid, "column_patch", key, DefinitionInput)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/column_patches.py", line 106, in read_pair
+    row = graph.lookup(c, user, aid, kind, key)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-control-baseline/src/sim2act/delivery_graph_apps.py", line 500, in lookup
+    c.execute(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+[SQL: SELECT test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.app_id, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.principal_id, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.kind, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.request_key, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.request_fingerprint, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.snapshot, test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.fingerprint 
+FROM test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests 
+WHERE test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.app_id = %(app_id_1)s::VARCHAR AND test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.principal_id = %(principal_id_1)s::VARCHAR AND test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.kind = %(kind_1)s::VARCHAR AND test_6a3d42188a1846f3988efa128fb64fcd.delivery_graph_requests.request_key = %(request_key_1)s::VARCHAR]
+[parameters: {'app_id_1': 'app_eff129e0aa884f49960a56c114089787', 'principal_id_1': 'user_dacf79f1b6e54950a0fdb7277f543e05', 'kind_1': 'column_patch', 'request_key_1': 'nul\x00path'}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+{"source_sha": "eb2e5fbe72ac8585a65c441eaff5e02dd50825a5", "loaded_column_module_sha256": "138887a45272d7b6bf0934dd8fe27abe5d69bd826a783ceea9f074b86b4552a6", "cases": [{"environment": "sqlite", "transport": "actual loopback HTTP", "definition_status": 201, "json_nul_check_status": 201, "encoded_nul_path_status": 409}, {"environment": "pg", "transport": "actual loopback HTTP", "definition_status": 201, "json_nul_check_status": 500, "encoded_nul_path_status": 500}], "live": 0}

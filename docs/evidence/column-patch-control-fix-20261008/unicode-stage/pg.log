@@ -1,0 +1,172 @@
+.................................................................FF..... [ 53%]
+...........s......F............................................          [100%]
+=================================== FAILURES ===================================
+___ test_shared_validator_all_ascii_controls_and_read_before_any_sql[\ud800] ___
+
+char = '\ud800'
+
+    @pytest.mark.parametrize("char", [chr(i) for i in range(32)] + [chr(i) for i in range(127, 160)] + ["\ud800", "\udfff"])
+    def test_shared_validator_all_ascii_controls_and_read_before_any_sql(char):
+        key = "owned" + char + "key"
+        # A bare object has no DB API: attempted SQL would raise AttributeError.
+        for call in (
+            lambda: validate_request_key(key),
+            lambda: read_pair(object(), "user", "app", "column_check", key, CheckInput),
+            lambda: load(object(), object(), "user", "project", "app", key, None),
+            lambda: propose(object(), "user", "project", "app", SimpleNamespace(request_key=key), None),
+            lambda: check(object(), "user", "project", "app", key, CheckInput(expected_patch_fingerprint="0" * 64, request_key="safe"), None),
+            lambda: check(object(), "user", "project", "app", "safe", CheckInput(expected_patch_fingerprint="0" * 64, request_key=key), None),
+        ):
+            with pytest.raises(DomainError) as error:
+>               call()
+
+tests/test_column_patch_controls.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>       lambda: check(object(), "user", "project", "app", "safe", CheckInput(expected_patch_fingerprint="0" * 64, request_key=key), None),
+                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for CheckInput
+E   request_key
+E     Input should be a valid string, unable to parse raw data as a unicode string [type=string_unicode, input_value='owned\ud800key', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.12/v/string_unicode
+
+tests/test_column_patch_controls.py:55: ValidationError
+___ test_shared_validator_all_ascii_controls_and_read_before_any_sql[\udfff] ___
+
+char = '\udfff'
+
+    @pytest.mark.parametrize("char", [chr(i) for i in range(32)] + [chr(i) for i in range(127, 160)] + ["\ud800", "\udfff"])
+    def test_shared_validator_all_ascii_controls_and_read_before_any_sql(char):
+        key = "owned" + char + "key"
+        # A bare object has no DB API: attempted SQL would raise AttributeError.
+        for call in (
+            lambda: validate_request_key(key),
+            lambda: read_pair(object(), "user", "app", "column_check", key, CheckInput),
+            lambda: load(object(), object(), "user", "project", "app", key, None),
+            lambda: propose(object(), "user", "project", "app", SimpleNamespace(request_key=key), None),
+            lambda: check(object(), "user", "project", "app", key, CheckInput(expected_patch_fingerprint="0" * 64, request_key="safe"), None),
+            lambda: check(object(), "user", "project", "app", "safe", CheckInput(expected_patch_fingerprint="0" * 64, request_key=key), None),
+        ):
+            with pytest.raises(DomainError) as error:
+>               call()
+
+tests/test_column_patch_controls.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>       lambda: check(object(), "user", "project", "app", "safe", CheckInput(expected_patch_fingerprint="0" * 64, request_key=key), None),
+                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for CheckInput
+E   request_key
+E     Input should be a valid string, unable to parse raw data as a unicode string [type=string_unicode, input_value='owned\udfffkey', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.12/v/string_unicode
+
+tests/test_column_patch_controls.py:55: ValidationError
+_ test_unicode_control_or_unpaired_surrogate_json_rejected_before_sql[invalid\ud800key] _
+
+env = (<sim2act.db.Store object at 0x7efd94968ad0>, Settings(database_url='postgresql+psycopg://postgres@/postgres?host=/tmp...97634391a34ed3b8bdebcb7c526d38', 'user_d23f11934b59472f83fe9f00819abc3c', 'proj_7e541254eea046b182ef5bde91f45945', ...)
+http = <httpx.Client object at 0x7efd94547e30>, key = 'invalid\ud800key'
+
+    @pytest.mark.parametrize("key", ["c1\x85key", "invalid\ud800key"])
+    def test_unicode_control_or_unpaired_surrogate_json_rejected_before_sql(env, http, key):
+        aid, _, _, body, _ = setup(env)
+        target = url(env, aid)
+        patch = http.post(target, json=body).json()
+        before = http.get(target).json()
+        seen, listener = collect_sql(env[0])
+        try:
+            reply = http.post(target + "/new-definition/checks",
+                              content=json.dumps(check_body(patch, key), ensure_ascii=True).encode(),
+                              headers={"Content-Type": "application/json"})
+>           assert reply.status_code == 400 and reply.json()["error"]["code"] == "INVALID_INPUT", reply.text
+E           AssertionError: Internal Server Error
+E           assert (500 == 400)
+E            +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_column_patch_controls.py:180: AssertionError
+--------------------------- Captured stderr teardown ---------------------------
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 719, in app
+    raise validation_error
+fastapi.exceptions.RequestValidationError: 1 validation error:
+  {'type': 'string_unicode', 'loc': ('body', 'request_key'), 'msg': 'Input should be a valid string, unable to parse raw data as a unicode string', 'input': 'invalid\ud800key'}
+
+  File "/workspace/Sim2Act/src/sim2act/column_patches.py", line 309, in confirm
+    POST /api/projects/{pid}/apps/{aid}/delivery-graph/column-patches/{key}/checks
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/src/sim2act/api.py", line 169, in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 676, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 697, in app
+    await route.handle(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py", line 282, in handle
+    await self.app(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 59, in wrapped_app
+    response = await handler(conn, exc)  # type: ignore[arg-type]
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/exception_handlers.py", line 23, in request_validation_exception_handler
+    return JSONResponse(
+           ^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/responses.py", line 194, in __init__
+    super().__init__(content, status_code, headers, media_type, background)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/responses.py", line 45, in __init__
+    self.body = self.render(content)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/starlette/responses.py", line 203, in render
+    ).encode("utf-8")
+      ^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 166: surrogates not allowed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_column_patch_controls.py::test_shared_validator_all_ascii_controls_and_read_before_any_sql[\ud800]
+FAILED tests/test_column_patch_controls.py::test_shared_validator_all_ascii_controls_and_read_before_any_sql[\udfff]
+FAILED tests/test_column_patch_controls.py::test_unicode_control_or_unpaired_surrogate_json_rejected_before_sql[invalid\ud800key]
+3 failed, 131 passed, 1 skipped, 1 warning in 157.05s (0:02:37)
