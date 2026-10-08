@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="2.026" timestamp="2026-10-08T12:27:54.059134+00:00" hostname="58262d033e58"><testcase classname="tests.test_run_dispatch_owner" name="test_foreign_store_denied_before_any_ledger_read[dag-inspect]" time="0.832"><failure message="AssertionError: ['SELECT runs.context &#10;  FROM runs &#10;  WHERE runs.id = ?', 'SELECT events.id &#10;  FROM events &#10;  WHERE events.run_id = ? AND events.kind = ?']&#10;assert not ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND events.kind = ?']">env = (&lt;sim2act.db.Store object at 0x7f548b9701d0&gt;, Settings(database_url='sqlite:////tmp/sim2act-owner-repro/test_foreign_s...b355726e594de786639a3c6c63ecc3', 'user_fa158780f3f646a19aba9cbe2cf2c056', 'proj_7636f3a286144acbb845a61e5ecf4176', ...)
+accepted = ('dag', {'cancel_intent': False, 'context': {'kind': 'FIXED_CSV_DAG', 'messages': [], 'repairs': 0, 'requests': 0, ...}, 'created_at': 1791462475.0356274, 'error': None, ...})
+entry = 'inspect'
+
+    @pytest.mark.parametrize("entry", ["inspect", "command", "reconcile"])
+    def test_foreign_store_denied_before_any_ledger_read(env, accepted, entry):
+        _, job = accepted
+        before = snapshot(env)
+        with statements(env[0]) as sql, pytest.raises(DomainError) as denied:
+            call(env[0], env[4], job, entry)
+        assert denied.value.code == "PERMISSION_DENIED"
+&gt;       assert_no_ledger_read(sql)
+
+tests/test_run_dispatch_owner.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+seen = ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND ...ts.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id IS NULL AND projects.owner_id = ?']
+
+    def assert_no_ledger_read(seen):
+        forbidden = re.compile(r"\b(events|operations|operation_intents|run_contracts|internal_run_bindings|protocol_jobs|delivery_graph_requests)\b|\bcontext\b|\bresult\b", re.I)
+        protected = [sql for sql in seen if sql.lstrip().lower().startswith("select") and forbidden.search(sql)]
+&gt;       assert not protected, protected
+E       AssertionError: ['SELECT runs.context 
+E         FROM runs 
+E         WHERE runs.id = ?', 'SELECT events.id 
+E         FROM events 
+E         WHERE events.run_id = ? AND events.kind = ?']
+E       assert not ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND events.kind = ?']
+
+tests/test_run_dispatch_owner.py:71: AssertionError</failure></testcase><testcase classname="tests.test_run_dispatch_owner" name="test_foreign_store_denied_before_any_ledger_read[dag-command]" time="0.480"><failure message="AssertionError: ['SELECT runs.context &#10;  FROM runs &#10;  WHERE runs.id = ?', 'SELECT events.id &#10;  FROM events &#10;  WHERE events.run_id = ? AND events.kind = ?']&#10;assert not ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND events.kind = ?']">env = (&lt;sim2act.db.Store object at 0x7f548a38c6b0&gt;, Settings(database_url='sqlite:////tmp/sim2act-owner-repro/test_foreign_s...04402bd2c74f1ea5b0f327157d8766', 'user_8bf4bb5b480f4a278ed6d74b27d68a4c', 'proj_44cee900d9aa4beaa06b3d023f47bf6d', ...)
+accepted = ('dag', {'cancel_intent': False, 'context': {'kind': 'FIXED_CSV_DAG', 'messages': [], 'repairs': 0, 'requests': 0, ...}, 'created_at': 1791462475.573855, 'error': None, ...})
+entry = 'command'
+
+    @pytest.mark.parametrize("entry", ["inspect", "command", "reconcile"])
+    def test_foreign_store_denied_before_any_ledger_read(env, accepted, entry):
+        _, job = accepted
+        before = snapshot(env)
+        with statements(env[0]) as sql, pytest.raises(DomainError) as denied:
+            call(env[0], env[4], job, entry)
+        assert denied.value.code == "PERMISSION_DENIED"
+&gt;       assert_no_ledger_read(sql)
+
+tests/test_run_dispatch_owner.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+seen = ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND ...ts.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id IS NULL AND projects.owner_id = ?']
+
+    def assert_no_ledger_read(seen):
+        forbidden = re.compile(r"\b(events|operations|operation_intents|run_contracts|internal_run_bindings|protocol_jobs|delivery_graph_requests)\b|\bcontext\b|\bresult\b", re.I)
+        protected = [sql for sql in seen if sql.lstrip().lower().startswith("select") and forbidden.search(sql)]
+&gt;       assert not protected, protected
+E       AssertionError: ['SELECT runs.context 
+E         FROM runs 
+E         WHERE runs.id = ?', 'SELECT events.id 
+E         FROM events 
+E         WHERE events.run_id = ? AND events.kind = ?']
+E       assert not ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND events.kind = ?']
+
+tests/test_run_dispatch_owner.py:71: AssertionError</failure></testcase><testcase classname="tests.test_run_dispatch_owner" name="test_foreign_store_denied_before_any_ledger_read[dag-reconcile]" time="0.432"><failure message="AssertionError: ['SELECT runs.context &#10;  FROM runs &#10;  WHERE runs.id = ?', 'SELECT events.id &#10;  FROM events &#10;  WHERE events.run_id = ? AND events.kind = ?']&#10;assert not ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND events.kind = ?']">env = (&lt;sim2act.db.Store object at 0x7f5489f24320&gt;, Settings(database_url='sqlite:////tmp/sim2act-owner-repro/test_foreign_s...c0e31d46384ad9a3c3b89f9df53dfe', 'user_4d9eb503eaab49af98c03398281f12a3', 'proj_60d07c8c5caa44648c1f96579abf3c56', ...)
+accepted = ('dag', {'cancel_intent': False, 'context': {'kind': 'FIXED_CSV_DAG', 'messages': [], 'repairs': 0, 'requests': 0, ...}, 'created_at': 1791462476.0281684, 'error': None, ...})
+entry = 'reconcile'
+
+    @pytest.mark.parametrize("entry", ["inspect", "command", "reconcile"])
+    def test_foreign_store_denied_before_any_ledger_read(env, accepted, entry):
+        _, job = accepted
+        before = snapshot(env)
+        with statements(env[0]) as sql, pytest.raises(DomainError) as denied:
+            call(env[0], env[4], job, entry)
+        assert denied.value.code == "PERMISSION_DENIED"
+&gt;       assert_no_ledger_read(sql)
+
+tests/test_run_dispatch_owner.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+seen = ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND ...ts.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id IS NULL AND projects.owner_id = ?']
+
+    def assert_no_ledger_read(seen):
+        forbidden = re.compile(r"\b(events|operations|operation_intents|run_contracts|internal_run_bindings|protocol_jobs|delivery_graph_requests)\b|\bcontext\b|\bresult\b", re.I)
+        protected = [sql for sql in seen if sql.lstrip().lower().startswith("select") and forbidden.search(sql)]
+&gt;       assert not protected, protected
+E       AssertionError: ['SELECT runs.context 
+E         FROM runs 
+E         WHERE runs.id = ?', 'SELECT events.id 
+E         FROM events 
+E         WHERE events.run_id = ? AND events.kind = ?']
+E       assert not ['SELECT runs.context \nFROM runs \nWHERE runs.id = ?', 'SELECT events.id \nFROM events \nWHERE events.run_id = ? AND events.kind = ?']
+
+tests/test_run_dispatch_owner.py:71: AssertionError</failure></testcase></testsuite></testsuites>

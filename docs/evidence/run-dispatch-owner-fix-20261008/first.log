@@ -1,0 +1,55 @@
+..........................................F...ssss                       [100%]
+=================================== FAILURES ===================================
+__ test_authorized_real_jobs_keep_family_inspect_commands_and_reconcile[dag] ___
+
+env = (<sim2act.db.Store object at 0x7f5e157c84d0>, Settings(database_url='sqlite:////tmp/sim2act-owner-first/test_authorize...06a5222bb6437dabbb7bb7c7b803d7', 'user_b6b5df36aa2c44539822af5732f9c5c1', 'proj_91860446fb7a42f1926a5570aca632e5', ...)
+accepted = ('dag', {'cancel_intent': False, 'context': {'kind': 'FIXED_CSV_DAG', 'messages': [], 'repairs': 0, 'requests': 0, ...}, 'created_at': 1791462556.4078827, 'error': None, ...})
+
+    def test_authorized_real_jobs_keep_family_inspect_commands_and_reconcile(env, accepted):
+        kind, job = accepted
+        store = env[0]
+        before = snapshot(env)
+        first = store.inspect(env[3], job["id"])
+        assert fingerprint(first) == fingerprint(store.inspect(env[3], job["id"]))
+        assert first.get("id", first.get("run_id")) == job["id"]
+        assert fingerprint(snapshot(env)) == fingerprint(before)
+        if kind == "dag":
+            assert first["namespace"] == "fixed-csv-dag.v1"
+        elif kind == "protocol":
+            assert first["namespace"] == "protocol_jobs.v1"
+        elif kind == "app":
+            assert first["namespace"] == "INTERNAL_APPRUN"
+        else:
+            assert "namespace" not in first
+        # Type-specific unsupported reconciliation is retained; ordinary/app take the
+        # original generic path and reject a non-waiting/missing-operation precondition.
+        with pytest.raises(DomainError) as denied:
+            call(store, env[3], job, "reconcile")
+        assert denied.value.code == ("UNSUPPORTED_CAPABILITY" if kind in {"dag", "protocol"} else "VERSION_CONFLICT")
+        assert fingerprint(snapshot(env)) == fingerprint(before)
+        paused = store.command(env[3], job["id"], "pause", job["version"])
+        assert (paused["status"] if isinstance(paused, dict) else paused) == ("PAUSE_REQUESTED" if job["status"] == "RUNNING" else "PAUSED")
+        with pytest.raises(DomainError) as old:
+            store.command(env[3], job["id"], "pause", job["version"])
+        assert old.value.code == "VERSION_CONFLICT"
+        current = store.inspect(env[3], job["id"])
+        if current["status"] == "PAUSED":
+            resumed = store.command(env[3], job["id"], "resume", current["version"])
+            assert (resumed["status"] if isinstance(resumed, dict) else resumed) == "QUEUED"
+        else:
+>           assert store.command(env[3], job["id"], "cancel", current["version"]) == "CANCEL_REQUESTED"
+E           AssertionError: assert 'CANCELLED' == 'CANCEL_REQUESTED'
+E             
+E             - CANCEL_REQUESTED
+E             + CANCELLED
+
+tests/test_run_dispatch_owner.py:163: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_run_dispatch_owner.py::test_authorized_real_jobs_keep_family_inspect_commands_and_reconcile[dag]
+1 failed, 45 passed, 4 skipped, 1 warning in 19.73s

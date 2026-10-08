@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="5" time="1.754" timestamp="2026-10-08T12:30:16.052504+00:00" hostname="58262d033e58"><testcase classname="tests.test_run_dispatch_owner" name="test_owned_generic_read_reconciliation_and_duplicate_are_not_regressed" time="0.377" /><testcase classname="tests.test_run_dispatch_owner" name="test_typed_markers_cannot_fall_back_when_context_is_changed[dag]" time="0.457" /><testcase classname="tests.test_run_dispatch_owner" name="test_typed_markers_cannot_fall_back_when_context_is_changed[protocol]" time="0.227"><failure message="Failed: DID NOT RAISE &lt;class 'sim2act.errors.DomainError'&gt;">env = (&lt;sim2act.db.Store object at 0x7f625bf988c0&gt;, Settings(database_url='sqlite:////tmp/sim2act-owner-extra/test_typed_mar...cb9f28c4fd4aefbddc427ca810a2b2', 'user_36fb8373d56940fbb507df9e028b6d17', 'proj_a1c090bd3d5e414788832ef2167bf3d9', ...)
+accepted = ('protocol', {'cancel_intent': False, 'context': {'kind': 'protocol_jobs.v1', 'messages': [], 'repairs': 0, 'requests': 0, ...}, 'created_at': 1791462617.172873, 'error': None, ...})
+
+    def test_typed_markers_cannot_fall_back_when_context_is_changed(env, accepted):
+        kind, job = accepted
+        with env[0].tx() as c:
+            context = {**job["context"], "kind": "ordinary" if kind != "ordinary" else "FIXED_CSV_DAG"}
+            c.execute(update(runs).where(runs.c.id == job["id"]).values(context=context))
+        before = snapshot(env)
+&gt;       with pytest.raises(DomainError) as refused:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE &lt;class 'sim2act.errors.DomainError'&gt;
+
+tests/test_run_dispatch_owner.py:225: Failed</failure></testcase><testcase classname="tests.test_run_dispatch_owner" name="test_typed_markers_cannot_fall_back_when_context_is_changed[app]" time="0.370" /><testcase classname="tests.test_run_dispatch_owner" name="test_typed_markers_cannot_fall_back_when_context_is_changed[ordinary]" time="0.188" /></testsuite></testsuites>
