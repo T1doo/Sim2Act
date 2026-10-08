@@ -1,0 +1,671 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="3.173" timestamp="2026-10-08T16:56:08.090321+00:00" hostname="58262d033e58"><testcase classname="tests.test_resources_project_lock" name="test_pg_resources_graph_share_project_first_lock[resources-plan]" time="3.008"><failure message="NameError: name 'watched' is not defined">env = (&lt;sim2act.db.Store object at 0x7fa2c932f290&gt;, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...6839c8291f4ccfb95610a811427a0c', 'user_ac67a45cf5cc45f0a36939de8e9e0aee', 'proj_cd1252a46128401c8def15e6e0835a8d', ...)
+tmp_path = PosixPath('/tmp/sim2act-history-diagnostic-normal-plan/test_pg_resources_graph_share_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fa2c8f1ee10&gt;
+operation = 'plan', first = 'resources'
+
+    @pytest.mark.parametrize("operation", ["plan", "history"])
+    @pytest.mark.parametrize("first", ["resources", "graph"])
+    def test_pg_resources_graph_share_project_first_lock(env, tmp_path, monkeypatch, operation, first):
+        store, settings, _, owner, _, pid, csv = env
+        if store.sqlite:
+            pytest.skip("Real PG multi-resource lock ordering regression")
+        # Same trusted initial CSV peer + Report origins as actual REPORT DOM test.
+        draft(env)
+        bounded = bounded_env.__wrapped__(env)
+        saved, _, _, _, wires = promoted(bounded, tmp_path)
+        aid = saved["id"]
+        base = path(env, aid)
+        made = env[2].post(
+            base + "/derive",
+            json={
+                "expected_candidate_fingerprint": saved["fingerprint"],
+                "request_key": "barrier-derive",
+            },
+        )
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        body = change(graph, "barrier-plan")
+        if operation == "history":
+            seeded = env[2].post(base + "/plans", json=body)
+            assert seeded.status_code == 201, seeded.text
+            assert seeded.json()["receipt"]["revalidation_scope"] == "PROJECT"
+        before = snapshot(env)
+        source = saved["candidate"]["report_proof"]["source_resource_id"]
+        target = saved["candidate"]["report_proof"]["target_resource_id"]
+        assert len({csv, source, target}) == 3
+        assert len(wires) == 3
+    
+        tag = contextvars.ContextVar("pg_resource_graph_request", default=None)
+        reached = {name: threading.Event() for name in ("resources", "graph")}
+        release = {name: threading.Event() for name in reached}
+        request_started = {name: threading.Event() for name in reached}
+        data_lock = threading.Lock()
+        records, errors, pids = [], [], {}
+        real_authorize = store.authorize
+    
+        def gated_authorize(c, principal, runtime, project_id, rid, tool):
+            # Original DB authorization executes before the passive hold: no granted
+            # identity, permission, query ordering, or application return is faked.
+            result = real_authorize(c, principal, runtime, project_id, rid, tool)
+            name = tag.get()
+            at_gate = (name == "resources" and rid == csv) or (name == "graph" and rid == source)
+            if at_gate and project_id == pid and tool == "resource.read" and not reached[name].is_set():
+                reached[name].set()
+                assert release[name].wait(8), "test barrier was not released"
+            return result
+    
+        monkeypatch.setattr(store, "authorize", gated_authorize)
+        app = create_app(store, settings)
+    
+        @app.middleware("http")
+        async def request_tag(request, call_next):
+            name = request.headers.get("x-test-lock-request")
+            token = tag.set(name if name in reached else None)
+            if name in request_started:
+                request_started[name].set()
+            try:
+                return await call_next(request)
+            finally:
+                tag.reset(token)
+    
+        def before_cursor(conn, cursor, statement, parameters, context, executemany):
+            name = tag.get()
+            if name not in reached:
+                return
+            # Authentication and application transactions can use different pool
+            # connections: associate the current SQL with its actual physical backend.
+            # A driver cursor avoids SQLAlchemy event recursion. This test-only
+            # observer is intentionally excluded from performance comparisons.
+            with conn.connection.cursor() as raw:
+                raw.execute("SELECT pg_backend_pid()")
+                backend = raw.fetchone()[0]
+                # Only this owned test transaction: no server/security config change.
+                # Bounds abnormal SQL waits so executor shutdown cannot strand.
+                raw.execute("SET LOCAL statement_timeout = '7000ms'")
+            with data_lock:
+                pids[name] = backend
+            if "FOR UPDATE" in statement and ("grants" in statement or "projects" in statement):
+                with data_lock:
+                    records.append(
+                        {
+                            "request": name,
+                            "backend": pids[name],
+                            "time": time.monotonic(),
+                            "kind": "project" if "projects" in statement else "grant",
+                            "statement": statement,
+                            "parameters": repr(parameters),
+                        }
+                    )
+    
+        def handle_error(context):
+            name = tag.get()
+            if name in reached:
+                original = context.original_exception
+                with data_lock:
+                    errors.append(
+                        {
+                            "request": name,
+                            "backend": pids.get(name),
+                            "sqlstate": getattr(original, "sqlstate", None),
+                            "message": str(original),
+                        }
+                    )
+    
+        event.listen(store.engine, "before_cursor_execute", before_cursor)
+        event.listen(store.engine, "handle_error", handle_error)
+    
+        def observe_blocked(waiter, holder, seconds=2):
+            deadline = time.monotonic() + seconds
+            observations = []
+            while time.monotonic() &lt; deadline:
+                if waiter in pids and holder in pids:
+                    with store.engine.connect() as c:
+                        row = (
+                            c.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(:pid) AS blockers, "
+                                    "(SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid) AS wait_type, "
+                                    "(SELECT query FROM pg_stat_activity WHERE pid=:pid) AS query"
+                                ),
+                                {"pid": pids[waiter]},
+                            )
+                            .mappings()
+                            .one()
+                        )
+                    value = {"waiter": waiter, "holder": holder, "time": time.monotonic(), **dict(row)}
+                    observations.append(value)
+                    if pids[holder] in value["blockers"]:
+                        return value, observations
+                time.sleep(0.01)
+            return None, observations
+    
+        def request(name):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(
+                    {"Authorization": "Bearer synthetic-test-A", "x-test-lock-request": name}
+                )
+                if name == "resources":
+                    return client.get(f"/api/projects/{pid}/resources")
+                if operation == "plan":
+                    return client.post(base + "/plans", json=body)
+                return client.get(base + "/plans")
+    
+        second = "graph" if first == "resources" else "resources"
+        receipt = {
+            "first": first,
+            "operation": operation,
+            "resource_ids": {"csv": csv, "source": source, "target": target},
+            "paths": {"resources": f"/api/projects/{pid}/resources", "graph": base + "/plans"},
+            "old_cycle_observed": False,
+            "project_first_observed": False,
+            "blocking": [],
+        }
+        futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    futures[first] = pool.submit(request, first)
+&gt;                   assert reached[first].wait(8), "first request did not acquire expected real grants"
+                           ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_resources_project_lock.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;threading.Event at 0x7fa2c83dcb90: unset&gt;
+_original = &lt;function Event.wait at 0x7fa2cdc354e0&gt;, _name = 'wait', args = (8,)
+kwargs = {}, name = 'reached.resources', start = 37720.22479575
+
+    @functools.wraps(original)
+    def gate(self,*args,_original=original,_name=name,**kwargs):
+        name=event_name(self,sys._getframe(1))
+        if name is None:return _original(self,*args,**kwargs)
+        start=time.monotonic();record('gate.'+_name+'.start',gate=name,args=args)
+        try:
+&gt;           if watched and _name=='__exit__' and self.headers.get('x-test-lock-request')=='resources' and os.environ.get('SIM2ACT_DIAGNOSTIC_FAULT')=='client_exit_delay':
+               ^^^^^^^
+E           NameError: name 'watched' is not defined
+
+docs/evidence/pg-history-timeout-investigation-20261008/diagnostic_plugin.py:120: NameError
+
+During handling of the above exception, another exception occurred:
+
+env = (&lt;sim2act.db.Store object at 0x7fa2c932f290&gt;, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...6839c8291f4ccfb95610a811427a0c', 'user_ac67a45cf5cc45f0a36939de8e9e0aee', 'proj_cd1252a46128401c8def15e6e0835a8d', ...)
+tmp_path = PosixPath('/tmp/sim2act-history-diagnostic-normal-plan/test_pg_resources_graph_share_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fa2c8f1ee10&gt;
+operation = 'plan', first = 'resources'
+
+    @pytest.mark.parametrize("operation", ["plan", "history"])
+    @pytest.mark.parametrize("first", ["resources", "graph"])
+    def test_pg_resources_graph_share_project_first_lock(env, tmp_path, monkeypatch, operation, first):
+        store, settings, _, owner, _, pid, csv = env
+        if store.sqlite:
+            pytest.skip("Real PG multi-resource lock ordering regression")
+        # Same trusted initial CSV peer + Report origins as actual REPORT DOM test.
+        draft(env)
+        bounded = bounded_env.__wrapped__(env)
+        saved, _, _, _, wires = promoted(bounded, tmp_path)
+        aid = saved["id"]
+        base = path(env, aid)
+        made = env[2].post(
+            base + "/derive",
+            json={
+                "expected_candidate_fingerprint": saved["fingerprint"],
+                "request_key": "barrier-derive",
+            },
+        )
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        body = change(graph, "barrier-plan")
+        if operation == "history":
+            seeded = env[2].post(base + "/plans", json=body)
+            assert seeded.status_code == 201, seeded.text
+            assert seeded.json()["receipt"]["revalidation_scope"] == "PROJECT"
+        before = snapshot(env)
+        source = saved["candidate"]["report_proof"]["source_resource_id"]
+        target = saved["candidate"]["report_proof"]["target_resource_id"]
+        assert len({csv, source, target}) == 3
+        assert len(wires) == 3
+    
+        tag = contextvars.ContextVar("pg_resource_graph_request", default=None)
+        reached = {name: threading.Event() for name in ("resources", "graph")}
+        release = {name: threading.Event() for name in reached}
+        request_started = {name: threading.Event() for name in reached}
+        data_lock = threading.Lock()
+        records, errors, pids = [], [], {}
+        real_authorize = store.authorize
+    
+        def gated_authorize(c, principal, runtime, project_id, rid, tool):
+            # Original DB authorization executes before the passive hold: no granted
+            # identity, permission, query ordering, or application return is faked.
+            result = real_authorize(c, principal, runtime, project_id, rid, tool)
+            name = tag.get()
+            at_gate = (name == "resources" and rid == csv) or (name == "graph" and rid == source)
+            if at_gate and project_id == pid and tool == "resource.read" and not reached[name].is_set():
+                reached[name].set()
+                assert release[name].wait(8), "test barrier was not released"
+            return result
+    
+        monkeypatch.setattr(store, "authorize", gated_authorize)
+        app = create_app(store, settings)
+    
+        @app.middleware("http")
+        async def request_tag(request, call_next):
+            name = request.headers.get("x-test-lock-request")
+            token = tag.set(name if name in reached else None)
+            if name in request_started:
+                request_started[name].set()
+            try:
+                return await call_next(request)
+            finally:
+                tag.reset(token)
+    
+        def before_cursor(conn, cursor, statement, parameters, context, executemany):
+            name = tag.get()
+            if name not in reached:
+                return
+            # Authentication and application transactions can use different pool
+            # connections: associate the current SQL with its actual physical backend.
+            # A driver cursor avoids SQLAlchemy event recursion. This test-only
+            # observer is intentionally excluded from performance comparisons.
+            with conn.connection.cursor() as raw:
+                raw.execute("SELECT pg_backend_pid()")
+                backend = raw.fetchone()[0]
+                # Only this owned test transaction: no server/security config change.
+                # Bounds abnormal SQL waits so executor shutdown cannot strand.
+                raw.execute("SET LOCAL statement_timeout = '7000ms'")
+            with data_lock:
+                pids[name] = backend
+            if "FOR UPDATE" in statement and ("grants" in statement or "projects" in statement):
+                with data_lock:
+                    records.append(
+                        {
+                            "request": name,
+                            "backend": pids[name],
+                            "time": time.monotonic(),
+                            "kind": "project" if "projects" in statement else "grant",
+                            "statement": statement,
+                            "parameters": repr(parameters),
+                        }
+                    )
+    
+        def handle_error(context):
+            name = tag.get()
+            if name in reached:
+                original = context.original_exception
+                with data_lock:
+                    errors.append(
+                        {
+                            "request": name,
+                            "backend": pids.get(name),
+                            "sqlstate": getattr(original, "sqlstate", None),
+                            "message": str(original),
+                        }
+                    )
+    
+        event.listen(store.engine, "before_cursor_execute", before_cursor)
+        event.listen(store.engine, "handle_error", handle_error)
+    
+        def observe_blocked(waiter, holder, seconds=2):
+            deadline = time.monotonic() + seconds
+            observations = []
+            while time.monotonic() &lt; deadline:
+                if waiter in pids and holder in pids:
+                    with store.engine.connect() as c:
+                        row = (
+                            c.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(:pid) AS blockers, "
+                                    "(SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid) AS wait_type, "
+                                    "(SELECT query FROM pg_stat_activity WHERE pid=:pid) AS query"
+                                ),
+                                {"pid": pids[waiter]},
+                            )
+                            .mappings()
+                            .one()
+                        )
+                    value = {"waiter": waiter, "holder": holder, "time": time.monotonic(), **dict(row)}
+                    observations.append(value)
+                    if pids[holder] in value["blockers"]:
+                        return value, observations
+                time.sleep(0.01)
+            return None, observations
+    
+        def request(name):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(
+                    {"Authorization": "Bearer synthetic-test-A", "x-test-lock-request": name}
+                )
+                if name == "resources":
+                    return client.get(f"/api/projects/{pid}/resources")
+                if operation == "plan":
+                    return client.post(base + "/plans", json=body)
+                return client.get(base + "/plans")
+    
+        second = "graph" if first == "resources" else "resources"
+        receipt = {
+            "first": first,
+            "operation": operation,
+            "resource_ids": {"csv": csv, "source": source, "target": target},
+            "paths": {"resources": f"/api/projects/{pid}/resources", "graph": base + "/plans"},
+            "old_cycle_observed": False,
+            "project_first_observed": False,
+            "blocking": [],
+        }
+        futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    futures[first] = pool.submit(request, first)
+                    assert reached[first].wait(8), "first request did not acquire expected real grants"
+                    futures[second] = pool.submit(request, second)
+                    assert request_started[second].wait(5), "second HTTP request not started"
+                    # Candidate must stop at project lock. Baseline instead reaches
+                    # its grants gate, so exact same inputs can expose the old cycle.
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() &lt; deadline and not reached[second].is_set():
+                        blocked, observations = observe_blocked(second, first, seconds=0.05)
+                        receipt["blocking"].extend(observations)
+                        if blocked:
+                            receipt["project_first_observed"] = (
+                                "projects" in blocked["query"]
+                                and "FOR UPDATE" in blocked["query"]
+                                and not any(
+                                    r["request"] == second and r["kind"] == "grant" for r in records
+                                )
+                            )
+                            if receipt["project_first_observed"]:
+                                break
+                    if reached[second].is_set():
+                        # Both real grant sets are held on old code. Let resource
+                        # listing next seek source while graph still holds source.
+                        release["resources"].set()
+                        blocked, observations = observe_blocked("resources", "graph")
+                        receipt["blocking"].extend(observations)
+                        receipt["source_wait_observed"] = bool(blocked and "grants" in blocked["query"])
+                        # Graph now reaches CSV in PROJECT expansion: detector
+                        # resolves cycle; either victim is legitimate old evidence.
+                        release["graph"].set()
+                    else:
+                        release[first].set()
+                    # Never wait/join while a Python barrier remains held.
+                    for gate in release.values():
+                        gate.set()
+                    replies = {name: future.result(timeout=10) for name, future in futures.items()}
+                    receipt["statuses"] = {name: reply.status_code for name, reply in replies.items()}
+                    receipt["old_cycle_observed"] = any(e["sqlstate"] == "40P01" for e in errors)
+                finally:
+                    for gate in release.values():
+&gt;                       gate.set()
+
+tests/test_resources_project_lock.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;threading.Event at 0x7fa2c83405c0: unset&gt;
+_original = &lt;function Event.set at 0x7fa2cdc353a0&gt;, _name = 'set', args = ()
+kwargs = {}, name = 'release.resources', start = 37720.22486462
+
+    @functools.wraps(original)
+    def gate(self,*args,_original=original,_name=name,**kwargs):
+        name=event_name(self,sys._getframe(1))
+        if name is None:return _original(self,*args,**kwargs)
+        start=time.monotonic();record('gate.'+_name+'.start',gate=name,args=args)
+        try:
+&gt;           if watched and _name=='__exit__' and self.headers.get('x-test-lock-request')=='resources' and os.environ.get('SIM2ACT_DIAGNOSTIC_FAULT')=='client_exit_delay':
+               ^^^^^^^
+E           NameError: name 'watched' is not defined
+
+docs/evidence/pg-history-timeout-investigation-20261008/diagnostic_plugin.py:120: NameError
+
+During handling of the above exception, another exception occurred:
+
+env = (&lt;sim2act.db.Store object at 0x7fa2c932f290&gt;, Settings(database_url='postgresql+psycopg://sim2act_owned@/sim2act_owned...6839c8291f4ccfb95610a811427a0c', 'user_ac67a45cf5cc45f0a36939de8e9e0aee', 'proj_cd1252a46128401c8def15e6e0835a8d', ...)
+tmp_path = PosixPath('/tmp/sim2act-history-diagnostic-normal-plan/test_pg_resources_graph_share_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fa2c8f1ee10&gt;
+operation = 'plan', first = 'resources'
+
+    @pytest.mark.parametrize("operation", ["plan", "history"])
+    @pytest.mark.parametrize("first", ["resources", "graph"])
+    def test_pg_resources_graph_share_project_first_lock(env, tmp_path, monkeypatch, operation, first):
+        store, settings, _, owner, _, pid, csv = env
+        if store.sqlite:
+            pytest.skip("Real PG multi-resource lock ordering regression")
+        # Same trusted initial CSV peer + Report origins as actual REPORT DOM test.
+        draft(env)
+        bounded = bounded_env.__wrapped__(env)
+        saved, _, _, _, wires = promoted(bounded, tmp_path)
+        aid = saved["id"]
+        base = path(env, aid)
+        made = env[2].post(
+            base + "/derive",
+            json={
+                "expected_candidate_fingerprint": saved["fingerprint"],
+                "request_key": "barrier-derive",
+            },
+        )
+        assert made.status_code == 201, made.text
+        graph = made.json()
+        body = change(graph, "barrier-plan")
+        if operation == "history":
+            seeded = env[2].post(base + "/plans", json=body)
+            assert seeded.status_code == 201, seeded.text
+            assert seeded.json()["receipt"]["revalidation_scope"] == "PROJECT"
+        before = snapshot(env)
+        source = saved["candidate"]["report_proof"]["source_resource_id"]
+        target = saved["candidate"]["report_proof"]["target_resource_id"]
+        assert len({csv, source, target}) == 3
+        assert len(wires) == 3
+    
+        tag = contextvars.ContextVar("pg_resource_graph_request", default=None)
+        reached = {name: threading.Event() for name in ("resources", "graph")}
+        release = {name: threading.Event() for name in reached}
+        request_started = {name: threading.Event() for name in reached}
+        data_lock = threading.Lock()
+        records, errors, pids = [], [], {}
+        real_authorize = store.authorize
+    
+        def gated_authorize(c, principal, runtime, project_id, rid, tool):
+            # Original DB authorization executes before the passive hold: no granted
+            # identity, permission, query ordering, or application return is faked.
+            result = real_authorize(c, principal, runtime, project_id, rid, tool)
+            name = tag.get()
+            at_gate = (name == "resources" and rid == csv) or (name == "graph" and rid == source)
+            if at_gate and project_id == pid and tool == "resource.read" and not reached[name].is_set():
+                reached[name].set()
+                assert release[name].wait(8), "test barrier was not released"
+            return result
+    
+        monkeypatch.setattr(store, "authorize", gated_authorize)
+        app = create_app(store, settings)
+    
+        @app.middleware("http")
+        async def request_tag(request, call_next):
+            name = request.headers.get("x-test-lock-request")
+            token = tag.set(name if name in reached else None)
+            if name in request_started:
+                request_started[name].set()
+            try:
+                return await call_next(request)
+            finally:
+                tag.reset(token)
+    
+        def before_cursor(conn, cursor, statement, parameters, context, executemany):
+            name = tag.get()
+            if name not in reached:
+                return
+            # Authentication and application transactions can use different pool
+            # connections: associate the current SQL with its actual physical backend.
+            # A driver cursor avoids SQLAlchemy event recursion. This test-only
+            # observer is intentionally excluded from performance comparisons.
+            with conn.connection.cursor() as raw:
+                raw.execute("SELECT pg_backend_pid()")
+                backend = raw.fetchone()[0]
+                # Only this owned test transaction: no server/security config change.
+                # Bounds abnormal SQL waits so executor shutdown cannot strand.
+                raw.execute("SET LOCAL statement_timeout = '7000ms'")
+            with data_lock:
+                pids[name] = backend
+            if "FOR UPDATE" in statement and ("grants" in statement or "projects" in statement):
+                with data_lock:
+                    records.append(
+                        {
+                            "request": name,
+                            "backend": pids[name],
+                            "time": time.monotonic(),
+                            "kind": "project" if "projects" in statement else "grant",
+                            "statement": statement,
+                            "parameters": repr(parameters),
+                        }
+                    )
+    
+        def handle_error(context):
+            name = tag.get()
+            if name in reached:
+                original = context.original_exception
+                with data_lock:
+                    errors.append(
+                        {
+                            "request": name,
+                            "backend": pids.get(name),
+                            "sqlstate": getattr(original, "sqlstate", None),
+                            "message": str(original),
+                        }
+                    )
+    
+        event.listen(store.engine, "before_cursor_execute", before_cursor)
+        event.listen(store.engine, "handle_error", handle_error)
+    
+        def observe_blocked(waiter, holder, seconds=2):
+            deadline = time.monotonic() + seconds
+            observations = []
+            while time.monotonic() &lt; deadline:
+                if waiter in pids and holder in pids:
+                    with store.engine.connect() as c:
+                        row = (
+                            c.execute(
+                                text(
+                                    "SELECT pg_blocking_pids(:pid) AS blockers, "
+                                    "(SELECT wait_event_type FROM pg_stat_activity WHERE pid=:pid) AS wait_type, "
+                                    "(SELECT query FROM pg_stat_activity WHERE pid=:pid) AS query"
+                                ),
+                                {"pid": pids[waiter]},
+                            )
+                            .mappings()
+                            .one()
+                        )
+                    value = {"waiter": waiter, "holder": holder, "time": time.monotonic(), **dict(row)}
+                    observations.append(value)
+                    if pids[holder] in value["blockers"]:
+                        return value, observations
+                time.sleep(0.01)
+            return None, observations
+    
+        def request(name):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(
+                    {"Authorization": "Bearer synthetic-test-A", "x-test-lock-request": name}
+                )
+                if name == "resources":
+                    return client.get(f"/api/projects/{pid}/resources")
+                if operation == "plan":
+                    return client.post(base + "/plans", json=body)
+                return client.get(base + "/plans")
+    
+        second = "graph" if first == "resources" else "resources"
+        receipt = {
+            "first": first,
+            "operation": operation,
+            "resource_ids": {"csv": csv, "source": source, "target": target},
+            "paths": {"resources": f"/api/projects/{pid}/resources", "graph": base + "/plans"},
+            "old_cycle_observed": False,
+            "project_first_observed": False,
+            "blocking": [],
+        }
+        futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    futures[first] = pool.submit(request, first)
+                    assert reached[first].wait(8), "first request did not acquire expected real grants"
+                    futures[second] = pool.submit(request, second)
+                    assert request_started[second].wait(5), "second HTTP request not started"
+                    # Candidate must stop at project lock. Baseline instead reaches
+                    # its grants gate, so exact same inputs can expose the old cycle.
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() &lt; deadline and not reached[second].is_set():
+                        blocked, observations = observe_blocked(second, first, seconds=0.05)
+                        receipt["blocking"].extend(observations)
+                        if blocked:
+                            receipt["project_first_observed"] = (
+                                "projects" in blocked["query"]
+                                and "FOR UPDATE" in blocked["query"]
+                                and not any(
+                                    r["request"] == second and r["kind"] == "grant" for r in records
+                                )
+                            )
+                            if receipt["project_first_observed"]:
+                                break
+                    if reached[second].is_set():
+                        # Both real grant sets are held on old code. Let resource
+                        # listing next seek source while graph still holds source.
+                        release["resources"].set()
+                        blocked, observations = observe_blocked("resources", "graph")
+                        receipt["blocking"].extend(observations)
+                        receipt["source_wait_observed"] = bool(blocked and "grants" in blocked["query"])
+                        # Graph now reaches CSV in PROJECT expansion: detector
+                        # resolves cycle; either victim is legitimate old evidence.
+                        release["graph"].set()
+                    else:
+                        release[first].set()
+                    # Never wait/join while a Python barrier remains held.
+                    for gate in release.values():
+                        gate.set()
+                    replies = {name: future.result(timeout=10) for name, future in futures.items()}
+                    receipt["statuses"] = {name: reply.status_code for name, reply in replies.items()}
+                    receipt["old_cycle_observed"] = any(e["sqlstate"] == "40P01" for e in errors)
+                finally:
+                    for gate in release.values():
+                        gate.set()
+            after = snapshot(env)
+            receipt["source_mutation_absent"] = all(
+                before[k] == after[k] for k in before if not k.startswith("delivery_graph_")
+            )
+            receipt["wires"] = len(wires)
+            assert receipt["project_first_observed"], receipt
+            assert not errors, errors
+            assert replies["resources"].status_code == 200, replies["resources"].text
+            expected_status = 201 if operation == "plan" else 200
+            assert replies["graph"].status_code == expected_status, replies["graph"].text
+            assert {r["id"] for r in replies["resources"].json()} == {csv, source, target}
+            answer = replies["graph"].json()
+            plans = [answer] if operation == "plan" else answer["items"]
+            assert len(plans) == 1
+            assert all(
+                p["receipt"]["revalidation_scope"] == "PROJECT"
+                and p["receipt"]["patch_executed"] is False
+                for p in plans
+            )
+            assert receipt["source_mutation_absent"] and len(wires) == 3
+            if operation == "history":
+                assert before == after
+        finally:
+            for gate in release.values():
+&gt;               gate.set()
+
+tests/test_resources_project_lock.py:253: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;threading.Event at 0x7fa2c83405c0: unset&gt;
+_original = &lt;function Event.set at 0x7fa2cdc353a0&gt;, _name = 'set', args = ()
+kwargs = {}, name = 'release.resources', start = 37720.231319949
+
+    @functools.wraps(original)
+    def gate(self,*args,_original=original,_name=name,**kwargs):
+        name=event_name(self,sys._getframe(1))
+        if name is None:return _original(self,*args,**kwargs)
+        start=time.monotonic();record('gate.'+_name+'.start',gate=name,args=args)
+        try:
+&gt;           if watched and _name=='__exit__' and self.headers.get('x-test-lock-request')=='resources' and os.environ.get('SIM2ACT_DIAGNOSTIC_FAULT')=='client_exit_delay':
+               ^^^^^^^
+E           NameError: name 'watched' is not defined
+
+docs/evidence/pg-history-timeout-investigation-20261008/diagnostic_plugin.py:120: NameError</failure></testcase></testsuite></testsuites>
