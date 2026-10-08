@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="43" time="126.126" timestamp="2026-10-08T07:54:33.328794+00:00" hostname="58262d033e58"><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[independent/key]" time="2.232" /><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[encoded%2Fkey]" time="2.002" /><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[\u72ec\u7acb/\u952e \u7a7a\u683c]" time="5.388" /><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[safe-uuid_123]" time="19.386"><failure message="httpx.ReadTimeout: timed out">@contextlib.contextmanager
+    def map_httpcore_exceptions() -&gt; typing.Iterator[None]:
+        global HTTPCORE_EXC_MAP
+        if len(HTTPCORE_EXC_MAP) == 0:
+            HTTPCORE_EXC_MAP = _load_httpcore_exceptions()
+        try:
+&gt;           yield
+
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:101: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:250: in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/connection_pool.py:256: in handle_request
+    raise exc from None
+.venv/lib/python3.12/site-packages/httpcore/_sync/connection_pool.py:236: in handle_request
+    response = connection.handle_request(
+.venv/lib/python3.12/site-packages/httpcore/_sync/connection.py:103: in handle_request
+    return self._connection.handle_request(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:136: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:106: in handle_request
+    ) = self._receive_response_headers(**kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:177: in _receive_response_headers
+    event = self._receive_event(timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:217: in _receive_event
+    data = self._network_stream.read(
+.venv/lib/python3.12/site-packages/httpcore/_backends/sync.py:126: in read
+    with map_exceptions(exc_map):
+         ^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+map = {&lt;class 'TimeoutError'&gt;: &lt;class 'httpcore.ReadTimeout'&gt;, &lt;class 'OSError'&gt;: &lt;class 'httpcore.ReadError'&gt;}
+
+    @contextlib.contextmanager
+    def map_exceptions(map: ExceptionMapping) -&gt; typing.Iterator[None]:
+        try:
+            yield
+        except Exception as exc:  # noqa: PIE786
+            for from_exc, to_exc in map.items():
+                if isinstance(exc, from_exc):
+&gt;                   raise to_exc(exc) from exc
+E                   httpcore.ReadTimeout: timed out
+
+.venv/lib/python3.12/site-packages/httpcore/_exceptions.py:14: ReadTimeout
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7f0ad9b0d5e0&gt;, Settings(database_url='sqlite:////tmp/sim2act-keyfix-final-sqlite/test_r...dcb51d16d04a6e8bf6e17de513a3cc', 'user_770cd2d70fcd47af8ea630ee524541e2', 'proj_f552dffcd1e44ae299e0eb54be2a57c6', ...)
+http = &lt;httpx.Client object at 0x7f0ad883c380&gt;, key = 'safe-uuid_123'
+
+    @pytest.mark.parametrize("key", ["independent/key", "encoded%2Fkey", "独立/键 空格", "safe-uuid_123", "/leading/trailing/"])
+    def test_real_http_key_confirmation_replay_and_cold_history(env, http, key):
+        aid, _, _, body, _ = setup(env)
+        target = url(env, aid)
+        body["request_key"] = key
+        response = http.post(target, json=body)
+        assert response.status_code == 201, response.text
+        patch = response.json()
+        path = target + "/" + quote(key, safe="") + "/checks"
+        confirmation = check_body(patch, "independent-check")
+&gt;       result = http.post(path, json=confirmation)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_column_patch_keys.py:47: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:249: in handle_request
+    with map_httpcore_exceptions():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @contextlib.contextmanager
+    def map_httpcore_exceptions() -&gt; typing.Iterator[None]:
+        global HTTPCORE_EXC_MAP
+        if len(HTTPCORE_EXC_MAP) == 0:
+            HTTPCORE_EXC_MAP = _load_httpcore_exceptions()
+        try:
+            yield
+        except Exception as exc:
+            mapped_exc = None
+    
+            for from_exc, to_exc in HTTPCORE_EXC_MAP.items():
+                if not isinstance(exc, from_exc):
+                    continue
+                # We want to map to the most specific exception we can find.
+                # Eg if `exc` is an `httpcore.ReadTimeout`, we want to map to
+                # `httpx.ReadTimeout`, not just `httpx.TimeoutException`.
+                if mapped_exc is None or issubclass(to_exc, mapped_exc):
+                    mapped_exc = to_exc
+    
+            if mapped_exc is None:  # pragma: no cover
+                raise
+    
+            message = str(exc)
+&gt;           raise mapped_exc(message) from exc
+E           httpx.ReadTimeout: timed out
+
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:118: ReadTimeout</failure></testcase><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[/leading/trailing/]" time="4.911" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[line\nbreak]" time="1.457" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[nul\x00key]" time="1.663" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[del\x7fkey]" time="1.825" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[.]" time="2.781" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[..]" time="2.267" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[a/../b]" time="3.147" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[a/./b]" time="2.259" /><testcase classname="tests.test_column_patches" name="test_new_definition_draft_exact_check_cold_history_and_preserved_objects" time="4.340" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[column]" time="0.571" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[same_column]" time="0.428" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[schema]" time="0.771" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[scope]" time="0.336" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[candidate]" time="1.099" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[node]" time="0.500" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[bool_revision]" time="0.477" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[stale_graph]" time="0.719" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[permission]" time="0.978" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[code]" time="0.335" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[kind]" time="0.784" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[owner_revoke]" time="0.992" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[runtime_revoke]" time="1.278" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[source]" time="1.155" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[source_rehash]" time="0.949" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[lock]" time="0.843" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[identity]" time="0.584" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[project]" time="0.727" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[definition_tamper]" time="0.791" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[check_tamper]" time="1.056" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[same_key]" time="0.855" /><testcase classname="tests.test_column_patches" name="test_duplicate_definition_and_checks_serialized_by_existing_project_lock" time="0.706" /><testcase classname="tests.test_column_patches" name="test_old_patch_invalidates_after_lock_cycle_without_hiding_new_draft" time="0.996" /><testcase classname="tests.test_column_patches" name="test_coherently_resigned_saved_check_cannot_promote_false_result" time="1.216" /><testcase classname="tests.test_column_patches" name="test_history_capacity_rejects_extra_acceptance_but_keeps_original_keys[column_patch]" time="0.982" /><testcase classname="tests.test_column_patches" name="test_history_capacity_rejects_extra_acceptance_but_keeps_original_keys[column_check]" time="1.646" /><testcase classname="tests.test_column_patches" name="test_project_unknown_dependencies_block_execution_without_rewriting" time="0.426" /><testcase classname="tests.test_column_patch_ui" name="test_column_patch_actual_http_dom_recovery_exact_version_and_revocation" time="12.050" /><testcase classname="tests.test_delivery_graph_apps_ui" name="test_delivery_graph_actual_http_dom[CSV]" time="8.716" /><testcase classname="tests.test_delivery_graph_apps_ui" name="test_delivery_graph_actual_http_dom[REPORT]" time="20.796" /></testsuite></testsuites>

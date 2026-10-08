@@ -21,6 +21,8 @@ B,20,8
 
 API 复现同一页面链路：先 `GET /api/apps/{aid}`、`POST /api/projects/{pid}/apps/{aid}/delivery-graph/derive` 并回读图；在 `POST .../delivery-graph/column-patches` 发送闭合请求：expected_candidate_fingerprint、expected_graph_fingerprint、request_key、kind=`csv.column-binding.v1`、baseline_column=`amount`、column=`quantity`、change（原 action:aggregate 的 node_id/expected_revision/expected_content_fingerprint）。随后 `POST .../column-patches/{原request_key}/checks`，仅提交 expected_patch_fingerprint 和新的 request_key。`GET .../column-patches` 回读，所有入口沿用既有 Bearer 身份和当前授权，不接受客户端 graph/context/schema/代码。
 
+原键路由修复候选为 `dev/column-patch-key-fix-20261008`，原冻结分支不改动。定义键可包含 `/`、Unicode、空格及字面 `%`，放入 URL 时对完整键编码一次（Python `urllib.parse.quote(key, safe="")`、浏览器 `encodeURIComponent(key)`）；不要双重编码。`independent/key` 的原路径与 `independent%2Fkey` 编码路径都定位同一草案，`independent%252Fkey` 定位字面 `%2F` 键，不能代替前者。新的控制字符或 `.` / `..` 路径段键在持久化前返回 INVALID_INPUT；已有可定位原键的定义/检查幂等、指纹及历史结构保持。新增真实 HTTP 回归为 `tests/test_column_patch_keys.py`。
+
 开发者定向验证（Node/JSDOM 只供工程测试，产品无 Node 依赖）：
 
 ```bash

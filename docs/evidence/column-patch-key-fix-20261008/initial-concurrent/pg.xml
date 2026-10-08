@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="43" time="172.079" timestamp="2026-10-08T07:54:34.705361+00:00" hostname="58262d033e58"><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[independent/key]" time="4.045" /><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[encoded%2Fkey]" time="10.866"><failure message="httpx.ReadTimeout: timed out">@contextlib.contextmanager
+    def map_httpcore_exceptions() -&gt; typing.Iterator[None]:
+        global HTTPCORE_EXC_MAP
+        if len(HTTPCORE_EXC_MAP) == 0:
+            HTTPCORE_EXC_MAP = _load_httpcore_exceptions()
+        try:
+&gt;           yield
+
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:101: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:250: in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/connection_pool.py:256: in handle_request
+    raise exc from None
+.venv/lib/python3.12/site-packages/httpcore/_sync/connection_pool.py:236: in handle_request
+    response = connection.handle_request(
+.venv/lib/python3.12/site-packages/httpcore/_sync/connection.py:103: in handle_request
+    return self._connection.handle_request(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:136: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:106: in handle_request
+    ) = self._receive_response_headers(**kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:177: in _receive_response_headers
+    event = self._receive_event(timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpcore/_sync/http11.py:217: in _receive_event
+    data = self._network_stream.read(
+.venv/lib/python3.12/site-packages/httpcore/_backends/sync.py:126: in read
+    with map_exceptions(exc_map):
+         ^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+map = {&lt;class 'TimeoutError'&gt;: &lt;class 'httpcore.ReadTimeout'&gt;, &lt;class 'OSError'&gt;: &lt;class 'httpcore.ReadError'&gt;}
+
+    @contextlib.contextmanager
+    def map_exceptions(map: ExceptionMapping) -&gt; typing.Iterator[None]:
+        try:
+            yield
+        except Exception as exc:  # noqa: PIE786
+            for from_exc, to_exc in map.items():
+                if isinstance(exc, from_exc):
+&gt;                   raise to_exc(exc) from exc
+E                   httpcore.ReadTimeout: timed out
+
+.venv/lib/python3.12/site-packages/httpcore/_exceptions.py:14: ReadTimeout
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7f1eb0143170&gt;, Settings(database_url='postgresql+psycopg://postgres@/postgres?host=/tmp...d82e88523d4c9fbff835d6040420ee', 'user_7887f462e6334878a7bb6e04ec28aee4', 'proj_43e08ea6952f40b29fbb14e76e8354fa', ...)
+http = &lt;httpx.Client object at 0x7f1ead131bb0&gt;, key = 'encoded%2Fkey'
+
+    @pytest.mark.parametrize("key", ["independent/key", "encoded%2Fkey", "独立/键 空格", "safe-uuid_123", "/leading/trailing/"])
+    def test_real_http_key_confirmation_replay_and_cold_history(env, http, key):
+        aid, _, _, body, _ = setup(env)
+        target = url(env, aid)
+        body["request_key"] = key
+&gt;       response = http.post(target, json=body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_column_patch_keys.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:249: in handle_request
+    with map_httpcore_exceptions():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @contextlib.contextmanager
+    def map_httpcore_exceptions() -&gt; typing.Iterator[None]:
+        global HTTPCORE_EXC_MAP
+        if len(HTTPCORE_EXC_MAP) == 0:
+            HTTPCORE_EXC_MAP = _load_httpcore_exceptions()
+        try:
+            yield
+        except Exception as exc:
+            mapped_exc = None
+    
+            for from_exc, to_exc in HTTPCORE_EXC_MAP.items():
+                if not isinstance(exc, from_exc):
+                    continue
+                # We want to map to the most specific exception we can find.
+                # Eg if `exc` is an `httpcore.ReadTimeout`, we want to map to
+                # `httpx.ReadTimeout`, not just `httpx.TimeoutException`.
+                if mapped_exc is None or issubclass(to_exc, mapped_exc):
+                    mapped_exc = to_exc
+    
+            if mapped_exc is None:  # pragma: no cover
+                raise
+    
+            message = str(exc)
+&gt;           raise mapped_exc(message) from exc
+E           httpx.ReadTimeout: timed out
+
+.venv/lib/python3.12/site-packages/httpx/_transports/default.py:118: ReadTimeout</failure></testcase><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[\u72ec\u7acb/\u952e \u7a7a\u683c]" time="19.104" /><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[safe-uuid_123]" time="6.799" /><testcase classname="tests.test_column_patch_keys" name="test_real_http_key_confirmation_replay_and_cold_history[/leading/trailing/]" time="10.961" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[line\nbreak]" time="2.002" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[nul\x00key]" time="3.267"><failure message="AssertionError: Internal Server Error&#10;assert 500 == 400&#10; +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1eaf1b7020&gt;, Settings(database_url='postgresql+psycopg://postgres@/postgres?host=/tmp...86198ff3b740a9b3c1eeed5381c37c', 'user_8797e0da7904411cb080923a0f98ba80', 'proj_1617e9efd0014ed0b5511208b4634046', ...)
+http = &lt;httpx.Client object at 0x7f1eaf548320&gt;, key = 'nul\x00key'
+
+    @pytest.mark.parametrize("key", ["line\nbreak", "nul\0key", "del\x7fkey", ".", "..", "a/../b", "a/./b"])
+    def test_unaddressable_new_keys_rejected_before_acceptance(env, http, key):
+        aid, _, _, body, _ = setup(env)
+        target = url(env, aid)
+        before = http.get(target).json()
+        response = http.post(target, json={**body, "request_key": key})
+&gt;       assert response.status_code == 400, response.text
+E       AssertionError: Internal Server Error
+E       assert 500 == 400
+E        +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code
+
+tests/test_column_patch_keys.py:78: AssertionError</failure></testcase><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[del\x7fkey]" time="2.592" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[.]" time="1.575" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[..]" time="1.453" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[a/../b]" time="1.462" /><testcase classname="tests.test_column_patch_keys" name="test_unaddressable_new_keys_rejected_before_acceptance[a/./b]" time="1.276" /><testcase classname="tests.test_column_patches" name="test_new_definition_draft_exact_check_cold_history_and_preserved_objects" time="3.074" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[column]" time="0.693" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[same_column]" time="0.655" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[schema]" time="0.606" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[scope]" time="0.552" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[candidate]" time="0.618" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[node]" time="0.876" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[bool_revision]" time="0.573" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[stale_graph]" time="0.591" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[permission]" time="0.545" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[code]" time="0.675" /><testcase classname="tests.test_column_patches" name="test_closed_definition_negative_cases_zero_write[kind]" time="0.555" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[owner_revoke]" time="1.280" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[runtime_revoke]" time="1.485" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[source]" time="1.254" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[source_rehash]" time="3.754" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[lock]" time="3.413" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[identity]" time="4.488" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[project]" time="1.636" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[definition_tamper]" time="1.661" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[check_tamper]" time="1.742" /><testcase classname="tests.test_column_patches" name="test_saved_patch_and_check_invalidation_zero_write[same_key]" time="1.794" /><testcase classname="tests.test_column_patches" name="test_duplicate_definition_and_checks_serialized_by_existing_project_lock" time="1.341" /><testcase classname="tests.test_column_patches" name="test_old_patch_invalidates_after_lock_cycle_without_hiding_new_draft" time="1.998" /><testcase classname="tests.test_column_patches" name="test_coherently_resigned_saved_check_cannot_promote_false_result" time="1.996" /><testcase classname="tests.test_column_patches" name="test_history_capacity_rejects_extra_acceptance_but_keeps_original_keys[column_patch]" time="1.885" /><testcase classname="tests.test_column_patches" name="test_history_capacity_rejects_extra_acceptance_but_keeps_original_keys[column_check]" time="2.644" /><testcase classname="tests.test_column_patches" name="test_project_unknown_dependencies_block_execution_without_rewriting" time="0.820" /><testcase classname="tests.test_column_patch_ui" name="test_column_patch_actual_http_dom_recovery_exact_version_and_revocation" time="10.475" /><testcase classname="tests.test_delivery_graph_apps_ui" name="test_delivery_graph_actual_http_dom[CSV]" time="7.702" /><testcase classname="tests.test_delivery_graph_apps_ui" name="test_delivery_graph_actual_http_dom[REPORT]" time="37.647" /></testsuite></testsuites>
