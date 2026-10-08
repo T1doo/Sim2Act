@@ -20,6 +20,7 @@ from .contracts import (
     validate_action,
     validate_action_input,
 )
+from .csv_dag import mount as mount_csv_dag
 from .db import (
     Store,
     app_drafts,
@@ -677,6 +678,7 @@ def create_app(store=None, settings=None):
     mount_conditional_apps(app, db, identity, platform_limits, s)
     mount_report_manifest_apps(app, db, identity, platform_limits, s)
     mount_delivery_graph_apps(app, db, identity, platform_limits, s)
+    mount_csv_dag(app, db, s, identity, platform_limits)
 
     web = Path(__file__).parent / "web"
 
@@ -711,6 +713,10 @@ def create_app(store=None, settings=None):
     @app.get("/delivery-graph.js")
     def delivery_graph_js():
         return FileResponse(web / "delivery-graph.js", media_type="text/javascript")
+
+    @app.get("/csv-dag.js")
+    def csv_dag_js():
+        return FileResponse(web / "csv-dag.js", media_type="text/javascript")
 
     @app.get("/conditional-apps.js")
     def conditional_apps_js():
