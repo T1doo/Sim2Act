@@ -25,6 +25,12 @@ See [result and remaining gates](../../F2/EngineeringPGPhaseLog.md) and
   four-module58PASS targeted PG/preflight run. Exact58 baseline nodes and283
   source hashes match; owned schema/role/container/volume cleanup verified.
   Prior failure's cause remains unresolved. No full suite or Windows qualification.
+- `full-verification/`: subsequent single complete Engineering authorization on
+  frozen1932200; collection/execution/JUnit1586 match,1559PASS/27 original SKIP,
+  ruff/mypy PASS, original7 failures now PASS,283 source hashes unchanged,11
+  role cases PASS and owned cleanup verified. Full startup streams/state/timeline,
+  fixture-definition/call rankings,76 exported artifacts and recomputation scripts.
+  No product optimization or native/Windows900 acceptance is inferred.
 - `assertion-preservation.json`: all137 original assertion ASTs in modified
   tests are preserved. `postfix-source-current-equality.json` verifies283 source
   files against candidate preparation bytes, without inventing a SQLite
@@ -51,3 +57,5 @@ The installed venv and owned Node dependencies remain in the new instance.
 Single-start server stdout is preserved byte-for-byte, including blank lines and
 Docker timestamp-prefix trailing spaces. `git diff --check` reports only these
 two raw stdout files; excluding exactly those files passes. They were not trimmed.
+The same byte-preservation rule applies to full-verification raw server streams
+and driver logs; any whitespace warnings in those logs are retained as evidence.

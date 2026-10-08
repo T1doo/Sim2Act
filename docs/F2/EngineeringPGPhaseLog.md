@@ -261,3 +261,138 @@ all original collection/stages. **It was not run in this round.** Current native
 PG attribution, complete Edge tail and Windows900/240/150 still lack evidence;
 NO_GO remains. All original failed-attempt evidence is preserved. Full records:
 `docs/evidence/engineering-pg-phase-20261008/single-start/`.
+
+## Complete frozen-source PG Engineering verification
+
+Explicitly authorized once after the successful targeted run. Frozen source:
+`193220054cd3268e6332875c7a7daa5937d65f15` (same283 runtime bytes as f904).
+Actual command, shell/controller exit0:
+
+```bash
+.venv/bin/python docs/evidence/engineering-pg-phase-20261008/full-verification/controller.py /tmp/sim2act-full-verification-20261008
+```
+
+Only one new labelled localhost container started, using the same pinned image.
+Separate server stdout/stderr files were open before attached start. Full streams,
+timestamped streams, pre-start/ready/pre-cleanup State and20-second stage State
+samples, readiness/first-connect timeline and stage PIDs/commands are retained.
+First authenticated host SELECT succeeded; start-to-SELECT1.304506s and
+connect+SELECT0.012804s. No startup retry/restart or second full process occurred.
+Diagnostic fixture hooks record setup time/definition only; no assertions,
+selectors, production code or SQL/parameter values were changed/exported by hooks.
+
+|Stage|Exit|Actual process wall seconds|
+|---|---:|---:|
+|Original default collection|0|1.521|
+|ruff check src scripts tests|0|0.064|
+|mypy src (47 source files)|0|0.265|
+|pytest -q --durations=30 -ra|0|1067.583|
+
+Pytest summary: **1559PASS/0FAIL/0ERROR/27SKIP**,3 warnings,1065.03s.
+Collection/execution/JUnit each contain1586, with exactly equal node multisets.
+All original seven failed nodes now PASS. The27 skip nodes/reasons exactly match
+the baseline:23 explicit R0 private-GO oracles,1 actual Windows PowerShell test,
+2 SQLite-only protocol-UI subprocess variants,1 protected Chromium sandbox start.
+The actual Chromium stderr is retained; no sandbox bypass. Three warnings are
+one existing Starlette/httpx deprecation and two existing Pydantic authorization
+alias warnings. No dependency or test was edited in response.
+
+|Pytest reported component|Seconds|Fraction of pytest process wall|
+|---|---:|---:|
+|setup|217.710|20.393%|
+|call|829.353|77.685%|
+|teardown|16.696|1.564%|
+|remaining process wall|3.823|0.358%|
+
+Ruff+mypy+pytest total1067.911s excludes diagnostic collection, dependency
+preparation, PG startup, source checks and cleanup. Mypy and dependencies are
+warm in this instance. This is a complete **Linux** default Engineering result,
+not a clean native setup/Edge cost envelope or Windows900 capacity acceptance.
+
+### Actual call and fixture rankings
+
+|Slowest individual call|Seconds|
+|---|---:|
+|report_manifest_apps_ui::test_report_manifest_real_http_dom|34.903|
+|delivery_graph_apps_ui::test_delivery_graph_actual_http_dom[REPORT]|27.150|
+|protocol_gated_execution::test_whole_package_actual_postgresql_two_forms|16.131|
+|conditional_apps_ui::test_named_report_draft_real_http_dom|15.310|
+|conditional_runs_native::test_conditional_bound_native_shared_actual_http[True]|13.793|
+
+Call module totals: natural_receipt_candidate63.750s, fixed_goal_acceptance42.706s,
+delivery_graph_apps41.819s, report_manifest_apps_ui34.903s,
+delivery_graph_apps_ui32.142s. These module aggregates identify workload scale;
+the individual-call table identifies the longest single cases.
+
+|Fixture definition setup aggregate|Calls|Seconds|
+|---|---:|---:|
+|conftest.env, baseid tests|1053|195.990|
+|test_protocol_jobs.env, baseid test_protocol_jobs.py|40|5.038|
+|test_global_experiment_gate.sealed_protocol_fixture, module scope|1|2.639|
+|test_protocol_jobs.env, baseid test_protocol_experiment.py|16|2.330|
+|test_protocol_jobs.env, baseid test_protocol_pool.py|19|2.161|
+
+Slowest individual fixture setup is sealed_protocol_fixture2.639s; slowest root
+env is0.521s. The1053 root env hook outcomes all record PostgreSQL. Other env
+definitions are reported separately, avoiding a false unique-schema count from
+same-name nested wrappers. Fixture spans may nest; these totals are not added to
+phase/initialize/SQL totals and do not attribute teardown/subprocess internals.
+
+Initialize1195 calls/77.575s is7.266% of pytest wall as an overlapping descriptive
+ratio. PG initialization DDL46824/53.314s, existence3649/0.751s; PG non-initialization
+SELECT1138811/293.271s. Existing metrics COMPLETE/pendingSQL0 means only the
+defined pytest-process scope. Cursor spans exclude fetch/commit/pool acquisition
+and combine setup/call work; they do not establish source-level duplicate work.
+
+**No causal optimization saving is proven or implemented in this round.**
+The measured next targets are the longest actual HTTP/DOM/protocol calls, natural
+receipt/fixed-goal call modules, and root env setup. Profile their subprocess,
+Python, DB/round-trip and synthetic seed components before any minimal change.
+The remaining initialization existence cursor slice is only0.751s here; it cannot
+justify a Windows900 recovery claim. Keep independent schemas/roles, all negative
+assertions, current-head revalidation, authorization and fencing. Frozen origin
+tests explicitly reject same-transaction mutations and later-request revocation;
+aggregate SELECT counts are not permission to cache or omit those checks.
+The failed baseline has different source/outcomes and truncated business paths;
+there is no controlled/uninstrumented before-after pair or Windows saving estimate.
+
+Retained server stderr also records three grant-row `FOR UPDATE` deadlock events
+between backends345/346 at04:24:26.134,04:24:31.138 and04:24:33.640UTC. All executed
+cases still PASS; the observer did not map backend IDs/lock waits to individual node
+timestamps, so the exact case, recovery path and saving potential are not claimed.
+This is a concrete next diagnostic target for lock-order/wait attribution, not a
+reason to change locks during the frozen run. Background checkpoints also logged
+278.570s/274.874s totals with paced writes and8.728s/4.451s sync aggregates. These
+background elapsed spans overlap test execution; they are not measured pytest
+stalls, additive product costs or evidence of an environment I/O hang. A scoped
+resource point sample and periodic State are retained without causal attribution.
+
+### Privileges, integrity and cleanup
+
+Eleven application/runtime-role JUnit cases PASS, including the actual child
+process role, CRUD-only conditional chain/checker, cold registered-run result and
+history/lifecycle paths. The PG-role receipt confirms superuser=false,
+createdb=false, createrole=false, DDL denied, business CRUD successful and no CRUD
+DDL statement. Final schema/role/public-table census is0/0/0, matching before.
+
+The original cancellation race uses actual distinct backends704/705; cancellation
+wins200 and confirmation rejects409, with no operation, lease released and
+authority unchanged. The preceding targeted run on identical runtime bytes
+observed confirmation winning followed by fresh cancellation. Both actual-PG
+orderings have now been observed, without forcing or weakening assertions.
+Revoke/expire/confirm-again and two-worker/rollback receipts also PASS. Their wires
+are original mock transports; real provider calls0, LIVE0, no CI.
+
+All283 source hashes match before/after/current frozen bytes. Before removal PG
+was Running, OOMKilled=false, Error empty. Label-checked rm -f -v removed only
+this run's container/anonymous volume; both absence checks pass. Attached exit137
+is the deliberate cleanup result. Seven PG receipts and36 driver logs were
+verified/exported before removing only this run's fixture directory.76 exported
+artifacts have matching hashes and0 temporary-URL redactions; raw logs remain
+under the owned /tmp root. Original failed-attempt evidence remains untouched.
+
+Candidate full Linux PG Engineering correctness gate is now closed within the
+original27 skips. Native Windows/Win11/Edge/real-provider/owner/F1/F3/R0 acceptance
+is not claimed. **Windows900/Edge240/Node150 remain unchanged and NO_GO.**
+Full artifacts, commands, JUnit, measured rankings, optimization limits and
+ownership receipts are under `docs/evidence/engineering-pg-phase-20261008/full-verification/`.
