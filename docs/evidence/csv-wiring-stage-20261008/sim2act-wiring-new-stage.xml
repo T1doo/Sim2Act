@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="37" time="36.814" timestamp="2026-10-08T09:43:50.159055+00:00" hostname="58262d033e58"><testcase classname="tests.test_csv_wiring" name="test_server_options_authority_seal_exact_ports_and_no_write" time="0.584" /><testcase classname="tests.test_csv_wiring" name="test_different_legal_wires_same_independent_answer_and_unchanged_objects" time="1.864" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[0-0-0]" time="5.400" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[0-0-1]" time="1.737" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[0-1-0]" time="1.174" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[0-1-1]" time="1.311" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[1-0-0]" time="1.088" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[1-0-1]" time="1.106" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[1-1-0]" time="1.052" /><testcase classname="tests.test_csv_wiring" name="test_all_eight_allowed_port_combinations_actual_execution[1-1-1]" time="1.020" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[resource_from_hash]" time="0.501" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[hash_from_resource]" time="0.409" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[aggregate_hash_port]" time="0.415" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[resource_ref]" time="0.538" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[unknown_step]" time="0.369" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[unknown_port]" time="0.475" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[unknown_source]" time="0.363" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[unknown_dependency]" time="0.358" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[cycle]" time="0.489" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[executor]" time="0.350" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[schema]" time="0.344" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[nodes]" time="0.422" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[duplicate]" time="0.393" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[oversize]" time="0.459" /><testcase classname="tests.test_csv_wiring" name="test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write[surrogate]" time="0.382"><failure message="UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 330: surrogates not allowed">env = (&lt;sim2act.db.Store object at 0x7fe636e2e2a0&gt;, Settings(database_url='sqlite:////tmp/sim2act-wiring-new-stage/test_clos...0e6bf790b44b2497f1c88187abfe14', 'user_173995d0af44425f80bf505eb9e25586', 'proj_10f2ca649e43469392e280ed40fde100', ...)
+attack = 'surrogate'
+
+    @pytest.mark.parametrize(
+        "attack",
+        [
+            "resource_from_hash",
+            "hash_from_resource",
+            "aggregate_hash_port",
+            "resource_ref",
+            "unknown_step",
+            "unknown_port",
+            "unknown_source",
+            "unknown_dependency",
+            "cycle",
+            "executor",
+            "schema",
+            "nodes",
+            "duplicate",
+            "oversize",
+            "surrogate",
+        ],
+    )
+    def test_closed_wire_payload_rejects_semantic_string_confusion_and_unknowns_before_write(
+        env, attack
+    ):
+        _, base, anchor, _, _, _ = setup(env)
+        patch = copy.deepcopy(PATCH)
+        if attack == "resource_from_hash":
+            patch[1]["source"]["field"] = "hash"
+        elif attack == "hash_from_resource":
+            patch[2]["source"]["field"] = "resource_id"
+        elif attack == "aggregate_hash_port":
+            patch[0]["port"] = "source_hash"
+        elif attack == "resource_ref":
+            patch[0]["source"]["ref"] = "aggregate"
+        elif attack == "unknown_step":
+            patch[0]["step_id"] = "other"
+        elif attack == "unknown_port":
+            patch[0]["port"] = "sum"
+        elif attack == "unknown_source":
+            patch[0]["source"]["ref"] = "foreign"
+        elif attack == "unknown_dependency":
+            patch[0]["depends_on"] = ["foreign"]
+        elif attack == "cycle":
+            patch[0]["source"]["ref"] = "report"
+        elif attack in {"executor", "schema", "nodes"}:
+            patch[0][attack] = {"ref": "arbitrary"}
+        elif attack == "duplicate":
+            patch[1] = copy.deepcopy(patch[0])
+        elif attack == "oversize":
+            patch.append(copy.deepcopy(patch[0]))
+        else:
+            patch[0]["source"]["ref"] = "\ud800"
+        before = snapshot(env)
+&gt;       reply = propose(env, base, anchor, patch, "bad")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_wiring.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_csv_wiring.py:49: in propose
+    return env[2].post(
+.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:812: in request
+    request = self.build_request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:378: in build_request
+    return Request(
+.venv/lib/python3.12/site-packages/httpx/_models.py:408: in __init__
+    headers, stream = encode_request(
+.venv/lib/python3.12/site-packages/httpx/_content.py:216: in encode_request
+    return encode_json(json)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+json = {'column': 'quantity', 'expected_candidate_fingerprint': 'cddf178a4d1a5b89366f9b5d91354e551cbebb8f33db6912db7116795966...cted_graph_fingerprint': 'ffe5e53c59a00fc75e0f932caa09157bd59aa0c9ff02b5f4a379fcce34542cdd', 'request_key': 'bad', ...}
+
+    def encode_json(json: Any) -&gt; tuple[dict[str, str], ByteStream]:
+        body = json_dumps(
+            json, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+&gt;       ).encode("utf-8")
+          ^^^^^^^^^^^^^^^
+E       UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 330: surrogates not allowed
+
+.venv/lib/python3.12/site-packages/httpx/_content.py:179: UnicodeEncodeError</failure></testcase><testcase classname="tests.test_csv_wiring" name="test_same_key_changed_wires_and_old_fingerprint_confirmation_are_rejected" time="1.001" /><testcase classname="tests.test_csv_wiring" name="test_cold_recovery_verifies_wires_and_both_predecessors_without_reexecution[1]" time="1.184" /><testcase classname="tests.test_csv_wiring" name="test_cold_recovery_verifies_wires_and_both_predecessors_without_reexecution[2]" time="1.263" /><testcase classname="tests.test_csv_wiring" name="test_cold_recovery_verifies_wires_and_both_predecessors_without_reexecution[3]" time="1.236" /><testcase classname="tests.test_csv_wiring" name="test_lineage_tamper_rejected_even_when_ordinary_scalar_values_still_match[receipt_sources]" time="1.082" /><testcase classname="tests.test_csv_wiring" name="test_lineage_tamper_rejected_even_when_ordinary_scalar_values_still_match[intent_sources]" time="1.045" /><testcase classname="tests.test_csv_wiring" name="test_lineage_tamper_rejected_even_when_ordinary_scalar_values_still_match[parents]" time="0.983" /><testcase classname="tests.test_csv_wiring" name="test_lineage_tamper_rejected_even_when_ordinary_scalar_values_still_match[plan_sources]" time="0.986" /><testcase classname="tests.test_csv_wiring" name="test_lineage_tamper_rejected_even_when_ordinary_scalar_values_still_match[final]" time="1.345" /><testcase classname="tests.test_csv_wiring" name="test_wired_report_rechecks_source_and_authority_and_keeps_upstream[source]" time="1.830" /><testcase classname="tests.test_csv_wiring" name="test_wired_report_rechecks_source_and_authority_and_keeps_upstream[owner]" time="1.119" /><testcase classname="tests.test_csv_wiring" name="test_wired_report_rechecks_source_and_authority_and_keeps_upstream[runtime]" time="0.894" /></testsuite></testsuites>

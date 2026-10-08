@@ -18,6 +18,7 @@ async function setup(){
     const response=await fetch(target,opts);
     if(mode==="lost"&&request.method==="POST"&&request.path.includes("/csv-dag")){mode="";throw Error("owned lost accepted response");}
     if(mode==="hold"&&request.method==="GET"&&/^\/api\/csv-dag\/runs\/run_[a-f0-9]+$/.test(request.path)){mode="";await new Promise(r=>release=r);release=null;}
+    if(mode==="tamperWire"&&request.method==="GET"&&/^\/api\/csv-dag\/runs\/run_[a-f0-9]+$/.test(request.path)){mode="";const data=await response.json();data.steps[2].input_sources.source_hash={source:"step",ref:"aggregate",field:"source_hash"};return {ok:true,status:200,json:async()=>data};}
     if(mode==="tamper"&&request.method==="GET"&&/^\/api\/csv-dag\/runs\/run_[a-f0-9]+$/.test(request.path)){mode="";const data=await response.json();data.result.output.sum="999";return {ok:true,status:200,json:async()=>data};}
     return new Response(await response.arrayBuffer(),{status:response.status,headers:response.headers});
   }finally{current.requests--;}};
@@ -46,6 +47,23 @@ async function work(runId,oneStep=false){const r=await fetch(info.base+"/__fixtu
   check(completed.result.output.sum==="15"&&completed.result.output.text==="列 quantity；行数 2；合计 15","actual synthetic CSV produces independently frozen report text and sum");
   check(completed.steps.every(s=>s.artifact_refs.length===0)&&completed.model_requests===0&&completed.business_writes===0,"report remains a run result with zero artifacts models or business writes");
   check(!$("csv-dag-confirm").checked&&completed.owner_acceptance==="PENDING"&&completed.semantic_status==="UNKNOWN"&&completed.formal_publication_enabled===false,"engineering success leaves owner semantic and publication gates honest");
+  await w.csvDagWiringRead();check(!$("csv-dag-wiring").hidden&&$("csv-dag-wiring-ports").querySelectorAll("select").length===3,"server supplies exactly three semantic wiring ports");
+  $("csv-dag-wire-aggregate-resource_id").value=JSON.stringify({source:"data",ref:"source",field:"resource_id"});
+  $("csv-dag-wire-report-resource_id").value=JSON.stringify({source:"step",ref:"preview",field:"resource_id"});
+  $("csv-dag-wire-report-source_hash").value=JSON.stringify({source:"step",ref:"preview",field:"hash"});
+  mode="lost";await w.csvDagSubmit("plan");check(!$("csv-dag-retry").hidden&&$("csv-dag-wire-report-source_hash").disabled,"unknown wiring acceptance pins and locks source choices");
+  await w.csvDagSubmit(null,true);const wiredPlan=JSON.parse($("csv-dag-definition").textContent);
+  const wiredPosts=requests.filter(r=>r.method==="POST"&&r.path.endsWith("/csv-dag")&&r.body.wiring_patch);check(wiredPosts.length===2&&JSON.stringify(wiredPosts[0].body)===JSON.stringify(wiredPosts[1].body),"wired plan retry preserves all selected ports key and fingerprints");
+  check(JSON.stringify(wiredPlan.definition.manifest.workflow[2].depends_on)===JSON.stringify(["preview","aggregate"]),"report has two actual declared predecessors");
+  check(JSON.stringify(wiredPlan.definition.manifest.workflow[1].depends_on)===JSON.stringify(["preview"]),"direct data source retains fixed preview validation barrier");
+  check(wiredPlan.plan_fingerprint!==completed.plan_fingerprint&&!$("csv-dag-confirm").checked,"changed wires require their own exact confirmation");
+  $("csv-dag-confirm").checked=true;await w.csvDagSubmit("run");const wiredQueued=JSON.parse($("csv-dag-result").textContent);await work(wiredQueued.id,true);await w.csvDagRead();
+  const wiredPreview=JSON.parse($("csv-dag-result").textContent);check(wiredPreview.steps.length===1&&wiredPreview.steps[0].input_sources.resource_id.source==="data","first actual wired receipt records its source field");
+  await work(wiredQueued.id);await w.csvDagRead();const wiredResult=JSON.parse($("csv-dag-result").textContent);
+  check(wiredResult.status==="SUCCEEDED"&&wiredResult.result.output.sum==="15"&&wiredResult.result.output.text===completed.result.output.text,"different legal wires have the same frozen arithmetic answer");
+  check(wiredResult.steps[2].predecessor_receipts.length===2&&wiredResult.steps[2].input_sources.source_hash.ref==="preview"&&wiredResult.steps[2].input_sources.source_hash.field==="hash","actual report receipt binds both predecessors and the selected semantic hash port");
+  mode="tamperWire";let wireRejected=false;try{await w.csvDagRead();}catch{wireRejected=true;}check(wireRejected&&!$("csv-dag-result").textContent,"same-valued hash with tampered port lineage is cleared by product verifier");
+  await w.csvDagHistory();Array.from($("csv-dag-history").querySelectorAll("button")).find(b=>b.textContent==="核对运行回执"&&b.parentElement.textContent.includes(wiredQueued.id)).click();await idle();check($("csv-dag-result").textContent.includes("SUCCEEDED"),"saved wired report cold-read revalidates explicit sources and both parents");
   const posts=requests.filter(r=>r.method==="POST").length;await setup();await w.csvDagHistory();const buttons=Array.from($("csv-dag-history").querySelectorAll("button"));check(buttons.some(b=>b.textContent==="核对运行回执"),"cold page lists saved plans and accepted runs");buttons.find(b=>b.textContent==="核对运行回执").click();await idle();check($("csv-dag-result").textContent.includes("SUCCEEDED")&&requests.filter(r=>r.method==="POST").length===posts,"cold history recovery verifies receipts without any new submission");
   mode="tamper";let rejected=false;try{await w.csvDagRead();}catch{rejected=true;}check(rejected&&!$("csv-dag-result").textContent&&!$("csv-dag-definition").textContent,"tampered final result clears all current proof");
   await w.csvDagHistory();Array.from($("csv-dag-history").querySelectorAll("button")).find(b=>b.textContent==="核对运行回执").click();await idle();

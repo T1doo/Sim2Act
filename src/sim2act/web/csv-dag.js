@@ -12,6 +12,9 @@ function clearCsvDag() {
   $("csv-dag-status").textContent = "";
   $("csv-dag-confirm").checked = false;
   $("csv-dag-history").replaceChildren();
+  $("csv-dag-wiring").hidden = true;
+  $("csv-dag-wiring-ports").replaceChildren();
+  $("csv-dag-wiring-proof").textContent = "";
 }
 function openCsvDag(parent) {
   clearCsvDag();
@@ -40,6 +43,8 @@ function csvDagButtons(c = csvDagContext) {
   $("csv-dag-refresh").disabled = c.busy || (!c.job && !intent?.runId);
   $("csv-dag-history-read").disabled = c.busy || !!intent;
   $("csv-dag-column").disabled = locked;
+  $("csv-dag-wiring-read").disabled = locked;
+  for (const select of $("csv-dag-wiring-ports").querySelectorAll("select")) select.disabled = locked;
   $("csv-dag-confirm").disabled = locked || !c.plan;
   for (const command of ["pause", "resume", "cancel"]) {
     const states = command === "pause" ? ["QUEUED", "RUNNING"] : command === "resume" ? ["PAUSED", "WAITING_RESOURCE"] : ["QUEUED", "RUNNING", "PAUSED", "PAUSE_REQUESTED", "WAITING_RESOURCE", "RECONCILING"];
@@ -55,9 +60,9 @@ async function csvDagPlanSeal(p, c) {
   if (m.app_id !== a.id || m.revision !== a.candidate.manifest.revision + 1 || !deliverySame(m.data_bindings, a.candidate.manifest.data_bindings) || !deliverySame(m.permission_requirements, a.candidate.manifest.permission_requirements) || !deliverySame(p.preflight.topological_order, steps) || !deliverySame(m.workflow.map(s => s.step_id), steps)) return false;
   for (let i = 0; i < 3; i++) {
     const action = d.actions[i], step = m.workflow[i];
-    if (action.executor.kind !== "registered_tool" || action.executor.ref !== refs[i] || action.executor.version !== "1" || action.effect !== "read" || action.idempotency !== "read_only" || !deliverySame(action.allowed_tool_refs, []) || !deliverySame(step.depends_on, i ? [steps[i - 1]] : [])) return false;
+    if (action.executor.kind !== "registered_tool" || action.executor.ref !== refs[i] || action.executor.version !== "1" || action.effect !== "read" || action.idempotency !== "read_only" || !deliverySame(action.allowed_tool_refs, [])) return false;
   }
-  if (d.actions[2].permission_requirements.length || d.actions[2].dependencies.length || !deliverySame(m.workflow[1].inputs.resource_id, {source:"step",ref:"preview",field:"resource_id"})) return false;
+  if (d.actions[2].permission_requirements.length || d.actions[2].dependencies.length || !csvDagWiringSeal(p)) return false;
   return Object.values(m.outputs).every(v => v.source === "step" && v.ref === "report");
 }
 async function csvDagJobSeal(job, c, plan) {
@@ -65,8 +70,10 @@ async function csvDagJobSeal(job, c, plan) {
   const rid = plan.definition.manifest.data_bindings[0].resource_ref, sourceHash = plan.source_hash, proved = [];
   for (let i = 0; i < job.steps.length; i++) {
     const receipt = job.steps[i], name = ["preview", "aggregate", "report"][i];
-    const args = i === 0 ? {resource_id:rid} : i === 1 ? {resource_id:rid,column:plan.input.column} : job.steps[1].data;
-    if (receipt.step_id !== name || receipt.status !== "VERIFIED" || receipt.plan_fingerprint !== plan.plan_fingerprint || receipt.source_hash !== sourceHash || receipt.data.resource_id !== rid || receipt.action_revision !== plan.definition.actions[i].revision || receipt.artifact_refs.length || receipt.input_fingerprint !== await deliveryDigest(args) || receipt.output_fingerprint !== await deliveryDigest(receipt.data) || !deliverySame(receipt.predecessor_receipts, i ? [await deliveryDigest(proved[i-1])] : [])) return false;
+    const step = plan.definition.manifest.workflow[i], outputs = Object.fromEntries(proved.map(p => [p.step_id,p.data]));
+    const args = Object.fromEntries(Object.entries(step.inputs).map(([port,source]) => [port,source.source === "data" ? rid : source.source === "input" ? plan.input[source.field] : outputs[source.ref]?.[source.field]]));
+    const parents = await Promise.all(proved.filter(p => step.depends_on.includes(p.step_id)).map(deliveryDigest));
+    if (receipt.step_id !== name || receipt.status !== "VERIFIED" || receipt.plan_fingerprint !== plan.plan_fingerprint || receipt.source_hash !== sourceHash || receipt.data.resource_id !== rid || receipt.action_revision !== plan.definition.actions[i].revision || receipt.artifact_refs.length || receipt.input_fingerprint !== await deliveryDigest(args) || receipt.output_fingerprint !== await deliveryDigest(receipt.data) || !deliverySame(receipt.predecessor_receipts, parents) || (plan.wiring && !deliverySame(receipt.input_sources,step.inputs))) return false;
     if (i === 0) {
       const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(receipt.data.content));
       if (Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2,"0")).join("") !== sourceHash || receipt.data.hash !== sourceHash || receipt.data.format !== "csv") return false;
@@ -117,6 +124,7 @@ async function csvDagSubmit(kind, retry = false) {
     if (intent) throw Error("先恢复原接受回执");
     if (kind === "plan") {
       const column = $("csv-dag-column").value;
+      const wiringPatch = c.wiringOptions ? Array.from($("csv-dag-wiring-ports").querySelectorAll("select"), select => ({step_id:select.dataset.step,port:select.dataset.port,source:JSON.parse(select.value)})) : null;
       c.busy = true;csvDagButtons(c);
       try {
         const anchor = await api(deliveryBase(c.parent));
@@ -124,6 +132,10 @@ async function csvDagSubmit(kind, retry = false) {
         if (!await deliveryGraphSeal(anchor,c.parent)) throw Error("VERSION_CONFLICT");
         if (!csvDagCurrent(c)) {c.busy = false;return;}
         intent = {kind, body:{expected_candidate_fingerprint:c.parent.app.fingerprint,expected_graph_fingerprint:anchor.graph_fingerprint,column,request_key:crypto.randomUUID()}};
+        if (wiringPatch) {
+          if(c.wiringOptions.graph_fingerprint !== anchor.graph_fingerprint)throw Error("VERSION_CONFLICT");
+          intent.body.wiring_patch = wiringPatch;
+        }
       } catch(e) {c.busy = false;csvDagButtons(c);throw e;}
     } else {
       if (!c.plan || !$("csv-dag-confirm").checked) throw Error("请确认精确计划");
@@ -141,7 +153,7 @@ async function csvDagSubmit(kind, retry = false) {
       const saved = await api(csvDagBase(c) + "/" + encodeURIComponent(intent.body.request_key));
       if (!csvDagCurrent(c)) return;
       const {cached,...receipt} = made;
-      if (!await csvDagPlanSeal(saved,c) || !deliverySame(receipt,saved) || saved.input.column !== intent.body.column) throw Error("VERSION_CONFLICT");
+      if (!await csvDagPlanSeal(saved,c) || !deliverySame(receipt,saved) || saved.input.column !== intent.body.column || (intent.body.wiring_patch && !intent.body.wiring_patch.every(p => deliverySame(saved.definition.manifest.workflow.find(s => s.step_id===p.step_id).inputs[p.port],p.source)))) throw Error("VERSION_CONFLICT");
       if (!csvDagCurrent(c)) return;
       c.plan = saved; c.job = null;
       $("csv-dag-definition").textContent = JSON.stringify(saved,null,2); $("csv-dag-result").textContent = ""; $("csv-dag-confirm").checked = false;
@@ -195,6 +207,49 @@ async function csvDagHistory() {
     csvDagButtons(c);
   } catch(e) {if(csvDagCurrent(c))csvDagClearProof(c);throw e;}
 }
+function csvDagPortOptions() {
+  return [
+    {step_id:"aggregate",port:"resource_id",semantic_type:"resource_id",sources:[{source:"step",ref:"preview",field:"resource_id"},{source:"data",ref:"source",field:"resource_id"}]},
+    {step_id:"report",port:"resource_id",semantic_type:"resource_id",sources:[{source:"step",ref:"aggregate",field:"resource_id"},{source:"step",ref:"preview",field:"resource_id"}]},
+    {step_id:"report",port:"source_hash",semantic_type:"source_hash",sources:[{source:"step",ref:"aggregate",field:"source_hash"},{source:"step",ref:"preview",field:"hash"}]}
+  ];
+}
+function csvDagWiringSeal(plan) {
+  const workflow = plan.definition.manifest.workflow, [preview,aggregate,report] = workflow;
+  const defaults = {preview:{resource_id:{source:"data",ref:"source",field:"resource_id"}},aggregate:{resource_id:{source:"step",ref:"preview",field:"resource_id"},column:{source:"input",field:"column"}},report:Object.fromEntries(["resource_id","column","count","sum","source_hash"].map(field => [field,{source:"step",ref:"aggregate",field}]))};
+  if (!deliverySame(preview.inputs,defaults.preview) || !deliverySame(preview.depends_on,[]) || !deliverySame(aggregate.depends_on,["preview"])) return false;
+  if(!plan.wiring)return workflow.every(s => deliverySame(s.inputs,defaults[s.step_id])) && deliverySame(report.depends_on,["aggregate"]);
+  const allowed = csvDagPortOptions();
+  for(const step of workflow) {
+    if(!deliverySame(Object.keys(step.inputs).sort(),Object.keys(defaults[step.step_id]).sort()))return false;
+    for(const [port,source] of Object.entries(step.inputs)) {
+      const choice = allowed.find(p => p.step_id===step.step_id&&p.port===port);
+      if(choice ? !choice.sources.some(v => deliverySame(v,source)) : !deliverySame(source,defaults[step.step_id][port]))return false;
+    }
+  }
+  const parents = ["preview","aggregate"].filter(ref => ref==="aggregate" || Object.values(report.inputs).some(v => v.source==="step"&&v.ref===ref));
+  return deliverySame(report.depends_on,parents) && deliverySame(plan.wiring,{version:"csv.wiring.v1",inputs:Object.fromEntries(workflow.map(s => [s.step_id,s.inputs])),depends_on:Object.fromEntries(workflow.map(s => [s.step_id,s.depends_on]))});
+}
+async function csvDagWiringRead() {
+  const c=csvDagContext;if(!c||!csvDagCurrent(c)||c.busy||csvDagIntents.has(csvDagKey(c)))return;
+  c.busy=true;csvDagButtons(c);
+  try {
+    const data=await api(csvDagBase(c)+"/wiring-options");if(!csvDagCurrent(c))return;
+    const {options_fingerprint,...body}=data;
+    if(data.version!=="csv.wiring.v1"||data.app_id!==c.parent.id||data.project_id!==c.parent.project||data.candidate_fingerprint!==c.parent.app.fingerprint||data.editable_dependencies!==false||!deliverySame(data.barrier,["preview","aggregate"])||!deliverySame(data.fixed_steps,["preview","aggregate","report"])||!deliverySame(data.ports,csvDagPortOptions())||await deliveryDigest(body)!==options_fingerprint)throw Error("VERSION_CONFLICT");
+    if(!csvDagCurrent(c))return;
+    csvDagClearProof(c);c.wiringOptions=data;
+    $("csv-dag-wiring-ports").replaceChildren();
+    for(const port of data.ports) {
+      const label=document.createElement("label"),select=document.createElement("select");label.textContent=`${port.step_id}.${port.port} 来源 `;select.id=`csv-dag-wire-${port.step_id}-${port.port}`;select.dataset.step=port.step_id;select.dataset.port=port.port;
+      for(const source of port.sources) {const option=document.createElement("option");option.value=JSON.stringify(source);option.textContent=`${source.ref}.${source.field}`;select.append(option);}
+      select.onchange=()=>{if(csvDagCurrent(c)){csvDagClearProof(c);csvDagButtons(c);}};label.append(select);$("csv-dag-wiring-ports").append(label);
+    }
+    $("csv-dag-wiring").hidden=false;$("csv-dag-wiring-proof").textContent=JSON.stringify(data,null,2);
+  } catch(e) {if(csvDagCurrent(c)){c.wiringOptions=null;csvDagClearProof(c);$("csv-dag-wiring").hidden=true;}throw e;}
+  finally{c.busy=false;csvDagButtons(c);}
+}
+$("csv-dag-wiring-read").onclick=safe(csvDagWiringRead);
 $("csv-dag-plan").onclick = safe(() => csvDagSubmit("plan"));
 $("csv-dag-run").onclick = safe(() => csvDagSubmit("run"));
 $("csv-dag-retry").onclick = safe(() => csvDagSubmit(null,true));
