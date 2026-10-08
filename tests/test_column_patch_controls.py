@@ -42,7 +42,7 @@ def collect_sql(store):
     return seen, inspect
 
 
-@pytest.mark.parametrize("char", [chr(i) for i in range(32)] + [chr(127)])
+@pytest.mark.parametrize("char", [chr(i) for i in range(32)] + [chr(i) for i in range(127, 160)] + ["\ud800", "\udfff"])
 def test_shared_validator_all_ascii_controls_and_read_before_any_sql(char):
     key = "owned" + char + "key"
     # A bare object has no DB API: attempted SQL would raise AttributeError.
@@ -161,6 +161,24 @@ def test_raw_http_control_request_target_never_reaches_key_sql(env, http, contro
             first = sock.recv(4096)
         assert first.startswith(b"HTTP/1.1 400") or first.startswith(b"HTTP/1.1 404"), repr(first)
         assert not any("raw" + control.decode() + "key" in value for value in seen)
+    finally:
+        event.remove(env[0].engine, "before_cursor_execute", listener)
+    assert http.get(target).json() == before
+
+
+@pytest.mark.parametrize("key", ["c1\x85key", "invalid\ud800key"])
+def test_unicode_control_or_unpaired_surrogate_json_rejected_before_sql(env, http, key):
+    aid, _, _, body, _ = setup(env)
+    target = url(env, aid)
+    patch = http.post(target, json=body).json()
+    before = http.get(target).json()
+    seen, listener = collect_sql(env[0])
+    try:
+        reply = http.post(target + "/new-definition/checks",
+                          content=json.dumps(check_body(patch, key), ensure_ascii=True).encode(),
+                          headers={"Content-Type": "application/json"})
+        assert reply.status_code == 400 and reply.json()["error"]["code"] == "INVALID_INPUT", reply.text
+        assert not any(key in value for value in seen)
     finally:
         event.remove(env[0].engine, "before_cursor_execute", listener)
     assert http.get(target).json() == before
