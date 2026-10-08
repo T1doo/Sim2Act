@@ -118,6 +118,8 @@ def test_new_column_cold_store_wrong_inputs_and_no_whole_task_promotion(env):
         == 409
     )
     cold = Store(settings.database_url, test_only=True)
+    if not store.sqlite:
+        cold.engine = cold.engine.execution_options(**store.engine.get_execution_options())
     try:
         with TestClient(create_app(cold, settings)) as cc:
             cc.headers["Authorization"] = "Bearer synthetic-test-A"
@@ -305,6 +307,8 @@ def test_existing_durable_candidate_runner_cold_new_result_and_bad_input(env):
     inst = create(env, rel)
     accepted_run = enqueue(env, inst, rel, column="quantity")
     cold = Store(env[1].database_url, test_only=True)
+    if not env[0].sqlite:
+        cold.engine = cold.engine.execution_options(**env[0].engine.get_execution_options())
     try:
         assert worker(env, cold).once()
         final = cold.inspect(env[3], accepted_run["run_id"])

@@ -713,7 +713,7 @@ def confirm_natural_plan(store, user, run_id, body, settings=None):
                     status="QUEUED",
                     version=seal["confirmed_version"],
                     worker_id=None,
-                    lease_until=None,
+                    lease_until=0,
                 )
             )
             store.event(c, run_id, "NL_PLAN_CONFIRMED", seal)

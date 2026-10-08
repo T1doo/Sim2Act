@@ -82,6 +82,8 @@ def test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pend
     assert not report["formal_publication_enabled"] and not view["result"]["candidate_generated"]
     assert client.post(path, json=body).json()["run_id"] == rid
     cold = Store(settings.database_url, test_only=True)
+    if not store.sqlite:
+        cold.engine = cold.engine.execution_options(**store.engine.get_execution_options())
     try:
         assert cold.inspect(user, rid) == view
     finally:
@@ -161,6 +163,8 @@ def test_accepted_source_reuses_candidate_new_input_cold_result_version_bad_inpu
     inst = create(env, rel)
     run = enqueue(env, inst, rel, column="quantity")
     cold = Store(env[1].database_url, test_only=True)
+    if not env[0].sqlite:
+        cold.engine = cold.engine.execution_options(**env[0].engine.get_execution_options())
     try:
         assert worker(env, cold).once()
         view = cold.inspect(env[3], run["run_id"])

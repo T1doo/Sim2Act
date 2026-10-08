@@ -144,13 +144,18 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(self.config.read_bytes(), before)
 
     def test_real_cli_reads_only_explicit_config_and_redacts_secrets(self):
+        # Keep the real CLI rooted in the synthetic repository, independent of
+        # whether the caller uses the actual checkout's valid .venv.
+        script = self.root / "scripts" / "install_preflight.py"
+        script.parent.mkdir()
+        script.write_bytes(SCRIPT.read_bytes())
         before = self.config.read_bytes()
         inventory = sorted(path.name for path in self.root.iterdir())
         for stage in ("setup", "start"):
             child = subprocess.run(
                 [
                     sys.executable,
-                    str(SCRIPT),
+                    str(script),
                     "--stage",
                     stage,
                     "--config",

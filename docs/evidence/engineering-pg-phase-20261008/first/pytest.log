@@ -1,0 +1,1537 @@
+........................................................................ [  4%]
+........................................................................ [  9%]
+........................................................................ [ 13%]
+........................................................ssssssssssssssss [ 18%]
+sssssss................................................................. [ 22%]
+........................................................................ [ 27%]
+........................................................................ [ 31%]
+...................FF..F................................................ [ 36%]
+.......................................................................F [ 40%]
+........................................................................ [ 45%]
+........................................................................ [ 49%]
+........................................................................ [ 54%]
+......................................F................................. [ 59%]
+.........................................F...............F.............. [ 63%]
+........................................................................ [ 68%]
+......................................s................................. [ 72%]
+........................................................................ [ 77%]
+........................................................................ [ 81%]
+........................................................................ [ 86%]
+.........................ss............................................. [ 90%]
+........................................................................ [ 95%]
+.........................................................s.............. [ 99%]
+..                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[read_preview] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x7ff69b5da660>
+dialect = <sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x7ff6992d5ac0>
+context = <sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x7ff6992d5df0>
+statement = <sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x7ff6992d4b30>
+parameters = [{'run_id_1': 'run_90be96a036e74aa4b34c044115c97f62'}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699787f50>
+query = 'SELECT protocol_jobs.run_id \nFROM protocol_jobs \nWHERE protocol_jobs.run_id = %(run_id_1)s::VARCHAR'
+params = {'run_id_1': 'run_90be96a036e74aa4b34c044115c97f62'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.UndefinedTable: relation "protocol_jobs" does not exist
+E           LINE 2: FROM protocol_jobs 
+E                        ^
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: UndefinedTable
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7ff699fd4a40>, Settings(database_url='postgresql+psycopg://postgres:1b2cc09d96cd38c9c30...c2e65ceb994cfbbcd7df9f9ec7f68c', 'user_eff3a265e63d423aa8b37a4f88edd3ff', 'proj_1aeac2e8b8684324acaaad2993fe00ff', ...)
+kind = 'read_preview'
+
+    @pytest.mark.parametrize("kind", ["read_preview", "sum_quantity_z"])
+    def test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending(env, kind):
+        value, _, rid, sent, _, path, body = prepared(env, kind)
+        store, settings, client, user, *_ = value
+        view = client.get("/api/runs/" + rid)
+        assert view.status_code == 200, view.text
+        view = view.json()
+        report = view["result"]["task_acceptance"]
+        assert (
+            view["status"] == "SUCCEEDED" and view["result"]["goal_acceptance"] == "PASS_FIXED_CONTRACT"
+        )
+        assert report["whole_task_accepted"] is True and report["single_step_status"] == "VERIFIED"
+        assert (
+            report["scope"] == "EXACT_FIXED_SYNTHETIC_GOAL_ONLY"
+            and report["owner_acceptance"] == "PENDING"
+        )
+        assert not report["formal_publication_enabled"] and not view["result"]["candidate_generated"]
+        assert client.post(path, json=body).json()["run_id"] == rid
+        cold = Store(settings.database_url, test_only=True)
+        try:
+>           assert cold.inspect(user, rid) == view
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_fixed_goal_acceptance.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/db.py:1006: in inspect
+    if is_protocol_job(self, run_id):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/protocol_jobs.py:255: in is_protocol_job
+    return rid in protocol_run_ids(c, rid)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/protocol_jobs.py:228: in protocol_run_ids
+    ids = set(c.execute(jobs_query).scalars())
+              ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699787f50>
+query = 'SELECT protocol_jobs.run_id \nFROM protocol_jobs \nWHERE protocol_jobs.run_id = %(run_id_1)s::VARCHAR'
+params = {'run_id_1': 'run_90be96a036e74aa4b34c044115c97f62'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "protocol_jobs" does not exist
+E           LINE 2: FROM protocol_jobs 
+E                        ^
+E           [SQL: SELECT protocol_jobs.run_id 
+E           FROM protocol_jobs 
+E           WHERE protocol_jobs.run_id = %(run_id_1)s::VARCHAR]
+E           [parameters: {'run_id_1': 'run_90be96a036e74aa4b34c044115c97f62'}]
+E           (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: ProgrammingError
+_ test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[sum_quantity_z] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x7ff699e7c110>
+dialect = <sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x7ff699e7fe60>
+context = <sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x7ff69b536570>
+statement = <sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x7ff69b536de0>
+parameters = [{'run_id_1': 'run_1e1264218f8e4a6da3e094c8c14c1c96'}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699784f50>
+query = 'SELECT protocol_jobs.run_id \nFROM protocol_jobs \nWHERE protocol_jobs.run_id = %(run_id_1)s::VARCHAR'
+params = {'run_id_1': 'run_1e1264218f8e4a6da3e094c8c14c1c96'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.UndefinedTable: relation "protocol_jobs" does not exist
+E           LINE 2: FROM protocol_jobs 
+E                        ^
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: UndefinedTable
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7ff699793b60>, Settings(database_url='postgresql+psycopg://postgres:1b2cc09d96cd38c9c30...a653257a1947ce9443529db6355daa', 'user_60543ac0306e4707b1da8865dfbbab3b', 'proj_c24756581b2a4ffab61ca11bd40fd1d5', ...)
+kind = 'sum_quantity_z'
+
+    @pytest.mark.parametrize("kind", ["read_preview", "sum_quantity_z"])
+    def test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending(env, kind):
+        value, _, rid, sent, _, path, body = prepared(env, kind)
+        store, settings, client, user, *_ = value
+        view = client.get("/api/runs/" + rid)
+        assert view.status_code == 200, view.text
+        view = view.json()
+        report = view["result"]["task_acceptance"]
+        assert (
+            view["status"] == "SUCCEEDED" and view["result"]["goal_acceptance"] == "PASS_FIXED_CONTRACT"
+        )
+        assert report["whole_task_accepted"] is True and report["single_step_status"] == "VERIFIED"
+        assert (
+            report["scope"] == "EXACT_FIXED_SYNTHETIC_GOAL_ONLY"
+            and report["owner_acceptance"] == "PENDING"
+        )
+        assert not report["formal_publication_enabled"] and not view["result"]["candidate_generated"]
+        assert client.post(path, json=body).json()["run_id"] == rid
+        cold = Store(settings.database_url, test_only=True)
+        try:
+>           assert cold.inspect(user, rid) == view
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_fixed_goal_acceptance.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/db.py:1006: in inspect
+    if is_protocol_job(self, run_id):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/protocol_jobs.py:255: in is_protocol_job
+    return rid in protocol_run_ids(c, rid)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/protocol_jobs.py:228: in protocol_run_ids
+    ids = set(c.execute(jobs_query).scalars())
+              ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699784f50>
+query = 'SELECT protocol_jobs.run_id \nFROM protocol_jobs \nWHERE protocol_jobs.run_id = %(run_id_1)s::VARCHAR'
+params = {'run_id_1': 'run_1e1264218f8e4a6da3e094c8c14c1c96'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "protocol_jobs" does not exist
+E           LINE 2: FROM protocol_jobs 
+E                        ^
+E           [SQL: SELECT protocol_jobs.run_id 
+E           FROM protocol_jobs 
+E           WHERE protocol_jobs.run_id = %(run_id_1)s::VARCHAR]
+E           [parameters: {'run_id_1': 'run_1e1264218f8e4a6da3e094c8c14c1c96'}]
+E           (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: ProgrammingError
+_ test_accepted_source_reuses_candidate_new_input_cold_result_version_bad_input _
+
+self = <sqlalchemy.engine.base.Connection object at 0x7ff6995bf1d0>
+dialect = <sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x7ff6998da0f0>
+context = <sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x7ff6993488c0>
+statement = <sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x7ff6995be0f0>
+parameters = [{'id_1': 'worker_064b6d940a314fb486719900932de87c'}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699785910>
+query = 'SELECT heartbeats.id \nFROM heartbeats \nWHERE heartbeats.id = %(id_1)s::VARCHAR'
+params = {'id_1': 'worker_064b6d940a314fb486719900932de87c'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.UndefinedTable: relation "heartbeats" does not exist
+E           LINE 2: FROM heartbeats 
+E                        ^
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: UndefinedTable
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7ff69994d1f0>, Settings(database_url='postgresql+psycopg://postgres:1b2cc09d96cd38c9c30...b9278d09484ac7914c90372a4a190c', 'user_81514845d1404e8bbbac48ab5674d938', 'proj_b2db0efd5ae04ef7a834b1e94551b096', ...)
+
+    def test_accepted_source_reuses_candidate_new_input_cold_result_version_bad_input(env):
+        from test_internal_lifecycle import create, release
+        from test_persistent_app_runs import enqueue, worker
+    
+        from sim2act.db import internal_instance_data
+    
+        context, _ = context_with_target(env)
+        value, _, rid, _, _, original, sent = context
+        opt, body = accepted(context)
+        assert opt["whole_task_accepted"] is True
+        assert opt["proof"]["kind"] == "accepted_fixed_natural_goal.v1"
+        made = value[2].post("/api/runs/" + rid + "/receipt-candidates", json=body).json()
+        assert (
+            made["whole_task_accepted"] is True
+            and made["state"] == "CANDIDATE_ONLY"
+            and not made["publishable"]
+        )
+        rel, _, _ = release(env, made["id"], made["candidate_fingerprint"])
+        inst = create(env, rel)
+        run = enqueue(env, inst, rel, column="quantity")
+        cold = Store(env[1].database_url, test_only=True)
+        try:
+>           assert worker(env, cold).once()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_fixed_goal_acceptance.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:560: in once
+    self.store.heartbeat(self.id)
+src/sim2act/db.py:988: in heartbeat
+    if c.execute(select(heartbeats.c.id).where(heartbeats.c.id == worker_id)).first():
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699785910>
+query = 'SELECT heartbeats.id \nFROM heartbeats \nWHERE heartbeats.id = %(id_1)s::VARCHAR'
+params = {'id_1': 'worker_064b6d940a314fb486719900932de87c'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "heartbeats" does not exist
+E           LINE 2: FROM heartbeats 
+E                        ^
+E           [SQL: SELECT heartbeats.id 
+E           FROM heartbeats 
+E           WHERE heartbeats.id = %(id_1)s::VARCHAR]
+E           [parameters: {'id_1': 'worker_064b6d940a314fb486719900932de87c'}]
+E           (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: ProgrammingError
+_ PreflightTests.test_real_cli_reads_only_explicit_config_and_redacts_secrets __
+
+self = <test_install_preflight.PreflightTests testMethod=test_real_cli_reads_only_explicit_config_and_redacts_secrets>
+
+    def test_real_cli_reads_only_explicit_config_and_redacts_secrets(self):
+        before = self.config.read_bytes()
+        inventory = sorted(path.name for path in self.root.iterdir())
+        for stage in ("setup", "start"):
+            child = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--stage",
+                    stage,
+                    "--config",
+                    str(self.config),
+                    "--json",
+                ],
+                cwd=self.root,
+                env={**os.environ, "INTERN_API_TOKEN": SECRET},
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            self.assertNotIn(SECRET, child.stdout + child.stderr)
+            report = json.loads(child.stdout)
+            self.assertEqual(child.returncode, 0 if report["status"] == "PASS" else 1)
+            checks = {item["check"]: item["status"] for item in report["checks"]}
+            for name in ("config_format", "sim2act_database_url", "sim2act_data_dir"):
+                self.assertEqual(checks[name], "PASS")
+            if stage == "start":
+>               self.assertEqual(checks["virtual_environment"], "BLOCKED")
+E               AssertionError: 'PASS' != 'BLOCKED'
+E               - PASS
+E               + BLOCKED
+
+tests/test_install_preflight.py:173: AssertionError
+_______ test_pg_confirmation_control_transactions_are_linearized[cancel] _______
+
+env = (<sim2act.db.Store object at 0x7ff699216960>, Settings(database_url='postgresql+psycopg://postgres:1b2cc09d96cd38c9c30...793cf17b194f7c923b8ea5a8a98cf6', 'user_ecb4f9eea09941449fb08332296f2813', 'proj_9b7c4e53024e48b6b2632f56f6a7e6c6', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff69963e330>
+control = 'cancel'
+
+    @pytest.mark.parametrize("control", ["cancel", "revoke", "expire", "confirm-again"])
+    def test_pg_confirmation_control_transactions_are_linearized(env, monkeypatch, control):
+        require_pg(env)
+        value, session, rid, sent, worker, body = waiting(env)
+        store, _, client, *_ = value
+        before = authority(store)
+        clock = [activation.now()]
+        monkeypatch.setattr(activation, "now", lambda: clock[0])
+        actor = contextvars.ContextVar("activation_pg_actor", default=None)
+        barrier = threading.Barrier(2)
+        backend_ids = {}
+        original = store.lock_project
+        def project_lock(c, user, pid):
+            name = actor.get()
+            assert name in {"confirm", "control"}
+            backend_ids[name] = c.execute(text("SELECT pg_backend_pid()")).scalar_one()
+            barrier.wait(10)
+            result = original(c, user, pid)
+            if name == "control" and control == "expire":
+                clock[0] = session["approval"]["expires_at"]
+            return result
+        monkeypatch.setattr(store, "lock_project", project_lock)
+        def invoke(name):
+            token = actor.set(name)
+            try:
+                if name == "confirm" or control == "confirm-again":
+                    return client.post(f"/api/runs/{rid}/confirm-natural-plan", json=body)
+                if control == "cancel":
+                    return client.post(f"/api/runs/{rid}/commands",
+                                       json={"command": "cancel", "version": body["expected_version"]})
+                if control == "revoke":
+                    return client.post(f"/api/natural-activations/{session['id']}/revoke", json={
+                        "expected_version": session["version"],
+                        "expected_scope_fingerprint": session["scope_fingerprint"],
+                        "request_key": "race-revoke"})
+                return client.post(f"/api/natural-activations/{session['id']}/close-expired", json={})
+            finally:
+                actor.reset(token)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            replies = list(pool.map(invoke, ("confirm", "control")))
+        monkeypatch.setattr(store, "lock_project", original)
+        assert len(set(backend_ids.values())) == 2
+        confirmed = [r for r in rows(store, events) if r["kind"] == "NL_PLAN_CONFIRMED"]
+        statuses = [r.status_code for r in replies]
+        if control == "confirm-again":
+            assert statuses == [200, 200] and replies[0].json() == replies[1].json()
+            assert len(confirmed) == 1
+            assert worker.once()
+            assert len(sent) == 1 and len(rows(store, operations)) == 1
+            assert client.get(f"/api/runs/{rid}").json()["result"]["receipts"][0]["data"]["sum"] == "19"
+        else:
+            if control == "cancel":
+                assert sorted(statuses) == [200, 409]
+                # A stale cancellation is rejected; explicit fresh cancel closes the winner.
+                view = client.get(f"/api/runs/{rid}").json()
+                if view["status"] == "QUEUED":
+                    cancelled = client.post(f"/api/runs/{rid}/commands",
+                                            json={"command": "cancel", "version": view["version"]})
+                    assert cancelled.status_code == 200, cancelled.text
+                assert client.get(f"/api/runs/{rid}").json()["status"] == "CANCELLED"
+            else:
+                assert statuses[1] == 200 and statuses[0] in {200, 403}
+                assert client.get(f"/api/natural-activations/{session['id']}").json()["status"] == (
+                    "REVOKED" if control == "revoke" else "EXPIRED")
+            assert len(confirmed) == (1 if statuses[0] == 200 else 0)
+            worker.once()
+            assert not rows(store, operations) and len(sent) == 1
+            assert client.get(f"/api/runs/{rid}").json()["result"] is None
+        assert len(rows(store, attempts)) == len(rows(store, reservations)) == 1
+>       assert all(r["lease_until"] == 0 for r in rows(store, runs))
+E       assert False
+E        +  where False = all(<generator object test_pg_confirmation_control_transactions_are_linearized.<locals>.<genexpr> at 0x7ff698459ff0>)
+
+tests/test_natural_activation_pg.py:184: AssertionError
+_____ test_new_column_cold_store_wrong_inputs_and_no_whole_task_promotion ______
+
+self = <sqlalchemy.engine.base.Connection object at 0x7ff6984384d0>
+dialect = <sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x7ff68bdd2330>
+context = <sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x7ff699de8aa0>
+statement = <sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x7ff69adb2d80>
+parameters = [{'token_hash_1': '92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd'}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699786bd0>
+query = 'SELECT principals.id \nFROM principals \nWHERE principals.token_hash = %(token_hash_1)s::VARCHAR'
+params = {'token_hash_1': '92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.UndefinedTable: relation "principals" does not exist
+E           LINE 2: FROM principals 
+E                        ^
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: UndefinedTable
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7ff69b9e8b00>, Settings(database_url='postgresql+psycopg://postgres:1b2cc09d96cd38c9c30...7177fef9244d09a45a903e20b5bcfb', 'user_f4b992d818d245bf8a6e605e50c4158f', 'proj_ccea66bba69f4c459ebe477b40b8ec70', ...)
+
+    def test_new_column_cold_store_wrong_inputs_and_no_whole_task_promotion(env):
+        context = prepare(env)
+        value, _, rid, _, target_resource, original, sent = context
+        store, settings, client, user, *_ = value
+        before = table_snapshot(store)
+        opt, body = accepted(context)
+        assert table_snapshot(store) == before
+        made = client.post("/api/runs/" + rid + "/receipt-candidates", json=body)
+        assert made.status_code == 201, made.text
+        made = made.json()
+        assert made["state"] == "CANDIDATE_ONLY" and not made["whole_task_accepted"]
+        assert made["source_run_status"] == "PARTIAL" and not made["publishable"]
+        after = table_snapshot(store)
+        for table in before:
+            if table not in {"app_drafts", "task_extractions"}:
+                assert before[table] == after[table], table
+        assert len(after["app_drafts"]) == len(before["app_drafts"]) + 1
+        assert len(after["task_extractions"]) == len(before["task_extractions"]) + 1
+        assert client.get("/api/runs/" + rid).json() == original
+        again = client.post("/api/runs/" + rid + "/receipt-candidates", json=body).json()
+        assert again["id"] == made["id"] and again["cached"] and table_snapshot(store) == after
+        assert (
+            client.post(
+                "/api/runs/" + rid + "/receipt-candidates", json={**body, "name": "changed"}
+            ).status_code
+            == 409
+        )
+        cold = Store(settings.database_url, test_only=True)
+        try:
+            with TestClient(create_app(cold, settings)) as cc:
+                cc.headers["Authorization"] = "Bearer synthetic-test-A"
+>               draft = cc.get("/api/apps/" + made["id"]).json()
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_receipt_candidate.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/httpx/_client.py:1053: in get
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:169: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:453: in app
+    solved_result = await solve_dependencies(
+.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py:677: in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:191: in identity
+    return db.authenticate(authorization[7:])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/db.py:547: in authenticate
+    row = c.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699786bd0>
+query = 'SELECT principals.id \nFROM principals \nWHERE principals.token_hash = %(token_hash_1)s::VARCHAR'
+params = {'token_hash_1': '92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "principals" does not exist
+E           LINE 2: FROM principals 
+E                        ^
+E           [SQL: SELECT principals.id 
+E           FROM principals 
+E           WHERE principals.token_hash = %(token_hash_1)s::VARCHAR]
+E           [parameters: {'token_hash_1': '92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd'}]
+E           (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: ProgrammingError
+_____ test_existing_durable_candidate_runner_cold_new_result_and_bad_input _____
+
+self = <sqlalchemy.engine.base.Connection object at 0x7ff699411610>
+dialect = <sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x7ff6995e20f0>
+context = <sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x7ff699410890>
+statement = <sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x7ff699413170>
+parameters = [{'id_1': 'worker_ab72788b2b1e4fa498f6ca1adb207eb7'}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699e9f950>
+query = 'SELECT heartbeats.id \nFROM heartbeats \nWHERE heartbeats.id = %(id_1)s::VARCHAR'
+params = {'id_1': 'worker_ab72788b2b1e4fa498f6ca1adb207eb7'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.UndefinedTable: relation "heartbeats" does not exist
+E           LINE 2: FROM heartbeats 
+E                        ^
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: UndefinedTable
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7ff6999c3e90>, Settings(database_url='postgresql+psycopg://postgres:1b2cc09d96cd38c9c30...b62101841349ae97dd8360b509f523', 'user_539953eff574462380f7de1485915ed9', 'proj_0482ee7296f94245b7d84c38b9b46bd5', ...)
+
+    def test_existing_durable_candidate_runner_cold_new_result_and_bad_input(env):
+        from test_internal_lifecycle import create, release
+        from test_persistent_app_runs import enqueue, worker
+    
+        from sim2act.db import internal_instance_data
+    
+        context = prepare(env)
+        value, _, rid, _, _, original, _ = context
+        _, body = accepted(context)
+        made = value[2].post("/api/runs/" + rid + "/receipt-candidates", json=body).json()
+        rel, _, _ = release(env, made["id"], made["candidate_fingerprint"])
+        inst = create(env, rel)
+        accepted_run = enqueue(env, inst, rel, column="quantity")
+        cold = Store(env[1].database_url, test_only=True)
+        try:
+>           assert worker(env, cold).once()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_receipt_candidate.py:309: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:560: in once
+    self.store.heartbeat(self.id)
+src/sim2act/db.py:988: in heartbeat
+    if c.execute(select(heartbeats.c.id).where(heartbeats.c.id == worker_id)).first():
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <psycopg.Cursor [closed] [BAD] at 0x7ff699e9f950>
+query = 'SELECT heartbeats.id \nFROM heartbeats \nWHERE heartbeats.id = %(id_1)s::VARCHAR'
+params = {'id_1': 'worker_ab72788b2b1e4fa498f6ca1adb207eb7'}
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -> Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable) relation "heartbeats" does not exist
+E           LINE 2: FROM heartbeats 
+E                        ^
+E           [SQL: SELECT heartbeats.id 
+E           FROM heartbeats 
+E           WHERE heartbeats.id = %(id_1)s::VARCHAR]
+E           [parameters: {'id_1': 'worker_ab72788b2b1e4fa498f6ca1adb207eb7'}]
+E           (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/psycopg/cursor.py:117: ProgrammingError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_preview_extraction.py::test_idempotency_stale_version_and_concurrent_single_authority
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'alias' attribute with value 'aid' was provided to the `Field()` function, which has no effect in the context it was used. 'alias' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 30 durations =============================
+33.20s call     tests/test_report_manifest_apps_ui.py::test_report_manifest_real_http_dom
+25.84s call     tests/test_delivery_graph_apps_ui.py::test_delivery_graph_actual_http_dom[REPORT]
+16.36s call     tests/test_protocol_gated_execution.py::test_whole_package_actual_postgresql_two_forms
+13.97s call     tests/test_conditional_apps_ui.py::test_named_report_draft_real_http_dom
+13.84s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[True]
+13.73s call     tests/test_protocol_experiment.py::test_two_forms_real_worker_review_sequence_global_clock_and_shared_pool[False]
+11.71s call     tests/test_registered_generation_native_dom.py::test_registered_generation_direct_actual_http_dom[poll-refresh-order]
+11.62s call     tests/test_conditional_runs_native.py::test_conditional_bound_native_shared_actual_http[False]
+9.40s call     tests/test_registered_generation_native_dom.py::test_registered_generation_direct_actual_http_dom[normal]
+7.51s call     tests/test_report_manifest_apps.py::test_real_common_manifest_compiler_catalog_and_two_actual_cold_scenarios
+6.30s call     tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[lost]
+6.08s call     tests/test_conditional_native_oracle.py::test_conditional_capture_optional_and_failure[omit]
+6.03s call     tests/test_conditional_native_oracle.py::test_conditional_native_shared_module_existing_fixture
+5.98s call     tests/test_conditional_apps.py::test_named_draft_two_actual_new_scenarios_history_and_recovery
+5.80s call     tests/test_protocol_gated_execution.py::test_whole_package_zero_network[None-8]
+5.76s call     tests/test_lifecycle.py::test_AT05_real_process_stop_accept_restart_reopen
+5.73s call     tests/test_conditional_run_product.py::test_source_bound_product_actual_http_dom
+5.72s call     tests/test_fixed_goal_acceptance.py::test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[wrong_contract]
+5.71s call     tests/test_fixed_goal_acceptance.py::test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[lost]
+5.69s call     tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_id]
+5.40s call     tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_type]
+5.03s call     tests/test_product_integration.py::test_integrated_same_session_source_and_recovery
+4.90s call     tests/test_natural_activation_ui.py::test_activation_actual_http_complete_page_path[valid]
+4.90s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_anchor]
+4.88s call     tests/test_delivery_graph_apps_ui.py::test_delivery_graph_actual_http_dom[CSV]
+4.85s call     tests/test_application_use.py::test_application_use_actual_http
+4.75s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[membership]
+4.73s call     tests/test_delivery_graph_apps.py::test_project_replay_and_history_bind_current_peer_graph_authority_lock_membership[peer_auth]
+4.24s call     tests/test_conditional_checks_ui.py::test_conditional_checks_actual_http_dom
+3.98s call     tests/test_protocol_store_dryrun.py::test_two_forms_share_actual_database_pool_and_independent_reviews
+=========================== short test summary info ============================
+SKIPPED [23] tests/test_db_readiness_pg_oracle.py:55: R0 PostgreSQL oracle waits for parent GO and private owned fixture
+SKIPPED [1] tests/test_process_environment.py:73: Actual Windows PowerShell native launch required
+SKIPPED [2] tests/test_protocol_ui.py:25: Owned subprocess fixture currently SQLite only; no PG UI coverage claimed
+SKIPPED [1] tests/test_task_submission_recovery.py:64: Protected Chromium sandbox startup blocked; actual stderr retained in driver.log
+FAILED tests/test_fixed_goal_acceptance.py::test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[read_preview]
+FAILED tests/test_fixed_goal_acceptance.py::test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[sum_quantity_z]
+FAILED tests/test_fixed_goal_acceptance.py::test_accepted_source_reuses_candidate_new_input_cold_result_version_bad_input
+FAILED tests/test_install_preflight.py::PreflightTests::test_real_cli_reads_only_explicit_config_and_redacts_secrets
+FAILED tests/test_natural_activation_pg.py::test_pg_confirmation_control_transactions_are_linearized[cancel]
+FAILED tests/test_natural_receipt_candidate.py::test_new_column_cold_store_wrong_inputs_and_no_whole_task_promotion
+FAILED tests/test_natural_receipt_candidate.py::test_existing_durable_candidate_runner_cold_new_result_and_bad_input
+7 failed, 1552 passed, 27 skipped, 2 warnings in 1022.56s (0:17:02)
