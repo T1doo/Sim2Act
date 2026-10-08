@@ -8,6 +8,7 @@ import copy
 import csv
 import io
 import json
+import math
 import threading
 import time
 from fractions import Fraction
@@ -155,7 +156,7 @@ def build(store, c, user, pid, aid, body, limits):
 
 def load_plan(store, c, user, pid, aid, key, limits):
     body, answer = read_pair(c, user, aid, "csv_dag_plan", key, PlanInput)
-    if build(store, c, user, pid, aid, body, limits) != answer:
+    if fingerprint(build(store, c, user, pid, aid, body, limits)) != fingerprint(answer):
         graph.conflict("DAG frozen definition/authority/source changed")
     return answer
 
@@ -227,10 +228,27 @@ def is_job(store, rid):
         return bool(marked or isinstance(ctx, dict) and ctx.get("kind") == KIND)
 
 
+def check_quantities(job, *, context=True):
+    if (any(type(job[k]) is not int or job[k] < low for k, low in (("version", 1), ("fence", 0)))
+            or any(type(job[k]) not in {int, float} or not math.isfinite(job[k])
+                   for k in ("created_at", "lease_until"))):
+        graph.conflict("Invalid persisted Run quantity or time")
+    if not context:
+        return
+    ctx = job["context"]
+    if (not isinstance(ctx, dict)
+            or set(ctx) != {"kind", "messages", "requests", "tools", "repairs", "reserved_tokens"}
+            or ctx["messages"] != [] or any(type(ctx[k]) is not int for k in ("requests", "tools", "repairs", "reserved_tokens"))
+            or any(ctx[k] != 0 for k in ("requests", "repairs", "reserved_tokens"))
+            or not 0 <= ctx["tools"] <= 3):
+        graph.conflict("Fixed DAG has only three local operations and zero model usage")
+
+
 def row(c, user, rid):
     job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user).with_for_update()).mappings().first()
     if not job:
         raise DomainError("PERMISSION_DENIED")
+    check_quantities(job, context=False)
     return dict(job)
 
 
@@ -245,26 +263,23 @@ def binding(store, c, job, limits, *, authorize=True):
     if len(accepted) != 1 or fingerprint(accepted[0]) != job["fingerprint"]:
         graph.conflict("Missing immutable DAG acceptance")
     value = accepted[0]
-    ctx = job["context"]
-    if (set(ctx) != {"kind", "messages", "requests", "tools", "repairs", "reserved_tokens"}
-            or ctx["messages"] != [] or any(type(ctx[k]) is not int for k in ("requests", "tools", "repairs", "reserved_tokens"))
-            or any(ctx[k] != 0 for k in ("requests", "repairs", "reserved_tokens"))
-            or not 0 <= ctx["tools"] <= 3):
-        graph.conflict("Fixed DAG has only three local operations and zero model usage")
+    check_quantities(job)
     if (job["context"].get("kind") != KIND or value["run_id"] != job["id"]
             or value["principal_id"] != job["principal_id"] or value["project_id"] != job["project_id"]
             or value["runtime_id"] != job["runtime_id"]):
         graph.conflict("DAG Run identity changed")
     confirmation = RunInput.model_validate(value["confirmation"])
     req, receipt = read_pair(c, job["principal_id"], value["app_id"], "csv_dag_run", confirmation.request_key, RunInput)
-    if req != confirmation or receipt["run_id"] != job["id"] or receipt["plan_key"] != value["plan_key"]:
+    expected_receipt = dict(namespace=PLAN, run_id=job["id"], plan_key=value["plan_key"],
+                            plan_fingerprint=value["plan"]["plan_fingerprint"], status="QUEUED", version=1)
+    if req != confirmation or fingerprint(receipt) != fingerprint(expected_receipt):
         graph.conflict("DAG accepted request link changed")
     if authorize:
         frozen = store.frozen_contract(c, job)
         if fingerprint(frozen.model_dump()) != value["contract_fingerprint"]:
             graph.conflict("DAG Run contract changed")
         current = load_plan(store, c, job["principal_id"], job["project_id"], value["app_id"], value["plan_key"], limits)
-        if current != value["plan"] or current["plan_fingerprint"] != confirmation.expected_plan_fingerprint:
+        if fingerprint(current) != fingerprint(value["plan"]) or current["plan_fingerprint"] != confirmation.expected_plan_fingerprint:
             graph.conflict("DAG plan changed after confirmation")
     return value
 
@@ -322,11 +337,14 @@ def receipts(store, c, job, plan, source):
         intent = dict(tool=action["executor"]["ref"], args=args, plan_fingerprint=plan["plan_fingerprint"],
                       predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]])
         saved = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar()
-        if saved != intent or op["fingerprint"] != fingerprint(intent) or op["tool_ref"] != intent["tool"]:
+        if fingerprint(saved) != fingerprint(intent) or op["fingerprint"] != fingerprint(intent) or op["tool_ref"] != intent["tool"]:
             graph.conflict("DAG operation input binding changed")
         if op["status"] != "VERIFIED":
             raise DomainError("OUTCOME_UNKNOWN", "Unknown DAG operation requires reconciliation")
         receipt = op["receipt"]
+        # Validate the persisted output, not merely its recomputed counterpart.
+        # Python equality would otherwise accept True==1 and 1.0==1.
+        validate_value(action["output_schema"], receipt["data"])
         wanted = expected(step["step_id"], args, source)
         validate_value(action["output_schema"], wanted)
         check = dict(operation_id=op["id"], step_id=step["step_id"], status="VERIFIED", data=wanted,
@@ -336,7 +354,7 @@ def receipts(store, c, job, plan, source):
                      artifact_refs=[], check_results=[dict(check="receipt.readback.v1", status="PASS")],
                      actual_reads=[] if step["step_id"] == "report" else [dict(resource_id=source["resource_id"],
                                  source_hash=source["hash"], tool_ref=intent["tool"])])
-        if receipt != check:
+        if fingerprint(receipt) != fingerprint(check):
             raise DomainError("VERIFICATION_FAILED", "Actual DAG receipt differs from independent readback")
         outputs[step["step_id"]] = wanted
         proved.append(check)
@@ -355,6 +373,23 @@ def transition(store, c, job, state, error=None, result=None):
     c.execute(update(runs).where(runs.c.id == job["id"]).values(status=state, error=error,
                result=result, lease_until=0, version=job["version"] + 1))
     store.event(c, job["id"], "STATE", dict(status=state, error=error))
+
+
+def commit_guard(worker, c, run, plan, *, tool_delta=0):
+    """Fresh ownership and effective budget check immediately before a commit."""
+    job = worker.store.guard(c, run["id"], run["fence"])
+    check_quantities(job)
+    current = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
+    frozen = worker.store.frozen_contract(c, job).limits
+    declared = Limits(**plan["definition"]["manifest"]["runtime_limits"])
+    seconds = min(current.run_seconds, frozen.run_seconds, declared.run_seconds)
+    counts = {"max_requests": "requests", "max_tools": "tools", "max_repairs": "repairs",
+              "max_total_tokens": "reserved_tokens"}
+    if (time.time() >= job["created_at"] + seconds or any(
+            job["context"][counter] + (tool_delta if counter == "tools" else 0) > min(getattr(current, cap), getattr(frozen, cap), getattr(declared, cap))
+            for cap, counter in counts.items())):
+        raise DomainError("BUDGET_EXHAUSTED", "Effective budget expired before commit")
+    return job
 
 
 @graph.controlled
@@ -382,7 +417,11 @@ def advance(worker, run):
         if len(proved) == 3:
             result = dict(namespace=PLAN, output=outputs["report"], plan_fingerprint=plan["plan_fingerprint"],
                           steps=proved, model_requests=0, business_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING")
-            transition(store, c, job, "SUCCEEDED", result=result)
+            live = commit_guard(worker, c, run, plan)
+            if live["status"] != "RUNNING" or worker.stop.is_set():
+                transition(store, c, live, stop_state(live, store.has_unknown(c, job["id"])))
+            else:
+                transition(store, c, live, "SUCCEEDED", result=result)
             return False
         if len(proved) >= min(limits.max_tools, 3):
             raise DomainError("BUDGET_EXHAUSTED", "Step budget/counter mismatch")
@@ -409,9 +448,7 @@ def advance(worker, run):
         validate_value(action["output_schema"], value)
         # A lease/deadline can expire during local parsing; don't commit an old
         # ownership interval merely because it was valid at transaction entry.
-        store.guard(c, job["id"], run["fence"])
-        if time.time() - job["created_at"] > min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"]):
-            raise DomainError("BUDGET_EXHAUSTED")
+        commit_guard(worker, c, run, plan, tool_delta=1)
         # Reconstruct/verify the exact receipt using the same cold readback contract.
         receipt = dict(operation_id=oid, step_id=step["step_id"], status="VERIFIED", data=value,
                        plan_fingerprint=plan["plan_fingerprint"], action_revision=action["revision"],
@@ -471,9 +508,9 @@ def inspect_job(store, user, rid, limits):
         outputs, proved = receipts(store, c, job, bound["plan"], source)
         if job["context"]["tools"] != len(proved):
             graph.conflict("Step counter no longer matches receipts")
-        if job["status"] == "SUCCEEDED" and (len(proved) != 3 or job["result"] != dict(
+        if job["status"] == "SUCCEEDED" and (len(proved) != 3 or fingerprint(job["result"]) != fingerprint(dict(
                 namespace=PLAN, output=outputs["report"], plan_fingerprint=bound["plan"]["plan_fingerprint"],
-                steps=proved, model_requests=0, business_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING")):
+                steps=proved, model_requests=0, business_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING"))):
             raise DomainError("VERIFICATION_FAILED", "Final result lacks all three checked receipts")
         return dict(namespace=PLAN, id=rid, app_id=bound["app_id"], project_id=job["project_id"],
                     status=job["status"], version=job["version"], result=job["result"], error=job["error"],
