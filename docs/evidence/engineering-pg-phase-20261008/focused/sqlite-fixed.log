@@ -1,0 +1,513 @@
+............FF....................FFF................................... [ 68%]
+.................................                                        [100%]
+=================================== FAILURES ===================================
+_ test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[lost] __
+
+env = (<sim2act.db.Store object at 0x7f6757b061e0>, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...96406baddf44339bc5fdeb70c78e30', 'user_0ee357d9c2094641ac6dafc543276769', 'proj_2b3d136933fc41a59449e5b7a87dcfa9', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_prospective0')
+fake = 'lost'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_contract"])
+    def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+    
+        import uvicorn
+    
+        from sim2act.api import create_app
+        from sim2act.db import grants, internal_approvals, internal_releases
+    
+        value = setup(env)
+        store, settings, client, user, other, pid, resource, cards = value
+        session, _ = approved(value)
+        new_resource = client.post(
+            "/api/projects/" + pid + "/resources",
+            json={
+                "name": "unseen.csv",
+                "format": "csv",
+                "content": "amount,quantity,bad\n30,6,x\n50,9,y\n",
+            },
+        ).json()["id"]
+        target = client.post(
+            "/api/projects/" + pid + "/apps/csv-preview",
+            json={"name": "existing target", "resource_id": new_resource, "goal": "new CSV"},
+        ).json()["id"]
+        sent = []
+    
+        def handler(request):
+            sent.append(request.content)
+            return httpx.Response(200, json=response(wire(value)))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-fixed-worker")
+        def work():
+            assert store.test_only and settings.mode == "mock"
+            assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+            return {"offline_test": True}
+    
+        @app.post("/test-only-fixed-revoke")
+        def revoke():
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == resource).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                {
+                    "base": f"http://127.0.0.1:{port}",
+                    "session": session["id"],
+                    "card": cards["sum_quantity_z"]["id"],
+                    "target": target,
+                    "fake": fake,
+                }
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/fixed_goal_acceptance_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+>           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/fixed_goal_acceptance_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixt...ULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_fixed_goal_acceptance.py:351: AssertionError
+_ test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[wrong_contract] _
+
+env = (<sim2act.db.Store object at 0x7f67577c7a40>, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...57185b12e04e3abe841202db2b06c4', 'user_b66349bb8963406081887b87d0354ebc', 'proj_c620a699c5194b888676872f461e06ad', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_prospective1')
+fake = 'wrong_contract'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_contract"])
+    def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+    
+        import uvicorn
+    
+        from sim2act.api import create_app
+        from sim2act.db import grants, internal_approvals, internal_releases
+    
+        value = setup(env)
+        store, settings, client, user, other, pid, resource, cards = value
+        session, _ = approved(value)
+        new_resource = client.post(
+            "/api/projects/" + pid + "/resources",
+            json={
+                "name": "unseen.csv",
+                "format": "csv",
+                "content": "amount,quantity,bad\n30,6,x\n50,9,y\n",
+            },
+        ).json()["id"]
+        target = client.post(
+            "/api/projects/" + pid + "/apps/csv-preview",
+            json={"name": "existing target", "resource_id": new_resource, "goal": "new CSV"},
+        ).json()["id"]
+        sent = []
+    
+        def handler(request):
+            sent.append(request.content)
+            return httpx.Response(200, json=response(wire(value)))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-fixed-worker")
+        def work():
+            assert store.test_only and settings.mode == "mock"
+            assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+            return {"offline_test": True}
+    
+        @app.post("/test-only-fixed-revoke")
+        def revoke():
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == resource).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                {
+                    "base": f"http://127.0.0.1:{port}",
+                    "session": session["id"],
+                    "card": cards["sum_quantity_z"]["id"],
+                    "target": target,
+                    "fake": fake,
+                }
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/fixed_goal_acceptance_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+>           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/fixed_goal_acceptance_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixt...ULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_fixed_goal_acceptance.py:351: AssertionError
+_ test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[lost] _
+
+env = (<sim2act.db.Store object at 0x7f6757e68230>, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...3b56f2bc314f20aef9eb78c56d665b', 'user_8342852c500d4735b699bf2a059e3d32', 'proj_9d9ec41c0da244c79d15f2e62700bef0', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_actual_rece0')
+fake = 'lost'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_id", "wrong_type"])
+    def test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        context = prepare(env)
+        value, session, rid, target, _, original, sent = context
+        store, settings, client, user, *_ = value
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-receipt-revoke")
+        def revoke():
+            assert store.test_only and settings.mode == "mock"
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == value[6]).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        info = {
+            "base": f"http://127.0.0.1:{port}",
+            "project": value[5],
+            "run": rid,
+            "target": target,
+            "fake": fake,
+        }
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/natural_receipt_candidate_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+>           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_natural_receipt_candidate.py:406: AssertionError
+_ test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_id] _
+
+env = (<sim2act.db.Store object at 0x7f675d7a5100>, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...ae18d229e1436d9990ce2b57dd28fc', 'user_a2471a4209c343adae4e2b44cba9f99f', 'proj_87e95198ee8e470781baac9ef790845d', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_actual_rece1')
+fake = 'wrong_id'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_id", "wrong_type"])
+    def test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        context = prepare(env)
+        value, session, rid, target, _, original, sent = context
+        store, settings, client, user, *_ = value
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-receipt-revoke")
+        def revoke():
+            assert store.test_only and settings.mode == "mock"
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == value[6]).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        info = {
+            "base": f"http://127.0.0.1:{port}",
+            "project": value[5],
+            "run": rid,
+            "target": target,
+            "fake": fake,
+        }
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/natural_receipt_candidate_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+>           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_natural_receipt_candidate.py:406: AssertionError
+_ test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_type] _
+
+env = (<sim2act.db.Store object at 0x7f6757fc4dd0>, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...de1812e25c4b748fe63eae320ec6d0', 'user_41444a1ceb284622a228fe0c3fa9705e', 'proj_881c0fac775c4b5f9445f5b4eb5ea668', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_actual_rece2')
+fake = 'wrong_type'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_id", "wrong_type"])
+    def test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        context = prepare(env)
+        value, session, rid, target, _, original, sent = context
+        store, settings, client, user, *_ = value
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-receipt-revoke")
+        def revoke():
+            assert store.test_only and settings.mode == "mock"
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == value[6]).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        info = {
+            "base": f"http://127.0.0.1:{port}",
+            "project": value[5],
+            "run": rid,
+            "target": target,
+            "fake": fake,
+        }
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/natural_receipt_candidate_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+>           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_natural_receipt_candidate.py:406: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 30 durations =============================
+1.70s call     tests/test_fixed_goal_acceptance.py::test_accepted_source_reuses_candidate_new_input_cold_result_version_bad_input
+1.44s call     tests/test_natural_activation_flow.py::test_two_fixed_goals_actual_slots_receipts_history_no_hidden_calls
+1.36s call     tests/test_natural_receipt_candidate.py::test_existing_durable_candidate_runner_cold_new_result_and_bad_input
+1.14s call     tests/test_natural_receipt_candidate.py::test_new_column_cold_store_wrong_inputs_and_no_whole_task_promotion
+0.90s call     tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_id]
+0.85s call     tests/test_natural_receipt_candidate.py::test_coherent_same_value_wrong_type_proof_is_not_a_valid_candidate
+0.82s call     tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[lost]
+0.80s call     tests/test_fixed_goal_acceptance.py::test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[spec]
+0.78s call     tests/test_fixed_goal_acceptance.py::test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[missing]
+0.76s call     tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_type]
+0.75s call     tests/test_fixed_goal_acceptance.py::test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[report_type]
+0.74s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[receipt]
+0.74s call     tests/test_fixed_goal_acceptance.py::test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[source_grant]
+0.73s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[target_grant]
+0.72s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[scope]
+0.70s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[marker]
+0.70s call     tests/test_fixed_goal_acceptance.py::test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[sum_quantity_z]
+0.69s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[SUCCEEDED]
+0.67s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[FAILED]
+0.67s call     tests/test_natural_receipt_candidate.py::test_preview_goal_foreign_owner_project_versions_and_extra_fields_are_rejected
+0.67s call     tests/test_fixed_goal_acceptance.py::test_legacy_partial_finish_cannot_be_upgraded_to_success
+0.67s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[candidate]
+0.65s call     tests/test_fixed_goal_acceptance.py::test_terminal_missing_result_is_not_cold_success[False]
+0.65s call     tests/test_fixed_goal_acceptance.py::test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[read_preview]
+0.64s call     tests/test_fixed_goal_acceptance.py::test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[partial]
+0.64s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[target_version]
+0.62s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[cancel]
+0.58s call     tests/test_fixed_goal_acceptance.py::test_old_partial_status_only_upgrade_is_rejected_by_cold_inspection
+0.58s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[source_grant]
+0.58s call     tests/test_natural_receipt_candidate.py::test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[revoke]
+=========================== short test summary info ============================
+FAILED tests/test_fixed_goal_acceptance.py::test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[lost]
+FAILED tests/test_fixed_goal_acceptance.py::test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[wrong_contract]
+FAILED tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[lost]
+FAILED tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_id]
+FAILED tests/test_natural_receipt_candidate.py::test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_type]
+5 failed, 100 passed, 1 warning in 48.76s

@@ -106,7 +106,10 @@ def main():
         started = True
         port = run(["docker", "port", name, "5432/tcp"]).stdout.strip().rsplit(":", 1)[1]
         for _ in range(150):
-            ready = subprocess.run(["docker", "exec", name, "pg_isready", "-U", "postgres"],
+            # The image's bootstrap server listens only on a Unix socket; require
+            # TCP readiness from the permanent server before probing the host port.
+            ready = subprocess.run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1",
+                                    "-p", "5432", "-U", "postgres"],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if ready.returncode == 0:
                 break
@@ -155,7 +158,12 @@ def main():
             label = run(["docker", "inspect", name, "--format",
                          '{{index .Config.Labels "sim2act.owner"}}']).stdout.strip()
             assert label == OWNER
-            run(["docker", "rm", "-f", name])
+            mounts = json.loads(run(["docker", "inspect", name]).stdout)[0]["Mounts"]
+            save("owned-mounts.json", [{"type": m["Type"], "name": m.get("Name"),
+                                       "destination": m["Destination"]} for m in mounts])
+            logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True)
+            (ROOT / "owned-pg.log").write_text(logs.stdout + logs.stderr, encoding="utf-8")
+            run(["docker", "rm", "-f", "-v", name])
             absent = subprocess.run(["docker", "inspect", name],
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             cleanup["owned_container_removed"] = absent.returncode != 0

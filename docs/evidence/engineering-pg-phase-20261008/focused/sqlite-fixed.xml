@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="105" time="48.754" timestamp="2026-10-08T03:50:05.468713+00:00" hostname="04525f2cceff"><testcase classname="tests.test_fixed_goal_acceptance" name="test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[read_preview]" time="0.768" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_explicit_whole_fixed_contract_and_cold_read_keep_owner_and_publish_pending[sum_quantity_z]" time="0.786" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_partial_effect_cannot_be_whole_success_or_candidate" time="0.562" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_prospective_mode_key_conflict_no_implicit_or_retroactive_acceptance" time="0.519" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_accepted_source_reuses_candidate_new_input_cold_result_version_bad_input" time="1.787" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[partial]" time="0.829" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[missing]" time="0.864" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[report_type]" time="0.833" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[spec]" time="0.876" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_whole_source_invalidations_reject_read_cache_candidate_and_new_run[source_grant]" time="0.824" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_legacy_partial_finish_cannot_be_upgraded_to_success" time="0.744" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_old_partial_status_only_upgrade_is_rejected_by_cold_inspection" time="0.657" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[lost]" time="0.559"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;      at Module._load (node:internal/modules/cjs/loader:1294:5)&#10;      at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)&#10;      at Module.require (node:internal/modules/cjs/loader:1617:12)&#10;      at require (node:internal/modules/helpers:153:16)&#10;      at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs:2:152)&#10;      at Module._compile (node:internal/modules/cjs/loader:1872:14) {&#10;    code: 'MODULE_NOT_FOUND',&#10;    requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]&#10;  }&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/fixed_goal_acceptance_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixt...ULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]\n}\n\nNode.js v24.19.0\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7f6757b061e0&gt;, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...96406baddf44339bc5fdeb70c78e30', 'user_0ee357d9c2094641ac6dafc543276769', 'proj_2b3d136933fc41a59449e5b7a87dcfa9', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_prospective0')
+fake = 'lost'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_contract"])
+    def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+    
+        import uvicorn
+    
+        from sim2act.api import create_app
+        from sim2act.db import grants, internal_approvals, internal_releases
+    
+        value = setup(env)
+        store, settings, client, user, other, pid, resource, cards = value
+        session, _ = approved(value)
+        new_resource = client.post(
+            "/api/projects/" + pid + "/resources",
+            json={
+                "name": "unseen.csv",
+                "format": "csv",
+                "content": "amount,quantity,bad\n30,6,x\n50,9,y\n",
+            },
+        ).json()["id"]
+        target = client.post(
+            "/api/projects/" + pid + "/apps/csv-preview",
+            json={"name": "existing target", "resource_id": new_resource, "goal": "new CSV"},
+        ).json()["id"]
+        sent = []
+    
+        def handler(request):
+            sent.append(request.content)
+            return httpx.Response(200, json=response(wire(value)))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-fixed-worker")
+        def work():
+            assert store.test_only and settings.mode == "mock"
+            assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+            return {"offline_test": True}
+    
+        @app.post("/test-only-fixed-revoke")
+        def revoke():
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == resource).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                {
+                    "base": f"http://127.0.0.1:{port}",
+                    "session": session["id"],
+                    "card": cards["sum_quantity_z"]["id"],
+                    "target": target,
+                    "fake": fake,
+                }
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/fixed_goal_acceptance_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+&gt;           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/fixed_goal_acceptance_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixt...ULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_fixed_goal_acceptance.py:351: AssertionError</failure></testcase><testcase classname="tests.test_fixed_goal_acceptance" name="test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input[wrong_contract]" time="0.430"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;      at Module._load (node:internal/modules/cjs/loader:1294:5)&#10;      at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)&#10;      at Module.require (node:internal/modules/cjs/loader:1617:12)&#10;      at require (node:internal/modules/helpers:153:16)&#10;      at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs:2:152)&#10;      at Module._compile (node:internal/modules/cjs/loader:1872:14) {&#10;    code: 'MODULE_NOT_FOUND',&#10;    requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]&#10;  }&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/fixed_goal_acceptance_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixt...ULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]\n}\n\nNode.js v24.19.0\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7f67577c7a40&gt;, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...57185b12e04e3abe841202db2b06c4', 'user_b66349bb8963406081887b87d0354ebc', 'proj_c620a699c5194b888676872f461e06ad', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_prospective1')
+fake = 'wrong_contract'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_contract"])
+    def test_ordinary_page_prospective_contract_to_candidate_cold_wrong_input(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+    
+        import uvicorn
+    
+        from sim2act.api import create_app
+        from sim2act.db import grants, internal_approvals, internal_releases
+    
+        value = setup(env)
+        store, settings, client, user, other, pid, resource, cards = value
+        session, _ = approved(value)
+        new_resource = client.post(
+            "/api/projects/" + pid + "/resources",
+            json={
+                "name": "unseen.csv",
+                "format": "csv",
+                "content": "amount,quantity,bad\n30,6,x\n50,9,y\n",
+            },
+        ).json()["id"]
+        target = client.post(
+            "/api/projects/" + pid + "/apps/csv-preview",
+            json={"name": "existing target", "resource_id": new_resource, "goal": "new CSV"},
+        ).json()["id"]
+        sent = []
+    
+        def handler(request):
+            sent.append(request.content)
+            return httpx.Response(200, json=response(wire(value)))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-fixed-worker")
+        def work():
+            assert store.test_only and settings.mode == "mock"
+            assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+            return {"offline_test": True}
+    
+        @app.post("/test-only-fixed-revoke")
+        def revoke():
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == resource).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                {
+                    "base": f"http://127.0.0.1:{port}",
+                    "session": session["id"],
+                    "card": cards["sum_quantity_z"]["id"],
+                    "target": target,
+                    "fake": fake,
+                }
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/fixed_goal_acceptance_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+&gt;           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/fixed_goal_acceptance_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixt...ULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/fixed_goal_acceptance_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_fixed_goal_acceptance.py:351: AssertionError</failure></testcase><testcase classname="tests.test_fixed_goal_acceptance" name="test_terminal_missing_result_is_not_cold_success[False]" time="0.745" /><testcase classname="tests.test_fixed_goal_acceptance" name="test_terminal_missing_result_is_not_cold_success[True]" time="0.590" /><testcase classname="tests.test_natural_receipt_candidate" name="test_new_column_cold_store_wrong_inputs_and_no_whole_task_promotion" time="1.220" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[FAILED]" time="0.751" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[UNKNOWN]" time="0.633" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[SUCCEEDED]" time="0.763" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[cancel]" time="0.698" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[receipt]" time="0.829" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[material]" time="0.644" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[scope]" time="0.798" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[revoke]" time="0.662" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[source_grant]" time="0.769" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[target_grant]" time="0.810" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[candidate]" time="0.742" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[marker]" time="0.776" /><testcase classname="tests.test_natural_receipt_candidate" name="test_invalidated_source_or_target_denies_cached_read_and_execution_without_writes[target_version]" time="0.710" /><testcase classname="tests.test_natural_receipt_candidate" name="test_preview_goal_foreign_owner_project_versions_and_extra_fields_are_rejected" time="0.746" /><testcase classname="tests.test_natural_receipt_candidate" name="test_fixed_preview_goal_has_no_csv_extraction" time="0.545" /><testcase classname="tests.test_natural_receipt_candidate" name="test_existing_durable_candidate_runner_cold_new_result_and_bad_input" time="1.430" /><testcase classname="tests.test_natural_receipt_candidate" name="test_same_owner_foreign_project_target_rejected_zero_writes" time="0.635" /><testcase classname="tests.test_natural_receipt_candidate" name="test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[lost]" time="1.011"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;      at Module._load (node:internal/modules/cjs/loader:1294:5)&#10;      at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)&#10;      at Module.require (node:internal/modules/cjs/loader:1617:12)&#10;      at require (node:internal/modules/helpers:153:16)&#10;      at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)&#10;      at Module._compile (node:internal/modules/cjs/loader:1872:14) {&#10;    code: 'MODULE_NOT_FOUND',&#10;    requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]&#10;  }&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7f6757e68230&gt;, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...3b56f2bc314f20aef9eb78c56d665b', 'user_8342852c500d4735b699bf2a059e3d32', 'proj_9d9ec41c0da244c79d15f2e62700bef0', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_actual_rece0')
+fake = 'lost'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_id", "wrong_type"])
+    def test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        context = prepare(env)
+        value, session, rid, target, _, original, sent = context
+        store, settings, client, user, *_ = value
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-receipt-revoke")
+        def revoke():
+            assert store.test_only and settings.mode == "mock"
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == value[6]).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        info = {
+            "base": f"http://127.0.0.1:{port}",
+            "project": value[5],
+            "run": rid,
+            "target": target,
+            "fake": fake,
+        }
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/natural_receipt_candidate_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+&gt;           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_natural_receipt_candidate.py:406: AssertionError</failure></testcase><testcase classname="tests.test_natural_receipt_candidate" name="test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_id]" time="0.978"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;      at Module._load (node:internal/modules/cjs/loader:1294:5)&#10;      at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)&#10;      at Module.require (node:internal/modules/cjs/loader:1617:12)&#10;      at require (node:internal/modules/helpers:153:16)&#10;      at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)&#10;      at Module._compile (node:internal/modules/cjs/loader:1872:14) {&#10;    code: 'MODULE_NOT_FOUND',&#10;    requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]&#10;  }&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7f675d7a5100&gt;, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...ae18d229e1436d9990ce2b57dd28fc', 'user_a2471a4209c343adae4e2b44cba9f99f', 'proj_87e95198ee8e470781baac9ef790845d', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_actual_rece1')
+fake = 'wrong_id'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_id", "wrong_type"])
+    def test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        context = prepare(env)
+        value, session, rid, target, _, original, sent = context
+        store, settings, client, user, *_ = value
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-receipt-revoke")
+        def revoke():
+            assert store.test_only and settings.mode == "mock"
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == value[6]).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        info = {
+            "base": f"http://127.0.0.1:{port}",
+            "project": value[5],
+            "run": rid,
+            "target": target,
+            "fake": fake,
+        }
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/natural_receipt_candidate_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+&gt;           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_natural_receipt_candidate.py:406: AssertionError</failure></testcase><testcase classname="tests.test_natural_receipt_candidate" name="test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation[wrong_type]" time="0.837"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;      at Module._load (node:internal/modules/cjs/loader:1294:5)&#10;      at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)&#10;      at Module.require (node:internal/modules/cjs/loader:1617:12)&#10;      at require (node:internal/modules/helpers:153:16)&#10;      at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)&#10;      at Module._compile (node:internal/modules/cjs/loader:1872:14) {&#10;    code: 'MODULE_NOT_FOUND',&#10;    requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]&#10;  }&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7f6757fc4dd0&gt;, Settings(database_url='sqlite:////tmp/sim2act-pg-phase-20261008/sqlite-f...de1812e25c4b748fe63eae320ec6d0', 'user_41444a1ceb284622a228fe0c3fa9705e', 'proj_881c0fac775c4b5f9445f5b4eb5ea668', ...)
+tmp_path = PosixPath('/tmp/sim2act-pg-phase-20261008/sqlite-fixed-fixtures/test_ordinary_page_actual_rece2')
+fake = 'wrong_type'
+
+    @pytest.mark.parametrize("fake", ["lost", "wrong_id", "wrong_type"])
+    def test_ordinary_page_actual_receipt_extraction_new_input_cold_and_revocation(env, tmp_path, fake):
+        import json
+        import socket
+        import subprocess
+        import threading
+        import time
+    
+        import uvicorn
+    
+        context = prepare(env)
+        value, session, rid, target, _, original, sent = context
+        store, settings, client, user, *_ = value
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-receipt-revoke")
+        def revoke():
+            assert store.test_only and settings.mode == "mock"
+            with store.tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == value[6]).values(revoked=True))
+            return {"offline_test": True}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        info = {
+            "base": f"http://127.0.0.1:{port}",
+            "project": value[5],
+            "run": rid,
+            "target": target,
+            "fake": fake,
+        }
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; end
+                time.sleep(0.01)
+            p = subprocess.run(
+                ["node", "tests/natural_receipt_candidate_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(p.stdout + p.stderr)
+&gt;           assert p.returncode == 0, p.stdout + p.stderr
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_receipt_candidate_ui.cjs', '/tmp/sim2act-pg-phase-20261008/sqlite-fixed-...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_receipt_candidate_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_natural_receipt_candidate.py:406: AssertionError</failure></testcase><testcase classname="tests.test_natural_receipt_candidate" name="test_coherent_same_value_wrong_type_proof_is_not_a_valid_candidate" time="0.922" /><testcase classname="tests.test_natural_goal_planning" name="test_actual_provider_selects_distinct_plan_then_real_read_only_task[resource.read]" time="0.331" /><testcase classname="tests.test_natural_goal_planning" name="test_actual_provider_selects_distinct_plan_then_real_read_only_task[data.aggregate_csv]" time="0.464" /><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[disabled-mock]" time="0.245" /><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[intern-s2-mock]" time="0.349" /><testcase classname="tests.test_natural_goal_planning" name="test_production_selection_does_not_grant_live_or_mock_fallback[intern-s2-live]" time="0.227" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[unknown_field]" time="0.316" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[write]" time="0.226" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[outside]" time="0.219" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[column]" time="0.320" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[dependency]" time="0.215" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[duplicate_id]" time="0.313" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[wrong_goal]" time="0.225" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[bool_version]" time="0.227" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[duplicate_json]" time="0.338" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[wrong_model]" time="0.217" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[unknown_usage]" time="0.362" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[truncated]" time="0.235" /><testcase classname="tests.test_natural_goal_planning" name="test_invalid_provider_result_dispatches_nothing_and_does_not_retry[refusal]" time="0.228" /><testcase classname="tests.test_natural_goal_planning" name="test_transport_injection_and_closed_input" time="0.309" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[policy]" time="0.302" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[plan]" time="0.411" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[attempt]" time="0.297" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[usage]" time="0.317" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[receipt]" time="0.476" /><testcase classname="tests.test_natural_goal_planning" name="test_persistent_plan_or_receipt_tamper_cannot_resume_or_refall_back[counter]" time="0.306" /><testcase classname="tests.test_natural_goal_planning" name="test_two_step_plan_resumes_actual_receipts_without_new_provider" time="0.557" /><testcase classname="tests.test_natural_goal_planning" name="test_boundary_limits_and_current_authorization[wire_size]" time="0.197" /><testcase classname="tests.test_natural_goal_planning" name="test_boundary_limits_and_current_authorization[tool_limit]" time="0.215" /><testcase classname="tests.test_natural_goal_planning" name="test_boundary_limits_and_current_authorization[reported_output]" time="0.310" /><testcase classname="tests.test_natural_goal_planning" name="test_boundary_limits_and_current_authorization[timeout]" time="0.196" /><testcase classname="tests.test_natural_goal_planning" name="test_boundary_limits_and_current_authorization[revoke]" time="0.263" /><testcase classname="tests.test_natural_goal_planning" name="test_boundary_limits_and_current_authorization[policy_bool]" time="0.167" /><testcase classname="tests.test_natural_goal_planning" name="test_boundary_limits_and_current_authorization[result]" time="0.303" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[attempt_wire]" time="0.427" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[wire_event]" time="0.320" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[coherent_wire]" time="0.409" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[coherent_unknown]" time="0.312" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[coherent_float]" time="0.303" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[request_counter]" time="0.429" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[removed_seal]" time="0.296" /><testcase classname="tests.test_natural_goal_planning" name="test_original_wire_and_strict_budget_survive_coordinated_tamper[reserved_tokens]" time="0.409" /><testcase classname="tests.test_natural_activation_flow" name="test_disabled_activation_has_zero_dml_and_network" time="0.158" /><testcase classname="tests.test_natural_activation_flow" name="test_two_fixed_goals_actual_slots_receipts_history_no_hidden_calls" time="1.515" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[before_guard]" time="0.311" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[in_flight]" time="0.277" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[before_confirm]" time="0.492" /><testcase classname="tests.test_natural_activation_flow" name="test_revoke_cut_points_never_execute_new_tools[before_dispatch]" time="0.455" /><testcase classname="tests.test_natural_activation_flow" name="test_unexpected_provider_failure_retains_unknown_slot_no_retry" time="0.378" /><testcase classname="tests.test_natural_activation_flow" name="test_scope_caller_cannot_change_caps_clock_model_or_false_consent" time="0.161" /><testcase classname="tests.test_natural_activation_flow" name="test_expiry_is_immediate_without_timer_and_cannot_renew" time="0.512" /><testcase classname="tests.test_natural_activation_flow" name="test_duplicate_hidden_sender_guard_permits_exactly_one_offline_send" time="0.287" /><testcase classname="tests.test_natural_activation_flow" name="test_truncated_actual_response_keeps_bounded_text_model_known_usage" time="0.266" /><testcase classname="tests.test_natural_activation_flow" name="test_received_failure_cleans_lease_retains_usage_without_unsafe_text[partial_usage]" time="0.397" /><testcase classname="tests.test_natural_activation_flow" name="test_received_failure_cleans_lease_retains_usage_without_unsafe_text[invalid_unicode]" time="0.267" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_bad_lock_or_metadata_never_echoes_error" time="0.001" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_bom_and_equals_in_values_match_loader" time="0.000" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_cli_output_exit_codes_redaction_and_no_changes" time="0.002" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_config_limit" time="0.000" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_explicit_config_is_repo_relative_not_cwd" time="0.000" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_malformed_lines_and_empty_required_values" time="0.000" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_missing_mismatched_and_valid_packages" time="0.000" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_missing_unreadable_and_invalid_encoding_are_safe" time="0.000" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_real_cli_reads_only_explicit_config_and_redacts_secrets" time="0.098" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_setup_does_not_read_package_metadata" time="0.001" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_start_uses_platform_lock_and_requires_repo_venv" time="0.001" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_windows_missing_commands_actionable" time="0.000" /><testcase classname="tests.test_install_preflight.PreflightTests" name="test_wrong_python_or_architecture_blocks" time="0.001" /></testsuite></testsuites>
