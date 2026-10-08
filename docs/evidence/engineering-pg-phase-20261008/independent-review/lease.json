@@ -1,0 +1,159 @@
+{
+  "reviewed_sha": "f9044237805e91438807d5acbf9b963ac8af83e4",
+  "baseline_sha": "5c06520bc31269d11b9bf2786b9e18ed89333a28",
+  "scope": "Independent lease sentinel review only; no repository changes, PG/container startup, CI, real model, network or security changes.",
+  "verdict": "No blocking issue identified in the minimal None-to-0 fix. Real PostgreSQL cancellation concurrency remains unverified for this candidate.",
+  "diff": "src/sim2act/goal_planner.py:716 confirm_natural_plan lease_until=None -> lease_until=0; all other function bytes unchanged.",
+  "findings": [
+    {
+      "contract": "release",
+      "evidence": [
+        "src/sim2act/db.py:83 default lease0",
+        "src/sim2act/db.py:794 submitted lease0",
+        "src/sim2act/worker.py:290 finished lease0",
+        "src/sim2act/db.py:1426 reconciled lease0",
+        "src/sim2act/db.py:1601 reconciled lease0"
+      ],
+      "conclusion": "0 follows the established numeric no-lease sentinel; this is a product consistency fix, not a relaxed test assertion."
+    },
+    {
+      "contract": "fresh cancellation",
+      "evidence": [
+        "src/sim2act/db.py:1153 natural plan project-before-run lock",
+        "src/sim2act/db.py:1181 current version check",
+        "src/sim2act/db.py:1221 status/version/cancel_intent update, lease unchanged",
+        "tests/test_natural_activation_pg.py:171 fresh cancel when confirmation wins",
+        "tests/test_natural_activation_pg.py:184 zero-lease assertion"
+      ],
+      "conclusion": "When confirm wins, confirm clears worker and lease and increments version; stale cancel fails, fresh cancel moves QUEUED to CANCELLED preserving sentinel0. The baseline would preserve NULL here. Baseline PG failed the original lease-release assertion after prior outcome assertions passed; it did not demonstrate a stale worker executed."
+    },
+    {
+      "contract": "claim/fencing",
+      "evidence": [
+        "src/sim2act/db.py:828 guard compares lease numerically and restricts state",
+        "src/sim2act/db.py:958 queued-only claim",
+        "src/sim2act/db.py:972 new fence and lease allocated after row acquisition",
+        "src/sim2act/goal_planner.py:688 WAITING_APPROVAL/no-cancel/version/fingerprint gate"
+      ],
+      "conclusion": "Queued claim eligibility does not depend on lease value, so NULL-to0 does not enable new claims. A claim still increments fence and grants a fresh future lease. Old worker guard fails safely on sentinel0 rather than risking TypeError on NULL. Confirmation preserves planning fence; released expiry/status invalidate its authority. No lock, source, plan seal, budget or authorization gate changed."
+    }
+  ],
+  "dynamic_verification": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/Sim2Act/tests:/workspace/Sim2Act/src /workspace/Sim2Act/.venv/bin/python -m pytest -q --durations=30 -ra -p no:cacheprovider --basetemp=/tmp/sim2act-lease-review-fixtures --junitxml=/tmp/sim2act-lease-review-junit.xml /tmp/test_sim2act_lease_review.py > /tmp/sim2act-lease-review-pytest.log 2>&1",
+    "exit_code": 0,
+    "backend": "SQLite explicitly via original env fixture; SIM2ACT_TEST_DATABASE_URL removed only in test monkeypatch",
+    "junit": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "2",
+      "time": "1.392",
+      "timestamp": "2026-10-08T04:03:30.440129+00:00",
+      "hostname": "04525f2cceff"
+    },
+    "fresh_cancel": {
+      "source_sha": "f9044237805e91438807d5acbf9b963ac8af83e4",
+      "backend": "SQLite",
+      "ordering": "confirm, stale cancel rejected, fresh cancel accepted",
+      "http_statuses": [
+        200,
+        200,
+        409,
+        200
+      ],
+      "versions": [
+        2,
+        3,
+        4
+      ],
+      "fences": [
+        1,
+        1,
+        1
+      ],
+      "lease_until": 0.0,
+      "worker_id": null,
+      "provider_wires": 1,
+      "operations": 0,
+      "authority_unchanged": true,
+      "limitations": "Sequential SQLite; not actual PG concurrent race evidence"
+    },
+    "claim_cancel": {
+      "source_sha": "f9044237805e91438807d5acbf9b963ac8af83e4",
+      "backend": "SQLite",
+      "ordering": "confirm, claim, fresh cancel, fenced finish",
+      "versions": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "fences": [
+        1,
+        1,
+        2,
+        2
+      ],
+      "lease_until": 0.0,
+      "provider_wires": 1,
+      "operations": 0,
+      "authority_unchanged": true,
+      "limitations": "Sequential SQLite; not actual PG concurrent race evidence"
+    },
+    "limits": "Sequential SQLite two orderings; no actual distinct PG transactions and no claim of Windows performance or true race resolution."
+  },
+  "existing105_sqlite_result": {
+    "junit": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "105",
+      "time": "57.422",
+      "timestamp": "2026-10-08T03:51:43.463690+00:00",
+      "hostname": "04525f2cceff"
+    },
+    "observed_log_result": "105 passed, 1 warning in57.42s",
+    "source_label": "2315fea1f803ca45e0cbd5ff3da6a329a40d1a1d",
+    "limits": "Existing record, not rerun by this reviewer; does not include real PG race and lacks before/after snapshots for that SQLite invocation as disclosed by postfix-source-current-equality.json."
+  },
+  "frozen_source_verified": {
+    "src/sim2act/goal_planner.py": true,
+    "src/sim2act/db.py": true,
+    "src/sim2act/worker.py": true,
+    "tests/test_natural_activation_pg.py": true,
+    "tests/test_natural_activation_flow.py": true,
+    "tests/test_natural_goal_planning.py": true,
+    "tests/conftest.py": true
+  },
+  "repository_status": "Clean dev/pg-phase-diagnostics-20261008 after directed verification",
+  "cleanup": {
+    "owned_fixture_directory": "/tmp/sim2act-lease-review-fixtures",
+    "removed": true,
+    "artifacts_retained": true
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/test_sim2act_lease_review.py",
+      "sha256": "67e14230517f291b7abe393e612ca8938523783c3afa2f04e3cf9fee91ce2de4"
+    },
+    {
+      "path": "/tmp/sim2act-lease-review-pytest.log",
+      "sha256": "f386a671775072bdfc6cd1be86aa0e3ca4ab3bf22be09ce7ff726d69172d8f74"
+    },
+    {
+      "path": "/tmp/sim2act-lease-review-junit.xml",
+      "sha256": "e5f8c2391dde2e926a003e9124be2c565c83b637abcc8a89d48cdd580bbab53a"
+    },
+    {
+      "path": "/tmp/sim2act-lease-fresh-cancel.json",
+      "sha256": "9ee517069be78f09f39e5c70b4f8239f711f30fd3adb7e601bd5fd954b408673"
+    },
+    {
+      "path": "/tmp/sim2act-lease-claim-cancel.json",
+      "sha256": "76da6d7b00be4ad68a0edae8fc4b6a2c8a676c950508235c36574aae9dffa778"
+    }
+  ],
+  "remaining_gate": "On the same final frozen source, actual isolated PG confirmation-control test (cancel/revoke/expire/confirm-again) plus relevant related modules under root authorization; no unconditional PG restart recommended by this review."
+}

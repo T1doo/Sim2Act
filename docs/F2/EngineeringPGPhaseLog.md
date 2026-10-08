@@ -136,3 +136,55 @@ The remaining gates are candidate full actual PG validation, source-specific
 runtime attribution and a complete qualified native cost envelope before any
 Windows900 decision. Evidence and candidate are saved on the independent branch;
 this is a diagnostic candidate with open gates, not a qualified release.
+
+## Independent review on frozen source f904423
+
+All four reviewers used `f9044237805e91438807d5acbf9b963ac8af83e4`.
+The exact283-file candidate preparation snapshot, frozen Git bytes and current
+bytes match. This follow-up changes only review evidence/documentation; no new
+PG container, full collection, CI or real provider run was started.
+
+- Cold schema review found no blocker: all four Stores retain a new engine and
+  independent pool. Existing schema translation routes those connections to
+  their already-owned dataset; there is no initialize, retry, error suppression
+  or grant change. All103 assertions in the two affected files are preserved.
+  Server connection closure would still fail. These are same-process cold-engine
+  checks, not process-restart or every production-role path qualification.
+- Preflight review found no blocker: production script bytes and all34 original
+  assertions are unchanged; the real copied script executes in a subprocess
+  using its own synthetic repository ROOT. Independent preflight13PASS/0.19s,
+  exit0. Existing105 SQLite cases/JUnit/node multiset and61 evidence hashes plus
+  six focused export hashes were verified;105 was not independently repeated.
+  Original no-write/redaction coverage limits remain.
+- Lease review found no blocker:0 is the established numeric no-lease sentinel.
+  Claim eligibility, fencing, locks, versions and authority are unchanged.
+  Two independent deterministic SQLite paths PASS/1.39s, exit0: confirmation
+  then stale/fresh cancellation, and confirmation then claim/cancel/fenced finish.
+  No real model request or new operation occurred. These sequential checks do
+  not validate the original distinct-transaction PostgreSQL cancellation race.
+
+Independent startup review found no retained server boot log in the exported
+or exact owned raw log directory. Docker events for the exact deleted owned
+container show socket pg_isready2,2,2,0 followed by cleanup kill(signal9),
+die(exit137), destroy. There is no recorded preceding OOM/die;137 cannot be
+reported as OOM. The socket readiness weakness is established, but bootstrap
+transition, host forwarding/transport and resource causes remain unresolved.
+Failure occurred before product/test execution. Current evidence does not meet
+the user's explicit clear safe recoverable cause condition, so PG remains
+blocked and no restart or affected/full PG run was attempted. The updated TCP
+controller still has no runtime validation.
+
+For the baseline Linux failed run, pytest process wall1024.981s splits into
+reported setup211.989s(20.682%), call792.304s(77.299%), teardown16.032s(1.564%),
+and remaining process wall4.656s(0.454%). Ruff0.060s, mypy7.365s and
+pytest1024.981s total1032.407s excluding diagnostic collection3.467s; their
+shares are0.0058%,0.7134%,99.2808%. Initialize7.117% and non-initialization PG
+SELECT cursor26.365% are overlapping descriptive ratios, not exclusive phase
+shares or potential savings. Instrumentation overhead is unknown, seven failures
+truncate paths, and the candidate has no complete PG timing. Test counts and
+the15 independent cases cannot be added to claim a larger/faster full suite.
+Windows900/Edge240/Node150 evidence is still missing; **NO_GO** remains.
+
+Exact review JSON, commands, targeted JUnit/logs, deterministic check source,
+Docker events, timing denominators and SHA256 manifest are retained in
+`docs/evidence/engineering-pg-phase-20261008/independent-review/`.

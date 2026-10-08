@@ -1,0 +1,70 @@
+{
+  "reviewed_sha": "f9044237805e91438807d5acbf9b963ac8af83e4",
+  "baseline_sha": "5c06520bc31269d11b9bf2786b9e18ed89333a28",
+  "scope": "Four cold Store changes in tests/test_fixed_goal_acceptance.py and tests/test_natural_receipt_candidate.py only",
+  "verdict": "APPROVE_WITH_VALIDATION_LIMITATIONS",
+  "blocking_findings": [],
+  "evidence": [
+    {
+      "location": "tests/test_fixed_goal_acceptance.py:84,165; tests/test_natural_receipt_candidate.py:120,309",
+      "finding": "Each cold Store constructor remains. The only changes add PG fixture engine execution options onto that cold engine, with SQLite untouched. No initialize, exception suppression, retry, DDL, grants, hot Store/engine assignment, or assertion removal."
+    },
+    {
+      "location": "src/sim2act/db.py:476-497",
+      "finding": "Store constructs a fresh create_engine on every call, and tx obtains connections from self.engine. Runtime API and worker construct Stores from their configured URL. Store/database setup implementation is unchanged from baseline."
+    },
+    {
+      "check": "Offline instantiated two PG Store engines with SQLAlchemy 2.0.48, without connecting",
+      "result": {
+        "engines_distinct": true,
+        "pools_distinct": true,
+        "cold_wrapper_keeps_own_pool": true,
+        "hot_option_keys": [
+          "schema_translate_map"
+        ]
+      }
+    },
+    {
+      "location": "tests/conftest.py:16-24",
+      "finding": "The owner fixture creates a random test_* schema, maps unqualified metadata into it, and keeps Settings.database_url equal to original unmapped URL. Therefore a new Store from URL alone points to the default schema rather than the fixture schema."
+    },
+    {
+      "location": "tests/test_persistent_app_runs.py:88-90 at baseline",
+      "finding": "Identical execution-option copying was already the established cold Store pattern. Also used in registered-run extraction, lifecycle, internal API and other tests."
+    },
+    {
+      "location": "docs/evidence/engineering-pg-phase-20261008/first/engineering.xml",
+      "finding": "Five affected cases failed on unqualified protocol_jobs (two parameterizations), principals (cold API auth) and heartbeats (two cold workers). Original trace confirms absent schema qualification; all these relations are part of fixture metadata."
+    },
+    {
+      "check": "AST assertion multiset compared git show baseline to reviewed SHA",
+      "result": {
+        "tests/test_fixed_goal_acceptance.py": {
+          "identical": true,
+          "count": 51
+        },
+        "tests/test_natural_receipt_candidate.py": {
+          "identical": true,
+          "count": 52
+        }
+      }
+    },
+    {
+      "location": "tests/conftest.py:45-80; tests/test_registered_run_generation_pg_role.py:104-106",
+      "finding": "Separate runtime-role URL test supplies search_path in URL and opens a new production Store(runtime_role) without copied owner engine options or initialize. It forbids DDL/grant statements and verifies cold durable result with CRUD-only capabilities."
+    },
+    {
+      "location": "docs/evidence/engineering-pg-phase-20261008/first/engineering.xml",
+      "finding": "Unchanged baseline application-role registered-run cold test PASSED (2.312s), natural-activation role test PASSED (0.514s), conditional checker role test PASSED (0.293s). These are historical baseline evidence, not new reviewer PG execution."
+    }
+  ],
+  "limitations": [
+    "No PG connection, container start, focused/full test execution, provider request or CI run was performed by reviewer; root owns current PG validation.",
+    "Copying schema_translate_map routes queries to the same test dataset. It proves cold independent engine/pool behavior within a process, not independent process restart or a production misconfigured search_path recovery.",
+    "The four tests remain test_only owner-role tests and do not individually prove each natural receipt/fixed-contract path works with CRUD-only production credentials. Existing separate role test covers durable cold runner rather than all four exact paths.",
+    "These changes do not catch or suppress initial connection failures. A server-closed cold connection remains a real failure. No evidence here establishes Windows 900/240/150 performance qualification.",
+    "Execution-option copying currently copies only schema_translate_map (including SQLAlchemy internal map alias after compilation); future additional fixture options would also be copied and should be reviewed for masking effects."
+  ],
+  "workspace_changes": "None; only this review JSON is written to /tmp.",
+  "instructions_checked": "No AGENTS.md found at /, /workspace, repository or tests. Workspace .agents/.codex contain no skill/rule files; repository .agents/.codex are absent."
+}

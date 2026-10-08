@@ -14,6 +14,11 @@ See [result and remaining gates](../../F2/EngineeringPGPhaseLog.md) and
   folder also retains the earlier short-SHA rejection before resource creation.
 - `focused/`: preflight13PASS; initial dependency-path omission100PASS5FAIL and
   corrected original five-module SQLite105PASS0FAIL0SKIP; current Ruff/mypy47.
+- `independent-review/`: four independent reviews of frozen runtime source
+  `f9044237805e91438807d5acbf9b963ac8af83e4`; additional preflight13PASS and
+  deterministic SQLite lease2PASS, exact raw review reports/commands/JUnit/logs,
+  retained Docker events and SHA256 manifest. No PG/full rerun. Historical startup
+  root cause is unresolved; the explicit restart condition is not met.
 - `assertion-preservation.json`: all137 original assertion ASTs in modified
   tests are preserved. `postfix-source-current-equality.json` verifies283 source
   files against candidate preparation bytes, without inventing a SQLite

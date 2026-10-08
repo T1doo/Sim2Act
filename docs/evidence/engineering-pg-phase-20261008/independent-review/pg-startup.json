@@ -1,0 +1,386 @@
+{
+  "reviewed_sha": "f9044237805e91438807d5acbf9b963ac8af83e4",
+  "failed_attempt_sha": "2315fea1f803ca45e0cbd5ff3da6a329a40d1a1d",
+  "review_mode": "Independent read-only; no container creation/start, tests, source edits, pushes, credentials/network/security changes.",
+  "conclusion": "The socket readiness configuration weakness is established. The historical first TCP connection closure cause remains unproven. Evidence does not establish a clear safe recoverable historical cause under the parent's restart condition.",
+  "attempt": {
+    "stages": [],
+    "complete": false,
+    "owned_pg_start_seconds": 3.2655184689999714,
+    "failure_location": "controller census-before -> SQLAlchemy engine.connect -> psycopg connect to 127.0.0.1:32769",
+    "error": "server closed the connection unexpectedly",
+    "product_or_tests_executed": false
+  },
+  "evidence": [
+    "postfix-pg-start-failed/controller.log has only client-side traceback; controller.json records no collection/test stages.",
+    "Both exported manifest and exact owned raw log directory /tmp/sim2act-pg-phase-final-20261008 contain no retained PG boot log.",
+    "Failed-attempt cleanup.json records exact owned label check and container removal.",
+    "Read-only Docker events scoped to exact labelled deleted container show socket pg_isready exit codes 2,2,2,0, then signal-9 kill, die exit137, destroy. No recorded OOM/container die precedes the cleanup kill.",
+    "Container die exit137 follows recorded kill signal9 and is consistent with controller docker rm -f cleanup, so it is not evidence of OOM.",
+    "Current controller switches readiness to container localhost TCP and captures owned boot logs/mounts before rm -f -v; these changes have NOT_RUN runtime validation."
+  ],
+  "image": {
+    "local_image_id": "sha256:327daa8fae7178d61f93142f146b098467b345e10997b9eb79f63bd58e5c8f3c",
+    "repo_digest": "postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
+    "entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "cmd": [
+      "postgres"
+    ],
+    "volume": "/var/lib/postgresql/data",
+    "primary_upstream_source": "https://raw.githubusercontent.com/docker-library/postgres/master/docker-entrypoint.sh",
+    "primary_upstream_behavior": "temporary server is socket-only via listen_addresses='', is stopped with pg_ctl fast stop, then postgres is exec'd",
+    "scope_limit": "Read official upstream master; exact script bytes from the pinned image were not extracted, so upstream lines are supporting configuration context, not historical boot evidence."
+  },
+  "classification": {
+    "controller_readiness": "confirmed configuration weakness; socket readiness does not establish readiness of the host-published TCP service",
+    "environment_resource": "OOM or environment resource exhaustion not established; no boot log, historical State.OOMKilled, memory/disk resource telemetry retained",
+    "environment_transport": "published host TCP connection failed before tests; Docker forwarding or environment disconnection causality not established",
+    "product": "failure predates product fixture/schema/lease/preflight execution and cannot establish or refute a product cold-connect regression"
+  },
+  "unknowns": [
+    "Whether socket success was temporary bootstrap server or permanent server",
+    "Historical postmaster/backend boot and shutdown sequence",
+    "Historical OOMKilled and resource telemetry",
+    "Whether host published TCP route reset versus server transition/backend failure",
+    "Exact timestamp alignment between controller monotonic timer and daemon events",
+    "Runtime validation of updated controller, affected PG repairs, full PG candidate and Windows900 envelope"
+  ],
+  "recommendation": {
+    "restart_condition_met": false,
+    "next_action": "Preserve evidence and report unresolved startup root cause. No unconditional PG restart/full run justified by this review.",
+    "if_separately_authorized_bounded_controller_diagnostic": "Capture timestamped boot logs and container State including OOMKilled, explicit deadline and published-host authenticated probe before tests; require bounded successful owned startup before affected PG tests. This is a new diagnostic hypothesis, not proof of the old cause.",
+    "gates": "Windows900/Edge240/Node150 and NO_GO unchanged."
+  },
+  "denial_handling": "One broad rg /tmp inventory hit /tmp/codex-daemon-1000 Permission denied and was stopped; no bypass or access to that path attempted. Only named owned log roots were subsequently read.",
+  "docker_events_command": "timeout 10s docker events --since 1791431280 --until 1791431286 --filter container=c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a --format '{{json .}}'",
+  "docker_events_exit_code": 0,
+  "owned_container_events": [
+    {
+      "status": "create",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "create",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431282,
+      "timeNano": 1791431282676347400
+    },
+    {
+      "status": "start",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "start",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431282,
+      "timeNano": 1791431282765294300
+    },
+    {
+      "status": "exec_create: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_create: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "ba9d0cb8a69881d0cc78dda523b356d98eea0431374f9225994f25c6963f06ef",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431282,
+      "timeNano": 1791431282790695200
+    },
+    {
+      "status": "exec_start: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_start: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "ba9d0cb8a69881d0cc78dda523b356d98eea0431374f9225994f25c6963f06ef",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431282,
+      "timeNano": 1791431282791052800
+    },
+    {
+      "status": "exec_die",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_die",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "ba9d0cb8a69881d0cc78dda523b356d98eea0431374f9225994f25c6963f06ef",
+          "exitCode": "2",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431282,
+      "timeNano": 1791431282860636700
+    },
+    {
+      "status": "exec_create: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_create: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "3963d101156bd5e9050302d7a190d9e5598c8af4a2ee4790c63dd8a1d6fd02ca",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283076394200
+    },
+    {
+      "status": "exec_start: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_start: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "3963d101156bd5e9050302d7a190d9e5598c8af4a2ee4790c63dd8a1d6fd02ca",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283076736000
+    },
+    {
+      "status": "exec_die",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_die",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "3963d101156bd5e9050302d7a190d9e5598c8af4a2ee4790c63dd8a1d6fd02ca",
+          "exitCode": "2",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283136616000
+    },
+    {
+      "status": "exec_create: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_create: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "74fd70bbfe00f93e7e5625a4c18796fdb5fcca74f446497a3d23e66448f32706",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283351753700
+    },
+    {
+      "status": "exec_start: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_start: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "74fd70bbfe00f93e7e5625a4c18796fdb5fcca74f446497a3d23e66448f32706",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283352068400
+    },
+    {
+      "status": "exec_die",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_die",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "74fd70bbfe00f93e7e5625a4c18796fdb5fcca74f446497a3d23e66448f32706",
+          "exitCode": "2",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283423249000
+    },
+    {
+      "status": "exec_create: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_create: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "045ab1ae44fd55edc620ccd61e45724416951b632b0eff5556f21049845b5866",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283639512000
+    },
+    {
+      "status": "exec_start: pg_isready -U postgres",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_start: pg_isready -U postgres",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "045ab1ae44fd55edc620ccd61e45724416951b632b0eff5556f21049845b5866",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283640117000
+    },
+    {
+      "status": "exec_die",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "exec_die",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execID": "045ab1ae44fd55edc620ccd61e45724416951b632b0eff5556f21049845b5866",
+          "exitCode": "0",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283702727000
+    },
+    {
+      "status": "kill",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "kill",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "signal": "9",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431283,
+      "timeNano": 1791431283811687000
+    },
+    {
+      "status": "die",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "die",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "execDuration": "1",
+          "exitCode": "137",
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431284,
+      "timeNano": 1791431284006681000
+    },
+    {
+      "status": "destroy",
+      "id": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+      "from": "postgres:17.11",
+      "Type": "container",
+      "Action": "destroy",
+      "Actor": {
+        "ID": "c32e2da5a2a193da079117b4eadf0569ae8d93099456211922ded50bd386d22a",
+        "Attributes": {
+          "image": "postgres:17.11",
+          "name": "sim2act-engineering-phase-78b1fa7e9c",
+          "sim2act.owner": "engineering-pg-phase-20261008"
+        }
+      },
+      "scope": "local",
+      "time": 1791431284,
+      "timeNano": 1791431284178542800
+    }
+  ]
+}

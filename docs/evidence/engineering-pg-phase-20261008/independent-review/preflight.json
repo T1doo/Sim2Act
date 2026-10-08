@@ -1,0 +1,168 @@
+{
+  "baseline": "5c06520bc31269d11b9bf2786b9e18ed89333a28",
+  "frozen": "f9044237805e91438807d5acbf9b963ac8af83e4",
+  "head": "f9044237805e91438807d5acbf9b963ac8af83e4",
+  "preflight_assertions": {
+    "count": 34,
+    "unchanged": true,
+    "includes_unittest_assert_calls": true
+  },
+  "production_script": {
+    "unchanged": true,
+    "sha256": "f40f36a1ce3ba0c7505680e3269999b2586a469d0dd81ed78d67519b2099d10a"
+  },
+  "artifact_manifest": {
+    "checked": 61,
+    "mismatches": []
+  },
+  "focused_export_manifest": {
+    "checked": 6,
+    "all_match": true
+  },
+  "existing_junit": {
+    "preflight-fixed.xml": {
+      "cases": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "13",
+          "time": "0.151",
+          "timestamp": "2026-10-08T03:45:57.431867+00:00",
+          "hostname": "04525f2cceff"
+        }
+      ],
+      "case_classes": {
+        "tests.test_install_preflight.PreflightTests": 13
+      },
+      "unique_cases": 13
+    },
+    "sqlite-fixed.xml": {
+      "cases": 105,
+      "failures": 5,
+      "errors": 0,
+      "skipped": 0,
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "5",
+          "skipped": "0",
+          "tests": "105",
+          "time": "48.754",
+          "timestamp": "2026-10-08T03:50:05.468713+00:00",
+          "hostname": "04525f2cceff"
+        }
+      ],
+      "case_classes": {
+        "tests.test_fixed_goal_acceptance": 16,
+        "tests.test_natural_receipt_candidate": 22,
+        "tests.test_natural_goal_planning": 41,
+        "tests.test_natural_activation_flow": 13,
+        "tests.test_install_preflight.PreflightTests": 13
+      },
+      "unique_cases": 105
+    },
+    "sqlite-fixed-complete.xml": {
+      "cases": 105,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "105",
+          "time": "57.422",
+          "timestamp": "2026-10-08T03:51:43.463690+00:00",
+          "hostname": "04525f2cceff"
+        }
+      ],
+      "case_classes": {
+        "tests.test_fixed_goal_acceptance": 16,
+        "tests.test_natural_receipt_candidate": 22,
+        "tests.test_natural_goal_planning": 41,
+        "tests.test_natural_activation_flow": 13,
+        "tests.test_install_preflight.PreflightTests": 13
+      },
+      "unique_cases": 105
+    }
+  },
+  "source_snapshot_structure": {
+    "type": "list",
+    "keys": null
+  },
+  "source_equality": {
+    "count": 283,
+    "candidate": "2315fea1f803ca45e0cbd5ff3da6a329a40d1a1d",
+    "all_match": true,
+    "mismatches": [],
+    "sqlite_before_after_snapshot_available": false
+  },
+  "existing_junit_nodes_unchanged_initial_vs_corrected": true,
+  "independent_run": {
+    "command": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/test_install_preflight.py",
+      "-q",
+      "--durations=30",
+      "-ra",
+      "-p",
+      "no:cacheprovider",
+      "--basetemp",
+      "/tmp/sim2act-independent-preflight-3d3qmlke/pytest-tmp",
+      "--junitxml",
+      "/tmp/sim2act-independent-preflight-3d3qmlke/junit.xml"
+    ],
+    "exit": 0,
+    "artifact_dir": "/tmp/sim2act-independent-preflight-3d3qmlke",
+    "log": "/tmp/sim2act-independent-preflight-3d3qmlke/pytest.log",
+    "junit": "/tmp/sim2act-independent-preflight-3d3qmlke/junit.xml",
+    "scope": "preflight13 only; no PG/Docker/startup",
+    "environment": "model/database env removed; plugin autoload disabled; bytecode/cache writing disabled",
+    "testcases": 13,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junit_sha256": "793f7cbc1ba7c3b365e3b6cdfdcf7753025f8921f52ddd159e275cfe3057388e",
+    "log_sha256": "eb959aa1577e3281ddc160c9c600f9a78a842d02efbb38a5f05da5f31b78604a"
+  },
+  "findings": [
+    {
+      "severity": "none",
+      "finding": "No regression found in the synthetic script-copy fix. Exact production script bytes execute in a real Python subprocess, without patching product collect/config/dependency behavior. ROOT remains derived from __file__; the synthetic repository deliberately lacks its own selected .venv, so the preserved BLOCKED assertion is valid regardless of whether the calling interpreter is the actual checkout .venv."
+    },
+    {
+      "severity": "none",
+      "finding": "Production scripts/install_preflight.py and src/sim2act/preflight.py are unchanged vs baseline. The script-copy and scripts directory creation occur before the no-write inventory capture, isolating fixture preparation from observed CLI execution."
+    },
+    {
+      "severity": "scope_limit",
+      "finding": "Existing no-write assertions check selected config bytes and top-level repository names, not recursive filesystem integrity; redaction checks one synthetic sentinel in stdout/stderr. These inherited coverage limits are not strengthened by this fix and cannot prove absence of every possible side effect or disclosure."
+    },
+    {
+      "severity": "scope_limit",
+      "finding": "The real-CLI test uses an absolute selected config and other tests cover collect with an alternate repo-relative config. Static script review confirms reads only config_path derived from explicit --config and does not consult ambient configuration, write files, start subprocesses, connect databases or networks. The copied standalone script does not test a full installed product start or native Windows launch."
+    },
+    {
+      "severity": "scope_limit",
+      "finding": "Existing 105-case evidence verified independently by JUnit parsing, unchanged node multiset, manifests and current/source equality, but no independent rerun of all 105 cases and no SQLite before/after source snapshot exist."
+    },
+    {
+      "severity": "scope_limit",
+      "finding": "No conclusions about PostgreSQL cold connection behavior, lease cancellation race, Windows 900/240/150-second qualification or complete candidate PG pass follow from this review."
+    }
+  ],
+  "final_git_status": "## dev/pg-phase-diagnostics-20261008",
+  "unchanged_product_preflight_module": true,
+  "cleanup": "unittest TemporaryDirectory fixtures self-cleaned; reviewer log/JUnit/receipts remain in own /tmp artifact directory; no PG/Docker resource created"
+}
