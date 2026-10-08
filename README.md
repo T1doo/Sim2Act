@@ -10,7 +10,7 @@
 
 [固定 CSV 三步 DAG](docs/F2/FixedCsvDagQuickstart.md)：在同一应用保存预览 → 求和 → 固定文字报告计划，复用既有 Worker 与持久步骤回执，支持精确确认和冷恢复。离线工程候选未验收。
 
-[有限只读 CSV 节点组合](docs/F2/BoundedCsvCompositionQuickstart.md)：独立开发候选，可在原面板编辑一至四个已有动作节点并保留多个末端新输出；原预算与授权范围不变，独立审查待完成，不代表非 CSV／PROJECT／AT13 完成。
+[有限只读 CSV 节点组合](docs/F2/BoundedCsvCompositionQuickstart.md)：已按限定独审整合 dev，可在原面板编辑一至四个已有动作节点并保留多个末端新输出；原预算与授权范围不变，验收仍 PENDING，不代表非 CSV／PROJECT／AT13 完成。[整合证据与限制](docs/evidence/bounded-readonly-dag-integration-20261008/README.md)。
 
 [三端口受限接线草案](docs/F2/CsvWiringPatchQuickstart.md)：服务端允许来源、新计划精确确认、实际前驱与来源证明；默认旧接线兼容，候选未验收、发布关闭。
 

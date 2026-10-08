@@ -1,5 +1,8 @@
 # F2-T04 route B 实现候选
 
+以下 PENDING 为候选冻结时状态。随后父线程报告限定独审通过，并授权按已审
+产品字节整合 dev；后续复验及当前状态见 [整合证据](../bounded-readonly-dag-integration-20261008/README.md)。
+
 分支 `dev/bounded-readonly-dag-20261008`；基线
 `a02371d44208dc2bc4b561a540dd4afa665e57d8`。最终源码 SHA：
 `67807be6940cda16007a6a0cca90d9b04a589461`。
