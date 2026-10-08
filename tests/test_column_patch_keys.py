@@ -11,6 +11,9 @@ import uvicorn
 from test_column_patches import check_body, setup, url
 
 from sim2act.api import create_app
+from sim2act.column_patches import DefinitionInput, build
+from sim2act.delivery_graph_apps import remember
+from test_internal_lifecycle import limits
 
 
 @pytest.fixture
@@ -26,7 +29,8 @@ def http(env):
         while not server.started:
             assert thread.is_alive() and time.monotonic() < end
             time.sleep(.01)
-        with httpx.Client(base_url=f"http://127.0.0.1:{port}", headers={"Authorization": "Bearer synthetic-test-A"}) as client:
+        with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30,
+                          headers={"Authorization": "Bearer synthetic-test-A"}) as client:
             yield client
     finally:
         server.should_exit = True
@@ -78,3 +82,22 @@ def test_unaddressable_new_keys_rejected_before_acceptance(env, http, key):
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "INVALID_INPUT"
     assert http.get(target).json() == before
+
+
+def test_legacy_accepted_dot_segment_key_keeps_request_receipt_and_history(env, http):
+    aid, _, _, body, _ = setup(env)
+    target = url(env, aid)
+    legacy = DefinitionInput.model_validate({**body, "request_key": "legacy/../key"})
+    # Seed the unchanged immutable ledger contract used before key admission
+    # checks. This is compatibility of stored payloads, not an old-code run.
+    with env[0].tx() as c:
+        answer = build(env[0], c, env[3], env[5], aid, legacy, limits(env))
+        for kind in ("column_patch", "column_patch_seal"):
+            remember(c, env[3], aid, kind, legacy.request_key, legacy, answer)
+    restored = http.post(target, json=legacy.model_dump())
+    assert restored.status_code == 201 and restored.json()["cached"]
+    assert {k: v for k, v in restored.json().items() if k != "cached"} == answer
+    result = http.post(target + "/legacy/%2E%2E/key/checks", json=check_body(answer, "legacy-check"))
+    assert result.status_code == 201, result.text
+    item = http.get(target).json()["items"][0]
+    assert item["patch"] == answer and item["checks"][0]["outputs"]["patched"]["sum"] == "15"
