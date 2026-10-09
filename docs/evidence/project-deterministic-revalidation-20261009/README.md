@@ -3,7 +3,8 @@
 开发集成基线 `5fedb359eff076798782b99a5fd5748d76da5148`；隔离候选
 `dev/project-deterministic-revalidation-20261009`。最终源码/测试冻结
 `429a62a418748822d51d9e930ec05f8b560c5ef2`，348文件。作者及独审矩阵已实际结束，独审LIMITED_PASS仅适用下述范围；
-普通推送与远端验证随后记录。不能当完整验收。
+普通候选push已成功，远端实际核验见first-remote-verification.json；
+最末证据HEAD再核对的私有remote-verification.json随最终回复给出。不能当完整验收。
 
 对应原F2-T07/V5§9.3(7)，实际执行既有CSV注册工具和canonical Report有限规则，
 按原PROJECT精确计划、全部当前成员、逐应用输入/归档Run/version/fence/result
@@ -42,4 +43,10 @@ owned PG `be85119016f205d4da1e766f730dd82c56d3a22f2f13931c8a43843168c4dd08`
 前后schema/role/public为0/0/0，按精确CID/owner/network none/ports无发布
 核验后normal stop、rm-v，CID及1匿名卷确证不存在。完整容器日志留私有根。
 独审三个阻断均已修复，限定范围内无剩余review blocker。
-普通推送远端验证尚待；开发5fed、Report锁候选26ff及main6f688保持。
+普通push已实际成功，首个已核远端证据HEAD
+`4eee59b27636a8b5cdbf0727f9839372f5de126a`；候选正常显式fetch后
+HEAD与明确remote-tracking ref一致，工作树clean、ahead/behind0/0。默认fetch
+仅main，upstream快捷名不可解析，诊断已保存，未更改配置。此回执随docs-only
+提交追加，不修改348冻结文件。开发`5fedb359eff076798782b99a5fd5748d76da5148`、
+Report锁候选`26ff0328976fa432a0993359ed96fb78e7718d56`、main
+`6f688e4dd80b5c81d41aecde90e360d3629f9c21`远端均未变。

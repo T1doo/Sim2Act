@@ -61,3 +61,9 @@ Junit/exit/source-command及新终态mtime已核对。旧eafea退出文件在本
 POST201后GET422丢原键）均复验关闭。最终LIMITED_PASS只签独立有限scope，
 未运行PG/角色/两连接竞争/旧库升级/native；不代作者或完整验收。
 45artifact独立SHA256清单及全部原始失败/最终harness已逐一哈希核对后归档。
+
+推送后Git元数据检查：默认origin.fetch只映射main，虽然显式fetch已创建
+候选remote-tracking ref，@{upstream}快捷名仍无法解析（exit128）。该诊断
+不代表推送失败；HEAD和明确candidate remote ref实际0/0，工作树clean。
+失败的元数据脚本在任何文档修改前停止；后续shell只有no-op push，未改refs。
+保全tracking-probe.json，改用明确ref核验；不改默认配置/安全或凭据。

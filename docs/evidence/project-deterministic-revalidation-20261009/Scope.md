@@ -7,7 +7,7 @@
 
 用户从原计划页面明确读取范围，逐应用选择数值列或所属候选的真实Run版本，
 确认当前plan/options/graph/result指纹后提交。CSV实际授权读取原数据并调用原
-registered_tool，再独立Fraction算count/sum；Report实际重新读取材料和计算原
+registered_tool，以独立行数及Fraction核算count/sum；Report实际重新读取材料和计算原
 有限规则。已接受POST及原键GET均需当前证明核验，UNKNOWN/晚回执保持原body/key。
 首次POST本身422才可释放首次未接受意图；GET422、已UNKNOWN后的422不得释放。
 
