@@ -1,0 +1,16 @@
+# From clean dev/f1-foundation at f540194b334f6ccce06b7548e7a0d36636d6fbc1.
+# Python locked .venv, private jsdom30.1.2, verified actual old source archives.
+export LIVE=0 SIM2ACT_LIVE_ENABLED=false
+export NODE_PATH=/tmp/sim2act-late-integration-20261009/node/node_modules
+export SIM2ACT_UPGRADE_OLD_ARCHIVE=/tmp/sim2act-late-integration-20261009/old-dag
+export SIM2ACT_UPGRADE_CORE_ARCHIVE=/tmp/sim2act-late-integration-20261009/core-dag
+unset SIM2ACT_TEST_DATABASE_URL
+.venv/bin/pytest -q tests/test_condition_groups_ui.py tests/test_controlled_branches_ui.py tests/test_csv_composition_ui.py tests/test_csv_dag_upgrade.py --basetemp=/tmp/sim2act-condition-groups-integration-20261009/sqlite --junitxml=/tmp/sim2act-condition-groups-integration-20261009/sqlite.xml
+# Then the same 13-case command with explicit owned isolated synthetic PG URL;
+# actual original instance was socket-only, network-none, no mapped ports, now removed.
+SIM2ACT_TEST_DATABASE_URL='postgresql+psycopg://postgres@/sim2act_groups_integration_owned?host=/tmp/sim2act-condition-groups-integration-20261009/pg-socket' .venv/bin/pytest -q tests/test_condition_groups_ui.py tests/test_controlled_branches_ui.py tests/test_csv_composition_ui.py tests/test_csv_dag_upgrade.py --basetemp=/tmp/sim2act-condition-groups-integration-20261009/pg --junitxml=/tmp/sim2act-condition-groups-integration-20261009/pg.xml
+.venv/bin/ruff check src scripts tests
+.venv/bin/mypy src
+node --check src/sim2act/web/csv-dag.js
+node --check tests/condition_groups_ui.cjs
+# For reproduction choose new owned basetemps/container/schema; do not overwrite retained logs/databases.

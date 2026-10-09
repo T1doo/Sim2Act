@@ -1,7 +1,8 @@
 # 同一步的二至四个条件
 
 原计划 F2-T04 / V5 §5.3 的独立工程候选；仅现有授权 CSV 与三种已有动作，
-0模型、0业务写入、未发布。当前候选分支 dev/bounded-condition-groups-20261009。
+0模型、0业务写入、未发布。已按限定独审集成 dev/f1-foundation；原候选为
+dev/bounded-condition-groups-20261009。[集成回归与限制](../evidence/bounded-condition-groups-integration-20261009/README.md)。
 
 1. 原 CSV 应用派生当前图锚，打开既有 CSV DAG 面板。
 2. 原三节点选择 report 或 aggregate，或在“有限只读节点组合”选择一个节点。
