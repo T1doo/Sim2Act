@@ -34,7 +34,20 @@ KEY = r"^[A-Za-z0-9_-]{1,100}$"
 
 
 class SafeInput(KeyInput):
-    @field_validator("*", mode="before")
+    @field_validator(
+        "column",
+        "app_id",
+        "expected_graph_fingerprint",
+        "run_id",
+        "expected_result_fingerprint",
+        "plan_key",
+        "expected_plan_fingerprint",
+        "expected_options_fingerprint",
+        "consent",
+        "request_key",
+        mode="before",
+        check_fields=False,
+    )
     @classmethod
     def valid_unicode(cls, value):
         if isinstance(value, str):
