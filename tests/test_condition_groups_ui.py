@@ -59,7 +59,7 @@ def test_actual_group_controls_worker_and_cold_http_page(env, tmp_path, mode, gr
         assert result.returncode == 0, result.stdout + result.stderr
         proof = json.loads((tmp_path / "results.json").read_text())
         assert proof["status"] == "PASS" and len(proof["jobs"]) == 2
-        assert len(proof["checks"]) == 8 + 2 * 7
+        assert len(proof["checks"]) == 10 + 2 * 7
         web = Path(__file__).parents[1] / "src/sim2act/web"
         assert proof["loaded_source_sha256"] == {name: hashlib.sha256((web / name).read_bytes()).hexdigest()
             for name in proof["loaded_source_sha256"]}
