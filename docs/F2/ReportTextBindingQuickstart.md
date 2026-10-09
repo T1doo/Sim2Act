@@ -1,5 +1,10 @@
 # 历史 Report 的受限 text 展示草案复现
 
+2026-10-09：展示功能连同晚回执恢复限定修复已集成 `dev/f1-foundation`。
+当前产品冻结点为 `51487fd4787eae66f09f8ff2b01492d8f9c13503`；
+下文候选 SHA 和“未合并”是原冻结时的历史记录。操作边界不变，整体未验收、
+未发布，见[本轮集成证据](../evidence/report-late-integration-20261009/README.md)。
+
 源码候选：`ffda5b00a9a1469b454728adb5a0005016cd0a55`。
 基线：`cc368dbbda1e4452df64efcac76e184dafe65e6d`；独立分支
 `dev/report-text-binding-20261008`。这是未验收工程候选，未合并 dev、未发布。

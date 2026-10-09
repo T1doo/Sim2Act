@@ -1,0 +1,116 @@
+{
+  "cwd": "/workspace/Sim2Act",
+  "commands": [
+    {
+      "name": "sqlite",
+      "env": {
+        "LIVE": "0",
+        "SIM2ACT_LIVE_ENABLED": "false",
+        "NODE_PATH": "/tmp/sim2act-late-integration-20261009/node/node_modules",
+        "SIM2ACT_UPGRADE_OLD_ARCHIVE": "/tmp/sim2act-late-integration-20261009/old-dag",
+        "SIM2ACT_UPGRADE_CORE_ARCHIVE": "/tmp/sim2act-late-integration-20261009/core-dag"
+      },
+      "argv": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/test_report_presentation_late_ui.py",
+        "tests/test_report_presentation_ui.py",
+        "tests/test_report_manifest_apps_ui.py",
+        "tests/test_report_presentations.py",
+        "tests/test_report_text_binding_boundary.py",
+        "tests/test_csv_dag_upgrade.py",
+        "--basetemp=/tmp/sim2act-late-integration-20261009/sqlite",
+        "--junitxml=/tmp/sim2act-late-integration-20261009/sqlite.xml"
+      ],
+      "log": "/tmp/sim2act-late-integration-20261009/sqlite.log"
+    },
+    {
+      "name": "sqlite-report-upgrade",
+      "env": {
+        "LIVE": "0",
+        "SIM2ACT_LIVE_ENABLED": "false",
+        "SIM2ACT_REPORT_UPGRADE_ROOT": "/tmp/sim2act-late-integration-20261009",
+        "PYTHONPATH": "src:tests"
+      },
+      "argv": [
+        ".venv/bin/pytest",
+        "-q",
+        "-c",
+        "pyproject.toml",
+        "/tmp/sim2act-late-integration-20261009/test_owned_report_upgrade.py",
+        "--basetemp=/tmp/sim2act-late-integration-20261009/sqlite-report-upgrade",
+        "--junitxml=/tmp/sim2act-late-integration-20261009/sqlite-report-upgrade.xml"
+      ],
+      "log": "/tmp/sim2act-late-integration-20261009/sqlite-report-upgrade.log"
+    },
+    {
+      "name": "postgresql",
+      "env": {
+        "LIVE": "0",
+        "SIM2ACT_LIVE_ENABLED": "false",
+        "NODE_PATH": "/tmp/sim2act-late-integration-20261009/node/node_modules",
+        "SIM2ACT_UPGRADE_OLD_ARCHIVE": "/tmp/sim2act-late-integration-20261009/old-dag",
+        "SIM2ACT_UPGRADE_CORE_ARCHIVE": "/tmp/sim2act-late-integration-20261009/core-dag",
+        "SIM2ACT_TEST_DATABASE_URL": "postgresql+psycopg://postgres@/sim2act_late_owned?host=/tmp/sim2act-late-integration-20261009/pg-socket",
+        "SIM2ACT_REPORT_UPGRADE_ROOT": "/tmp/sim2act-late-integration-20261009",
+        "PYTHONPATH": "src:tests"
+      },
+      "argv": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/test_report_presentation_late_ui.py",
+        "tests/test_report_presentation_ui.py",
+        "tests/test_report_manifest_apps_ui.py",
+        "tests/test_report_presentations.py",
+        "tests/test_report_text_binding_boundary.py",
+        "tests/test_csv_dag_upgrade.py",
+        "/tmp/sim2act-late-integration-20261009/test_owned_report_upgrade.py",
+        "--basetemp=/tmp/sim2act-late-integration-20261009/postgresql",
+        "--junitxml=/tmp/sim2act-late-integration-20261009/postgresql.xml"
+      ],
+      "log": "/tmp/sim2act-late-integration-20261009/postgresql.log"
+    },
+    {
+      "name": "sqlite-old-negative",
+      "env": {
+        "LIVE": "0",
+        "SIM2ACT_LIVE_ENABLED": "false",
+        "NODE_PATH": "/tmp/sim2act-late-integration-20261009/node/node_modules",
+        "SIM2ACT_PRESENTATION_JS_BASELINE": "/tmp/sim2act-late-integration-20261009/old-report.js"
+      },
+      "unset_env": [
+        "SIM2ACT_TEST_DATABASE_URL"
+      ],
+      "argv": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[same-checks]",
+        "--basetemp=/tmp/sim2act-late-integration-20261009/sqlite-old-negative",
+        "--junitxml=/tmp/sim2act-late-integration-20261009/sqlite-old-negative.xml"
+      ],
+      "log": "/tmp/sim2act-late-integration-20261009/sqlite-old-negative.log",
+      "expected_exit_code": 1
+    },
+    {
+      "name": "postgresql-old-negative",
+      "env": {
+        "LIVE": "0",
+        "SIM2ACT_LIVE_ENABLED": "false",
+        "NODE_PATH": "/tmp/sim2act-late-integration-20261009/node/node_modules",
+        "SIM2ACT_PRESENTATION_JS_BASELINE": "/tmp/sim2act-late-integration-20261009/old-report.js",
+        "SIM2ACT_TEST_DATABASE_URL": "postgresql+psycopg://postgres@/sim2act_late_owned?host=/tmp/sim2act-late-integration-20261009/pg-socket"
+      },
+      "unset_env": [],
+      "argv": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/test_report_presentation_late_ui.py::test_actual_late_receipt_current_page_readback[same-checks]",
+        "--basetemp=/tmp/sim2act-late-integration-20261009/postgresql-old-negative",
+        "--junitxml=/tmp/sim2act-late-integration-20261009/postgresql-old-negative.xml"
+      ],
+      "log": "/tmp/sim2act-late-integration-20261009/postgresql-old-negative.log",
+      "expected_exit_code": 1
+    }
+  ],
+  "sequential": true
+}

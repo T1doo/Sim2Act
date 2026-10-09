@@ -12,6 +12,8 @@
 
 [有限只读 CSV 节点组合](docs/F2/BoundedCsvCompositionQuickstart.md)：已按限定独审整合 dev，可在原面板编辑一至四个已有动作节点并保留多个末端新输出；原预算与授权范围不变，验收仍 PENDING，不代表非 CSV／PROJECT／AT13 完成。[整合证据与限制](docs/evidence/bounded-readonly-dag-integration-20261008/README.md)。
 
+[历史 Report 展示晚回执恢复](docs/F2/ReportPresentationLateReceiptFix.md)：同应用重开后重新读取当前授权展示历史，保留原 decision 与 explanation 展示；限定修复已集成 dev，PROJECT 仍 PENDING/BLOCKED_PARTIAL，整体验收与发布关闭。[集成回归与保留限制](docs/evidence/report-late-integration-20261009/README.md)。
+
 [三端口受限接线草案](docs/F2/CsvWiringPatchQuickstart.md)：服务端允许来源、新计划精确确认、实际前驱与来源证明；默认旧接线兼容，候选未验收、发布关闭。
 
 已成功内部 CSV 任务的有界复用入口：[最短上手说明](docs/F2/RegisteredRunQuickstart.md)。保持本机 MOCK，不代表完整 P-B 或正式发布。
