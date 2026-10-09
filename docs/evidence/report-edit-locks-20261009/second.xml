@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="24" time="86.061" timestamp="2026-10-09T17:34:35.485195+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_report_edit_locks" name="test_report_lock_blocks_actual_original_edit_unlock_new_plan_and_readback" time="8.067"><failure message="assert 4 == 7&#10; +  where 4 = len([{'max_tokens': 1024, 'messages': [{'content': 'Use only supplied authorized read tools, then return a JSON object. Re...line&quot;, &quot;explanation&quot;], &quot;additionalProperties&quot;: false}}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])">env = (&lt;sim2act.db.Store object at 0x7febae45ee40&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...ffd8cbb39447a19b9d9207a0f09ddd', 'user_2b81597e9c784833adb86cb3a8c1eb6e', 'proj_e426b599f8b34774af4d229f078083b6', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/second/test_report_lock_blocks_actual0')
+
+    def test_report_lock_blocks_actual_original_edit_unlock_new_plan_and_readback(env, tmp_path):
+        app, anchor, base, definition, output, wires = setup(env, tmp_path)
+        before = snapshot(env)
+        reply = env[2].post(base + "manual-locks", json=body(anchor))
+        assert reply.status_code == 201, reply.text
+        assert reply.json()["lock"]["logical_key"] == "view:text:decision"
+        assert reply.json()["lock"]["locked"] is True
+        after = snapshot(env)
+        for table in before:
+            if table not in {"delivery_graph_locks", "delivery_graph_requests"}:
+                assert before[table] == after[table], table
+        locked = derive(env, app["id"], "report-locked-anchor")
+        before = snapshot(env)
+        denied = env[2].post(
+            base + "plans",
+            json=dict(
+                expected_graph_fingerprint=locked["graph_fingerprint"],
+                request_key="locked-view-plan",
+                changes=[body(locked)["change"]],
+            ),
+        )
+        assert denied.status_code == 400 and denied.json()["error"]["code"] == "LOCK_CONFLICT", (
+            denied.text
+        )
+        definition["expected_graph_fingerprint"] = locked["graph_fingerprint"]
+        denied = env[2].post(base + "report-presentations", json=definition)
+        assert denied.status_code == 409
+        assert_unchanged(env, before)
+        unlocked = env[2].post(base + "manual-locks", json=body(locked, False, 1, "report-view-unlock"))
+        assert unlocked.status_code == 201, unlocked.text
+        anchor = derive(env, app["id"], "report-unlocked-anchor")
+        plan = env[2].post(
+            base + "plans",
+            json=dict(
+                expected_graph_fingerprint=anchor["graph_fingerprint"],
+                request_key="unlocked-view-plan",
+                changes=[body(anchor)["change"]],
+            ),
+        )
+        assert plan.status_code == 201, plan.text
+        assert plan.json()["scope_expansion"]["status"] in {"PENDING", "BLOCKED_PARTIAL"}
+        definition.update(
+            expected_graph_fingerprint=anchor["graph_fingerprint"],
+            plan_key="unlocked-view-plan",
+            expected_plan_fingerprint=plan.json()["native_outer_fingerprint"],
+            request_key="unlocked-explanation",
+        )
+        patch = env[2].post(base + "report-presentations", json=definition)
+        assert patch.status_code == 201, patch.text
+        check = env[2].post(
+            base + "report-presentations/unlocked-explanation/checks",
+            json=dict(
+                expected_patch_fingerprint=patch.json()["patch_fingerprint"],
+                request_key="unlocked-readback",
+            ),
+        )
+        assert check.status_code == 201, check.text
+        assert check.json()["text"] == output["explanation"]
+        assert check.json()["display_readback_status"] == "PASS"
+        assert (
+            check.json()["semantic_status"] == "UNKNOWN"
+            and check.json()["owner_acceptance"] == "PENDING"
+        )
+        assert check.json()["project_revalidation_status"] in {"PENDING", "BLOCKED_PARTIAL"}
+&gt;       assert len(wires) == 7  # Only the original synthetic Report fixture requests.
+        ^^^^^^^^^^^^^^^^^^^^^^
+E       assert 4 == 7
+E        +  where 4 = len([{'max_tokens': 1024, 'messages': [{'content': 'Use only supplied authorized read tools, then return a JSON object. Re...line", "explanation"], "additionalProperties": false}}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])
+
+tests/test_report_edit_locks.py:112: AssertionError</failure></testcase><testcase classname="tests.test_report_edit_locks" name="test_report_lock_cold_store_same_key_recovery_and_superseded_history" time="4.199" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[candidate]" time="2.868" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[graph]" time="2.864" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[graph_revision]" time="3.094" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[node_revision]" time="2.472" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[node_hash]" time="3.025" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[node_id]" time="3.394" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[lock_revision]" time="3.093" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[consent]" time="2.079" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[locked_int]" time="2.513" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[graph_bool]" time="2.772" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[extra]" time="2.775" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[no_change]" time="2.859" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[other_owner]" time="2.583" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[other_project]" time="3.565" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[revoke]" time="3.578" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[source]" time="2.834" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[seal]" time="3.331" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[lock]" time="3.157" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[same_key]" time="3.069" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_two_real_connections_have_one_revision_winner" time="3.157" /><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[normal]" time="7.089"><failure message="AssertionError: TypeError: Cannot read properties of undefined (reading 'value')&#10;      at selectView (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:17:142)&#10;      at /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:29:89&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/report_edit_locks_ui.cjs', '/tmp/sim2act-report-edit-locks-20261009/second/test_.../report_edit_locks_ui.cjs:29:89\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7febae011d60&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...079ae597714f44baf287b788a286fd', 'user_4b10111b7dec44ecbacddc7386b8817b', 'proj_0a636c88fc4640a49927ea186669593f', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/second/test_report_edit_lock_actual_h0')
+scenario = 'normal'
+
+    @pytest.mark.parametrize("scenario", ["normal", "aba"])
+    def test_report_edit_lock_actual_http_page(env, tmp_path, scenario):
+        app, _, _, _, output, wires = prepared(env, tmp_path)
+        assert shutil.which("node")
+        other = env[0].project(env[3], "Other Report project")
+        before = snapshot(env)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                dict(
+                    base=f"http://127.0.0.1:{port}",
+                    project=env[5],
+                    other=other,
+                    app=app["id"],
+                    explanation=output["explanation"],
+                    scenario=scenario,
+                )
+            )
+        )
+        server = uvicorn.Server(
+            uvicorn.Config(create_app(env[0], env[1]), host="127.0.0.1", port=port, log_level="error")
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(0.01)
+            result = subprocess.run(
+                ["node", "tests/report_edit_locks_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+&gt;           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: TypeError: Cannot read properties of undefined (reading 'value')
+E                 at selectView (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:17:142)
+E                 at /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:29:89
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_edit_locks_ui.cjs', '/tmp/sim2act-report-edit-locks-20261009/second/test_.../report_edit_locks_ui.cjs:29:89\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n").returncode
+
+tests/test_report_edit_locks_ui.py:59: AssertionError</failure></testcase><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[aba]" time="7.350"><failure message="AssertionError: TypeError: Cannot read properties of undefined (reading 'value')&#10;      at selectView (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:17:142)&#10;      at /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:29:89&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/report_edit_locks_ui.cjs', '/tmp/sim2act-report-edit-locks-20261009/second/test_.../report_edit_locks_ui.cjs:29:89\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7febac67b590&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...5714515d9c4b1ab09eac7f9a115494', 'user_d38c8bfcd689411980ad756cc767a4bd', 'proj_621a05531e8046018196c7f672df20bd', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/second/test_report_edit_lock_actual_h1')
+scenario = 'aba'
+
+    @pytest.mark.parametrize("scenario", ["normal", "aba"])
+    def test_report_edit_lock_actual_http_page(env, tmp_path, scenario):
+        app, _, _, _, output, wires = prepared(env, tmp_path)
+        assert shutil.which("node")
+        other = env[0].project(env[3], "Other Report project")
+        before = snapshot(env)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                dict(
+                    base=f"http://127.0.0.1:{port}",
+                    project=env[5],
+                    other=other,
+                    app=app["id"],
+                    explanation=output["explanation"],
+                    scenario=scenario,
+                )
+            )
+        )
+        server = uvicorn.Server(
+            uvicorn.Config(create_app(env[0], env[1]), host="127.0.0.1", port=port, log_level="error")
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(0.01)
+            result = subprocess.run(
+                ["node", "tests/report_edit_locks_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+&gt;           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: TypeError: Cannot read properties of undefined (reading 'value')
+E                 at selectView (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:17:142)
+E                 at /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:29:89
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_edit_locks_ui.cjs', '/tmp/sim2act-report-edit-locks-20261009/second/test_.../report_edit_locks_ui.cjs:29:89\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n").returncode
+
+tests/test_report_edit_locks_ui.py:59: AssertionError</failure></testcase></testsuite></testsuites>

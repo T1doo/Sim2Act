@@ -1,0 +1,81 @@
+..F.                                                                     [100%]
+=================================== FAILURES ===================================
+_____________ test_report_edit_lock_actual_http_page[unknown-plan] _____________
+
+env = (<sim2act.db.Store object at 0x7efed4b4fbc0>, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...7a1ccf1789467fad3a9e3d4edcc676', 'user_cde0bf3d6b884963ba9598ec0428ac9f', 'proj_2259a0ed5dca4572b9e2aae1eee253bf', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/unknown-fix/test_report_edit_lock_actual_h2')
+scenario = 'unknown-plan'
+
+    @pytest.mark.parametrize("scenario", ["normal", "aba", "unknown-plan"])
+    def test_report_edit_lock_actual_http_page(env, tmp_path, scenario):
+        app, _, _, _, output, wires = prepared(env, tmp_path, peer=scenario == "unknown-plan")
+        peer = None
+        if scenario == "unknown-plan":
+            with env[0].tx() as c:
+                peer = dict(
+                    next(
+                        row
+                        for row in c.execute(
+                            select(app_drafts).where(app_drafts.c.project_id == env[5])
+                        ).mappings()
+                        if row["id"] != app["id"]
+                        and row["candidate"].get("manifest", {}).get("workflow", [{}])[0].get("step_id")
+                        == "aggregate"
+                    )
+                )
+        assert shutil.which("node")
+        other = env[0].project(env[3], "Other Report project")
+        before = snapshot(env)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                dict(
+                    base=f"http://127.0.0.1:{port}",
+                    project=env[5],
+                    other=other,
+                    app=app["id"],
+                    explanation=output["explanation"],
+                    scenario=scenario,
+                    peer=None if peer is None else dict(id=peer["id"], fingerprint=peer["fingerprint"]),
+                )
+            )
+        )
+        server = uvicorn.Server(
+            uvicorn.Config(create_app(env[0], env[1]), host="127.0.0.1", port=port, log_level="error")
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(0.01)
+            result = subprocess.run(
+                ["node", "tests/report_edit_locks_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: {"error":{"code":"VERSION_CONFLICT","message":"Manual lock node version changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E                 at call (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:89:227)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async unknownPlan (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:101:17)
+E                 at async /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:15:37
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_edit_locks_ui.cjs', '/tmp/sim2act-report-edit-locks-20261009/unknown-fix/...im2Act/tests/report_edit_locks_ui.cjs:101:17)\n    at async /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:15:37\n').returncode
+
+tests/test_report_edit_locks_ui.py:76: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_edit_locks_ui.py::test_report_edit_lock_actual_http_page[unknown-plan]
+1 failed, 3 passed, 1 warning in 40.68s

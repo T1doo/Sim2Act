@@ -1,0 +1,34 @@
+......................s.........................sF...................... [ 85%]
+............                                                             [100%]
+=================================== FAILURES ===================================
+_ test_client_identity_fields_and_underived_report_cannot_bypass_lock_preflight _
+
+env = (<sim2act.db.Store object at 0x7f7345bede50>, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...6cd8be069940dd9de2c91dfd229b9b', 'user_6a5f3bbcc9c343329ab858666a8acb7d', 'proj_f5f2a71937ea4e08a58c1be989b063c2', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/sqlite-frozen/test_client_identity_fields_an0')
+
+    def test_client_identity_fields_and_underived_report_cannot_bypass_lock_preflight(env, tmp_path):
+        from test_delivery_graph_apps import report_project
+    
+        aid, _, anchor, _, _ = setup(env)
+        request = body(anchor)
+        before = snapshot(env)
+        assert env[2].post(base(env, aid), json={**request, "principal_id": env[4]}).status_code == 422
+        assert fingerprint(before) == fingerprint(snapshot(env))
+        report, *_ = report_project(env, tmp_path)
+        before = snapshot(env)
+        reply = env[2].get(base(env, report["id"]))
+>       assert reply.status_code == 409 and reply.json()["error"]["code"] == "VERSION_CONFLICT", reply.text
+E       AssertionError: {"namespace":"manual-edit-lock.v1","project_id":"proj_f5f2a71937ea4e08a58c1be989b063c2","app_id":"app_ffca579e8123439d91150d8e8d16edd4","nodes":[{"node_id":"action_5a5da152432948a5ab7636c073149627","locked":false,"lock_revision":0},{"node_id":"node_987df6f1b3f44aa7a605d132e60f40e8","locked":false,"lock_revision":0},{"node_id":"node_3533b2741953432b9aff5587e98123c0","locked":false,"lock_revision":0},{"node_id":"node_89429ebc575b4de28300b166c43b76e7","locked":false,"lock_revision":0},{"node_id":"node_5cce6c08b71445839059003f67ffa2d7","locked":false,"lock_revision":0},{"node_id":"node_8352e237976c4b709a947b54cf868a9f","locked":false,"lock_revision":0},{"node_id":"node_f4f4def48b734c2e98dc597c1123d75a","locked":false,"lock_revision":0},{"node_id":"node_13eb038a399f45e0820731b7821e9fbd","locked":false,"lock_revision":0},{"node_id":"node_8504239672d44670bf944452595ca931","locked":false,"lock_revision":0},{"node_id":"goal_0e27895072c2492690c6b792529ace2a","locked":false,"lock_revision":0},{"node_id":"app_ffca579e8123439d91150d8e8d16edd4","locked":false,"lock_revision":0},{"node_id":"node_44f658b0b5d447a68f774541c1d3db9f","locked":false,"lock_revision":0},{"node_id":"node_da5b3b6aca5543c99e0e7ad74249825d","locked":false,"lock_revision":0},{"node_id":"node_eeecc12a6a804154957f31801c5f1289","locked":false,"lock_revision":0},{"node_id":"res_da94b0bac7fb4a2688628e1c2899a820","locked":false,"lock_revision":0},{"node_id":"res_f55da73916e648df90c70bd555f73e38","locked":false,"lock_revision":0},{"node_id":"node_9313bcabcc3645658707ab1289d1176d","locked":false,"lock_revision":0}],"history":[],"graph_fingerprint":"fce06a9604cacaf6f1f1f02546a03c43c054d0aa325bb8578b852da66475759a","graph_revision":1,"needs_derive":false,"publishable":false,"formal_publication_enabled":false}
+E       assert (200 == 409)
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/test_manual_locks.py:269: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_manual_locks.py::test_client_identity_fields_and_underived_report_cannot_bypass_lock_preflight
+1 failed, 81 passed, 2 skipped, 1 warning in 337.69s (0:05:37)

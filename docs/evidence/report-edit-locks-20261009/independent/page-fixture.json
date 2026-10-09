@@ -1,0 +1,3377 @@
+{
+  "app": {
+    "namespace": "bounded-report-manifest.v1",
+    "id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+    "name": "Saved hypothetical travel report",
+    "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+    "runtime_id": "runtime_952586bf15eb4756876bd5c583744770",
+    "fingerprint": "0cc61ad17e6582d457bd5435b732d2ee21a9850356d6d26e1b7f5a4a1bf34637",
+    "candidate": {
+      "namespace": "bounded-report-manifest.v1",
+      "manifest": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+        "revision": 1,
+        "origin": "task_run",
+        "goal_ref": "goal_16f279adfa60469d9e127d08057f0940",
+        "source_run_ref": "run_c3c5f22c9f4a48a0ba13f22f3ec22bb0",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "HYPOTHETICAL_EMPLOYEE"
+              ]
+            },
+            "trip_ended": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "amount": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "receipt_present": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "approved": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "elapsed_days": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 3650
+            }
+          },
+          "required": [
+            "kind",
+            "trip_ended",
+            "amount",
+            "receipt_present",
+            "approved",
+            "elapsed_days"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rule_id": {
+                    "type": "string",
+                    "enum": [
+                      "R1",
+                      "R2",
+                      "R3"
+                    ]
+                  },
+                  "applies": {
+                    "type": "string",
+                    "enum": [
+                      "TRUE",
+                      "FALSE",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "citation": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200
+                      },
+                      "quote": {
+                        "type": "string",
+                        "maxLength": 1000
+                      }
+                    },
+                    "required": [
+                      "line",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "rule_id",
+                  "applies",
+                  "citation"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 3
+            },
+            "decision": {
+              "type": "string",
+              "enum": [
+                "ALLOW",
+                "BLOCK",
+                "UNKNOWN"
+              ]
+            },
+            "next_actions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "wait_trip_end",
+                  "obtain_receipt",
+                  "obtain_prior_approval",
+                  "clarify_facts",
+                  "clarify_late_policy",
+                  "submit_claim_and_receipt"
+                ]
+              },
+              "maxItems": 6
+            },
+            "deadline_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650
+            },
+            "absolute_date": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "receipt_restarts_deadline": {
+              "type": "boolean"
+            },
+            "explanation": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "findings",
+            "decision",
+            "next_actions",
+            "deadline_days",
+            "absolute_date",
+            "receipt_restarts_deadline",
+            "explanation"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "findings": {
+            "source": "step",
+            "ref": "report",
+            "field": "findings"
+          },
+          "decision": {
+            "source": "step",
+            "ref": "report",
+            "field": "decision"
+          },
+          "next_actions": {
+            "source": "step",
+            "ref": "report",
+            "field": "next_actions"
+          },
+          "deadline_days": {
+            "source": "step",
+            "ref": "report",
+            "field": "deadline_days"
+          },
+          "absolute_date": {
+            "source": "step",
+            "ref": "report",
+            "field": "absolute_date"
+          },
+          "receipt_restarts_deadline": {
+            "source": "step",
+            "ref": "report",
+            "field": "receipt_restarts_deadline"
+          },
+          "explanation": {
+            "source": "step",
+            "ref": "report",
+            "field": "explanation"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "decision"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "report",
+            "binding_id": "conditional_report",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "rules",
+                "field": "resource_id"
+              },
+              "kind": {
+                "source": "input",
+                "field": "kind"
+              },
+              "trip_ended": {
+                "source": "input",
+                "field": "trip_ended"
+              },
+              "amount": {
+                "source": "input",
+                "field": "amount"
+              },
+              "receipt_present": {
+                "source": "input",
+                "field": "receipt_present"
+              },
+              "approved": {
+                "source": "input",
+                "field": "approved"
+              },
+              "elapsed_days": {
+                "source": "input",
+                "field": "elapsed_days"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "conditional_report",
+            "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+            "revision": 1
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "rules",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_project_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          },
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_45de40de1f234518ae4882706effbcb2",
+            "version": "1"
+          },
+          {
+            "kind": "resource",
+            "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "prompt",
+            "ref": "intern.system.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "source.conditional_report.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "source.conditional_report.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "actions": [
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "revision": 1,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "HYPOTHETICAL_EMPLOYEE"
+                ]
+              },
+              "trip_ended": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "amount": {
+                "type": "integer",
+                "nullable": true,
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "receipt_present": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "approved": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "elapsed_days": {
+                "type": "integer",
+                "nullable": true,
+                "minimum": 0,
+                "maximum": 3650
+              }
+            },
+            "required": [
+              "resource_id",
+              "kind",
+              "trip_ended",
+              "amount",
+              "receipt_present",
+              "approved",
+              "elapsed_days"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule_id": {
+                      "type": "string",
+                      "enum": [
+                        "R1",
+                        "R2",
+                        "R3"
+                      ]
+                    },
+                    "applies": {
+                      "type": "string",
+                      "enum": [
+                        "TRUE",
+                        "FALSE",
+                        "UNKNOWN"
+                      ]
+                    },
+                    "citation": {
+                      "type": "object",
+                      "properties": {
+                        "line": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 200
+                        },
+                        "quote": {
+                          "type": "string",
+                          "maxLength": 1000
+                        }
+                      },
+                      "required": [
+                        "line",
+                        "quote"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "rule_id",
+                    "applies",
+                    "citation"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 3
+              },
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "ALLOW",
+                  "BLOCK",
+                  "UNKNOWN"
+                ]
+              },
+              "next_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "wait_trip_end",
+                    "obtain_receipt",
+                    "obtain_prior_approval",
+                    "clarify_facts",
+                    "clarify_late_policy",
+                    "submit_claim_and_receipt"
+                  ]
+                },
+                "maxItems": 6
+              },
+              "deadline_days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "absolute_date": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "receipt_restarts_deadline": {
+                "type": "boolean"
+              },
+              "explanation": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "findings",
+              "decision",
+              "next_actions",
+              "deadline_days",
+              "absolute_date",
+              "receipt_restarts_deadline",
+              "explanation"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "bounded_report",
+            "ref": "intern.conditional_report",
+            "version": "1"
+          },
+          "allowed_tool_refs": [
+            "resource.read"
+          ],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_45de40de1f234518ae4882706effbcb2",
+              "version": "1"
+            },
+            {
+              "kind": "resource",
+              "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+            },
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "source.conditional_report.v1"
+          ],
+          "limits": {
+            "max_requests": 4,
+            "max_tools": 4,
+            "max_repairs": 1,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED",
+            "VERSION_CONFLICT",
+            "RESOURCE_UNAVAILABLE"
+          ]
+        }
+      ],
+      "source_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+      "report_proof": {
+        "named_app_id": "app_44e0e1e2cdaf4b25ac42878eedac363f",
+        "expected_named_fingerprint": "54442bb4ccde3c4855af2cc188bf9f367ff92ccadae68d4a85707d819b8390bf",
+        "extraction_run_id": "run_f0b4724730bd421d80f5bfffd9d15725",
+        "expected_plan_fingerprint": "a865e05acb84aa1d8bd3db5fb3377ce29f608a6f76f603debc353b761bbd5881",
+        "expected_check_fingerprint": "449f1f8414ebfc0481dcdbf0ac7d8913e011ba989bfb7507a31d490a9331676a",
+        "source_run_id": "run_c3c5f22c9f4a48a0ba13f22f3ec22bb0",
+        "source_resource_id": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+        "target_resource_id": "res_45de40de1f234518ae4882706effbcb2",
+        "expected_target_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+        "runtime_id": "runtime_952586bf15eb4756876bd5c583744770",
+        "limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        }
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "HYPOTHETICAL_EMPLOYEE"
+          ]
+        },
+        "trip_ended": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "amount": {
+          "type": "integer",
+          "nullable": true,
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "receipt_present": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "approved": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "elapsed_days": {
+          "type": "integer",
+          "nullable": true,
+          "minimum": 0,
+          "maximum": 3650
+        }
+      },
+      "required": [
+        "kind",
+        "trip_ended",
+        "amount",
+        "receipt_present",
+        "approved",
+        "elapsed_days"
+      ],
+      "additionalProperties": false
+    },
+    "state": "PREVIEW_ONLY",
+    "publishable": false,
+    "formal_publication_enabled": false,
+    "semantic_status": "UNKNOWN",
+    "owner_acceptance": "PENDING",
+    "overall_run_acceptance": "NOT_ACCEPTED",
+    "validation": {
+      "state": "PREFLIGHTED_DRAFT",
+      "publishable": false,
+      "execution_performed": false,
+      "not_an_executable_plan": true,
+      "topological_order": [
+        "report"
+      ],
+      "budget_envelope": {
+        "max_requests": 4,
+        "max_tools": 4,
+        "max_repairs": 1,
+        "max_total_tokens": 64000,
+        "run_seconds": 300
+      },
+      "resource_refs": [
+        "res_45de40de1f234518ae4882706effbcb2",
+        "res_e723b5121bfe479ea2cd7b00cb695ecb"
+      ],
+      "candidate_fingerprint_basis": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+        "revision": 1,
+        "origin": "task_run",
+        "goal_ref": "goal_16f279adfa60469d9e127d08057f0940",
+        "source_run_ref": "run_c3c5f22c9f4a48a0ba13f22f3ec22bb0",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "HYPOTHETICAL_EMPLOYEE"
+              ]
+            },
+            "trip_ended": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "amount": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "receipt_present": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "approved": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "elapsed_days": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 3650
+            }
+          },
+          "required": [
+            "kind",
+            "trip_ended",
+            "amount",
+            "receipt_present",
+            "approved",
+            "elapsed_days"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rule_id": {
+                    "type": "string",
+                    "enum": [
+                      "R1",
+                      "R2",
+                      "R3"
+                    ]
+                  },
+                  "applies": {
+                    "type": "string",
+                    "enum": [
+                      "TRUE",
+                      "FALSE",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "citation": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200
+                      },
+                      "quote": {
+                        "type": "string",
+                        "maxLength": 1000
+                      }
+                    },
+                    "required": [
+                      "line",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "rule_id",
+                  "applies",
+                  "citation"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 3
+            },
+            "decision": {
+              "type": "string",
+              "enum": [
+                "ALLOW",
+                "BLOCK",
+                "UNKNOWN"
+              ]
+            },
+            "next_actions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "wait_trip_end",
+                  "obtain_receipt",
+                  "obtain_prior_approval",
+                  "clarify_facts",
+                  "clarify_late_policy",
+                  "submit_claim_and_receipt"
+                ]
+              },
+              "maxItems": 6
+            },
+            "deadline_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650
+            },
+            "absolute_date": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "receipt_restarts_deadline": {
+              "type": "boolean"
+            },
+            "explanation": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "findings",
+            "decision",
+            "next_actions",
+            "deadline_days",
+            "absolute_date",
+            "receipt_restarts_deadline",
+            "explanation"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "findings": {
+            "source": "step",
+            "ref": "report",
+            "field": "findings"
+          },
+          "decision": {
+            "source": "step",
+            "ref": "report",
+            "field": "decision"
+          },
+          "next_actions": {
+            "source": "step",
+            "ref": "report",
+            "field": "next_actions"
+          },
+          "deadline_days": {
+            "source": "step",
+            "ref": "report",
+            "field": "deadline_days"
+          },
+          "absolute_date": {
+            "source": "step",
+            "ref": "report",
+            "field": "absolute_date"
+          },
+          "receipt_restarts_deadline": {
+            "source": "step",
+            "ref": "report",
+            "field": "receipt_restarts_deadline"
+          },
+          "explanation": {
+            "source": "step",
+            "ref": "report",
+            "field": "explanation"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "decision"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "report",
+            "binding_id": "conditional_report",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "rules",
+                "field": "resource_id"
+              },
+              "kind": {
+                "source": "input",
+                "ref": null,
+                "field": "kind"
+              },
+              "trip_ended": {
+                "source": "input",
+                "ref": null,
+                "field": "trip_ended"
+              },
+              "amount": {
+                "source": "input",
+                "ref": null,
+                "field": "amount"
+              },
+              "receipt_present": {
+                "source": "input",
+                "ref": null,
+                "field": "receipt_present"
+              },
+              "approved": {
+                "source": "input",
+                "ref": null,
+                "field": "approved"
+              },
+              "elapsed_days": {
+                "source": "input",
+                "ref": null,
+                "field": "elapsed_days"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "conditional_report",
+            "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+            "revision": 1
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "rules",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_project_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          },
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_45de40de1f234518ae4882706effbcb2",
+            "version": "1"
+          },
+          {
+            "kind": "resource",
+            "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "prompt",
+            "ref": "intern.system.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "source.conditional_report.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "source.conditional_report.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "compiler": "bounded-report-manifest.v1",
+      "actual_execution_gateway": "protocol-cold.v1",
+      "scope": "finite Report only; semantic UNKNOWN, owner PENDING"
+    },
+    "input_guidance": {
+      "mode": "BOUNDED_REPORT",
+      "authorization_domain": "SHARED_EXISTING_PROJECT_RUNTIME",
+      "input": "new typed hypothetical Scenario only",
+      "source_report_reused": false,
+      "release_supported": false
+    },
+    "cached": false
+  },
+  "graph": {
+    "namespace": "delivery-graph-apps.v1",
+    "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+    "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+    "runtime_id": "runtime_952586bf15eb4756876bd5c583744770",
+    "candidate_fingerprint": "0cc61ad17e6582d457bd5435b732d2ee21a9850356d6d26e1b7f5a4a1bf34637",
+    "graph_revision": 1,
+    "authorization_revision": 1,
+    "current_authorization_fingerprint": "6137bca9bd73df38bb3f9e39b01cbac87ad30e827928557ac3d9bb1b84dd01d5",
+    "graph_fingerprint": "197fff85830966624833f694d649f1e16f6bfa465665b898c5c7a4c87eb9ac82",
+    "state": "PLANNING_ONLY",
+    "semantic_status": "UNKNOWN",
+    "owner_acceptance": "PENDING",
+    "patch_executed": false,
+    "business_write_performed": false,
+    "publishable": false,
+    "formal_publication_enabled": false,
+    "graph": {
+      "schema_version": "delivery-graph.v1",
+      "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+      "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+      "authorization_revision": 1,
+      "context_fingerprint": "1cc262c0a7ea112161419641188acf2b1b1cfaa2294f70322caca66cde14f5d4",
+      "resource_ids": [
+        "res_45de40de1f234518ae4882706effbcb2",
+        "res_e723b5121bfe479ea2cd7b00cb695ecb"
+      ],
+      "nodes": [
+        {
+          "id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "key": "action:report",
+          "kind": "ACTION",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "action": {
+              "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+              "allowed_tool_refs": [
+                "resource.read"
+              ],
+              "dependencies": [
+                {
+                  "kind": "resource",
+                  "ref": "res_45de40de1f234518ae4882706effbcb2",
+                  "version": "1"
+                },
+                {
+                  "kind": "resource",
+                  "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+                  "version": "1"
+                }
+              ],
+              "effect": "read",
+              "error_contract": [
+                "INVALID_INPUT",
+                "PERMISSION_DENIED",
+                "GRANT_REVOKED",
+                "VERSION_CONFLICT",
+                "RESOURCE_UNAVAILABLE"
+              ],
+              "executor": {
+                "kind": "bounded_report",
+                "ref": "intern.conditional_report",
+                "version": "1"
+              },
+              "idempotency": "read_only",
+              "input_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "approved": {
+                    "nullable": true,
+                    "type": "boolean"
+                  },
+                  "elapsed_days": {
+                    "maximum": 3650,
+                    "minimum": 0,
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "enum": [
+                      "HYPOTHETICAL_EMPLOYEE"
+                    ],
+                    "type": "string"
+                  },
+                  "receipt_present": {
+                    "nullable": true,
+                    "type": "boolean"
+                  },
+                  "resource_id": {
+                    "type": "string"
+                  },
+                  "trip_ended": {
+                    "nullable": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "resource_id",
+                  "kind",
+                  "trip_ended",
+                  "amount",
+                  "receipt_present",
+                  "approved",
+                  "elapsed_days"
+                ],
+                "type": "object"
+              },
+              "limits": {
+                "max_output_tokens": 1024,
+                "max_repairs": 1,
+                "max_requests": 4,
+                "max_tools": 4,
+                "max_total_tokens": 64000,
+                "run_seconds": 300
+              },
+              "output_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "absolute_date": {
+                    "maxLength": 40,
+                    "type": "string"
+                  },
+                  "deadline_days": {
+                    "maximum": 3650,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "decision": {
+                    "enum": [
+                      "ALLOW",
+                      "BLOCK",
+                      "UNKNOWN"
+                    ],
+                    "type": "string"
+                  },
+                  "explanation": {
+                    "maxLength": 1000,
+                    "type": "string"
+                  },
+                  "findings": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "applies": {
+                          "enum": [
+                            "TRUE",
+                            "FALSE",
+                            "UNKNOWN"
+                          ],
+                          "type": "string"
+                        },
+                        "citation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "line": {
+                              "maximum": 200,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "quote": {
+                              "maxLength": 1000,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "line",
+                            "quote"
+                          ],
+                          "type": "object"
+                        },
+                        "rule_id": {
+                          "enum": [
+                            "R1",
+                            "R2",
+                            "R3"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "rule_id",
+                        "applies",
+                        "citation"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 3,
+                    "type": "array"
+                  },
+                  "next_actions": {
+                    "items": {
+                      "enum": [
+                        "wait_trip_end",
+                        "obtain_receipt",
+                        "obtain_prior_approval",
+                        "clarify_facts",
+                        "clarify_late_policy",
+                        "submit_claim_and_receipt"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 6,
+                    "type": "array"
+                  },
+                  "receipt_restarts_deadline": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "findings",
+                  "decision",
+                  "next_actions",
+                  "deadline_days",
+                  "absolute_date",
+                  "receipt_restarts_deadline",
+                  "explanation"
+                ],
+                "type": "object"
+              },
+              "permission_requirements": [
+                {
+                  "resource_ref": "res_45de40de1f234518ae4882706effbcb2",
+                  "tool_ref": "resource.read"
+                },
+                {
+                  "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+                  "tool_ref": "resource.read"
+                }
+              ],
+              "postcheck_refs": [
+                "source.conditional_report.v1"
+              ],
+              "preconditions": [],
+              "reconcile_ref": "operation.lookup.v1",
+              "revision": 1,
+              "schema_version": "1.0-draft"
+            },
+            "step": {
+              "binding_id": "conditional_report",
+              "depends_on": [],
+              "inputs": {
+                "amount": {
+                  "field": "amount",
+                  "ref": null,
+                  "source": "input"
+                },
+                "approved": {
+                  "field": "approved",
+                  "ref": null,
+                  "source": "input"
+                },
+                "elapsed_days": {
+                  "field": "elapsed_days",
+                  "ref": null,
+                  "source": "input"
+                },
+                "kind": {
+                  "field": "kind",
+                  "ref": null,
+                  "source": "input"
+                },
+                "receipt_present": {
+                  "field": "receipt_present",
+                  "ref": null,
+                  "source": "input"
+                },
+                "resource_id": {
+                  "field": "resource_id",
+                  "ref": "rules",
+                  "source": "data"
+                },
+                "trip_ended": {
+                  "field": "trip_ended",
+                  "ref": null,
+                  "source": "input"
+                }
+              },
+              "step_id": "report"
+            }
+          },
+          "content_fingerprint": "a75a3cf1f018bead3a6c3efb0d33f64480e5fd03c009c4a0216a2ea01517fc5f"
+        },
+        {
+          "id": "node_f17c807980704462a53df3f8c4715742",
+          "key": "artifact:absolute_date",
+          "kind": "ARTIFACT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "binding": {
+              "field": "absolute_date",
+              "ref": "report",
+              "source": "step"
+            },
+            "field": "absolute_date",
+            "schema": {
+              "maxLength": 40,
+              "type": "string"
+            }
+          },
+          "content_fingerprint": "c31bac12015d66de3ebbd469a90c8b59e57dd072d1b635591133a0f4d845f23a"
+        },
+        {
+          "id": "node_afc473cbaa0a49fba0bc6bb353ed37b0",
+          "key": "artifact:deadline_days",
+          "kind": "ARTIFACT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "binding": {
+              "field": "deadline_days",
+              "ref": "report",
+              "source": "step"
+            },
+            "field": "deadline_days",
+            "schema": {
+              "maximum": 3650,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "content_fingerprint": "81152b9374dd04d97352b6db07a5642af709a53216914d2e5e9c9d89ae139838"
+        },
+        {
+          "id": "node_6e2fcf83a85244d1be94ef5d0a20b617",
+          "key": "artifact:decision",
+          "kind": "ARTIFACT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "binding": {
+              "field": "decision",
+              "ref": "report",
+              "source": "step"
+            },
+            "field": "decision",
+            "schema": {
+              "enum": [
+                "ALLOW",
+                "BLOCK",
+                "UNKNOWN"
+              ],
+              "type": "string"
+            }
+          },
+          "content_fingerprint": "fe98b83e9d40a992332ff77de805a230400bf2b984e35578d1c8491ca561f41a"
+        },
+        {
+          "id": "node_7415c0f7cde743a0ae33bc5a4f70c096",
+          "key": "artifact:explanation",
+          "kind": "ARTIFACT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "binding": {
+              "field": "explanation",
+              "ref": "report",
+              "source": "step"
+            },
+            "field": "explanation",
+            "schema": {
+              "maxLength": 1000,
+              "type": "string"
+            }
+          },
+          "content_fingerprint": "3ab97a131db91572db282e8ce3abf34cfe3d313250075b33d579e3dd4a092fa1"
+        },
+        {
+          "id": "node_98a0cf48d61a4fdc8dd5cbab625c2190",
+          "key": "artifact:findings",
+          "kind": "ARTIFACT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "binding": {
+              "field": "findings",
+              "ref": "report",
+              "source": "step"
+            },
+            "field": "findings",
+            "schema": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "applies": {
+                    "enum": [
+                      "TRUE",
+                      "FALSE",
+                      "UNKNOWN"
+                    ],
+                    "type": "string"
+                  },
+                  "citation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "line": {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "quote": {
+                        "maxLength": 1000,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "line",
+                      "quote"
+                    ],
+                    "type": "object"
+                  },
+                  "rule_id": {
+                    "enum": [
+                      "R1",
+                      "R2",
+                      "R3"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rule_id",
+                  "applies",
+                  "citation"
+                ],
+                "type": "object"
+              },
+              "maxItems": 3,
+              "type": "array"
+            }
+          },
+          "content_fingerprint": "04eb157b1edee336dbf0351515842b3d28e8e24229e3dff4127bba7488424d2a"
+        },
+        {
+          "id": "node_4b1e71974fa64d3ba5f7b3a1e0cca140",
+          "key": "artifact:next_actions",
+          "kind": "ARTIFACT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "binding": {
+              "field": "next_actions",
+              "ref": "report",
+              "source": "step"
+            },
+            "field": "next_actions",
+            "schema": {
+              "items": {
+                "enum": [
+                  "wait_trip_end",
+                  "obtain_receipt",
+                  "obtain_prior_approval",
+                  "clarify_facts",
+                  "clarify_late_policy",
+                  "submit_claim_and_receipt"
+                ],
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            }
+          },
+          "content_fingerprint": "961a852b581688727701402a7169beb01ac8f88cadbc06033e7523270b3b2db6"
+        },
+        {
+          "id": "node_146912b369ec426db0e49e59b8ea9a44",
+          "key": "artifact:receipt_restarts_deadline",
+          "kind": "ARTIFACT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "binding": {
+              "field": "receipt_restarts_deadline",
+              "ref": "report",
+              "source": "step"
+            },
+            "field": "receipt_restarts_deadline",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          "content_fingerprint": "d1e43710d4354df03eb49ba4860d0ffd5e90e7d0a55c90a30f30fbf5969e6f90"
+        },
+        {
+          "id": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "key": "check:source.conditional_report.v1",
+          "kind": "CHECK",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "check_ref": "source.conditional_report.v1",
+            "source_version": {
+              "content_fingerprint": "f95f96ba91f3f07a55dab8b632c9c4002725503ab06fbc4bac4c0db84c43e110",
+              "revision": 1
+            }
+          },
+          "content_fingerprint": "36851a87ded9d6390a0c60e1b858d76d793912fa07e82762d33d8df7b7d0c72f"
+        },
+        {
+          "id": "goal_16f279adfa60469d9e127d08057f0940",
+          "key": "goal:goal_16f279adfa60469d9e127d08057f0940",
+          "kind": "GOAL",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "goal_ref": "goal_16f279adfa60469d9e127d08057f0940",
+            "source_version": {
+              "content_fingerprint": "049ea9eba4cc01a9e6886811245d969fb9154ffc2a89132722e594ee862cda37",
+              "revision": 1
+            }
+          },
+          "content_fingerprint": "5f203192207f8f3fa253db7a66a7c66abdfa81ec779ef24c0c0ea02ef06756cd"
+        },
+        {
+          "id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "key": "manifest:app_182633ae54fe44bcbd3ada60260c0ca3",
+          "kind": "MANIFEST",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "action_bindings": [
+              {
+                "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+                "binding_id": "conditional_report",
+                "revision": 1
+              }
+            ],
+            "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+            "data_bindings": [
+              {
+                "binding_id": "rules",
+                "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+              }
+            ],
+            "data_schema_version": 1,
+            "dependency_lock": [
+              {
+                "kind": "resource",
+                "ref": "res_45de40de1f234518ae4882706effbcb2",
+                "version": "1"
+              },
+              {
+                "kind": "resource",
+                "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+                "version": "1"
+              },
+              {
+                "kind": "tool",
+                "ref": "resource.read",
+                "version": "1"
+              },
+              {
+                "kind": "prompt",
+                "ref": "intern.system.v1",
+                "version": "1"
+              },
+              {
+                "kind": "check",
+                "ref": "source.conditional_report.v1",
+                "version": "1"
+              }
+            ],
+            "goal_ref": "goal_16f279adfa60469d9e127d08057f0940",
+            "input_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "maximum": 1000000,
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "integer"
+                },
+                "approved": {
+                  "nullable": true,
+                  "type": "boolean"
+                },
+                "elapsed_days": {
+                  "maximum": 3650,
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "integer"
+                },
+                "kind": {
+                  "enum": [
+                    "HYPOTHETICAL_EMPLOYEE"
+                  ],
+                  "type": "string"
+                },
+                "receipt_present": {
+                  "nullable": true,
+                  "type": "boolean"
+                },
+                "trip_ended": {
+                  "nullable": true,
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "trip_ended",
+                "amount",
+                "receipt_present",
+                "approved",
+                "elapsed_days"
+              ],
+              "type": "object"
+            },
+            "origin": "task_run",
+            "output_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "absolute_date": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "deadline_days": {
+                  "maximum": 3650,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "decision": {
+                  "enum": [
+                    "ALLOW",
+                    "BLOCK",
+                    "UNKNOWN"
+                  ],
+                  "type": "string"
+                },
+                "explanation": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "findings": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "applies": {
+                        "enum": [
+                          "TRUE",
+                          "FALSE",
+                          "UNKNOWN"
+                        ],
+                        "type": "string"
+                      },
+                      "citation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "line": {
+                            "maximum": 200,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "quote": {
+                            "maxLength": 1000,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "line",
+                          "quote"
+                        ],
+                        "type": "object"
+                      },
+                      "rule_id": {
+                        "enum": [
+                          "R1",
+                          "R2",
+                          "R3"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "rule_id",
+                      "applies",
+                      "citation"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 3,
+                  "type": "array"
+                },
+                "next_actions": {
+                  "items": {
+                    "enum": [
+                      "wait_trip_end",
+                      "obtain_receipt",
+                      "obtain_prior_approval",
+                      "clarify_facts",
+                      "clarify_late_policy",
+                      "submit_claim_and_receipt"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 6,
+                  "type": "array"
+                },
+                "receipt_restarts_deadline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "findings",
+                "decision",
+                "next_actions",
+                "deadline_days",
+                "absolute_date",
+                "receipt_restarts_deadline",
+                "explanation"
+              ],
+              "type": "object"
+            },
+            "outputs": {
+              "absolute_date": {
+                "field": "absolute_date",
+                "ref": "report",
+                "source": "step"
+              },
+              "deadline_days": {
+                "field": "deadline_days",
+                "ref": "report",
+                "source": "step"
+              },
+              "decision": {
+                "field": "decision",
+                "ref": "report",
+                "source": "step"
+              },
+              "explanation": {
+                "field": "explanation",
+                "ref": "report",
+                "source": "step"
+              },
+              "findings": {
+                "field": "findings",
+                "ref": "report",
+                "source": "step"
+              },
+              "next_actions": {
+                "field": "next_actions",
+                "ref": "report",
+                "source": "step"
+              },
+              "receipt_restarts_deadline": {
+                "field": "receipt_restarts_deadline",
+                "ref": "report",
+                "source": "step"
+              }
+            },
+            "permission_requirements": [
+              {
+                "resource_ref": "res_45de40de1f234518ae4882706effbcb2",
+                "tool_ref": "resource.read"
+              },
+              {
+                "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+                "tool_ref": "resource.read"
+              }
+            ],
+            "revision": 1,
+            "runtime_identity_requirements": {
+              "mode": "user_and_project_intersection"
+            },
+            "runtime_limits": {
+              "max_output_tokens": 1024,
+              "max_repairs": 1,
+              "max_requests": 4,
+              "max_tools": 4,
+              "max_total_tokens": 64000,
+              "run_seconds": 300
+            },
+            "schema_version": "1.0-draft",
+            "source_run_ref": "run_c3c5f22c9f4a48a0ba13f22f3ec22bb0",
+            "validation_suite_ref": "source.conditional_report.v1",
+            "views": [
+              {
+                "component_ref": "text",
+                "output_field": "decision"
+              }
+            ],
+            "workflow": [
+              {
+                "binding_id": "conditional_report",
+                "depends_on": [],
+                "inputs": {
+                  "amount": {
+                    "field": "amount",
+                    "ref": null,
+                    "source": "input"
+                  },
+                  "approved": {
+                    "field": "approved",
+                    "ref": null,
+                    "source": "input"
+                  },
+                  "elapsed_days": {
+                    "field": "elapsed_days",
+                    "ref": null,
+                    "source": "input"
+                  },
+                  "kind": {
+                    "field": "kind",
+                    "ref": null,
+                    "source": "input"
+                  },
+                  "receipt_present": {
+                    "field": "receipt_present",
+                    "ref": null,
+                    "source": "input"
+                  },
+                  "resource_id": {
+                    "field": "resource_id",
+                    "ref": "rules",
+                    "source": "data"
+                  },
+                  "trip_ended": {
+                    "field": "trip_ended",
+                    "ref": null,
+                    "source": "input"
+                  }
+                },
+                "step_id": "report"
+              }
+            ]
+          },
+          "content_fingerprint": "e2eba65067d6147207a3a5a28e09a5bc838e307d906fcb51328d557c2842347c"
+        },
+        {
+          "id": "node_06c8c98ba4da40148cbf692ab60bc7fa",
+          "key": "rule:check:source.conditional_report.v1",
+          "kind": "REQUIREMENT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "kind": "check",
+            "ref": "source.conditional_report.v1",
+            "source_version": {
+              "content_fingerprint": "1b1e7e02aec4e233dd55fb4896230c3285c21b27dbb880b490065d11539ad4af",
+              "revision": 1
+            },
+            "version": "1"
+          },
+          "content_fingerprint": "434261b3e9e17cc9e92aaf95c34f239f505a46b89fc3fc8d7ac47d09401e4dfb"
+        },
+        {
+          "id": "node_cd0bbb0ab91147849a52fb8108007dc8",
+          "key": "rule:prompt:intern.system.v1",
+          "kind": "REQUIREMENT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "kind": "prompt",
+            "ref": "intern.system.v1",
+            "source_version": {
+              "content_fingerprint": "db7c0288e4d9b0c1068258dc364fc938c738f8b98824b956353b3d57fea915d2",
+              "revision": 1
+            },
+            "version": "1"
+          },
+          "content_fingerprint": "dff9dcea03a63b50576bd8d0c90987cc1c674643262507c6242254315a27eee4"
+        },
+        {
+          "id": "node_b7f44f1ed7c040b8b71158c6e638a59f",
+          "key": "rule:tool:resource.read",
+          "kind": "REQUIREMENT",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "kind": "tool",
+            "ref": "resource.read",
+            "source_version": {
+              "content_fingerprint": "4b631befd9a08b259f151bebb02dafa875b2a81376bf4348153ccecbed458bdb",
+              "revision": 1
+            },
+            "version": "1"
+          },
+          "content_fingerprint": "8d07cfacb3e2545354e7c3f33a13c99f8ad1744e71e0cc2d3be8346107ce402d"
+        },
+        {
+          "id": "res_45de40de1f234518ae4882706effbcb2",
+          "key": "source:res_45de40de1f234518ae4882706effbcb2",
+          "kind": "SOURCE",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2",
+            "source_version": {
+              "content_fingerprint": "10e33b6d07731695c74d4457e67f4ef9522f353122f157c682508cf6840602bb",
+              "revision": 1
+            }
+          },
+          "content_fingerprint": "953f98263225e031c694651b89cc80737054877ade6ed07e9b69a902761b5884"
+        },
+        {
+          "id": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+          "key": "source:res_e723b5121bfe479ea2cd7b00cb695ecb",
+          "kind": "SOURCE",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+            "source_version": {
+              "content_fingerprint": "816d94b7cbe0c8aab3473f25cf8767a69603799cd9b121ab734aed7e57325042",
+              "revision": 1
+            }
+          },
+          "content_fingerprint": "c1b6ca73ea4b1363d40d05e845cdff7117657a66edb341354b9bc6dd49013601"
+        },
+        {
+          "id": "node_c5f4c7139c9c49e482627c417d557fa2",
+          "key": "view:text:decision",
+          "kind": "VIEW",
+          "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+          "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "revision": 1,
+          "locked": false,
+          "definition": {
+            "component_ref": "text",
+            "output_field": "decision"
+          },
+          "content_fingerprint": "4099266903be2c44bdc91f624d3d0888109429f0f4476a64e8efc50b4beea409"
+        }
+      ],
+      "edges": [
+        {
+          "upstream": "node_afc473cbaa0a49fba0bc6bb353ed37b0",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_98a0cf48d61a4fdc8dd5cbab625c2190",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_c5f4c7139c9c49e482627c417d557fa2",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_b7f44f1ed7c040b8b71158c6e638a59f",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_06c8c98ba4da40148cbf692ab60bc7fa",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_f17c807980704462a53df3f8c4715742",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "goal_16f279adfa60469d9e127d08057f0940",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_146912b369ec426db0e49e59b8ea9a44",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_6e2fcf83a85244d1be94ef5d0a20b617",
+          "downstream": "node_c5f4c7139c9c49e482627c417d557fa2",
+          "type": "PRESENTATION",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "res_45de40de1f234518ae4882706effbcb2",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_cd0bbb0ab91147849a52fb8108007dc8",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_6e2fcf83a85244d1be94ef5d0a20b617",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_cd0bbb0ab91147849a52fb8108007dc8",
+          "downstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "type": "RULE",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_06c8c98ba4da40148cbf692ab60bc7fa",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "RULE",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_4b1e71974fa64d3ba5f7b3a1e0cca140",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_f17c807980704462a53df3f8c4715742",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "res_45de40de1f234518ae4882706effbcb2",
+          "downstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_7415c0f7cde743a0ae33bc5a4f70c096",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_98a0cf48d61a4fdc8dd5cbab625c2190",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_7415c0f7cde743a0ae33bc5a4f70c096",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_6e2fcf83a85244d1be94ef5d0a20b617",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_c5f4c7139c9c49e482627c417d557fa2",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_146912b369ec426db0e49e59b8ea9a44",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_4b1e71974fa64d3ba5f7b3a1e0cca140",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_98a0cf48d61a4fdc8dd5cbab625c2190",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_6e2fcf83a85244d1be94ef5d0a20b617",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_b7f44f1ed7c040b8b71158c6e638a59f",
+          "downstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "type": "RULE",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_146912b369ec426db0e49e59b8ea9a44",
+          "downstream": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+          "type": "VERIFIED_BY",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_f17c807980704462a53df3f8c4715742",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_afc473cbaa0a49fba0bc6bb353ed37b0",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "downstream": "node_4b1e71974fa64d3ba5f7b3a1e0cca140",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+          "downstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "type": "DATA",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_7415c0f7cde743a0ae33bc5a4f70c096",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "goal_16f279adfa60469d9e127d08057f0940",
+          "downstream": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "type": "RULE",
+          "provenance": "DECLARED"
+        },
+        {
+          "upstream": "node_afc473cbaa0a49fba0bc6bb353ed37b0",
+          "downstream": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "type": "PACKAGED_IN",
+          "provenance": "DECLARED"
+        }
+      ],
+      "unknown_dependencies": [
+        {
+          "node_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+          "scope": "PROJECT",
+          "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+        }
+      ],
+      "graph_fingerprint": "197fff85830966624833f694d649f1e16f6bfa465665b898c5c7a4c87eb9ac82"
+    },
+    "source_versions": {
+      "check:source.conditional_report.v1": {
+        "revision": 1,
+        "content_fingerprint": "f95f96ba91f3f07a55dab8b632c9c4002725503ab06fbc4bac4c0db84c43e110"
+      },
+      "goal:goal_16f279adfa60469d9e127d08057f0940": {
+        "revision": 1,
+        "content_fingerprint": "049ea9eba4cc01a9e6886811245d969fb9154ffc2a89132722e594ee862cda37"
+      },
+      "rule:check:source.conditional_report.v1": {
+        "revision": 1,
+        "content_fingerprint": "1b1e7e02aec4e233dd55fb4896230c3285c21b27dbb880b490065d11539ad4af"
+      },
+      "rule:prompt:intern.system.v1": {
+        "revision": 1,
+        "content_fingerprint": "db7c0288e4d9b0c1068258dc364fc938c738f8b98824b956353b3d57fea915d2"
+      },
+      "rule:tool:resource.read": {
+        "revision": 1,
+        "content_fingerprint": "4b631befd9a08b259f151bebb02dafa875b2a81376bf4348153ccecbed458bdb"
+      },
+      "source:res_45de40de1f234518ae4882706effbcb2": {
+        "revision": 1,
+        "content_fingerprint": "10e33b6d07731695c74d4457e67f4ef9522f353122f157c682508cf6840602bb"
+      },
+      "source:res_e723b5121bfe479ea2cd7b00cb695ecb": {
+        "revision": 1,
+        "content_fingerprint": "816d94b7cbe0c8aab3473f25cf8767a69603799cd9b121ab734aed7e57325042"
+      }
+    },
+    "cached": false
+  },
+  "history": {
+    "namespace": "bounded-report-manifest.v1",
+    "id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+    "name": "Saved hypothetical travel report",
+    "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+    "runtime_id": "runtime_952586bf15eb4756876bd5c583744770",
+    "fingerprint": "0cc61ad17e6582d457bd5435b732d2ee21a9850356d6d26e1b7f5a4a1bf34637",
+    "candidate": {
+      "namespace": "bounded-report-manifest.v1",
+      "manifest": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+        "revision": 1,
+        "origin": "task_run",
+        "goal_ref": "goal_16f279adfa60469d9e127d08057f0940",
+        "source_run_ref": "run_c3c5f22c9f4a48a0ba13f22f3ec22bb0",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "HYPOTHETICAL_EMPLOYEE"
+              ]
+            },
+            "trip_ended": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "amount": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "receipt_present": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "approved": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "elapsed_days": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 3650
+            }
+          },
+          "required": [
+            "kind",
+            "trip_ended",
+            "amount",
+            "receipt_present",
+            "approved",
+            "elapsed_days"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rule_id": {
+                    "type": "string",
+                    "enum": [
+                      "R1",
+                      "R2",
+                      "R3"
+                    ]
+                  },
+                  "applies": {
+                    "type": "string",
+                    "enum": [
+                      "TRUE",
+                      "FALSE",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "citation": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200
+                      },
+                      "quote": {
+                        "type": "string",
+                        "maxLength": 1000
+                      }
+                    },
+                    "required": [
+                      "line",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "rule_id",
+                  "applies",
+                  "citation"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 3
+            },
+            "decision": {
+              "type": "string",
+              "enum": [
+                "ALLOW",
+                "BLOCK",
+                "UNKNOWN"
+              ]
+            },
+            "next_actions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "wait_trip_end",
+                  "obtain_receipt",
+                  "obtain_prior_approval",
+                  "clarify_facts",
+                  "clarify_late_policy",
+                  "submit_claim_and_receipt"
+                ]
+              },
+              "maxItems": 6
+            },
+            "deadline_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650
+            },
+            "absolute_date": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "receipt_restarts_deadline": {
+              "type": "boolean"
+            },
+            "explanation": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "findings",
+            "decision",
+            "next_actions",
+            "deadline_days",
+            "absolute_date",
+            "receipt_restarts_deadline",
+            "explanation"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "findings": {
+            "source": "step",
+            "ref": "report",
+            "field": "findings"
+          },
+          "decision": {
+            "source": "step",
+            "ref": "report",
+            "field": "decision"
+          },
+          "next_actions": {
+            "source": "step",
+            "ref": "report",
+            "field": "next_actions"
+          },
+          "deadline_days": {
+            "source": "step",
+            "ref": "report",
+            "field": "deadline_days"
+          },
+          "absolute_date": {
+            "source": "step",
+            "ref": "report",
+            "field": "absolute_date"
+          },
+          "receipt_restarts_deadline": {
+            "source": "step",
+            "ref": "report",
+            "field": "receipt_restarts_deadline"
+          },
+          "explanation": {
+            "source": "step",
+            "ref": "report",
+            "field": "explanation"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "decision"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "report",
+            "binding_id": "conditional_report",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "rules",
+                "field": "resource_id"
+              },
+              "kind": {
+                "source": "input",
+                "field": "kind"
+              },
+              "trip_ended": {
+                "source": "input",
+                "field": "trip_ended"
+              },
+              "amount": {
+                "source": "input",
+                "field": "amount"
+              },
+              "receipt_present": {
+                "source": "input",
+                "field": "receipt_present"
+              },
+              "approved": {
+                "source": "input",
+                "field": "approved"
+              },
+              "elapsed_days": {
+                "source": "input",
+                "field": "elapsed_days"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "conditional_report",
+            "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+            "revision": 1
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "rules",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_project_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          },
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_45de40de1f234518ae4882706effbcb2",
+            "version": "1"
+          },
+          {
+            "kind": "resource",
+            "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "prompt",
+            "ref": "intern.system.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "source.conditional_report.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "source.conditional_report.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "actions": [
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+          "revision": 1,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "HYPOTHETICAL_EMPLOYEE"
+                ]
+              },
+              "trip_ended": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "amount": {
+                "type": "integer",
+                "nullable": true,
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "receipt_present": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "approved": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "elapsed_days": {
+                "type": "integer",
+                "nullable": true,
+                "minimum": 0,
+                "maximum": 3650
+              }
+            },
+            "required": [
+              "resource_id",
+              "kind",
+              "trip_ended",
+              "amount",
+              "receipt_present",
+              "approved",
+              "elapsed_days"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule_id": {
+                      "type": "string",
+                      "enum": [
+                        "R1",
+                        "R2",
+                        "R3"
+                      ]
+                    },
+                    "applies": {
+                      "type": "string",
+                      "enum": [
+                        "TRUE",
+                        "FALSE",
+                        "UNKNOWN"
+                      ]
+                    },
+                    "citation": {
+                      "type": "object",
+                      "properties": {
+                        "line": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 200
+                        },
+                        "quote": {
+                          "type": "string",
+                          "maxLength": 1000
+                        }
+                      },
+                      "required": [
+                        "line",
+                        "quote"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "rule_id",
+                    "applies",
+                    "citation"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 3
+              },
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "ALLOW",
+                  "BLOCK",
+                  "UNKNOWN"
+                ]
+              },
+              "next_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "wait_trip_end",
+                    "obtain_receipt",
+                    "obtain_prior_approval",
+                    "clarify_facts",
+                    "clarify_late_policy",
+                    "submit_claim_and_receipt"
+                  ]
+                },
+                "maxItems": 6
+              },
+              "deadline_days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "absolute_date": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "receipt_restarts_deadline": {
+                "type": "boolean"
+              },
+              "explanation": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "findings",
+              "decision",
+              "next_actions",
+              "deadline_days",
+              "absolute_date",
+              "receipt_restarts_deadline",
+              "explanation"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "bounded_report",
+            "ref": "intern.conditional_report",
+            "version": "1"
+          },
+          "allowed_tool_refs": [
+            "resource.read"
+          ],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_45de40de1f234518ae4882706effbcb2",
+              "version": "1"
+            },
+            {
+              "kind": "resource",
+              "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+            },
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "source.conditional_report.v1"
+          ],
+          "limits": {
+            "max_requests": 4,
+            "max_tools": 4,
+            "max_repairs": 1,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED",
+            "VERSION_CONFLICT",
+            "RESOURCE_UNAVAILABLE"
+          ]
+        }
+      ],
+      "source_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+      "report_proof": {
+        "named_app_id": "app_44e0e1e2cdaf4b25ac42878eedac363f",
+        "expected_named_fingerprint": "54442bb4ccde3c4855af2cc188bf9f367ff92ccadae68d4a85707d819b8390bf",
+        "extraction_run_id": "run_f0b4724730bd421d80f5bfffd9d15725",
+        "expected_plan_fingerprint": "a865e05acb84aa1d8bd3db5fb3377ce29f608a6f76f603debc353b761bbd5881",
+        "expected_check_fingerprint": "449f1f8414ebfc0481dcdbf0ac7d8913e011ba989bfb7507a31d490a9331676a",
+        "source_run_id": "run_c3c5f22c9f4a48a0ba13f22f3ec22bb0",
+        "source_resource_id": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+        "target_resource_id": "res_45de40de1f234518ae4882706effbcb2",
+        "expected_target_hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+        "runtime_id": "runtime_952586bf15eb4756876bd5c583744770",
+        "limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        }
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "HYPOTHETICAL_EMPLOYEE"
+          ]
+        },
+        "trip_ended": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "amount": {
+          "type": "integer",
+          "nullable": true,
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "receipt_present": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "approved": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "elapsed_days": {
+          "type": "integer",
+          "nullable": true,
+          "minimum": 0,
+          "maximum": 3650
+        }
+      },
+      "required": [
+        "kind",
+        "trip_ended",
+        "amount",
+        "receipt_present",
+        "approved",
+        "elapsed_days"
+      ],
+      "additionalProperties": false
+    },
+    "state": "PREVIEW_ONLY",
+    "publishable": false,
+    "formal_publication_enabled": false,
+    "semantic_status": "UNKNOWN",
+    "owner_acceptance": "PENDING",
+    "overall_run_acceptance": "NOT_ACCEPTED",
+    "validation": {
+      "state": "PREFLIGHTED_DRAFT",
+      "publishable": false,
+      "execution_performed": false,
+      "not_an_executable_plan": true,
+      "topological_order": [
+        "report"
+      ],
+      "budget_envelope": {
+        "max_requests": 4,
+        "max_tools": 4,
+        "max_repairs": 1,
+        "max_total_tokens": 64000,
+        "run_seconds": 300
+      },
+      "resource_refs": [
+        "res_45de40de1f234518ae4882706effbcb2",
+        "res_e723b5121bfe479ea2cd7b00cb695ecb"
+      ],
+      "candidate_fingerprint_basis": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+        "revision": 1,
+        "origin": "task_run",
+        "goal_ref": "goal_16f279adfa60469d9e127d08057f0940",
+        "source_run_ref": "run_c3c5f22c9f4a48a0ba13f22f3ec22bb0",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "HYPOTHETICAL_EMPLOYEE"
+              ]
+            },
+            "trip_ended": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "amount": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "receipt_present": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "approved": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "elapsed_days": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 3650
+            }
+          },
+          "required": [
+            "kind",
+            "trip_ended",
+            "amount",
+            "receipt_present",
+            "approved",
+            "elapsed_days"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "rule_id": {
+                    "type": "string",
+                    "enum": [
+                      "R1",
+                      "R2",
+                      "R3"
+                    ]
+                  },
+                  "applies": {
+                    "type": "string",
+                    "enum": [
+                      "TRUE",
+                      "FALSE",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "citation": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200
+                      },
+                      "quote": {
+                        "type": "string",
+                        "maxLength": 1000
+                      }
+                    },
+                    "required": [
+                      "line",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "rule_id",
+                  "applies",
+                  "citation"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 3
+            },
+            "decision": {
+              "type": "string",
+              "enum": [
+                "ALLOW",
+                "BLOCK",
+                "UNKNOWN"
+              ]
+            },
+            "next_actions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "wait_trip_end",
+                  "obtain_receipt",
+                  "obtain_prior_approval",
+                  "clarify_facts",
+                  "clarify_late_policy",
+                  "submit_claim_and_receipt"
+                ]
+              },
+              "maxItems": 6
+            },
+            "deadline_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650
+            },
+            "absolute_date": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "receipt_restarts_deadline": {
+              "type": "boolean"
+            },
+            "explanation": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "findings",
+            "decision",
+            "next_actions",
+            "deadline_days",
+            "absolute_date",
+            "receipt_restarts_deadline",
+            "explanation"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "findings": {
+            "source": "step",
+            "ref": "report",
+            "field": "findings"
+          },
+          "decision": {
+            "source": "step",
+            "ref": "report",
+            "field": "decision"
+          },
+          "next_actions": {
+            "source": "step",
+            "ref": "report",
+            "field": "next_actions"
+          },
+          "deadline_days": {
+            "source": "step",
+            "ref": "report",
+            "field": "deadline_days"
+          },
+          "absolute_date": {
+            "source": "step",
+            "ref": "report",
+            "field": "absolute_date"
+          },
+          "receipt_restarts_deadline": {
+            "source": "step",
+            "ref": "report",
+            "field": "receipt_restarts_deadline"
+          },
+          "explanation": {
+            "source": "step",
+            "ref": "report",
+            "field": "explanation"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "decision"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "report",
+            "binding_id": "conditional_report",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "rules",
+                "field": "resource_id"
+              },
+              "kind": {
+                "source": "input",
+                "ref": null,
+                "field": "kind"
+              },
+              "trip_ended": {
+                "source": "input",
+                "ref": null,
+                "field": "trip_ended"
+              },
+              "amount": {
+                "source": "input",
+                "ref": null,
+                "field": "amount"
+              },
+              "receipt_present": {
+                "source": "input",
+                "ref": null,
+                "field": "receipt_present"
+              },
+              "approved": {
+                "source": "input",
+                "ref": null,
+                "field": "approved"
+              },
+              "elapsed_days": {
+                "source": "input",
+                "ref": null,
+                "field": "elapsed_days"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "conditional_report",
+            "action_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+            "revision": 1
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "rules",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_project_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_45de40de1f234518ae4882706effbcb2"
+          },
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_e723b5121bfe479ea2cd7b00cb695ecb"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_45de40de1f234518ae4882706effbcb2",
+            "version": "1"
+          },
+          {
+            "kind": "resource",
+            "ref": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "prompt",
+            "ref": "intern.system.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "source.conditional_report.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "source.conditional_report.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "compiler": "bounded-report-manifest.v1",
+      "actual_execution_gateway": "protocol-cold.v1",
+      "scope": "finite Report only; semantic UNKNOWN, owner PENDING"
+    },
+    "input_guidance": {
+      "mode": "BOUNDED_REPORT",
+      "authorization_domain": "SHARED_EXISTING_PROJECT_RUNTIME",
+      "input": "new typed hypothetical Scenario only",
+      "source_report_reused": false,
+      "release_supported": false
+    },
+    "history": [
+      {
+        "id": "preview_9978433f82ce41518407e8861b94edef",
+        "input": {
+          "kind": "HYPOTHETICAL_EMPLOYEE",
+          "trip_ended": true,
+          "amount": 500,
+          "receipt_present": true,
+          "approved": false,
+          "elapsed_days": 2
+        },
+        "run": {
+          "namespace": "conditional-run-checks.v1",
+          "overall_run_acceptance": "NOT_ACCEPTED",
+          "candidate_only": true,
+          "semantic_status": "UNKNOWN",
+          "semantic_review": "WAITING_APPROVAL",
+          "owner_semantic_acceptance": "PENDING",
+          "run_id": "run_6be676fb12b940969f66d5c3211dbc14",
+          "phase": "cold",
+          "status": "WAITING_APPROVAL",
+          "version": 2,
+          "fence": 1,
+          "result": {
+            "protocol_result": {
+              "kind": "model-protocol.v1",
+              "status": "AWAITING_EVALUATION",
+              "semantic_status": "UNKNOWN",
+              "evidence": {
+                "goal": "只核对公开注册的A-S有限规则及显式假设事实，返回Report结构的条件、逐行引用、决策、行动、原期限和例外；说明文字不在验收范围，不执行业务动作。",
+                "inputs": {
+                  "scenario_json": "{\"amount\": 500, \"approved\": false, \"elapsed_days\": 2, \"kind\": \"HYPOTHETICAL_EMPLOYEE\", \"receipt_present\": true, \"trip_ended\": true}",
+                  "report_schema_json": "{\"additionalProperties\": false, \"properties\": {\"absolute_date\": {\"maxLength\": 40, \"type\": \"string\"}, \"deadline_days\": {\"maximum\": 3650, \"minimum\": 1, \"type\": \"integer\"}, \"decision\": {\"enum\": [\"ALLOW\", \"BLOCK\", \"UNKNOWN\"], \"type\": \"string\"}, \"explanation\": {\"maxLength\": 1000, \"type\": \"string\"}, \"findings\": {\"items\": {\"additionalProperties\": false, \"properties\": {\"applies\": {\"enum\": [\"TRUE\", \"FALSE\", \"UNKNOWN\"], \"type\": \"string\"}, \"citation\": {\"additionalProperties\": false, \"properties\": {\"line\": {\"maximum\": 200, \"minimum\": 1, \"type\": \"integer\"}, \"quote\": {\"maxLength\": 1000, \"type\": \"string\"}}, \"required\": [\"line\", \"quote\"], \"type\": \"object\"}, \"rule_id\": {\"enum\": [\"R1\", \"R2\", \"R3\"], \"type\": \"string\"}}, \"required\": [\"rule_id\", \"applies\", \"citation\"], \"type\": \"object\"}, \"maxItems\": 3, \"type\": \"array\"}, \"next_actions\": {\"items\": {\"enum\": [\"wait_trip_end\", \"obtain_receipt\", \"obtain_prior_approval\", \"clarify_facts\", \"clarify_late_policy\", \"submit_claim_and_receipt\"], \"type\": \"string\"}, \"maxItems\": 6, \"type\": \"array\"}, \"receipt_restarts_deadline\": {\"type\": \"boolean\"}}, \"required\": [\"findings\", \"decision\", \"next_actions\", \"deadline_days\", \"absolute_date\", \"receipt_restarts_deadline\", \"explanation\"], \"type\": \"object\"}"
+                },
+                "resource_ids": [
+                  "res_45de40de1f234518ae4882706effbcb2"
+                ],
+                "tool_trace": [
+                  {
+                    "tool": "resource.read",
+                    "args": {
+                      "resource_id": "res_45de40de1f234518ae4882706effbcb2"
+                    },
+                    "data": {
+                      "resource_id": "res_45de40de1f234518ae4882706effbcb2",
+                      "content": "合成规则A-S：境内差旅报销\n适用对象：海岚工作室员工；本文件全部内容为虚构。\nR1：行程结束后，员工须在10个自然日内提交报销单和收据。\nR2：金额超过500元时，须先取得主管批准，再提交报销。\nR3：缺少收据时不得提交；收据补齐后仍按R1期限处理。\n案例：林舟行程已结束2天，金额680元，收据齐全，尚未取得主管批准。\n问题：提取规则，并判断林舟现在可否提交及尚需完成什么。\n",
+                      "hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+                      "format": "txt"
+                    }
+                  }
+                ],
+                "output": {
+                  "findings": [
+                    {
+                      "rule_id": "R1",
+                      "applies": "TRUE",
+                      "citation": {
+                        "line": 3,
+                        "quote": "R1：行程结束后，员工须在10个自然日内提交报销单和收据。"
+                      }
+                    },
+                    {
+                      "rule_id": "R2",
+                      "applies": "FALSE",
+                      "citation": {
+                        "line": 4,
+                        "quote": "R2：金额超过500元时，须先取得主管批准，再提交报销。"
+                      }
+                    },
+                    {
+                      "rule_id": "R3",
+                      "applies": "FALSE",
+                      "citation": {
+                        "line": 5,
+                        "quote": "R3：缺少收据时不得提交；收据补齐后仍按R1期限处理。"
+                      }
+                    }
+                  ],
+                  "decision": "ALLOW",
+                  "next_actions": [
+                    "submit_claim_and_receipt"
+                  ],
+                  "deadline_days": 10,
+                  "absolute_date": "UNKNOWN",
+                  "receipt_restarts_deadline": false,
+                  "explanation": "<script>window.reportExecuted=true</script> 合成解释"
+                },
+                "attempts": [
+                  {
+                    "identity": {
+                      "requested_model": "intern-s2",
+                      "raw_returned_model": "intern-s2",
+                      "normalized_returned_model": "intern-s2",
+                      "normalization_policy_version": "intern-s2-returned-name.v1",
+                      "enforced": true,
+                      "verdict": "ACCEPTED"
+                    },
+                    "usage": {
+                      "status": "known",
+                      "tokens": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 10,
+                        "total_tokens": 20
+                      }
+                    }
+                  }
+                ]
+              },
+              "verification": null
+            },
+            "completed_fence": 1,
+            "completed_run_version": 2,
+            "operation_refs": [
+              "op_22f20d28eb87453391beedda826d546b"
+            ],
+            "attempt_refs": [
+              "attempt_0ad584fcf6314825a758ee276b47a6ed"
+            ],
+            "scope": {
+              "approval_id": "run_6be676fb12b940969f66d5c3211dbc14",
+              "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+              "resource_ids": [
+                "res_e723b5121bfe479ea2cd7b00cb695ecb",
+                "res_45de40de1f234518ae4882706effbcb2"
+              ],
+              "tool_refs": [
+                "resource.read"
+              ],
+              "max_requests": 3,
+              "mode": "offline",
+              "model": "intern-s2"
+            },
+            "operation_seals": [
+              {
+                "operation_id": "op_22f20d28eb87453391beedda826d546b",
+                "call_id": "protocol:28505924da6488be2e21fff28f9a2f141295bb775ef1469e6175bc8bff071959",
+                "tool_ref": "resource.read",
+                "status": "VERIFIED",
+                "request_fingerprint": "d8cadfc3926c05f50c938af0184f1d68ff8b35aa25326592c63a8ff4a21ad156",
+                "intent_fingerprint": "d8cadfc3926c05f50c938af0184f1d68ff8b35aa25326592c63a8ff4a21ad156",
+                "receipt_fingerprint": "7456157d1fe2e0ac70280b2e519f3e30661d17daf99f08bd6a5538db743ca2c3"
+              }
+            ],
+            "attempt_seals": [
+              {
+                "attempt_id": "attempt_0ad584fcf6314825a758ee276b47a6ed",
+                "safe_response_fingerprint": "dc2422d50636131fca5b3b8daac0bd4404fa18bfd0a6779ed8be181735b95bf7",
+                "usage": {
+                  "status": "known",
+                  "tokens": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 10,
+                    "total_tokens": 20
+                  }
+                },
+                "model_identity": {
+                  "requested_model": "intern-s2",
+                  "raw_returned_model": "intern-s2",
+                  "normalized_returned_model": "intern-s2",
+                  "normalization_policy_version": "intern-s2-returned-name.v1",
+                  "enforced": true,
+                  "verdict": "ACCEPTED"
+                },
+                "parameters_fingerprint": "012e644053b57c3d2af91a404c0bebe51876cba996954a58fd6b9405cb220708",
+                "request_model": "intern-s2",
+                "response_model": "intern-s2",
+                "mode": "MOCK",
+                "status": "RECEIVED"
+              }
+            ]
+          },
+          "result_fingerprint": "0ef51c07e58eeb45ce0a963e74fa4637c5b3a72c9151a2dc15ce47a793b59660",
+          "error": null,
+          "cached": false,
+          "formal_publication_enabled": false
+        },
+        "namespace": "bounded-report-manifest.v1"
+      }
+    ]
+  },
+  "manual_state": {
+    "namespace": "manual-edit-lock.v1",
+    "project_id": "proj_31a703933acd4f0bb8a5d82c2be4a886",
+    "app_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+    "nodes": [
+      {
+        "node_id": "action_c4f861160c104378ba1ec2e6d3680e1c",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_f17c807980704462a53df3f8c4715742",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_afc473cbaa0a49fba0bc6bb353ed37b0",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_6e2fcf83a85244d1be94ef5d0a20b617",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_7415c0f7cde743a0ae33bc5a4f70c096",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_98a0cf48d61a4fdc8dd5cbab625c2190",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_4b1e71974fa64d3ba5f7b3a1e0cca140",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_146912b369ec426db0e49e59b8ea9a44",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_a92b7334d61d4bbf8858c886d1b0ebfa",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "goal_16f279adfa60469d9e127d08057f0940",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "app_182633ae54fe44bcbd3ada60260c0ca3",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_06c8c98ba4da40148cbf692ab60bc7fa",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_cd0bbb0ab91147849a52fb8108007dc8",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_b7f44f1ed7c040b8b71158c6e638a59f",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "res_45de40de1f234518ae4882706effbcb2",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "res_e723b5121bfe479ea2cd7b00cb695ecb",
+        "locked": false,
+        "lock_revision": 0
+      },
+      {
+        "node_id": "node_c5f4c7139c9c49e482627c417d557fa2",
+        "locked": false,
+        "lock_revision": 0
+      }
+    ],
+    "history": [],
+    "graph_fingerprint": "197fff85830966624833f694d649f1e16f6bfa465665b898c5c7a4c87eb9ac82",
+    "graph_revision": 1,
+    "needs_derive": false,
+    "publishable": false,
+    "formal_publication_enabled": false
+  }
+}

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="16" time="63.621" timestamp="2026-10-09T17:45:44.757151+00:00" hostname="5b45fac5b7b9"><testcase classname="test_independent" name="test_report_public_lock_cold_receipt_aba_and_immutable_scope[view:text:decision]" time="5.196" /><testcase classname="test_independent" name="test_report_public_lock_cold_receipt_aba_and_immutable_scope[action:conditional_report]" time="2.649"><failure message="StopIteration">env = (&lt;sim2act.db.Store object at 0x7f31a9c04ce0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-independ...17ce0eda0d46109864431a0dcc1333', 'user_159b716261124a3e921e1c5ffa796010', 'proj_7e6694dc481b4b34bbc71e0b377351a0', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-independent-20261009/pytest-fixture-fixed/test_report_public_lock_cold_r1')
+key = 'action:conditional_report'
+
+    @pytest.mark.parametrize('key',['view:text:decision','action:conditional_report'])
+    def test_report_public_lock_cold_receipt_aba_and_immutable_scope(env,tmp_path,key):
+        app,g,base,_,_,wires=prepared_case(env,tmp_path)
+        before=snapshot(env)
+&gt;       request=lock_body(g,node_key=key);response=post_lock(env,base,request)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+g = {'app_id': 'app_999dc36027a84ea89dfdc1d2b7e062ce', 'authorization_revision': 1, 'business_write_performed': False, 'cached': False, ...}
+key = 'independent-lock', locked = True, rev = 0
+node_key = 'action:conditional_report'
+
+    def lock_body(g,key='independent-lock',locked=True,rev=0,node_key='view:text:decision'):
+&gt;       n=next(v for v in g['graph']['nodes'] if v['key']==node_key)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:30: StopIteration</failure></testcase><testcase classname="test_independent" name="test_lock_conflict_unlock_new_presentation_preserves_every_original" time="8.829" /><testcase classname="test_independent" name="test_report_cas_and_exact_request_seal_reject_with_no_writes[graph_rev_bool]" time="4.354" /><testcase classname="test_independent" name="test_report_cas_and_exact_request_seal_reject_with_no_writes[lock_rev]" time="3.499" /><testcase classname="test_independent" name="test_report_cas_and_exact_request_seal_reject_with_no_writes[node_revision]" time="2.803" /><testcase classname="test_independent" name="test_report_cas_and_exact_request_seal_reject_with_no_writes[consent]" time="3.077" /><testcase classname="test_independent" name="test_report_cas_and_exact_request_seal_reject_with_no_writes[key_change]" time="4.030" /><testcase classname="test_independent" name="test_report_cas_and_exact_request_seal_reject_with_no_writes[unknown_node]" time="3.566" /><testcase classname="test_independent" name="test_source_authority_and_canonical_family_checked_before_lock_history[other_user]" time="3.654" /><testcase classname="test_independent" name="test_source_authority_and_canonical_family_checked_before_lock_history[source_hash_changed]" time="3.753" /><testcase classname="test_independent" name="test_source_authority_and_canonical_family_checked_before_lock_history[target_grant]" time="3.739" /><testcase classname="test_independent" name="test_source_authority_and_canonical_family_checked_before_lock_history[source_run_result]" time="4.402" /><testcase classname="test_independent" name="test_source_authority_and_canonical_family_checked_before_lock_history[candidate_kind]" time="3.457" /><testcase classname="test_independent" name="test_source_authority_and_canonical_family_checked_before_lock_history[seal]" time="3.895" /><testcase classname="test_independent" name="test_real_accepted_plan_replay_can_return_lock_conflict_after_peer_lock" time="2.153"><failure message="KeyError: 'actions'">env = (&lt;sim2act.db.Store object at 0x7f31a814abd0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-independ...b704e4e38b4c518aa9726f47527c31', 'user_d55d3c756ed4479d99ba2f3370f6c5a1', 'proj_9d3a07c3883946f2964af8fee3e77bc2', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-independent-20261009/pytest-fixture-fixed/test_real_accepted_plan_replay0')
+
+    def test_real_accepted_plan_replay_can_return_lock_conflict_after_peer_lock(env,tmp_path):
+        app,g,base,b,_,_=prepared_case(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+&gt;           peer=dict(next(row for row in c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings()
+                 if row['candidate']['actions'][0]['executor']['ref']=='data.aggregate_csv'))
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:141: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = &lt;generator object ResultInternal._iterator_getter.&lt;locals&gt;.iterrows at 0x7f31a9b826b0&gt;
+
+    peer=dict(next(row for row in c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings()
+&gt;        if row['candidate']['actions'][0]['executor']['ref']=='data.aggregate_csv'))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'actions'
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:142: KeyError</failure></testcase></testsuite></testsuites>

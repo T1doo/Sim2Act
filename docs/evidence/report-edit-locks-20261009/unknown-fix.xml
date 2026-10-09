@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="4" time="40.682" timestamp="2026-10-09T17:50:56.552529+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[normal]" time="16.533" /><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[aba]" time="17.554" /><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[unknown-plan]" time="5.117"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Manual lock node version changed&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;      at call (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:89:227)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async unknownPlan (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:101:17)&#10;      at async /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:15:37&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/report_edit_locks_ui.cjs', '/tmp/sim2act-report-edit-locks-20261009/unknown-fix/...im2Act/tests/report_edit_locks_ui.cjs:101:17)\n    at async /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:15:37\n').returncode">env = (&lt;sim2act.db.Store object at 0x7efed4b4fbc0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...7a1ccf1789467fad3a9e3d4edcc676', 'user_cde0bf3d6b884963ba9598ec0428ac9f', 'proj_2259a0ed5dca4572b9e2aae1eee253bf', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/unknown-fix/test_report_edit_lock_actual_h2')
+scenario = 'unknown-plan'
+
+    @pytest.mark.parametrize("scenario", ["normal", "aba", "unknown-plan"])
+    def test_report_edit_lock_actual_http_page(env, tmp_path, scenario):
+        app, _, _, _, output, wires = prepared(env, tmp_path, peer=scenario == "unknown-plan")
+        peer = None
+        if scenario == "unknown-plan":
+            with env[0].tx() as c:
+                peer = dict(
+                    next(
+                        row
+                        for row in c.execute(
+                            select(app_drafts).where(app_drafts.c.project_id == env[5])
+                        ).mappings()
+                        if row["id"] != app["id"]
+                        and row["candidate"].get("manifest", {}).get("workflow", [{}])[0].get("step_id")
+                        == "aggregate"
+                    )
+                )
+        assert shutil.which("node")
+        other = env[0].project(env[3], "Other Report project")
+        before = snapshot(env)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                dict(
+                    base=f"http://127.0.0.1:{port}",
+                    project=env[5],
+                    other=other,
+                    app=app["id"],
+                    explanation=output["explanation"],
+                    scenario=scenario,
+                    peer=None if peer is None else dict(id=peer["id"], fingerprint=peer["fingerprint"]),
+                )
+            )
+        )
+        server = uvicorn.Server(
+            uvicorn.Config(create_app(env[0], env[1]), host="127.0.0.1", port=port, log_level="error")
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(0.01)
+            result = subprocess.run(
+                ["node", "tests/report_edit_locks_ui.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+&gt;           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: {"error":{"code":"VERSION_CONFLICT","message":"Manual lock node version changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E                 at call (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:89:227)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async unknownPlan (/workspace/Sim2Act/tests/report_edit_locks_ui.cjs:101:17)
+E                 at async /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:15:37
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/report_edit_locks_ui.cjs', '/tmp/sim2act-report-edit-locks-20261009/unknown-fix/...im2Act/tests/report_edit_locks_ui.cjs:101:17)\n    at async /workspace/Sim2Act/tests/report_edit_locks_ui.cjs:15:37\n').returncode
+
+tests/test_report_edit_locks_ui.py:76: AssertionError</failure></testcase><testcase classname="tests.test_manual_locks" name="test_client_identity_fields_and_derived_report_read_are_checked_without_writes" time="1.251" /></testsuite></testsuites>

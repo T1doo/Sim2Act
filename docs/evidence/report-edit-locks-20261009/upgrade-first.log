@@ -1,0 +1,78 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_actual_old_report_upgrade_preserves_literal_history_requires_new_anchor _
+
+env = (<sim2act.db.Store object at 0x7ff9275118e0>, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...7222b79f9543049d1b88123a26a795', 'user_4d3e80ea407b4aa4ae188c84795ba332', 'proj_6d5ef86d49cc4cd38819cc197e4e8e8a', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/upgrade-first/test_actual_old_report_upgrade0')
+
+    def test_actual_old_report_upgrade_preserves_literal_history_requires_new_anchor(env, tmp_path):
+        archive_path = os.environ.get("SIM2ACT_REPORT_LOCK_OLD_ARCHIVE")
+        if not archive_path:
+            pytest.skip("Actual Report edit-lock upgrade requires explicitly prepared owned old source")
+        archive = Path(archive_path)
+        source = archive / "src/sim2act/manual_locks.py"
+        expected = os.environ["SIM2ACT_REPORT_LOCK_OLD_MODULE_SHA256"]
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == expected
+        assert source.read_bytes() != Path(manual_locks.__file__).read_bytes()
+        proof = tmp_path / "old-report-lock-proof.json"
+        body = dict(
+            database_url=env[1].database_url,
+            schema=env[0].engine.get_execution_options().get("schema_translate_map", {}).get(None),
+            data_root=str(tmp_path),
+            owner=env[3],
+            other=env[4],
+            project=env[5],
+            resource=env[6],
+            output=str(proof),
+        )
+        child = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).with_name("fixtures") / "report_edit_locks_upgrade.py"),
+            ],
+            cwd=archive,
+            input=json.dumps(body),
+            capture_output=True,
+            text=True,
+            timeout=90,
+            env={
+                **os.environ,
+                "PYTHONPATH": str(archive / "src") + os.pathsep + str(archive / "tests"),
+                "LIVE": "0",
+                "SIM2ACT_LIVE_ENABLED": "false",
+            },
+        )
+        (tmp_path / "child.log").write_text(child.stdout + child.stderr)
+>       assert child.returncode == 0, child.stdout + child.stderr
+E       AssertionError: /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+E           from starlette.testclient import TestClient as TestClient  # noqa
+E         Traceback (most recent call last):
+E           File "/workspace/Sim2Act/tests/fixtures/report_edit_locks_upgrade.py", line 9, in <module>
+E             from test_conditional_run_bindings import env as bounded_env
+E           File "/tmp/sim2act-report-edit-locks-20261009/old-afb2/tests/test_conditional_run_bindings.py", line 327, in <module>
+E             report(("TRUE", "FALSE", "FALSE"), "ALLOW", ["submit_claim_and_receipt"]),
+E             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/tmp/sim2act-report-edit-locks-20261009/old-afb2/tests/test_conditional_run_bindings.py", line 71, in report
+E             lines = POLICY.read_text().splitlines()
+E                     ^^^^^^^^^^^^^^^^^^
+E           File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py", line 1027, in read_text
+E             with self.open(mode='r', encoding=encoding, errors=errors) as f:
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py", line 1013, in open
+E             return io.open(self, mode, buffering, encoding, errors, newline)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E         FileNotFoundError: [Errno 2] No such file or directory: 'docs/evidence/model-protocol-preparation-20261006/materials/a-source/policy.txt'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/Sim2Act/.venv/bin/python', '/workspace/Sim2Act/tests/fixtures/report_edit_locks_upg...o 2] No such file or directory: \'docs/evidence/model-protocol-preparation-20261006/materials/a-source/policy.txt\'\n').returncode
+
+tests/test_report_edit_locks_upgrade.py:56: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_report_edit_locks_upgrade.py::test_actual_old_report_upgrade_preserves_literal_history_requires_new_anchor
+1 failed, 1 warning in 1.17s

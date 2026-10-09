@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="22" time="70.125" timestamp="2026-10-09T17:31:51.143071+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_report_edit_locks" name="test_report_lock_blocks_actual_original_edit_unlock_new_plan_and_readback" time="4.471"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;LOCK_CONFLICT&quot;,&quot;message&quot;:&quot;Affected manually locked object; no changes performed&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert (400 == 409)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fd0c29bf050&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...08ac53555448948af46153d9103902', 'user_d94c2c7398ac49fb8cb78ec891a4050e', 'proj_c03eefcaa97e4ef28b1814644c20a2c8', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/first/test_report_lock_blocks_actual0')
+
+    def test_report_lock_blocks_actual_original_edit_unlock_new_plan_and_readback(env, tmp_path):
+        app, anchor, base, definition, output, wires = setup(env, tmp_path)
+        before = snapshot(env)
+        reply = env[2].post(base + "manual-locks", json=body(anchor))
+        assert reply.status_code == 201, reply.text
+        assert reply.json()["lock"]["logical_key"] == "view:text:decision"
+        assert reply.json()["lock"]["locked"] is True
+        after = snapshot(env)
+        for table in before:
+            if table not in {"delivery_graph_locks", "delivery_graph_requests"}:
+                assert before[table] == after[table], table
+        locked = derive(env, app["id"], "report-locked-anchor")
+        before = snapshot(env)
+        denied = env[2].post(base + "plans", json=dict(expected_graph_fingerprint=locked["graph_fingerprint"],
+            request_key="locked-view-plan", changes=[body(locked)["change"]]))
+&gt;       assert denied.status_code == 409 and denied.json()["error"] == "LOCK_CONFLICT", denied.text
+E       AssertionError: {"error":{"code":"LOCK_CONFLICT","message":"Affected manually locked object; no changes performed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (400 == 409)
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_report_edit_locks.py:55: AssertionError</failure></testcase><testcase classname="tests.test_report_edit_locks" name="test_report_lock_cold_store_same_key_recovery_and_superseded_history" time="2.945"><failure message="TypeError: Headers.update() got an unexpected keyword argument 'Authorization'">env = (&lt;sim2act.db.Store object at 0x7fd0c243ef00&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...eeaf1353254f3ab10026a5a9c24c9f', 'user_95b500df1e73491c8b6b9c42cb8d429c', 'proj_ea9df7f7ac8944e5b111da390f2603bc', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/first/test_report_lock_cold_store_sa0')
+
+    def test_report_lock_cold_store_same_key_recovery_and_superseded_history(env, tmp_path):
+        app, anchor, base, _, _, _ = setup(env, tmp_path)
+        request = body(anchor)
+        accepted = env[2].post(base + "manual-locks", json=request)
+        assert accepted.status_code == 201, accepted.text
+        before = snapshot(env)
+        cold = Store(env[1].database_url, test_only=True)
+        cold.engine = cold.engine.execution_options(**env[0].engine.get_execution_options())
+        from fastapi.testclient import TestClient
+        with TestClient(create_app(cold, env[1])) as client:
+&gt;           client.headers.update(Authorization="Bearer synthetic-test-A")
+E           TypeError: Headers.update() got an unexpected keyword argument 'Authorization'
+
+tests/test_report_edit_locks.py:93: TypeError</failure></testcase><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[candidate]" time="2.623" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[graph]" time="3.721" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[graph_revision]" time="3.554" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[node_revision]" time="2.479" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[node_hash]" time="3.026" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[node_id]" time="3.216" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[lock_revision]" time="3.232" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[consent]" time="2.160" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[locked_int]" time="2.600" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[graph_bool]" time="2.837" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[extra]" time="3.066" /><testcase classname="tests.test_report_edit_locks" name="test_invalid_report_lock_rejected_before_any_write[no_change]" time="3.091" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[other_owner]" time="3.584" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[other_project]" time="3.226" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[revoke]" time="3.652" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[source]" time="2.559"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;message&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 in {403, 409}&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fd0c284fec0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...59426c7d1c4307b7597b98f23606c7', 'user_e3e47a9c5419468ea72205e50d165293', 'proj_8fa65f8662d841428c315ae20ed209e7', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/first/test_report_lock_authority_and3')
+mutation = 'source'
+
+    @pytest.mark.parametrize("mutation", ["other_owner", "other_project", "revoke", "source", "seal", "lock", "same_key"])
+    def test_report_lock_authority_and_saved_tamper_fail_closed(env, tmp_path, mutation):
+        app, anchor, base, _, _, _ = setup(env, tmp_path)
+        request = body(anchor)
+        accepted = env[2].post(base + "manual-locks", json=request)
+        assert accepted.status_code == 201, accepted.text
+        route = base + "manual-locks/receipt?request_key=report-view-lock"
+        if mutation == "other_owner": env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+        elif mutation == "other_project": route = route.replace(env[5], env[0].project(env[3], "other Report project"))
+        elif mutation == "revoke":
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.principal_id == env[3],
+                    grants.c.resource_id == app["candidate"]["report_proof"]["target_resource_id"]).values(revoked=True))
+        elif mutation == "source":
+            with env[0].tx() as c:
+                c.execute(update(resources).where(resources.c.id == app["candidate"]["report_proof"]["target_resource_id"]).values(content="changed"))
+        elif mutation in {"seal", "lock"}:
+            table = requests if mutation == "seal" else lock_rows
+            with env[0].tx() as c:
+                query = select(table).where(table.c.app_id == app["id"])
+                if mutation == "seal": query = query.where(table.c.kind == "manual_edit_lock_seal")
+                row = c.execute(query).mappings().one()
+                value = copy.deepcopy(row["snapshot"])
+                if mutation == "seal": value["response"]["lock"]["locked"] = False
+                else: value["locked"] = False
+                where = (table.c.id == row["id"]) if mutation == "seal" else (table.c.node_id == row["node_id"])
+                c.execute(update(table).where(where).values(snapshot=value, fingerprint=fingerprint(value)))
+        elif mutation == "same_key": request["locked"] = False
+        before = snapshot(env)
+        reply = env[2].post(base + "manual-locks", json=request) if mutation == "same_key" else env[2].get(route)
+&gt;       assert reply.status_code in {403, 409}, reply.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"VERIFICATION_FAILED","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_report_edit_locks.py:162: AssertionError</failure></testcase><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[seal]" time="3.271"><failure message="AttributeError: id">self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fd0c2ce1d00&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+&gt;           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7fd0c29568a0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...be8c43745c46e7b30a2aa3ae34eb02', 'user_38610aaceb6748839418965bce06f219', 'proj_72fb3411dccd48768e791d749d0cfb4e', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/first/test_report_lock_authority_and4')
+mutation = 'seal'
+
+    @pytest.mark.parametrize("mutation", ["other_owner", "other_project", "revoke", "source", "seal", "lock", "same_key"])
+    def test_report_lock_authority_and_saved_tamper_fail_closed(env, tmp_path, mutation):
+        app, anchor, base, _, _, _ = setup(env, tmp_path)
+        request = body(anchor)
+        accepted = env[2].post(base + "manual-locks", json=request)
+        assert accepted.status_code == 201, accepted.text
+        route = base + "manual-locks/receipt?request_key=report-view-lock"
+        if mutation == "other_owner": env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+        elif mutation == "other_project": route = route.replace(env[5], env[0].project(env[3], "other Report project"))
+        elif mutation == "revoke":
+            with env[0].tx() as c:
+                c.execute(update(grants).where(grants.c.principal_id == env[3],
+                    grants.c.resource_id == app["candidate"]["report_proof"]["target_resource_id"]).values(revoked=True))
+        elif mutation == "source":
+            with env[0].tx() as c:
+                c.execute(update(resources).where(resources.c.id == app["candidate"]["report_proof"]["target_resource_id"]).values(content="changed"))
+        elif mutation in {"seal", "lock"}:
+            table = requests if mutation == "seal" else lock_rows
+            with env[0].tx() as c:
+                query = select(table).where(table.c.app_id == app["id"])
+                if mutation == "seal": query = query.where(table.c.kind == "manual_edit_lock_seal")
+                row = c.execute(query).mappings().one()
+                value = copy.deepcopy(row["snapshot"])
+                if mutation == "seal": value["response"]["lock"]["locked"] = False
+                else: value["locked"] = False
+&gt;               where = (table.c.id == row["id"]) if mutation == "seal" else (table.c.node_id == row["node_id"])
+                         ^^^^^^^^^^
+
+tests/test_report_edit_locks.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fd0c2ce1d00&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+&gt;           raise AttributeError(key) from err
+E           AttributeError: id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError</failure></testcase><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[lock]" time="3.601" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_authority_and_saved_tamper_fail_closed[same_key]" time="3.917" /><testcase classname="tests.test_report_edit_locks" name="test_report_lock_two_real_connections_have_one_revision_winner" time="2.775"><failure message="TypeError: limits() missing 1 required positional argument: 'env'">env = (&lt;sim2act.db.Store object at 0x7fd0c29568a0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-20261009...9ddba1f55749ccbda40c2a0178fcc6', 'user_045d99d04d394dc484ca18612c442a26', 'proj_aafc8b51bc74435982eb0a33aeb4a45b', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-20261009/first/test_report_lock_two_real_conn0')
+
+    def test_report_lock_two_real_connections_have_one_revision_winner(env, tmp_path):
+        app, anchor, _, _, _, _ = setup(env, tmp_path)
+        from sim2act.errors import DomainError
+        def submit(key):
+            try:
+                return manual_locks.submit(env[0], env[3], env[5], app["id"],
+                    manual_locks.LockInput.model_validate(body(anchor, key=key)), limits())["lock"]["revision"]
+            except DomainError as exc:
+                return exc.code
+        with ThreadPoolExecutor(max_workers=2) as pool:
+&gt;           results = list(pool.map(submit, ["race-report-a", "race-report-b"]))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_report_edit_locks.py:176: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:619: in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:317: in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+key = 'race-report-a'
+
+    def submit(key):
+        try:
+            return manual_locks.submit(env[0], env[3], env[5], app["id"],
+&gt;               manual_locks.LockInput.model_validate(body(anchor, key=key)), limits())["lock"]["revision"]
+                                                                              ^^^^^^^^
+E               TypeError: limits() missing 1 required positional argument: 'env'
+
+tests/test_report_edit_locks.py:172: TypeError</failure></testcase></testsuite></testsuites>

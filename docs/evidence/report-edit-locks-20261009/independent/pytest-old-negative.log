@@ -1,0 +1,66 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_report_public_lock_cold_receipt_aba_and_immutable_scope[view:text:decision] _
+
+env = (<sim2act.db.Store object at 0x7f59120416d0>, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-independ...e3ac0cbda645e2aa35285b661c9d0f', 'user_05bb9073f59e412f90c6857f49816ec7', 'proj_2a4ad92d8f97492da367cfce9efdb046', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-independent-20261009/pytest-old-negative/test_report_public_lock_cold_r0')
+key = 'view:text:decision'
+
+    @pytest.mark.parametrize('key',['view:text:decision','action:conditional_report'])
+    def test_report_public_lock_cold_receipt_aba_and_immutable_scope(env,tmp_path,key):
+        app,g,base,_,_,wires=prepared_case(env,tmp_path)
+        before=snapshot(env)
+>       request=lock_body(g,node_key=key);response=post_lock(env,base,request)
+                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f59120416d0>, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-independ...e3ac0cbda645e2aa35285b661c9d0f', 'user_05bb9073f59e412f90c6857f49816ec7', 'proj_2a4ad92d8f97492da367cfce9efdb046', ...)
+base = '/api/projects/proj_2a4ad92d8f97492da367cfce9efdb046/apps/app_0d04537e333745898f725678551f428a/delivery-graph'
+b = {'change': {'expected_content_fingerprint': '88d3c4e5fa0246023b005809a8e8a85a15666131b82e3c534faef2564c20fcf9', 'expec...ph_fingerprint': '67a82bdb89a61e0e04e591216a85926d30679656b4d6d2a2ce9347399b25f876', 'expected_graph_revision': 1, ...}
+
+    def post_lock(env,base,b):
+        r=env[2].post(base+'/manual-locks',json=b)
+>       assert r.status_code==201,r.text
+E       AssertionError: {"error":{"code":"UNSUPPORTED_CAPABILITY","message":"Only fixed CSV application edit locks are supported","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:42: AssertionError
+_ test_report_public_lock_cold_receipt_aba_and_immutable_scope[action:conditional_report] _
+
+env = (<sim2act.db.Store object at 0x7f5910819760>, Settings(database_url='sqlite:////tmp/sim2act-report-edit-locks-independ...e7c5e7873e494c8c429c0c702922af', 'user_191b2c26ca4b4c51b1c2fb799c667c94', 'proj_3592396b75b44d429632894c3847a15f', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-edit-locks-independent-20261009/pytest-old-negative/test_report_public_lock_cold_r1')
+key = 'action:conditional_report'
+
+    @pytest.mark.parametrize('key',['view:text:decision','action:conditional_report'])
+    def test_report_public_lock_cold_receipt_aba_and_immutable_scope(env,tmp_path,key):
+        app,g,base,_,_,wires=prepared_case(env,tmp_path)
+        before=snapshot(env)
+>       request=lock_body(g,node_key=key);response=post_lock(env,base,request)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+g = {'app_id': 'app_03121efa32374ce39025e0426772e12d', 'authorization_revision': 1, 'business_write_performed': False, 'cached': False, ...}
+key = 'independent-lock', locked = True, rev = 0
+node_key = 'action:conditional_report'
+
+    def lock_body(g,key='independent-lock',locked=True,rev=0,node_key='view:text:decision'):
+>       n=next(v for v in g['graph']['nodes'] if v['key']==node_key)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+/tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py:30: StopIteration
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py::test_report_public_lock_cold_receipt_aba_and_immutable_scope[view:text:decision]
+FAILED ../../tmp/sim2act-report-edit-locks-independent-20261009/test_independent.py::test_report_public_lock_cold_receipt_aba_and_immutable_scope[action:conditional_report]
+2 failed, 14 deselected, 1 warning in 5.66s
