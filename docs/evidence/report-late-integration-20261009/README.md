@@ -48,7 +48,10 @@ PostgreSQL 45 PASS（501.454秒）；各后端45 PASS、0 FAIL、0 ERROR、0 SKI
   冷读和原键重放；全部表和原始 JSON 存储字节保持，canonical 候选不变。
   新旧 db.py 本身逐字相同；功能无需新表，API/worker 没有自动 DDL。
 - ffda5b0旧JS同应用 checks 负对照分别在两后端运行，按原断言预期失败。
-- Ruff、53源文件 Mypy、JS语法和git diff检查。
+- Ruff、53源文件 Mypy、JS语法通过。产品/原测试和手写说明的git diff检查通过；
+  完整新增证据diff有12处尾空白，来自原始负对照pytest日志/JUnit，保留原字节，
+  见 raw-evidence-whitespace-check.json。首次提交命令未因该检查非零停止，
+  后续文档提交纠正检查结论；没有修改测试或重写原始日志。
 
 补充升级脚本保存在本目录，不改变冻结 tests 或产品代码。复现时把两脚本复制到
 自己的临时根目录，准备 ffda5b0 的 src/tests archive 至其 old-report-source，设置
