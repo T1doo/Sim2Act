@@ -255,7 +255,7 @@ def test_pg_minimum_crud_role_manual_lock_and_cold_receipt(env, runtime_role):
         store.engine.dispose()
 
 
-def test_client_identity_fields_and_underived_report_cannot_bypass_lock_preflight(env, tmp_path):
+def test_client_identity_fields_and_derived_report_read_are_checked_without_writes(env, tmp_path):
     from test_delivery_graph_apps import report_project
 
     aid, _, anchor, _, _ = setup(env)
@@ -266,5 +266,8 @@ def test_client_identity_fields_and_underived_report_cannot_bypass_lock_prefligh
     report, *_ = report_project(env, tmp_path)
     before = snapshot(env)
     reply = env[2].get(base(env, report["id"]))
-    assert reply.status_code == 409 and reply.json()["error"]["code"] == "VERSION_CONFLICT", reply.text
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["app_id"] == report["id"]
+    assert reply.json()["history"] == [] and reply.json()["nodes"]
+    assert reply.json()["formal_publication_enabled"] is False
     assert fingerprint(before) == fingerprint(snapshot(env))

@@ -76,10 +76,18 @@ function presentationControls(c,item){
   try{
    const graphURL=`/api/projects/${c.project}/apps/${c.id}/delivery-graph`;
    if(!intent.graph){const g=await api(graphURL+"/derive","POST",{expected_candidate_fingerprint:c.app.fingerprint,request_key:intent.deriveKey});if(!manifestCurrent(c))return;if(g.project_id!==c.project||g.app_id!==c.id||g.candidate_fingerprint!==c.app.fingerprint||!boundedHash(g.graph_fingerprint)||!Array.isArray(g.graph?.nodes))throw Error("VERSION_CONFLICT");intent.graph=g;}
-   if(!intent.plan){const slot=intent.graph.graph.nodes.find(n=>n.kind==="VIEW"&&n.key==="view:text:decision");if(!slot)throw Error("VERSION_CONFLICT");const p=await api(graphURL+"/plans","POST",{expected_graph_fingerprint:intent.graph.graph_fingerprint,request_key:intent.planKey,changes:[{node_id:slot.id,expected_revision:slot.revision,expected_content_fingerprint:slot.content_fingerprint}]});if(!manifestCurrent(c))return;if(p.project_id!==c.project||p.app_id!==c.id||p.receipt?.revalidation_scope!=="PROJECT"||!boundedHash(p.native_outer_fingerprint)||p.receipt.patch_executed!==false)throw Error("VERSION_CONFLICT");intent.plan=p;}
+   if(!intent.plan){
+    const slot=intent.graph.graph.nodes.find(n=>n.kind==="VIEW"&&n.key==="view:text:decision");if(!slot)throw Error("VERSION_CONFLICT");
+    // A later rejection cannot establish that an earlier lost reply was never
+    // accepted. Freeze that uncertainty before every same-key plan request.
+    const previousUnknown=!!intent.planUnknown;intent.planUnknown=true;intent.planRejected=false;
+    let p;try{p=await api(graphURL+"/plans","POST",{expected_graph_fingerprint:intent.graph.graph_fingerprint,request_key:intent.planKey,changes:[{node_id:slot.id,expected_revision:slot.revision,expected_content_fingerprint:slot.content_fingerprint}]});}
+    catch(e){if(!previousUnknown&&e.httpStatus===400&&e.message==="LOCK_CONFLICT"){intent.planUnknown=false;intent.planRejected=true;}throw e;}
+    if(!manifestCurrent(c))return;if(p.project_id!==c.project||p.app_id!==c.id||p.receipt?.revalidation_scope!=="PROJECT"||!boundedHash(p.native_outer_fingerprint)||p.receipt.patch_executed!==false)throw Error("VERSION_CONFLICT");intent.plan=p;intent.planUnknown=false;
+   }
    intent.body=intent.body||{expected_candidate_fingerprint:c.app.fingerprint,expected_graph_fingerprint:intent.graph.graph_fingerprint,plan_key:intent.planKey,expected_plan_fingerprint:intent.plan.native_outer_fingerprint,run_id:r.run_id,expected_run_version:r.version,expected_run_fence:r.fence,expected_result_fingerprint:r.result_fingerprint,view:{component_ref:"text",output_field:"explanation"},request_key:intent.definitionKey};
    const p=await api(presentationBase(c),"POST",intent.body);if(!presentationPatch(p,c,r)||p.request_key!==intent.definitionKey||p.baseline_graph_fingerprint!==intent.graph.graph_fingerprint||p.impact_plan.native_outer_fingerprint!==intent.plan.native_outer_fingerprint)throw Error("VERSION_CONFLICT");intent.patch=p;if(manifestCurrent(c))status.textContent=`已保存展示草案 ${p.patch_fingerprint}；PROJECT ${p.project_revalidation_status}；实际材料 PENDING，未验收、未发布。`;
-  }catch(e){const locked=e.httpStatus===400&&e.message==="LOCK_CONFLICT"&&!intent.plan&&!intent.body;if(locked&&presentationIntents.get(key)===intent)presentationIntents.delete(key);if(manifestCurrent(c))status.textContent=locked?"LOCK_CONFLICT；保留锁定内容，解锁后须新精确规划。":e.message+"；保留原键恢复。";}finally{await reconcilePresentationIntent(c,intent,box);}
+  }catch(e){const locked=e.httpStatus===400&&e.message==="LOCK_CONFLICT"&&intent.planRejected===true&&intent.planUnknown===false&&!intent.plan&&!intent.body;if(locked&&presentationIntents.get(key)===intent)presentationIntents.delete(key);if(manifestCurrent(c))status.textContent=locked?"LOCK_CONFLICT；保留锁定内容，解锁后须新精确规划。":e.message+"；保留原键恢复。";}finally{await reconcilePresentationIntent(c,intent,box);}
  });
  confirm.onclick=safe(async()=>{
   if(!manifestCurrent(c)||!intent?.patch||intent.busy||intent.checked)return;intent.busy=true;intent.checkUnknown=true;paint();
