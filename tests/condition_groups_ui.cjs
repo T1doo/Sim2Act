@@ -30,6 +30,12 @@ function track(window){
     host.querySelector('[data-role="condition-value"]').value="true";
   }else host=$("csv-dag-branch");
   const mode=host.querySelector('[data-role="combine"]');mode.value=info.group;mode.dispatchEvent(new w.Event("change"));
+  const rows=host.querySelector('[data-role="conditions"]'),add=host.querySelector('[data-role="condition-add"]');
+  add.click();add.click();
+  check(rows.children.length===3&&add.disabled,"four-leaf group disables add at its exact bound");
+  rows.lastElementChild.querySelector('button').click();
+  check(rows.children.length===2&&!add.disabled,"removing a leaf restores bounded add control");
+  rows.lastElementChild.querySelector('button').click();
   const second=host.querySelector('[data-role="conditions"]').children[0];
   second.querySelector('[data-role="group-source"]').value=info.mode==="composition"?"node_1:count":"aggregate:count";
   second.querySelector('[data-role="group-value"]').value=String(info.count);

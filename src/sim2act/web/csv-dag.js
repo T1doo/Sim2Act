@@ -52,8 +52,8 @@ function csvDagButtons(c = csvDagContext) {
   $("csv-dag-mode").disabled=locked;
   for(const control of $("csv-dag-nodes").querySelectorAll("input,select,button"))control.disabled=locked;
   $("csv-dag-node-add").disabled=locked||$("csv-dag-nodes").children.length>=4;
-  for(const host of [$("csv-dag-branch"),...$("csv-dag-nodes").children]){const rows=host.querySelector('[data-role="conditions"]');rows.hidden=!host.querySelector('[data-role="combine"]').value;host.querySelector('[data-role="condition-add"]').disabled=locked||rows.children.length>=3;}
   for(const control of $("csv-dag-branch").querySelectorAll("input,select,button"))control.disabled=locked;
+  for(const host of [$("csv-dag-branch"),...$("csv-dag-nodes").children]){const rows=host.querySelector('[data-role="conditions"]');rows.hidden=!host.querySelector('[data-role="combine"]').value;host.querySelector('[data-role="condition-add"]').disabled=locked||rows.children.length>=3;}
   $("csv-dag-branch-input").disabled = locked || !c.plan?.branch_semantics;
   $("csv-dag-wiring-read").disabled = locked;
   for (const select of $("csv-dag-wiring-ports").querySelectorAll("select")) select.disabled = locked;
