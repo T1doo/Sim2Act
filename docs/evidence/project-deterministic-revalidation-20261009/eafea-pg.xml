@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="51" time="772.145" timestamp="2026-10-09T20:29:27.414623+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_project_revalidation" name="test_actual_project_csv_independent_sum_and_report_rules_keep_old_jobs" time="20.709" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[consent]" time="6.660" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[missing]" time="8.845" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[duplicate]" time="8.295" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[options]" time="8.435" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[plan]" time="9.327" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[graph]" time="10.455" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[run_version]" time="5.846" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[foreign_run]" time="7.539" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[gold]" time="6.419" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[column]" time="9.890" /><testcase classname="tests.test_project_revalidation" name="test_bad_project_selection_never_writes[invalid_unicode_key]" time="6.149"><failure message="UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 857: surrogates not allowed">env = (&lt;sim2act.db.Store object at 0x7f4970360530&gt;, Settings(database_url='postgresql+psycopg://postgres@/project_checks_fix...8439b318964609818584f58b1e6afe', 'user_676a88b3574842d0972e1373ebc4d154', 'proj_2c94728319774001a2a8a8a4648ada46', ...)
+tmp_path = PosixPath('/tmp/sim2act-project-checks-20261009/pg/test_bad_project_selection_nev10')
+change = 'invalid_unicode_key'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "consent",
+            "missing",
+            "duplicate",
+            "options",
+            "plan",
+            "graph",
+            "run_version",
+            "foreign_run",
+            "gold",
+            "column",
+            "invalid_unicode_key",
+        ],
+    )
+    def test_bad_project_selection_never_writes(env, tmp_path, change):
+        _, base, _, body, _ = setup(env, tmp_path)
+        changed = copy.deepcopy(body)
+        report = next(v for v in changed["selections"] if v["kind"] == "REPORT")
+        csv = next(v for v in changed["selections"] if v["kind"] == "CSV")
+        if change == "consent":
+            changed["consent"] = "auto"
+        elif change == "missing":
+            changed["selections"].pop()
+        elif change == "duplicate":
+            changed["selections"].append(copy.deepcopy(csv))
+        elif change in ("options", "plan"):
+            changed["expected_" + change + "_fingerprint"] = "0" * 64
+        elif change == "graph":
+            csv["expected_graph_fingerprint"] = "0" * 64
+        elif change == "run_version":
+            report["expected_run_version"] = True
+        elif change == "foreign_run":
+            report["run_id"] = "run_" + "f" * 32
+        elif change == "gold":
+            csv["expected_sum"] = "15"
+        elif change == "invalid_unicode_key":
+            changed["request_key"] = "bad\ud800"
+        else:
+            csv["input"]["column"] = "missing"
+        before = snapshot(env)
+&gt;       response = env[2].post(base, json=changed)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_project_revalidation.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:812: in request
+    request = self.build_request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:378: in build_request
+    return Request(
+.venv/lib/python3.12/site-packages/httpx/_models.py:408: in __init__
+    headers, stream = encode_request(
+.venv/lib/python3.12/site-packages/httpx/_content.py:216: in encode_request
+    return encode_json(json)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+json = {'consent': 'CONFIRM_EXACT_PROJECT_DETERMINISTIC_CHECKS', 'expected_options_fingerprint': '367552071bc9425ab383d4b51fa...fingerprint': '82d084b2a2e8d47a8fb4c2b729a91dd5f2abcd74cefbc292e9b7e1ed406f06e8', 'plan_key': 'presentation-plan', ...}
+
+    def encode_json(json: Any) -&gt; tuple[dict[str, str], ByteStream]:
+        body = json_dumps(
+            json, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+&gt;       ).encode("utf-8")
+          ^^^^^^^^^^^^^^^
+E       UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 857: surrogates not allowed
+
+.venv/lib/python3.12/site-packages/httpx/_content.py:179: UnicodeEncodeError</failure></testcase><testcase classname="tests.test_project_revalidation" name="test_project_current_source_and_independent_seal_gate[grant]" time="9.251" /><testcase classname="tests.test_project_revalidation" name="test_project_current_source_and_independent_seal_gate[source]" time="9.982" /><testcase classname="tests.test_project_revalidation" name="test_project_current_source_and_independent_seal_gate[seal]" time="9.233" /><testcase classname="tests.test_project_revalidation" name="test_project_current_source_and_independent_seal_gate[response]" time="12.406" /><testcase classname="tests.test_project_revalidation" name="test_authorized_underived_peer_is_recorded_but_its_revocation_cannot_be_omitted" time="14.279" /><testcase classname="tests.test_project_revalidation" name="test_project_receipt_cold_store_and_two_connection_same_key_race" time="22.328" /><testcase classname="tests.test_project_revalidation" name="test_project_scope_check_crud_only_role" time="15.671" /><testcase classname="tests.test_project_revalidation" name="test_foreign_scope_receipt_is_rejected_before_write[foreign_owner]" time="10.125" /><testcase classname="tests.test_project_revalidation" name="test_foreign_scope_receipt_is_rejected_before_write[foreign_project]" time="11.179" /><testcase classname="tests.test_project_revalidation" name="test_bad_registered_sum_is_recorded_as_real_failed_check" time="13.105" /><testcase classname="tests.test_project_revalidation" name="test_project_same_key_changed_input_and_peer_lock_aba_reject_zero_writes" time="28.747" /><testcase classname="tests.test_project_revalidation_ui" name="test_actual_project_revalidation_http_page[normal]" time="64.027" /><testcase classname="tests.test_project_revalidation_ui" name="test_actual_project_revalidation_http_page[late-acceptance]" time="81.800" /><testcase classname="tests.test_project_revalidation_upgrade" name="test_actual_previous_source_project_plan_upgrade" time="18.503" /><testcase classname="tests.test_delivery_graph_apps" name="test_csv_real_anchor_restart_idempotency_and_pending_scope_jobs" time="2.143" /><testcase classname="tests.test_delivery_graph_apps" name="test_real_report_origin_two_sources_project_pending_jobs_and_unsupported_omission" time="4.083" /><testcase classname="tests.test_delivery_graph_apps" name="test_project_missing_peer_anchor_is_explicit_partial_not_candidate_only_job" time="3.934" /><testcase classname="tests.test_report_presentations" name="test_new_immutable_presentation_and_actual_archived_readback_preserve_canonical" time="22.773" /><testcase classname="tests.test_manual_locks_ui" name="test_manual_lock_actual_http_dom" time="11.663" /><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[normal]" time="34.043" /><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[aba]" time="33.555" /><testcase classname="tests.test_report_edit_locks_ui" name="test_report_edit_lock_actual_http_page[unknown-plan]" time="9.513" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[same-checks]" time="17.902" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[same-definition]" time="14.522" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[other_app-checks]" time="11.738" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[other_app-definition]" time="8.756" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[identity-checks]" time="15.027" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[identity-definition]" time="11.146" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[revoke-checks]" time="13.788" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[revoke-definition]" time="9.955" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[history_failure-checks]" time="23.395" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[history_failure-definition]" time="17.457" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[lost_response-checks]" time="15.125" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[lost_response-definition]" time="13.941" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[refresh-checks]" time="16.981" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[refresh-definition]" time="13.418" /><testcase classname="tests.test_report_edit_locks_upgrade" name="test_actual_old_report_upgrade_preserves_literal_history_requires_new_anchor" time="9.647" /><testcase classname="tests.test_csv_dag_upgrade" name="test_actual_old_source_upgrade_retains_history_and_requires_new_exact_confirmation[SIM2ACT_UPGRADE_OLD_ARCHIVE-5a5543c902fbb78dd91c28c98386af51fb24dd67-91efd66bd69498c0aa62eefa285112095383d4f950d6cab0c2fa017de0a02aa5]" time="4.072" /><testcase classname="tests.test_csv_dag_upgrade" name="test_actual_old_source_upgrade_retains_history_and_requires_new_exact_confirmation[SIM2ACT_UPGRADE_CORE_ARCHIVE-1b65e94ebd81c1e31091b3078b8223328b726294-240c76f358870a9d933f94d129eeda362553092035044d6f306ee4dd7a58b3c0]" time="4.009" /></testsuite></testsuites>

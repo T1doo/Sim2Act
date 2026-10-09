@@ -23,7 +23,9 @@ dependency_completeness保持BLOCKED_UNKNOWN，不把局部PASS当完整PROJECT�
 新结果及独立seal只用现有delivery_graph_requests。原plan/jobs/presentation
 字节与PENDING/BLOCKED_PARTIAL状态不改。单事务预验证完整输入后执行，提交前
 重新核验；冷读和原键重试重构当前真实证明并与accepted seal比对，不能信重签hash。
-页面显示精确确认与逐应用输入/Run选择，UNKNOWN保留原body/key，晚回执不进入
+整份原JSON在字段/判别union验证前迭代检查所有字符串键和值，surrogate安全拒绝，
+避免错误响应回显编码500。仅首次POST自身422可释放未接受意图；已接受POST后
+GET422或任何不确定回读仍保留原body/key。页面显示精确确认与逐应用输入/Run选择，UNKNOWN保留原body/key，晚回执不进入
 新上下文或继续新写入。
 
 完成判据：实际HTTP页面执行同PROJECT的Report有限规则与CSV新列计算，展示

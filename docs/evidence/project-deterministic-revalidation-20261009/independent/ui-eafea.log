@@ -1,0 +1,45 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+___ test_private_actual_http_original_page_and_receipt_recovery[readback422] ___
+
+env = (<sim2act.db.Store object at 0x7f01b2188620>, Settings(database_url='sqlite:////tmp/sim2act-project-revalidation-indep...01c8650a69461bb35c1d595da17a4f', 'user_57b0eb1a667c4069a4fca470ec5068fc', 'proj_dfbf8bbdc2ac4ea2ab4d6163a9807f2f', ...)
+tmp_path = PosixPath('/tmp/sim2act-project-revalidation-independent-20261009/ui-cases-eafea/test_private_actual_http_origi0')
+scenario = 'readback422'
+
+    @pytest.mark.parametrize('scenario',['readback422','lost-and-late'])
+    def test_private_actual_http_original_page_and_receipt_recovery(env,tmp_path,scenario):
+        app,_,_,_,_,wires=arrange(env,tmp_path)
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        info=tmp_path/'server.json'
+        label=os.environ.get('REVIEW_LABEL','eafea')
+        evidence=ROOT/f'ui-{label}-{scenario}.json'
+        info.write_text(json.dumps(dict(url=f'http://127.0.0.1:{port}',project=env[5],app=app['id'],scenario=scenario,evidence=str(evidence))))
+        before=snapshot(env)
+        server=uvicorn.Server(uvicorn.Config(create_app(env[0],env[1]),host='127.0.0.1',port=port,log_level='error'))
+        thread=threading.Thread(target=server.run,daemon=True);thread.start()
+        try:
+            deadline=time.monotonic()+15
+            while not server.started:
+                assert thread.is_alive() and time.monotonic()<deadline
+                time.sleep(.01)
+            run=subprocess.run(['node',str(ROOT/'independent-ui.cjs'),str(info)],capture_output=True,text=True,timeout=120)
+            (ROOT/f'ui-{label}-{scenario}.log').write_text(run.stdout+run.stderr)
+>           assert run.returncode==0,run.stdout+run.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: POST accepted then GET422 preserves original frozen body and key
+E                 at verify (/tmp/sim2act-project-revalidation-independent-20261009/independent-ui.cjs:6:34)
+E                 at /tmp/sim2act-project-revalidation-independent-20261009/independent-ui.cjs:47:3
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', '/tmp/sim2act-project-revalidation-independent-20261009/independent-ui.cjs', '/tmp/sim2...009/independent-ui.cjs:6:34)\n    at /tmp/sim2act-project-revalidation-independent-20261009/independent-ui.cjs:47:3\n').returncode
+
+/tmp/sim2act-project-revalidation-independent-20261009/test_ui_independent.py:27: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-project-revalidation-independent-20261009/test_ui_independent.py::test_private_actual_http_original_page_and_receipt_recovery[readback422]
+1 failed, 1 passed, 1 warning in 46.38s

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="16.816" timestamp="2026-10-09T20:19:10.116158+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_project_revalidation" name="test_authorized_underived_peer_is_recorded_but_its_revocation_cannot_be_omitted" time="3.156"><failure message="KeyError: 'graph'">env = (&lt;sim2act.db.Store object at 0x7ff9e2950080&gt;, Settings(database_url='sqlite:////tmp/sim2act-project-checks-20261009/ex...92598823cc43b59560462cb24c3279', 'user_f5bcb6980b194114b7caf43419f8cc9a', 'proj_eb7e1ce3b5814b2da3578f3797f9f208', ...)
+tmp_path = PosixPath('/tmp/sim2act-project-checks-20261009/extra/test_authorized_underived_peer0')
+
+    def test_authorized_underived_peer_is_recorded_but_its_revocation_cannot_be_omitted(env, tmp_path):
+        app, base, _, body, _ = setup(env, tmp_path)
+        resource = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/resources",
+                json={
+                    "name": "underived independent CSV",
+                    "format": "csv",
+                    "content": "amount\n3\n",
+                },
+            )
+            .json()["id"]
+        )
+        peer = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/apps/csv-preview",
+                json={
+                    "name": "authorized underived peer",
+                    "resource_id": resource,
+                    "goal": "exact sum",
+                },
+            )
+            .json()
+        )
+        graph_base = base.removesuffix("scope-checks")
+        anchor = env[2].get(graph_base.rstrip("/")).json()
+&gt;       node = next(n for n in anchor["graph"]["nodes"] if n["kind"] == "VIEW")
+                               ^^^^^^^^^^^^^^^
+E       KeyError: 'graph'
+
+tests/test_project_revalidation.py:236: KeyError</failure></testcase><testcase classname="tests.test_project_revalidation" name="test_project_receipt_cold_store_and_two_connection_same_key_race" time="9.199" /><testcase classname="tests.test_project_revalidation" name="test_bad_registered_sum_is_recorded_as_real_failed_check" time="4.364" /></testsuite></testsuites>

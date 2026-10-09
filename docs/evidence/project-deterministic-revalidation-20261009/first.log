@@ -1,0 +1,26 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_actual_project_csv_independent_sum_and_report_rules_keep_old_jobs ____
+
+env = (<sim2act.db.Store object at 0x7f355518dd60>, Settings(database_url='sqlite:////tmp/sim2act-project-check-first/test_a...2e9b2e8296460aad72010d61367634', 'user_abcd036770534f1099db2dfe0abaf4c1', 'proj_92e436aff9364adb80c300bf8a76d5a8', ...)
+tmp_path = PosixPath('/tmp/sim2act-project-check-first/test_actual_project_csv_indepe0')
+
+    def test_actual_project_csv_independent_sum_and_report_rules_keep_old_jobs(env, tmp_path):
+        _, base, options, body, wires = setup(env, tmp_path)
+        before = snapshot(env)
+        accepted = env[2].post(base, json=body)
+>       assert accepted.status_code == 201, accepted.text
+E       AssertionError: {"error":{"code":"INVALID_INPUT","message":"Select a current numeric CSV column","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_revalidation.py:57: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_project_revalidation.py::test_actual_project_csv_independent_sum_and_report_rules_keep_old_jobs
+1 failed, 1 warning in 3.88s

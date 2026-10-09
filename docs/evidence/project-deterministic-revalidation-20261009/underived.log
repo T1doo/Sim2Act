@@ -1,0 +1,94 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_authorized_underived_peer_is_recorded_but_its_revocation_cannot_be_omitted _
+
+env = (<sim2act.db.Store object at 0x7fbb379732f0>, Settings(database_url='sqlite:////tmp/sim2act-project-checks-20261009/un...80d494cef248f0b0eee816ffd28c20', 'user_3d0a7e32a8604b50ab058797ebb50242', 'proj_27aa537e100f4ddfb9eb9de7ebe3759e', ...)
+tmp_path = PosixPath('/tmp/sim2act-project-checks-20261009/underived/test_authorized_underived_peer0')
+
+    def test_authorized_underived_peer_is_recorded_but_its_revocation_cannot_be_omitted(env, tmp_path):
+        app, base, original_options, body, _ = setup(env, tmp_path)
+        resource = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/resources",
+                json={
+                    "name": "underived independent CSV",
+                    "format": "csv",
+                    "content": "amount\n3\n",
+                },
+            )
+            .json()["id"]
+        )
+        peer = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/apps/csv-preview",
+                json={
+                    "name": "authorized underived peer",
+                    "resource_id": resource,
+                    "goal": "exact sum",
+                },
+            )
+            .json()
+        )
+        graph_base = base.removesuffix("scope-checks")
+        for item in original_options["applications"]:
+            refreshed = env[2].post(
+                f"/api/projects/{env[5]}/apps/{item['app_id']}/delivery-graph/derive",
+                json={
+                    "expected_candidate_fingerprint": item["binding"]["candidate_fingerprint"],
+                    "request_key": "after-new-peer",
+                },
+            )
+            assert refreshed.status_code == 201, refreshed.text
+        anchor = env[2].get(graph_base.rstrip("/")).json()
+        node = next(n for n in anchor["graph"]["nodes"] if n["kind"] == "VIEW")
+        plan = env[2].post(
+            graph_base + "plans",
+            json={
+                "expected_graph_fingerprint": anchor["graph_fingerprint"],
+                "request_key": "with-underived",
+                "changes": [
+                    {
+                        "node_id": node["id"],
+                        "expected_revision": node["revision"],
+                        "expected_content_fingerprint": node["content_fingerprint"],
+                    }
+                ],
+            },
+        )
+        assert plan.status_code == 201, plan.text
+        choices = env[2].get(base + "/options", params={"plan_key": "with-underived"})
+        assert choices.status_code == 200, choices.text
+        assert {"app_id": peer["id"], "reason": "GRAPH_NOT_DERIVED"} in choices.json()["omissions"]
+        body.update(
+            plan_key="with-underived",
+            expected_plan_fingerprint=choices.json()["plan_fingerprint"],
+            expected_options_fingerprint=choices.json()["options_fingerprint"],
+        )
+        for selection in body["selections"]:
+            item = next(v for v in choices.json()["applications"] if v["app_id"] == selection["app_id"])
+            selection["expected_graph_fingerprint"] = item["binding"]["graph_fingerprint"]
+        accepted = env[2].post(base, json=body)
+        assert accepted.status_code == 201 and accepted.json()["deterministic_status"] == "PARTIAL", (
+            accepted.text
+        )
+        with env[0].tx() as c:
+            c.execute(
+                update(grants)
+>               .where(grants.c.principal_id == peer["runtime_id"], grants.c.resource_id == resource)
+                                                ^^^^^^^^^^^^^^^^^^
+                .values(revoked=True)
+            )
+E           KeyError: 'runtime_id'
+
+tests/test_project_revalidation.py:279: KeyError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_project_revalidation.py::test_authorized_underived_peer_is_recorded_but_its_revocation_cannot_be_omitted
+1 failed, 1 warning in 6.31s

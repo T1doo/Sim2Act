@@ -1,0 +1,89 @@
+...........F.......................................                      [100%]
+=================================== FAILURES ===================================
+_________ test_bad_project_selection_never_writes[invalid_unicode_key] _________
+
+env = (<sim2act.db.Store object at 0x7f4970360530>, Settings(database_url='postgresql+psycopg://postgres@/project_checks_fix...8439b318964609818584f58b1e6afe', 'user_676a88b3574842d0972e1373ebc4d154', 'proj_2c94728319774001a2a8a8a4648ada46', ...)
+tmp_path = PosixPath('/tmp/sim2act-project-checks-20261009/pg/test_bad_project_selection_nev10')
+change = 'invalid_unicode_key'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "consent",
+            "missing",
+            "duplicate",
+            "options",
+            "plan",
+            "graph",
+            "run_version",
+            "foreign_run",
+            "gold",
+            "column",
+            "invalid_unicode_key",
+        ],
+    )
+    def test_bad_project_selection_never_writes(env, tmp_path, change):
+        _, base, _, body, _ = setup(env, tmp_path)
+        changed = copy.deepcopy(body)
+        report = next(v for v in changed["selections"] if v["kind"] == "REPORT")
+        csv = next(v for v in changed["selections"] if v["kind"] == "CSV")
+        if change == "consent":
+            changed["consent"] = "auto"
+        elif change == "missing":
+            changed["selections"].pop()
+        elif change == "duplicate":
+            changed["selections"].append(copy.deepcopy(csv))
+        elif change in ("options", "plan"):
+            changed["expected_" + change + "_fingerprint"] = "0" * 64
+        elif change == "graph":
+            csv["expected_graph_fingerprint"] = "0" * 64
+        elif change == "run_version":
+            report["expected_run_version"] = True
+        elif change == "foreign_run":
+            report["run_id"] = "run_" + "f" * 32
+        elif change == "gold":
+            csv["expected_sum"] = "15"
+        elif change == "invalid_unicode_key":
+            changed["request_key"] = "bad\ud800"
+        else:
+            csv["input"]["column"] = "missing"
+        before = snapshot(env)
+>       response = env[2].post(base, json=changed)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_project_revalidation.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:812: in request
+    request = self.build_request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:378: in build_request
+    return Request(
+.venv/lib/python3.12/site-packages/httpx/_models.py:408: in __init__
+    headers, stream = encode_request(
+.venv/lib/python3.12/site-packages/httpx/_content.py:216: in encode_request
+    return encode_json(json)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+json = {'consent': 'CONFIRM_EXACT_PROJECT_DETERMINISTIC_CHECKS', 'expected_options_fingerprint': '367552071bc9425ab383d4b51fa...fingerprint': '82d084b2a2e8d47a8fb4c2b729a91dd5f2abcd74cefbc292e9b7e1ed406f06e8', 'plan_key': 'presentation-plan', ...}
+
+    def encode_json(json: Any) -> tuple[dict[str, str], ByteStream]:
+        body = json_dumps(
+            json, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+>       ).encode("utf-8")
+          ^^^^^^^^^^^^^^^
+E       UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 857: surrogates not allowed
+
+.venv/lib/python3.12/site-packages/httpx/_content.py:179: UnicodeEncodeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_project_revalidation.py::test_bad_project_selection_never_writes[invalid_unicode_key]
+1 failed, 50 passed, 1 warning in 772.15s (0:12:52)
