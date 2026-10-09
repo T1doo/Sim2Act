@@ -1,4 +1,4 @@
-"""Single-node CSV edit protection; no identity or permission mutation."""
+"""Existing CSV/Report graph edit protection; no identity or permission mutation."""
 
 from typing import Literal
 
@@ -38,8 +38,11 @@ def binding(saved):
 def context(store, c, user, pid, aid, limits):
     # Authorization and supported family precede all protected graph/lock ledgers.
     _, _, action, *_ = graph.load_family(store, c, user, pid, aid, limits)
-    if action.executor.kind != "registered_tool" or action.executor.ref != "data.aggregate_csv":
-        raise DomainError("UNSUPPORTED_CAPABILITY", "Only fixed CSV application edit locks are supported")
+    if (action.executor.kind, action.executor.ref) not in {
+        ("registered_tool", "data.aggregate_csv"),
+        ("bounded_report", "intern.conditional_report"),
+    }:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "Only existing CSV and bounded Report graph edit locks are supported")
     saved = graph.state(store, c, user, pid, aid)
     fresh, _ = graph.build(store, c, user, pid, aid, limits, saved)
     if binding(fresh) != binding(saved):
