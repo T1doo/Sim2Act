@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import Field
 
 from . import csv_reports as report
-from .contracts import BranchCondition, FieldSource, Strict
+from .contracts import BranchExpression, FieldSource, Strict
 from .db import fingerprint
 from .errors import DomainError
 
@@ -22,7 +22,7 @@ class Node(Strict):
                                exclude_if=lambda value: value is None)
     inputs: dict[str, FieldSource] = Field(min_length=1, max_length=5)
     depends_on: list[str] = Field(max_length=3)
-    when: BranchCondition | None = Field(default=None, exclude_if=lambda value: value is None)
+    when: BranchExpression | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class Composition(Strict):

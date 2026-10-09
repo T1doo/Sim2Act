@@ -12,7 +12,7 @@ import math
 import threading
 import time
 from fractions import Fraction
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import Depends
 from pydantic import Field, field_validator
@@ -23,7 +23,7 @@ from . import delivery_graph_apps as graph
 from .app_jobs import lock_live, stop_state
 from .column_patches import KeyInput, read_pair, require_capacity
 from .contracts import (
-    BranchCondition,
+    BranchExpression,
     FrozenRunContract,
     GoalSpec,
     Limits,
@@ -119,7 +119,7 @@ def apply_wiring(manifest, patches):
 
 class BranchPatch(Strict):
     step_id: Literal["aggregate", "report"]
-    when: BranchCondition
+    when: BranchExpression
 
 
 class BranchInputs(Strict):
@@ -274,7 +274,9 @@ def build(store, c, user, pid, aid, body, limits):
             inputs={s["step_id"]: copy.deepcopy(s["inputs"]) for s in template["manifest"]["workflow"]},
             depends_on={s["step_id"]: s["depends_on"][:] for s in template["manifest"]["workflow"]})
     if body.branch_patch is not None or body.composition is not None and any(n.when is not None for n in body.composition.nodes):
-        value["branch_semantics"] = "typed-conditions.v1"
+        value["branch_semantics"] = ("typed-conditions.v2" if any(
+            s.get("when", {}).get("op") in {"all", "any"}
+            for s in template["manifest"]["workflow"]) else "typed-conditions.v1")
     if body.wiring_patch is not None:
         value["wiring"] = apply_wiring(copy.deepcopy(template["manifest"]), body.wiring_patch)
     return {**value, "plan_fingerprint": fingerprint(value)}
@@ -440,27 +442,37 @@ def decision(plan, step, inputs, outputs, proved):
         return {}
     parents = [p for p in proved if p["step_id"] in step["depends_on"]]
     skipped = [p["step_id"] for p in parents if p["status"] == "SKIPPED"]
-    reason, passed, observed = "UNCONDITIONAL", True, {"evaluated": False}
+    reason, passed = "UNCONDITIONAL", True
+    observed: dict[str, Any] = {"evaluated": False}
     condition = step.get("when")
     if skipped:
         reason, passed = "DEPENDENCY_SKIPPED", False
     elif condition is not None:
-        src = condition["source"]
-        values = inputs if src["source"] == "input" else outputs[src["ref"]]
-        present = src["field"] in values
-        actual = values.get(src["field"])
-        observed = dict(evaluated=True, present=present)
-        if present:
-            observed["value"] = actual
-        if condition["op"] == "exists":
-            passed = present
-        else:
+        def evaluate(atom):
+            src = atom["source"]
+            values = inputs if src["source"] == "input" else outputs[src["ref"]]
+            present = src["field"] in values
+            actual = values.get(src["field"])
+            observation = dict(evaluated=True, present=present)
+            if present:
+                observation["value"] = actual
+            if atom["op"] == "exists":
+                return present, observation
             if not present:
                 raise DomainError("INVALID_INPUT", "Condition value is missing")
-            choices = condition["value"] if condition["op"] == "in" else [condition["value"]]
-            passed = any(type(actual) is type(value) and fingerprint(actual) == fingerprint(value) for value in choices)
+            choices = atom["value"] if atom["op"] == "in" else [atom["value"]]
+            return any(type(actual) is type(v) and fingerprint(actual) == fingerprint(v)
+                       for v in choices), observation
+
+        if condition["op"] in {"all", "any"}:
+            # Evaluate every leaf: any/false must never conceal a missing or invalid input.
+            evaluations = [evaluate(atom) for atom in condition["conditions"]]
+            passed = (all if condition["op"] == "all" else any)(p for p, _ in evaluations)
+            observed = dict(evaluated=True, conditions=[dict(o, passed=p) for p, o in evaluations])
+        else:
+            passed, observed = evaluate(condition)
         reason = "CONDITION_TRUE" if passed else "CONDITION_FALSE"
-    return dict(branch_decision=dict(version="typed-conditions.v1", condition=copy.deepcopy(condition),
+    return dict(branch_decision=dict(version=plan["branch_semantics"], condition=copy.deepcopy(condition),
         observation=observed, passed=passed, reason=reason, skipped_predecessors=skipped,
         inputs_fingerprint=fingerprint(inputs)))
 

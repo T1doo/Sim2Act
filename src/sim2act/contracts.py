@@ -98,12 +98,22 @@ class BranchCondition(Strict):
         return self
 
 
+class BranchGroup(Strict):
+    """Flat finite combination of the existing typed predicates, never recursion."""
+
+    op: Literal["all", "any"]
+    conditions: list[BranchCondition] = Field(min_length=2, max_length=4)
+
+
+BranchExpression = BranchCondition | BranchGroup
+
+
 class WorkflowStep(Strict):
     step_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     binding_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     depends_on: list[str] = Field(max_length=16)
     inputs: dict[str, FieldSource] = Field(default_factory=dict, max_length=32)
-    when: BranchCondition | None = Field(default=None, exclude_if=lambda value: value is None)
+    when: BranchExpression | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ActionBinding(Strict):

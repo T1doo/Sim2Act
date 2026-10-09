@@ -92,6 +92,35 @@
       "title": "BranchCondition",
       "type": "object"
     },
+    "BranchGroup": {
+      "additionalProperties": false,
+      "description": "Flat finite combination of the existing typed predicates, never recursion.",
+      "properties": {
+        "op": {
+          "enum": [
+            "all",
+            "any"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "conditions": {
+          "items": {
+            "$ref": "#/$defs/BranchCondition"
+          },
+          "maxItems": 4,
+          "minItems": 2,
+          "title": "Conditions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "op",
+        "conditions"
+      ],
+      "title": "BranchGroup",
+      "type": "object"
+    },
     "DataBinding": {
       "additionalProperties": false,
       "properties": {
@@ -337,10 +366,14 @@
               "$ref": "#/$defs/BranchCondition"
             },
             {
+              "$ref": "#/$defs/BranchGroup"
+            },
+            {
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "title": "When"
         }
       },
       "required": [

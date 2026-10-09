@@ -2,7 +2,7 @@
 
 import json
 
-from .contracts import validate_action, validate_manifest, validate_value
+from .contracts import BranchGroup, validate_action, validate_manifest, validate_value
 from .csv_reports import REF as CSV_REPORT
 from .errors import DomainError
 
@@ -85,8 +85,9 @@ def preflight(raw, candidates, platform_limits):
         for field, source in step.inputs.items():
             if source_schema(source, set(step.depends_on)) != props[field]:
                 raise DomainError("INVALID_MANIFEST", "Schema edge mismatch; no implicit coercion")
-        if step.when is not None:
-            condition = step.when
+        conditions = (step.when.conditions if isinstance(step.when, BranchGroup)
+                      else [step.when] if step.when is not None else [])
+        for condition in conditions:
             if condition.source.source not in {"input", "step"}:
                 raise DomainError("INVALID_MANIFEST", "Conditions require input or verified predecessor")
             schema = source_schema(condition.source, set(step.depends_on), optional=True)
@@ -96,7 +97,11 @@ def preflight(raw, candidates, platform_limits):
                 if "value" in condition.model_fields_set:
                     raise DomainError("INVALID_MANIFEST", "Exists omits value")
             else:
-                values = condition.value if condition.op == "in" else [condition.value]
+                values: object
+                if condition.op == "in":
+                    values = condition.value
+                else:
+                    values = [condition.value]
                 if not isinstance(values, list) or not 1 <= len(values) <= 20:
                     raise DomainError("INVALID_MANIFEST", "Membership must be a bounded nonempty list")
                 for value in values:

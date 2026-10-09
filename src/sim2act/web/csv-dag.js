@@ -14,6 +14,8 @@ function clearCsvDag() {
   $("csv-dag-confirm").checked = false;
   $("csv-dag-branch-target").value = "";
   $("csv-dag-branch-input").value = "";
+  $("csv-dag-branch").querySelector('[data-role="combine"]').value="";
+  $("csv-dag-branch").querySelector('[data-role="conditions"]').replaceChildren();
   $("csv-dag-history").replaceChildren();
   $("csv-dag-wiring").hidden = true;
   $("csv-dag-wiring-ports").replaceChildren();
@@ -50,7 +52,8 @@ function csvDagButtons(c = csvDagContext) {
   $("csv-dag-mode").disabled=locked;
   for(const control of $("csv-dag-nodes").querySelectorAll("input,select,button"))control.disabled=locked;
   $("csv-dag-node-add").disabled=locked||$("csv-dag-nodes").children.length>=4;
-  for (const id of ["target","op","source","value"]) $("csv-dag-branch-"+id).disabled = locked;
+  for(const host of [$("csv-dag-branch"),...$("csv-dag-nodes").children]){const rows=host.querySelector('[data-role="conditions"]');rows.hidden=!host.querySelector('[data-role="combine"]').value;host.querySelector('[data-role="condition-add"]').disabled=locked||rows.children.length>=3;}
+  for(const control of $("csv-dag-branch").querySelectorAll("input,select,button"))control.disabled=locked;
   $("csv-dag-branch-input").disabled = locked || !c.plan?.branch_semantics;
   $("csv-dag-wiring-read").disabled = locked;
   for (const select of $("csv-dag-wiring-ports").querySelectorAll("select")) select.disabled = locked;
@@ -84,7 +87,7 @@ async function csvDagJobSeal(job, c, plan) {
     const receipt = job.steps[i], name = ["preview", "aggregate", "report"][i];
     const step = plan.definition.manifest.workflow[i], outputs = Object.fromEntries(proved.map(p => [p.step_id,p.data]));
     const inputs = plan.branch_semantics ? job.inputs : plan.input;
-    const decision = plan.branch_semantics ? await csvDagBranchDecision(step,inputs,proved) : null;
+    const decision = plan.branch_semantics ? await csvDagBranchDecision(step,inputs,proved,plan.branch_semantics) : null;
     if (plan.branch_semantics && !deliverySame(receipt.branch_decision,decision)) return false;
     if (decision && !decision.passed) {
       const expected = {step_id:name,status:"SKIPPED",data:null,plan_fingerprint:plan.plan_fingerprint,source_hash:sourceHash,action_revision:plan.definition.actions[i].revision,predecessor_receipts:await Promise.all(proved.filter(p=>step.depends_on.includes(p.step_id)).map(deliveryDigest)),artifact_refs:[],actual_reads:[],branch_decision:decision};
@@ -293,21 +296,25 @@ function csvDagBranchPatch() {
   const target = $("csv-dag-branch-target").value;
   if(!target)return null;
   const [ref,field] = $("csv-dag-branch-source").value.split(":"),op=$("csv-dag-branch-op").value;
-  const when={op,source:ref==="input"?{source:"input",field}:{source:"step",ref,field}};
-  if(op!=="exists")when.value=JSON.parse($("csv-dag-branch-value").value);
+  const first=csvDagCondition(op,ref+":"+field,$("csv-dag-branch-value").value);
+  const when=csvDagConditionGroup(first,$("csv-dag-branch"));
   return [{step_id:target,when}];
 }
 function csvDagBranchPlanSeal(plan) {
   const m=plan.definition.manifest,conditions=m.workflow.filter(s=>s.when);
   if(!plan.branch_semantics)return !conditions.length && !("include_report" in m.input_schema.properties);
-  if(plan.branch_semantics!=="typed-conditions.v1" || !conditions.length || !deliverySame(m.input_schema.properties.include_report,{type:"boolean"}) || m.input_schema.required.includes("include_report"))return false;
+  if(plan.branch_semantics!==(conditions.some(s=>["all","any"].includes(s.when.op))?"typed-conditions.v2":"typed-conditions.v1") || !conditions.length || !deliverySame(m.input_schema.properties.include_report,{type:"boolean"}) || m.input_schema.required.includes("include_report"))return false;
   return conditions.every(step=>{
-    const c=step.when,s=c.source;
-    if(step.step_id==="preview" || !["eq","in","exists"].includes(c.op) || !["input","step"].includes(s.source) || (s.source==="input"?s.ref!=null:!step.depends_on.includes(s.ref)))return false;
+    const expression=step.when,group=["all","any"].includes(expression.op);
+    if(group&&(Object.keys(expression).length!==2||!Array.isArray(expression.conditions)||expression.conditions.length<2||expression.conditions.length>4))return false;
+    return (group?expression.conditions:[expression]).every(c=>{
+    const s=c.source;if(!s)return false;
+    if((!plan.composition&&step.step_id==="preview") || !["eq","in","exists"].includes(c.op) || !["input","step"].includes(s.source) || (s.source==="input"?s.ref!=null:!step.depends_on.includes(s.ref)))return false;
     const schema=s.source==="input"?m.input_schema:plan.definition.actions[m.workflow.findIndex(v=>v.step_id===s.ref)]?.output_schema;
     const type=schema?.properties?.[s.field]?.type;
     const valid=v=>type==="boolean"?typeof v==="boolean":type==="integer"?Number.isInteger(v):type==="number"?typeof v==="number"&&Number.isFinite(v):type==="string"&&typeof v==="string";
     return c.op==="exists"?!Object.hasOwn(c,"value"):c.op==="in"?Array.isArray(c.value)&&c.value.length>0&&c.value.length<=20&&c.value.every(valid):valid(c.value);
+    });
   });
 }
 function csvDagBranchInputsSeal(job,plan) {
@@ -317,19 +324,27 @@ function csvDagBranchInputsSeal(job,plan) {
   if(Object.keys(extra).some(k=>k!=="include_report") || (Object.hasOwn(extra,"include_report")&&typeof extra.include_report!=="boolean"))return false;
   return deliverySame(inputs,{...plan.input,...extra});
 }
-async function csvDagBranchDecision(step,inputs,proved) {
+async function csvDagBranchDecision(step,inputs,proved,version="typed-conditions.v1") {
   const parents=proved.filter(p=>step.depends_on.includes(p.step_id)),skipped=parents.filter(p=>p.status==="SKIPPED").map(p=>p.step_id);
   const condition=step.when||null;let passed=true,reason="UNCONDITIONAL",observation={evaluated:false};
   if(skipped.length){passed=false;reason="DEPENDENCY_SKIPPED";}
   else if(condition){
-    const src=condition.source,values=src.source==="input"?inputs:parents.find(p=>p.step_id===src.ref)?.data;
-    if(!values)throw Error("VERIFICATION_FAILED");
-    const present=Object.hasOwn(values,src.field),value=values[src.field];observation={evaluated:true,present};if(present)observation.value=value;
-    if(condition.op==="exists")passed=present;
-    else {if(!present)throw Error("INVALID_INPUT");const choices=condition.op==="in"?condition.value:[condition.value];passed=choices.some(v=>typeof v===typeof value&&deliverySame(v,value));}
+    const evaluate=atom=>{
+      const src=atom.source,values=src.source==="input"?inputs:parents.find(p=>p.step_id===src.ref)?.data;
+      if(!values)throw Error("VERIFICATION_FAILED");
+      const present=Object.hasOwn(values,src.field),value=values[src.field],observed={evaluated:true,present};if(present)observed.value=value;
+      let passed;if(atom.op==="exists")passed=present;
+      else{if(!present)throw Error("INVALID_INPUT");const choices=atom.op==="in"?atom.value:[atom.value];passed=choices.some(v=>typeof v===typeof value&&deliverySame(v,value));}
+      return {...observed,passed};
+    };
+    if(["all","any"].includes(condition.op)){
+      const evaluations=condition.conditions.map(evaluate);
+      passed=condition.op==="all"?evaluations.every(v=>v.passed):evaluations.some(v=>v.passed);
+      observation={evaluated:true,conditions:evaluations};
+    }else{const evaluated=evaluate(condition);passed=evaluated.passed;const {passed:ignored,...actual}=evaluated;observation=actual;}
     reason=passed?"CONDITION_TRUE":"CONDITION_FALSE";
   }
-  return {version:"typed-conditions.v1",condition,observation,passed,reason,skipped_predecessors:skipped,inputs_fingerprint:await deliveryDigest(inputs)};
+  return {version,condition,observation,passed,reason,skipped_predecessors:skipped,inputs_fingerprint:await deliveryDigest(inputs)};
 }
 $("csv-dag-branch-input").onchange=()=>{$("csv-dag-confirm").checked=false;csvDagButtons();};
 
@@ -351,6 +366,7 @@ function csvDagNodeAdd(action="resource.read",column=null,parent=null) {
   select("condition-source","条件依据",[["input:include_report","本次是否包含报告"]]);
   const label=document.createElement("label"),value=document.createElement("input");label.textContent="比较值（true、数字、带引号文本或列表）";value.dataset.role="condition-value";value.value="true";label.append(value);row.append(label);
   const remove=document.createElement("button");remove.type="button";remove.textContent="删除此节点";remove.onclick=()=>{row.remove();csvDagNodesRefresh();csvDagClearProof(c);csvDagButtons(c);};row.append(remove);
+  csvDagGroupInit(row,()=>Array.from(row.querySelector('[data-role="condition-source"]').options).map(o=>[o.value,o.textContent]),()=>{csvDagNodesRefresh();csvDagClearProof(c);csvDagButtons(c);});
   $("csv-dag-nodes").append(row);csvDagNodesRefresh();
   if(parent)row.querySelector('[data-role="aggregate"]').value=parent;
   row.onchange=()=>{csvDagNodesRefresh();csvDagClearProof(c);csvDagButtons(c);};
@@ -364,6 +380,7 @@ function csvDagNodesRefresh() {
     fill(get(row,"aggregate"),others.filter(r=>get(r,"action").value==="data.aggregate_csv").map(r=>[r.dataset.step,r.dataset.step+" 的求和输出"]));
     fill(get(row,"dependencies"),others.map(r=>[r.dataset.step,r.dataset.step]));
     fill(get(row,"condition-source"),[["input:include_report","本次是否包含报告"],...others.flatMap(r=>(get(r,"action").value==="resource.read"?["format"]:["column","count","sum"]).map(f=>[r.dataset.step+":"+f,r.dataset.step+"."+f]))]);
+    for(const source of row.querySelectorAll('[data-role="group-source"]'))fill(source,Array.from(get(row,"condition-source").options).map(o=>[o.value,o.textContent]));
     get(row,"column").parentElement.hidden=action!=="data.aggregate_csv";get(row,"source").parentElement.hidden=action==="intern.csv_report.v1";get(row,"aggregate").parentElement.hidden=action!=="intern.csv_report.v1";
   }
 }
@@ -373,8 +390,8 @@ function csvDagCompositionInput() {
     const node={step_id,action,inputs:{},depends_on:Array.from(get("dependencies").selectedOptions).map(o=>o.value)};
     if(action==="intern.csv_report.v1"){const ref=get("aggregate").value;if(!ref)throw Error("报告需要一个求和前驱");for(const field of ["resource_id","column","count","sum","source_hash"])node.inputs[field]={source:"step",ref,field};}
     else{const ref=get("source").value;node.inputs.resource_id=ref==="source"?{source:"data",ref,field:"resource_id"}:{source:"step",ref,field:"resource_id"};if(action==="data.aggregate_csv"){node.column=get("column").value;node.inputs.column={source:"input",field:step_id+"_column"};}}
-    const op=get("condition").value;if(op){const [ref,field]=get("condition-source").value.split(":");node.when={op,source:ref==="input"?{source:"input",field}:{source:"step",ref,field}};if(op!=="exists")node.when.value=JSON.parse(get("condition-value").value);}
-    const refs=[...Object.values(node.inputs),...(node.when?[node.when.source]:[])].filter(s=>s.source==="step").map(s=>s.ref);node.depends_on=Array.from(new Set([...node.depends_on,...refs]));return node;
+    const op=get("condition").value;if(op)node.when=csvDagConditionGroup(csvDagCondition(op,get("condition-source").value,get("condition-value").value),row);else if(get("combine").value)throw Error("请先选择第一个条件");
+    const refs=[...Object.values(node.inputs),...(node.when?(["all","any"].includes(node.when.op)?node.when.conditions:[node.when]).map(c=>c.source):[])].filter(s=>s.source==="step").map(s=>s.ref);node.depends_on=Array.from(new Set([...node.depends_on,...refs]));return node;
   });
   if(!nodes.length)throw Error("至少需要一个节点");return {version:"csv.composition.v1",nodes};
 }
@@ -390,7 +407,7 @@ async function csvDagCompositionSeal(p,c) {
     names.add(s.step_id);
   }
   const sinks=nodes.filter(n=>!nodes.some(v=>v.depends_on.includes(n.step_id))).map(n=>n.step_id);
-  return deliverySame(p.composition.sinks,sinks)&&deliverySame(p.wiring,{version:"csv.composition.v1",inputs:Object.fromEntries(m.workflow.map(s=>[s.step_id,s.inputs])),depends_on:Object.fromEntries(m.workflow.map(s=>[s.step_id,s.depends_on]))})&&Object.values(m.outputs).every(v=>v.source==="step"&&sinks.includes(v.ref));
+  return csvDagBranchPlanSeal(p)&&deliverySame(p.composition.sinks,sinks)&&deliverySame(p.wiring,{version:"csv.composition.v1",inputs:Object.fromEntries(m.workflow.map(s=>[s.step_id,s.inputs])),depends_on:Object.fromEntries(m.workflow.map(s=>[s.step_id,s.depends_on]))})&&Object.values(m.outputs).every(v=>v.source==="step"&&sinks.includes(v.ref));
 }
 async function csvDagCompositionJobSeal(job,c,plan) {
   const m=plan.definition.manifest,workflow=m.workflow;
@@ -398,7 +415,7 @@ async function csvDagCompositionJobSeal(job,c,plan) {
   if(plan.branch_semantics&&!csvDagBranchInputsSeal(job,plan))return false;
   const rid=m.data_bindings[0].resource_ref,proved=[],outputs={},inputs=job.inputs||plan.input;
   for(let i=0;i<job.steps.length;i++){
-    const r=job.steps[i],s=workflow[i],action=plan.definition.actions[i],ref=action.executor.ref,parents=await Promise.all(proved.filter(p=>s.depends_on.includes(p.step_id)).map(deliveryDigest)),decision=plan.branch_semantics?await csvDagBranchDecision(s,inputs,proved):null;
+    const r=job.steps[i],s=workflow[i],action=plan.definition.actions[i],ref=action.executor.ref,parents=await Promise.all(proved.filter(p=>s.depends_on.includes(p.step_id)).map(deliveryDigest)),decision=plan.branch_semantics?await csvDagBranchDecision(s,inputs,proved,plan.branch_semantics):null;
     if(decision&&!deliverySame(r.branch_decision,decision))return false;
     if(decision&&!decision.passed){if(!deliverySame(r,{step_id:s.step_id,status:"SKIPPED",data:null,plan_fingerprint:plan.plan_fingerprint,source_hash:plan.source_hash,action_revision:action.revision,predecessor_receipts:parents,artifact_refs:[],actual_reads:[],branch_decision:decision}))return false;proved.push(r);continue;}
     const args=Object.fromEntries(Object.entries(s.inputs).map(([k,v])=>[k,v.source==="input"?inputs[v.field]:v.source==="data"?rid:outputs[v.ref]?.[v.field]]));
@@ -415,3 +432,31 @@ async function csvDagCompositionJobSeal(job,c,plan) {
 function BufferlessHex(buffer){return Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,"0")).join("");}
 $("csv-dag-mode").onchange=()=>{const c=csvDagContext;if(!c)return;$("csv-dag-composition").hidden=$("csv-dag-mode").value!=="composition";csvDagClearProof(c);csvDagButtons(c);};
 $("csv-dag-node-add").onclick=()=>{csvDagNodeAdd();if(csvDagContext)csvDagClearProof(csvDagContext);csvDagButtons();};
+
+function csvDagCondition(op,source,value){
+  const [ref,field]=source.split(":"),condition={op,source:ref==="input"?{source:"input",field}:{source:"step",ref,field}};
+  if(op!=="exists")condition.value=JSON.parse(value);return condition;
+}
+function csvDagConditionGroup(first,host){
+  const op=host.querySelector('[data-role="combine"]').value;if(!op)return first;
+  const conditions=[first,...Array.from(host.querySelector('[data-role="conditions"]').children).map(row=>csvDagCondition(row.querySelector('[data-role="group-op"]').value,row.querySelector('[data-role="group-source"]').value,row.querySelector('[data-role="group-value"]').value))];
+  if(conditions.length<2||conditions.length>4)throw Error("组合需要二至四个条件");return {op,conditions};
+}
+function csvDagGroupInit(host,sources,changed){
+  const label=document.createElement("label"),mode=document.createElement("select");label.textContent="条件关系";mode.dataset.role="combine";
+  for(const [value,text] of [["","单个条件"],["all","全部满足"],["any","任一满足"]]){const o=document.createElement("option");o.value=value;o.textContent=text;mode.append(o);}label.append(mode);host.append(label);
+  const rows=document.createElement("div");rows.dataset.role="conditions";host.append(rows);
+  const add=document.createElement("button");add.type="button";add.textContent="添加条件（最多四个）";add.dataset.role="condition-add";host.append(add);
+  const append=()=>{
+    if(rows.children.length>=3)return;const row=document.createElement("fieldset");
+    const select=(role,caption,items)=>{const l=document.createElement("label"),s=document.createElement("select");l.textContent=caption;s.dataset.role=role;for(const [value,text] of items){const o=document.createElement("option");o.value=value;o.textContent=text;s.append(o);}l.append(s);row.append(l);return s;};
+    select("group-op","条件",[["eq","等于"],["in","属于"],["exists","有此输入／输出"]]);select("group-source","依据",sources());
+    const l=document.createElement("label"),v=document.createElement("input");l.textContent="比较值";v.dataset.role="group-value";v.value="true";v.maxLength=1000;l.append(v);row.append(l);
+    const remove=document.createElement("button");remove.type="button";remove.textContent="删除条件";remove.onclick=()=>{row.remove();if(!rows.children.length)mode.value="";changed();};row.append(remove);row.onchange=changed;rows.append(row);
+  };
+  mode.onchange=()=>{if(mode.value&&!rows.children.length)append();changed();};
+  add.onclick=()=>{if(!mode.value)mode.value="all";append();changed();};
+}
+csvDagGroupInit($("csv-dag-branch"),()=>Array.from($("csv-dag-branch-source").options).map(o=>[o.value,o.textContent]),()=>{const c=csvDagContext;if(c){csvDagClearProof(c);csvDagButtons(c);}});
+
+for(const role of ["target","op","source","value"])$("csv-dag-branch-"+role).onchange=()=>{if(csvDagContext){csvDagClearProof(csvDagContext);csvDagButtons();}};
