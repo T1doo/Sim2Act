@@ -2,6 +2,7 @@
 
 import copy
 import hashlib
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -16,8 +17,7 @@ from sim2act.db import Store, app_drafts, fingerprint, grants, resources
 from sim2act.db import delivery_graph_requests as requests
 
 
-def setup(env, tmp_path):
-    content = "item,amount,quantity\na,1.25,7\nb,2.75,8\n"
+def setup(env, tmp_path, content="item,amount,quantity\na,1.25,7\nb,2.75,8\n"):
     with env[0].tx() as c:
         c.execute(
             update(resources)
@@ -119,6 +119,9 @@ def test_actual_project_csv_independent_sum_and_report_rules_keep_old_jobs(env, 
         "gold",
         "column",
         "invalid_unicode_key",
+        "invalid_unicode_kind",
+        "invalid_unicode_column",
+        "invalid_unicode_extra",
     ],
 )
 def test_bad_project_selection_never_writes(env, tmp_path, change):
@@ -144,10 +147,18 @@ def test_bad_project_selection_never_writes(env, tmp_path, change):
         csv["expected_sum"] = "15"
     elif change == "invalid_unicode_key":
         changed["request_key"] = "bad\ud800"
+    elif change == "invalid_unicode_kind":
+        csv["kind"] = "bad\ud800"
+    elif change == "invalid_unicode_column":
+        csv["input"]["column"] = "bad\ud800"
+    elif change == "invalid_unicode_extra":
+        changed["extra"] = "bad\ud800"
     else:
         csv["input"]["column"] = "missing"
     before = snapshot(env)
-    response = env[2].post(base, json=changed)
+    response = env[2].post(
+        base, content=json.dumps(changed), headers={"Content-Type": "application/json"}
+    )
     assert response.status_code in (400, 409, 422), response.text
     assert snapshot(env) == before
 
@@ -426,3 +437,27 @@ def test_project_same_key_changed_input_and_peer_lock_aba_reject_zero_writes(env
     rejected = env[2].get(base + "/" + body["request_key"])
     assert rejected.status_code == 409, rejected.text
     assert snapshot(env) == before
+
+
+def test_actual_extreme_precision_is_not_a_pass(env, tmp_path):
+    _, base, _, body, wires = setup(
+        env, tmp_path, content="item,amount,quantity\na,1.25,1e-1001\nb,2.75,0\n"
+    )
+    before = snapshot(env)
+    response = env[2].post(base, json=body)
+    assert response.status_code == 201, response.text
+    value = response.json()
+    actual = next(v["actual"] for v in value["applications"] if v["selection"]["kind"] == "CSV")
+    assert actual["status"] == "NOT_RUN"
+    assert actual["reason"] == "NUMERIC_PRECISION_OUTSIDE_BOUNDED_ORACLE"
+    assert next(v for v in actual["checks"] if v["id"] == "sum.independent")["status"] == "NOT_RUN"
+    assert value["executed_checks_status"] == "NOT_RUN"
+    assert value["deterministic_status"] == "PARTIAL"
+    assert value["overall_run_acceptance"] == "NOT_ACCEPTED"
+    assert value["project_revalidation_status"] == "BLOCKED_PARTIAL"
+    after = snapshot(env)
+    for table in before:
+        if table != "delivery_graph_requests":
+            assert before[table] == after[table], table
+    assert len(after["delivery_graph_requests"]) == len(before["delivery_graph_requests"]) + 2
+    assert len(wires) == 4

@@ -17,7 +17,7 @@ from test_project_revalidation import setup
 from sim2act.api import create_app
 
 
-@pytest.mark.parametrize("scenario", ["normal", "late-acceptance"])
+@pytest.mark.parametrize("scenario", ["normal", "late-acceptance", "readback-422"])
 def test_actual_project_revalidation_http_page(env, tmp_path, scenario):
     app, _, _, _, wires = setup(env, tmp_path)
     other = env[0].project(env[3], "Other project")

@@ -12,7 +12,7 @@ from fractions import Fraction
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from sqlalchemy import select
 
 from . import delivery_graph as core
@@ -34,27 +34,22 @@ KEY = r"^[A-Za-z0-9_-]{1,100}$"
 
 
 class SafeInput(KeyInput):
-    @field_validator(
-        "column",
-        "app_id",
-        "expected_graph_fingerprint",
-        "run_id",
-        "expected_result_fingerprint",
-        "plan_key",
-        "expected_plan_fingerprint",
-        "expected_options_fingerprint",
-        "consent",
-        "request_key",
-        mode="before",
-        check_fields=False,
-    )
+    @model_validator(mode="before")
     @classmethod
     def valid_unicode(cls, value):
-        if isinstance(value, str):
-            try:
-                value.encode("utf-8")
-            except UnicodeError as exc:
-                raise DomainError("INVALID_INPUT", "Valid UTF-8 confirmation required") from exc
+        pending = [value]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, dict):
+                pending.extend(item.keys())
+                pending.extend(item.values())
+            elif isinstance(item, list):
+                pending.extend(item)
+            elif isinstance(item, str):
+                try:
+                    item.encode("utf-8")
+                except UnicodeError as exc:
+                    raise DomainError("INVALID_INPUT", "Valid UTF-8 confirmation required") from exc
         return value
 
 
