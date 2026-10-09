@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="11" time="34.673" timestamp="2026-10-09T17:14:41.291957+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_condition_groups_ui" name="test_actual_group_controls_worker_and_cold_http_page[legacy-all-2-statuses0]" time="3.352"><failure message="AssertionError: assert 24 == (8 + (2 * 7))&#10; +  where 24 = len(['existing CSV app hosts DAG controls', 'four-leaf group disables add at its exact bound', 'removing a leaf restores b...'condition plan requires explicit confirmation', 'editing a group leaf clears saved proof and exact confirmation', ...])">env = (&lt;sim2act.db.Store object at 0x7f2a3d39a840&gt;, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...0440c1340948038b7275b92e171edf', 'user_d41f411588234020b8b62d64065c13b1', 'proj_48106c41307b4946ac2b64abd1679b97', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/sqlite-final-ui/test_actual_group_controls_wor0')
+mode = 'legacy', group = 'all', count = 2, statuses = ['SKIPPED', 'VERIFIED']
+
+    @pytest.mark.parametrize("mode,group,count,statuses", [
+        ("legacy", "all", 2, ["SKIPPED", "VERIFIED"]),
+        ("legacy", "any", 3, ["SKIPPED", "VERIFIED"]),
+        ("composition", "all", 2, ["SKIPPED", "VERIFIED"]),
+    ])
+    def test_actual_group_controls_worker_and_cold_http_page(env, tmp_path, mode, group, count, statuses):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], target="node_2" if mode=="composition" else "report",
+            op="eq", source="input:include_report", value="true", mode=mode, group=group, count=count,
+            inputs=["false","true"], statuses=statuses)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/condition_groups_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+            assert result.returncode == 0, result.stdout + result.stderr
+            proof = json.loads((tmp_path / "results.json").read_text())
+            assert proof["status"] == "PASS" and len(proof["jobs"]) == 2
+&gt;           assert len(proof["checks"]) == 8 + 2 * 7
+E           AssertionError: assert 24 == (8 + (2 * 7))
+E            +  where 24 = len(['existing CSV app hosts DAG controls', 'four-leaf group disables add at its exact bound', 'removing a leaf restores b...'condition plan requires explicit confirmation', 'editing a group leaf clears saved proof and exact confirmation', ...])
+
+tests/test_condition_groups_ui.py:62: AssertionError</failure></testcase><testcase classname="tests.test_condition_groups_ui" name="test_actual_group_controls_worker_and_cold_http_page[legacy-any-3-statuses1]" time="3.183"><failure message="AssertionError: assert 24 == (8 + (2 * 7))&#10; +  where 24 = len(['existing CSV app hosts DAG controls', 'four-leaf group disables add at its exact bound', 'removing a leaf restores b...'condition plan requires explicit confirmation', 'editing a group leaf clears saved proof and exact confirmation', ...])">env = (&lt;sim2act.db.Store object at 0x7f2a3d2efc20&gt;, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...ae6af12df8483ca7cffdf2b072ef6d', 'user_530f04cbb3f3444fbf420f5f935a521f', 'proj_ac6c7b9b87fe437190869840c61e8538', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/sqlite-final-ui/test_actual_group_controls_wor1')
+mode = 'legacy', group = 'any', count = 3, statuses = ['SKIPPED', 'VERIFIED']
+
+    @pytest.mark.parametrize("mode,group,count,statuses", [
+        ("legacy", "all", 2, ["SKIPPED", "VERIFIED"]),
+        ("legacy", "any", 3, ["SKIPPED", "VERIFIED"]),
+        ("composition", "all", 2, ["SKIPPED", "VERIFIED"]),
+    ])
+    def test_actual_group_controls_worker_and_cold_http_page(env, tmp_path, mode, group, count, statuses):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], target="node_2" if mode=="composition" else "report",
+            op="eq", source="input:include_report", value="true", mode=mode, group=group, count=count,
+            inputs=["false","true"], statuses=statuses)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/condition_groups_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+            assert result.returncode == 0, result.stdout + result.stderr
+            proof = json.loads((tmp_path / "results.json").read_text())
+            assert proof["status"] == "PASS" and len(proof["jobs"]) == 2
+&gt;           assert len(proof["checks"]) == 8 + 2 * 7
+E           AssertionError: assert 24 == (8 + (2 * 7))
+E            +  where 24 = len(['existing CSV app hosts DAG controls', 'four-leaf group disables add at its exact bound', 'removing a leaf restores b...'condition plan requires explicit confirmation', 'editing a group leaf clears saved proof and exact confirmation', ...])
+
+tests/test_condition_groups_ui.py:62: AssertionError</failure></testcase><testcase classname="tests.test_condition_groups_ui" name="test_actual_group_controls_worker_and_cold_http_page[composition-all-2-statuses2]" time="3.358"><failure message="AssertionError: assert 24 == (8 + (2 * 7))&#10; +  where 24 = len(['existing CSV app hosts DAG controls', 'four-leaf group disables add at its exact bound', 'removing a leaf restores b...'condition plan requires explicit confirmation', 'editing a group leaf clears saved proof and exact confirmation', ...])">env = (&lt;sim2act.db.Store object at 0x7f2a3c0c6b10&gt;, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...b04fb9db6e4695aabf8f98687e6833', 'user_dd7032d0801e4b129876cb5ab77503c0', 'proj_df6bc8299bdc4bcc8460fb80e97b04e4', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/sqlite-final-ui/test_actual_group_controls_wor2')
+mode = 'composition', group = 'all', count = 2
+statuses = ['SKIPPED', 'VERIFIED']
+
+    @pytest.mark.parametrize("mode,group,count,statuses", [
+        ("legacy", "all", 2, ["SKIPPED", "VERIFIED"]),
+        ("legacy", "any", 3, ["SKIPPED", "VERIFIED"]),
+        ("composition", "all", 2, ["SKIPPED", "VERIFIED"]),
+    ])
+    def test_actual_group_controls_worker_and_cold_http_page(env, tmp_path, mode, group, count, statuses):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], target="node_2" if mode=="composition" else "report",
+            op="eq", source="input:include_report", value="true", mode=mode, group=group, count=count,
+            inputs=["false","true"], statuses=statuses)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/condition_groups_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+            assert result.returncode == 0, result.stdout + result.stderr
+            proof = json.loads((tmp_path / "results.json").read_text())
+            assert proof["status"] == "PASS" and len(proof["jobs"]) == 2
+&gt;           assert len(proof["checks"]) == 8 + 2 * 7
+E           AssertionError: assert 24 == (8 + (2 * 7))
+E            +  where 24 = len(['existing CSV app hosts DAG controls', 'four-leaf group disables add at its exact bound', 'removing a leaf restores b...'condition plan requires explicit confirmation', 'editing a group leaf clears saved proof and exact confirmation', ...])
+
+tests/test_condition_groups_ui.py:62: AssertionError</failure></testcase><testcase classname="tests.test_controlled_branches_ui" name="test_actual_product_conditions_http_dom[report-eq-input:include_report-true-inputs0-statuses0]" time="3.091" /><testcase classname="tests.test_controlled_branches_ui" name="test_actual_product_conditions_http_dom[aggregate-eq-input:include_report-true-inputs1-statuses1]" time="3.259" /><testcase classname="tests.test_controlled_branches_ui" name="test_actual_product_conditions_http_dom[report-exists-input:include_report--inputs2-statuses2]" time="3.032" /><testcase classname="tests.test_controlled_branches_ui" name="test_actual_product_conditions_http_dom[report-in-aggregate:count-[2]-inputs3-statuses3]" time="3.238" /><testcase classname="tests.test_controlled_branches_ui" name="test_actual_product_conditions_http_dom[report-in-aggregate:count-[3]-inputs4-statuses4]" time="3.758" /><testcase classname="tests.test_controlled_branches_ui" name="test_actual_product_conditions_http_dom[report-eq-input:column-&quot;quantity&quot;-inputs5-statuses5]" time="2.549" /><testcase classname="tests.test_csv_composition_ui" name="test_actual_product_editable_composition[False]" time="2.844" /><testcase classname="tests.test_csv_composition_ui" name="test_actual_product_editable_composition[True]" time="2.861" /></testsuite></testsuites>

@@ -1,0 +1,2080 @@
+{
+  "status": "PASS",
+  "checks": [
+    "existing CSV app hosts DAG controls",
+    "editable four-node composition respects cap",
+    "original page persisted actual typed composition",
+    "composition requires exact confirmation",
+    "changed conditional input clears confirmation",
+    "unknown acceptance freezes composition",
+    "same-key response recovery retains exact confirmation",
+    "new four-node run queued",
+    "real four-node worker follows conditional composition",
+    "actual dual branch outputs preserve independent quantity path",
+    "candidate acceptance and authority preserved",
+    "cold original page restores all four checked receipts",
+    "original saved history accepts bounded plans",
+    "user removes nodes and changes action to save a distinct one-node composition"
+  ],
+  "requests": [
+    {
+      "path": "/api/projects",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/resources",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/goal-cards",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/instances",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/conditional-apps",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/protocol/contracts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/resources",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/runs",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/grants",
+      "method": "GET"
+    },
+    {
+      "path": "/api/capabilities",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/releases",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/instances",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/delivery-graph",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag",
+      "method": "POST",
+      "body": {
+        "expected_candidate_fingerprint": "27f29aa21fd3d3f530179f19354436c425cd74379efbf60cf3ff1ea6dc225b7f",
+        "expected_graph_fingerprint": "fccc873042ec4b33b8c1923fcd34103364b1fbb39c96b54b0db2253fa160fadb",
+        "column": "amount",
+        "request_key": "22915e3a-da8e-4df4-aaac-ae0c69e6e237",
+        "composition": {
+          "version": "csv.composition.v1",
+          "nodes": [
+            {
+              "step_id": "node_1",
+              "action": "data.aggregate_csv",
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "node_1_column"
+                }
+              },
+              "depends_on": [],
+              "column": "amount",
+              "when": {
+                "op": "eq",
+                "source": {
+                  "source": "input",
+                  "field": "include_report"
+                },
+                "value": true
+              }
+            },
+            {
+              "step_id": "node_2",
+              "action": "intern.csv_report.v1",
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "column"
+                },
+                "count": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "count"
+                },
+                "sum": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "sum"
+                },
+                "source_hash": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "source_hash"
+                }
+              },
+              "depends_on": [
+                "node_1"
+              ]
+            },
+            {
+              "step_id": "node_3",
+              "action": "data.aggregate_csv",
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "node_3_column"
+                }
+              },
+              "depends_on": [],
+              "column": "quantity"
+            },
+            {
+              "step_id": "node_4",
+              "action": "intern.csv_report.v1",
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "column"
+                },
+                "count": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "count"
+                },
+                "sum": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "sum"
+                },
+                "source_hash": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "source_hash"
+                }
+              },
+              "depends_on": [
+                "node_3"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag/22915e3a-da8e-4df4-aaac-ae0c69e6e237",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag/22915e3a-da8e-4df4-aaac-ae0c69e6e237/runs",
+      "method": "POST",
+      "body": {
+        "expected_plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+        "consent": "CONFIRM_EXACT_OFFLINE_CSV_DAG",
+        "request_key": "cdf2a8d8-2230-4756-bd74-f144edd3a68e",
+        "branch_inputs": {
+          "include_report": false
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag/22915e3a-da8e-4df4-aaac-ae0c69e6e237/runs",
+      "method": "POST",
+      "body": {
+        "expected_plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+        "consent": "CONFIRM_EXACT_OFFLINE_CSV_DAG",
+        "request_key": "cdf2a8d8-2230-4756-bd74-f144edd3a68e",
+        "branch_inputs": {
+          "include_report": false
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag/22915e3a-da8e-4df4-aaac-ae0c69e6e237",
+      "method": "GET"
+    },
+    {
+      "path": "/api/csv-dag/runs/run_079f3590ed854624ad4a17aae828c7ee",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag/22915e3a-da8e-4df4-aaac-ae0c69e6e237",
+      "method": "GET"
+    },
+    {
+      "path": "/api/csv-dag/runs/run_079f3590ed854624ad4a17aae828c7ee",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/releases",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/instances",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag/22915e3a-da8e-4df4-aaac-ae0c69e6e237",
+      "method": "GET"
+    },
+    {
+      "path": "/api/csv-dag/runs/run_079f3590ed854624ad4a17aae828c7ee",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/delivery-graph",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag",
+      "method": "POST",
+      "body": {
+        "expected_candidate_fingerprint": "27f29aa21fd3d3f530179f19354436c425cd74379efbf60cf3ff1ea6dc225b7f",
+        "expected_graph_fingerprint": "fccc873042ec4b33b8c1923fcd34103364b1fbb39c96b54b0db2253fa160fadb",
+        "column": "amount",
+        "request_key": "359ad661-c231-4c11-a87c-90ffe868c9d3",
+        "composition": {
+          "version": "csv.composition.v1",
+          "nodes": [
+            {
+              "step_id": "node_1",
+              "action": "resource.read",
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                }
+              },
+              "depends_on": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_4e1bb94f073049d4a92957a20ad9c12b/apps/app_9a8c4e09321443e0baaa76ad3ea2f18f/csv-dag/359ad661-c231-4c11-a87c-90ffe868c9d3",
+      "method": "GET"
+    }
+  ],
+  "plan": {
+    "namespace": "fixed-csv-dag.v1",
+    "project_id": "proj_4e1bb94f073049d4a92957a20ad9c12b",
+    "app_id": "app_9a8c4e09321443e0baaa76ad3ea2f18f",
+    "runtime_id": "appruntime_382ed0e1c0e440b4b326a70615d9e47b",
+    "request_key": "22915e3a-da8e-4df4-aaac-ae0c69e6e237",
+    "candidate_fingerprint": "27f29aa21fd3d3f530179f19354436c425cd74379efbf60cf3ff1ea6dc225b7f",
+    "graph_fingerprint": "fccc873042ec4b33b8c1923fcd34103364b1fbb39c96b54b0db2253fa160fadb",
+    "graph_revision": 1,
+    "authorization_fingerprint": "757c8aa1095447e99757ebe63b5ec3d47adf5f0187e535ff8f1740f871095f21",
+    "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+    "input": {
+      "node_1_column": "amount",
+      "node_3_column": "quantity"
+    },
+    "definition": {
+      "manifest": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_9a8c4e09321443e0baaa76ad3ea2f18f",
+        "revision": 2,
+        "origin": "goal",
+        "goal_ref": "goal_75da36c5f8a04496aeaa753bce618e15",
+        "source_run_ref": null,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "node_1_column": {
+              "type": "string",
+              "enum": [
+                "amount"
+              ]
+            },
+            "node_3_column": {
+              "type": "string",
+              "enum": [
+                "quantity"
+              ]
+            },
+            "include_report": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "node_1_column",
+            "node_3_column"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "node_2_resource_id": {
+              "type": "string"
+            },
+            "node_2_column": {
+              "type": "string"
+            },
+            "node_2_count": {
+              "type": "integer"
+            },
+            "node_2_sum": {
+              "type": "string"
+            },
+            "node_2_source_hash": {
+              "type": "string"
+            },
+            "node_2_text": {
+              "type": "string"
+            },
+            "node_4_resource_id": {
+              "type": "string"
+            },
+            "node_4_column": {
+              "type": "string"
+            },
+            "node_4_count": {
+              "type": "integer"
+            },
+            "node_4_sum": {
+              "type": "string"
+            },
+            "node_4_source_hash": {
+              "type": "string"
+            },
+            "node_4_text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "node_2_resource_id",
+            "node_2_column",
+            "node_2_count",
+            "node_2_sum",
+            "node_2_source_hash",
+            "node_2_text",
+            "node_4_resource_id",
+            "node_4_column",
+            "node_4_count",
+            "node_4_sum",
+            "node_4_source_hash",
+            "node_4_text"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "node_2_resource_id": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "resource_id"
+          },
+          "node_2_column": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "column"
+          },
+          "node_2_count": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "count"
+          },
+          "node_2_sum": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "sum"
+          },
+          "node_2_source_hash": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "source_hash"
+          },
+          "node_2_text": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "text"
+          },
+          "node_4_resource_id": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "resource_id"
+          },
+          "node_4_column": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "column"
+          },
+          "node_4_count": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "count"
+          },
+          "node_4_sum": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "sum"
+          },
+          "node_4_source_hash": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "source_hash"
+          },
+          "node_4_text": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "text"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "node_2_resource_id"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "node_1",
+            "binding_id": "node_1",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "node_1_column"
+              }
+            },
+            "when": {
+              "op": "eq",
+              "source": {
+                "source": "input",
+                "field": "include_report"
+              },
+              "value": true
+            }
+          },
+          {
+            "step_id": "node_3",
+            "binding_id": "node_3",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "node_3_column"
+              }
+            }
+          },
+          {
+            "step_id": "node_2",
+            "binding_id": "node_2",
+            "depends_on": [
+              "node_1"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "source_hash"
+              }
+            }
+          },
+          {
+            "step_id": "node_4",
+            "binding_id": "node_4",
+            "depends_on": [
+              "node_3"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "source_hash"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "node_1",
+            "action_id": "action_16ddd953b23be105bd0e3f7a48df685f",
+            "revision": 2
+          },
+          {
+            "binding_id": "node_2",
+            "action_id": "action_affdf678b98edc5cb3f7ab56aeba9813",
+            "revision": 2
+          },
+          {
+            "binding_id": "node_3",
+            "action_id": "action_c8d3f47800c2ede2d762b6af36f381de",
+            "revision": 2
+          },
+          {
+            "binding_id": "node_4",
+            "action_id": "action_12822fac11617d5fa37c2b720bf16277",
+            "revision": 2
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "source",
+            "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_app_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+          },
+          {
+            "tool_ref": "data.aggregate_csv",
+            "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_d93dcd985de14a718d1674ff63f25e0b",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "actions": [
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_16ddd953b23be105bd0e3f7a48df685f",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string",
+                "enum": [
+                  "amount"
+                ]
+              }
+            },
+            "required": [
+              "resource_id",
+              "column"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_d93dcd985de14a718d1674ff63f25e0b",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+            },
+            {
+              "tool_ref": "data.aggregate_csv",
+              "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 16000,
+            "max_output_tokens": 1024,
+            "run_seconds": 75
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        },
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_c8d3f47800c2ede2d762b6af36f381de",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string",
+                "enum": [
+                  "quantity"
+                ]
+              }
+            },
+            "required": [
+              "resource_id",
+              "column"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [
+            {
+              "kind": "resource",
+              "ref": "res_d93dcd985de14a718d1674ff63f25e0b",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+            },
+            {
+              "tool_ref": "data.aggregate_csv",
+              "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+            }
+          ],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 16000,
+            "max_output_tokens": 1024,
+            "run_seconds": 75
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        },
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_affdf678b98edc5cb3f7ab56aeba9813",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [],
+          "permission_requirements": [],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 16000,
+            "max_output_tokens": 1024,
+            "run_seconds": 75
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        },
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_12822fac11617d5fa37c2b720bf16277",
+          "revision": 2,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [],
+          "permission_requirements": [],
+          "effect": "read",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 16000,
+            "max_output_tokens": 1024,
+            "run_seconds": 75
+          },
+          "idempotency": "read_only",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED"
+          ]
+        }
+      ]
+    },
+    "preflight": {
+      "state": "PREFLIGHTED_DRAFT",
+      "publishable": false,
+      "execution_performed": false,
+      "not_an_executable_plan": true,
+      "topological_order": [
+        "node_1",
+        "node_3",
+        "node_2",
+        "node_4"
+      ],
+      "budget_envelope": {
+        "max_requests": 4,
+        "max_tools": 4,
+        "max_repairs": 0,
+        "max_total_tokens": 64000,
+        "run_seconds": 300
+      },
+      "resource_refs": [
+        "res_d93dcd985de14a718d1674ff63f25e0b"
+      ],
+      "candidate_fingerprint_basis": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_9a8c4e09321443e0baaa76ad3ea2f18f",
+        "revision": 2,
+        "origin": "goal",
+        "goal_ref": "goal_75da36c5f8a04496aeaa753bce618e15",
+        "source_run_ref": null,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "node_1_column": {
+              "type": "string",
+              "enum": [
+                "amount"
+              ]
+            },
+            "node_3_column": {
+              "type": "string",
+              "enum": [
+                "quantity"
+              ]
+            },
+            "include_report": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "node_1_column",
+            "node_3_column"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "node_2_resource_id": {
+              "type": "string"
+            },
+            "node_2_column": {
+              "type": "string"
+            },
+            "node_2_count": {
+              "type": "integer"
+            },
+            "node_2_sum": {
+              "type": "string"
+            },
+            "node_2_source_hash": {
+              "type": "string"
+            },
+            "node_2_text": {
+              "type": "string"
+            },
+            "node_4_resource_id": {
+              "type": "string"
+            },
+            "node_4_column": {
+              "type": "string"
+            },
+            "node_4_count": {
+              "type": "integer"
+            },
+            "node_4_sum": {
+              "type": "string"
+            },
+            "node_4_source_hash": {
+              "type": "string"
+            },
+            "node_4_text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "node_2_resource_id",
+            "node_2_column",
+            "node_2_count",
+            "node_2_sum",
+            "node_2_source_hash",
+            "node_2_text",
+            "node_4_resource_id",
+            "node_4_column",
+            "node_4_count",
+            "node_4_sum",
+            "node_4_source_hash",
+            "node_4_text"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "node_2_resource_id": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "resource_id"
+          },
+          "node_2_column": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "column"
+          },
+          "node_2_count": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "count"
+          },
+          "node_2_sum": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "sum"
+          },
+          "node_2_source_hash": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "source_hash"
+          },
+          "node_2_text": {
+            "source": "step",
+            "ref": "node_2",
+            "field": "text"
+          },
+          "node_4_resource_id": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "resource_id"
+          },
+          "node_4_column": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "column"
+          },
+          "node_4_count": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "count"
+          },
+          "node_4_sum": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "sum"
+          },
+          "node_4_source_hash": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "source_hash"
+          },
+          "node_4_text": {
+            "source": "step",
+            "ref": "node_4",
+            "field": "text"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "node_2_resource_id"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "node_1",
+            "binding_id": "node_1",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "ref": null,
+                "field": "node_1_column"
+              }
+            },
+            "when": {
+              "op": "eq",
+              "source": {
+                "source": "input",
+                "ref": null,
+                "field": "include_report"
+              },
+              "value": true
+            }
+          },
+          {
+            "step_id": "node_2",
+            "binding_id": "node_2",
+            "depends_on": [
+              "node_1"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "source_hash"
+              }
+            }
+          },
+          {
+            "step_id": "node_3",
+            "binding_id": "node_3",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "ref": null,
+                "field": "node_3_column"
+              }
+            }
+          },
+          {
+            "step_id": "node_4",
+            "binding_id": "node_4",
+            "depends_on": [
+              "node_3"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "source_hash"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "node_1",
+            "action_id": "action_16ddd953b23be105bd0e3f7a48df685f",
+            "revision": 2
+          },
+          {
+            "binding_id": "node_2",
+            "action_id": "action_affdf678b98edc5cb3f7ab56aeba9813",
+            "revision": 2
+          },
+          {
+            "binding_id": "node_3",
+            "action_id": "action_c8d3f47800c2ede2d762b6af36f381de",
+            "revision": 2
+          },
+          {
+            "binding_id": "node_4",
+            "action_id": "action_12822fac11617d5fa37c2b720bf16277",
+            "revision": 2
+          }
+        ],
+        "data_bindings": [
+          {
+            "binding_id": "source",
+            "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+          }
+        ],
+        "runtime_identity_requirements": {
+          "mode": "user_and_app_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+          },
+          {
+            "tool_ref": "data.aggregate_csv",
+            "resource_ref": "res_d93dcd985de14a718d1674ff63f25e0b"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_d93dcd985de14a718d1674ff63f25e0b",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "data.aggregate_csv",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "intern.csv_report.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      }
+    },
+    "state": "DRAFT_PLAN",
+    "model_generated": false,
+    "model_requests": 0,
+    "business_writes": 0,
+    "publishable": false,
+    "formal_publication_enabled": false,
+    "semantic_status": "UNKNOWN",
+    "owner_acceptance": "PENDING",
+    "composition": {
+      "version": "csv.composition.v1",
+      "definition": {
+        "version": "csv.composition.v1",
+        "nodes": [
+          {
+            "step_id": "node_1",
+            "action": "data.aggregate_csv",
+            "column": "amount",
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "node_1_column"
+              }
+            },
+            "depends_on": [],
+            "when": {
+              "op": "eq",
+              "source": {
+                "source": "input",
+                "field": "include_report"
+              },
+              "value": true
+            }
+          },
+          {
+            "step_id": "node_2",
+            "action": "intern.csv_report.v1",
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "node_1",
+                "field": "source_hash"
+              }
+            },
+            "depends_on": [
+              "node_1"
+            ]
+          },
+          {
+            "step_id": "node_3",
+            "action": "data.aggregate_csv",
+            "column": "quantity",
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "node_3_column"
+              }
+            },
+            "depends_on": []
+          },
+          {
+            "step_id": "node_4",
+            "action": "intern.csv_report.v1",
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "source_hash"
+              }
+            },
+            "depends_on": [
+              "node_3"
+            ]
+          }
+        ]
+      },
+      "sinks": [
+        "node_2",
+        "node_4"
+      ]
+    },
+    "wiring": {
+      "version": "csv.composition.v1",
+      "inputs": {
+        "node_1": {
+          "resource_id": {
+            "source": "data",
+            "ref": "source",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "input",
+            "field": "node_1_column"
+          }
+        },
+        "node_3": {
+          "resource_id": {
+            "source": "data",
+            "ref": "source",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "input",
+            "field": "node_3_column"
+          }
+        },
+        "node_2": {
+          "resource_id": {
+            "source": "step",
+            "ref": "node_1",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "node_1",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "node_1",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "node_1",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "node_1",
+            "field": "source_hash"
+          }
+        },
+        "node_4": {
+          "resource_id": {
+            "source": "step",
+            "ref": "node_3",
+            "field": "resource_id"
+          },
+          "column": {
+            "source": "step",
+            "ref": "node_3",
+            "field": "column"
+          },
+          "count": {
+            "source": "step",
+            "ref": "node_3",
+            "field": "count"
+          },
+          "sum": {
+            "source": "step",
+            "ref": "node_3",
+            "field": "sum"
+          },
+          "source_hash": {
+            "source": "step",
+            "ref": "node_3",
+            "field": "source_hash"
+          }
+        }
+      },
+      "depends_on": {
+        "node_1": [],
+        "node_3": [],
+        "node_2": [
+          "node_1"
+        ],
+        "node_4": [
+          "node_3"
+        ]
+      }
+    },
+    "branch_semantics": "typed-conditions.v1",
+    "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811"
+  },
+  "jobs": [
+    {
+      "namespace": "fixed-csv-dag.v1",
+      "id": "run_079f3590ed854624ad4a17aae828c7ee",
+      "app_id": "app_9a8c4e09321443e0baaa76ad3ea2f18f",
+      "project_id": "proj_4e1bb94f073049d4a92957a20ad9c12b",
+      "status": "PARTIAL",
+      "version": 2,
+      "result": {
+        "namespace": "fixed-csv-dag.v1",
+        "output": {
+          "node_4_resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+          "node_4_column": "quantity",
+          "node_4_count": 2,
+          "node_4_sum": "15",
+          "node_4_source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "node_4_text": "列 quantity；行数 2；合计 15"
+        },
+        "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+        "steps": [
+          {
+            "step_id": "node_1",
+            "status": "SKIPPED",
+            "data": null,
+            "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "action_revision": 2,
+            "predecessor_receipts": [],
+            "artifact_refs": [],
+            "actual_reads": [],
+            "branch_decision": {
+              "version": "typed-conditions.v1",
+              "condition": {
+                "op": "eq",
+                "source": {
+                  "source": "input",
+                  "field": "include_report"
+                },
+                "value": true
+              },
+              "observation": {
+                "evaluated": true,
+                "present": true,
+                "value": false
+              },
+              "passed": false,
+              "reason": "CONDITION_FALSE",
+              "skipped_predecessors": [],
+              "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+            }
+          },
+          {
+            "operation_id": "op_87cf79a82f9b4ccda18788d0c91292d5",
+            "step_id": "node_3",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+              "column": "quantity",
+              "count": 2,
+              "sum": "15",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f"
+            },
+            "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+            "action_revision": 2,
+            "input_fingerprint": "24d50ca73df574a1a1e0b90c97e88a4d373615ff91cc3dc53b31a82b01cf1113",
+            "output_fingerprint": "8178b91785c5b1d2e2f05663b66df448e79574c10cba132f7dc259665dc41b69",
+            "predecessor_receipts": [],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [
+              {
+                "resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+                "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+                "tool_ref": "data.aggregate_csv"
+              }
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "input",
+                "field": "node_3_column"
+              }
+            },
+            "branch_decision": {
+              "version": "typed-conditions.v1",
+              "condition": null,
+              "observation": {
+                "evaluated": false
+              },
+              "passed": true,
+              "reason": "UNCONDITIONAL",
+              "skipped_predecessors": [],
+              "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+            }
+          },
+          {
+            "step_id": "node_2",
+            "status": "SKIPPED",
+            "data": null,
+            "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "action_revision": 2,
+            "predecessor_receipts": [
+              "889e3a5e603e51e4e0e09f15a26f4818ee9bb06ea03d3236afc3999a19a49108"
+            ],
+            "artifact_refs": [],
+            "actual_reads": [],
+            "branch_decision": {
+              "version": "typed-conditions.v1",
+              "condition": null,
+              "observation": {
+                "evaluated": false
+              },
+              "passed": false,
+              "reason": "DEPENDENCY_SKIPPED",
+              "skipped_predecessors": [
+                "node_1"
+              ],
+              "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+            }
+          },
+          {
+            "operation_id": "op_76403d638b924e4f9aa1884b0298a361",
+            "step_id": "node_4",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+              "column": "quantity",
+              "count": 2,
+              "sum": "15",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "text": "列 quantity；行数 2；合计 15"
+            },
+            "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+            "action_revision": 2,
+            "input_fingerprint": "8178b91785c5b1d2e2f05663b66df448e79574c10cba132f7dc259665dc41b69",
+            "output_fingerprint": "6c22a6bb78cd1e7d24ed02bb4e030dfd04facb75c479c8e217d729df809ecabf",
+            "predecessor_receipts": [
+              "5e9f09dd4d70218e8afb9f8a3b52f49685f53f91f7d967af2473ec34b149a62a"
+            ],
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "actual_reads": [],
+            "input_sources": {
+              "resource_id": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "resource_id"
+              },
+              "column": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "column"
+              },
+              "count": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "count"
+              },
+              "sum": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "sum"
+              },
+              "source_hash": {
+                "source": "step",
+                "ref": "node_3",
+                "field": "source_hash"
+              }
+            },
+            "branch_decision": {
+              "version": "typed-conditions.v1",
+              "condition": null,
+              "observation": {
+                "evaluated": false
+              },
+              "passed": true,
+              "reason": "UNCONDITIONAL",
+              "skipped_predecessors": [],
+              "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+            }
+          }
+        ],
+        "model_requests": 0,
+        "business_writes": 0,
+        "semantic_status": "UNKNOWN",
+        "owner_acceptance": "PENDING",
+        "output_by_step": {
+          "node_2": null,
+          "node_4": {
+            "resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "text": "列 quantity；行数 2；合计 15"
+          }
+        },
+        "output_status": "PARTIAL"
+      },
+      "error": null,
+      "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+      "steps": [
+        {
+          "step_id": "node_1",
+          "status": "SKIPPED",
+          "data": null,
+          "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "action_revision": 2,
+          "predecessor_receipts": [],
+          "artifact_refs": [],
+          "actual_reads": [],
+          "branch_decision": {
+            "version": "typed-conditions.v1",
+            "condition": {
+              "op": "eq",
+              "source": {
+                "source": "input",
+                "field": "include_report"
+              },
+              "value": true
+            },
+            "observation": {
+              "evaluated": true,
+              "present": true,
+              "value": false
+            },
+            "passed": false,
+            "reason": "CONDITION_FALSE",
+            "skipped_predecessors": [],
+            "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+          }
+        },
+        {
+          "operation_id": "op_87cf79a82f9b4ccda18788d0c91292d5",
+          "step_id": "node_3",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f"
+          },
+          "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+          "action_revision": 2,
+          "input_fingerprint": "24d50ca73df574a1a1e0b90c97e88a4d373615ff91cc3dc53b31a82b01cf1113",
+          "output_fingerprint": "8178b91785c5b1d2e2f05663b66df448e79574c10cba132f7dc259665dc41b69",
+          "predecessor_receipts": [],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [
+            {
+              "resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+              "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+              "tool_ref": "data.aggregate_csv"
+            }
+          ],
+          "input_sources": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "input",
+              "field": "node_3_column"
+            }
+          },
+          "branch_decision": {
+            "version": "typed-conditions.v1",
+            "condition": null,
+            "observation": {
+              "evaluated": false
+            },
+            "passed": true,
+            "reason": "UNCONDITIONAL",
+            "skipped_predecessors": [],
+            "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+          }
+        },
+        {
+          "step_id": "node_2",
+          "status": "SKIPPED",
+          "data": null,
+          "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "action_revision": 2,
+          "predecessor_receipts": [
+            "889e3a5e603e51e4e0e09f15a26f4818ee9bb06ea03d3236afc3999a19a49108"
+          ],
+          "artifact_refs": [],
+          "actual_reads": [],
+          "branch_decision": {
+            "version": "typed-conditions.v1",
+            "condition": null,
+            "observation": {
+              "evaluated": false
+            },
+            "passed": false,
+            "reason": "DEPENDENCY_SKIPPED",
+            "skipped_predecessors": [
+              "node_1"
+            ],
+            "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+          }
+        },
+        {
+          "operation_id": "op_76403d638b924e4f9aa1884b0298a361",
+          "step_id": "node_4",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_d93dcd985de14a718d1674ff63f25e0b",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+            "text": "列 quantity；行数 2；合计 15"
+          },
+          "plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+          "action_revision": 2,
+          "input_fingerprint": "8178b91785c5b1d2e2f05663b66df448e79574c10cba132f7dc259665dc41b69",
+          "output_fingerprint": "6c22a6bb78cd1e7d24ed02bb4e030dfd04facb75c479c8e217d729df809ecabf",
+          "predecessor_receipts": [
+            "5e9f09dd4d70218e8afb9f8a3b52f49685f53f91f7d967af2473ec34b149a62a"
+          ],
+          "source_hash": "d5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f",
+          "artifact_refs": [],
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "actual_reads": [],
+          "input_sources": {
+            "resource_id": {
+              "source": "step",
+              "ref": "node_3",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "step",
+              "ref": "node_3",
+              "field": "column"
+            },
+            "count": {
+              "source": "step",
+              "ref": "node_3",
+              "field": "count"
+            },
+            "sum": {
+              "source": "step",
+              "ref": "node_3",
+              "field": "sum"
+            },
+            "source_hash": {
+              "source": "step",
+              "ref": "node_3",
+              "field": "source_hash"
+            }
+          },
+          "branch_decision": {
+            "version": "typed-conditions.v1",
+            "condition": null,
+            "observation": {
+              "evaluated": false
+            },
+            "passed": true,
+            "reason": "UNCONDITIONAL",
+            "skipped_predecessors": [],
+            "inputs_fingerprint": "6ced54c46c1e6c32ef21f3799077b1be0e1e6515d5f01ecb73f0a9f22b0bfb29"
+          }
+        }
+      ],
+      "pending_steps": [],
+      "model_requests": 0,
+      "business_writes": 0,
+      "publishable": false,
+      "formal_publication_enabled": false,
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING",
+      "inputs": {
+        "node_1_column": "amount",
+        "node_3_column": "quantity",
+        "include_report": false
+      },
+      "confirmation": {
+        "branch_inputs": {
+          "include_report": false
+        },
+        "expected_plan_fingerprint": "4f7d35a7dcecd0cd4a1937a7a6dccb5b9aba0856928173fc1c15aa76bf6f8811",
+        "consent": "CONFIRM_EXACT_OFFLINE_CSV_DAG",
+        "request_key": "cdf2a8d8-2230-4756-bd74-f144edd3a68e"
+      }
+    }
+  ],
+  "loaded_source_sha256": {
+    "index.html": "a378382e6234ece39df071eebffd6294dd315765ff1c3eeea204998c7128632d",
+    "app.js": "8cdb510be4f9dfe0185adf7a49aff183de729dc8a1522ce610b2f12ef1ca839b",
+    "natural-goal.js": "1b1b8fe39fdb60cbb2b906d6a0ca3e158feada119671a3028074e30573b3b592",
+    "internal.js": "e67cd987d3559031f3e1280098362de9d027201a46ad1c9bf85aea6f995bfc19",
+    "protocol.js": "dcf97729f2a69872a8b7c33374e9f2cd50e88c8b368c4d417ba133bea8e5f1e8",
+    "use.js": "a9eaadc871b857576b3c6bed6a41b8c9c9fe6a0f658ed3e557bbc8e9e20f3019",
+    "conditional-runs.js": "8493353812ee7b57e48c6b18e9cf8069a7366e38b07709f7ab6d6320e735393e",
+    "conditional-apps.js": "ddb32aec614a32fb6d75a0128a2313740f350a8f117d9466814796f52f979db9",
+    "report-manifest.js": "4081b425ac501f8a15f04e515ad0811331a1faf58b41ed22fd169de6807d12ac",
+    "delivery-graph.js": "f11fdf2a3e8c4323270d22c7df25a18c6e1de969184bb76bf60a16ae30aa6c9d",
+    "manual-locks.js": "f558e8ce112da78211c3929ba9c58249e892c8683548f75411be02b1ec099b32",
+    "csv-dag.js": "3bcf3391dbb485877ad9c1de092eaab69fe129671579336b28da037bfca71b6a"
+  },
+  "native": "NOT_RUN"
+}

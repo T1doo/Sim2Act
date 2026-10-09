@@ -1,0 +1,154 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_____________ test_four_leaf_types_order_and_cold_read[order0-all] _____________
+
+env = (<sim2act.db.Store object at 0x7f2903014680>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...6bb9956108427b92d90df6b065446f', 'user_a41e4229d55e4e4e9e6ac3310968eefe', 'proj_eb6e5ce7aeea40408a33ea4d5355f17e', ...)
+op = 'all', order = (0, 1, 2, 3)
+
+    @pytest.mark.parametrize('op', ['all','any'])
+    @pytest.mark.parametrize('order', [(0,1,2,3),(3,2,1,0)])
+    def test_four_leaf_types_order_and_cold_read(env,op,order):
+        leaves=[atom('in','include_report',[False]),atom('exists','count',ref='aggregate'),
+                atom('in','count',[2,7],ref='aggregate'),atom('eq','sum','15',ref='aggregate')]
+>       base,p,_=plan(env,{'op':op,'conditions':[leaves[i] for i in order]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:55: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f2903014680>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...6bb9956108427b92d90df6b065446f', 'user_a41e4229d55e4e4e9e6ac3310968eefe', 'proj_eb6e5ce7aeea40408a33ea4d5355f17e', ...)
+expression = {'conditions': [{'op': 'in', 'source': {'field': 'include_report', 'source': 'input'}, 'value': [False]}, {'op': 'exis...: [2, 7]}, {'op': 'eq', 'source': {'field': 'sum', 'ref': 'aggregate', 'source': 'step'}, 'value': '15'}], 'op': 'all'}
+target = 'report', extra = None
+
+    def plan(env, expression, target='report', extra=None):
+        aid,rid,anchor,*_=source_setup(env)
+        base=f'/api/projects/{env[5]}/apps/{aid}/csv-dag'
+        branches=[{'step_id':target,'when':expression}]
+        if extra:branches.append(extra)
+        body={'expected_candidate_fingerprint':anchor['candidate_fingerprint'],
+              'expected_graph_fingerprint':anchor['graph_fingerprint'],'column':'quantity',
+              'request_key':'independent','branch_patch':branches}
+        r=env[2].post(base,json=body)
+>       assert r.status_code==201,r.text
+E       AssertionError: {"detail":[{"type":"literal_error","loc":["body","branch_patch",0,"when","op"],"msg":"Input should be 'eq', 'in' or 'exists'","input":"all","ctx":{"expected":"'eq', 'in' or 'exists'"}},{"type":"missing","loc":["body","branch_patch",0,"when","source"],"msg":"Field required","input":{"op":"all","conditions":[{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"}]}},{"type":"extra_forbidden","loc":["body","branch_patch",0,"when","conditions"],"msg":"Extra inputs are not permitted","input":[{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"}]}]}
+E       assert 422 == 201
+E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:34: AssertionError
+_____________ test_four_leaf_types_order_and_cold_read[order0-any] _____________
+
+env = (<sim2act.db.Store object at 0x7f2902f50050>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...cb0836dc34400d977e9024812d08b8', 'user_cc78cfd49d024441a62afd92efa6a41a', 'proj_500ce31caec642488cbbc898298f1001', ...)
+op = 'any', order = (0, 1, 2, 3)
+
+    @pytest.mark.parametrize('op', ['all','any'])
+    @pytest.mark.parametrize('order', [(0,1,2,3),(3,2,1,0)])
+    def test_four_leaf_types_order_and_cold_read(env,op,order):
+        leaves=[atom('in','include_report',[False]),atom('exists','count',ref='aggregate'),
+                atom('in','count',[2,7],ref='aggregate'),atom('eq','sum','15',ref='aggregate')]
+>       base,p,_=plan(env,{'op':op,'conditions':[leaves[i] for i in order]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:55: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f2902f50050>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...cb0836dc34400d977e9024812d08b8', 'user_cc78cfd49d024441a62afd92efa6a41a', 'proj_500ce31caec642488cbbc898298f1001', ...)
+expression = {'conditions': [{'op': 'in', 'source': {'field': 'include_report', 'source': 'input'}, 'value': [False]}, {'op': 'exis...: [2, 7]}, {'op': 'eq', 'source': {'field': 'sum', 'ref': 'aggregate', 'source': 'step'}, 'value': '15'}], 'op': 'any'}
+target = 'report', extra = None
+
+    def plan(env, expression, target='report', extra=None):
+        aid,rid,anchor,*_=source_setup(env)
+        base=f'/api/projects/{env[5]}/apps/{aid}/csv-dag'
+        branches=[{'step_id':target,'when':expression}]
+        if extra:branches.append(extra)
+        body={'expected_candidate_fingerprint':anchor['candidate_fingerprint'],
+              'expected_graph_fingerprint':anchor['graph_fingerprint'],'column':'quantity',
+              'request_key':'independent','branch_patch':branches}
+        r=env[2].post(base,json=body)
+>       assert r.status_code==201,r.text
+E       AssertionError: {"detail":[{"type":"literal_error","loc":["body","branch_patch",0,"when","op"],"msg":"Input should be 'eq', 'in' or 'exists'","input":"any","ctx":{"expected":"'eq', 'in' or 'exists'"}},{"type":"missing","loc":["body","branch_patch",0,"when","source"],"msg":"Field required","input":{"op":"any","conditions":[{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"}]}},{"type":"extra_forbidden","loc":["body","branch_patch",0,"when","conditions"],"msg":"Extra inputs are not permitted","input":[{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"}]}]}
+E       assert 422 == 201
+E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:34: AssertionError
+_____________ test_four_leaf_types_order_and_cold_read[order1-all] _____________
+
+env = (<sim2act.db.Store object at 0x7f290296cc80>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...77367a7e984a649237bf6457e8a4bc', 'user_6a0e5743bbf54ba58db6cdabb9a0db7c', 'proj_6c814ce5d4f94b2e990356ca8762e65f', ...)
+op = 'all', order = (3, 2, 1, 0)
+
+    @pytest.mark.parametrize('op', ['all','any'])
+    @pytest.mark.parametrize('order', [(0,1,2,3),(3,2,1,0)])
+    def test_four_leaf_types_order_and_cold_read(env,op,order):
+        leaves=[atom('in','include_report',[False]),atom('exists','count',ref='aggregate'),
+                atom('in','count',[2,7],ref='aggregate'),atom('eq','sum','15',ref='aggregate')]
+>       base,p,_=plan(env,{'op':op,'conditions':[leaves[i] for i in order]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:55: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f290296cc80>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...77367a7e984a649237bf6457e8a4bc', 'user_6a0e5743bbf54ba58db6cdabb9a0db7c', 'proj_6c814ce5d4f94b2e990356ca8762e65f', ...)
+expression = {'conditions': [{'op': 'eq', 'source': {'field': 'sum', 'ref': 'aggregate', 'source': 'step'}, 'value': '15'}, {'op': ...rce': 'step'}}, {'op': 'in', 'source': {'field': 'include_report', 'source': 'input'}, 'value': [False]}], 'op': 'all'}
+target = 'report', extra = None
+
+    def plan(env, expression, target='report', extra=None):
+        aid,rid,anchor,*_=source_setup(env)
+        base=f'/api/projects/{env[5]}/apps/{aid}/csv-dag'
+        branches=[{'step_id':target,'when':expression}]
+        if extra:branches.append(extra)
+        body={'expected_candidate_fingerprint':anchor['candidate_fingerprint'],
+              'expected_graph_fingerprint':anchor['graph_fingerprint'],'column':'quantity',
+              'request_key':'independent','branch_patch':branches}
+        r=env[2].post(base,json=body)
+>       assert r.status_code==201,r.text
+E       AssertionError: {"detail":[{"type":"literal_error","loc":["body","branch_patch",0,"when","op"],"msg":"Input should be 'eq', 'in' or 'exists'","input":"all","ctx":{"expected":"'eq', 'in' or 'exists'"}},{"type":"missing","loc":["body","branch_patch",0,"when","source"],"msg":"Field required","input":{"op":"all","conditions":[{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]}]}},{"type":"extra_forbidden","loc":["body","branch_patch",0,"when","conditions"],"msg":"Extra inputs are not permitted","input":[{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]}]}]}
+E       assert 422 == 201
+E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:34: AssertionError
+_____________ test_four_leaf_types_order_and_cold_read[order1-any] _____________
+
+env = (<sim2act.db.Store object at 0x7f29015e2090>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...552d3977af4e4d833737275c3addf2', 'user_6e9929ed40b94d61b9e11bb74116ee45', 'proj_e216fea384234733a4d27a1244d9d852', ...)
+op = 'any', order = (3, 2, 1, 0)
+
+    @pytest.mark.parametrize('op', ['all','any'])
+    @pytest.mark.parametrize('order', [(0,1,2,3),(3,2,1,0)])
+    def test_four_leaf_types_order_and_cold_read(env,op,order):
+        leaves=[atom('in','include_report',[False]),atom('exists','count',ref='aggregate'),
+                atom('in','count',[2,7],ref='aggregate'),atom('eq','sum','15',ref='aggregate')]
+>       base,p,_=plan(env,{'op':op,'conditions':[leaves[i] for i in order]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:55: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f29015e2090>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-independe...552d3977af4e4d833737275c3addf2', 'user_6e9929ed40b94d61b9e11bb74116ee45', 'proj_e216fea384234733a4d27a1244d9d852', ...)
+expression = {'conditions': [{'op': 'eq', 'source': {'field': 'sum', 'ref': 'aggregate', 'source': 'step'}, 'value': '15'}, {'op': ...rce': 'step'}}, {'op': 'in', 'source': {'field': 'include_report', 'source': 'input'}, 'value': [False]}], 'op': 'any'}
+target = 'report', extra = None
+
+    def plan(env, expression, target='report', extra=None):
+        aid,rid,anchor,*_=source_setup(env)
+        base=f'/api/projects/{env[5]}/apps/{aid}/csv-dag'
+        branches=[{'step_id':target,'when':expression}]
+        if extra:branches.append(extra)
+        body={'expected_candidate_fingerprint':anchor['candidate_fingerprint'],
+              'expected_graph_fingerprint':anchor['graph_fingerprint'],'column':'quantity',
+              'request_key':'independent','branch_patch':branches}
+        r=env[2].post(base,json=body)
+>       assert r.status_code==201,r.text
+E       AssertionError: {"detail":[{"type":"literal_error","loc":["body","branch_patch",0,"when","op"],"msg":"Input should be 'eq', 'in' or 'exists'","input":"any","ctx":{"expected":"'eq', 'in' or 'exists'"}},{"type":"missing","loc":["body","branch_patch",0,"when","source"],"msg":"Field required","input":{"op":"any","conditions":[{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]}]}},{"type":"extra_forbidden","loc":["body","branch_patch",0,"when","conditions"],"msg":"Extra inputs are not permitted","input":[{"op":"eq","source":{"source":"step","field":"sum","ref":"aggregate"},"value":"15"},{"op":"in","source":{"source":"step","field":"count","ref":"aggregate"},"value":[2,7]},{"op":"exists","source":{"source":"step","field":"count","ref":"aggregate"}},{"op":"in","source":{"source":"input","field":"include_report"},"value":[false]}]}]}
+E       assert 422 == 201
+E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+
+/tmp/sim2act-condition-groups-independent-20261009/test_independent.py:34: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-condition-groups-independent-20261009/test_independent.py::test_four_leaf_types_order_and_cold_read[order0-all]
+FAILED ../../tmp/sim2act-condition-groups-independent-20261009/test_independent.py::test_four_leaf_types_order_and_cold_read[order0-any]
+FAILED ../../tmp/sim2act-condition-groups-independent-20261009/test_independent.py::test_four_leaf_types_order_and_cold_read[order1-all]
+FAILED ../../tmp/sim2act-condition-groups-independent-20261009/test_independent.py::test_four_leaf_types_order_and_cold_read[order1-any]
+4 failed, 17 deselected, 1 warning in 1.89s

@@ -1,0 +1,16 @@
+# Run from repo with locked .venv and private jsdom; LIVE=0 throughout.
+# Freeze eeb368ccb338429637f271bf57bdb2781245b976 for the 180-case matrix.
+export LIVE=0 SIM2ACT_LIVE_ENABLED=false
+export NODE_PATH=/tmp/sim2act-late-integration-20261009/node/node_modules
+export SIM2ACT_UPGRADE_OLD_ARCHIVE=/tmp/sim2act-late-integration-20261009/old-dag
+export SIM2ACT_UPGRADE_CORE_ARCHIVE=/tmp/sim2act-late-integration-20261009/core-dag
+# unset SIM2ACT_TEST_DATABASE_URL for SQLite; PG points only at owned isolated synthetic db.
+.venv/bin/pytest -q tests/test_condition_groups.py tests/test_condition_groups_ui.py tests/test_controlled_branches.py tests/test_controlled_branches_ui.py tests/test_csv_composition.py tests/test_csv_composition_ui.py tests/test_csv_dag.py tests/test_contract_semantics.py tests/test_csv_dag_upgrade.py --basetemp=<fresh-owned-root> --junitxml=<result.xml>
+# Final frozen 79b119b616a20d9347b5677c0d58fbbbe18127c8; same environment, each backend serially.
+.venv/bin/pytest -q tests/test_condition_groups_ui.py tests/test_controlled_branches_ui.py tests/test_csv_composition_ui.py --basetemp=<fresh-owned-root> --junitxml=<result.xml>
+.venv/bin/ruff check src scripts tests
+.venv/bin/mypy src
+node --check src/sim2act/web/csv-dag.js
+node --check tests/condition_groups_ui.cjs
+# Actual explicit basetemps/XML and runtime freeze attribution are in test-summary.json.
+# Independent drivers and result attribution are in independent/FINAL_REVIEW.md.

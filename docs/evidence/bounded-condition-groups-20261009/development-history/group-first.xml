@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="29" time="14.557" timestamp="2026-10-09T17:03:01.756866+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[2-False-all]" time="0.811" /><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[2-False-any]" time="0.698" /><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[2-True-all]" time="0.651" /><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[2-True-any]" time="0.711" /><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[3-False-all]" time="0.724" /><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[3-False-any]" time="0.654" /><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[3-True-all]" time="0.720" /><testcase classname="tests.test_condition_groups" name="test_actual_two_conditions_truth_table_cold_resume_and_exact_key[3-True-any]" time="0.649" /><testcase classname="tests.test_condition_groups" name="test_group_does_not_short_circuit_missing_required_comparison[all]" time="0.646" /><testcase classname="tests.test_condition_groups" name="test_group_does_not_short_circuit_missing_required_comparison[any]" time="0.604" /><testcase classname="tests.test_condition_groups" name="test_four_leaf_exists_missing_is_false_and_membership_is_typed" time="0.712" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[zero]" time="0.318" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[one]" time="0.372" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[five]" time="0.282" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[nested]" time="0.291" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[unknown_op]" time="0.489" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[expression]" time="0.261" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[extra_source]" time="0.262" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[extra_value]" time="0.341" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[numeric_bool]" time="0.320" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[float_int]" time="0.304" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[future]" time="0.389" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[undeclared]" time="0.300" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[data]" time="0.420" /><testcase classname="tests.test_condition_groups" name="test_all_group_leaves_preflight_before_any_write[exists_value]" time="0.265" /><testcase classname="tests.test_condition_groups" name="test_group_in_four_node_composition_retains_each_independent_output" time="0.659" /><testcase classname="tests.test_condition_groups" name="test_persisted_group_leaf_decision_tampering_fails_closed[False]" time="0.554" /><testcase classname="tests.test_condition_groups" name="test_persisted_group_leaf_decision_tampering_fails_closed[True]" time="0.629"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;message&quot;:&quot;Actual DAG receipt differs from independent readback&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 == 409&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fd7954fe8a0&gt;, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...5aae476f8d4586b77454a193f3173f', 'user_23e75b2cb5034ff4921f235d02adc115', 'proj_ed3de675a8354d8f9274caf2cf68c09f', ...)
+enabled = True
+
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_persisted_group_leaf_decision_tampering_fails_closed(env, enabled):
+        _, base, plan, _ = setup(env, group())
+        worker, job, _ = start(env, base, plan, {"include_report": enabled})
+        worker.process(job)
+        with env[0].tx() as c:
+            if enabled:
+                row = c.execute(select(operations).where(operations.c.run_id == job["id"], operations.c.call_id == "report")).mappings().one()
+                data = copy.deepcopy(row["receipt"])
+                data["branch_decision"]["observation"]["conditions"][0]["passed"] = False
+                c.execute(update(operations).where(operations.c.id == row["id"]).values(receipt=data))
+            else:
+                row = c.execute(select(events).where(events.c.run_id == job["id"], events.c.kind == "CSV_DAG_STEP_SKIPPED")).mappings().one()
+                data = copy.deepcopy(row["data"])
+                data["branch_decision"]["observation"]["conditions"][0]["passed"] = True
+                c.execute(update(events).where(events.c.id == row["id"]).values(data=data))
+        before = snapshot(env)
+        reply = env[2].get(f"/api/csv-dag/runs/{job['id']}")
+&gt;       assert reply.status_code == 409, reply.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"Actual DAG receipt differs from independent readback","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 409
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_condition_groups.py:151: AssertionError</failure></testcase><testcase classname="tests.test_condition_groups" name="test_group_skip_still_requires_current_authority" time="0.384"><failure message="AttributeError: resource_ref">self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fd79738d2b0&gt;
+key = 'resource_ref'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+&gt;           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'resource_ref'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7fd796cefd10&gt;, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...826ccb03474e1091ca449848480a64', 'user_2d7324abc7e3405cb4f3f72c66f9c8b9', 'proj_efeb976b9e204449ac369732759dcf6d', ...)
+
+    def test_group_skip_still_requires_current_authority(env):
+        _, base, plan, _ = setup(env, group())
+        worker, job, _ = start(env, base, plan, {"include_report": False})
+        assert dag.advance(worker, job) and dag.advance(worker, job)
+        with env[0].tx() as c:
+&gt;           c.execute(update(grants).where(grants.c.resource_ref.in_(job["resource_refs"])).values(revoked=True))
+                                           ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_condition_groups.py:160: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fd79738d2b0&gt;
+key = 'resource_ref'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+&gt;           raise AttributeError(key) from err
+E           AttributeError: resource_ref
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError</failure></testcase></testsuite></testsuites>

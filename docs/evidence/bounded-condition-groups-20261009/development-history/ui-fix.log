@@ -1,0 +1,173 @@
+FFF..                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_actual_group_controls_worker_and_cold_http_page[legacy-all-2-statuses0] _
+
+env = (<sim2act.db.Store object at 0x7f040930b710>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...0ae705d11640939a2467b37785ddb4', 'user_2c9411d53dc14d19a1eaa25ed18064a8', 'proj_a285e599ee6047f2b648d9940710e462', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/ui-fix/test_actual_group_controls_wor0')
+mode = 'legacy', group = 'all', count = 2, statuses = ['SKIPPED', 'VERIFIED']
+
+    @pytest.mark.parametrize("mode,group,count,statuses", [
+        ("legacy", "all", 2, ["SKIPPED", "VERIFIED"]),
+        ("legacy", "any", 3, ["SKIPPED", "VERIFIED"]),
+        ("composition", "all", 2, ["SKIPPED", "VERIFIED"]),
+    ])
+    def test_actual_group_controls_worker_and_cold_http_page(env, tmp_path, mode, group, count, statuses):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], target="node_2" if mode=="composition" else "report",
+            op="eq", source="input:include_report", value="true", mode=mode, group=group, count=count,
+            inputs=["false","true"], statuses=statuses)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/condition_groups_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: same frozen plan accepts distinct explicit input
+E                 at check (/workspace/Sim2Act/tests/condition_groups_ui.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/condition_groups_ui.cjs:58:5
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/condition_groups_ui.cjs', '/tmp/sim2act-condition-groups-20261009/ui-fix/test_ac...ts/condition_groups_ui.cjs:58:5\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+tests/test_condition_groups_ui.py:59: AssertionError
+_ test_actual_group_controls_worker_and_cold_http_page[legacy-any-3-statuses1] _
+
+env = (<sim2act.db.Store object at 0x7f0408e0c980>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...22ca5ae53f42c6b4b1cde0c71bf3ad', 'user_69a1d67f79f1473e87d6d3cd2ac1a0a3', 'proj_58f450205ef446e6affcdfe76d7a29b4', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/ui-fix/test_actual_group_controls_wor1')
+mode = 'legacy', group = 'any', count = 3, statuses = ['SKIPPED', 'VERIFIED']
+
+    @pytest.mark.parametrize("mode,group,count,statuses", [
+        ("legacy", "all", 2, ["SKIPPED", "VERIFIED"]),
+        ("legacy", "any", 3, ["SKIPPED", "VERIFIED"]),
+        ("composition", "all", 2, ["SKIPPED", "VERIFIED"]),
+    ])
+    def test_actual_group_controls_worker_and_cold_http_page(env, tmp_path, mode, group, count, statuses):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], target="node_2" if mode=="composition" else "report",
+            op="eq", source="input:include_report", value="true", mode=mode, group=group, count=count,
+            inputs=["false","true"], statuses=statuses)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/condition_groups_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: same frozen plan accepts distinct explicit input
+E                 at check (/workspace/Sim2Act/tests/condition_groups_ui.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/condition_groups_ui.cjs:58:5
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/condition_groups_ui.cjs', '/tmp/sim2act-condition-groups-20261009/ui-fix/test_ac...ts/condition_groups_ui.cjs:58:5\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+tests/test_condition_groups_ui.py:59: AssertionError
+_ test_actual_group_controls_worker_and_cold_http_page[composition-all-2-statuses2] _
+
+env = (<sim2act.db.Store object at 0x7f0402f1ae10>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...d43650572d42af9a96ac2471f9995b', 'user_2035b62ec1a54bc3bb634ee1495d9bda', 'proj_423eb8a7ec0b452b83888930773e9e34', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/ui-fix/test_actual_group_controls_wor2')
+mode = 'composition', group = 'all', count = 2
+statuses = ['SKIPPED', 'VERIFIED']
+
+    @pytest.mark.parametrize("mode,group,count,statuses", [
+        ("legacy", "all", 2, ["SKIPPED", "VERIFIED"]),
+        ("legacy", "any", 3, ["SKIPPED", "VERIFIED"]),
+        ("composition", "all", 2, ["SKIPPED", "VERIFIED"]),
+    ])
+    def test_actual_group_controls_worker_and_cold_http_page(env, tmp_path, mode, group, count, statuses):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], target="node_2" if mode=="composition" else "report",
+            op="eq", source="input:include_report", value="true", mode=mode, group=group, count=count,
+            inputs=["false","true"], statuses=statuses)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/condition_groups_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: same frozen plan accepts distinct explicit input
+E                 at check (/workspace/Sim2Act/tests/condition_groups_ui.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/condition_groups_ui.cjs:58:5
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/condition_groups_ui.cjs', '/tmp/sim2act-condition-groups-20261009/ui-fix/test_ac...ts/condition_groups_ui.cjs:58:5\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n').returncode
+
+tests/test_condition_groups_ui.py:59: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_condition_groups_ui.py::test_actual_group_controls_worker_and_cold_http_page[legacy-all-2-statuses0]
+FAILED tests/test_condition_groups_ui.py::test_actual_group_controls_worker_and_cold_http_page[legacy-any-3-statuses1]
+FAILED tests/test_condition_groups_ui.py::test_actual_group_controls_worker_and_cold_http_page[composition-all-2-statuses2]
+3 failed, 2 passed, 1 warning in 12.99s

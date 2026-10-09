@@ -1,0 +1,420 @@
+{
+  "status": "FAIL",
+  "checks": [
+    "existing CSV app hosts DAG controls",
+    "actual page saved exact typed condition",
+    "condition plan requires explicit confirmation",
+    "editing a group leaf clears saved proof and exact confirmation",
+    "group draft survives explicit replan",
+    "changed input clears confirmation",
+    "lost acceptance freezes branch input and original key",
+    "unknown acceptance restores exact same input key and confirmation"
+  ],
+  "error": "same frozen plan accepts distinct explicit input",
+  "requests": [
+    {
+      "path": "/api/projects",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/resources",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/goal-cards",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_a50612ed6a7240dab1108170dba5ee60",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_a50612ed6a7240dab1108170dba5ee60/instances",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/conditional-apps",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/protocol/contracts",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/resources",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/runs",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/grants",
+      "method": "GET"
+    },
+    {
+      "path": "/api/capabilities",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_a50612ed6a7240dab1108170dba5ee60",
+      "method": "GET"
+    },
+    {
+      "path": "/api/apps/app_a50612ed6a7240dab1108170dba5ee60",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_a50612ed6a7240dab1108170dba5ee60/releases",
+      "method": "GET"
+    },
+    {
+      "path": "/api/internal/apps/app_a50612ed6a7240dab1108170dba5ee60/instances",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/delivery-graph",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/csv-dag",
+      "method": "POST",
+      "body": {
+        "expected_candidate_fingerprint": "0e56b45c0a808351062ba4ecb2a724ab10da19ac5fc961a65081ce0b34eccf25",
+        "expected_graph_fingerprint": "8ef9f67f0320bcd38f3533b4b8383107a5240c4989739a5e882c0ed5cff8b397",
+        "column": "quantity",
+        "request_key": "7d24fe73-04d3-4584-b5a6-d458b6efdeac",
+        "composition": {
+          "version": "csv.composition.v1",
+          "nodes": [
+            {
+              "step_id": "node_1",
+              "action": "data.aggregate_csv",
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "node_1_column"
+                }
+              },
+              "depends_on": [],
+              "column": "amount"
+            },
+            {
+              "step_id": "node_2",
+              "action": "intern.csv_report.v1",
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "column"
+                },
+                "count": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "count"
+                },
+                "sum": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "sum"
+                },
+                "source_hash": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "source_hash"
+                }
+              },
+              "depends_on": [
+                "node_1"
+              ],
+              "when": {
+                "op": "all",
+                "conditions": [
+                  {
+                    "op": "eq",
+                    "source": {
+                      "source": "input",
+                      "field": "include_report"
+                    },
+                    "value": true
+                  },
+                  {
+                    "op": "eq",
+                    "source": {
+                      "source": "step",
+                      "ref": "node_1",
+                      "field": "count"
+                    },
+                    "value": 2
+                  }
+                ]
+              }
+            },
+            {
+              "step_id": "node_3",
+              "action": "data.aggregate_csv",
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "node_3_column"
+                }
+              },
+              "depends_on": [],
+              "column": "quantity"
+            },
+            {
+              "step_id": "node_4",
+              "action": "intern.csv_report.v1",
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "column"
+                },
+                "count": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "count"
+                },
+                "sum": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "sum"
+                },
+                "source_hash": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "source_hash"
+                }
+              },
+              "depends_on": [
+                "node_3"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/csv-dag/7d24fe73-04d3-4584-b5a6-d458b6efdeac",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/delivery-graph",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/csv-dag",
+      "method": "POST",
+      "body": {
+        "expected_candidate_fingerprint": "0e56b45c0a808351062ba4ecb2a724ab10da19ac5fc961a65081ce0b34eccf25",
+        "expected_graph_fingerprint": "8ef9f67f0320bcd38f3533b4b8383107a5240c4989739a5e882c0ed5cff8b397",
+        "column": "quantity",
+        "request_key": "e8b18907-fd81-422b-a3e4-944562e68613",
+        "composition": {
+          "version": "csv.composition.v1",
+          "nodes": [
+            {
+              "step_id": "node_1",
+              "action": "data.aggregate_csv",
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "node_1_column"
+                }
+              },
+              "depends_on": [],
+              "column": "amount"
+            },
+            {
+              "step_id": "node_2",
+              "action": "intern.csv_report.v1",
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "column"
+                },
+                "count": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "count"
+                },
+                "sum": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "sum"
+                },
+                "source_hash": {
+                  "source": "step",
+                  "ref": "node_1",
+                  "field": "source_hash"
+                }
+              },
+              "depends_on": [
+                "node_1"
+              ],
+              "when": {
+                "op": "all",
+                "conditions": [
+                  {
+                    "op": "eq",
+                    "source": {
+                      "source": "input",
+                      "field": "include_report"
+                    },
+                    "value": true
+                  },
+                  {
+                    "op": "eq",
+                    "source": {
+                      "source": "step",
+                      "ref": "node_1",
+                      "field": "count"
+                    },
+                    "value": 2
+                  }
+                ]
+              }
+            },
+            {
+              "step_id": "node_3",
+              "action": "data.aggregate_csv",
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "node_3_column"
+                }
+              },
+              "depends_on": [],
+              "column": "quantity"
+            },
+            {
+              "step_id": "node_4",
+              "action": "intern.csv_report.v1",
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "column"
+                },
+                "count": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "count"
+                },
+                "sum": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "sum"
+                },
+                "source_hash": {
+                  "source": "step",
+                  "ref": "node_3",
+                  "field": "source_hash"
+                }
+              },
+              "depends_on": [
+                "node_3"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/csv-dag/e8b18907-fd81-422b-a3e4-944562e68613",
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/csv-dag/e8b18907-fd81-422b-a3e4-944562e68613/runs",
+      "method": "POST",
+      "body": {
+        "expected_plan_fingerprint": "7a6113db5d2bd9caec3ea9ad586ee6970c06dddefde0f1baf7dba612c60bba88",
+        "consent": "CONFIRM_EXACT_OFFLINE_CSV_DAG",
+        "request_key": "1433270b-f4f9-499c-8e15-8ee648cdc02e",
+        "branch_inputs": {
+          "include_report": false
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/csv-dag/e8b18907-fd81-422b-a3e4-944562e68613/runs",
+      "method": "POST",
+      "body": {
+        "expected_plan_fingerprint": "7a6113db5d2bd9caec3ea9ad586ee6970c06dddefde0f1baf7dba612c60bba88",
+        "consent": "CONFIRM_EXACT_OFFLINE_CSV_DAG",
+        "request_key": "1433270b-f4f9-499c-8e15-8ee648cdc02e",
+        "branch_inputs": {
+          "include_report": false
+        }
+      }
+    },
+    {
+      "path": "/api/projects/proj_423eb8a7ec0b452b83888930773e9e34/apps/app_a50612ed6a7240dab1108170dba5ee60/csv-dag/e8b18907-fd81-422b-a3e4-944562e68613",
+      "method": "GET"
+    },
+    {
+      "path": "/api/csv-dag/runs/run_78e02b6db0b54707ab97aee3541593ce",
+      "method": "GET"
+    }
+  ],
+  "loaded_source_sha256": {
+    "index.html": "a378382e6234ece39df071eebffd6294dd315765ff1c3eeea204998c7128632d",
+    "app.js": "8cdb510be4f9dfe0185adf7a49aff183de729dc8a1522ce610b2f12ef1ca839b",
+    "natural-goal.js": "1b1b8fe39fdb60cbb2b906d6a0ca3e158feada119671a3028074e30573b3b592",
+    "internal.js": "e67cd987d3559031f3e1280098362de9d027201a46ad1c9bf85aea6f995bfc19",
+    "protocol.js": "dcf97729f2a69872a8b7c33374e9f2cd50e88c8b368c4d417ba133bea8e5f1e8",
+    "use.js": "a9eaadc871b857576b3c6bed6a41b8c9c9fe6a0f658ed3e557bbc8e9e20f3019",
+    "conditional-runs.js": "8493353812ee7b57e48c6b18e9cf8069a7366e38b07709f7ab6d6320e735393e",
+    "conditional-apps.js": "ddb32aec614a32fb6d75a0128a2313740f350a8f117d9466814796f52f979db9",
+    "report-manifest.js": "4081b425ac501f8a15f04e515ad0811331a1faf58b41ed22fd169de6807d12ac",
+    "delivery-graph.js": "f11fdf2a3e8c4323270d22c7df25a18c6e1de969184bb76bf60a16ae30aa6c9d",
+    "manual-locks.js": "f558e8ce112da78211c3929ba9c58249e892c8683548f75411be02b1ec099b32",
+    "csv-dag.js": "3bcf3391dbb485877ad9c1de092eaab69fe129671579336b28da037bfca71b6a"
+  }
+}

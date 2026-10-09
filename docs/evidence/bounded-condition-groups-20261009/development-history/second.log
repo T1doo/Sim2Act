@@ -1,0 +1,110 @@
+......................................FF                                 [100%]
+=================================== FAILURES ===================================
+_______________ test_actual_product_editable_composition[False] ________________
+
+env = (<sim2act.db.Store object at 0x7f275e7d2ff0>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...af822230e340b7b389047b1d7b24c3', 'user_c6a25aa7d9b04dc68a08e673671b4598', 'proj_98952611bdeb4596aa3428ca401de3bc', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/second/test_actual_product_editable_c0')
+enabled = False
+
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_actual_product_editable_composition(env, tmp_path, enabled):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], enabled=enabled)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/csv_composition.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: Error: 请先选择第一个条件
+E                 at http://127.0.0.1:57525/:393:193
+E                 at Array.map (<anonymous>)
+E                 at csvDagCompositionInput (http://127.0.0.1:57525/:388:55)
+E                 at csvDagSubmit (http://127.0.0.1:57525/:152:67)
+E                 at /workspace/Sim2Act/tests/csv_composition.cjs:49:11
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_composition.cjs', '/tmp/sim2act-condition-groups-20261009/second/test_actual...5)\n    at csvDagSubmit (http://127.0.0.1:57525/:152:67)\n    at /workspace/Sim2Act/tests/csv_composition.cjs:49:11\n').returncode
+
+tests/test_csv_composition_ui.py:53: AssertionError
+________________ test_actual_product_editable_composition[True] ________________
+
+env = (<sim2act.db.Store object at 0x7f275e7a6d20>, Settings(database_url='sqlite:////tmp/sim2act-condition-groups-20261009/...ad479a893049ba97d270311ffeef8d', 'user_1c35cb2528594b078b3971774ae3c629', 'proj_4e5f6b1fac714234a7df6a8229a939f5', ...)
+tmp_path = PosixPath('/tmp/sim2act-condition-groups-20261009/second/test_actual_product_editable_c1')
+enabled = True
+
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_actual_product_editable_composition(env, tmp_path, enabled):
+        _, _, plan, _ = setup(env)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+            project=env[5], app=plan["app_id"], enabled=enabled)))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            assert shutil.which("node")
+            result = subprocess.run(["node", "tests/csv_composition.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90)
+            (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: Error: 请先选择第一个条件
+E                 at http://127.0.0.1:42725/:393:193
+E                 at Array.map (<anonymous>)
+E                 at csvDagCompositionInput (http://127.0.0.1:42725/:388:55)
+E                 at csvDagSubmit (http://127.0.0.1:42725/:152:67)
+E                 at /workspace/Sim2Act/tests/csv_composition.cjs:49:11
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_composition.cjs', '/tmp/sim2act-condition-groups-20261009/second/test_actual...5)\n    at csvDagSubmit (http://127.0.0.1:42725/:152:67)\n    at /workspace/Sim2Act/tests/csv_composition.cjs:49:11\n').returncode
+
+tests/test_csv_composition_ui.py:53: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_composition_ui.py::test_actual_product_editable_composition[False]
+FAILED tests/test_csv_composition_ui.py::test_actual_product_editable_composition[True]
+2 failed, 38 passed, 1 warning in 46.00s
