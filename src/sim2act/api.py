@@ -681,6 +681,9 @@ def create_app(store=None, settings=None):
 
     mount_report_presentations(app, db, identity, platform_limits, s)
     mount_delivery_graph_apps(app, db, identity, platform_limits, s)
+    from .project_revalidation import mount as mount_project_revalidation
+
+    mount_project_revalidation(app, db, identity, platform_limits)
     mount_csv_dag(app, db, s, identity, platform_limits)
 
     web = Path(__file__).parent / "web"
@@ -724,6 +727,10 @@ def create_app(store=None, settings=None):
     @app.get("/csv-dag.js")
     def csv_dag_js():
         return FileResponse(web / "csv-dag.js", media_type="text/javascript")
+
+    @app.get("/project-revalidation.js")
+    def project_revalidation_js():
+        return FileResponse(web / "project-revalidation.js", media_type="text/javascript")
 
     @app.get("/conditional-apps.js")
     def conditional_apps_js():
