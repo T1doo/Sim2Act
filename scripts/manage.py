@@ -89,6 +89,19 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     from sim2act.config import Settings
+
+    if args.command == "status":
+        from sim2act.status_report import collect_status
+
+        settings = Settings.from_env()
+        output = collect_status(
+            settings.data_dir / "processes.json",
+            process,
+            lambda: httpx.get(f"http://127.0.0.1:{args.port}/health", timeout=3),
+        )
+        print(json.dumps(output, ensure_ascii=False))
+        return
+
     from sim2act.db import Store
     from sim2act.process_env import application_environment
 
@@ -138,13 +151,6 @@ def main():
         stop(records)
         state.unlink(missing_ok=True)
         print("Owned API/worker stopped; database service and data preserved.")
-    elif args.command == "status":
-        output = {r["kind"]: {"pid": r["pid"], "alive": process(r) is not None} for r in records}
-        try:
-            output["health"] = httpx.get(url + "/health", timeout=3).json()
-        except httpx.HTTPError:
-            output["health"] = "OFFLINE"
-        print(json.dumps(output, ensure_ascii=False))
     else:
         if any(process(r) for r in records):
             raise SystemExit("Owned process already running; inspect Status first")
