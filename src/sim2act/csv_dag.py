@@ -228,6 +228,10 @@ def compile_plan(candidate, column, limits, patches=None, branches=None):
 
 
 def build(store, c, user, pid, aid, body, limits):
+    from .csv_material_reuse import plan_origin
+    origin = plan_origin(store, c, user, pid, aid, body, limits)
+    if origin is not None:
+        limits = origin[1]
     saved = graph.current(store, c, user, pid, aid, limits)
     draft, _, action, _, source_rows, _ = graph.load_family(store, c, user, pid, aid, limits)
     if action.executor.kind != "registered_tool" or action.executor.ref != "data.aggregate_csv":
@@ -279,6 +283,9 @@ def build(store, c, user, pid, aid, body, limits):
             for s in template["manifest"]["workflow"]) else "typed-conditions.v1")
     if body.wiring_patch is not None:
         value["wiring"] = apply_wiring(copy.deepcopy(template["manifest"]), body.wiring_patch)
+    if origin is not None:
+        value["material_reuse"] = dict(version=origin[0]["version"],
+            source_release_id=origin[0]["source_release_id"], binding_fingerprint=fingerprint(origin[0]))
     return {**value, "plan_fingerprint": fingerprint(value)}
 
 
@@ -320,6 +327,9 @@ def enqueue(store, user, pid, aid, plan_key, body, limits):
 
 def enqueue_tx(store, c, user, pid, aid, plan_key, body, limits, *, run_id=None, internal_instance=None):
     plan = load_plan(store, c, user, pid, aid, plan_key, limits)
+    if "material_reuse" in plan:
+        # load_plan already reconstructed and reauthorized the complete origin.
+        limits = Limits(**plan["definition"]["manifest"]["runtime_limits"])
     if plan["plan_fingerprint"] != body.expected_plan_fingerprint:
         graph.conflict("Exact DAG confirmation required")
     inputs = execution_inputs(plan, body)

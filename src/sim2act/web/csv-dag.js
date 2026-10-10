@@ -485,6 +485,7 @@ function dagReuseClear() {
   for(const id of ["release","instance","column"]) $("dag-reuse-"+id).replaceChildren();
   $("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent="";
   $("dag-reuse-confirm").checked=false;$("dag-reuse-run-confirm").checked=false;
+  dagMaterialClear();
 }
 function dagReuseOpen(c) {c.reuse={busy:false,approval:null,release:null,instance:null,job:null};dagReuseButtons(c);}
 function dagReuseButtons(c=csvDagContext) {
@@ -497,6 +498,10 @@ function dagReuseButtons(c=csvDagContext) {
   $("dag-reuse-run").disabled=locked||!r.instance||!r.release||!$("dag-reuse-column").value||!$("dag-reuse-run-confirm").checked;
   $("dag-reuse-read").disabled=r.busy||!$("dag-reuse-instance").value;
   $("dag-reuse-recover").hidden=!intent;$("dag-reuse-recover").disabled=r.busy;
+  for(const id of ["options","target","column","confirm","plan","open"])$("dag-material-"+id).disabled=locked;
+  $("dag-material-options").disabled=locked||!r.release;
+  $("dag-material-plan").disabled=locked||!r.release||!r.materials?.items.some(v=>v.target_app_id===$("dag-material-target").value)||!$("dag-material-column").value||!$("dag-material-confirm").checked;
+  $("dag-material-open").disabled=locked||!r.material;
   for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).disabled=r.busy||!r.job||!(command==="pause"?["QUEUED","RUNNING"]:command==="resume"?["PAUSED","WAITING_RESOURCE"]:["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"]).includes(r.job.status);
 }
 async function dagReuseReleaseSeal(rel,c) {
@@ -564,6 +569,11 @@ async function dagReuseSubmit(kind,retry=false) {
     if(kind==="commit") {if(!r.approval||!$("dag-reuse-confirm").checked)throw Error("请确认已读回来源");intent={kind,path:`/api/internal/approvals/${r.approval.id}/commit`,body:{fingerprint:r.approval.fingerprint},approval:r.approval};}
     if(kind==="create") {if(!r.release)throw Error("先选择已核版本");intent={kind,path:`/api/internal/releases/${r.release.id}/instances`,body:{expected_release_fingerprint:r.release.fingerprint,request_key:crypto.randomUUID()},release:r.release};}
     if(kind==="run") {if(!r.instance||!r.release||!$("dag-reuse-run-confirm").checked)throw Error("请确认版本和新列");intent={kind,path:`/api/internal/instances/${r.instance.id}/runs`,body:{expected_revision:r.instance.revision,expected_release_fingerprint:r.release.fingerprint,input:{column:$("dag-reuse-column").value},request_key:crypto.randomUUID()},instance:r.instance,release:r.release};}
+    if(kind==="material") {
+      const t=r.materials?.items.find(v=>v.target_app_id===$("dag-material-target").value);
+      if(!r.release||!t||!$("dag-material-confirm").checked||!t.columns.includes($("dag-material-column").value))throw Error("请核对新材料、数值列及预算");
+      intent={kind,path:`/api/internal/releases/${r.release.id}/csv-material-plans`,release:r.release,target:t,body:{expected_release_fingerprint:r.release.fingerprint,target_app_id:t.target_app_id,expected_candidate_fingerprint:t.candidate_fingerprint,expected_graph_fingerprint:t.graph_fingerprint,expected_resource_id:t.resource_id,expected_source_hash:t.source_hash,column:$("dag-material-column").value,request_key:crypto.randomUUID()}};
+    }
     if(!intent)return;dagReuseIntents.set(key,intent);
   }
   if(!intent)return;
@@ -577,6 +587,7 @@ async function dagReuseSubmit(kind,retry=false) {
     if(intent.kind==="commit")accepted=validId(made.id,"irelease")&&hash(made.fingerprint)&&made.approval_id===intent.approval.id&&deliverySame(made.snapshot,intent.approval.payload.snapshot)&&made.project_id===intent.approval.project_id;
     if(intent.kind==="create")accepted=validId(made.id,"iinstance")&&made.release_id===intent.release.id&&made.source_app_id===intent.release.snapshot.draft.id&&made.project_id===intent.release.project_id&&made.runtime_id===intent.release.snapshot.draft.runtime_id;
     if(intent.kind==="run")accepted=validId(made.run_id,"run")&&validId(made.app_run_id,"iapprun")&&made.instance_id===intent.instance.id&&made.execution_version===intent.release.snapshot.execution_source.version&&Number.isInteger(made.version)&&made.version>=1;
+    if(intent.kind==="material")accepted=await dagMaterialReceipt(made,intent);
     if(!accepted)throw Error("VERIFICATION_FAILED");
     // Retain a validated late acceptance even if its page has been replaced.
     intent.receipt=made;
@@ -597,6 +608,14 @@ async function dagReuseSubmit(kind,retry=false) {
     } else if(intent.kind==="create") {
       if(made.release_id!==intent.release.id||made.source_app_id!==c.parent.id||made.project_id!==c.parent.project)throw Error("VERSION_CONFLICT");
       await dagReuseHistory(c);if(!csvDagCurrent(c))return;$("dag-reuse-instance").value=made.id;await dagReuseRead(c,made.id);
+    } else if(intent.kind==="material") {
+      const got=await api(`${intent.path}/${intent.target.target_app_id}/${encodeURIComponent(made.plan.request_key)}`);
+      if(!csvDagCurrent(c))return;
+      const app=await api(`/api/apps/${intent.target.target_app_id}`);
+      if(!csvDagCurrent(c))return;
+      if(!await dagMaterialReceipt(got,intent)||!deliverySame(got.binding,made.binding)||got.plan.plan_fingerprint!==made.plan.plan_fingerprint||!await csvDagPlanSeal(got.plan,{parent:{project:c.parent.project,id:app.id,app}}))throw Error("VERIFICATION_FAILED");
+      if(!csvDagCurrent(c))return;
+      r.material=got;$("dag-material-proof").textContent=JSON.stringify(got,null,2);$("dag-material-status").textContent="新材料计划已核读回；手动打开后重新确认运行。尚未执行、保存版本或创建实例。";
     } else {
       if(made.instance_id!==intent.instance.id||made.execution_version!==intent.release.snapshot.execution_source.version||!/^run_[a-f0-9]{32}$/.test(made.run_id))throw Error("VERSION_CONFLICT");
       const got=await api(`/api/internal/instances/${intent.instance.id}/runs/${made.run_id}`);
@@ -617,12 +636,52 @@ async function dagReuseAction(action) {
   try {await action(c);} catch(e) {if(csvDagCurrent(c)){c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent=e.message+" · 当前证明不可用；未执行写入";}} finally{c.reuse.busy=false;dagReuseButtons(c);}
 }
 for(const kind of ["prepare","commit","create","run"])$("dag-reuse-"+kind).onclick=()=>dagReuseSubmit(kind);
+$("dag-material-plan").onclick=()=>dagReuseSubmit("material");
 $("dag-reuse-recover").onclick=()=>dagReuseSubmit("",true);
 $("dag-reuse-history").onclick=()=>dagReuseAction(dagReuseHistory);
 $("dag-reuse-read").onclick=()=>dagReuseAction(c=>dagReuseRead(c));
-$("dag-reuse-release").onchange=()=>{const c=csvDagContext;if(!c)return;c.reuse.release=c.reuse.releases?.find(v=>v.id===$("dag-reuse-release").value)||null;c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-run-confirm").checked=false;$("dag-reuse-proof").textContent="";dagReuseButtons(c);};
+$("dag-reuse-release").onchange=()=>{const c=csvDagContext;if(!c)return;c.reuse.release=c.reuse.releases?.find(v=>v.id===$("dag-reuse-release").value)||null;c.reuse.instance=null;c.reuse.job=null;c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();$("dag-reuse-run-confirm").checked=false;$("dag-reuse-proof").textContent="";dagReuseButtons(c);};
 $("dag-reuse-instance").onchange=()=>{const c=csvDagContext;if(!c)return;c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-run-confirm").checked=false;dagReuseButtons(c);};
 $("dag-reuse-confirm").onchange=()=>dagReuseButtons();
 $("dag-reuse-run-confirm").onchange=()=>dagReuseButtons();
 $("dag-reuse-column").onchange=()=>{$("dag-reuse-run-confirm").checked=false;dagReuseButtons();};
 for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).onclick=()=>dagReuseAction(async c=>{const j=c.reuse.job,i=c.reuse.instance;if(!j||!i)return;await api(`/api/internal/instances/${i.id}/runs/${j.run_id}/commands`,"POST",{command,version:j.version});await dagReuseRead(c,i.id);});
+
+const dagMaterialVersion="internal.csv-material-reuse.v1";
+function dagMaterialClear(){for(const id of ["target","column"])$("dag-material-"+id).replaceChildren();$("dag-material-confirm").checked=false;$("dag-material-proof").textContent="";$("dag-material-status").textContent="";}
+async function dagMaterialReceipt(m,intent){
+  const b=m?.binding,p=m?.plan,t=intent.target,e=intent.release.snapshot.execution_source,s=dagReuseShape(p);
+  if(!p||!b)return false;
+  const exactKey="material-plan-"+(await deliveryDigest([intent.release.id,intent.body.request_key])).slice(0,48);
+  const {cached,plan_fingerprint,...value}=p;
+  if(p.request_key!==exactKey||!deliveryHash(plan_fingerprint)||plan_fingerprint!==await deliveryDigest(value)||b.principal_id!==intent.release.principal_id||!deliverySame(p.definition?.manifest?.runtime_limits,e.limits)||p.graph_revision!==t.graph_revision||p.authorization_fingerprint!==t.authorization_fingerprint||!deliverySame(b.plan_input,{expected_candidate_fingerprint:t.candidate_fingerprint,expected_graph_fingerprint:t.graph_fingerprint,column:intent.body.column,composition:p.composition?.definition,request_key:exactKey}))return false;
+  if(!b||!p||m.namespace!==dagMaterialVersion||m.source_release_id!==intent.release.id||m.model_requests!==0||m.formal_publication_enabled!==false||b.version!==dagMaterialVersion||b.source_release_id!==intent.release.id||b.source_release_fingerprint!==intent.release.fingerprint||!deliverySame(b.source_execution,e)||!deliverySame(b.target,t)||!deliverySame(b.limits,e.limits)||b.column!==intent.body.column||b.request_key!==intent.body.request_key||b.model_requests!==0||b.semantic_status!=="UNKNOWN"||b.owner_acceptance!=="PENDING"||b.formal_publication_enabled!==false||m.binding_fingerprint!==await deliveryDigest(b)||!s||s.version!==e.version||s.aggregate!==e.aggregate_step||s.report!==(e.report_step||null)||p.app_id!==t.target_app_id||p.project_id!==t.project_id||p.runtime_id!==t.runtime_id||p.source_hash!==t.source_hash||p.candidate_fingerprint!==t.candidate_fingerprint||p.graph_fingerprint!==t.graph_fingerprint||p.input[s.aggregate+"_column"]!==intent.body.column||!deliverySame(p.material_reuse,{version:dagMaterialVersion,source_release_id:intent.release.id,binding_fingerprint:m.binding_fingerprint})||!/^material-plan-[a-f0-9]{48}$/.test(p.request_key))return false;
+  return true;
+}
+function dagMaterialPick(c){
+  const t=c.reuse.materials?.items.find(v=>v.target_app_id===$("dag-material-target").value);
+  c.reuse.material=null;$("dag-material-confirm").checked=false;$("dag-material-proof").textContent="";
+  $("dag-material-column").replaceChildren(...(t?.columns||[]).map(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;return o;}));dagReuseButtons(c);
+}
+$("dag-material-options").onclick=()=>dagReuseAction(async c=>{
+  const rel=c.reuse.release;if(!rel)return;
+  c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();
+  const m=await api(`/api/internal/releases/${rel.id}/csv-materials`);if(!csvDagCurrent(c))return;
+  if(m.namespace!==dagMaterialVersion||m.source_release_id!==rel.id||m.source_release_fingerprint!==rel.fingerprint||!deliverySame(m.limits,rel.snapshot.execution_source.limits)||!Array.isArray(m.items)||m.model_requests!==0||m.formal_publication_enabled!==false||m.items.some(t=>t.project_id!==c.parent.project||!/^app_[a-f0-9]{32}$/.test(t.target_app_id)||!/^res_[a-f0-9]{32}$/.test(t.resource_id)||!Array.isArray(t.columns)||!t.columns.length))throw Error("VERIFICATION_FAILED");
+  c.reuse.materials=m;$("dag-material-target").replaceChildren(...m.items.map(t=>{const o=document.createElement("option");o.value=t.target_app_id;o.textContent=`${t.name} · ${t.resource_id} · ${t.source_hash}`;return o;}));dagMaterialPick(c);$("dag-material-status").textContent=`${m.items.length} 份当前可用材料；预算 ${JSON.stringify(m.limits)}。先在现有注册入口授权并核查图；旧来源仍须可核查。`;
+});
+$("dag-material-target").onchange=()=>{if(csvDagContext)dagMaterialPick(csvDagContext);};
+$("dag-material-column").onchange=()=>{const c=csvDagContext;if(c){c.reuse.material=null;$("dag-material-proof").textContent="";}$("dag-material-confirm").checked=false;dagReuseButtons();};
+$("dag-material-confirm").onchange=()=>dagReuseButtons();
+$("dag-material-open").onclick=()=>dagReuseAction(async c=>{
+  const m=c.reuse.material;if(!m)return;
+  // showApp has its own selection-generation fence. A late open never paints another page.
+  let generation=null;
+  await showApp(m.binding.target.target_app_id,c.parent.project,g=>{generation=g;});
+  const next=csvDagContext;if(!next||!csvDagCurrent(next)||next.parent.generation!==generation||next.parent.identity!==c.parent.identity||next.parent.project!==c.parent.project||next.parent.id!==m.binding.target.target_app_id)return;
+  const p=await api(csvDagBase(next)+"/"+encodeURIComponent(m.plan.request_key));
+  if(!csvDagCurrent(next))return;
+  if(p.plan_fingerprint!==m.plan.plan_fingerprint||!await csvDagPlanSeal(p,next))throw Error("VERIFICATION_FAILED");
+  if(!csvDagCurrent(next))return;
+  next.plan=p;next.job=null;$("csv-dag-definition").textContent=JSON.stringify(p,null,2);$("csv-dag-confirm").checked=false;$("csv-dag-status").textContent="新材料计划已打开；核对并单独确认实际运行，成功后可保存新版本与实例。";csvDagButtons(next);
+});

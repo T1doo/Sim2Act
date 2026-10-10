@@ -4,7 +4,7 @@ from fastapi import Depends, Request
 from pydantic import Field
 from sqlalchemy import select
 
-from . import app_jobs, csv_dag, csv_dag_instances, lifecycle
+from . import app_jobs, csv_dag, csv_dag_instances, csv_material_reuse, lifecycle
 from .contracts import Strict
 from .db import (
     app_drafts,
@@ -177,6 +177,18 @@ def mount(app, store, limits, identity):
                 request_key=body.request_key,
             )
         )
+
+    @app.get("/api/internal/releases/{rid}/csv-materials")
+    def material_options(rid: str, user=user_dependency):
+        return csv_material_reuse.options(store, user, rid, limits)
+
+    @app.post("/api/internal/releases/{rid}/csv-material-plans", status_code=201)
+    def material_plan(rid: str, body: csv_material_reuse.MaterialInput, user=user_dependency):
+        return csv_material_reuse.propose(store, user, rid, body, limits)
+
+    @app.get("/api/internal/releases/{rid}/csv-material-plans/{aid}/{key}")
+    def material_read(rid: str, aid: str, key: str, user=user_dependency):
+        return csv_material_reuse.inspect(store, user, rid, aid, key, limits)
 
     @app.get("/api/internal/apps/{aid}/instances")
     @app.get("/api/internal/apps/{aid}/dag-instances")
