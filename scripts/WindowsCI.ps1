@@ -104,15 +104,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $RuntimeU
     $env:PYTEST_ADDOPTS = "--junitxml=`"$Xml`" --durations=30 -ra"
     try {
         $env:SIM2ACT_TEST_DATABASE_URL = ([IO.File]::ReadAllText($TestOwnerConfig) -split '=', 2)[1]
-        & ./scripts/Test.ps1 -Suite Engineering
+        & ./scripts/Test.ps1 -Suite Engineering -CITracePath (Join-Path $JobRoot 'pytest-events.jsonl')
     } finally {
         Remove-Item Env:SIM2ACT_TEST_DATABASE_URL -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $TestOwnerConfig -Force -ErrorAction SilentlyContinue
     }
 } elseif ($Phase -eq 'Report') {
     $Xml = Join-Path $JobRoot 'engineering.xml'
-    $env:SIM2ACT_CI_JUNIT = $Xml
-    & ./.venv/Scripts/python.exe -c "import os, pathlib, xml.etree.ElementTree as E; p=pathlib.Path(os.environ['SIM2ACT_CI_JUNIT']); r=E.parse(p).getroot()[0] if p.exists() else None; s=('NOT_RUN: no engineering JUnit' if r is None else 'Engineering results: '+str(r.attrib)); print(s); pathlib.Path(os.environ['GITHUB_STEP_SUMMARY']).open('a',encoding='utf-8').write('\n'+s+'\nWin11 product acceptance: NOT_RUN. Real model requests: 0.\n')"
+    & ./.venv/Scripts/python.exe scripts/native_pytest_diagnostics.py --report (Join-Path $JobRoot 'pytest-events.jsonl') --junit $Xml
     if ($LASTEXITCODE -ne 0) { throw 'Report step failed.' }
 } else {
     try {
