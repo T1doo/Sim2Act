@@ -20,7 +20,7 @@ function manifestButtons(c){if(!manifestCurrent(c))return;c.pending=manifestInte
 async function readManifestHistory(c=manifestContext){
  if(!c||!manifestCurrent(c))return;
  let data;try{data=await api(`/api/projects/${c.project}/apps/${c.id}/history`);}catch(e){if(manifestCurrent(c)){clearApp();e.manifestReadCleared=c;}throw e;}
- if(!manifestCurrent(c))return;if(!manifestValid(data,c.project,c.id)||data.fingerprint!==c.app.fingerprint||data.runtime_id!==c.app.runtime_id||!manifestSameValue(data.candidate,c.app.candidate)||!Array.isArray(data.history)||data.history.some(item=>!item||item.namespace!==manifestNamespace||!manifestRunReceipt(item.run))){clearApp();throw Error("VERSION_CONFLICT");}
+ if(!manifestCurrent(c))return;if(!manifestValid(data,c.project,c.id)||data.fingerprint!==c.app.fingerprint||data.runtime_id!==c.app.runtime_id||!manifestSameValue(data.candidate,c.app.candidate)||!Array.isArray(data.history)||data.history.some(item=>!item||item.namespace!==manifestNamespace||!manifestRunReceipt(item.run))){clearApp();const e=Error("VERSION_CONFLICT");e.manifestReadCleared=c;throw e;}
  await readPresentationHistory(c,data.history);if(!manifestCurrent(c))return;
  $("app-history").replaceChildren(...data.history.map(item=>{const section=document.createElement("section");section.append(row(`实际 Run ${item.run.run_id} · ${item.run.status} · 整体 NOT_ACCEPTED · 语义 UNKNOWN · 用户确认 PENDING`));const pre=document.createElement("pre");pre.textContent=JSON.stringify({input:item.input,result:item.run.result?.protocol_result?.evidence?.output||null},null,2);section.append(pre,presentationControls(c,item));return section;}));
 }
@@ -100,6 +100,6 @@ function presentationControls(c,item){
 async function readPresentationHistory(c,items){
  if(!items.some(item=>item.run.result))return;
  let data;try{data=await api(presentationBase(c));}catch(e){if(e.httpStatus===409&&e.detail?.includes("has not been derived"))return;if(manifestCurrent(c)){clearApp();e.manifestReadCleared=c;}throw e;}
- if(!manifestCurrent(c))return;if(!presentationFlags(data,c)||data.namespace!=="report-presentation-history.v1"||!Array.isArray(data.items)){clearApp();throw Error("VERSION_CONFLICT");}
- for(const item of data.items){const p=item.patch,r=items.find(x=>x.run.run_id===p?.result_binding?.run_id)?.run;if(!r||!presentationPatch(p,c,r)||!Array.isArray(item.checks)||item.checks.some(v=>!presentationCheck(v,c,r,p))){clearApp();throw Error("VERSION_CONFLICT");}const key=presentationKey(c,r),old=presentationIntents.get(key);if(!old?.busy)presentationIntents.set(key,{...old,definitionKey:p.request_key,patch:p,checkKey:item.checks.at(-1)?.request_key||old?.checkKey||reportKey(),checked:item.checks.at(-1)});}
+ if(!manifestCurrent(c))return;if(!presentationFlags(data,c)||data.namespace!=="report-presentation-history.v1"||!Array.isArray(data.items)){clearApp();const e=Error("VERSION_CONFLICT");e.manifestReadCleared=c;throw e;}
+ for(const item of data.items){const p=item.patch,r=items.find(x=>x.run.run_id===p?.result_binding?.run_id)?.run;if(!r||!presentationPatch(p,c,r)||!Array.isArray(item.checks)||item.checks.some(v=>!presentationCheck(v,c,r,p))){clearApp();const e=Error("VERSION_CONFLICT");e.manifestReadCleared=c;throw e;}const key=presentationKey(c,r),old=presentationIntents.get(key);if(!old?.busy)presentationIntents.set(key,{...old,definitionKey:p.request_key,patch:p,checkKey:item.checks.at(-1)?.request_key||old?.checkKey||reportKey(),checked:item.checks.at(-1)});}
 }
