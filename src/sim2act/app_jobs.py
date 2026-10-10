@@ -62,6 +62,11 @@ def enqueue(
         ).scalar()
         store.lock_project(c, user, pid)
         i, release = instance(store, c, user, iid, limits, lock=True)
+        if "execution_source" in release["snapshot"]:
+            from .csv_dag_instances import enqueue_tx
+            if offline_replay is not None:
+                raise DomainError("INVALID_INPUT", "DAG execution does not accept model replay")
+            return enqueue_tx(store, c, user, i, release, expected_revision, release_fp, input_value, key, limits)
         from .agent_apps import is_agent, offline_replay_model
 
         agent = is_agent(release["snapshot"]["draft"]["candidate"])

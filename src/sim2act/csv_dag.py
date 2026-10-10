@@ -293,68 +293,80 @@ def load_plan(store, c, user, pid, aid, key, limits):
 @graph.controlled
 def propose(store, user, pid, aid, body, limits):
     with store.tx() as c:
-        answer = build(store, c, user, pid, aid, body, limits)
-        old = graph.lookup(c, user, aid, "csv_dag_plan", body.request_key)
-        if old:
-            request, _ = read_pair(c, user, aid, "csv_dag_plan", body.request_key, PlanInput)
-            if request != body:
-                graph.conflict("DAG request key changed")
-            if load_plan(store, c, user, pid, aid, body.request_key, limits) != answer:
-                graph.conflict("DAG request key changed")
-        else:
-            require_capacity(c, user, aid, "csv_dag_plan")
-            for kind in ("csv_dag_plan", "csv_dag_plan_seal"):
-                graph.remember(c, user, aid, kind, body.request_key, body, answer)
-        return {**answer, "cached": bool(old)}
+        return propose_tx(store, c, user, pid, aid, body, limits)
+
+
+def propose_tx(store, c, user, pid, aid, body, limits):
+    answer = build(store, c, user, pid, aid, body, limits)
+    old = graph.lookup(c, user, aid, "csv_dag_plan", body.request_key)
+    if old:
+        request, _ = read_pair(c, user, aid, "csv_dag_plan", body.request_key, PlanInput)
+        if request != body:
+            graph.conflict("DAG request key changed")
+        if load_plan(store, c, user, pid, aid, body.request_key, limits) != answer:
+            graph.conflict("DAG request key changed")
+    else:
+        require_capacity(c, user, aid, "csv_dag_plan")
+        for kind in ("csv_dag_plan", "csv_dag_plan_seal"):
+            graph.remember(c, user, aid, kind, body.request_key, body, answer)
+    return {**answer, "cached": bool(old)}
 
 
 @graph.controlled
 def enqueue(store, user, pid, aid, plan_key, body, limits):
     with store.tx() as c:
-        plan = load_plan(store, c, user, pid, aid, plan_key, limits)
-        if plan["plan_fingerprint"] != body.expected_plan_fingerprint:
-            graph.conflict("Exact DAG confirmation required")
-        inputs = execution_inputs(plan, body)
-        old = graph.lookup(c, user, aid, "csv_dag_run", body.request_key)
-        if old:
-            request, answer = read_pair(c, user, aid, "csv_dag_run", body.request_key, RunInput)
-            if request != body or answer["plan_key"] != plan_key:
-                graph.conflict("Run request key changed")
-            job = row(c, user, answer["run_id"])
-            binding(store, c, job, limits)
-            return {**answer, "cached": True}
-        require_capacity(c, user, aid, "csv_dag_run")
-        rid = new_id("run")
-        source_id = plan["definition"]["manifest"]["data_bindings"][0]["resource_ref"]
-        goal = ("Bounded offline CSV composition" if "composition" in plan else
-                "Fixed offline CSV preview, sum and deterministic report")
-        contract = FrozenRunContract(
-            run_id=rid, runtime_id=plan["runtime_id"], contract_version="F1.3",
-            goal=GoalSpec(goal_id=new_id("goal"), project_id=pid, owner_id=user, goal=goal,
-                          constraints=[], acceptance_version="F1-tool-chain.v1", resource_refs=[source_id],
-                          unresolved=["Engineering candidate; semantic UNKNOWN; owner PENDING"]),
-            resources=[ResourceSnapshot(resource_id=source_id, revision=1,
-                                        content_hash=plan["source_hash"], format="csv")],
-            limits=limits, mode="mock", request_model="intern-s2",
-        ).model_dump()
-        accepted = dict(run_id=rid, plan_key=plan_key, app_id=aid, project_id=pid,
-                        principal_id=user, runtime_id=plan["runtime_id"], plan=plan,
-                        confirmation=body.model_dump(), contract_fingerprint=fingerprint(contract))
-        if "branch_semantics" in plan:
-            accepted["inputs"] = inputs
-        c.execute(insert(run_contracts).values(run_id=rid, snapshot=contract, fingerprint=fingerprint(contract)))
-        c.execute(insert(runs).values(
-            id=rid, project_id=pid, principal_id=user, runtime_id=plan["runtime_id"], goal=goal,
-            resource_refs=[source_id], request_key="csv-dag:" + rid, fingerprint=fingerprint(accepted),
-            status="QUEUED", created_at=time.time(), lease_until=0, fence=0,
-            context=dict(kind=KIND, messages=[], requests=0, tools=0, repairs=0, reserved_tokens=0),
-            version=1, cancel_intent=False,
-        ))
-        store.event(c, rid, "CSV_DAG_ACCEPTED", accepted)
-        answer = dict(namespace=PLAN, run_id=rid, plan_key=plan_key, plan_fingerprint=plan["plan_fingerprint"], status="QUEUED", version=1)
-        for kind in ("csv_dag_run", "csv_dag_run_seal"):
-            graph.remember(c, user, aid, kind, body.request_key, body, answer)
-        return {**answer, "cached": False}
+        return enqueue_tx(store, c, user, pid, aid, plan_key, body, limits)
+
+
+def enqueue_tx(store, c, user, pid, aid, plan_key, body, limits, *, run_id=None, internal_instance=None):
+    plan = load_plan(store, c, user, pid, aid, plan_key, limits)
+    if plan["plan_fingerprint"] != body.expected_plan_fingerprint:
+        graph.conflict("Exact DAG confirmation required")
+    inputs = execution_inputs(plan, body)
+    old = graph.lookup(c, user, aid, "csv_dag_run", body.request_key)
+    if old:
+        request, answer = read_pair(c, user, aid, "csv_dag_run", body.request_key, RunInput)
+        if request != body or answer["plan_key"] != plan_key:
+            graph.conflict("Run request key changed")
+        job = row(c, user, answer["run_id"])
+        binding(store, c, job, limits)
+        return {**answer, "cached": True}
+    require_capacity(c, user, aid, "csv_dag_run")
+    rid = run_id or new_id("run")
+    source_id = plan["definition"]["manifest"]["data_bindings"][0]["resource_ref"]
+    goal = ("Bounded offline CSV composition" if "composition" in plan else
+            "Fixed offline CSV preview, sum and deterministic report")
+    contract = FrozenRunContract(
+        run_id=rid, runtime_id=plan["runtime_id"], contract_version="F1.3",
+        goal=GoalSpec(goal_id=new_id("goal"), project_id=pid, owner_id=user, goal=goal,
+                      constraints=[], acceptance_version="F1-tool-chain.v1", resource_refs=[source_id],
+                      unresolved=["Engineering candidate; semantic UNKNOWN; owner PENDING"]),
+        resources=[ResourceSnapshot(resource_id=source_id, revision=1,
+                                    content_hash=plan["source_hash"], format="csv")],
+        limits=limits, mode="mock", request_model="intern-s2",
+    ).model_dump()
+    accepted = dict(run_id=rid, plan_key=plan_key, app_id=aid, project_id=pid,
+                    principal_id=user, runtime_id=plan["runtime_id"], plan=plan,
+                    confirmation=body.model_dump(), contract_fingerprint=fingerprint(contract))
+    if internal_instance is not None:
+        accepted["internal_instance"] = internal_instance
+    if "branch_semantics" in plan:
+        accepted["inputs"] = inputs
+    c.execute(insert(run_contracts).values(run_id=rid, snapshot=contract, fingerprint=fingerprint(contract)))
+    c.execute(insert(runs).values(
+        id=rid, project_id=pid, principal_id=user, runtime_id=plan["runtime_id"], goal=goal,
+        resource_refs=[source_id], request_key="csv-dag:" + rid, fingerprint=fingerprint(accepted),
+        status="QUEUED", created_at=time.time(), lease_until=0, fence=0,
+        context=dict(kind=KIND, messages=[], requests=0, tools=0, repairs=0, reserved_tokens=0),
+        version=1, cancel_intent=False,
+    ))
+    store.event(c, rid, "CSV_DAG_ACCEPTED", accepted)
+    answer = dict(namespace=PLAN, run_id=rid, plan_key=plan_key, plan_fingerprint=plan["plan_fingerprint"], status="QUEUED", version=1)
+    if internal_instance is not None:
+        answer["internal_instance"] = internal_instance
+    for kind in ("csv_dag_run", "csv_dag_run_seal"):
+        graph.remember(c, user, aid, kind, body.request_key, body, answer)
+    return {**answer, "cached": False}
 
 
 def is_job(store, rid):
@@ -410,6 +422,8 @@ def binding(store, c, job, limits, *, authorize=True):
     req, receipt = read_pair(c, job["principal_id"], value["app_id"], "csv_dag_run", confirmation.request_key, RunInput)
     expected_receipt = dict(namespace=PLAN, run_id=job["id"], plan_key=value["plan_key"],
                             plan_fingerprint=value["plan"]["plan_fingerprint"], status="QUEUED", version=1)
+    if "internal_instance" in value:
+        expected_receipt["internal_instance"] = value["internal_instance"]
     if req != confirmation or fingerprint(receipt) != fingerprint(expected_receipt):
         graph.conflict("DAG accepted request link changed")
     if authorize:
@@ -424,6 +438,8 @@ def binding(store, c, job, limits, *, authorize=True):
             graph.conflict("Frozen branch inputs changed")
     elif confirmation.branch_inputs is not None or "inputs" in value:
         graph.conflict("Unexpected legacy branch inputs")
+    from . import csv_dag_instances as instances
+    instances.validate_binding(store, c, job, value, limits, authorize=authorize)
     return value
 
 
@@ -622,6 +638,8 @@ def read_source(store, c, job):
 def transition(store, c, job, state, error=None, result=None):
     c.execute(update(runs).where(runs.c.id == job["id"]).values(status=state, error=error,
                result=result, lease_until=0, version=job["version"] + 1))
+    from . import csv_dag_instances as instances
+    instances.sync_state(store, c, job, state, error)
     store.event(c, job["id"], "STATE", dict(status=state, error=error))
 
 
@@ -671,6 +689,9 @@ def advance(worker, run):
                 transition(store, c, live, stop_state(live, store.has_unknown(c, job["id"])))
             else:
                 state = "PARTIAL" if result.get("output_status") in {"SKIPPED", "PARTIAL"} else "SUCCEEDED"
+                from . import csv_dag_instances as instances
+                result = instances.commit_result(store, c, live, bound, result, limits)
+                live = commit_guard(worker, c, run, plan)
                 transition(store, c, live, state, result=result)
             return False
         index = len(proved)
@@ -773,29 +794,39 @@ def process_job(worker, run):
 @graph.controlled
 def inspect_job(store, user, rid, limits):
     with store.tx() as c:
-        owner_lock(store, c, user, rid)
-        job = row(c, user, rid)
-        limits = limits or store.frozen_contract(c, job).limits
-        bound = binding(store, c, job, limits)
-        source = read_source(store, c, job)
-        outputs, proved = receipts(store, c, job, bound["plan"], source, bound.get("inputs"))
-        if job["context"]["tools"] != executed_count(proved):
-            graph.conflict("Step counter no longer matches receipts")
-        terminal = job["status"] == "SUCCEEDED" or (("branch_semantics" in bound["plan"]
-                    or "composition" in bound["plan"]) and job["status"] == "PARTIAL")
-        wanted = final_result(bound["plan"], outputs, proved)
-        if terminal and (len(proved) != len(plan_steps(bound["plan"])) or fingerprint(job["result"]) != fingerprint(wanted)
-                or job["status"] != ("PARTIAL" if wanted.get("output_status") in {"SKIPPED", "PARTIAL"} else "SUCCEEDED")):
-            raise DomainError("VERIFICATION_FAILED", "Final result lacks all frozen checked receipts")
-        answer = dict(namespace=PLAN, id=rid, app_id=bound["app_id"], project_id=job["project_id"],
-                    status=job["status"], version=job["version"], result=job["result"], error=job["error"],
-                    plan_fingerprint=bound["plan"]["plan_fingerprint"], steps=proved,
-                    pending_steps=plan_steps(bound["plan"])[len(proved):], model_requests=0, business_writes=0,
-                    publishable=False, formal_publication_enabled=False, semantic_status="UNKNOWN", owner_acceptance="PENDING")
-        if "branch_semantics" in bound["plan"]:
-            answer["inputs"] = bound["inputs"]
-            answer["confirmation"] = bound["confirmation"]
-        return answer
+        return inspect_job_tx(store, c, user, rid, limits)
+
+
+def inspect_job_tx(store, c, user, rid, limits):
+    owner_lock(store, c, user, rid)
+    job = row(c, user, rid)
+    limits = limits or store.frozen_contract(c, job).limits
+    bound = binding(store, c, job, limits)
+    source = read_source(store, c, job)
+    outputs, proved = receipts(store, c, job, bound["plan"], source, bound.get("inputs"))
+    if job["context"]["tools"] != executed_count(proved):
+        graph.conflict("Step counter no longer matches receipts")
+    terminal = job["status"] == "SUCCEEDED" or (("branch_semantics" in bound["plan"]
+                or "composition" in bound["plan"]) and job["status"] == "PARTIAL")
+    wanted = final_result(bound["plan"], outputs, proved)
+    from . import csv_dag_instances as instances
+    if terminal:
+        wanted = instances.checked_result(store, c, job, bound, wanted, limits)
+    if terminal and (len(proved) != len(plan_steps(bound["plan"])) or fingerprint(job["result"]) != fingerprint(wanted)
+            or job["status"] != ("PARTIAL" if wanted.get("output_status") in {"SKIPPED", "PARTIAL"} else "SUCCEEDED")):
+        raise DomainError("VERIFICATION_FAILED", "Final result lacks all frozen checked receipts")
+    answer = dict(namespace=PLAN, id=rid, app_id=bound["app_id"], project_id=job["project_id"],
+                status=job["status"], version=job["version"], result=job["result"], error=job["error"],
+                plan_fingerprint=bound["plan"]["plan_fingerprint"], steps=proved,
+                pending_steps=plan_steps(bound["plan"])[len(proved):], model_requests=0, business_writes=0,
+                publishable=False, formal_publication_enabled=False, semantic_status="UNKNOWN", owner_acceptance="PENDING")
+    if "internal_instance" in bound:
+        answer["business_writes"] = 1 if terminal else 0
+        answer["internal_instance"] = bound["internal_instance"]
+    if "branch_semantics" in bound["plan"]:
+        answer["inputs"] = bound["inputs"]
+        answer["confirmation"] = bound["confirmation"]
+    return answer
 
 
 @graph.controlled
@@ -826,6 +857,7 @@ def history(store, user, pid, aid, limits):
                 expired.append(dict(request_key=key, state="INVALIDATED"))
                 continue
             accepted = []
+            instance_only = False
             run_keys = c.execute(select(delivery_graph_requests.c.request_key).where(
                 delivery_graph_requests.c.app_id == aid, delivery_graph_requests.c.principal_id == user,
                 delivery_graph_requests.c.kind == "csv_dag_run").order_by(delivery_graph_requests.c.request_key)).scalars().all()
@@ -833,9 +865,13 @@ def history(store, user, pid, aid, limits):
                 _, receipt = read_pair(c, user, aid, "csv_dag_run", run_key, RunInput)
                 if receipt["plan_key"] == key:
                     job = row(c, user, receipt["run_id"])
-                    binding(store, c, job, limits)
+                    run_binding = binding(store, c, job, limits)
+                    if "internal_instance" in run_binding:
+                        instance_only = True
+                        continue
                     accepted.append(dict(id=job["id"], status=job["status"], version=job["version"], proof_status="NOT_VALIDATED"))
-            items.append(dict(plan=plan, runs=accepted))
+            if accepted or not instance_only:
+                items.append(dict(plan=plan, runs=accepted))
         return dict(namespace=PLAN, app_id=aid, project_id=pid, items=items, invalidated=expired)
 
 
@@ -868,6 +904,8 @@ def command_job(store, user, rid, command, version):
             graph.conflict("DAG command unavailable")
         c.execute(update(runs).where(runs.c.id == rid).values(status=state, version=version + 1,
                     cancel_intent=job["cancel_intent"] or command == "cancel"))
+        from .csv_dag_instances import sync_state
+        sync_state(store, c, job, state, None)
         store.event(c, rid, "COMMAND", dict(command=command, status=state))
         return state
 

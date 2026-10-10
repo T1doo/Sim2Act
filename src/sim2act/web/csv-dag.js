@@ -6,6 +6,7 @@ const csvDagKey = c => deliveryKey(c.parent);
 const csvDagBase = c => `/api/projects/${c.parent.project}/apps/${c.parent.id}/csv-dag`;
 function clearCsvDag() {
   csvDagContext = null;
+  dagReuseClear();
   $("csv-dag-mode").value="legacy";$("csv-dag-composition").hidden=true;$("csv-dag-nodes").replaceChildren();
   $("csv-dag-panel").hidden = true;
   $("csv-dag-definition").textContent = "";
@@ -32,6 +33,7 @@ function openCsvDag(parent) {
     const o = document.createElement("option"); o.value = v.name; o.textContent = v.name; return o;
   }));
   csvDagCompositionInit(c);
+  dagReuseOpen(c);
   csvDagButtons(c);
 }
 function csvDagClearProof(c) {
@@ -41,6 +43,7 @@ function csvDagClearProof(c) {
 }
 function csvDagButtons(c = csvDagContext) {
   if (!c || !csvDagCurrent(c)) return;
+  dagReuseButtons(c);
   const intent = csvDagIntents.get(csvDagKey(c)), locked = c.busy || !!intent;
   $("csv-dag-plan").disabled = locked || !$("csv-dag-column").value;
   $("csv-dag-run").disabled = locked || !c.plan || !$("csv-dag-confirm").checked;
@@ -460,3 +463,150 @@ function csvDagGroupInit(host,sources,changed){
 csvDagGroupInit($("csv-dag-branch"),()=>Array.from($("csv-dag-branch-source").options).map(o=>[o.value,o.textContent]),()=>{const c=csvDagContext;if(c){csvDagClearProof(c);csvDagButtons(c);}});
 
 for(const role of ["target","op","source","value"])$("csv-dag-branch-"+role).onchange=()=>{if(csvDagContext){csvDagClearProof(csvDagContext);csvDagButtons();}};
+
+// Closed internal read→sum reuse. Every mutation is explicit; GET restores cold state.
+const dagReuseIntents = new Map();
+const dagReuseVersion = "internal.csv-read-sum.v1";
+function dagReuseClear() {
+  for(const id of ["release","instance","column"]) $("dag-reuse-"+id).replaceChildren();
+  $("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent="";
+  $("dag-reuse-confirm").checked=false;$("dag-reuse-run-confirm").checked=false;
+}
+function dagReuseOpen(c) {c.reuse={busy:false,approval:null,release:null,instance:null,job:null};dagReuseButtons(c);}
+function dagReuseButtons(c=csvDagContext) {
+  if(!c||!csvDagCurrent(c)||!c.reuse)return;
+  const r=c.reuse,intent=dagReuseIntents.get(csvDagKey(c)),locked=r.busy||!!intent;
+  for(const id of ["prepare","commit","history","create","run","release","instance","column","confirm","run-confirm"])$("dag-reuse-"+id).disabled=locked;
+  const n=c.plan?.composition?.definition?.nodes;
+  $("dag-reuse-prepare").disabled=locked||c.job?.status!=="SUCCEEDED"||n?.length!==2||n[0].action!=="resource.read"||n[1].action!=="data.aggregate_csv"||!!c.plan.branch_semantics;
+  $("dag-reuse-commit").disabled=locked||!r.approval||!$("dag-reuse-confirm").checked;
+  $("dag-reuse-create").disabled=locked||!r.release;
+  $("dag-reuse-run").disabled=locked||!r.instance||!r.release||!$("dag-reuse-column").value||!$("dag-reuse-run-confirm").checked;
+  $("dag-reuse-read").disabled=r.busy||!$("dag-reuse-instance").value;
+  $("dag-reuse-recover").hidden=!intent;$("dag-reuse-recover").disabled=r.busy;
+  for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).disabled=r.busy||!r.job||!(command==="pause"?["QUEUED","RUNNING"]:command==="resume"?["PAUSED","WAITING_RESOURCE"]:["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"]).includes(r.job.status);
+}
+async function dagReuseReleaseSeal(rel,c) {
+  const s=rel?.snapshot,e=s?.execution_source;
+  return !!e&&e.version===dagReuseVersion&&s.namespace==="INTERNAL_ENGINEERING_ONLY"&&s.formal_publication_enabled===false&&s.model_requests===0&&s.semantic_status==="UNKNOWN"&&s.owner_acceptance==="PENDING"&&rel.project_id===c.parent.project&&s.draft.id===c.parent.id&&s.draft.runtime_id===c.parent.app.runtime_id&&s.draft.fingerprint===c.parent.app.fingerprint&&e.source_hash===c.parent.app.candidate.source_hash&&Array.isArray(e.columns)&&e.columns.every(v=>typeof v==="string")&&Array.isArray(e.receipt_fingerprints)&&e.receipt_fingerprints.length===2&&rel.fingerprint===await deliveryDigest(s);
+}
+function dagReusePick(id,items,label) {
+  const select=$("dag-reuse-"+id),old=select.value;
+  select.replaceChildren(...items.map(v=>{const o=document.createElement("option");o.value=v.id;o.textContent=label(v);return o;}));
+  if(items.some(v=>v.id===old))select.value=old;
+}
+async function dagReuseHistory(c=csvDagContext) {
+  if(!c||!csvDagCurrent(c))return;
+  const releases=await api(`/api/internal/apps/${c.parent.id}/dag-releases`);
+  const instances=await api(`/api/internal/apps/${c.parent.id}/dag-instances`);
+  if(!csvDagCurrent(c))return;
+  if(!Array.isArray(releases.items)||!Array.isArray(instances.items)||!(await Promise.all(releases.items.map(v=>dagReuseReleaseSeal(v,c)))).every(Boolean))throw Error("VERSION_CONFLICT");
+  const validIds=new Set(releases.items.map(v=>v.id));
+  if(instances.items.some(v=>v.project_id!==c.parent.project||v.source_app_id!==c.parent.id||v.runtime_id!==c.parent.app.runtime_id||!validIds.has(v.release_id)||!Number.isInteger(v.revision)))throw Error("VERSION_CONFLICT");
+  if(!csvDagCurrent(c))return;
+  c.reuse.releases=releases.items;c.reuse.instances=instances.items;
+  dagReusePick("release",releases.items,v=>`${v.id} · 两步内部版本`);
+  dagReusePick("instance",instances.items,v=>`${v.id} · 结果 ${v.data_version}`);
+  c.reuse.release=releases.items.find(v=>v.id===$("dag-reuse-release").value)||null;
+  $("dag-reuse-status").textContent="已有版本与实例已读回；选择实例后只读恢复结果";
+  dagReuseButtons(c);
+}
+async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value) {
+  if(!c||!csvDagCurrent(c)||!iid)return;
+  const detail=await api(`/api/internal/instances/${iid}`);
+  const rel=await api(`/api/internal/releases/${detail.release_id}`);
+  if(!csvDagCurrent(c))return;
+  if(detail.id!==iid||detail.source_app_id!==c.parent.id||detail.project_id!==c.parent.project||detail.runtime_id!==c.parent.app.runtime_id||detail.release_fingerprint!==rel.fingerprint||!await dagReuseReleaseSeal(rel,c)||!Array.isArray(detail.runs)||!Array.isArray(detail.data))throw Error("VERSION_CONFLICT");
+  for(const run of detail.runs) {
+    if(run.instance_id!==iid||run.release_id!==rel.id||run.execution_version!==dagReuseVersion||run.run_id!==run.proof?.id||run.status!==run.proof.status)throw Error("VERIFICATION_FAILED");
+    const accepted=run.proof.internal_instance;
+    if(accepted?.instance_id!==iid||accepted.app_run_id!==run.app_run_id||accepted.version!==dagReuseVersion)throw Error("VERIFICATION_FAILED");
+    const bindingPlan=await api(csvDagBase(c)+"/"+encodeURIComponent(run.plan_key));
+    if(!csvDagCurrent(c))return;
+    if(!await csvDagPlanSeal(bindingPlan,c)||run.proof.plan_fingerprint!==bindingPlan.plan_fingerprint||bindingPlan.composition?.definition?.nodes.length!==2||bindingPlan.input[rel.snapshot.execution_source.aggregate_step+"_column"]!==run.input.column)throw Error("VERIFICATION_FAILED");
+    // Verify the unchanged DAG receipt protocol, then separately bind the one typed write.
+    if(!await csvDagCompositionJobSeal({...run.proof,business_writes:0},c,bindingPlan))throw Error("VERIFICATION_FAILED");
+    if(run.status==="SUCCEEDED") {
+      const record=detail.data.find(v=>v.run_id===run.app_run_id),p=run.proof.result.instance_result;
+      if(!record||p?.instance_id!==iid||p.app_run_id!==run.app_run_id||p.release_id!==rel.id||p.result_version!==run.result_version||record.version!==run.result_version||record.release_id!==rel.id||record.fingerprint!==await deliveryDigest(record.data)||p.record_fingerprint!==record.fingerprint||!deliverySame(record.data,{result:run.output})||!deliverySame(run.output,run.proof.result.output_by_step[rel.snapshot.execution_source.aggregate_step])||run.proof.business_writes!==1||run.proof.result.business_writes!==1)throw Error("VERIFICATION_FAILED");
+    } else if(run.proof.business_writes!==0||run.result_version!==null||run.output!==null)throw Error("VERIFICATION_FAILED");
+  }
+  if(detail.data.length!==detail.runs.filter(v=>v.status==="SUCCEEDED").length)throw Error("VERIFICATION_FAILED");
+  if(!csvDagCurrent(c))return;
+  c.reuse.instance=detail;c.reuse.release=rel;c.reuse.job=detail.runs.find(v=>["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"].includes(v.status))||detail.runs.slice().sort((a,b)=>(b.result_version||0)-(a.result_version||0))[0]||null;
+  $("dag-reuse-column").replaceChildren(...rel.snapshot.execution_source.columns.map(value=>{const o=document.createElement("option");o.value=value;o.textContent=value;return o;}));
+  $("dag-reuse-run-confirm").checked=false;
+  $("dag-reuse-proof").textContent=JSON.stringify({release:rel,instance:detail},null,2);
+  $("dag-reuse-status").textContent=`实例已核读回 · ${detail.data_version} 条结果 · 两步复用 · 正式发布关闭`;
+  dagReuseButtons(c);return detail;
+}
+async function dagReuseSubmit(kind,retry=false) {
+  const c=csvDagContext;if(!c||!csvDagCurrent(c)||c.reuse.busy)return;
+  const r=c.reuse,key=csvDagKey(c);let intent=dagReuseIntents.get(key),returned=false;
+  if(!retry) {
+    if(intent)throw Error("先恢复原请求回执");
+    if(kind==="prepare") {if(c.job?.status!=="SUCCEEDED"||!c.plan)throw Error("需要已完成的两步运行");intent={kind,path:`/api/csv-dag/runs/${c.job.id}/release-approvals`,body:{expected_plan_fingerprint:c.plan.plan_fingerprint,request_key:crypto.randomUUID()},sourceRun:c.job.id,sourcePlan:c.plan};}
+    if(kind==="commit") {if(!r.approval||!$("dag-reuse-confirm").checked)throw Error("请确认已读回来源");intent={kind,path:`/api/internal/approvals/${r.approval.id}/commit`,body:{fingerprint:r.approval.fingerprint},approval:r.approval};}
+    if(kind==="create") {if(!r.release)throw Error("先选择已核版本");intent={kind,path:`/api/internal/releases/${r.release.id}/instances`,body:{expected_release_fingerprint:r.release.fingerprint,request_key:crypto.randomUUID()},release:r.release};}
+    if(kind==="run") {if(!r.instance||!r.release||!$("dag-reuse-run-confirm").checked)throw Error("请确认版本和新列");intent={kind,path:`/api/internal/instances/${r.instance.id}/runs`,body:{expected_revision:r.instance.revision,expected_release_fingerprint:r.release.fingerprint,input:{column:$("dag-reuse-column").value},request_key:crypto.randomUUID()},instance:r.instance,release:r.release};}
+    if(!intent)return;dagReuseIntents.set(key,intent);
+  }
+  if(!intent)return;
+  r.busy=true;dagReuseButtons(c);
+  try {
+    const made=intent.receipt||await api(intent.path,"POST",intent.body);returned=true;
+    const validId=(value,prefix)=>typeof value==="string"&&new RegExp("^"+prefix+"_[a-f0-9]{32}$").test(value);
+    const hash=value=>typeof value==="string"&&/^[a-f0-9]{64}$/.test(value);
+    let accepted=false;
+    if(intent.kind==="prepare")accepted=validId(made.id,"iapproval")&&hash(made.fingerprint)&&made.namespace==="INTERNAL_ENGINEERING_ONLY"&&made.formal_publication_enabled===false;
+    if(intent.kind==="commit")accepted=validId(made.id,"irelease")&&hash(made.fingerprint)&&made.approval_id===intent.approval.id&&deliverySame(made.snapshot,intent.approval.payload.snapshot)&&made.project_id===intent.approval.project_id;
+    if(intent.kind==="create")accepted=validId(made.id,"iinstance")&&made.release_id===intent.release.id&&made.source_app_id===intent.release.snapshot.draft.id&&made.project_id===intent.release.project_id&&made.runtime_id===intent.release.snapshot.draft.runtime_id;
+    if(intent.kind==="run")accepted=validId(made.run_id,"run")&&validId(made.app_run_id,"iapprun")&&made.instance_id===intent.instance.id&&made.execution_version===dagReuseVersion&&Number.isInteger(made.version)&&made.version>=1;
+    if(!accepted)throw Error("VERIFICATION_FAILED");
+    // Retain a validated late acceptance even if its page has been replaced.
+    intent.receipt=made;
+    if(!csvDagCurrent(c))return;
+    if(intent.kind==="prepare") {
+      const a=await api(`/api/internal/approvals/${made.id}`);
+      if(!csvDagCurrent(c))return;
+      if(a.id!==made.id||a.fingerprint!==made.fingerprint||a.fingerprint!==await deliveryDigest(a.payload)||a.payload.snapshot.execution_source?.run_id!==intent.sourceRun||a.payload.snapshot.execution_source.plan_fingerprint!==intent.sourcePlan.plan_fingerprint||!deliverySame(a.payload.dag_intent,{run_id:intent.sourceRun,...intent.body}))throw Error("VERSION_CONFLICT");
+      if(!csvDagCurrent(c))return;
+      r.approval=a;$("dag-reuse-confirm").checked=false;$("dag-reuse-proof").textContent=JSON.stringify(a,null,2);$("dag-reuse-status").textContent="两步来源已核准备；核对允许列与预算后手动保存内部版本";
+    } else if(intent.kind==="commit") {
+      const rel=await api(`/api/internal/releases/${made.id}`);
+      if(!csvDagCurrent(c))return;
+      if(!await dagReuseReleaseSeal(rel,c)||rel.approval_id!==intent.approval.id||!deliverySame(rel.snapshot,intent.approval.payload.snapshot)||made.fingerprint!==rel.fingerprint)throw Error("VERSION_CONFLICT");
+      if(!csvDagCurrent(c))return;
+      r.release=rel;r.approval=null;await dagReuseHistory(c);if(!csvDagCurrent(c))return;$("dag-reuse-release").value=rel.id;r.release=rel;$("dag-reuse-proof").textContent=JSON.stringify(rel,null,2);
+    } else if(intent.kind==="create") {
+      if(made.release_id!==intent.release.id||made.source_app_id!==c.parent.id||made.project_id!==c.parent.project)throw Error("VERSION_CONFLICT");
+      await dagReuseHistory(c);if(!csvDagCurrent(c))return;$("dag-reuse-instance").value=made.id;await dagReuseRead(c,made.id);
+    } else {
+      if(made.instance_id!==intent.instance.id||made.execution_version!==dagReuseVersion||!/^run_[a-f0-9]{32}$/.test(made.run_id))throw Error("VERSION_CONFLICT");
+      const got=await api(`/api/internal/instances/${intent.instance.id}/runs/${made.run_id}`);
+      if(!csvDagCurrent(c))return;
+      if(got.run_id!==made.run_id||got.app_run_id!==made.app_run_id||got.instance_id!==intent.instance.id||!deliverySame(got.input,intent.body.input))throw Error("VERIFICATION_FAILED");
+      await dagReuseRead(c,intent.instance.id);
+    }
+    if(csvDagCurrent(c))dagReuseIntents.delete(key);
+  } catch(e) {
+    if(!retry&&!intent.uncertain&&!returned&&[400,403,409,422].includes(e.httpStatus))dagReuseIntents.delete(key);
+    else intent.uncertain=true;
+    if(csvDagCurrent(c)){$("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent=e.message+(dagReuseIntents.has(key)?" · 接受结果 UNKNOWN；保留原请求。已知回执只读恢复":" · 请求被拒绝");}
+  } finally {r.busy=false;dagReuseButtons(c);}
+}
+async function dagReuseAction(action) {
+  const c=csvDagContext;if(!c||!csvDagCurrent(c)||c.reuse.busy)return;
+  c.reuse.busy=true;dagReuseButtons(c);
+  try {await action(c);} catch(e) {if(csvDagCurrent(c)){c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent=e.message+" · 当前证明不可用；未执行写入";}} finally{c.reuse.busy=false;dagReuseButtons(c);}
+}
+for(const kind of ["prepare","commit","create","run"])$("dag-reuse-"+kind).onclick=()=>dagReuseSubmit(kind);
+$("dag-reuse-recover").onclick=()=>dagReuseSubmit("",true);
+$("dag-reuse-history").onclick=()=>dagReuseAction(dagReuseHistory);
+$("dag-reuse-read").onclick=()=>dagReuseAction(c=>dagReuseRead(c));
+$("dag-reuse-release").onchange=()=>{const c=csvDagContext;if(!c)return;c.reuse.release=c.reuse.releases?.find(v=>v.id===$("dag-reuse-release").value)||null;c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-run-confirm").checked=false;$("dag-reuse-proof").textContent="";dagReuseButtons(c);};
+$("dag-reuse-instance").onchange=()=>{const c=csvDagContext;if(!c)return;c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-run-confirm").checked=false;dagReuseButtons(c);};
+$("dag-reuse-confirm").onchange=()=>dagReuseButtons();
+$("dag-reuse-run-confirm").onchange=()=>dagReuseButtons();
+$("dag-reuse-column").onchange=()=>{$("dag-reuse-run-confirm").checked=false;dagReuseButtons();};
+for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).onclick=()=>dagReuseAction(async c=>{const j=c.reuse.job,i=c.reuse.instance;if(!j||!i)return;await api(`/api/internal/instances/${i.id}/runs/${j.run_id}/commands`,"POST",{command,version:j.version});await dagReuseRead(c,i.id);});

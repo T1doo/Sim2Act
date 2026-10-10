@@ -263,6 +263,8 @@ def commit_release(store, user, approval_id, exact_fp, limits):
         p = a["payload"]
         snap = p["snapshot"]
         draft = snap["draft"]
+        from .csv_dag_instances import validate_family
+        validate_family(c, user, approval_id, snap)
         current, _, _, _ = load_draft(store, c, user, draft["id"], limits, lock=True)
         validate_source_bytes(store, c, user, current)
         if (
@@ -270,6 +272,9 @@ def commit_release(store, user, approval_id, exact_fp, limits):
             or grant_version(c, location, user) != p["grant_version"]
         ):
             raise DomainError("VERSION_CONFLICT", "Source or grant precondition changed")
+        if "execution_source" in snap:
+            from .csv_dag_instances import validate_snapshot
+            validate_snapshot(store, c, user, snap, limits)
         rid = new_id("irelease")
         row = {
             "id": rid,
@@ -325,6 +330,8 @@ def read_release(store, c, user, rid, limits):
         raise DomainError("VERSION_CONFLICT", "Immutable release/approval mismatch")
     s = r["snapshot"]
     draft = s["draft"]
+    from .csv_dag_instances import validate_family
+    validate_family(c, user, r["approval_id"], s)
     if (
         s["namespace"] != NAMESPACE
         or s["formal_publication_enabled"] is not False
@@ -332,6 +339,10 @@ def read_release(store, c, user, rid, limits):
         or s["dependency_lock"] != draft["candidate"]["manifest"]["dependency_lock"]
     ):
         raise DomainError("VERSION_CONFLICT")
+    if "execution_source" in s:
+        from .csv_dag_instances import validate_snapshot
+        validate_snapshot(store, c, user, s, limits)
+        return r
     record_schema(draft["candidate"], s["data_schema"])
     validate_frozen_candidate(store, c, user, draft, limits)
     validate_source_bytes(store, c, user, draft)
@@ -432,8 +443,12 @@ def data_rows(c, iid):
 
 def inspect_instance(store, user, iid, limits):
     with store.tx() as c:
-        i, _ = instance(store, c, user, iid, limits)
-        return {**dict(i), "namespace": NAMESPACE, "data": [dict(x) for x in data_rows(c, iid)]}
+        i, release = instance(store, c, user, iid, limits)
+        records = data_rows(c, iid)
+        if "execution_source" in release["snapshot"]:
+            from .csv_dag_instances import check_instance_records
+            check_instance_records(store, c, user, i, records, limits)
+        return {**dict(i), "namespace": NAMESPACE, "data": [dict(x) for x in records]}
 
 
 def run_instance(
@@ -447,6 +462,8 @@ def run_instance(
         ).scalar()
         store.lock_project(c, user, pid)
         i, r = instance(store, c, user, iid, limits, lock=True)
+        if "execution_source" in r["snapshot"]:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "DAG instances require the durable DAG worker")
         request_fp = fingerprint(
             {
                 "instance_id": iid,
@@ -544,6 +561,8 @@ def switch_target(c, i, old, target):
         raise DomainError(
             "PERMISSION_DENIED", "Cannot switch another app/runtime into this instance"
         )
+    if "execution_source" in old["snapshot"] or "execution_source" in target["snapshot"]:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "DAG instance version switching is not supported")
     compatible(old["snapshot"]["data_schema"], target["snapshot"]["data_schema"])
     same_schema = target["snapshot"]["data_schema"] == old["snapshot"]["data_schema"]
     old_version = old["snapshot"]["data_schema_version"]

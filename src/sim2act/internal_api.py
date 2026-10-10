@@ -1,10 +1,10 @@
 """Authenticated INTERNAL_ENGINEERING_ONLY adapter; formal deployment stays disabled."""
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from pydantic import Field
 from sqlalchemy import select
 
-from . import app_jobs, lifecycle
+from . import app_jobs, csv_dag, csv_dag_instances, lifecycle
 from .contracts import Strict
 from .db import (
     app_drafts,
@@ -23,6 +23,11 @@ class PrepareInput(Strict):
     expected_draft_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     sample_input: dict
     offline_replay: list[dict] | None = Field(default=None, min_length=2, max_length=2)
+
+
+class DagPrepareInput(Strict):
+    request_key: str = Field(min_length=1, max_length=100)
+    expected_plan_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class ApprovalInput(Strict):
@@ -66,13 +71,30 @@ def mount(app, store, limits, identity):
             raise DomainError("UNSUPPORTED_CAPABILITY", "Bounded Report manifests support private previews only")
         return pid
 
+    def inspect_job(user, rid):
+        if csv_dag.is_job(store, rid):
+            return csv_dag_instances.inspect_job(store, user, rid, limits)
+        return app_jobs.inspect_job(store, user, rid)
+
+    @app.post("/api/csv-dag/runs/{rid}/release-approvals", status_code=201)
+    def dag_release(rid: str, body: DagPrepareInput, user=user_dependency):
+        return csv_dag_instances.prepare_release(store, user, rid, body.expected_plan_fingerprint, limits, request_key=body.request_key)
+
     def scope_run(user, iid, rid):
         # Stop must remain possible after grant revocation; immutable binding/owner still required.
         with store.tx() as c:
             job = c.execute(select(runs).where(runs.c.id == rid)).mappings().first()
-            if not job:
+            if not job or job["principal_id"] != user:
                 raise DomainError("PERMISSION_DENIED")
-            snapshot, _ = app_jobs.load_binding(store, c, user, job, None, authorize=False)
+            store.own_project(c, user, job["project_id"])
+            if csv_dag.is_job(store, rid):
+                accepted = csv_dag.binding(store, c, job, None, authorize=False)
+                value = csv_dag_instances.validate_binding(store, c, job, accepted, None, authorize=False)
+                if value is None:
+                    raise DomainError("PERMISSION_DENIED")
+                snapshot, _ = value
+            else:
+                snapshot, _ = app_jobs.load_binding(store, c, user, job, None, authorize=False)
             if snapshot["instance_id"] != iid:
                 raise DomainError("PERMISSION_DENIED")
             return dict(job)
@@ -99,10 +121,13 @@ def mount(app, store, limits, identity):
             if not row or row["principal_id"] != user or row["kind"] != "release":
                 raise DomainError("PERMISSION_DENIED")
             lifecycle.approval(c, user, aid, row["fingerprint"], "release", allow_consumed=True)
+            csv_dag_instances.validate_family(c, user, aid, row["payload"]["snapshot"])
             draft = row["payload"]["snapshot"]["draft"]
             store.own_project(c, user, row["project_id"])
             lifecycle.validate_frozen_candidate(store, c, user, draft, limits)
             lifecycle.validate_source_bytes(store, c, user, draft)
+            if "execution_source" in row["payload"]["snapshot"]:
+                csv_dag_instances.validate_snapshot(store, c, user, row["payload"]["snapshot"], limits)
             return envelope(**dict(row))
 
     @app.post("/api/internal/approvals/{aid}/commit")
@@ -110,7 +135,9 @@ def mount(app, store, limits, identity):
         return envelope(**lifecycle.commit_release(store, user, aid, body.fingerprint, limits))
 
     @app.get("/api/internal/apps/{aid}/releases")
-    def releases(aid: str, user=user_dependency):
+    @app.get("/api/internal/apps/{aid}/dag-releases")
+    def releases(aid: str, request: Request, user=user_dependency):
+        dag_only = request.url.path.endswith("/dag-releases")
         with store.tx() as c:
             pid = supported_app(c, user, aid)
             ids = (
@@ -129,6 +156,7 @@ def mount(app, store, limits, identity):
                 dict(lifecycle.read_release(store, c, user, row["id"], limits))
                 for row in ids
                 if row["snapshot"].get("draft", {}).get("id") == aid
+                and ("execution_source" in row["snapshot"]) == dag_only
             ]
             return envelope(items=items)
 
@@ -151,7 +179,9 @@ def mount(app, store, limits, identity):
         )
 
     @app.get("/api/internal/apps/{aid}/instances")
-    def instances(aid: str, user=user_dependency):
+    @app.get("/api/internal/apps/{aid}/dag-instances")
+    def instances(aid: str, request: Request, user=user_dependency):
+        dag_only = request.url.path.endswith("/dag-instances")
         with store.tx() as c:
             pid = supported_app(c, user, aid)
             ids = (
@@ -167,7 +197,13 @@ def mount(app, store, limits, identity):
                 .scalars()
                 .all()
             )
-        return envelope(items=[lifecycle.inspect_instance(store, user, iid, limits) for iid in ids])
+            items = []
+            for iid in ids:
+                value, rel = lifecycle.instance(store, c, user, iid, limits)
+                if ("execution_source" in rel["snapshot"]) == dag_only:
+                    items.append({**dict(value), "namespace": lifecycle.NAMESPACE,
+                        **({} if dag_only else {"data": [dict(x) for x in lifecycle.data_rows(c, iid)]})})
+        return envelope(items=items)
 
     @app.get("/api/internal/instances/{iid}")
     def inspect(iid: str, user=user_dependency):
@@ -193,7 +229,7 @@ def mount(app, store, limits, identity):
         return envelope(
             **value,
             release_fingerprint=release["fingerprint"],
-            runs=[app_jobs.inspect_job(store, user, rid) for rid in ids],
+            runs=[inspect_job(user, rid) for rid in ids],
         )
 
     @app.post("/api/internal/instances/{iid}/switch-approvals", status_code=201)
@@ -237,7 +273,7 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/instances/{iid}/runs/{rid}")
     def inspect_run(iid: str, rid: str, user=user_dependency):
         scope_run(user, iid, rid)
-        return envelope(**app_jobs.inspect_job(store, user, rid))
+        return envelope(**inspect_job(user, rid))
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/extraction-options")
     def extraction_options(iid: str, rid: str, user=user_dependency):
@@ -282,5 +318,5 @@ def mount(app, store, limits, identity):
     @app.post("/api/internal/instances/{iid}/runs/{rid}/commands")
     def command(iid: str, rid: str, body: ControlInput, user=user_dependency):
         scope_run(user, iid, rid)
-        status = app_jobs.command_job(store, user, rid, body.command, body.version)
+        status = (csv_dag.command_job if csv_dag.is_job(store, rid) else app_jobs.command_job)(store, user, rid, body.command, body.version)
         return envelope(status=status)
