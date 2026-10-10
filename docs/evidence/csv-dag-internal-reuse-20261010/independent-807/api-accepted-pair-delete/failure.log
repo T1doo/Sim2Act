@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/tmp/sim2act-dag-reuse-independent-20261010/backend.py", line 40, in <module>
+    rows=c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.kind.in_(['csv_dag_run','csv_dag_run_seal']))).mappings().all();keys=[x['request_key'] for x in rows if x['response'].get('run_id')==rid2];check(len(keys)==2,'target accepted independent pair located',checks);c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.request_key.in_(keys),delivery_graph_requests.c.kind.in_(['csv_dag_run','csv_dag_run_seal'])))
+                                                                                                                                                                                           ~^^^^^^^^^^^^
+  File "lib/sqlalchemy/cyextension/resultproxy.pyx", line 57, in sqlalchemy.cyextension.resultproxy.BaseRow._get_by_key_impl_mapping
+  File "lib/sqlalchemy/cyextension/resultproxy.pyx", line 63, in sqlalchemy.cyextension.resultproxy.BaseRow._get_by_key_impl
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py", line 215, in _key_not_found
+    self._key_fallback(key, None)
+  File "/workspace/Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/cursor.py", line 847, in _key_fallback
+    raise exc.NoSuchColumnError(
+sqlalchemy.exc.NoSuchColumnError: Could not locate column in row for column 'response'

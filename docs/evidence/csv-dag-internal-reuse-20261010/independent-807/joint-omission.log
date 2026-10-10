@@ -1,0 +1,10 @@
+/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+Traceback (most recent call last):
+  File "/tmp/sim2act-dag-reuse-independent-20261010/joint-omission.py", line 11, in <module>
+    before=fingerprint(snapshot(e));r=e[2].get('/api/internal/instances/'+i['id']);out={'status':r.status_code,'body':r.json(),'unchanged':fingerprint(snapshot(e))==before,'target_run':a,'remaining_run':request(e,'GET','/api/runs/'+a['run_id'])};(folder/'result.json').write_text(json.dumps(out,indent=2,default=str));print(json.dumps({'status':r.status_code,'data_version':r.json().get('data_version'),'runs':len(r.json().get('runs',[])),'unchanged':out['unchanged']}));assert r.status_code==409,'joint markers + joins + data omission must refuse existing accepted actual DAG history'
+                                                                                                                                                                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-dag-reuse-independent-20261010/common.py", line 25, in request
+    r=e[2].request(method,path,json=body) if body is not None else e[2].request(method,path);assert r.status_code==status,(method,path,r.status_code,r.text);return r.json()
+                                                                                                    ^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('GET', '/api/runs/run_5560520d6a514488826382207e828c14', 409, '{"error":{"code":"VERSION_CONFLICT","message":"DAG accepted request link changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}')

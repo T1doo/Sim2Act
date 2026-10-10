@@ -10,7 +10,9 @@ HTTP200有效JSON坏证明导致晚回执自清页无提示的三处分支，已
 
 本地CSV文件入口按冻结 `fdc91282b2107164ba33624246be6f50e007cd13` 接入既有链：选择只本地读取、显式保存及逐步授权/内部确认，正常worker两新列结果与冷历史均真实回读。作者SQLite26PASS/1PG角色SKIP、PG27PASS，每库新8例9页面67检查及3实际旧源码升级；[本轮证据](../evidence/local-csv-file-20261010/README.md)按其限定独审报告读取，不能扩为P-A/P-B或整体验收。
 
-PG resources-history原失败节点在未改产品667上仅一次当前PASS（4.180秒），原Future10/测试字节/SQL observer不变，395graph锁跨度1.149秒，实际资源与graphHTTP200；仍未解释42b7a992历史17.59秒慢读，OPEN保留，不能以单次通过关闭。下一可离线推进的实际业务缺口是已有固定CSV DAG到不可变内部版本、实例、冷输入新Run和持久结果的复用链；应先冻结来源/Release/输入/预算/CAS合同再实施，不能持续扩大低价值提示检查。PROJECT全局完整性、其他任务族、真实P-A/P-B/R0和原生Windows/owner/semantic依然需要原合同、精确真实模型授权及预算/外部环境；合成工程不能替代。
+固定CSV DAG的“成功两步来源→不可变内部版本→独立实例→冷输入新Run→typed持久结果”已按冻结 `d716feda486fd6f0322c11b2e1b5112f718a94fa` 完成限定工程闭环。原807独审发现联合遗漏历史BLOCK，039产品修复后必要增量4例12检查LIMITED_PASS；69产品与d716全同字节。SQLite原74例72PASS/1测试钩子FAIL/1SKIP，钩子修正定向1PASS；PG最终74PASS，每库9真实HTTP页104检查、4实际旧源码升级。[本轮合同与失败归属](../evidence/csv-dag-internal-reuse-20261010/README.md)。仅同材料无条件read→sum，不扩成任意DAG或完整P-B。
+
+PG resources-history原失败节点在未改产品667上仅一次当前PASS（4.180秒），原Future10/测试字节/SQL observer不变，395graph锁跨度1.149秒，实际资源与graphHTTP200；仍未解释42b7a992历史17.59秒慢读，OPEN保留，不能以单次通过关闭。新增807 Report最终GET原6秒idle失败亦OPEN，相同冻结定向通过和最终集合通过均不证明根因或稳定性。下一步回到原F2-T01–T04不同实际任务族及P-A/P-B目标到应用合同，先核对确定性来源/输入/授权/预算/持久结果缺口；真实模型和新副作用需精确授权与预算，不能持续扩大低价值提示检查。PROJECT全局完整性、其他任务族、真实P-A/P-B/R0和原生Windows/owner/semantic依然需要原合同及外部环境；合成工程不能替代。
 ## 原方案必须交付的范围
 
 | 原任务 | 尚未被当前限定证据证明的交付项 | 依赖与推进方式 |
@@ -41,4 +43,4 @@ PG resources-history原失败节点在未改产品667上仅一次当前PASS（4.
 
 ## 不可抹平的状态
 
-`LIVE=0`；真实模型授权、成本预算与真实材料未获批准。PROJECT 为 `PENDING/BLOCKED_PARTIAL`，语义 `UNKNOWN`，owner `PENDING`，整体 `NOT_ACCEPTED`，正式发布关闭。PG resources-history 超时为 OPEN；HTTP 200 其余损坏形式/入口提示限制保留，三处晚回执自清页提示仅限定通过；Windows 900 秒、Edge 240 秒、Node 150 秒未验收。禁止修改 main、强推、部署、凭据或安全/网络配置及未经授权的真实模型调用。关键路径计划不修改这些边界。
+`LIVE=0`；真实模型授权、成本预算与真实材料未获批准。PROJECT 为 `PENDING/BLOCKED_PARTIAL`，语义 `UNKNOWN`，owner `PENDING`，整体 `NOT_ACCEPTED`，正式发布关闭。PG resources-history 超时及新增807 Report GET idle失败为 OPEN；HTTP 200 其余损坏形式/入口提示限制保留，三处晚回执自清页提示仅限定通过；Windows 900 秒、Edge 240 秒、Node 150 秒未验收。禁止修改 main、强推、部署、凭据或安全/网络配置及未经授权的真实模型调用。关键路径计划不修改这些边界。

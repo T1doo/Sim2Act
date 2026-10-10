@@ -1,0 +1,60 @@
+.F
+=================================== FAILURES ===================================
+________ test_actual_dag_internal_reuse_and_cold_new_column_page[read] _________
+
+env = (<sim2act.db.Store object at 0x7f5da06bdc10>, Settings(database_url='sqlite:////tmp/sim2act-dag-reuse-20261010/ui3/tes...22bb446e404682985e3ce64f009c8a', 'user_1162d94ff48d47d185b4e378e6476438', 'proj_94f804699c724a8b8065f93f8ac76f93', ...)
+tmp_path = PosixPath('/tmp/sim2act-dag-reuse-20261010/ui3/test_actual_dag_internal_reuse1')
+lost = 'read'
+
+    @pytest.mark.parametrize('lost', ['post','read'])
+    def test_actual_dag_internal_reuse_and_cold_new_column_page(env,tmp_path,lost):
+        aid,rid,plan,_,source=setup(env)
+        plan.pop("cached", None)
+        app=create_app(env[0],env[1]);worker=Worker(env[0],env[1],NoModel())
+        @app.post('/__fixture__/work')
+        def work(body:dict,authorization:str=Header()):
+            assert authorization=='Bearer synthetic-test-A'
+            job=env[0].claim(worker.id,env[1].lease_seconds)
+            assert job['id']==body['run_id']
+            worker.process(job)
+            return {'run_id':job['id']}
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        (tmp_path/'info.json').write_text(json.dumps(dict(base=f'http://127.0.0.1:{port}',project=env[5],
+            app=aid,resource=rid,source=source['id'],plan=plan,lost=lost)))
+        server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=port,log_level='error'))
+        thread=threading.Thread(target=server.run,daemon=True);thread.start()
+        try:
+            deadline=time.monotonic()+10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic()<deadline
+                time.sleep(.01)
+            assert shutil.which('node')
+            child=subprocess.run(['node','tests/csv_dag_instances.cjs',str(tmp_path)],capture_output=True,text=True,timeout=90)
+            (tmp_path/'driver.log').write_text(child.stdout+child.stderr)
+>           assert child.returncode==0,child.stdout+child.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: lost acceptance or read retains frozen intent
+E                 at check (/workspace/Sim2Act/tests/csv_dag_instances.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/csv_dag_instances.cjs:19:1 {
+E               generatedMessage: false,
+E               code: 'ERR_ASSERTION',
+E               actual: false,
+E               expected: true,
+E               operator: '==',
+E               diff: 'simple'
+E             }
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_instances.cjs', '/tmp/sim2act-dag-reuse-20261010/ui3/test_actual_dag_int...sage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n").returncode
+
+tests/test_csv_dag_instances_ui.py:47: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_dag_instances_ui.py::test_actual_dag_internal_reuse_and_cold_new_column_page[read]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 passed, 1 warning in 18.03s

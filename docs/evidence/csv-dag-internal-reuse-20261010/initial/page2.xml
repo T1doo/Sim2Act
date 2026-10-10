@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="22" time="41.329" timestamp="2026-10-10T03:52:16.353642+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_csv_dag_instances" name="test_actual_two_nodes_two_cold_columns_instances_and_read_only_recovery" time="8.742" /><testcase classname="tests.test_csv_dag_instances" name="test_unfinished_source_cannot_prepare_release" time="0.395" /><testcase classname="tests.test_csv_dag_instances" name="test_invalid_new_input_and_request_replay_write_nothing[missing]" time="1.405" /><testcase classname="tests.test_csv_dag_instances" name="test_invalid_new_input_and_request_replay_write_nothing[text]" time="1.441" /><testcase classname="tests.test_csv_dag_instances" name="test_invalid_new_input_and_request_replay_write_nothing[override]" time="1.439" /><testcase classname="tests.test_csv_dag_instances" name="test_invalid_new_input_and_request_replay_write_nothing[same-key]" time="1.558" /><testcase classname="tests.test_csv_dag_instances" name="test_invalid_new_input_and_request_replay_write_nothing[release]" time="1.572" /><testcase classname="tests.test_csv_dag_instances" name="test_invalid_new_input_and_request_replay_write_nothing[revision]" time="1.385" /><testcase classname="tests.test_csv_dag_instances" name="test_invalid_new_input_and_request_replay_write_nothing[replay]" time="1.284" /><testcase classname="tests.test_csv_dag_instances" name="test_changed_authority_provenance_or_cas_never_appends_result[grant]" time="1.429" /><testcase classname="tests.test_csv_dag_instances" name="test_changed_authority_provenance_or_cas_never_appends_result[source]" time="1.418" /><testcase classname="tests.test_csv_dag_instances" name="test_changed_authority_provenance_or_cas_never_appends_result[instance-aba]" time="1.642" /><testcase classname="tests.test_csv_dag_instances" name="test_changed_authority_provenance_or_cas_never_appends_result[binding-delete]" time="1.519" /><testcase classname="tests.test_csv_dag_instances" name="test_changed_authority_provenance_or_cas_never_appends_result[binding-input]" time="1.522" /><testcase classname="tests.test_csv_dag_instances" name="test_changed_authority_provenance_or_cas_never_appends_result[receipt]" time="1.655" /><testcase classname="tests.test_csv_dag_instances" name="test_cold_lease_reclaim_and_old_fence_no_duplicate_operations" time="2.426" /><testcase classname="tests.test_csv_dag_instances" name="test_cross_owner_control_metadata_and_other_instance_rejected" time="1.337" /><testcase classname="tests.test_csv_dag_instances" name="test_coherent_typed_output_tamper_cannot_replace_actual_operations" time="2.546" /><testcase classname="tests.test_csv_dag_instances" name="test_release_origin_seal_rejects_family_downgrade" time="0.983" /><testcase classname="tests.test_csv_dag_instances" name="test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_failure" time="2.673" /><testcase classname="tests.test_csv_dag_instances" name="test_preparation_and_commit_recover_exact_intent_without_duplicate_version" time="0.900" /><testcase classname="tests.test_csv_dag_instances_ui" name="test_actual_dag_internal_reuse_and_cold_new_column_page[post]" time="1.935"><failure message="AssertionError: Error: VERSION_CONFLICT&#10;      at csvDagRead (http://127.0.0.1:44537/:123:80)&#10;      at async /workspace/Sim2Act/tests/csv_dag_instances.cjs:14:104&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_instances.cjs', '/tmp/sim2act-dag-reuse-20261010/page2/test_actual_dag_i... at csvDagRead (http://127.0.0.1:44537/:123:80)\n    at async /workspace/Sim2Act/tests/csv_dag_instances.cjs:14:104\n').returncode">env = (&lt;sim2act.db.Store object at 0x7ffb221c4ce0&gt;, Settings(database_url='sqlite:////tmp/sim2act-dag-reuse-20261010/page2/t...106d6588bd44e081ca40ec6e26df03', 'user_1adec84e0d7d4037b719bc152b4bfcd2', 'proj_f92d69a2be164ace8f6a0f3249dadb3e', ...)
+tmp_path = PosixPath('/tmp/sim2act-dag-reuse-20261010/page2/test_actual_dag_internal_reuse0')
+lost = 'post'
+
+    @pytest.mark.parametrize('lost', ['post','read'])
+    def test_actual_dag_internal_reuse_and_cold_new_column_page(env,tmp_path,lost):
+        aid,rid,plan,_,source=setup(env)
+        app=create_app(env[0],env[1]);worker=Worker(env[0],env[1],NoModel())
+        @app.post('/__fixture__/work')
+        def work(body:dict,authorization:str=Header()):
+            assert authorization=='Bearer synthetic-test-A'
+            job=env[0].claim(worker.id,env[1].lease_seconds)
+            assert job['id']==body['run_id']
+            worker.process(job)
+            return {'run_id':job['id']}
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        (tmp_path/'info.json').write_text(json.dumps(dict(base=f'http://127.0.0.1:{port}',project=env[5],
+            app=aid,resource=rid,source=source['id'],plan=plan,lost=lost)))
+        server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=port,log_level='error'))
+        thread=threading.Thread(target=server.run,daemon=True);thread.start()
+        try:
+            deadline=time.monotonic()+10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic()&lt;deadline
+                time.sleep(.01)
+            assert shutil.which('node')
+            child=subprocess.run(['node','tests/csv_dag_instances.cjs',str(tmp_path)],capture_output=True,text=True,timeout=90)
+            (tmp_path/'driver.log').write_text(child.stdout+child.stderr)
+&gt;           assert child.returncode==0,child.stdout+child.stderr
+E           AssertionError: Error: VERSION_CONFLICT
+E                 at csvDagRead (http://127.0.0.1:44537/:123:80)
+E                 at async /workspace/Sim2Act/tests/csv_dag_instances.cjs:14:104
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_instances.cjs', '/tmp/sim2act-dag-reuse-20261010/page2/test_actual_dag_i... at csvDagRead (http://127.0.0.1:44537/:123:80)\n    at async /workspace/Sim2Act/tests/csv_dag_instances.cjs:14:104\n').returncode
+
+tests/test_csv_dag_instances_ui.py:46: AssertionError</failure></testcase></testsuite></testsuites>

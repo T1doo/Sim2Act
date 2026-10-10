@@ -1,0 +1,64 @@
+....................F....s.............................................. [ 97%]
+..                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_failure _
+
+env = (<sim2act.db.Store object at 0x7f40dbc08080>, Settings(database_url='sqlite:////tmp/sim2act-dag-reuse-20261010/sqlite/...b28f52ddb84fab9e0c9affa6c7c7a1', 'user_cb14e54ad0fd497aabe7ad9f03fff40e', 'proj_9347711ceaf847ccb7faab96aa95b31d', ...)
+
+    def test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_failure(env):
+        from sqlalchemy import event
+        _, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+        w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
+        assert dag.advance(w,job) and dag.advance(w,job)
+        def reject_terminal(conn,cursor,statement,parameters,context,executemany):
+            if context.compiled.statement.is_update and context.compiled.statement.table is runs and context.compiled.params.get('status') == 'SUCCEEDED':
+                raise RuntimeError('owned fixture injects failure after typed append, before terminal state')
+        event.listen(env[0].engine,'before_cursor_execute',reject_terminal)
+        try:
+>           with pytest.raises(RuntimeError,match='owned fixture'): dag.advance(w,job)
+                                                                    ^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_dag_instances.py:250: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_dag.py:667: in advance
+    with store.tx() as c:
+         ^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/db.py:489: in tx
+    c.exec_driver_sql("BEGIN IMMEDIATE")
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1889: in _exec_single_context
+    str_statement, effective_parameters = fn(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/events.py:183: in wrap_before_cursor_execute
+    orig_fn(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+conn = <sqlalchemy.engine.base.Connection object at 0x7f40e01ab680>
+cursor = <sqlite3.Cursor object at 0x7f40e14d4f40>
+statement = 'BEGIN IMMEDIATE', parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f40e01a8b60>
+executemany = False
+
+    def reject_terminal(conn,cursor,statement,parameters,context,executemany):
+>       if context.compiled.statement.is_update and context.compiled.statement.table is runs and context.compiled.params.get('status') == 'SUCCEEDED':
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'NoneType' object has no attribute 'statement'
+
+tests/test_csv_dag_instances.py:246: AttributeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_dag_instances.py::test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_failure
+1 failed, 72 passed, 1 skipped, 1 warning in 124.05s (0:02:04)

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="18.032" timestamp="2026-10-10T03:53:21.700554+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_csv_dag_instances_ui" name="test_actual_dag_internal_reuse_and_cold_new_column_page[post]" time="13.499" /><testcase classname="tests.test_csv_dag_instances_ui" name="test_actual_dag_internal_reuse_and_cold_new_column_page[read]" time="4.445"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: lost acceptance or read retains frozen intent&#10;      at check (/workspace/Sim2Act/tests/csv_dag_instances.cjs:5:29)&#10;      at /workspace/Sim2Act/tests/csv_dag_instances.cjs:19:1 {&#10;    generatedMessage: false,&#10;    code: 'ERR_ASSERTION',&#10;    actual: false,&#10;    expected: true,&#10;    operator: '==',&#10;    diff: 'simple'&#10;  }&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_instances.cjs', '/tmp/sim2act-dag-reuse-20261010/ui3/test_actual_dag_int...sage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7f5da06bdc10&gt;, Settings(database_url='sqlite:////tmp/sim2act-dag-reuse-20261010/ui3/tes...22bb446e404682985e3ce64f009c8a', 'user_1162d94ff48d47d185b4e378e6476438', 'proj_94f804699c724a8b8065f93f8ac76f93', ...)
+tmp_path = PosixPath('/tmp/sim2act-dag-reuse-20261010/ui3/test_actual_dag_internal_reuse1')
+lost = 'read'
+
+    @pytest.mark.parametrize('lost', ['post','read'])
+    def test_actual_dag_internal_reuse_and_cold_new_column_page(env,tmp_path,lost):
+        aid,rid,plan,_,source=setup(env)
+        plan.pop("cached", None)
+        app=create_app(env[0],env[1]);worker=Worker(env[0],env[1],NoModel())
+        @app.post('/__fixture__/work')
+        def work(body:dict,authorization:str=Header()):
+            assert authorization=='Bearer synthetic-test-A'
+            job=env[0].claim(worker.id,env[1].lease_seconds)
+            assert job['id']==body['run_id']
+            worker.process(job)
+            return {'run_id':job['id']}
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        (tmp_path/'info.json').write_text(json.dumps(dict(base=f'http://127.0.0.1:{port}',project=env[5],
+            app=aid,resource=rid,source=source['id'],plan=plan,lost=lost)))
+        server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=port,log_level='error'))
+        thread=threading.Thread(target=server.run,daemon=True);thread.start()
+        try:
+            deadline=time.monotonic()+10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic()&lt;deadline
+                time.sleep(.01)
+            assert shutil.which('node')
+            child=subprocess.run(['node','tests/csv_dag_instances.cjs',str(tmp_path)],capture_output=True,text=True,timeout=90)
+            (tmp_path/'driver.log').write_text(child.stdout+child.stderr)
+&gt;           assert child.returncode==0,child.stdout+child.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: lost acceptance or read retains frozen intent
+E                 at check (/workspace/Sim2Act/tests/csv_dag_instances.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/csv_dag_instances.cjs:19:1 {
+E               generatedMessage: false,
+E               code: 'ERR_ASSERTION',
+E               actual: false,
+E               expected: true,
+E               operator: '==',
+E               diff: 'simple'
+E             }
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_instances.cjs', '/tmp/sim2act-dag-reuse-20261010/ui3/test_actual_dag_int...sage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n").returncode
+
+tests/test_csv_dag_instances_ui.py:47: AssertionError</failure></testcase></testsuite></testsuites>
