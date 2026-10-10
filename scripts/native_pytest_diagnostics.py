@@ -12,10 +12,14 @@ from pathlib import Path
 
 
 def redact(text):
-    text = re.sub(r"postgres(?:ql)?(?:\+\w+)?://[^\s\"'<>]+", "<redacted-database-url>", text)
+    text = re.sub(r"(?i)postgres(?:ql)?(?:\+\w+)?://[^\s\"'<>]+", "<redacted-database-url>", text)
     text = re.sub(r"(?i)\bBearer\s+[^\s\"'<>]+", "Bearer <redacted>", text)
+    # Tracebacks include both evaluated values and their source-code escaping.
+    # Hide the rest of a credential-bearing line rather than guessing the quote
+    # layer; fully quoted multiline values must also be consumed as one value.
     return re.sub(
-        r"(?i)(\b(?:[\w]*password|[\w]*authorization|[\w]*api[_-]?key|[\w]*token|[\w]*secret)\b[\"']?\s*[:=]\s*[\"']?)[^\s,\"'}]+",
+        r"(?i)(\b(?:[\w]*password|[\w]*authorization|[\w]*api[_-]?key|[\w]*token|[\w]*secret)\b[\"']?[ \t]*[:=][ \t]*)"
+        r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\r\n]*)[^\r\n]*",
         r"\1<redacted>",
         text,
     )

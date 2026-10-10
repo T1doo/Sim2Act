@@ -18,10 +18,18 @@ def test_actual_pytest_failure_evidence_survives_incomplete_suite(tmp_path, mode
     root = Path(__file__).resolve().parents[1]
     trace = tmp_path / "events.jsonl"
     xml = tmp_path / "junit.xml"
+    secrets = [
+        "fake-db-secret",
+        "fake-bearer-secret",
+        "fake-basic-secret",
+        "fake-spaced-password",
+        "fake-escaped-secret",
+        "fake-unquoted-secret",
+    ]
     if mode != "collection_error":
-        code = """
+        code = r"""
 def test_failure():
-    assert False, "diagnostic assertion; postgresql+psycopg://fixture:fake-db-secret@localhost/db; Bearer fake-bearer-secret"
+    assert False, "diagnostic assertion; postgresql+psycopg://fixture:fake-db-secret@localhost/db; Bearer fake-bearer-secret; authorization='Basic fake-basic-secret'; password='first fake-spaced-password'; secret='first\\' fake-escaped-secret'; authorization=Basic fake-unquoted-secret"
 
 def test_pass():
     assert True
@@ -70,8 +78,8 @@ def test_never_started():
         line for line in child.stdout.splitlines() if line.startswith("SIM2ACT_CI_DIAGNOSTIC ")
     )
     assert "diagnostic assertion" in diagnostics
-    assert "fake-db-secret" not in diagnostics + trace.read_text()
-    assert "fake-bearer-secret" not in diagnostics + trace.read_text()
+    for secret in secrets:
+        assert secret not in diagnostics + trace.read_text()
     if mode == "interrupt":
         assert result["collected"] == 4 and result["started"] == 3 and result["finished"] == 2
         assert result["not_started_count"] == 1
@@ -114,7 +122,8 @@ def test_never_started():
     assert (
         '"suite_complete": true' if mode == "failure" else '"suite_complete": false'
     ) in report.stdout
-    assert "fake-db-secret" not in report.stdout and "fake-bearer-secret" not in report.stdout
+    for secret in secrets:
+        assert secret not in report.stdout
     (tmp_path / "child.log").write_text(child.stdout + child.stderr)
     (tmp_path / "report.log").write_text(report.stdout + report.stderr)
 
