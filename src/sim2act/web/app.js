@@ -215,7 +215,8 @@ $("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("run-history-refresh").onclick=safe(async()=>refresh());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
 $("project-select").onchange = safe(async () => {if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
-document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => ["projects","apps","resources"].forEach(id => $(id).hidden=id!==b.dataset.tab));
+document.querySelectorAll("#workspace-nav [data-tab]").forEach(b => b.onclick = () => selectWorkspace(b.dataset.tab));
+selectWorkspace("projects");
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
 let backgroundRefreshInFlight=false;
 setInterval(async () => {
@@ -558,6 +559,10 @@ $("goal-card-form").onsubmit=safe(async()=>{
 
 function selectWorkspace(id) {
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
+  document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
+    if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  });
 }
 function updateCandidateCreate() {
   $("goal-candidate-create").disabled=candidateBusy || !candidatePanelReady || goalCardLoading || goalCardSaving;
