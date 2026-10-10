@@ -296,7 +296,7 @@ def test_complete_intent_current_authority_and_budget_reject_zero_write(env, att
             )
     elif attack == "target-version":
         candidate = copy.deepcopy(target["candidate"])
-        candidate["goal"] += " changed"
+        candidate["goal"]["known"] += " changed"
         with env[0].tx() as c:
             c.execute(
                 update(app_drafts)
