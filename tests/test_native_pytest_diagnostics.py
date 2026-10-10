@@ -28,7 +28,9 @@ def test_fixed_remaining_manifest_rejects_missing_duplicate_and_changed_nodes(tm
 
 
 @pytest.mark.parametrize("state", ["complete", "skipped", "interrupted", "partial_tail",
-                                   "missing_selection", "missing_full", "wrong_full_hash", "wrong_full_count"])
+                                   "missing_selection", "missing_full", "wrong_full_hash", "wrong_full_count",
+                                   "foreign_start", "foreign_finish", "wrong_header", "extra_session",
+                                   "foreign_phase", "swapped_events"])
 def test_remaining_scope_requires_all_actual_phases_and_complete_tail(tmp_path, state):
     load = runpy.run_path(str(ROOT / "scripts/native_pytest_diagnostics.py"))["remaining11_nodes"]
     nodes = load()
@@ -56,13 +58,26 @@ def test_remaining_scope_requires_all_actual_phases_and_complete_tail(tmp_path, 
         records[2]["full_nodes_sha256"] = "different"
     elif state == "wrong_full_count":
         records[2]["full_count"] += 1
+    elif state in {"foreign_start", "foreign_finish"}:
+        event = "node_start" if state == "foreign_start" else "node_finish"
+        next(r for r in records if r["event"] == event)["nodeid"] = "foreign-node"
+    elif state == "wrong_header":
+        records[0]["event"] = "different-event"
+    elif state == "extra_session":
+        records.insert(1, dict(event="session_start", pid=1))
+    elif state == "foreign_phase":
+        records.insert(-1, dict(event="node_report", nodeid="foreign-node", phase="call", outcome="passed", pid=1))
+    elif state == "swapped_events":
+        start = next(i for i, r in enumerate(records) if r["event"] == "node_start")
+        finish = next(i for i, r in enumerate(records) if r["event"] == "node_finish")
+        records[start], records[finish] = records[finish], records[start]
     path = tmp_path / "events.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in records) + ('\n{"event":' if state == "partial_tail" else "\n"))
     result = summarize(path)
     assert result["scope"] == "DIAGNOSTIC_ONLY_REMAINING11"
     assert result["required_targets_complete"] == (state == "complete")
     assert len(result["required_outcomes"]) == 11
-    assert result["not_started_count"] == 0
+    assert result["not_started_count"] == (1 if state == "foreign_start" else 0)
 
 
 def test_remaining_requested_but_missing_selection_is_not_verified(tmp_path):

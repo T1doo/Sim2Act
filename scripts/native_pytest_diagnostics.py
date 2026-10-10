@@ -215,16 +215,29 @@ def summarize(path):
         full = [r for r in records if r["event"] == "full_collection"]
         full_nodes = full[0]["nodes"] if len(full) == 1 else []
         pid = requested[0].get("pid") if len(requested) == 1 else None
+        expected_sequence = [(event, None, None) for event in
+                             ("session_start", "full_collection", "selection", "collection")]
+        for node in required:
+            expected_sequence.extend([
+                ("node_start", node, None),
+                *( ("node_report", node, phase) for phase in ("setup", "call", "teardown") ),
+                ("node_finish", node, None),
+            ])
+        expected_sequence.append(("session_finish", None, None))
+        actual_sequence = [(r["event"], r.get("nodeid"), r.get("phase")) for r in records
+                           if r["event"] != "collection_summary"]
         # A request header is evidence of intended scope, never a replacement
         # for the actual selection/full-collection records or their session.
         selection_verified = (
             len(requested) == len(selected) == len(full) == len(collected) == len(ends) == 1
+            and actual_sequence == expected_sequence
             and requested[0] is records[0] and ends[0] is records[-1]
             and isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
             and all(r.get("pid") == pid for r in records)
             and records.index(requested[0]) < records.index(full[0])
             < records.index(selected[0]) < records.index(collected[0])
             and selection["scope"] == "DIAGNOSTIC_ONLY_REMAINING11"
+            and required == remaining11_nodes()
             and requested[0]["required_nodes"] == required == collected[0]["nodes"]
             and isinstance(full_nodes, list) and all(isinstance(node, str) for node in full_nodes)
             and len(set(full_nodes)) == len(full_nodes) >= 11
@@ -234,6 +247,8 @@ def summarize(path):
             and selection["deselected_count"] == len(full_nodes) - 11
             and sum(r["event"] == "node_start" for r in records) == 11
             and sum(r["event"] == "node_finish" for r in records) == 11
+            and started == finished == set(required)
+            and len(reports) == 33 and all(r["nodeid"] in required for r in reports)
         )
         outcomes = {
             node: {phase: [r["outcome"] for r in reports if r["nodeid"] == node and r["phase"] == phase]
