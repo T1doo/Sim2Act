@@ -40,6 +40,7 @@ async function refresh() {
   try {materials = await api(`/api/projects/${pid}/resources`);}
   catch(error){if(current() && typeof invalidateConditionalSource === "function")invalidateConditionalSource("授权列表读取失败");throw error;}
   if (!current()) return;
+  if(typeof renderResourceMaterial === "function")renderResourceMaterial();
   if(typeof reconcileConditionalSources === "function")reconcileConditionalSources(materials);
   refs = materials.map(x => x.id);
   const selectedGoals=Array.from($("goal-card-resources").selectedOptions).map(o=>o.value);
@@ -182,6 +183,7 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  if(typeof clearResourceMaterial === "function")clearResourceMaterial();
   if(typeof clearReportManifest === "function")clearReportManifest();
   if(typeof clearReportApps === "function")clearReportApps();
   if(typeof clearReportSave === "function")clearReportSave();
@@ -211,7 +213,7 @@ $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").va
 $("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("run-history-refresh").onclick=safe(async()=>refresh());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
+$("project-select").onchange = safe(async () => {if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => ["projects","apps","resources"].forEach(id => $(id).hidden=id!==b.dataset.tab));
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
 let backgroundRefreshInFlight=false;
@@ -692,3 +694,98 @@ $("run-submit-read").onclick=safe(async()=>{
   renderRunSubmission();
   await readAcceptedOrdinaryRun(entry,runUserSelectionGeneration);
 });
+
+"use strict";
+// Browser-local import; existing resource POST remains the only explicit save/authorization.
+let resourceFileGeneration=0, resourceFileReader=null, resourceFileSnapshot=null;
+const resourceSaveRequests=new Map();
+function resourceContext() {return {identity:token,connection:identityConnectionGeneration,project:$("project-select").value,generation:resourceFileGeneration};}
+function resourceContextCurrent(c) {return c.identity===token && c.connection===identityConnectionGeneration && c.project===$("project-select").value && c.generation===resourceFileGeneration;}
+function resourceSaveKey(c=resourceContext()) {return JSON.stringify([c.identity,c.project]);}
+function renderResourceMaterial() {
+  const pending=resourceSaveRequests.get(resourceSaveKey());
+  for(const id of ["resource-file","resource-name","format","content","resource-file-clear"])$(id).disabled=!!pending;
+  $("resource-save").disabled=!!resourceFileReader || !!pending || !$("project-select").value;
+  $("resource-save-read").hidden=!["unknown","accepted"].includes(pending?.state);
+  $("resource-save-reset").hidden=$("resource-save-read").hidden;
+  if(pending){
+    $("resource-name").value=pending.body.name;$("format").value=pending.body.format;$("content").value=pending.body.content;
+    $("resource-file-status").textContent=pending.state==="unknown" ? "保存回执未知：材料可能已保存并授权。禁止重发；先刷新材料列表核对名称与内容，不能仅凭相同内容认定是本次保存。" : pending.state==="accepted" ? `先前保存已接受：${pending.body.name} · ${pending.saved.id}。页面选择已变化，未自动继续；请刷新材料列表核对。` : "正在保存已核对材料…";
+  }
+}
+function cancelResourceFileRead() {
+  resourceFileGeneration++;
+  const reader=resourceFileReader;resourceFileReader=null;
+  if(reader?.readyState===FileReader.LOADING)reader.abort();
+}
+function clearResourceMaterial() {
+  cancelResourceFileRead();resourceFileSnapshot=null;
+  $("resource-file").value="";$("resource-name").value="";$("content").value="";$("format").value="csv";
+  $("resource-file-status").textContent="";renderResourceMaterial();
+}
+function editResourceMaterial() {
+  cancelResourceFileRead();resourceFileSnapshot=null;$("resource-file").value="";
+  $("resource-file-status").textContent="手工文本模式：保存当前表单内容；已解除原文件绑定。";renderResourceMaterial();
+}
+function selectResourceFile() {
+  if(resourceSaveRequests.has(resourceSaveKey()))return;
+  cancelResourceFileRead();resourceFileSnapshot=null;
+  $("resource-name").value="";$("content").value="";
+  const c=resourceContext(),generation=resourceFileGeneration,files=$("resource-file").files;
+  const current=()=>resourceContextCurrent(c) && generation===resourceFileGeneration;
+  const fail=message=>{if(current()){$("resource-file").value="";$("resource-file-status").textContent=message;renderResourceMaterial();}};
+  if(!files?.length){clearResourceMaterial();return;}
+  if(!c.project){fail("先选择项目，再选择 CSV 文件。");return;}
+  if(files.length!==1){fail("一次只能选择一个 CSV 文件。");return;}
+  const file=files[0];
+  if(!/\.csv$/i.test(file.name) || file.name.length>200){fail("请选择名称不超过200字的 .csv 文件。");return;}
+  if(file.size===0 || file.size>32768){fail("CSV 文件须为1–32768字节。");return;}
+  const reader=new FileReader();resourceFileReader=reader;
+  $("resource-file-status").textContent="正在本页读取 CSV；尚未保存或授权。";renderResourceMaterial();
+  reader.onload=()=>{
+    if(!current())return;
+    resourceFileReader=null;
+    try {
+      const bytes=new Uint8Array(reader.result);
+      if(bytes.length!==file.size || (bytes[0]===0xef && bytes[1]===0xbb && bytes[2]===0xbf))throw Error("请选择无 BOM 的 UTF-8 CSV；文件尚未保存。");
+      const content=new TextDecoder("utf-8",{fatal:true}).decode(bytes);
+      if(content.includes("\0"))throw Error("CSV 含不支持的空字节；文件尚未保存。");
+      $("resource-name").value=file.name;$("format").value="csv";$("content").value=content;
+      resourceFileSnapshot={...c,content,displayContent:$("content").value,name:file.name,bytes:file.size};
+      $("resource-file-status").textContent=`已在本页读取 ${file.name} · ${file.size}字节 · 目标项目：${$("project-select").selectedOptions[0].textContent}。请核对下方内容，再保存并授权；保存保留原文件换行，手改则转为文本模式。`;
+    } catch(error){fail(error.name==="TypeError" ? "文件不是有效 UTF-8 CSV；请另存为无 BOM UTF-8 后重选。" : error.message);}
+    renderResourceMaterial();
+  };
+  reader.onerror=()=>{if(current()){resourceFileReader=null;fail("本地文件读取失败；未保存，请重新选择。");}};
+  reader.onabort=()=>{if(current()){resourceFileReader=null;fail("本地读取已取消；未保存。");}};
+  reader.readAsArrayBuffer(file);
+}
+async function saveResourceMaterial() {
+  const c=resourceContext(),key=resourceSaveKey(c);
+  if(!c.project)throw Error("先选择项目");
+  if(resourceFileReader || resourceSaveRequests.has(key))return;
+  const file=resourceFileSnapshot;
+  const original=file && resourceContextCurrent(file) && $("resource-name").value===file.name && $("format").value==="csv" && $("content").value===file.displayContent;
+  const body={name:$("resource-name").value,format:$("format").value,content:original ? file.content : $("content").value};
+  const pending={body:Object.freeze(body),state:"saving"};resourceSaveRequests.set(key,pending);renderResourceMaterial();
+  let saved;
+  try {saved=await api(`/api/projects/${c.project}/resources`,"POST",body);if(typeof saved?.id!=="string" || !/^res_[a-f0-9]{32}$/.test(saved.id))throw Error("保存回执缺失");}
+  catch(error){
+    if(error.httpStatus>=400 && error.httpStatus<500 && ![408,425,429].includes(error.httpStatus)){resourceSaveRequests.delete(key);if(c.identity===token && c.project===$("project-select").value){renderResourceMaterial();$("resource-file-status").textContent=`保存被拒绝：${error.message}`;}}
+    else {pending.state="unknown";if(resourceContextCurrent(c))renderResourceMaterial();}
+    return;
+  }
+  if(!resourceContextCurrent(c)){pending.state="accepted";pending.saved=saved;if(c.identity===token && c.project===$("project-select").value)renderResourceMaterial();return;}
+  resourceSaveRequests.delete(key);
+  clearResourceMaterial();$("resource-file-status").textContent=`已保存并授权当前项目：${body.name} · ${saved.id}。可在应用中选择此 CSV；创建草案仍需单独确认授权。`;
+  const readContext=resourceContext();
+  try {await refresh();}
+  catch(error){if(resourceContextCurrent(readContext))$("resource-file-status").textContent+=` 材料列表读取失败：${error.message}；保存回执已收到，只需刷新列表核对，不要重复保存。`;}
+}
+$("resource-file").onchange=selectResourceFile;
+$("resource-file-clear").onclick=()=>clearResourceMaterial();
+for(const id of ["resource-name","format","content"])$(id).oninput=editResourceMaterial;
+$("resource-form").onsubmit=safe(saveResourceMaterial);
+$("resource-save-read").onclick=safe(async()=>{const c=resourceContext();await refresh();if(resourceContextCurrent(c) && resourceSaveRequests.get(resourceSaveKey(c))?.state==="unknown")$("resource-file-status").textContent+=" 已重新读取材料列表；请手动核对，读取不会确认原保存或重发。";});
+$("resource-save-reset").onclick=()=>{const key=resourceSaveKey();if(!["unknown","accepted"].includes(resourceSaveRequests.get(key)?.state))return;resourceSaveRequests.delete(key);clearResourceMaterial();$("resource-file-status").textContent="已结束本页原意图核对；没有新增保存、删除材料或重新发送。新材料仍需重新选择并显式保存。";};
+renderResourceMaterial();
