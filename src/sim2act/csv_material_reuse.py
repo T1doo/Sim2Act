@@ -73,7 +73,7 @@ def recipe(store, c, user, rid, limits):
     execution = row["snapshot"].get("execution_source", {})
     instances.require(execution.get("version") in instances.VERSIONS)
     # One material transfer, not a recursive chain of source-release interpreters.
-    if execution["plan_key"].startswith(PREFIX):
+    if execution["plan_key"].startswith((PREFIX, "logic-plan-", "logic-instance-plan-")):
         raise DomainError(
             "UNSUPPORTED_CAPABILITY", "Select the original completed CSV flow version"
         )
@@ -93,16 +93,32 @@ def recipe(store, c, user, rid, limits):
 
 
 def target(store, c, user, rel, aid, cap):
-    pid = rel["project_id"]
+    return target_for_schema(store, c, user, rel["project_id"], aid, cap,
+        rel["snapshot"]["data_schema"], excluded_id=rel["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"],
+        excluded_hash=rel["snapshot"]["execution_source"]["source_hash"])
+
+
+def target_for_schema(store, c, user, pid, aid, cap, schema, *, excluded_id=None, excluded_hash=None):
+    # Reject original-resource aliases before any family/resource loading. This
+    # metadata projection never loads the candidate goal, columns or source hash.
+    meta = c.execute(select(app_drafts.c.project_id,
+        app_drafts.c.candidate["manifest"]["data_bindings"].label("bindings"),
+        app_drafts.c.candidate["actions"][0]["executor"].label("executor"))
+        .where(app_drafts.c.id == aid)).mappings().first()
+    if meta is None or meta["project_id"] != pid:
+        raise DomainError("PERMISSION_DENIED")
+    bindings, executor = meta["bindings"], meta["executor"]
+    if (not isinstance(bindings, list) or len(bindings) != 1 or not isinstance(bindings[0], dict) or not isinstance(executor, dict)
+            or executor.get("kind") != "registered_tool" or executor.get("ref") != "data.aggregate_csv"):
+        raise DomainError("UNSUPPORTED_CAPABILITY", "Target must be a registered CSV draft")
+    if bindings[0].get("resource_ref") == excluded_id:
+        raise DomainError("INVALID_INPUT", "Original resource is outside the data-free target path")
     saved = graph.current(store, c, user, pid, aid, cap)
     draft, manifest, action, _, rows, _ = graph.load_family(store, c, user, pid, aid, cap)
     if action.executor.kind != "registered_tool" or action.executor.ref != "data.aggregate_csv":
         raise DomainError(
             "UNSUPPORTED_CAPABILITY", "Target must be an existing registered CSV draft"
         )
-    source_id = rel["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0][
-        "resource_ref"
-    ]
     rid = manifest.data_bindings[0].resource_ref
     instances.require(len(rows) == 1 and rows[0]["id"] == rid)
     raw = dag.authorized_read(
@@ -113,11 +129,11 @@ def target(store, c, user, rel, aid, cap):
     columns = [v["name"] for v in guide["columns"] if v["numeric"]]
     if raw["format"] != "csv" or guide["error"] or not columns:
         raise DomainError("INVALID_INPUT", "New CSV requires unique finite numeric columns")
-    if rid == source_id or raw["hash"] == rel["snapshot"]["execution_source"]["source_hash"]:
+    if rid == excluded_id or excluded_hash is not None and raw["hash"] == excluded_hash:
         raise DomainError("INVALID_INPUT", "Choose another CSV with different bytes")
     instances.require(
         fingerprint(lifecycle.record_schema(draft["candidate"]))
-        == fingerprint(rel["snapshot"]["data_schema"])
+        == fingerprint(schema)
     )
     return dict(
         target_app_id=aid,

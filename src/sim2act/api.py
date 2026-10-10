@@ -728,6 +728,10 @@ def create_app(store=None, settings=None):
     def csv_dag_js():
         return FileResponse(web / "csv-dag.js", media_type="text/javascript")
 
+    @app.get("/csv-logic.js")
+    def csv_logic_js():
+        return FileResponse(web / "csv-logic.js", media_type="text/javascript")
+
     @app.get("/project-revalidation.js")
     def project_revalidation_js():
         return FileResponse(web / "project-revalidation.js", media_type="text/javascript")

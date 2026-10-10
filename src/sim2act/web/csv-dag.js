@@ -490,6 +490,7 @@ function dagReuseClear() {
 function dagReuseOpen(c) {c.reuse={busy:false,approval:null,release:null,instance:null,job:null,materialPlans:new Map()};dagReuseButtons(c);}
 function dagReuseButtons(c=csvDagContext) {
   if(!c||!csvDagCurrent(c)||!c.reuse)return;
+  if(typeof csvLogicButtons === "function")csvLogicButtons();
   const r=c.reuse,intent=dagReuseIntents.get(csvDagKey(c)),locked=r.busy||!!intent;
   for(const id of ["prepare","commit","history","create","run","release","instance","column","confirm","run-confirm"])$("dag-reuse-"+id).disabled=locked;
   $("dag-reuse-prepare").disabled=locked||c.job?.status!=="SUCCEEDED"||!dagReuseShape(c.plan);
@@ -536,11 +537,11 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   // Instance GET reauthorizes read_release and returns its exact fingerprint.
   // Only a matching immutable material release/plan in this context can avoid
   // duplicate GETs. Every fresh Instance proof and every seal remains mandatory.
-  const cachedRelease=[c.reuse.release,...(c.reuse.releases||[])].find(v=>v?.id===detail.release_id&&v.fingerprint===detail.release_fingerprint&&v.snapshot?.execution_source?.plan_key?.startsWith("material-plan-"));
+  const cachedRelease=[c.reuse.release,...(c.reuse.releases||[])].find(v=>v?.id===detail.release_id&&v.fingerprint===detail.release_fingerprint&&v.snapshot?.execution_source?.plan_key?.match(/^(material|logic)-plan-/));
   const rel=expected?.release||cachedRelease||await api(`/api/internal/releases/${detail.release_id}`);
   if(!csvDagCurrent(c))return;
   if(detail.id!==iid||rel.id!==detail.release_id||detail.source_app_id!==c.parent.id||detail.project_id!==c.parent.project||detail.runtime_id!==c.parent.app.runtime_id||detail.release_fingerprint!==rel.fingerprint||!await dagReuseReleaseSeal(rel,c)||!Array.isArray(detail.runs)||!Array.isArray(detail.data))throw Error("VERSION_CONFLICT");
-  const material=rel.snapshot.execution_source.plan_key.startsWith("material-plan-"),verifiedPlans=[];
+  const material=rel.snapshot.execution_source.plan_key.match(/^(material|logic)-plan-/),verifiedPlans=[];
   for(const run of detail.runs) {
     const e=rel.snapshot.execution_source;
     if(run.instance_id!==iid||run.release_id!==rel.id||run.execution_version!==e.version||run.run_id!==run.proof?.id||run.status!==run.proof.status)throw Error("VERIFICATION_FAILED");
@@ -631,7 +632,7 @@ async function dagReuseSubmit(kind,retry=false) {
       r.material=got;$("dag-material-proof").textContent=JSON.stringify(got,null,2);$("dag-material-status").textContent="新材料计划已核读回；手动打开后重新确认运行。尚未执行、保存版本或创建实例。";
     } else {
       if(made.instance_id!==intent.instance.id||made.execution_version!==intent.release.snapshot.execution_source.version||!/^run_[a-f0-9]{32}$/.test(made.run_id))throw Error("VERSION_CONFLICT");
-      if(intent.release.snapshot.execution_source.plan_key.startsWith("material-plan-")) {
+      if(intent.release.snapshot.execution_source.plan_key.match(/^(material|logic)-plan-/)) {
         // Instance readback already validates every full run proof. Bind the accepted
         // identity before painting, avoiding a second recursive proof read over PG.
         await dagReuseRead(c,intent.instance.id,{...made,input:intent.body.input,release:intent.release});

@@ -4,7 +4,7 @@ from fastapi import Depends, Request
 from pydantic import Field
 from sqlalchemy import select
 
-from . import app_jobs, csv_dag, csv_dag_instances, csv_material_reuse, lifecycle
+from . import app_jobs, csv_dag, csv_dag_instances, csv_logic_reuse, csv_material_reuse, lifecycle
 from .contracts import Strict
 from .db import (
     app_drafts,
@@ -181,6 +181,34 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/releases/{rid}/csv-materials")
     def material_options(rid: str, user=user_dependency):
         return csv_material_reuse.options(store, user, rid, limits)
+
+    @app.post("/api/internal/releases/{rid}/csv-logic-authorizations", status_code=201)
+    def authorize_logic(rid: str, body: csv_logic_reuse.AuthorizeInput, user=user_dependency):
+        return csv_logic_reuse.authorize(store, user, rid, body, limits)
+
+    @app.get("/api/projects/{pid}/csv-logics")
+    def logic_history(pid: str, user=user_dependency):
+        return csv_logic_reuse.history(store, user, pid, limits)
+
+    @app.get("/api/internal/csv-logics/{lid}")
+    def logic_read(lid: str, user=user_dependency):
+        return csv_logic_reuse.inspect(store, user, lid, limits)
+
+    @app.post("/api/internal/csv-logics/{lid}/revoke")
+    def logic_revoke(lid: str, body: csv_logic_reuse.RevokeInput, user=user_dependency):
+        return csv_logic_reuse.revoke(store, user, lid, body, limits)
+
+    @app.get("/api/internal/csv-logics/{lid}/materials")
+    def logic_materials(lid: str, user=user_dependency):
+        return csv_logic_reuse.options(store, user, lid, limits)
+
+    @app.post("/api/internal/csv-logics/{lid}/material-plans", status_code=201)
+    def logic_plan(lid: str, body: csv_logic_reuse.MaterialInput, user=user_dependency):
+        return csv_logic_reuse.propose(store, user, lid, body, limits)
+
+    @app.get("/api/internal/csv-logics/{lid}/material-plans/{aid}/{key}")
+    def logic_plan_read(lid: str, aid: str, key: str, user=user_dependency):
+        return csv_logic_reuse.inspect_plan(store, user, lid, aid, key, limits)
 
     @app.post("/api/internal/releases/{rid}/csv-material-plans", status_code=201)
     def material_plan(rid: str, body: csv_material_reuse.MaterialInput, user=user_dependency):

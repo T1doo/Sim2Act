@@ -133,6 +133,14 @@ class BranchInputs(Strict):
         return value
 
 
+class LogicOrigin(Strict):
+    version: Literal["internal.csv-data-free-logic.v1"]
+    logic_id: str = Field(pattern=r"^csvlogic_[a-f0-9]{32}$")
+    logic_fingerprint: str = Field(pattern=graph.HASH)
+    origin_key: str = Field(pattern=r"^logic-plan-[a-f0-9]{48}$")
+    binding_fingerprint: str = Field(pattern=graph.HASH)
+
+
 class PlanInput(KeyInput):
     expected_candidate_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
@@ -144,6 +152,7 @@ class PlanInput(KeyInput):
     # Keep legacy request dumps byte-compatible when the field was absent.
     wiring_patch: list[WirePatch] | None = Field(default=None, max_length=3,
                                                exclude_if=lambda value: value is None)
+    logic_origin: LogicOrigin | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class RunInput(KeyInput):
@@ -228,10 +237,16 @@ def compile_plan(candidate, column, limits, patches=None, branches=None):
 
 
 def build(store, c, user, pid, aid, body, limits):
+    from .csv_logic_reuse import plan_origin as logic_origin
     from .csv_material_reuse import plan_origin
     origin = plan_origin(store, c, user, pid, aid, body, limits)
+    logical = logic_origin(store, c, user, pid, aid, body, limits)
+    if origin is not None and logical is not None:
+        graph.conflict("Conflicting reuse origins")
     if origin is not None:
         limits = origin[1]
+    if logical is not None:
+        limits = logical[1]
     saved = graph.current(store, c, user, pid, aid, limits)
     draft, _, action, _, source_rows, _ = graph.load_family(store, c, user, pid, aid, limits)
     if action.executor.kind != "registered_tool" or action.executor.ref != "data.aggregate_csv":
@@ -286,6 +301,8 @@ def build(store, c, user, pid, aid, body, limits):
     if origin is not None:
         value["material_reuse"] = dict(version=origin[0]["version"],
             source_release_id=origin[0]["source_release_id"], binding_fingerprint=fingerprint(origin[0]))
+    if logical is not None:
+        value["logical_reuse"] = logical[0]
     return {**value, "plan_fingerprint": fingerprint(value)}
 
 
@@ -327,7 +344,7 @@ def enqueue(store, user, pid, aid, plan_key, body, limits):
 
 def enqueue_tx(store, c, user, pid, aid, plan_key, body, limits, *, run_id=None, internal_instance=None):
     plan = load_plan(store, c, user, pid, aid, plan_key, limits)
-    if "material_reuse" in plan:
+    if "material_reuse" in plan or "logical_reuse" in plan:
         # load_plan already reconstructed and reauthorized the complete origin.
         limits = Limits(**plan["definition"]["manifest"]["runtime_limits"])
     if plan["plan_fingerprint"] != body.expected_plan_fingerprint:
@@ -667,6 +684,8 @@ def commit_guard(worker, c, run, plan, *, tool_delta=0):
             job["context"][counter] + (tool_delta if counter == "tools" else 0) > min(getattr(current, cap), getattr(frozen, cap), getattr(declared, cap))
             for cap, counter in counts.items())):
         raise DomainError("BUDGET_EXHAUSTED", "Effective budget expired before commit")
+    from .csv_logic_reuse import commit_authority
+    commit_authority(worker.store, c, job, plan, current)
     return job
 
 

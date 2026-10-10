@@ -179,7 +179,7 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
         return dict(run_id=job["id"], app_run_id=old["id"], instance_id=i["id"], status=job["status"],
             version=job["version"], cached=True, execution_version=execution["version"])
     require(i["revision"] == revision and release["fingerprint"] == release_fp)
-    source_body, _ = read_pair(c, user, i["source_app_id"], "csv_dag_plan", execution["plan_key"], dag.PlanInput)
+    source_body, source_plan = read_pair(c, user, i["source_app_id"], "csv_dag_plan", execution["plan_key"], dag.PlanInput)
     body = source_body.model_dump(exclude_none=True)
     body["column"] = input_value["column"]
     body["composition"]["nodes"][1]["column"] = input_value["column"]
@@ -187,7 +187,12 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
     cap = Limits(**execution["limits"])
     # No broader platform defaults: compilation and the accepted contract use frozen caps.
     require(all(getattr(limits, k) >= getattr(cap, k) for k in Limits.model_fields), "Current budget tightened")
-    plan = dag.propose_tx(store, c, user, i["project_id"], i["source_app_id"], dag.PlanInput(**body), cap)
+    plan_body = dag.PlanInput(**body)
+    if "logical_reuse" in source_plan:
+        from .csv_logic_reuse import INSTANCE_PREFIX, prepare_instance_plan
+        plan_body = plan_body.model_copy(update={"request_key": INSTANCE_PREFIX + fingerprint([i["id"], key])[:48]})
+        plan_body = prepare_instance_plan(store, c, user, i["project_id"], i["source_app_id"], source_plan, plan_body, cap)
+    plan = dag.propose_tx(store, c, user, i["project_id"], i["source_app_id"], plan_body, cap)
     plan.pop("cached")
     rid, arid = new_id("run"), new_id("iapprun")
     s = dict(namespace=execution["version"], **request, run_id=rid, app_run_id=arid, release_id=release["id"],
@@ -248,12 +253,17 @@ def validate_binding(store, c, job, accepted, limits, *, authorize=True):
             and i["source_app_id"] == accepted["app_id"] and r["fingerprint"] == s["expected_release_fp"]
             and r["snapshot"]["execution_source"] == s["execution_source"]
             and s["limits"] == s["execution_source"]["limits"])
-        source_body, _ = read_pair(c, job["principal_id"], accepted["app_id"], "csv_dag_plan", s["execution_source"]["plan_key"], dag.PlanInput)
-        derived_body, _ = read_pair(c, job["principal_id"], accepted["app_id"], "csv_dag_plan", s["plan_key"], dag.PlanInput)
+        source_body, source_plan = read_pair(c, job["principal_id"], accepted["app_id"], "csv_dag_plan", s["execution_source"]["plan_key"], dag.PlanInput)
+        derived_body, derived_plan = read_pair(c, job["principal_id"], accepted["app_id"], "csv_dag_plan", s["plan_key"], dag.PlanInput)
         expected = source_body.model_dump(exclude_none=True)
         expected["column"] = s["input"]["column"]
         expected["composition"]["nodes"][1]["column"] = s["input"]["column"]
         expected["request_key"] = "instance-plan-" + fingerprint([i["id"], s["request_key"]])[:48]
+        if "logical_reuse" in source_plan:
+            from .csv_logic_reuse import INSTANCE_PREFIX
+            expected["request_key"] = INSTANCE_PREFIX + fingerprint([i["id"], s["request_key"]])[:48]
+            expected["logic_origin"] = source_plan["logical_reuse"]
+            require(derived_plan.get("logical_reuse") == source_plan["logical_reuse"])
         require(derived_body.model_dump(exclude_none=True) == expected and s["input"]["column"] in s["execution_source"]["columns"])
         require(store.frozen_contract(c, job).limits.model_dump() == s["limits"])
         closed(accepted["plan"])

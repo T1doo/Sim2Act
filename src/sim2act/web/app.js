@@ -183,6 +183,7 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  if(typeof clearCsvLogic === "function")clearCsvLogic();
   if(typeof clearResourceMaterial === "function")clearResourceMaterial();
   if(typeof clearReportManifest === "function")clearReportManifest();
   if(typeof clearReportApps === "function")clearReportApps();
@@ -213,7 +214,7 @@ $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").va
 $("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("run-history-refresh").onclick=safe(async()=>refresh());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
+$("project-select").onchange = safe(async () => {if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => ["projects","apps","resources"].forEach(id => $(id).hidden=id!==b.dataset.tab));
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
 let backgroundRefreshInFlight=false;
@@ -228,6 +229,7 @@ setInterval(async () => {
 },2500);
 
 function clearApp() {
+  if(typeof clearCsvLogic === "function")clearCsvLogic();
   if(typeof clearDeliveryGraph === "function")clearDeliveryGraph();
   if(typeof clearReportManifest === "function")clearReportManifest();
   if(typeof clearReportApps === "function")clearReportApps();
