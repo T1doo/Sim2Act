@@ -529,7 +529,7 @@ async function dagReuseHistory(c=csvDagContext) {
   $("dag-reuse-status").textContent="已有版本与实例已读回；选择实例后只读恢复结果";
   dagReuseButtons(c);
 }
-async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value) {
+async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, expected=null) {
   if(!c||!csvDagCurrent(c)||!iid)return;
   const detail=await api(`/api/internal/instances/${iid}`);
   const rel=await api(`/api/internal/releases/${detail.release_id}`);
@@ -552,6 +552,10 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value) 
     } else if(run.proof.business_writes!==0||run.result_version!==null||run.output!==null)throw Error("VERIFICATION_FAILED");
   }
   if(detail.data.length!==detail.runs.filter(v=>v.status==="SUCCEEDED").length)throw Error("VERIFICATION_FAILED");
+  if(expected) {
+    const run=detail.runs.find(v=>v.run_id===expected.run_id);
+    if(!run||run.app_run_id!==expected.app_run_id||run.instance_id!==expected.instance_id||!deliverySame(run.input,expected.input))throw Error("VERIFICATION_FAILED");
+  }
   if(!csvDagCurrent(c))return;
   c.reuse.instance=detail;c.reuse.release=rel;c.reuse.job=detail.runs.find(v=>["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"].includes(v.status))||detail.runs.slice().sort((a,b)=>(b.result_version||0)-(a.result_version||0))[0]||null;
   $("dag-reuse-column").replaceChildren(...rel.snapshot.execution_source.columns.map(value=>{const o=document.createElement("option");o.value=value;o.textContent=value;return o;}));
@@ -618,10 +622,16 @@ async function dagReuseSubmit(kind,retry=false) {
       r.material=got;$("dag-material-proof").textContent=JSON.stringify(got,null,2);$("dag-material-status").textContent="新材料计划已核读回；手动打开后重新确认运行。尚未执行、保存版本或创建实例。";
     } else {
       if(made.instance_id!==intent.instance.id||made.execution_version!==intent.release.snapshot.execution_source.version||!/^run_[a-f0-9]{32}$/.test(made.run_id))throw Error("VERSION_CONFLICT");
-      const got=await api(`/api/internal/instances/${intent.instance.id}/runs/${made.run_id}`);
-      if(!csvDagCurrent(c))return;
-      if(got.run_id!==made.run_id||got.app_run_id!==made.app_run_id||got.instance_id!==intent.instance.id||!deliverySame(got.input,intent.body.input))throw Error("VERIFICATION_FAILED");
-      await dagReuseRead(c,intent.instance.id);
+      if(intent.release.snapshot.execution_source.plan_key.startsWith("material-plan-")) {
+        // Instance readback already validates every full run proof. Bind the accepted
+        // identity before painting, avoiding a second recursive proof read over PG.
+        await dagReuseRead(c,intent.instance.id,{...made,input:intent.body.input});
+      } else {
+        const got=await api(`/api/internal/instances/${intent.instance.id}/runs/${made.run_id}`);
+        if(!csvDagCurrent(c))return;
+        if(got.run_id!==made.run_id||got.app_run_id!==made.app_run_id||got.instance_id!==intent.instance.id||!deliverySame(got.input,intent.body.input))throw Error("VERIFICATION_FAILED");
+        await dagReuseRead(c,intent.instance.id);
+      }
     }
     if(csvDagCurrent(c))dagReuseIntents.delete(key);
   } catch(e) {
