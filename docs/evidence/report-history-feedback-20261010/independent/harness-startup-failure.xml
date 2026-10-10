@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="11" skipped="0" tests="11" time="31.865" timestamp="2026-10-10T02:48:10.631439+00:00" hostname="5b45fac5b7b9"><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-canonical-current-final]" time="2.938"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd4989322d0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...95a32332954404859f15f8e45f80de', 'user_be0de4f8f3434cf08df536c22dc48c52', 'proj_8b308de50dcf400580cb24dbdba2e601', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted0')
+phase = 'definition', branch = 'canonical', navigation = 'current'
+source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd4988390a0&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd4971f7ec0&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-envelope-current-final]" time="3.239"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd4972623f0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...c94d2d4b1a4f1bb53aa1f44344b9df', 'user_4cb5fda583714c029023aa3fde58622d', 'proj_fa220922bdb64196bc93ba7c6a24fd92', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted1')
+phase = 'definition', branch = 'envelope', navigation = 'current'
+source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd497261220&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd4973a8720&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-item-current-final]" time="2.430"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd4971e5940&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...1f1af557ee4185bc077889e0513634', 'user_22919b9945c54199b4cf1fe777cb5a07', 'proj_c736b1f9519b4efb8cdf15dac57ec128', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted2')
+phase = 'definition', branch = 'item', navigation = 'current', source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd49855f0e0&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd4984f9580&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[checks-canonical-current-final]" time="2.403"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd4972553d0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...5f697305044eaf932c286a6cad80d9', 'user_51ac68db5bb6426caa53acf514c3885d', 'proj_ed4a9005b8584dd1954b642ce7242541', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted3')
+phase = 'checks', branch = 'canonical', navigation = 'current', source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd498580a70&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd4984b6c00&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[checks-envelope-current-final]" time="3.240"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd4973a7290&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...ad6a90bdd740818d5b5566a15e3c0a', 'user_eb80d3a11f124e1db654f304762611ad', 'proj_651b8337b2d54a97a436803bd005edb9', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted4')
+phase = 'checks', branch = 'envelope', navigation = 'current', source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd497134290&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd496fa8860&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[checks-item-current-final]" time="3.314"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd496e8d880&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...f1774ec4d245b78a6c95ee2fc01ae7', 'user_7d1b854626154f2e8839c287f15a93ce', 'proj_02e129e004e44578aa82fdce7f1c5eb5', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted5')
+phase = 'checks', branch = 'item', navigation = 'current', source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd496d627b0&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd498731ee0&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-canonical-app-final]" time="3.187"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd4972552e0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...fec62a634545ec998a3e796fbbf625', 'user_6aaf21ca72c84e0195790ef069b8682e', 'proj_3211a1907bf64e56b0662101af05d9a4', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted6')
+phase = 'definition', branch = 'canonical', navigation = 'app', source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd498482450&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd4984b5940&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-canonical-identity-final]" time="3.060"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd4983e69c0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...dd7754efe5443c9f3c35152b950d34', 'user_5c641cda73084c9e86ada785728b53a0', 'proj_8ab8769d000141839aa5618541f35c6e', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted7')
+phase = 'definition', branch = 'canonical', navigation = 'identity'
+source = 'final'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd497279cd0&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd4989b62a0&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-canonical-current-old112]" time="2.382"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd496e77d10&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...760643473441b88acedd45d3ad0bab', 'user_ccdf073984b04ae3a6c850061d033771', 'proj_40d6c7a475354daa8c2b14b58e4bd8e8', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted8')
+phase = 'definition', branch = 'canonical', navigation = 'current'
+source = 'old112'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd496e77f20&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd4972e1f80&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-envelope-current-old112]" time="2.167"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd496dc7890&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...838c38a96d4c31a5d7da3740710207', 'user_e53cea22dc66485ba037d8baf95bdd42', 'proj_ff2a0f810ee34fc7ad892a6316654f45', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted9')
+phase = 'definition', branch = 'envelope', navigation = 'current'
+source = 'old112'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd496cf6d20&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd496eaf560&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase><testcase classname="test_review" name="test_independent_lost_accepted_history_feedback_and_exact_context[definition-item-current-old112]" time="2.493"><failure message="RuntimeError: Cannot add middleware after an application has started">env = (&lt;sim2act.db.Store object at 0x7fd49872eea0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-history-feedback-in...c5362b912143c2b0744d3cfbf6886e', 'user_3fcc52f05ef64ca59c02462215ceb894', 'proj_4b24276b204444dcb4aef9ea25056ba6', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-history-feedback-independent-20261010/cases/test_independent_lost_accepted10')
+phase = 'definition', branch = 'item', navigation = 'current', source = 'old112'
+
+    @pytest.mark.parametrize('phase,branch,navigation,source',CASES)
+    def test_independent_lost_accepted_history_feedback_and_exact_context(env,tmp_path,phase,branch,navigation,source):
+        app,_,_,_,output,wires=prepared(env,tmp_path,peer=True)
+        with env[0].tx() as c:
+            rows=c.execute(select(app_drafts).where(app_drafts.c.project_id==env[5])).mappings().all()
+            peer=next(r['id'] for r in rows if r['candidate'].get('manifest',{}).get('workflow',[{}])[0].get('step_id')=='aggregate')
+        other=env[0].project(env[4],'independent identity workspace')
+        service=env[2].app
+        if source=='old112':
+            old=(ROOT/'old-112-report-manifest.js').read_bytes()
+            route=next(r for r in service.routes if getattr(r,'path',None)=='/report-manifest.js')
+            route.dependant.call=lambda:Response(old,media_type='application/javascript')
+        request_scope=contextvars.ContextVar('independent-request-scope',default=None)
+        mutations=[]
+&gt;       @service.middleware('http')
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-report-history-feedback-independent-20261010/test_review.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4642: in decorator
+    self.add_middleware(BaseHTTPMiddleware, dispatch=func)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;fastapi.applications.FastAPI object at 0x7fd496cf6f30&gt;
+middleware_class = &lt;class 'starlette.middleware.base.BaseHTTPMiddleware'&gt;
+args = ()
+kwargs = {'dispatch': &lt;function test_independent_lost_accepted_history_feedback_and_exact_context.&lt;locals&gt;.record_context at 0x7fd498c660c0&gt;}
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -&gt; None:
+        if self.middleware_stack is not None:  # pragma: no cover
+&gt;           raise RuntimeError("Cannot add middleware after an application has started")
+E           RuntimeError: Cannot add middleware after an application has started
+
+.venv/lib/python3.12/site-packages/starlette/applications.py:106: RuntimeError</failure></testcase></testsuite></testsuites>

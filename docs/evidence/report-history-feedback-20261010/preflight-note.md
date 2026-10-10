@@ -1,0 +1,1 @@
+Initial pg_isready observed the image temporary initialization server. A following psql readiness probe exited2 during its shutdown/start transition; no tests ran. Full owned-container startup logs retained. Final psql probe must succeed with counts0|0|0 before matrix. No escalation or security/network changes.

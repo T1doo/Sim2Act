@@ -6,8 +6,9 @@
 
 开发分支已将已审 PROJECT 候选 `112c8e3c890dc75fb1b823458b34d4c9a2fb2983` 从 `5fedb359eff076798782b99a5fd5748d76da5148` 正常快进集成。产品冻结 `429a62a418748822d51d9e930ec05f8b560c5ef2` 共348文件；实际集成回归 SQLite14PASS/1PG角色SKIP、PG15PASS，每库7真实HTTP/jsdom页面96检查及4实际旧源码升级，详见[集成证据](../evidence/project-integration-20261010/README.md)。既有 Report 锁与 UNKNOWN 修复、PROJECT 原有 CSV/Report 有限检查已按精确冻结审查；未派生/未知检查仍记录 NOT_RUN，PROJECT 仍 PENDING/BLOCKED_PARTIAL。
 
-下一本地真实缺口是 HTTP200有效JSON但历史证明无效时，晚回执回读自清页后缺少受原身份/项目/选择代数保护的提示。先仅修三处分支的上下文错误标记，验证真实页面的无重复提交、原键 UNKNOWN 恢复及切应用/身份隔离；保留原112 JS负对照并按最终源码独审。不得将提示切片扩大成全部损坏响应验收、PG历史超时修复或完整原方案完成。
+HTTP200有效JSON坏证明导致晚回执自清页无提示的三处分支，已按冻结 `c46093d4d9bdf2c6fda17405307b053d964d8ff2` 修复：作者双库各13PASS、每库12实际HTTP页面179检查与1实际旧源码Report升级；独审8页面111检查及3原112 JS敏感性负例LIMITED_PASS，[范围与失败保全](../evidence/report-history-feedback-20261010/README.md)。仅三处分支附原c错误标记；未放宽守卫，也未完成其他坏响应形式/入口、逐item历史map、PG超时或整体验收。
 
+下一真实缺口仍按原方案推进：PG resources-history历史超时需先核准原确切失败用例与冻结源码，限定复现/取证后定位，不能以本轮正常页面通过关闭OPEN，不能放宽原预算或跳过权限/源验证。PROJECT全局完整性、其余任务族、真实P-A/P-B/R0与原生Windows/owner/semantic依然需要原合同、精确真实模型授权和预算/外部环境；本轮不以合成离线fixture替代。
 ## 原方案必须交付的范围
 
 | 原任务 | 尚未被当前限定证据证明的交付项 | 依赖与推进方式 |
@@ -38,4 +39,4 @@
 
 ## 不可抹平的状态
 
-`LIVE=0`；真实模型授权、成本预算与真实材料未获批准。PROJECT 为 `PENDING/BLOCKED_PARTIAL`，语义 `UNKNOWN`，owner `PENDING`，整体 `NOT_ACCEPTED`，正式发布关闭。PG resources-history 超时为 OPEN；HTTP 200 损坏响应提示限制保留；Windows 900 秒、Edge 240 秒、Node 150 秒未验收。禁止修改 main、强推、部署、凭据或安全/网络配置及未经授权的真实模型调用。关键路径计划不修改这些边界。
+`LIVE=0`；真实模型授权、成本预算与真实材料未获批准。PROJECT 为 `PENDING/BLOCKED_PARTIAL`，语义 `UNKNOWN`，owner `PENDING`，整体 `NOT_ACCEPTED`，正式发布关闭。PG resources-history 超时为 OPEN；HTTP 200 其余损坏形式/入口提示限制保留，三处晚回执自清页提示仅限定通过；Windows 900 秒、Edge 240 秒、Node 150 秒未验收。禁止修改 main、强推、部署、凭据或安全/网络配置及未经授权的真实模型调用。关键路径计划不修改这些边界。
