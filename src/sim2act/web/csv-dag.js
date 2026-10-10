@@ -532,7 +532,10 @@ async function dagReuseHistory(c=csvDagContext) {
 async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, expected=null) {
   if(!c||!csvDagCurrent(c)||!iid)return;
   const detail=await api(`/api/internal/instances/${iid}`);
-  const rel=await api(`/api/internal/releases/${detail.release_id}`);
+  // Instance GET reauthorizes read_release and returns its exact fingerprint.
+  // A frozen accepted intent may reuse that matching release; cold/manual reads
+  // still fetch the release. Every run/plan/typed seal below remains mandatory.
+  const rel=expected?.release||await api(`/api/internal/releases/${detail.release_id}`);
   if(!csvDagCurrent(c))return;
   if(detail.id!==iid||detail.source_app_id!==c.parent.id||detail.project_id!==c.parent.project||detail.runtime_id!==c.parent.app.runtime_id||detail.release_fingerprint!==rel.fingerprint||!await dagReuseReleaseSeal(rel,c)||!Array.isArray(detail.runs)||!Array.isArray(detail.data))throw Error("VERSION_CONFLICT");
   for(const run of detail.runs) {
@@ -554,7 +557,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   if(detail.data.length!==detail.runs.filter(v=>v.status==="SUCCEEDED").length)throw Error("VERIFICATION_FAILED");
   if(expected) {
     const run=detail.runs.find(v=>v.run_id===expected.run_id);
-    if(!run||run.app_run_id!==expected.app_run_id||run.instance_id!==expected.instance_id||!deliverySame(run.input,expected.input))throw Error("VERIFICATION_FAILED");
+    if(rel.id!==detail.release_id||!run||run.app_run_id!==expected.app_run_id||run.instance_id!==expected.instance_id||!deliverySame(run.input,expected.input))throw Error("VERIFICATION_FAILED");
   }
   if(!csvDagCurrent(c))return;
   c.reuse.instance=detail;c.reuse.release=rel;c.reuse.job=detail.runs.find(v=>["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"].includes(v.status))||detail.runs.slice().sort((a,b)=>(b.result_version||0)-(a.result_version||0))[0]||null;
@@ -625,7 +628,7 @@ async function dagReuseSubmit(kind,retry=false) {
       if(intent.release.snapshot.execution_source.plan_key.startsWith("material-plan-")) {
         // Instance readback already validates every full run proof. Bind the accepted
         // identity before painting, avoiding a second recursive proof read over PG.
-        await dagReuseRead(c,intent.instance.id,{...made,input:intent.body.input});
+        await dagReuseRead(c,intent.instance.id,{...made,input:intent.body.input,release:intent.release});
       } else {
         const got=await api(`/api/internal/instances/${intent.instance.id}/runs/${made.run_id}`);
         if(!csvDagCurrent(c))return;
