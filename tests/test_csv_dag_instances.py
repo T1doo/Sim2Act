@@ -243,7 +243,7 @@ def test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_fail
     w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
     assert dag.advance(w,job) and dag.advance(w,job)
     def reject_terminal(conn,cursor,statement,parameters,context,executemany):
-        if context.compiled.statement.is_update and context.compiled.statement.table is runs and context.compiled.params.get('status') == 'SUCCEEDED':
+        if context.compiled is not None and context.compiled.statement.is_update and context.compiled.statement.table is runs and context.compiled.params.get('status') == 'SUCCEEDED':
             raise RuntimeError('owned fixture injects failure after typed append, before terminal state')
     event.listen(env[0].engine,'before_cursor_execute',reject_terminal)
     try:
