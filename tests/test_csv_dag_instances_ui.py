@@ -21,7 +21,16 @@ from sim2act.worker import Worker
 
 @pytest.mark.parametrize("lost", ["post", "read"])
 def test_actual_dag_internal_reuse_and_cold_new_column_page(env, tmp_path, lost):
-    aid, rid, plan, _, source = setup(env)
+    actual_reuse_page(env, tmp_path, lost, with_report=False)
+
+
+@pytest.mark.parametrize("lost", ["post", "read"])
+def test_actual_report_dag_internal_reuse_and_cold_new_column_page(env, tmp_path, lost):
+    actual_reuse_page(env, tmp_path, lost, with_report=True)
+
+
+def actual_reuse_page(env, tmp_path, lost, *, with_report):
+    aid, rid, plan, _, source = setup(env, with_report=with_report)
     plan.pop("cached", None)
     app = create_app(env[0], env[1])
     worker = Worker(env[0], env[1], NoModel())
@@ -47,6 +56,7 @@ def test_actual_dag_internal_reuse_and_cold_new_column_page(env, tmp_path, lost)
                 source=source["id"],
                 plan=plan,
                 lost=lost,
+                nodes=3 if with_report else 2,
             )
         )
     )

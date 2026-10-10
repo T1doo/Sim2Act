@@ -31,7 +31,7 @@ from sim2act.errors import DomainError
 from sim2act.worker import Worker
 
 
-def setup(env, completed=True):
+def setup(env, completed=True, *, with_report=False):
     aid, rid, anchor, _, _ = source_setup(env)
     base = f"/api/projects/{env[5]}/apps/{aid}/csv-dag"
     composition = dict(
@@ -55,6 +55,10 @@ def setup(env, completed=True):
             ),
         ],
     )
+    if with_report:
+        composition["nodes"].append(dict(step_id="formatted", action="intern.csv_report.v1",
+            depends_on=["total"], inputs={k: dict(source="step", ref="total", field=k)
+                for k in ("resource_id", "column", "count", "sum", "source_hash")}))
     response = env[2].post(
         base,
         json=dict(
@@ -88,8 +92,8 @@ def setup(env, completed=True):
     return aid, rid, plan, worker, job
 
 
-def release(env):
-    aid, rid, plan, _, job = setup(env)
+def release(env, *, with_report=False):
+    aid, rid, plan, _, job = setup(env, with_report=with_report)
     approval = env[2].post(
         f"/api/csv-dag/runs/{job['id']}/release-approvals",
         json=dict(expected_plan_fingerprint=plan["plan_fingerprint"], request_key="prepare"),

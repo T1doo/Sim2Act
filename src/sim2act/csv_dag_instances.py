@@ -1,4 +1,4 @@
-"""Closed read→sum instance adapter. Uses the existing DAG worker and typed ledger.
+"""Closed read→sum[→report] adapter, using the existing DAG worker and typed ledger.
 
 A completed, independently reconstructed source Run anchors each immutable version.
 No new manifest family, executor, principal, Grant or publication capability.
@@ -8,6 +8,7 @@ import copy
 from sqlalchemy import insert, select, update
 
 from . import csv_dag as dag
+from . import csv_reports as report
 from . import lifecycle
 from .apps import load_draft
 from .column_patches import KeyInput, read_pair
@@ -28,6 +29,8 @@ from .errors import DomainError
 from .tools import csv_column_options
 
 VERSION = "internal.csv-read-sum.v1"
+REPORT_VERSION = "internal.csv-read-sum-report.v1"
+VERSIONS = (VERSION, REPORT_VERSION)
 
 
 def require(ok, message="Internal DAG provenance changed"):
@@ -41,9 +44,9 @@ def marked(snapshot):
 
 def closed(plan):
     nodes = plan.get("composition", {}).get("definition", {}).get("nodes", [])
-    require(len(nodes) == 2 and not any(k in plan for k in ("branch_semantics",)),
-            "Only unconditional read→sum composition is reusable")
-    read, total = nodes
+    require(len(nodes) in (2, 3) and "branch_semantics" not in plan,
+            "Only unconditional read→sum[→report] composition is reusable")
+    read, total = nodes[:2]
     require(read["action"] == "resource.read" and total["action"] == "data.aggregate_csv"
         and read["depends_on"] == [] and total["depends_on"] == [read["step_id"]]
         and not any("when" in node for node in nodes)
@@ -51,9 +54,30 @@ def closed(plan):
         and total["inputs"] == {
             "resource_id": dict(source="step", ref=read["step_id"], field="resource_id"),
             "column": dict(source="input", field=total["step_id"] + "_column")}
-        and plan["composition"]["sinks"] == [total["step_id"]],
+        and plan["composition"]["sinks"] == [nodes[-1]["step_id"]],
         "Only the closed read→sum ports can be reused")
+    if len(nodes) == 3:
+        formatted = nodes[2]
+        require(formatted["action"] == report.REF
+            and formatted["depends_on"] == [total["step_id"]]
+            and formatted["inputs"] == {k: dict(source="step", ref=total["step_id"], field=k)
+                                        for k in report.FIELDS},
+            "Report requires exactly the complete aggregate tuple")
     return total["step_id"]
+
+
+def aggregate_result(base, execution):
+    """The typed ledger stays five fields; the complete report remains in Run proof."""
+    if execution["version"] == VERSION:
+        return base["output_by_step"][execution["aggregate_step"]]
+    require(execution["version"] == REPORT_VERSION)
+    totals = [p for p in base["steps"] if p["step_id"] == execution["aggregate_step"]]
+    require(len(base["steps"]) == 3 and len(totals) == 1
+        and all(p["status"] == "VERIFIED" for p in base["steps"]))
+    value = totals[0]["data"]
+    require(base["output_by_step"] == {execution["report_step"]: report.render(value)},
+            "Report result differs from its actual aggregate receipt")
+    return value
 
 
 @dag.graph.controlled
@@ -65,9 +89,10 @@ def source_snapshot(store, c, user, rid, limits):
     proof = dag.inspect_job_tx(store, c, user, rid, limits)
     plan = bound["plan"]
     sid = closed(plan)
-    require(proof["status"] == "SUCCEEDED" and len(proof["steps"]) == 2
+    count = len(plan["composition"]["definition"]["nodes"])
+    require(proof["status"] == "SUCCEEDED" and len(proof["steps"]) == count
         and all(p["status"] == "VERIFIED" for p in proof["steps"])
-        and job["context"]["tools"] == 2, "Two actual verified source operations required")
+        and job["context"]["tools"] == count, "Every actual source operation must be verified")
     draft, _, _, _ = load_draft(store, c, user, bound["app_id"], limits, lock=True)
     frozen = {k: copy.deepcopy(draft[k]) for k in ("id", "project_id", "runtime_id", "candidate", "fingerprint")}
     raw = dag.read_source(store, c, job)
@@ -76,17 +101,21 @@ def source_snapshot(store, c, user, rid, limits):
     declared = Limits(**plan["definition"]["manifest"]["runtime_limits"])
     effective = Limits(**{k: min(getattr(cap, k), getattr(declared, k)) for k in Limits.model_fields})
     schema = lifecycle.record_schema(frozen["candidate"])
-    validate_value(schema, {"result": proof["result"]["output_by_step"][sid]})
-    execution = dict(version=VERSION, run_id=rid, run_version=job["version"], fence=job["fence"],
+    execution = dict(version=VERSION if count == 2 else REPORT_VERSION,
+        run_id=rid, run_version=job["version"], fence=job["fence"],
         accepted_fingerprint=job["fingerprint"], plan_key=bound["plan_key"],
         plan_fingerprint=plan["plan_fingerprint"], source_hash=plan["source_hash"],
         graph_fingerprint=plan["graph_fingerprint"], authorization_fingerprint=plan["authorization_fingerprint"],
         receipt_fingerprints=[fingerprint(p) for p in proof["steps"]], aggregate_step=sid,
         columns=columns, limits=effective.model_dump())
+    if count == 3:
+        execution["report_step"] = plan["composition"]["definition"]["nodes"][2]["step_id"]
+    validate_value(schema, {"result": aggregate_result(proof["result"], execution)})
     return dict(namespace=lifecycle.NAMESPACE, draft=frozen,
         dependency_lock=frozen["candidate"]["manifest"]["dependency_lock"], data_schema=schema,
         data_schema_version=1, execution_source=execution,
-        check_evidence=[dict(check="csv.read-sum.source-run.v1", status="PASS", run_id=rid,
+        check_evidence=[dict(check="csv.read-sum.source-run.v1" if count == 2 else
+                            "csv.read-sum-report.source-run.v1", status="PASS", run_id=rid,
                             receipt_fingerprints=execution["receipt_fingerprints"])],
         model_requests=0, semantic_status="UNKNOWN", owner_acceptance="PENDING",
         formal_publication_enabled=False)
@@ -95,7 +124,7 @@ def source_snapshot(store, c, user, rid, limits):
 @dag.graph.controlled
 def validate_snapshot(store, c, user, snapshot, limits):
     execution = snapshot.get("execution_source")
-    require(isinstance(execution, dict) and execution.get("version") == VERSION,
+    require(isinstance(execution, dict) and execution.get("version") in VERSIONS,
             "Unknown internal execution source")
     expected = source_snapshot(store, c, user, execution["run_id"], limits)
     require(fingerprint(snapshot) == fingerprint(expected), "Internal version no longer matches its actual source receipts")
@@ -122,7 +151,7 @@ def prepare_release(store, user, rid, expected_plan_fp, limits, *, request_key):
                         formal_publication_enabled=False)
         approval = lifecycle.new_approval(c, user, pid, "release", dict(snapshot=snap,
             dag_intent=intent, grant_version=lifecycle.grant_version(c, pid, user)))
-        body = ReleaseOrigin(version=VERSION, request_key=approval["id"], approval_id=approval["id"],
+        body = ReleaseOrigin(version=snap["execution_source"]["version"], request_key=approval["id"], approval_id=approval["id"],
             snapshot_fingerprint=fingerprint(snap), source_run_id=rid)
         for kind in ("csv_dag_release_origin", "csv_dag_release_origin_seal"):
             dag.graph.remember(c, user, snap["draft"]["id"], kind, approval["id"], body, body.model_dump())
@@ -148,7 +177,7 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
         job = dag.row(c, user, b["run_id"])
         dag.binding(store, c, job, limits)
         return dict(run_id=job["id"], app_run_id=old["id"], instance_id=i["id"], status=job["status"],
-            version=job["version"], cached=True, execution_version=VERSION)
+            version=job["version"], cached=True, execution_version=execution["version"])
     require(i["revision"] == revision and release["fingerprint"] == release_fp)
     source_body, _ = read_pair(c, user, i["source_app_id"], "csv_dag_plan", execution["plan_key"], dag.PlanInput)
     body = source_body.model_dump(exclude_none=True)
@@ -161,11 +190,11 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
     plan = dag.propose_tx(store, c, user, i["project_id"], i["source_app_id"], dag.PlanInput(**body), cap)
     plan.pop("cached")
     rid, arid = new_id("run"), new_id("iapprun")
-    s = dict(namespace=VERSION, **request, run_id=rid, app_run_id=arid, release_id=release["id"],
+    s = dict(namespace=execution["version"], **request, run_id=rid, app_run_id=arid, release_id=release["id"],
         principal_id=user, project_id=i["project_id"], runtime_id=i["runtime_id"], request_key=key,
         request_fingerprint=fingerprint(request), limits=cap.model_dump(),
         execution_source=copy.deepcopy(execution), plan_key=plan["request_key"], plan_fingerprint=plan["plan_fingerprint"])
-    marker = dict(version=VERSION, instance_id=i["id"], app_run_id=arid, binding_fingerprint=fingerprint(s))
+    marker = dict(version=execution["version"], instance_id=i["id"], app_run_id=arid, binding_fingerprint=fingerprint(s))
     confirmation = dag.RunInput(expected_plan_fingerprint=plan["plan_fingerprint"],
         consent="CONFIRM_EXACT_OFFLINE_CSV_DAG", request_key="instance-run-"+fingerprint([i["id"], key])[:48])
     accepted = dag.enqueue_tx(store, c, user, i["project_id"], i["source_app_id"], plan["request_key"],
@@ -175,7 +204,7 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
         principal_id=user, request_key=key, fingerprint=fingerprint(request), input=input_value, status="QUEUED"))
     c.execute(insert(internal_run_bindings).values(run_id=rid, app_run_id=arid, snapshot=s, fingerprint=fingerprint(s)))
     return dict(run_id=rid, app_run_id=arid, instance_id=i["id"], status="QUEUED", version=1,
-                cached=False, execution_version=VERSION)
+                cached=False, execution_version=execution["version"])
 
 
 @dag.graph.controlled
@@ -188,8 +217,9 @@ def validate_binding(store, c, job, accepted, limits, *, authorize=True):
     require(b is not None and isinstance(marker, dict))
     s = b["snapshot"]
     ar = c.execute(select(internal_app_runs).where(internal_app_runs.c.id == b["app_run_id"])).mappings().first()
-    require(s.get("namespace") == VERSION and b["fingerprint"] == fingerprint(s)
-        and marker == dict(version=VERSION, instance_id=s["instance_id"], app_run_id=s["app_run_id"],
+    require(s.get("namespace") in VERSIONS and s["namespace"] == s["execution_source"]["version"]
+        and b["fingerprint"] == fingerprint(s)
+        and marker == dict(version=s["namespace"], instance_id=s["instance_id"], app_run_id=s["app_run_id"],
                            binding_fingerprint=fingerprint(s))
         and s["run_id"] == job["id"] and s["principal_id"] == job["principal_id"]
         and s["project_id"] == job["project_id"] and s["runtime_id"] == job["runtime_id"]
@@ -237,7 +267,7 @@ def ledger_result(c, s, ar, base):
         and record["release_id"] == s["release_id"] and record["version"] == ar["result_version"]
         and record["schema_version"] == 1 and record["data"] == {"result": ar["output"]}
         and fingerprint(record["data"]) == record["fingerprint"]
-        and ar["output"] == base["output_by_step"][s["execution_source"]["aggregate_step"]])
+        and ar["output"] == aggregate_result(base, s["execution_source"]))
     return {**base, "business_writes": 1, "instance_result": dict(instance_id=s["instance_id"],
         app_run_id=ar["id"], release_id=s["release_id"], result_version=record["version"],
         record_fingerprint=record["fingerprint"])}
@@ -260,9 +290,9 @@ def commit_result(store, c, job, accepted, base, limits):
     s, ar = value
     require(ar["status"] != "SUCCEEDED" and ar["result_version"] is None)
     i, r = lifecycle.instance(store, c, job["principal_id"], s["instance_id"], limits, lock=True)
-    sid = s["execution_source"]["aggregate_step"]
-    output = base["output_by_step"][sid]
-    require(base["output_status"] == "PRODUCED" and len(base["steps"]) == 2)
+    output = aggregate_result(base, s["execution_source"])
+    require(base["output_status"] == "PRODUCED" and len(base["steps"]) ==
+            (2 if s["namespace"] == VERSION else 3))
     validate_value(r["snapshot"]["data_schema"], {"result": output})
     dag.oracle(dag.read_source(store, c, job)["content"], output)
     version = i["data_version"] + 1
@@ -302,7 +332,7 @@ def inspect_job(store, user, rid, limits):
         value = validate_binding(store, c, job, accepted, limits)
         require(value is not None)
         s, ar = value
-        return {**dict(ar), "namespace": lifecycle.NAMESPACE, "execution_version": VERSION,
+        return {**dict(ar), "namespace": lifecycle.NAMESPACE, "execution_version": s["namespace"],
             "run_id": rid, "app_run_id": ar["id"], "version": job["version"], "status": job["status"],
             "expected_revision": s["expected_revision"], "plan_key": s["plan_key"], "proof": proof}
 
@@ -321,7 +351,7 @@ def instance_run_ids(c, user, i):
         marker = response.get("internal_instance")
         if marker is not None and marker.get("instance_id") == i["id"]:
             _, receipt = read_pair(c, user, i["source_app_id"], "csv_dag_run", row["request_key"], dag.RunInput)
-            require(receipt == response and marker.get("version") == VERSION)
+            require(receipt == response and marker.get("version") in VERSIONS)
             wanted.add(receipt["run_id"])
     joined = set(c.execute(select(internal_run_bindings.c.run_id).join(internal_app_runs,
         internal_app_runs.c.id == internal_run_bindings.c.app_run_id).where(
@@ -377,9 +407,9 @@ def validate_family(c, user, approval_id, snapshot):
         return False
     aid = anchors[0]
     body, answer = read_pair(c, user, aid, "csv_dag_release_origin", approval_id, ReleaseOrigin)
-    require(body.model_dump() == answer and body.version == VERSION and body.approval_id == approval_id
+    require(body.model_dump() == answer and body.version in VERSIONS and body.approval_id == approval_id
         and aid == snapshot["draft"]["id"] and marked(snapshot)
-        and snapshot["execution_source"].get("version") == VERSION
+        and snapshot["execution_source"].get("version") == body.version
         and snapshot["execution_source"].get("run_id") == body.source_run_id
         and fingerprint(snapshot) == body.snapshot_fingerprint,
         "DAG release cannot change or downgrade execution family")
