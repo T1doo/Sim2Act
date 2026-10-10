@@ -1,5 +1,6 @@
 """Exercise the real pytest lifecycle, including failure before interruption."""
 
+import hashlib
 import json
 import os
 import runpy
@@ -26,13 +27,16 @@ def test_fixed_remaining_manifest_rejects_missing_duplicate_and_changed_nodes(tm
     assert load(path) == expected
 
 
-@pytest.mark.parametrize("state", ["complete", "skipped", "interrupted", "partial_tail"])
+@pytest.mark.parametrize("state", ["complete", "skipped", "interrupted", "partial_tail",
+                                   "missing_selection", "missing_full", "wrong_full_hash", "wrong_full_count"])
 def test_remaining_scope_requires_all_actual_phases_and_complete_tail(tmp_path, state):
     load = runpy.run_path(str(ROOT / "scripts/native_pytest_diagnostics.py"))["remaining11_nodes"]
     nodes = load()
+    full_nodes = nodes + ["tests/test_unselected_fixture.py::test_unselected"]
     records = [dict(event="session_start", requested_scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=nodes),
+               dict(event="full_collection", nodes=full_nodes),
                dict(event="selection", scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=nodes,
-                    full_count=2234, full_nodes_sha256="finite fixture only", deselected_count=2223),
+                    full_count=len(full_nodes), full_nodes_sha256=hashlib.sha256(json.dumps(full_nodes).encode()).hexdigest(), deselected_count=1),
                dict(event="collection", nodes=nodes)]
     for node in nodes:
         records.append(dict(event="node_start", nodeid=node))
@@ -43,6 +47,15 @@ def test_remaining_scope_requires_all_actual_phases_and_complete_tail(tmp_path, 
             records.append(dict(event="node_report", nodeid=node, phase=phase, outcome=outcome))
         records.append(dict(event="node_finish", nodeid=node))
     records.append(dict(event="session_finish", exitstatus=2 if state == "interrupted" else 0))
+    for record in records:
+        record["pid"] = 1  # Finite recorder fixture only, not a native execution.
+    if state in {"missing_selection", "missing_full"}:
+        removed = "selection" if state == "missing_selection" else "full_collection"
+        records = [r for r in records if r["event"] != removed]
+    elif state == "wrong_full_hash":
+        records[2]["full_nodes_sha256"] = "different"
+    elif state == "wrong_full_count":
+        records[2]["full_count"] += 1
     path = tmp_path / "events.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in records) + ('\n{"event":' if state == "partial_tail" else "\n"))
     result = summarize(path)

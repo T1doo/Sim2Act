@@ -212,18 +212,42 @@ def summarize(path):
         )
         required = selection["required_nodes"]
         reports = [r for r in records if r["event"] == "node_report"]
+        full = [r for r in records if r["event"] == "full_collection"]
+        full_nodes = full[0]["nodes"] if len(full) == 1 else []
+        pid = requested[0].get("pid") if len(requested) == 1 else None
+        # A request header is evidence of intended scope, never a replacement
+        # for the actual selection/full-collection records or their session.
+        selection_verified = (
+            len(requested) == len(selected) == len(full) == len(collected) == len(ends) == 1
+            and requested[0] is records[0] and ends[0] is records[-1]
+            and isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
+            and all(r.get("pid") == pid for r in records)
+            and records.index(requested[0]) < records.index(full[0])
+            < records.index(selected[0]) < records.index(collected[0])
+            and selection["scope"] == "DIAGNOSTIC_ONLY_REMAINING11"
+            and requested[0]["required_nodes"] == required == collected[0]["nodes"]
+            and isinstance(full_nodes, list) and all(isinstance(node, str) for node in full_nodes)
+            and len(set(full_nodes)) == len(full_nodes) >= 11
+            and set(required) <= set(full_nodes)
+            and selection["full_count"] == len(full_nodes)
+            and selection["full_nodes_sha256"] == hashlib.sha256(json.dumps(full_nodes).encode()).hexdigest()
+            and selection["deselected_count"] == len(full_nodes) - 11
+            and sum(r["event"] == "node_start" for r in records) == 11
+            and sum(r["event"] == "node_finish" for r in records) == 11
+        )
         outcomes = {
             node: {phase: [r["outcome"] for r in reports if r["nodeid"] == node and r["phase"] == phase]
                    for phase in ("setup", "call", "teardown")}
             for node in required
         }
         result.update(
-            scope=selection["scope"],
+            scope="DIAGNOSTIC_ONLY_REMAINING11",
             full_collection_count=selection["full_count"],
             full_collection_sha256=selection["full_nodes_sha256"],
             deselected_count=selection["deselected_count"],
             required_outcomes=outcomes,
-            required_targets_complete=result["suite_complete"] and nodes == set(required)
+            selection_verified=selection_verified,
+            required_targets_complete=selection_verified and result["suite_complete"] and nodes == set(required)
             and len(required) == 11 and len(set(required)) == 11
             and hashlib.sha256(json.dumps(required).encode()).hexdigest() == REMAINING11_SHA256
             and all(phases == {phase: ["passed"] for phase in ("setup", "call", "teardown")}
