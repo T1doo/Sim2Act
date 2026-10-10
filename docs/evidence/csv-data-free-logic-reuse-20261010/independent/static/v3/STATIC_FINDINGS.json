@@ -1,0 +1,33 @@
+{
+  "conclusion": "BLOCK static",
+  "source10_before_after_exact": true,
+  "tests_executed": 0,
+  "resolved_previous": [
+    "null current guard",
+    "instance-derived prefix/origin validation",
+    "all new complete-object fingerprint matches",
+    "full target PlanSeal before accepted caching"
+  ],
+  "blocking": [
+    {
+      "id": "ORIGINAL_RESOURCE_PREFILTER",
+      "path": "csv_logic_reuse.target -> csv_material_reuse.target_for_schema",
+      "trigger": "another canonical CSV App references original rid, or direct plan targets original App/rid",
+      "why": "graph.current/load_family/authorized_read run before excluded_id check, so original resource is queried/read before exclusion; options skips originalapp but not aliasapp",
+      "required": "metadata-only canonicalCSV/singlebinding/rid/ownerproject prefilter before full live target gates"
+    },
+    {
+      "id": "LATE_IDENTITY_TARGET_READ",
+      "path": "web/csv-logic.js csvLogicPlanSeal",
+      "trigger": "valid old-identity accepted POST response arrives after identity switch",
+      "why": "full seal fetches targetApp with current globaltoken before receipt saved; may query old target as newidentity and fail/lose known accepted receipt",
+      "required": "freeze actual target App while current before POST; pure complete seal of late response then save receipt before current; GET readback current backend authorization"
+    }
+  ],
+  "static_notes": [
+    "commit_authority aggregate authorization recurses Store.authorize resource.read; fresh read+aggregate gate exists despite one explicit call",
+    "audit projection does not select original Run.result/Operation/resource; excludes private_audit from all public logic responses",
+    "load strict current project ownership/canonical recipe/schema/current implementation/sourcecap plus dualorigins and expiry/revoked; no old approval consumed exception",
+    "reserved logic/logic-instance prefix full origin and expected derived links repaired; no new compiler/worker/executor/Grant"
+  ]
+}

@@ -1,0 +1,105 @@
+F
+=================================== FAILURES ===================================
+__ test_actual_data_free_logic_page_cold_result_and_safe_recovery[post-False] __
+
+env = (<sim2act.db.Store object at 0x7f4cac23a450>, Settings(database_url='sqlite:////tmp/sim2act-csv-data-free-logic-202610...9dc0fce6904f6b9f120bd7c299568e', 'user_df998c2a7e2a41a89997f5946a74a49e', 'proj_0d1262ea5d2b4615a02c6712110c1c3d', ...)
+tmp_path = PosixPath('/tmp/sim2act-csv-data-free-logic-20261010/first-ui-sqlite/test_actual_data_free_logic_pa0')
+lost = 'post', with_report = False
+
+    @pytest.mark.parametrize(
+        "lost,with_report",
+        [
+            ("post", False),
+            ("post", True),
+            ("read", True),
+            ("late", True),
+            ("unknown403", True),
+            ("mint-post", True),
+            ("invalid-key", True),
+            ("invalid-budget", True),
+        ],
+    )
+    def test_actual_data_free_logic_page_cold_result_and_safe_recovery(env, tmp_path, lost, with_report):
+        aid, rid, _, _, rel = release(env, with_report=with_report)
+        aid = rel["snapshot"]["draft"]["id"]
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        @app.post("/__fixture__/target-grant")
+        def grant(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            with env[0].tx() as c:
+                c.execute(
+                    update(grants)
+                    .where(
+                        grants.c.principal_id == c.execute(select(app_drafts.c.runtime_id).where(app_drafts.c.id == body["app_id"])).scalar_one(),
+                        grants.c.resource_id == body["resource_id"],
+                    )
+                    .values(revoked=body["revoked"])
+                )
+            return {"changed": True}
+    
+        @app.post("/__fixture__/retire-old")
+        def retire(authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            retire_old(env, rid)
+            return {"retired": True}
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                dict(
+                    base=f"http://127.0.0.1:{port}",
+                    project=env[5],
+                    app=aid,
+                    resource=rid,
+                    release=rel["id"],
+                    lost=lost,
+                    nodes=3 if with_report else 2,
+                )
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(0.01)
+            assert shutil.which("node")
+            child = subprocess.run(
+                ["node", "tests/csv_logic_reuse.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(child.stdout + child.stderr)
+>           assert child.returncode == 0, child.stdout + child.stderr
+E           AssertionError: SyntaxError: Unexpected end of JSON input
+E                 at JSON.parse (<anonymous>)
+E                 at /workspace/Sim2Act/tests/csv_logic_reuse.cjs:27:18
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_logic_reuse.cjs', '/tmp/sim2act-csv-data-free-logic-20261010/first-ui-sqlite...ected end of JSON input\n    at JSON.parse (<anonymous>)\n    at /workspace/Sim2Act/tests/csv_logic_reuse.cjs:27:18\n').returncode
+
+tests/test_csv_logic_reuse_ui.py:103: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_logic_reuse_ui.py::test_actual_data_free_logic_page_cold_result_and_safe_recovery[post-False]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 2.91s

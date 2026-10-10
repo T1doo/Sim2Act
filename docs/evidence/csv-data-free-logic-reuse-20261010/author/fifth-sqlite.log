@@ -1,0 +1,56 @@
+..................F
+=================================== FAILURES ===================================
+_______ test_reserved_prefix_cannot_downgrade_when_both_origins_removed ________
+
+env = (<sim2act.db.Store object at 0x7fa46b763d70>, Settings(database_url='sqlite:////tmp/sim2act-csv-data-free-logic-202610...d54143e08748919a48a09f38b82821', 'user_3aed5b3c04b04485b928fc96f9bcd5e9', 'proj_c525727f7a5a4f7f9235a1f2e9582df0', ...)
+
+    def test_reserved_prefix_cannot_downgrade_when_both_origins_removed(env):
+        obj, _, _, _, _, _, body, _ = setup_logic(env)
+        p, _ = accept(env, obj, body)
+        with env[0].tx() as c:
+            c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind.in_([logic.ORIGIN, logic.ORIGIN + "_seal"])))
+            rows = c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.kind.in_(["csv_dag_plan", "csv_dag_plan_seal"]), delivery_graph_requests.c.request_key == p["request_key"])).mappings().all()
+            for r in rows:
+>               payload = copy.deepcopy(r["payload"])
+                                        ^^^^^^^^^^^^
+
+tests/test_csv_logic_reuse.py:254: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+lib/sqlalchemy/cyextension/resultproxy.pyx:57: in sqlalchemy.cyextension.resultproxy.BaseRow._get_by_key_impl_mapping
+    ???
+lib/sqlalchemy/cyextension/resultproxy.pyx:63: in sqlalchemy.cyextension.resultproxy.BaseRow._get_by_key_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py:215: in _key_not_found
+    self._key_fallback(key, None)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.cursor.CursorResultMetaData object at 0x7fa469a920a0>
+key = 'payload', err = None, raiseerr = True
+
+    def _key_fallback(
+        self, key: Any, err: Optional[Exception], raiseerr: bool = True
+    ) -> Optional[NoReturn]:
+        if raiseerr:
+            if self._unpickled and isinstance(key, elements.ColumnElement):
+                raise exc.NoSuchColumnError(
+                    "Row was unpickled; lookup by ColumnElement "
+                    "is unsupported"
+                ) from err
+            else:
+>               raise exc.NoSuchColumnError(
+                    "Could not locate column in row for column '%s'"
+                    % util.string_or_unprintable(key)
+                ) from err
+E               sqlalchemy.exc.NoSuchColumnError: Could not locate column in row for column 'payload'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/cursor.py:847: NoSuchColumnError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_logic_reuse.py::test_reserved_prefix_cannot_downgrade_when_both_origins_removed
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 18 passed, 1 warning in 38.65s

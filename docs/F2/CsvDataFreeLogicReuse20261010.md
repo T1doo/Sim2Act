@@ -1,0 +1,19 @@
+# 事先确认的无原材料内容 CSV 逻辑复用（限定）
+
+基线开发 fab14d542d7efe41d0b290e5b5baec433a1669a9，原产品709e0978c15236ed86bafc095d4cdf1301ad756c。本轮产品冻结4a4b6949fd159bd35c1ed1ed9d111426a27b706f；378非docs／72src文件精确冻结。先独立冻结[安全合同](CsvDataFreeLogicSafety20261010.md)，合同SHA256为014dc78e6e29772ce4d37400c0150ed52f7c37adcf8aafc843b3bec768acacd8。
+
+原材料转移仍要求来源CSV实时可读且完整来源证明有效。本轮增加单独的逻辑授权：owner必须在原成功版本仍可完整核验时显式确认；授权固定24h且可不可逆撤销。随后可注册新CSV、重新derive目标当前图，在同owner/project、已有注册且当前用户与runtime读取/aggregate权限均有效的目标上显式绑定规范化read→sum[→report]。新增CSV注册不会使事先签好的逻辑授权依赖原Grant基线，无需重跑原任务；已因注册/源码/撤权失效但未事先签授权的来源仍拒绝补发。
+
+复用对象只保存服务端规范化两/三步家族、固定schema、源冻结cap、软件实现承诺和授权身份。它不复制原列名、目标/描述、自定义step ID、CSV bytes/hash或原输入/输出。private审计仅保留来源opaque ID与指纹，允许读取封存来源JSON作hash和身份/版本核验；不读取原resource、Operation input/output或Run result/context。原Release/Run/CSV实时GET仍保留原权限与完整证明门；原材料用户/runtime撤权及删除不可读后仍拒绝这些GET，但事先授权的逻辑可继续执行当前目标。不可变来源审计仍必要，不能说所有旧记录均可删除，也不声称抵御数据库管理员全面重写。
+
+目标规划没有新增表、Principal、Grant、通用执行器或模型；现有注册入口仍会建立其原有runtime与Grant。逻辑授权、撤销、目标绑定和实际执行分别显式确认。规范化结构只接受当前目标数值列，工具操作和FrozenRunContract.resources只指向该目标；成功后由原worker、schema、原子typed提交及既有Release/Instance门保存新结果。逻辑计划和后续实例均持reserved prefix与双origin；剥除marker和双origin、重签hash也不能降级普通计划。每步及最终typed提交前后重核授权expiry/撤销、当前目标权限/版本/真实bytes、冻结及当前预算。
+
+项目逻辑入口支持冷页读取逻辑清单，其入口网络段不打开原app或读取原Release/CSV。既有connect的refreshApplicationUse可能枚举旧app并收到403，不承诺整个页面启动零旧app尝试；逻辑入口不依赖这些查询成功，原拒绝门不放宽。UNKNOWN保留完整原body/key；known恢复只GET。合法迟到接受先保存完整核过的回执，再核identity/project/selection generation；更换页面不绘制旧接受且不发起旧目标后续读取。目标app在POST前冻结，坏200不缓存、不绘制新plan；原其他损坏响应反馈及虚假accepted ID恢复限制仍保留。
+
+4e66136866d5a46347785af45f517dd75de1aeac被独审BLOCK：共同重签双AUTH的request_key、重算两类指纹而保留原逻辑ID后，SQLite/PG公开GET都仍200且零写。最终4a4b修复为每次load从user、原release ID及双封存原请求键重算逻辑ID，再核完整payload及源指纹；新增409/零写负例。所有原失败、夹具错误、中止与不同源码冻结分别保全，不合并成一次最终通过。
+
+最终实测及独审范围见[证据](../evidence/csv-data-free-logic-reuse-20261010/README.md)。实际fab旧源码建立历史→升级后旧证明拒绝/不迁移→新完整来源可签；旧50b材料转移升级回归也单独覆盖。新结果oracle为net8.75、count3，冷新列units13；并非复用原30/15、count2结果。
+
+该切片推进AT10“不依赖固定旧文件”的已有注册两/三步家族部分，不接受通用任务提取、自由代码/模型归纳、完整AT10/AT11或整体工程验收。早期四PG DOMidle10、原Report GET idle6、resources-history Future10、原HTTP200损坏回执恢复及整体性能观察继续OPEN。Windows900/Edge240/Node150 NOT_ACCEPTED；fixed11与原生Edge仅诊断范围，不覆盖新增功能。PROJECT PENDING/BLOCKED_PARTIAL，overall NOT_ACCEPTED，semantic UNKNOWN，owner PENDING，formal publication关闭，LIVE/真实模型0。无main修改、强推、部署或凭据/安全网络修改。
+
+本源原生run38045426944／job114193869021：fixed11为11PASS/0FAIL/0SKIP、33阶段报告，实际inventory2337/未执行2326；job整体FAIL，Edge阶段119s因protocol console guard观察natural-goal.js net::ERR_NO_BUFFER_SPACE而拒绝。该asset与fab逐字节相同，根因未定，不能推断暂态或排除新源相关；未放宽gate/预算、安全网络、未重跑。主67检查、agent及protocol内部26/boundRuns/conditional有局部PASS，不冒充Edge整项PASS；protocol-results.json未生成，仅8对象原bytes/hash重组，原完整log/transport/失败metadata保全。原生清理success，新增Edge asset-load/console问题OPEN。Windows11 NOT_RUN、model0，Windows900/Edge240/Node150仍NOT_ACCEPTED。

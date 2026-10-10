@@ -21,3 +21,5 @@ PROJECT PENDING/BLOCKED_PARTIAL，overall NOT_ACCEPTED，semantic UNKNOWN，owne
 新材料三步PG页面在c9单次30例中29PASS1冷实例DOM idle10失败，同源同预算1例重试仍失败；392仍失败在接受后Instance→Release→plan读取；e76已通过接受读回并真实写units17，但最后手动Instance→Release→plan读取仍idle10。四次产品失败的原FAILURE/log/JUnit均保留。不能将它们算作夹具错误。392删去material路径重复完整perRun GET；e76用fresh Instance GET精确release id/fingerprint匹配已sealed immutable intent release；709进一步用当前context已有sealed history release及已完整通过PlanSeal/jobSeal/typed/expected-ID/input门的最多50个immutable plan缓存减少重复GET。每次仍fresh Instance GET，后台live reauthorize/loadPlan/operations/typed证明，并且全部前端seal/input/ID/typed/current门重新校验后才cache/paint；缺cache正常GET，旧nonmaterial路径不改。DOM10/Node90均不提高。
 
 709上原失败invalid-budget三步PG页面1PASS42.18s，另两步/三步丢POST及冷页新结果2PASS86.67s，均原预算、无skip。此前22项PG/SQLite后端专项只通过全部Python/69其余src精确字节桥接；此前c9其余7个页面不冒充709重跑。最终SQLite12页及独立5场景结果按证据README。完整性能门仍未签收，不把限定用例通过升级为PG整体验收；历史Report GET idle6及resources-history Future10 OPEN均保留。
+
+后续4a4b限定切片新增事先显式确认的独立逻辑授权，可在旧CSV撤权/删除后读取当前授权新目标，见[无原材料内容逻辑复用](CsvDataFreeLogicReuse20261010.md)。本页原material路径的来源实时依赖、旧结果及性能OPEN仍按原范围保留，不将其自动升级成新授权。

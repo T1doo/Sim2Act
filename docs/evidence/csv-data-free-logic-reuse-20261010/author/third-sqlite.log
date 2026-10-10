@@ -1,0 +1,65 @@
+F
+=================================== FAILURES ===================================
+_ test_authorize_before_register_delete_old_then_actual_target_cold_instance[False] _
+
+env = (<sim2act.db.Store object at 0x7f9fe66b46e0>, Settings(database_url='sqlite:////tmp/sim2act-csv-data-free-logic-202610...d178ee65bd45c6a7bf17241f8e2bc3', 'user_e511e5e93ab34cf688f55f442ff77208', 'proj_07fbd6465e614bd5a0b610b1beaf99bd', ...)
+with_report = False
+
+    @pytest.mark.parametrize("with_report", [False, True])
+    def test_authorize_before_register_delete_old_then_actual_target_cold_instance(env, with_report):
+        from fastapi.testclient import TestClient
+        from sim2act.api import create_app
+    
+        obj, rel, _, old_rid, old_job, _, body, auth = setup_logic(env, with_report)
+        assert env[2].get(f"/api/internal/releases/{rel['id']}").status_code != 200
+        retire_old(env, old_rid)
+        assert env[2].get(f"/api/csv-dag/runs/{old_job['id']}").status_code != 200
+        assert env[2].get(f"/api/internal/releases/{rel['id']}").status_code != 200
+        public = json.dumps(obj)
+        for private in ("amount", "quantity", '"total"', "formatted", rel["snapshot"]["execution_source"]["source_hash"], old_rid, rel["id"], old_job["id"], "private_audit"):
+            assert private not in public, private
+        assert env[2].post(f"/api/internal/releases/{rel['id']}/csv-logic-authorizations", json=auth).json()["logic"] == obj
+        target = env[2].get(f"/api/apps/{body['target_app_id']}").json()
+        anchor = env[2].post(f"/api/projects/{env[5]}/apps/{target['id']}/delivery-graph/derive", json=dict(expected_candidate_fingerprint=target["fingerprint"], request_key="retired-anchor")).json()
+        body["expected_graph_fingerprint"] = anchor["graph_fingerprint"]
+        before = snapshot(env)
+        opts = env[2].get(f"/api/internal/csv-logics/{obj['id']}/materials")
+        assert opts.status_code == 200 and [v["resource_id"] for v in opts.json()["items"]] == [body["expected_resource_id"]]
+        assert fingerprint(snapshot(env)) == fingerprint(before)
+        p, accepted = accept(env, obj, body)
+        work(env, accepted)
+        detail = env[2].get(f"/api/csv-dag/runs/{accepted['run_id']}")
+        assert detail.status_code == 200, detail.text
+        proof = detail.json()
+        output = next(iter(proof["result"]["output_by_step"].values()))
+        assert proof["status"] == "SUCCEEDED" and len(proof["steps"]) == (3 if with_report else 2)
+        assert output["resource_id"] == body["expected_resource_id"] and output["sum"] == "8.75" and output["count"] == 3
+        with env[0].tx() as c:
+            actual = c.execute(select(operations).where(operations.c.run_id == accepted["run_id"])).mappings().all()
+            assert all(old_rid not in json.dumps(dict(op)) for op in actual)
+>           assert c.execute(select(runs.c.version).where(runs.c.id == old_job["id"])).scalar_one() == old_job["version"] + len(proof["steps"]) + 1
+E           AssertionError: assert 2 == ((1 + 2) + 1)
+E            +  where 2 = scalar_one()
+E            +    where scalar_one = <sqlalchemy.engine.cursor.CursorResult object at 0x7f9fe470a820>.scalar_one
+E            +      where <sqlalchemy.engine.cursor.CursorResult object at 0x7f9fe470a820> = execute(<sqlalchemy.sql.selectable.Select object at 0x7f9fe4fdbce0>)
+E            +        where execute = <sqlalchemy.engine.base.Connection object at 0x7f9fe4fdad80>.execute
+E            +        and   <sqlalchemy.sql.selectable.Select object at 0x7f9fe4fdbce0> = where(Column('id', String(), table=<runs>, primary_key=True, nullable=False) == 'run_301deea93e844f109ea6d52c06d597fe')
+E            +          where where = <sqlalchemy.sql.selectable.Select object at 0x7f9fe4fdb1d0>.where
+E            +            where <sqlalchemy.sql.selectable.Select object at 0x7f9fe4fdb1d0> = select(Column('version', Integer(), table=<runs>, default=ScalarElementColumnDefault(1)))
+E            +              where Column('version', Integer(), table=<runs>, default=ScalarElementColumnDefault(1)) = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f9fe6b39bc0>.version
+E            +                where <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f9fe6b39bc0> = Table('runs', MetaData(), Column('id', String(), table=<runs>, primary_key=True, nullable=False), Column('project_id',...tColumnDefault(False)), Column('version', Integer(), table=<runs>, default=ScalarElementColumnDefault(1)), schema=None).c
+E            +          and   Column('id', String(), table=<runs>, primary_key=True, nullable=False) = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f9fe6b39bc0>.id
+E            +            where <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f9fe6b39bc0> = Table('runs', MetaData(), Column('id', String(), table=<runs>, primary_key=True, nullable=False), Column('project_id',...tColumnDefault(False)), Column('version', Integer(), table=<runs>, default=ScalarElementColumnDefault(1)), schema=None).c
+E            +  and   2 = len([{'action_revision': 2, 'actual_reads': [{'resource_id': 'res_d301c77a06fe46189e86ea32310228e7', 'source_hash': '87783...ata.aggregate_csv'}], 'artifact_refs': [], 'check_results': [{'check': 'receipt.readback.v1', 'status': 'PASS'}], ...}])
+
+tests/test_csv_logic_reuse.py:114: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_logic_reuse.py::test_authorize_before_register_delete_old_then_actual_target_cold_instance[False]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 5.29s

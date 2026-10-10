@@ -1,0 +1,11 @@
+# 最终合同：LIMITED_DESIGN_PASS
+
+精确合同 SHA256 `014dc78e6e29772ce4d37400c0150ed52f7c37adcf8aafc843b3bec768acacd8`。HEAD仍为fab14d5，src/scripts/tests无变更；未运行测试或PG。可以按此合同开始实施，随后必须精确源码独审。
+
+相比已封存e657合同，§6明确旧审计字段投影及不读取/不宣称验证原Operation/Run.result；§9明确相同project锁序和每步、最终typed提交前后current逻辑expiry/撤销与目标Grant门。三项初始设计风险及事务内expiry缺口已有明确最小合同约束，无新增架构阻断。
+
+独立授权是明示新权限记录，与原数据Grant分离，不应偷偷改变旧readRelease/原Run/Instance保护。新loader不能调用旧allow_consumed例外；规范化结构/schema/cap/实现承诺应重构核验，防pair共同改签；source cap与旧封存授权上限保持精确绑定，当前平台收紧拒绝。logic-plan和logic-instance-plan必须reserved前缀+完整origin及真实release祖先绑定，以免marker删除后降级。所有新工具资源和FrozenRunContract仅目标CSV。Global冷入口不用原app/Release/CSV。
+
+此前CONTRACT_REVIEW中的10条必要实现门与目标反例仍适用。原合同重构件与其初始实际读取hash一致，e657过渡审查6对象白名单已逐字节保全，不覆写。此最终三对象另有白名单。
+
+本结论不签实现、PG并发、native、完整AT10/AT11、模型或性能。源码实现后另冻结验收；PROJECT PENDING/BLOCKED_PARTIAL、semantic UNKNOWN、owner PENDING、overall NOT_ACCEPTED、LIVE0及原OPEN均保持。

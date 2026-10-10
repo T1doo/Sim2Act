@@ -1,0 +1,11 @@
+# Read-only native terminal observation
+
+Source `4a4b6949fd159bd35c1ed1ed9d111426a27b706f`, run38045426944/job114193869021: **overall failure**, fixed remaining11 engineering diagnostic passes11/0FAIL/0SKIP, full collection2337 with2326 explicitly deselected, 33 passed setup/call/teardown reports, JUnit87.263s. Original full collection SHA and selected-node order/phases were independently reconstructed from the saved raw log. This is not full2337 or new data-free logical capability native acceptance.
+
+**Edge wrapper FAIL** at `internal-ui.cjs:393`, assertion `protocol native has no unexpected script or console failures`. Main browser67 checks and agent checks pass. Inner protocol26, boundRuns and conditional scopes report PASS; these nested results do not erase the outer gate failure. The single unexpected console event is `Failed to load resource: net::ERR_NO_BUFFER_SPACE`, loopback `/natural-goal.js`. The error is an asset-loading event, not an observed assertion in that script.
+
+Raw transport JSON decodes exactly to4,665,560 UTF8 bytes, SHA256 `0777625bd8b54f1ef499e7ce1d1defcfe6a1f21cff3afb2b4be7cc6aeabf447b`. All8 emitted browser objects independently reassemble from contiguous chunks and match published lengths/SHA and saved bytes. `protocol-results.json` is the missing ninth object: source writes it only after the failing console gate, so it must not be treated as completed evidence. Cleanup/Report steps succeeded; Python post step was skipped.
+
+The failing natural-goal asset is byte-identical to fab14d5. This does not establish a transient environment cause or rule out an association with the new source. Root cause remains **UNRESOLVED/OPEN**. Preserve gate, security configuration and original deadlines. There is presently no evidenced minimal source repair; keep the actual Edge failure OPEN, without blind reruns or suppressing the event.
+
+All72 products still match4a4b. The previously sealed final-fixed97 files and LIMITED_PASS are unchanged. This separate observation ran no tests/CI, changed no repo files/refs/PG/network and makes no visual/Windows11/whole-project acceptance claim. Two parser assumptions (phase field called when; Cleanup display-name assumption) and their corrected runs are preserved separately; they are observation harness errors, not additional native test failures. STOP ACK.
