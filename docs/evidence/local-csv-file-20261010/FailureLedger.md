@@ -2,6 +2,8 @@
 
 最终冻结与初始探测分开；全部初始日志/库/驱动输出私存 `/tmp/sim2act-resource-file-20261010`，摘要及原JUnit SHA256见 [初始账本](initial-run-ledger.json)。失败未删、不作为最终PASS计数。
 
+初次候选证据提交c5929cd8受仓库既有 `* text=auto` 影响，将14份独审CRLF CSV在Git blob内归一为LF；工作区/私有原件仍逐字节一致。此问题在推送后Git blob核查中发现，添加仅该证据目录的换行保留属性，并普通后续提交恢复14份原件，不改原白名单hash、不强推、不改产品。最终集成须同时核对工作区及Git blob全部白名单文件。
+
 | 初始运行 | 结果 | 原因与处置 |
 | --- | --- | --- |
 | initial-sqlite | 0PASS/5FAIL，6.620秒 | 新resource-files.js没有既有服务路由，HTTP加载hash不匹配，未进入文件选择。复用已注册app.js承载功能，未新增后端路线 |
