@@ -1,10 +1,11 @@
-param([ValidateSet('Setup', 'Test', 'Report', 'Cleanup')] [string] $Phase)
+param([ValidateSet('Setup', 'Test', 'Report', 'Cleanup')] [string] $Phase, [switch] $Remaining11)
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $RepoRoot
 if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or -not $env:RUNNER_TEMP) {
     throw 'This harness requires the actual Windows GitHub runner; no platform spoofing.'
 }
+if ($Remaining11 -and $Phase -ne 'Test') { throw 'Remaining11 is only an explicit Test-phase scope.' }
 $JobRoot = Join-Path $env:RUNNER_TEMP "sim2act-native-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
 $Cluster = Join-Path $JobRoot 'pgdata'
 $Config = Join-Path $JobRoot 'runtime.env'
@@ -115,7 +116,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $RuntimeU
         & node -e 'const p=require.resolve("jsdom/package.json"); if(require(p).version!=="30.1.2" || !p.startsWith(process.argv[1]+require("path").sep))process.exit(1); console.log("PASS: owned locked engineering jsdom30.1.2 before pytest")' $env:NODE_PATH
         if ($LASTEXITCODE -ne 0) { throw 'Owned locked engineering jsdom verification failed.' }
         $env:SIM2ACT_TEST_DATABASE_URL = ([IO.File]::ReadAllText($TestOwnerConfig) -split '=', 2)[1]
-        & ./scripts/Test.ps1 -Suite Engineering -CITracePath (Join-Path $JobRoot 'pytest-events.jsonl')
+        & ./scripts/Test.ps1 -Suite Engineering -CITracePath (Join-Path $JobRoot 'pytest-events.jsonl') -Remaining11:$Remaining11
     } finally {
         $env:NODE_PATH = $PreviousNodePath
         Remove-Item Env:SIM2ACT_TEST_DATABASE_URL -ErrorAction SilentlyContinue

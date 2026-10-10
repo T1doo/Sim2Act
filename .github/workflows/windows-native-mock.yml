@@ -50,8 +50,12 @@ jobs:
         run: ./scripts/WindowsCI.ps1 -Phase Setup
       - name: Small native API-worker-PowerShell smoke with application role
         run: ./.venv/Scripts/python.exe scripts/windows_ci_smoke.py
-      - name: Existing PowerShell engineering regression suite
-        run: ./scripts/WindowsCI.ps1 -Phase Test
+      - name: Engineering or explicitly marked remaining11 diagnostics
+        run: |
+          # Only an explicit diagnostic commit requests the fixed remaining11 scope.
+          # Default engineering remains full; neither mode accepts Windows11/R0.
+          $Remaining11 = '${{ contains(github.event.head_commit.message, '[native-remaining11]') }}' -eq 'true'
+          ./scripts/WindowsCI.ps1 -Phase Test -Remaining11:$Remaining11
       - name: Protected installed Edge real internal UI (synthetic, same runner)
         timeout-minutes: 4
         run: ./scripts/WindowsBrowserCI.ps1

@@ -13,6 +13,53 @@ ROOT = Path(__file__).resolve().parents[1]
 summarize = runpy.run_path(str(ROOT / "scripts/native_pytest_diagnostics.py"))["summarize"]
 
 
+def test_fixed_remaining_manifest_rejects_missing_duplicate_and_changed_nodes(tmp_path):
+    load = runpy.run_path(str(ROOT / "scripts/native_pytest_diagnostics.py"))["remaining11_nodes"]
+    expected = load()
+    for changed in [expected[:-1], expected[:-1] + [expected[0]], expected[:-1] + ["tests/test_other.py::test_other"]]:
+        path = tmp_path / "manifest.json"
+        path.write_text(json.dumps(changed))
+        with pytest.raises(ValueError, match="manifest mismatch"):
+            load(path)
+    # Windows checkout line endings do not change the canonical identity.
+    path.write_bytes(json.dumps(expected, indent=2).replace("\n", "\r\n").encode())
+    assert load(path) == expected
+
+
+@pytest.mark.parametrize("state", ["complete", "skipped", "interrupted", "partial_tail"])
+def test_remaining_scope_requires_all_actual_phases_and_complete_tail(tmp_path, state):
+    load = runpy.run_path(str(ROOT / "scripts/native_pytest_diagnostics.py"))["remaining11_nodes"]
+    nodes = load()
+    records = [dict(event="session_start", requested_scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=nodes),
+               dict(event="selection", scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=nodes,
+                    full_count=2234, full_nodes_sha256="finite fixture only", deselected_count=2223),
+               dict(event="collection", nodes=nodes)]
+    for node in nodes:
+        records.append(dict(event="node_start", nodeid=node))
+        if state == "interrupted" and node == nodes[-1]:
+            break
+        for phase in ("setup", "call", "teardown"):
+            outcome = "skipped" if state == "skipped" and node == nodes[-1] and phase == "call" else "passed"
+            records.append(dict(event="node_report", nodeid=node, phase=phase, outcome=outcome))
+        records.append(dict(event="node_finish", nodeid=node))
+    records.append(dict(event="session_finish", exitstatus=2 if state == "interrupted" else 0))
+    path = tmp_path / "events.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in records) + ('\n{"event":' if state == "partial_tail" else "\n"))
+    result = summarize(path)
+    assert result["scope"] == "DIAGNOSTIC_ONLY_REMAINING11"
+    assert result["required_targets_complete"] == (state == "complete")
+    assert len(result["required_outcomes"]) == 11
+    assert result["not_started_count"] == 0
+
+
+def test_remaining_requested_but_missing_selection_is_not_verified(tmp_path):
+    nodes = runpy.run_path(str(ROOT / "scripts/native_pytest_diagnostics.py"))["remaining11_nodes"]()
+    path = tmp_path / "events.jsonl"
+    path.write_text(json.dumps(dict(event="session_start", requested_scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=nodes)) + "\n")
+    result = summarize(path)
+    assert not result["required_targets_complete"] and result["full_collection_count"] is None
+
+
 @pytest.mark.parametrize("mode", ["interrupt", "collection_error", "failure"])
 def test_actual_pytest_failure_evidence_survives_incomplete_suite(tmp_path, mode):
     root = Path(__file__).resolve().parents[1]

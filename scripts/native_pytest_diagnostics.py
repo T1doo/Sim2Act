@@ -10,6 +10,21 @@ import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from pathlib import Path
 
+REMAINING11_SHA256 = "1f2b967e13bf163e1c19e33d9297f185f54d9c872a64295366142ac77021314e"
+
+
+def remaining11_nodes(path=None):
+    nodes = json.loads((path or Path(__file__).with_name("native-remaining11.json")).read_text(encoding="utf-8"))
+    if (
+        not isinstance(nodes, list)
+        or len(nodes) != 11
+        or any(not isinstance(node, str) for node in nodes)
+        or len(set(nodes)) != 11
+        or hashlib.sha256(json.dumps(nodes).encode()).hexdigest() != REMAINING11_SHA256
+    ):
+        raise ValueError("Fixed remaining11 manifest mismatch; no alternative selection.")
+    return nodes
+
 
 def redact(text):
     text = re.sub(r"(?i)postgres(?:ql)?(?:\+\w+)?://[^\s\"'<>]+", "<redacted-database-url>", text)
@@ -26,8 +41,9 @@ def redact(text):
 
 
 class Recorder:
-    def __init__(self, path):
+    def __init__(self, path, required_nodes=None):
         self.path = path
+        self.required_nodes = required_nodes
         self.start = time.monotonic()
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -49,7 +65,33 @@ class Recorder:
             print("\nSIM2ACT_CI_DIAGNOSTIC " + line, flush=True)
 
     def pytest_sessionstart(self, session):
-        self.emit("session_start", visible=True)
+        detail = {}
+        if self.required_nodes is not None:
+            detail = dict(requested_scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=self.required_nodes)
+        self.emit("session_start", visible=True, **detail)
+
+    def pytest_collection_modifyitems(self, session, config, items):
+        if self.required_nodes is None:
+            return
+        import pytest
+
+        full_nodes = [redact(item.nodeid) for item in items]
+        by_node = {item.nodeid: item for item in items}
+        if len(by_node) != len(items) or any(node not in by_node for node in self.required_nodes):
+            raise pytest.UsageError("Required remaining11 nodes missing or duplicate; no partial selection.")
+        self.emit("full_collection", nodes=full_nodes)
+        self.emit(
+            "selection",
+            visible=True,
+            scope="DIAGNOSTIC_ONLY_REMAINING11",
+            full_count=len(full_nodes),
+            full_nodes_sha256=hashlib.sha256(json.dumps(full_nodes).encode()).hexdigest(),
+            required_nodes=self.required_nodes,
+            deselected_count=len(items) - len(self.required_nodes),
+        )
+        deselected = [item for item in items if item.nodeid not in self.required_nodes]
+        items[:] = [by_node[node] for node in self.required_nodes]
+        config.hook.pytest_deselected(items=deselected)
 
     def pytest_collection_finish(self, session):
         nodes = [redact(item.nodeid) for item in session.items]
@@ -73,7 +115,7 @@ class Recorder:
             detail["failure"] = text
         self.emit(
             "node_report",
-            visible=report.failed,
+            visible=report.failed or self.required_nodes is not None,
             nodeid=redact(report.nodeid),
             phase=report.when,
             outcome=report.outcome,
@@ -91,7 +133,7 @@ class Recorder:
             )
 
     def pytest_runtest_logfinish(self, nodeid, location):
-        self.emit("node_finish", nodeid=redact(nodeid))
+        self.emit("node_finish", visible=self.required_nodes is not None, nodeid=redact(nodeid))
 
     def pytest_keyboard_interrupt(self, excinfo):
         self.emit("interrupted", visible=True, reason="KeyboardInterrupt")
@@ -102,15 +144,23 @@ class Recorder:
 
 def pytest_addoption(parser):
     parser.addoption("--ci-diagnostics", type=Path, help="Explicit native CI JSONL path")
+    parser.addoption("--ci-remaining11", action="store_true", help="Fixed diagnostic targets; not full acceptance")
 
 
 def pytest_configure(config):
     path = config.getoption("--ci-diagnostics")
+    required_nodes = None
+    if config.getoption("--ci-remaining11"):
+        import pytest
+
+        if path is None:
+            raise pytest.UsageError("Remaining11 requires explicit diagnostics; no silent reduced coverage.")
+        required_nodes = remaining11_nodes()
     if path is not None:
-        config.pluginmanager.register(Recorder(path), "sim2act-native-diagnostics")
+        config.pluginmanager.register(Recorder(path, required_nodes), "sim2act-native-diagnostics")
 
 
-def summarize(path):
+def read_records(path):
     records = []
     incomplete_tail = False
     if path.exists():
@@ -122,6 +172,11 @@ def summarize(path):
                 if index != len(lines) - 1:
                     raise
                 incomplete_tail = True
+    return records, incomplete_tail
+
+
+def summarize(path):
+    records, incomplete_tail = read_records(path)
     collected = [r for r in records if r["event"] == "collection"]
     started = {r["nodeid"] for r in records if r["event"] == "node_start"}
     finished = {r["nodeid"] for r in records if r["event"] == "node_finish"}
@@ -133,7 +188,7 @@ def summarize(path):
     ]
     ends = [r for r in records if r["event"] == "session_finish"]
     nodes = set().union(*(set(r["nodes"]) for r in collected)) if collected else set()
-    return dict(
+    result = dict(
         evidence_present=bool(records),
         collected=len(nodes),
         started=len(started),
@@ -148,6 +203,34 @@ def summarize(path):
         and all(r["exitstatus"] in (0, 1) for r in ends)
         and not incomplete_tail,
     )
+    selected = [r for r in records if r["event"] == "selection"]
+    requested = [r for r in records if r.get("requested_scope") == "DIAGNOSTIC_ONLY_REMAINING11"]
+    if selected or requested:
+        selection = selected[-1] if selected else dict(
+            scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=requested[-1]["required_nodes"],
+            full_count=None, full_nodes_sha256=None, deselected_count=None,
+        )
+        required = selection["required_nodes"]
+        reports = [r for r in records if r["event"] == "node_report"]
+        outcomes = {
+            node: {phase: [r["outcome"] for r in reports if r["nodeid"] == node and r["phase"] == phase]
+                   for phase in ("setup", "call", "teardown")}
+            for node in required
+        }
+        result.update(
+            scope=selection["scope"],
+            full_collection_count=selection["full_count"],
+            full_collection_sha256=selection["full_nodes_sha256"],
+            deselected_count=selection["deselected_count"],
+            required_outcomes=outcomes,
+            required_targets_complete=result["suite_complete"] and nodes == set(required)
+            and len(required) == 11 and len(set(required)) == 11
+            and hashlib.sha256(json.dumps(required).encode()).hexdigest() == REMAINING11_SHA256
+            and all(phases == {phase: ["passed"] for phase in ("setup", "call", "teardown")}
+                    for phases in outcomes.values())
+            and result["exitstatuses"] == [0] and not failures,
+        )
+    return result
 
 
 def main():
@@ -156,6 +239,12 @@ def main():
     parser.add_argument("--junit", required=True, type=Path)
     args = parser.parse_args()
     result = summarize(args.report)
+    if result.get("scope") == "DIAGNOSTIC_ONLY_REMAINING11":
+        records, _ = read_records(args.report)
+        full = [r["nodes"] for r in records if r["event"] == "full_collection"]
+        if full:
+            for offset in range(0, len(full[-1]), 20):
+                print("SIM2ACT_CI_FULL_COLLECTION " + json.dumps(dict(offset=offset, nodes=full[-1][offset:offset + 20])), flush=True)
     for failure in result["failures"]:
         print("SIM2ACT_CI_FAILURE " + json.dumps(failure), flush=True)
     summary = {k: v for k, v in result.items() if k != "failures"}
@@ -173,6 +262,8 @@ def main():
             stream.write(
                 "\n" + text + "\nWin11 product acceptance: NOT_RUN. Real model requests: 0.\n"
             )
+    if result.get("scope") == "DIAGNOSTIC_ONLY_REMAINING11" and not result["required_targets_complete"]:
+        raise SystemExit("Remaining11 incomplete/failed/skipped; full acceptance remains NOT_ACCEPTED.")
 
 
 if __name__ == "__main__":
