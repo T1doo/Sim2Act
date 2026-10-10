@@ -243,7 +243,7 @@ def test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_fail
     w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
     assert dag.advance(w,job) and dag.advance(w,job)
     def reject_terminal(conn,cursor,statement,parameters,context,executemany):
-        if statement.startswith('UPDATE runs SET status='):
+        if context.compiled.statement.is_update and context.compiled.statement.table is runs and context.compiled.params.get('status') == 'SUCCEEDED':
             raise RuntimeError('owned fixture injects failure after typed append, before terminal state')
     event.listen(env[0].engine,'before_cursor_execute',reject_terminal)
     try:
@@ -332,3 +332,25 @@ def test_dag_instance_application_role_and_no_new_principal_or_grant(env,runtime
         with store.engine.connect() as c:
             assert before==[c.execute(select(func.count()).select_from(t)).scalar_one() for t in [principals,grants]]
     finally:client.close();store.engine.dispose()
+
+
+def test_joint_pair_marker_and_join_deletion_cannot_hide_actual_accepted_event(env):
+    from sim2act.db import delivery_graph_requests
+    _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    with env[0].tx() as c:
+        rows=c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id==i['source_app_id'],
+            delivery_graph_requests.c.kind.in_(['csv_dag_run','csv_dag_run_seal']))).mappings().all()
+        for row in rows:
+            if row['snapshot']['response'].get('run_id')==a['run_id']:
+                value=copy.deepcopy(row['snapshot']);value['response'].pop('internal_instance')
+                c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.app_id==row['app_id'],
+                    delivery_graph_requests.c.principal_id==row['principal_id'],delivery_graph_requests.c.kind==row['kind'],
+                    delivery_graph_requests.c.request_key==row['request_key']).values(snapshot=value,fingerprint=fingerprint(value)))
+        c.execute(delete(internal_instance_data).where(internal_instance_data.c.run_id==a['app_run_id']))
+        c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id==a['run_id']))
+        c.execute(delete(internal_app_runs).where(internal_app_runs.c.id==a['app_run_id']))
+        c.execute(update(internal_instances).where(internal_instances.c.id==i['id']).values(data_version=0))
+    before=fingerprint(snapshot(env))
+    assert env[2].get('/api/internal/instances/'+i['id']).status_code==409
+    assert env[2].get('/api/runs/'+a['run_id']).status_code==409
+    assert fingerprint(snapshot(env))==before

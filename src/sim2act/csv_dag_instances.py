@@ -326,7 +326,17 @@ def instance_run_ids(c, user, i):
     joined = set(c.execute(select(internal_run_bindings.c.run_id).join(internal_app_runs,
         internal_app_runs.c.id == internal_run_bindings.c.app_run_id).where(
             internal_app_runs.c.instance_id == i["id"], internal_app_runs.c.principal_id == user)).scalars().all())
-    require(wanted == joined, "Accepted instance Run history is incomplete")
+    # The acceptance event is a third independent link. Pair markers and joins
+    # can be jointly removed while the original accepted Run still exists.
+    event_rows = c.execute(select(events.c.run_id, events.c.data).where(
+        events.c.kind == "CSV_DAG_ACCEPTED",
+        events.c.data["principal_id"].as_string() == user,
+        events.c.data["project_id"].as_string() == i["project_id"],
+        events.c.data["app_id"].as_string() == i["source_app_id"],
+        events.c.data["internal_instance"]["instance_id"].as_string() == i["id"])).all()
+    event_ids = {rid for rid, _ in event_rows}
+    require(len(event_ids) == len(event_rows) and wanted == joined == event_ids,
+        "Accepted instance Run history is incomplete")
     return sorted(wanted)
 
 
