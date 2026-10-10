@@ -8,7 +8,7 @@
 
 51个独审白名单文件逐大小/SHA复制，含两报告、正式/探针/初始harness失败、原112 JS、3负例及全部SQL审计，见 independent-copy-receipt.json。初始11私有harness初始化失败没有执行页面，修正仅发生在私有harness，单探针13检查不重复计入正式111检查；原失败日志保留。冻结脚本初始路径/数量修正也记录在独审harness-freeze-notes.md。
 
-本证据提交后普通推送候选，再将开发分支ff-only到相同冻结字节并普通推送，不重新启动已结束的13项矩阵；逐字证明、远端精确SHA与未推送差异按最终核验记录。
+候选 `bc31c20d837d4f503a86d5fcac819c071bc0f0da` 已普通推送并将开发分支ff-only到相同冻结字节，[集成记录](Integration.md)与integration-byte-proof.json保留精确证明。仅此集成证据提交后普通推送开发分支，不重新启动已结束的13项矩阵；远端精确SHA与未推送差异按最终核验记录。
 
 只使用本轮核验完整ID/owner标签的PG：network none、Unix socket、零公开端口，前后schema/测试角色/public表 `0|0|0`，正常停止后容器/匿名卷删除核验成功。首次pg_isready观察到镜像初始化临时服务器，随后SQL探针exit2；启动日志包含临时服务停止/最终服务启动，后续SQL真实成功才启动矩阵。私有原日志与该探针事件保留，未改安全/网络配置或升级权限。唯一测试警告为既有Starlette/httpx弃用提示。
 

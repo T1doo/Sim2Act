@@ -8,4 +8,4 @@
 
 这是三处晚回执自清页的反馈修复，不是全部 HTTP200 损坏形式或其他入口的验收。原112 JS真实页面负例需要在预期提示断言失败，不能把负对照当产品失败。其余 HTTP200 提示限制、PG resources-history/历史全量/探索超时 OPEN；Windows900/Edge240/Node150 未验收。`LIVE=0`、PROJECT `PENDING/BLOCKED_PARTIAL`、semantic `UNKNOWN`、owner `PENDING`、overall `NOT_ACCEPTED`，正式发布关闭。
 
-最终作者 SQLite/PG 各13PASS、0FAIL、0SKIP，每库12实际HTTP页面179检查及1实际旧源码Report数据库升级；独立LIMITED_PASS为8新源码页面111检查及3原112 JS精确预期失败，独审不签PG/旧DB/native。350冻结文件前后逐字一致；独审初始私有harness初始化失败及PG初始化SQL探针exit2全部保留，未计产品通过。完整[本轮证据](../evidence/report-history-feedback-20261010/README.md)含精确命令、负例、失败ledger和冻结清单。普通推送候选后按相同冻结字节快进开发分支；源码不变，不重复已通过矩阵。
+最终作者 SQLite/PG 各13PASS、0FAIL、0SKIP，每库12实际HTTP页面179检查及1实际旧源码Report数据库升级；独立LIMITED_PASS为8新源码页面111检查及3原112 JS精确预期失败，独审不签PG/旧DB/native。350冻结文件前后逐字一致；独审初始私有harness初始化失败及PG初始化SQL探针exit2全部保留，未计产品通过。完整[本轮证据](../evidence/report-history-feedback-20261010/README.md)含精确命令、负例、失败ledger和冻结清单。候选bc31已普通推送，开发分支按相同350冻结字节快进集成；源码不变，不重复已通过矩阵，[集成证据](../evidence/report-history-feedback-20261010/Integration.md)仅记录集成与最终普通推送核验。
