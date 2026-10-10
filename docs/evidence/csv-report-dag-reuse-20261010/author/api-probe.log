@@ -1,0 +1,50 @@
+F..........                                                              [100%]
+=================================== FAILURES ===================================
+_ test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs _
+
+env = (<sim2act.db.Store object at 0x7f3e31d3d250>, Settings(database_url='sqlite:////tmp/sim2act-report-dag-reuse-20261010/...f2f74d0653459181792cabdeda802d', 'user_7ef7fd43c0b34513afb34c5707f54b24', 'proj_a2859e38e9ea4f0ab5eb30b030ce7139', ...)
+
+    def test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs(env):
+        _, rid, plan, source, rel = release(env, with_report=True)
+        execution = rel["snapshot"]["execution_source"]
+        assert execution["version"] == adapter.REPORT_VERSION
+        assert execution["report_step"] == "formatted" and len(execution["receipt_fingerprints"]) == 3
+        assert plan["composition"]["sinks"] == ["formatted"]
+        i = create(env, rel)
+        result_ids = []
+        for n, (column, total) in enumerate((("quantity", "15"), ("amount", "30")), 1):
+            accepted, body = enqueue(env, i, rel, column, column)
+            assert accepted["execution_version"] == adapter.REPORT_VERSION
+            queued = env[2].get(f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}")
+            assert queued.status_code == 200 and queued.json()["output"] is None
+            work(env, accepted)
+            reply = env[2].get(f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}")
+            assert reply.status_code == 200, reply.text
+            value = reply.json()
+            assert value["status"] == "SUCCEEDED" and value["result_version"] == n
+            assert value["output"]["sum"] == total and value["output"]["column"] == column
+            assert value["output"]["resource_id"] == rid and set(value["output"]) == {
+                "resource_id", "column", "count", "sum", "source_hash"}
+            proof = value["proof"]
+            assert proof["model_requests"] == 0 and proof["business_writes"] == 1
+            assert len(proof["steps"]) == 3 and all(p["status"] == "VERIFIED" for p in proof["steps"])
+            assert proof["steps"][2]["predecessor_receipts"] == [fingerprint(proof["steps"][1])]
+            assert proof["steps"][2]["actual_reads"] == []
+>           assert proof["result"]["output_by_step"] == {"formatted": {
+                **value["output"], "text": f"列 {column}；行数 3；合计 {total}"}}
+E           AssertionError: assert {'formatted':...59619f', ...}} == {'formatted':...59619f', ...}}
+E             
+E             Differing items:
+E             {'formatted': {'column': 'quantity', 'count': 2, 'resource_id': 'res_2e689b9b024a4f1d97154b669d090304', 'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f', ...}} != {'formatted': {'column': 'quantity', 'count': 2, 'resource_id': 'res_2e689b9b024a4f1d97154b669d090304', 'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f', ...}}
+E             Use -v to get more diff
+
+tests/test_csv_report_dag_instances.py:57: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_report_dag_instances.py::test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs
+1 failed, 10 passed, 1 warning in 26.19s

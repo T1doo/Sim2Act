@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="8.765" timestamp="2026-10-10T07:43:27.861345+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_csv_report_dag_instances" name="test_resigned_float_count_cannot_impersonate_integer_receipt[False-False]" time="2.055"><failure message="AttributeError: id">self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+&gt;           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7fc2fc0924e0&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-dag-type-fix-202610...945186e227406bb66b79b98afd4888', 'user_3960db55e2c24d68a1baa86978872dae', 'proj_86a0a0d7e6e14ee58cbcea5cd25f0c64', ...)
+with_report = False, joint_output = False
+
+    @pytest.mark.parametrize("with_report", [False, True])
+    @pytest.mark.parametrize("joint_output", [False, True])
+    def test_resigned_float_count_cannot_impersonate_integer_receipt(env, with_report, joint_output):
+        _, _, _, _, rel = release(env, with_report=with_report)
+        i = create(env, rel)
+        accepted, _ = enqueue(env, i, rel)
+        work(env, accepted)
+        with env[0].tx() as c:
+            record = c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == i["id"])).mappings().one()
+            data = copy.deepcopy(record["data"])
+            assert type(data["result"]["count"]) is int and data["result"]["count"] == 2
+            data["result"]["count"] = 2.0
+            digest = fingerprint(data)
+            c.execute(update(internal_instance_data).where(
+&gt;               internal_instance_data.c.id == record["id"]).values(data=data, fingerprint=digest))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_report_dag_instances.py:197: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+&gt;           raise AttributeError(key) from err
+E           AttributeError: id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError</failure></testcase><testcase classname="tests.test_csv_report_dag_instances" name="test_resigned_float_count_cannot_impersonate_integer_receipt[False-True]" time="2.164"><failure message="AttributeError: id">self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+&gt;           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7fc2fa969370&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-dag-type-fix-202610...b2bdc3d95f4fefafa47665e865e0a2', 'user_760f961185f9450e8195b653944062d9', 'proj_117a3fd49ffc4814932f30bc4b074447', ...)
+with_report = True, joint_output = False
+
+    @pytest.mark.parametrize("with_report", [False, True])
+    @pytest.mark.parametrize("joint_output", [False, True])
+    def test_resigned_float_count_cannot_impersonate_integer_receipt(env, with_report, joint_output):
+        _, _, _, _, rel = release(env, with_report=with_report)
+        i = create(env, rel)
+        accepted, _ = enqueue(env, i, rel)
+        work(env, accepted)
+        with env[0].tx() as c:
+            record = c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == i["id"])).mappings().one()
+            data = copy.deepcopy(record["data"])
+            assert type(data["result"]["count"]) is int and data["result"]["count"] == 2
+            data["result"]["count"] = 2.0
+            digest = fingerprint(data)
+            c.execute(update(internal_instance_data).where(
+&gt;               internal_instance_data.c.id == record["id"]).values(data=data, fingerprint=digest))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_report_dag_instances.py:197: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+&gt;           raise AttributeError(key) from err
+E           AttributeError: id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError</failure></testcase><testcase classname="tests.test_csv_report_dag_instances" name="test_resigned_float_count_cannot_impersonate_integer_receipt[True-False]" time="1.962"><failure message="AttributeError: id">self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+&gt;           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7fc2fa51ef90&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-dag-type-fix-202610...b4a1c0cea94a9dae24d15acb5c4c5f', 'user_5b2fd3ff40814779b34291aa8c7e2651', 'proj_95c93c5130114e7aa54016a3cf722648', ...)
+with_report = False, joint_output = True
+
+    @pytest.mark.parametrize("with_report", [False, True])
+    @pytest.mark.parametrize("joint_output", [False, True])
+    def test_resigned_float_count_cannot_impersonate_integer_receipt(env, with_report, joint_output):
+        _, _, _, _, rel = release(env, with_report=with_report)
+        i = create(env, rel)
+        accepted, _ = enqueue(env, i, rel)
+        work(env, accepted)
+        with env[0].tx() as c:
+            record = c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == i["id"])).mappings().one()
+            data = copy.deepcopy(record["data"])
+            assert type(data["result"]["count"]) is int and data["result"]["count"] == 2
+            data["result"]["count"] = 2.0
+            digest = fingerprint(data)
+            c.execute(update(internal_instance_data).where(
+&gt;               internal_instance_data.c.id == record["id"]).values(data=data, fingerprint=digest))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_report_dag_instances.py:197: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+&gt;           raise AttributeError(key) from err
+E           AttributeError: id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError</failure></testcase><testcase classname="tests.test_csv_report_dag_instances" name="test_resigned_float_count_cannot_impersonate_integer_receipt[True-True]" time="2.257"><failure message="AttributeError: id">self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+&gt;           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7fc2fa795e20&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-dag-type-fix-202610...244a987b654950b601b4b611a767eb', 'user_b5bd708ed3e44dacb91d09d7fec9ae36', 'proj_71a2f0bff7314a67a15b8630012a7155', ...)
+with_report = True, joint_output = True
+
+    @pytest.mark.parametrize("with_report", [False, True])
+    @pytest.mark.parametrize("joint_output", [False, True])
+    def test_resigned_float_count_cannot_impersonate_integer_receipt(env, with_report, joint_output):
+        _, _, _, _, rel = release(env, with_report=with_report)
+        i = create(env, rel)
+        accepted, _ = enqueue(env, i, rel)
+        work(env, accepted)
+        with env[0].tx() as c:
+            record = c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == i["id"])).mappings().one()
+            data = copy.deepcopy(record["data"])
+            assert type(data["result"]["count"]) is int and data["result"]["count"] == 2
+            data["result"]["count"] = 2.0
+            digest = fingerprint(data)
+            c.execute(update(internal_instance_data).where(
+&gt;               internal_instance_data.c.id == record["id"]).values(data=data, fingerprint=digest))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_report_dag_instances.py:197: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fc2fc390db0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+&gt;           raise AttributeError(key) from err
+E           AttributeError: id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError</failure></testcase></testsuite></testsuites>

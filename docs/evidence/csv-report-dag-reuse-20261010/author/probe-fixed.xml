@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="21.820" timestamp="2026-10-10T07:10:11.397841+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_csv_dag_instances" name="test_actual_two_nodes_two_cold_columns_instances_and_read_only_recovery" time="11.667" /><testcase classname="tests.test_csv_dag_instances_ui" name="test_actual_report_dag_internal_reuse_and_cold_new_column_page[post]" time="9.992"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: three actual operations retain report sink and exact five-field typed result&#10;      at check (/workspace/Sim2Act/tests/csv_dag_instances.cjs:5:29)&#10;      at /workspace/Sim2Act/tests/csv_dag_instances.cjs:20:591 {&#10;    generatedMessage: false,&#10;    code: 'ERR_ASSERTION',&#10;    actual: false,&#10;    expected: true,&#10;    operator: '==',&#10;    diff: 'simple'&#10;  }&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_instances.cjs', '/tmp/sim2act-report-dag-reuse-20261010/probe-fixed/test...sage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x7fa21cffe900&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-dag-reuse-20261010/...8bb97e7181456da6881902384b3317', 'user_050dbe63bed0470aa4049f3c3277c209', 'proj_dabb59be40b64e21ae118cd69adb3e87', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-dag-reuse-20261010/probe-fixed/test_actual_report_dag_interna0')
+lost = 'post'
+
+    @pytest.mark.parametrize("lost", ["post", "read"])
+    def test_actual_report_dag_internal_reuse_and_cold_new_column_page(env, tmp_path, lost):
+&gt;       actual_reuse_page(env, tmp_path, lost, with_report=True)
+
+tests/test_csv_dag_instances_ui.py:29: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fa21cffe900&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-dag-reuse-20261010/...8bb97e7181456da6881902384b3317', 'user_050dbe63bed0470aa4049f3c3277c209', 'proj_dabb59be40b64e21ae118cd69adb3e87', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-dag-reuse-20261010/probe-fixed/test_actual_report_dag_interna0')
+lost = 'post'
+
+    def actual_reuse_page(env, tmp_path, lost, *, with_report):
+        aid, rid, plan, _, source = setup(env, with_report=with_report)
+        plan.pop("cached", None)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                dict(
+                    base=f"http://127.0.0.1:{port}",
+                    project=env[5],
+                    app=aid,
+                    resource=rid,
+                    source=source["id"],
+                    plan=plan,
+                    lost=lost,
+                    nodes=3 if with_report else 2,
+                )
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(0.01)
+            assert shutil.which("node")
+            child = subprocess.run(
+                ["node", "tests/csv_dag_instances.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(child.stdout + child.stderr)
+&gt;           assert child.returncode == 0, child.stdout + child.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: three actual operations retain report sink and exact five-field typed result
+E                 at check (/workspace/Sim2Act/tests/csv_dag_instances.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/csv_dag_instances.cjs:20:591 {
+E               generatedMessage: false,
+E               code: 'ERR_ASSERTION',
+E               actual: false,
+E               expected: true,
+E               operator: '==',
+E               diff: 'simple'
+E             }
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_dag_instances.cjs', '/tmp/sim2act-report-dag-reuse-20261010/probe-fixed/test...sage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n").returncode
+
+tests/test_csv_dag_instances_ui.py:79: AssertionError</failure></testcase></testsuite></testsuites>

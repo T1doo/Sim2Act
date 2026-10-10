@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="11" time="26.189" timestamp="2026-10-10T07:11:11.374024+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_csv_report_dag_instances" name="test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs" time="4.040"><failure message="AssertionError: assert {'formatted':...59619f', ...}} == {'formatted':...59619f', ...}}&#10;  &#10;  Differing items:&#10;  {'formatted': {'column': 'quantity', 'count': 2, 'resource_id': 'res_2e689b9b024a4f1d97154b669d090304', 'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f', ...}} != {'formatted': {'column': 'quantity', 'count': 2, 'resource_id': 'res_2e689b9b024a4f1d97154b669d090304', 'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f', ...}}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7f3e31d3d250&gt;, Settings(database_url='sqlite:////tmp/sim2act-report-dag-reuse-20261010/...f2f74d0653459181792cabdeda802d', 'user_7ef7fd43c0b34513afb34c5707f54b24', 'proj_a2859e38e9ea4f0ab5eb30b030ce7139', ...)
+
+    def test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs(env):
+        _, rid, plan, source, rel = release(env, with_report=True)
+        execution = rel["snapshot"]["execution_source"]
+        assert execution["version"] == adapter.REPORT_VERSION
+        assert execution["report_step"] == "formatted" and len(execution["receipt_fingerprints"]) == 3
+        assert plan["composition"]["sinks"] == ["formatted"]
+        i = create(env, rel)
+        result_ids = []
+        for n, (column, total) in enumerate((("quantity", "15"), ("amount", "30")), 1):
+            accepted, body = enqueue(env, i, rel, column, column)
+            assert accepted["execution_version"] == adapter.REPORT_VERSION
+            queued = env[2].get(f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}")
+            assert queued.status_code == 200 and queued.json()["output"] is None
+            work(env, accepted)
+            reply = env[2].get(f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}")
+            assert reply.status_code == 200, reply.text
+            value = reply.json()
+            assert value["status"] == "SUCCEEDED" and value["result_version"] == n
+            assert value["output"]["sum"] == total and value["output"]["column"] == column
+            assert value["output"]["resource_id"] == rid and set(value["output"]) == {
+                "resource_id", "column", "count", "sum", "source_hash"}
+            proof = value["proof"]
+            assert proof["model_requests"] == 0 and proof["business_writes"] == 1
+            assert len(proof["steps"]) == 3 and all(p["status"] == "VERIFIED" for p in proof["steps"])
+            assert proof["steps"][2]["predecessor_receipts"] == [fingerprint(proof["steps"][1])]
+            assert proof["steps"][2]["actual_reads"] == []
+&gt;           assert proof["result"]["output_by_step"] == {"formatted": {
+                **value["output"], "text": f"列 {column}；行数 3；合计 {total}"}}
+E           AssertionError: assert {'formatted':...59619f', ...}} == {'formatted':...59619f', ...}}
+E             
+E             Differing items:
+E             {'formatted': {'column': 'quantity', 'count': 2, 'resource_id': 'res_2e689b9b024a4f1d97154b669d090304', 'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f', ...}} != {'formatted': {'column': 'quantity', 'count': 2, 'resource_id': 'res_2e689b9b024a4f1d97154b669d090304', 'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f', ...}}
+E             Use -v to get more diff
+
+tests/test_csv_report_dag_instances.py:57: AssertionError</failure></testcase><testcase classname="tests.test_csv_report_dag_instances" name="test_changed_authority_or_third_receipt_never_appends_typed_result[grant]" time="2.193" /><testcase classname="tests.test_csv_report_dag_instances" name="test_changed_authority_or_third_receipt_never_appends_typed_result[source]" time="2.696" /><testcase classname="tests.test_csv_report_dag_instances" name="test_changed_authority_or_third_receipt_never_appends_typed_result[instance-aba]" time="2.683" /><testcase classname="tests.test_csv_report_dag_instances" name="test_changed_authority_or_third_receipt_never_appends_typed_result[binding-delete]" time="2.252" /><testcase classname="tests.test_csv_report_dag_instances" name="test_changed_authority_or_third_receipt_never_appends_typed_result[report-receipt]" time="1.915" /><testcase classname="tests.test_csv_report_dag_instances" name="test_report_terminal_failure_rolls_back_the_actual_typed_append" time="4.328" /><testcase classname="tests.test_csv_report_dag_instances" name="test_source_shape_cannot_be_relabelled_or_partially_frozen[old-version]" time="1.533" /><testcase classname="tests.test_csv_report_dag_instances" name="test_source_shape_cannot_be_relabelled_or_partially_frozen[unknown-version]" time="1.446" /><testcase classname="tests.test_csv_report_dag_instances" name="test_source_shape_cannot_be_relabelled_or_partially_frozen[missing-report-step]" time="1.663" /><testcase classname="tests.test_csv_report_dag_instances" name="test_source_shape_cannot_be_relabelled_or_partially_frozen[missing-third-receipt]" time="1.337" /></testsuite></testsuites>

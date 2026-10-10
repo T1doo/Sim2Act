@@ -1,0 +1,9 @@
+终态出版独立复核 LIMITED_PASS_TERMINAL_PUBLICATION。精确 source50b10417a99a070f6bcd614471cc00ec102b7836，run38035830928/job114165927573/attempt1 actual completedSUCCESS。
+
+17公开对象及白名单逐项与私有原件、大小、SHA256一致。实际transport解码UTF8日志4811976 bytes、SHA256 9f4951d31759eb99f710b80c6370e4f969d4b15f7c0cb66f06421c4789355cc7。自编parser未调用作者decoder，从实际日志重构2270唯一full nodes/114chunks，与public collection及hash相等；11固定节点按manifest顺序各start/setup-call-teardown passed/finish完整，59事件单PID、sessionfinish0，33passed phase、2259明确deselected，summary/JUnit11P0F0S与事件闭合。
+
+9browser文件从原始base64 chunks逐项独立重组，size/hash与公开/私有一致。三个JSON的69/33/26检查分别核对，不叠加为独立总验收；visualReview未审和Win11 NOT_RUN保持。实际API终态/step时间核对job312s、Engineering103s、Edge127s、JUnit91.405s。365source-after-native字节与当前冻结一致。
+
+仅固定remaining11诊断及installedEdge场景终态，2259未执行、新20feature/type节点未选入。不是新产品Windows验收、全量2270或Win11/owner/semantic验收，不能关闭两个历史OPEN或改变900/240/150。此处未跑tests/CI/PG，仅静态解析已有材料。
+
+首次自编解析断言错误地要求public fullcollection chunks在selection之前；实际chunks由Report在session事件后导出。原脚本/失败日志保留，按实际输出契约纠正并验证顺序/节点hash闭合，不是源或CI失败。最终根manifest及发布Gitblob字节需在一次最终封存后单独确认，本收据排除尚未封存根。

@@ -1,0 +1,102 @@
+F..........F....                                                         [100%]
+=================================== FAILURES ===================================
+_ test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs _
+
+env = (<sim2act.db.Store object at 0x7fa3ec9a8d70>, Settings(database_url='sqlite:////tmp/sim2act-report-dag-reuse-20261010/...6504c6b5bb49d79ca3f0edf2903b7d', 'user_21514c1546b2465388edd855b92e1bf1', 'proj_8e8b68deed3845628db0698779492df9', ...)
+
+    def test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs(env):
+        _, rid, plan, source, rel = release(env, with_report=True)
+        execution = rel["snapshot"]["execution_source"]
+        assert execution["version"] == adapter.REPORT_VERSION
+        assert execution["report_step"] == "formatted" and len(execution["receipt_fingerprints"]) == 3
+        assert plan["composition"]["sinks"] == ["formatted"]
+        i = create(env, rel)
+        result_ids = []
+        for n, (column, total) in enumerate((("quantity", "15"), ("amount", "30")), 1):
+            accepted, body = enqueue(env, i, rel, column, column)
+            assert accepted["execution_version"] == adapter.REPORT_VERSION
+            queued = env[2].get(f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}")
+            assert queued.status_code == 200 and queued.json()["output"] is None
+            work(env, accepted)
+            reply = env[2].get(f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}")
+            assert reply.status_code == 200, reply.text
+            value = reply.json()
+            assert value["status"] == "SUCCEEDED" and value["result_version"] == n
+            assert value["output"]["sum"] == total and value["output"]["column"] == column
+            assert value["output"]["resource_id"] == rid and set(value["output"]) == {
+                "resource_id", "column", "count", "sum", "source_hash"}
+            proof = value["proof"]
+            assert proof["model_requests"] == 0 and proof["business_writes"] == 1
+            assert len(proof["steps"]) == 3 and all(p["status"] == "VERIFIED" for p in proof["steps"])
+            assert proof["steps"][2]["predecessor_receipts"] == [fingerprint(proof["steps"][1])]
+            assert proof["steps"][2]["actual_reads"] == []
+            assert proof["result"]["output_by_step"] == {"formatted": {
+                **value["output"], "text": f"列 {column}；行数 2；合计 {total}"}}
+            assert accepted["run_id"] != source["id"] and proof["plan_fingerprint"] != plan["plan_fingerprint"]
+            repeat = env[2].post(f"/api/internal/instances/{i['id']}/runs", json=body)
+            assert repeat.status_code == 202 and repeat.json()["cached"]
+            assert repeat.json()["run_id"] == accepted["run_id"]
+            result_ids.append(accepted["run_id"])
+        before = fingerprint(snapshot(env))
+        cold = lifecycle.inspect_instance(env[0], env[3], i["id"], limits(env))
+>       assert cold["data_version"] == 2 and len(cold["runs"]) == 2
+                                                 ^^^^^^^^^^^^
+E       KeyError: 'runs'
+
+tests/test_csv_report_dag_instances.py:66: KeyError
+_____ test_actual_f13_two_node_version_and_history_survive_source_upgrade ______
+
+env = (<sim2act.db.Store object at 0x7fa3eb1f0b90>, Settings(database_url='sqlite:////tmp/sim2act-report-dag-reuse-20261010/...6790e266e6415d96c64e27399ee9a8', 'user_810602fe642047e29042366eb786a585', 'proj_e63cb99f71854faca4e4e556184398c0', ...)
+tmp_path = PosixPath('/tmp/sim2act-report-dag-reuse-20261010/focused-sqlite/test_actual_f13_two_node_versi0')
+
+    def test_actual_f13_two_node_version_and_history_survive_source_upgrade(env, tmp_path):
+        import json
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+    
+        from test_csv_dag_upgrade import raw_history_hashes
+    
+        value = os.environ.get("SIM2ACT_REPORT_DAG_OLD_ARCHIVE")
+        if not value:
+            pytest.skip("Requires explicitly prepared actual f13 source archive")
+        archive = Path(value)
+        old_module = archive / "src/sim2act/csv_dag_instances.py"
+        assert hashlib.sha256(old_module.read_bytes()).hexdigest() == os.environ["SIM2ACT_REPORT_DAG_OLD_MODULE_SHA256"]
+        assert old_module.read_bytes() != Path(adapter.__file__).read_bytes()
+        output = tmp_path / "old-f13-result.json"
+        body = dict(database_url=env[1].database_url,
+            schema=env[0].engine.get_execution_options().get("schema_translate_map", {}).get(None),
+            data_root=str(tmp_path), owner=env[3], other=env[4], project=env[5],
+            resource=env[6], output=str(output))
+        driver = Path(__file__).with_name("fixtures") / "csv_report_dag_upgrade.py"
+        child = subprocess.run([sys.executable, str(driver.resolve())], cwd=archive,
+            env={**os.environ, "PYTHONPATH": str(archive / "src") + os.pathsep + str(archive / "tests"), "LIVE": "0"},
+            input=json.dumps(body), text=True, capture_output=True, timeout=60)
+        (tmp_path / "old-f13-driver.log").write_text(child.stdout + child.stderr)
+        assert child.returncode == 0, child.stdout + child.stderr
+        old = json.loads(output.read_text())
+        assert Path(old["module_path"]).resolve() == old_module.resolve()
+        assert old["module_sha256"] == os.environ["SIM2ACT_REPORT_DAG_OLD_MODULE_SHA256"]
+        assert old["result"]["execution_version"] == adapter.VERSION and old["result"]["output"]["sum"] == "15"
+        names = list(snapshot(env))
+        before = raw_history_hashes(env[0], names)
+        i, rel, a = old["instance"], old["release"], old["accepted"]
+        read = env[2].get(f"/api/internal/instances/{i['id']}/runs/{a['run_id']}")
+>       assert read.status_code == 200, read.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Current graph baseline changed; explicitly derive a new anchor","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 200
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_csv_report_dag_instances.py:189: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_report_dag_instances.py::test_completed_report_flow_reexecutes_two_cold_columns_and_preserves_full_proofs
+FAILED tests/test_csv_report_dag_instances.py::test_actual_f13_two_node_version_and_history_survive_source_upgrade
+2 failed, 14 passed, 1 warning in 87.25s (0:01:27)

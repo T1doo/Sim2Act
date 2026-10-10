@@ -1,0 +1,13 @@
+本轮公开已完成内容审计：LIMITED_PASS_COMPLETED_CONTENT_ONLY。
+
+精确源码 50b10417a99a070f6bcd614471cc00ec102b7836。七组白名单共289项公开文件逐项与私有来源、大小、SHA256一致；加7份白名单和root README为297个已完成材料。type-fix-author在审查期间从47项增加至49项，新增remote-source-push和capacity-final-bridge均已核对。首次旧287-count断言失败的脚本和日志保留，属于发布快照更新，不是产品/证据内容失败。
+
+365文件Git、工作区、冻结字节前后匹配。69产品中66与473相同；50b对5588仅adapter两处严格指纹比较及一份测试文件。source-freeze原继承changed/product_changed描述的是f13/473；新增addendum原manifest哈希、base5588实际2路径、f13实际8路径和473产品3路径均与Git实查一致，原件未被覆写。不能将继承列表视为base5588差异。
+
+旧5588有限61项证据及native11属于旧源码。5588类型攻击BLOCK12原件、六个公开GET200及独立typed schema拒绝浮点证据保留。最终50b自编6例38检查限定通过属于新源码，不与原12例/页面范围拼成一次矩阵。作者50b SQLite12/12 108.655秒、PG12/12 190.927秒与XML逐项闭合；cleanup记录0|0|0、network-none/零published ports、自有容器与卷移除。此处核对封存材料，不代签独立PG或再次执行测试。
+
+capacity-final-bridge四项静态输入哈希分别核对5588/current及原capacity证据。只证明旧串行流程下界>900，当前完整最小成本、未测尾部UNKNOWN；未批准或实施新budget、full运行、分片或共享可变夹具。两历史超时OPEN及PROJECT/semantic/owner/overall/LIVE边界明确保留。
+
+native-final实际运行尚未全部终态，排除本收据；root总manifest尚未封存，也排除本收据。不存在将pending认作缺失错误或成功。待实际终态材料及根manifest后只需另做出版增量审核。
+
+本轮未运行tests/CI、未操作PG、未改repo/refs/remote。私有证据COPY_WHITELIST.json可精确复制，旧独审白名单均未改。

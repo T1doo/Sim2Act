@@ -1,0 +1,4 @@
+from common import *
+folder=ROOT/'api-report-self-sign';url='sqlite:///'+str(folder/'db.sqlite');store=Store(url,test_only=True);settings=Settings(url,folder,mode='mock');client=TestClient(create_app(store,settings));client.headers['Authorization']='Bearer review-A';e=[store,settings,client,None,None,None,None]
+with store.engine.connect() as c:i=c.execute(select(internal_instances)).mappings().one()
+before=fingerprint(snapshot(e));response=client.get('/api/internal/instances/'+i['id']);after=fingerprint(snapshot(e));out={'scope':'same initial alteredDB retained, nofixture/testrerun','status':response.status_code,'body':response.json(),'zero_allDB_writes':before==after};assert response.status_code==400 and response.json()['detail']['code']=='VERIFICATION_FAILED' and before==after;out['verdict']='PASS';(ROOT/'report-tamper-corrected-result.json').write_text(json.dumps(out,indent=2));print(json.dumps(out));client.close();store.engine.dispose()

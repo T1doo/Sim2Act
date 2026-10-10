@@ -1,0 +1,102 @@
+{
+  "case": "report-joint",
+  "source_sha": "50b10417a99a070f6bcd614471cc00ec102b7836",
+  "family": "internal.csv-read-sum-report.v1",
+  "typed_frozen_schema": {
+    "type": "object",
+    "properties": {
+      "result": {
+        "type": "object",
+        "properties": {
+          "resource_id": {
+            "type": "string"
+          },
+          "column": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "sum": {
+            "type": "string"
+          },
+          "source_hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource_id",
+          "column",
+          "count",
+          "sum",
+          "source_hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "additionalProperties": false
+  },
+  "attack_typed_data": {
+    "result": {
+      "resource_id": "res_6f904d918abf4ecda07b0a9fc7d8a0f3",
+      "column": "quantity",
+      "count": 2.0,
+      "sum": "4",
+      "source_hash": "44ee79d063a4da666cf7f94134d27d04583f28dae740ed576bdc280a784c75bc"
+    }
+  },
+  "ar_count_type": "float",
+  "status": "PASS",
+  "checks": [
+    "frozen typed schema rejects floating count",
+    "actual Operation/receipts untouched",
+    "actual public instance rejects type tamper",
+    "actual public instance_run rejects type tamper",
+    "actual public dag_run rejects type tamper",
+    "all failed GET zero entireDB writes"
+  ],
+  "responses": {
+    "instance": {
+      "path": "/api/internal/instances/iinstance_88785edaca593652a690be90d2a59e98",
+      "status": 409,
+      "body": {
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "Internal DAG provenance changed",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    "instance_run": {
+      "path": "/api/internal/instances/iinstance_88785edaca593652a690be90d2a59e98/runs/run_ba0ac3796c744bc5aa123fd9429b5b35",
+      "status": 409,
+      "body": {
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "Internal DAG provenance changed",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    "dag_run": {
+      "path": "/api/csv-dag/runs/run_ba0ac3796c744bc5aa123fd9429b5b35",
+      "status": 409,
+      "body": {
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "Internal DAG provenance changed",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    }
+  }
+}
