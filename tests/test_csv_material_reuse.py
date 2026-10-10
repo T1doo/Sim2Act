@@ -308,7 +308,7 @@ def test_complete_intent_current_authority_and_budget_reject_zero_write(env, att
     before = fingerprint(snapshot(env))
     if attack == "budget":
         cap = limits(env).model_dump()
-        cap["max_tool_calls"] = 2
+        cap["max_tools"] = 2
         with pytest.raises(DomainError):
             material.propose(
                 env[0], env[3], rel["id"], material.MaterialInput(**body), Limits(**cap)

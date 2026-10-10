@@ -13,7 +13,7 @@ if(target.pathname.endsWith("/csv-material-plans")&&opts.method==="POST"){
   if(info.lost.startsWith("invalid")&&hold===null){hold=true;const m=JSON.parse(Buffer.from(bytes).toString());
  if(info.lost==="invalid")m.binding_fingerprint="0".repeat(64);
  else {if(info.lost==="invalid-key"){m.plan.request_key="material-plan-"+"0".repeat(48);m.binding.plan_input.request_key=m.plan.request_key;m.binding_fingerprint=await w.deliveryDigest(m.binding);m.plan.material_reuse.binding_fingerprint=m.binding_fingerprint;}
- else m.plan.definition.manifest.runtime_limits.max_tool_calls+=1;
+ else m.plan.definition.manifest.runtime_limits.max_tools+=1;
  const {cached,plan_fingerprint,...v}=m.plan;m.plan.plan_fingerprint=await w.deliveryDigest(v);}
  return new Response(JSON.stringify(m),{status:201,headers:r.headers});}
 }
