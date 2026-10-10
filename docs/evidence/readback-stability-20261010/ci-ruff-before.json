@@ -1,0 +1,1322 @@
+[
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 34,
+      "row": 14
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import hashlib\nimport json\nimport sys\nfrom pathlib import Path\n\nfrom fastapi.testclient import TestClient\nfrom test_column_patches import setup\nfrom test_csv_dag import NoModel\nfrom test_delivery_graph_apps import snapshot\n\nfrom sim2act import csv_dag\nfrom sim2act.api import create_app\nfrom sim2act.config import Settings\nfrom sim2act.db import Store\nfrom sim2act.worker import Worker\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 15
+          },
+          "location": {
+            "column": 1,
+            "row": 2
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 2
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "noqa_row": 2,
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 19,
+      "row": 17
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": null,
+    "location": {
+      "column": 18,
+      "row": 17
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 17,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 47,
+      "row": 19
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": null,
+    "location": {
+      "column": 46,
+      "row": 19
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 19,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 36,
+      "row": 30
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": null,
+    "location": {
+      "column": 35,
+      "row": 30
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 30,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 81,
+      "row": 30
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": null,
+    "location": {
+      "column": 80,
+      "row": 30
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 30,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 125,
+      "row": 30
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": null,
+    "location": {
+      "column": 124,
+      "row": 30
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 30,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 50,
+      "row": 31
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": null,
+    "location": {
+      "column": 49,
+      "row": 31
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 31,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 16,
+      "row": 35
+    },
+    "filename": "/workspace/Sim2Act/tests/fixtures/csv_dag_instance_upgrade.py",
+    "fix": null,
+    "location": {
+      "column": 15,
+      "row": 35
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 35,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 34,
+      "row": 17
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import copy\nimport hashlib\nfrom fractions import Fraction\n\nimport pytest\nfrom sqlalchemy import delete, select, update\nfrom test_column_patches import setup as source_setup\nfrom test_csv_dag import NoModel\nfrom test_delivery_graph_apps import snapshot\nfrom test_internal_lifecycle import limits\n\nfrom sim2act import csv_dag as dag\nfrom sim2act import csv_dag_instances as instances\nfrom sim2act import lifecycle\nfrom sim2act.db import (\n    Store,\n    fingerprint,\n    grants,\n    internal_app_runs,\n    internal_instance_data,\n    internal_instances,\n    internal_releases,\n    internal_run_bindings,\n    operations,\n    resources,\n    runs,\n)\nfrom sim2act.errors import DomainError\nfrom sim2act.worker import Worker\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 20
+          },
+          "location": {
+            "column": 1,
+            "row": 2
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 2
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "noqa_row": 2,
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 28,
+      "row": 137
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 27,
+      "row": 137
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 137,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 25,
+      "row": 138
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 24,
+      "row": 138
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 138,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 29,
+      "row": 139
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 139
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 139,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 29,
+      "row": 140
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 140
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 140,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 28,
+      "row": 141
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 27,
+      "row": 141
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 141,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 29,
+      "row": 142
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 142
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 142,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 27,
+      "row": 143
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 26,
+      "row": 143
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 143,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 30,
+      "row": 160
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 160
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 160,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 31,
+      "row": 161
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 30,
+      "row": 161
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 161,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 37,
+      "row": 162
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 162
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 162,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 39,
+      "row": 163
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 163
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 163,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 44,
+      "row": 166
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 43,
+      "row": 166
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 166,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 50,
+      "row": 170
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 49,
+      "row": 170
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 170,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 39,
+      "row": 187
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 187
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 187,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 27,
+      "row": 189
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 26,
+      "row": 189
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 189,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 43,
+      "row": 190
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 42,
+      "row": 190
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 190,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 37,
+      "row": 192
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 192
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 192,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 34,
+      "row": 199
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 33,
+      "row": 199
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 199,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 52,
+      "row": 199
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 51,
+      "row": 199
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 199,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 36,
+      "row": 210
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 35,
+      "row": 210
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 210,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 54,
+      "row": 210
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 53,
+      "row": 210
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 210,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 77,
+      "row": 210
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 76,
+      "row": 210
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 210,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 44,
+      "row": 213
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 43,
+      "row": 213
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 213,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 37,
+      "row": 219
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 219
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 219,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 34,
+      "row": 224
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 33,
+      "row": 224
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 224,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 45,
+      "row": 230
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 44,
+      "row": 230
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 230,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 45,
+      "row": 232
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 44,
+      "row": 232
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 232,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 37,
+      "row": 237
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 237
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 237,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 34,
+      "row": 242
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 33,
+      "row": 242
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 242,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 52,
+      "row": 242
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 51,
+      "row": 242
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 242,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 39,
+      "row": 243
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 243
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 243,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 64,
+      "row": 250
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 63,
+      "row": 250
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 250,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 13,
+      "row": 251
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 251
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 251,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 38,
+      "row": 265
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 37,
+      "row": 265
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 265,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 20,
+      "row": 267
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 19,
+      "row": 267
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 267,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E401",
+    "end_location": {
+      "column": 37,
+      "row": 274
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "    import json\n    import os\n    import subprocess\n    import sys",
+          "end_location": {
+            "column": 37,
+            "row": 274
+          },
+          "location": {
+            "column": 1,
+            "row": 274
+          }
+        }
+      ],
+      "message": "Split imports"
+    },
+    "location": {
+      "column": 5,
+      "row": 274
+    },
+    "message": "Multiple imports on one line",
+    "noqa_row": 274,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-imports-on-one-line"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 56,
+      "row": 276
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "    import json\n    import os\n    import subprocess\n    import sys\n    from pathlib import Path\n\n    from test_csv_dag_upgrade import raw_history_hashes\n",
+          "end_location": {
+            "column": 1,
+            "row": 277
+          },
+          "location": {
+            "column": 1,
+            "row": 274
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 5,
+      "row": 274
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "noqa_row": 274,
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 26,
+      "row": 278
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 278
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 278,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 33,
+      "row": 279
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 32,
+      "row": 279
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 279,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 37,
+      "row": 286
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 286
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 286,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 30,
+      "row": 295
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 295
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 295,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 48,
+      "row": 295
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 47,
+      "row": 295
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 295,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 71,
+      "row": 295
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 70,
+      "row": 295
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 295,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 30,
+      "row": 305
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 305
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 305,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 48,
+      "row": 305
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 47,
+      "row": 305
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 305,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 17,
+      "row": 306
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 16,
+      "row": 306
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 306,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 38,
+      "row": 321
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "    from dataclasses import replace\n\n    from fastapi.testclient import TestClient\n    from sqlalchemy import func, text\n\n    from sim2act.api import create_app\n    from sim2act.db import principals\n",
+          "end_location": {
+            "column": 1,
+            "row": 322
+          },
+          "location": {
+            "column": 1,
+            "row": 317
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 5,
+      "row": 317
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "noqa_row": 317,
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 46,
+      "row": 322
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 45,
+      "row": 322
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 322,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 51,
+      "row": 323
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 50,
+      "row": 323
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 323,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 39,
+      "row": 326
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 326
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 326,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 37,
+      "row": 330
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 330
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 330,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E701",
+    "end_location": {
+      "column": 13,
+      "row": 334
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 334
+    },
+    "message": "Multiple statements on one line (colon)",
+    "noqa_row": 334,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-colon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 28,
+      "row": 334
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 27,
+      "row": 334
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 334,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 30,
+      "row": 339
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 339
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 339,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 48,
+      "row": 339
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 47,
+      "row": 339
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 339,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 71,
+      "row": 339
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 70,
+      "row": 339
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 339,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 54,
+      "row": 345
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances.py",
+    "fix": null,
+    "location": {
+      "column": 53,
+      "row": 345
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 345,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "I001",
+    "end_location": {
+      "column": 34,
+      "row": 18
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances_ui.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import hashlib\nimport json\nimport shutil\nimport socket\nimport subprocess\nimport threading\nimport time\nfrom pathlib import Path\n\nimport pytest\nimport uvicorn\nfrom fastapi import Header\nfrom test_csv_dag import NoModel\nfrom test_csv_dag_instances import setup\n\nfrom sim2act.api import create_app\nfrom sim2act.worker import Worker\n\n\n",
+          "end_location": {
+            "column": 1,
+            "row": 21
+          },
+          "location": {
+            "column": 1,
+            "row": 2
+          }
+        }
+      ],
+      "message": "Organize imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 2
+    },
+    "message": "Import block is un-sorted or un-formatted",
+    "noqa_row": 2,
+    "url": "https://docs.astral.sh/ruff/rules/unsorted-imports"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 35,
+      "row": 25
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances_ui.py",
+    "fix": null,
+    "location": {
+      "column": 34,
+      "row": 25
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 25,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 36,
+      "row": 34
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances_ui.py",
+    "fix": null,
+    "location": {
+      "column": 35,
+      "row": 34
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 34,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 60,
+      "row": 38
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances_ui.py",
+    "fix": null,
+    "location": {
+      "column": 59,
+      "row": 38
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 38,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 33,
+      "row": 53
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances_ui.py",
+    "fix": null,
+    "location": {
+      "column": 32,
+      "row": 53
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 53,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 49,
+      "row": 53
+    },
+    "filename": "/workspace/Sim2Act/tests/test_csv_dag_instances_ui.py",
+    "fix": null,
+    "location": {
+      "column": 48,
+      "row": 53
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "noqa_row": 53,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  }
+]

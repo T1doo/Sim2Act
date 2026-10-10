@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/tmp/sim2act-read-stability-independent-20261010/backend.py", line 53, in <module>
+    r2=client.post(url+'/independent-alpha/checks',json={'expected_patch_fingerprint':cfg['patches']['alpha']['patch_fingerprint'],'request_key':'independent-after-corruption-'+case});ck(r2.status_code in [400,403,409],case+' write-side still refuses bad current scope/proof',checks);ck(fingerprint(state(store))==before,'write-side refusal no durable write',checks);(folder/'write-response.json').write_text(json.dumps({'http':r2.status_code,'body':r2.json()},indent=2));ck(not any(s.lstrip().split()[0].upper() in ['INSERT','UPDATE','DELETE'] for s in sql[n:]),'history/write refusal issue zero SQL mutations',checks)
+                                                                                                                                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-read-stability-independent-20261010/backend.py", line 3, in ck
+    def ck(v,label,checks):assert v,label;checks.append(label)
+                                  ^
+AssertionError: cross-definition write-side still refuses bad current scope/proof

@@ -1,0 +1,708 @@
+E701 Multiple statements on one line (colon)
+  --> tests/fixtures/csv_dag_instance_upgrade.py:20:18
+   |
+18 | body=json.load(sys.stdin)
+19 | store=Store(body['database_url'],test_only=True)
+20 | if body['schema']:store.engine=store.engine.execution_options(schema_translate_map={None:body['schema']})
+   |                  ^
+21 | settings=Settings(body['database_url'],Path(body['data_root']),mode='mock')
+22 | client=TestClient(create_app(store,settings));client.headers['Authorization']='Bearer synthetic-test-A'
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/fixtures/csv_dag_instance_upgrade.py:22:46
+   |
+20 | if body['schema']:store.engine=store.engine.execution_options(schema_translate_map={None:body['schema']})
+21 | settings=Settings(body['database_url'],Path(body['data_root']),mode='mock')
+22 | client=TestClient(create_app(store,settings));client.headers['Authorization']='Bearer synthetic-test-A'
+   |                                              ^
+23 | env=(store,settings,client,body['owner'],body['other'],body['project'],body['resource'])
+24 | aid,rid,anchor,_,_=setup(env)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/fixtures/csv_dag_instance_upgrade.py:33:35
+   |
+31 | accepted=client.post(base+'/old-two-step/runs',json=dict(expected_plan_fingerprint=plan.json()['plan_fingerprint'],consent='CONFIRM_EX…
+32 | assert accepted.status_code==202,accepted.text
+33 | w=Worker(store,settings,NoModel());job=store.claim(w.id,settings.lease_seconds);assert job['id']==accepted.json()['run_id'];w.process(…
+   |                                   ^
+34 | proof=client.get('/api/csv-dag/runs/'+job['id']);assert proof.status_code==200 and proof.json()['status']=='SUCCEEDED'
+35 | unsupported=client.post('/api/csv-dag/runs/'+job['id']+'/release-approvals',json=dict(expected_plan_fingerprint=plan.json()['plan_fing…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/fixtures/csv_dag_instance_upgrade.py:33:80
+   |
+31 | accepted=client.post(base+'/old-two-step/runs',json=dict(expected_plan_fingerprint=plan.json()['plan_fingerprint'],consent='CONFIRM_EX…
+32 | assert accepted.status_code==202,accepted.text
+33 | w=Worker(store,settings,NoModel());job=store.claim(w.id,settings.lease_seconds);assert job['id']==accepted.json()['run_id'];w.process(…
+   |                                                                                ^
+34 | proof=client.get('/api/csv-dag/runs/'+job['id']);assert proof.status_code==200 and proof.json()['status']=='SUCCEEDED'
+35 | unsupported=client.post('/api/csv-dag/runs/'+job['id']+'/release-approvals',json=dict(expected_plan_fingerprint=plan.json()['plan_fing…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/fixtures/csv_dag_instance_upgrade.py:33:124
+   |
+31 | accepted=client.post(base+'/old-two-step/runs',json=dict(expected_plan_fingerprint=plan.json()['plan_fingerprint'],consent='CONFIRM_EX…
+32 | assert accepted.status_code==202,accepted.text
+33 | w=Worker(store,settings,NoModel());job=store.claim(w.id,settings.lease_seconds);assert job['id']==accepted.json()['run_id'];w.process(…
+   |                                                                                                                            ^
+34 | proof=client.get('/api/csv-dag/runs/'+job['id']);assert proof.status_code==200 and proof.json()['status']=='SUCCEEDED'
+35 | unsupported=client.post('/api/csv-dag/runs/'+job['id']+'/release-approvals',json=dict(expected_plan_fingerprint=plan.json()['plan_fing…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/fixtures/csv_dag_instance_upgrade.py:34:49
+   |
+32 | assert accepted.status_code==202,accepted.text
+33 | w=Worker(store,settings,NoModel());job=store.claim(w.id,settings.lease_seconds);assert job['id']==accepted.json()['run_id'];w.process(…
+34 | proof=client.get('/api/csv-dag/runs/'+job['id']);assert proof.status_code==200 and proof.json()['status']=='SUCCEEDED'
+   |                                                 ^
+35 | unsupported=client.post('/api/csv-dag/runs/'+job['id']+'/release-approvals',json=dict(expected_plan_fingerprint=plan.json()['plan_fing…
+36 | assert unsupported.status_code==404
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/fixtures/csv_dag_instance_upgrade.py:38:15
+   |
+36 | assert unsupported.status_code==404
+37 | Path(body['output']).write_text(json.dumps(dict(old_module_path=csv_dag.__file__,old_module_sha256=hashlib.sha256(Path(csv_dag.__file_…
+38 | client.close();store.engine.dispose()
+   |               ^
+   |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:150:27
+    |
+148 |     _, body = enqueue(env, i, rel)
+149 |     bad = copy.deepcopy(body)
+150 |     if attack == 'missing': bad['input']={'column':'missing'}
+    |                           ^
+151 |     if attack == 'text': bad['input']={'column':'item'}
+152 |     if attack == 'override': bad['input']['resource_id']='another'
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:151:24
+    |
+149 |     bad = copy.deepcopy(body)
+150 |     if attack == 'missing': bad['input']={'column':'missing'}
+151 |     if attack == 'text': bad['input']={'column':'item'}
+    |                        ^
+152 |     if attack == 'override': bad['input']['resource_id']='another'
+153 |     if attack == 'same-key': bad['input']['column']='amount'
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:152:28
+    |
+150 |     if attack == 'missing': bad['input']={'column':'missing'}
+151 |     if attack == 'text': bad['input']={'column':'item'}
+152 |     if attack == 'override': bad['input']['resource_id']='another'
+    |                            ^
+153 |     if attack == 'same-key': bad['input']['column']='amount'
+154 |     if attack == 'release': bad['expected_release_fingerprint']='0'*64
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:153:28
+    |
+151 |     if attack == 'text': bad['input']={'column':'item'}
+152 |     if attack == 'override': bad['input']['resource_id']='another'
+153 |     if attack == 'same-key': bad['input']['column']='amount'
+    |                            ^
+154 |     if attack == 'release': bad['expected_release_fingerprint']='0'*64
+155 |     if attack == 'revision': bad['expected_revision']=2
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:154:27
+    |
+152 |     if attack == 'override': bad['input']['resource_id']='another'
+153 |     if attack == 'same-key': bad['input']['column']='amount'
+154 |     if attack == 'release': bad['expected_release_fingerprint']='0'*64
+    |                           ^
+155 |     if attack == 'revision': bad['expected_revision']=2
+156 |     if attack == 'replay': bad['offline_replay']=[{},{}]
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:155:28
+    |
+153 |     if attack == 'same-key': bad['input']['column']='amount'
+154 |     if attack == 'release': bad['expected_release_fingerprint']='0'*64
+155 |     if attack == 'revision': bad['expected_revision']=2
+    |                            ^
+156 |     if attack == 'replay': bad['offline_replay']=[{},{}]
+157 |     before = fingerprint(snapshot(env))
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:156:26
+    |
+154 |     if attack == 'release': bad['expected_release_fingerprint']='0'*64
+155 |     if attack == 'revision': bad['expected_revision']=2
+156 |     if attack == 'replay': bad['offline_replay']=[{},{}]
+    |                          ^
+157 |     before = fingerprint(snapshot(env))
+158 |     reply = env[2].post(f"/api/internal/instances/{i['id']}/runs", json=bad)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:173:29
+    |
+171 |     assert dag.advance(w, job)
+172 |     with env[0].tx() as c:
+173 |         if attack == 'grant': c.execute(update(grants).where(grants.c.resource_id==rid).values(revoked=True))
+    |                             ^
+174 |         if attack == 'source': c.execute(update(resources).where(resources.c.id==rid).values(content='bad',hash=hashlib.sha256(b'bad'…
+175 |         if attack == 'instance-aba': c.execute(update(internal_instances).where(internal_instances.c.id==i['id']).values(revision=3))
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:174:30
+    |
+172 |     with env[0].tx() as c:
+173 |         if attack == 'grant': c.execute(update(grants).where(grants.c.resource_id==rid).values(revoked=True))
+174 |         if attack == 'source': c.execute(update(resources).where(resources.c.id==rid).values(content='bad',hash=hashlib.sha256(b'bad'…
+    |                              ^
+175 |         if attack == 'instance-aba': c.execute(update(internal_instances).where(internal_instances.c.id==i['id']).values(revision=3))
+176 |         if attack == 'binding-delete': c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id==job['id']))
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:175:36
+    |
+173 | …     if attack == 'grant': c.execute(update(grants).where(grants.c.resource_id==rid).values(revoked=True))
+174 | …     if attack == 'source': c.execute(update(resources).where(resources.c.id==rid).values(content='bad',hash=hashlib.sha256(b'bad').…
+175 | …     if attack == 'instance-aba': c.execute(update(internal_instances).where(internal_instances.c.id==i['id']).values(revision=3))
+    |                                  ^
+176 | …     if attack == 'binding-delete': c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id==job['id']))
+177 | …     if attack == 'binding-input':
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:176:38
+    |
+174 | …     if attack == 'source': c.execute(update(resources).where(resources.c.id==rid).values(content='bad',hash=hashlib.sha256(b'bad').…
+175 | …     if attack == 'instance-aba': c.execute(update(internal_instances).where(internal_instances.c.id==i['id']).values(revision=3))
+176 | …     if attack == 'binding-delete': c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id==job['id']))
+    |                                    ^
+177 | …     if attack == 'binding-input':
+178 | …         b=c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id==job['id'])).mappings().one()
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:179:43
+    |
+177 | …     if attack == 'binding-input':
+178 | …         b=c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id==job['id'])).mappings().one()
+179 | …         s=copy.deepcopy(b['snapshot']);s['input']['column']='amount'
+    |                                         ^
+180 | …         c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id==job['id']).values(snapshot=s,fingerprint=fing…
+181 | …     if attack == 'receipt':
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:183:49
+    |
+181 |         if attack == 'receipt':
+182 |             op=c.execute(select(operations).where(operations.c.run_id==job['id'])).mappings().one()
+183 |             receipt=copy.deepcopy(op['receipt']);receipt['data']['content']='fake'
+    |                                                 ^
+184 |             c.execute(update(operations).where(operations.c.id==op['id']).values(receipt=receipt))
+185 |     w.process(job)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:200:38
+    |
+198 |     i = create(env, rel)
+199 |     accepted, _ = enqueue(env, i, rel)
+200 |     w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
+    |                                      ^
+201 |     assert dag.advance(w,job)
+202 |     with env[0].tx() as c: c.execute(update(runs).where(runs.c.id==job['id']).values(lease_until=0))
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:202:26
+    |
+200 |     w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
+201 |     assert dag.advance(w,job)
+202 |     with env[0].tx() as c: c.execute(update(runs).where(runs.c.id==job['id']).values(lease_until=0))
+    |                          ^
+203 |     other=Worker(env[0],env[1],NoModel());claimed=env[0].claim(other.id,env[1].lease_seconds)
+204 |     assert claimed['fence']>job['fence']
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:203:42
+    |
+201 |     assert dag.advance(w,job)
+202 |     with env[0].tx() as c: c.execute(update(runs).where(runs.c.id==job['id']).values(lease_until=0))
+203 |     other=Worker(env[0],env[1],NoModel());claimed=env[0].claim(other.id,env[1].lease_seconds)
+    |                                          ^
+204 |     assert claimed['fence']>job['fence']
+205 |     with pytest.raises(DomainError): dag.advance(w,job)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:205:36
+    |
+203 |     other=Worker(env[0],env[1],NoModel());claimed=env[0].claim(other.id,env[1].lease_seconds)
+204 |     assert claimed['fence']>job['fence']
+205 |     with pytest.raises(DomainError): dag.advance(w,job)
+    |                                    ^
+206 |     other.process(claimed)
+207 |     proof=instances.inspect_job(env[0],env[3],job['id'],limits(env))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:212:33
+    |
+211 | def test_cross_owner_control_metadata_and_other_instance_rejected(env):
+212 |     _, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+    |                                 ^
+213 |     b=create(env,rel,'other-instance')
+214 |     env[2].headers.update({'Authorization':'Bearer synthetic-test-B'})
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:212:51
+    |
+211 | def test_cross_owner_control_metadata_and_other_instance_rejected(env):
+212 |     _, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+    |                                                   ^
+213 |     b=create(env,rel,'other-instance')
+214 |     env[2].headers.update({'Authorization':'Bearer synthetic-test-B'})
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:223:35
+    |
+222 | def test_coherent_typed_output_tamper_cannot_replace_actual_operations(env):
+223 |     aid, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                                   ^
+224 |     with env[0].tx() as c:
+225 |         ar=c.execute(select(internal_app_runs).where(internal_app_runs.c.id==a['app_run_id'])).mappings().one()
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:223:53
+    |
+222 | def test_coherent_typed_output_tamper_cannot_replace_actual_operations(env):
+223 |     aid, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                                                     ^
+224 |     with env[0].tx() as c:
+225 |         ar=c.execute(select(internal_app_runs).where(internal_app_runs.c.id==a['app_run_id'])).mappings().one()
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:223:76
+    |
+222 | def test_coherent_typed_output_tamper_cannot_replace_actual_operations(env):
+223 |     aid, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                                                                            ^
+224 |     with env[0].tx() as c:
+225 |         ar=c.execute(select(internal_app_runs).where(internal_app_runs.c.id==a['app_run_id'])).mappings().one()
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:226:43
+    |
+224 |     with env[0].tx() as c:
+225 |         ar=c.execute(select(internal_app_runs).where(internal_app_runs.c.id==a['app_run_id'])).mappings().one()
+226 |         output=copy.deepcopy(ar['output']);output['sum']='999'
+    |                                           ^
+227 |         c.execute(update(internal_app_runs).where(internal_app_runs.c.id==ar['id']).values(output=output))
+228 |         c.execute(update(internal_instance_data).where(internal_instance_data.c.run_id==ar['id']).values(data={'result':output},finge…
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:232:36
+    |
+230 |     assert listing.status_code==200 and all('data' not in v for v in listing.json()['items'])
+231 |     assert env[2].get('/api/internal/instances/'+i['id']).status_code==409
+232 |     with pytest.raises(DomainError): lifecycle.inspect_instance(env[0],env[3],i['id'],limits(env))
+    |                                    ^
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:237:33
+    |
+235 | @pytest.mark.parametrize("orphan", [False, True])
+236 | def test_release_origin_seal_rejects_family_downgrade(env, orphan):
+237 |     _, _, _, _, rel=release(env);i=create(env,rel)
+    |                                 ^
+238 |     with env[0].tx() as c:
+239 |         from sim2act.db import internal_approvals
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:243:44
+    |
+241 | …         from sim2act.db import delivery_graph_requests
+242 | …         c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind=='csv_dag_release_origin',delivery_graph_req…
+243 | …     snap=copy.deepcopy(rel['snapshot']);snap.pop('execution_source')
+    |                                          ^
+244 | …     a=c.execute(select(internal_approvals).where(internal_approvals.c.id==rel['approval_id'])).mappings().one()
+245 | …     payload=copy.deepcopy(a['payload']);payload['snapshot']=snap
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:245:44
+    |
+243 | …     snap=copy.deepcopy(rel['snapshot']);snap.pop('execution_source')
+244 | …     a=c.execute(select(internal_approvals).where(internal_approvals.c.id==rel['approval_id'])).mappings().one()
+245 | …     payload=copy.deepcopy(a['payload']);payload['snapshot']=snap
+    |                                          ^
+246 | …     c.execute(update(internal_releases).where(internal_releases.c.id==rel['id']).values(snapshot=snap,fingerprint=fingerprint(snap)…
+247 | …     c.execute(update(internal_approvals).where(internal_approvals.c.id==a['id']).values(payload=payload,fingerprint=fingerprint(pay…
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:250:36
+    |
+248 |     assert env[2].get('/api/internal/releases/'+rel['id']).status_code==409
+249 |     assert env[2].get('/api/internal/instances/'+i['id']).status_code==409
+250 |     with pytest.raises(DomainError): lifecycle.run_instance(env[0],env[3],i['id'],1,fingerprint(snap),{'column':'quantity'},'wrong-ex…
+    |                                    ^
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:255:33
+    |
+253 | def test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_failure(env):
+254 |     from sqlalchemy import event
+255 |     _, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+    |                                 ^
+256 |     w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
+257 |     assert dag.advance(w,job) and dag.advance(w,job)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:255:51
+    |
+253 | def test_atomic_final_transaction_rolls_back_typed_append_on_terminal_write_failure(env):
+254 |     from sqlalchemy import event
+255 |     _, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+    |                                                   ^
+256 |     w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
+257 |     assert dag.advance(w,job) and dag.advance(w,job)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:256:38
+    |
+254 |     from sqlalchemy import event
+255 |     _, _, _, _, rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+256 |     w=Worker(env[0],env[1],NoModel());job=env[0].claim(w.id,env[1].lease_seconds)
+    |                                      ^
+257 |     assert dag.advance(w,job) and dag.advance(w,job)
+258 |     def reject_terminal(conn,cursor,statement,parameters,context,executemany):
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:263:63
+    |
+261 |     event.listen(env[0].engine,'before_cursor_execute',reject_terminal)
+262 |     try:
+263 |         with pytest.raises(RuntimeError,match='owned fixture'): dag.advance(w,job)
+    |                                                               ^
+264 |     finally: event.remove(env[0].engine,'before_cursor_execute',reject_terminal)
+265 |     with env[0].engine.connect() as c:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:264:12
+    |
+262 |     try:
+263 |         with pytest.raises(RuntimeError,match='owned fixture'): dag.advance(w,job)
+264 |     finally: event.remove(env[0].engine,'before_cursor_execute',reject_terminal)
+    |            ^
+265 |     with env[0].engine.connect() as c:
+266 |         assert not c.execute(select(internal_instance_data).where(internal_instance_data.c.instance_id==i['id'])).first()
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:278:37
+    |
+276 |     body=dict(expected_plan_fingerprint=plan['plan_fingerprint'],request_key='lost-response')
+277 |     url=f"/api/csv-dag/runs/{job['id']}/release-approvals"
+278 |     first=env[2].post(url,json=body);second=env[2].post(url,json=body)
+    |                                     ^
+279 |     assert first.status_code==second.status_code==201 and first.json()==second.json()
+280 |     a=first.json();endpoint='/api/internal/approvals/'+a['id']+'/commit'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:280:19
+    |
+278 |     first=env[2].post(url,json=body);second=env[2].post(url,json=body)
+279 |     assert first.status_code==second.status_code==201 and first.json()==second.json()
+280 |     a=first.json();endpoint='/api/internal/approvals/'+a['id']+'/commit'
+    |                   ^
+281 |     one=env[2].post(endpoint,json={'fingerprint':a['fingerprint']})
+282 |     two=env[2].post(endpoint,json={'fingerprint':a['fingerprint']})
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:295:25
+    |
+293 |     from test_csv_dag_upgrade import raw_history_hashes
+294 |     archive_value=os.environ.get('SIM2ACT_DAG_REUSE_OLD_ARCHIVE')
+295 |     if not archive_value:pytest.skip('Requires explicit actual 67c6ccc8 source archive')
+    |                         ^
+296 |     archive=Path(archive_value);old_module=archive/'src/sim2act/csv_dag.py'
+297 |     assert hashlib.sha256(old_module.read_bytes()).hexdigest()=='e02a5a1e38910f64914e095e77da95cd7f0106dea49844f3a1723e37d0acc1d2'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:296:32
+    |
+294 |     archive_value=os.environ.get('SIM2ACT_DAG_REUSE_OLD_ARCHIVE')
+295 |     if not archive_value:pytest.skip('Requires explicit actual 67c6ccc8 source archive')
+296 |     archive=Path(archive_value);old_module=archive/'src/sim2act/csv_dag.py'
+    |                                ^
+297 |     assert hashlib.sha256(old_module.read_bytes()).hexdigest()=='e02a5a1e38910f64914e095e77da95cd7f0106dea49844f3a1723e37d0acc1d2'
+298 |     out=tmp_path/'old-67-proof.json'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:303:36
+    |
+301 |     child=subprocess.run([sys.executable,str(driver.resolve())],cwd=archive,env={**os.environ,'PYTHONPATH':str(archive/'src')+os.path…
+302 |     assert child.returncode==0,child.stdout+child.stderr
+303 |     old=json.loads(out.read_text());assert Path(old['old_module_path']).resolve()==old_module.resolve()
+    |                                    ^
+304 |     assert old['proof']['result']['output_by_step']['total']['sum']=='30' and len(old['proof']['steps'])==2
+305 |     names=['runs','operations','operation_intents','events','delivery_graph_requests','delivery_graph_anchors','delivery_graph_source…
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:312:29
+    |
+310 |     assert raw_history_hashes(env[0],names)==before
+311 |     # A fresh current proof chain is required, without rewriting the previous Run.
+312 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                             ^
+313 |     assert instances.inspect_job(env[0],env[3],a['run_id'],limits(env))['output']['sum']=='15'
+314 |     with env[0].engine.connect() as c:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:312:47
+    |
+310 |     assert raw_history_hashes(env[0],names)==before
+311 |     # A fresh current proof chain is required, without rewriting the previous Run.
+312 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                                               ^
+313 |     assert instances.inspect_job(env[0],env[3],a['run_id'],limits(env))['output']['sum']=='15'
+314 |     with env[0].engine.connect() as c:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:312:70
+    |
+310 |     assert raw_history_hashes(env[0],names)==before
+311 |     # A fresh current proof chain is required, without rewriting the previous Run.
+312 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                                                                      ^
+313 |     assert instances.inspect_job(env[0],env[3],a['run_id'],limits(env))['output']['sum']=='15'
+314 |     with env[0].engine.connect() as c:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:322:29
+    |
+320 | @pytest.mark.parametrize('finished',[False,True])
+321 | def test_independent_acceptance_detects_shared_join_or_result_deletion(env,finished):
+322 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+    |                             ^
+323 |     if finished:work(env,a)
+324 |     with env[0].tx() as c:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:322:47
+    |
+320 | @pytest.mark.parametrize('finished',[False,True])
+321 | def test_independent_acceptance_detects_shared_join_or_result_deletion(env,finished):
+322 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+    |                                               ^
+323 |     if finished:work(env,a)
+324 |     with env[0].tx() as c:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:323:16
+    |
+321 | def test_independent_acceptance_detects_shared_join_or_result_deletion(env,finished):
+322 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel)
+323 |     if finished:work(env,a)
+    |                ^
+324 |     with env[0].tx() as c:
+325 |         c.execute(delete(internal_instance_data).where(internal_instance_data.c.run_id==a['app_run_id']))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:341:45
+    |
+339 |     from sim2act.api import create_app
+340 |     from sim2act.db import principals
+341 |     store=Store(runtime_role,test_only=True);settings=replace(env[1],database_url=runtime_role)
+    |                                             ^
+342 |     client=TestClient(create_app(store,settings));client.headers['Authorization']='Bearer synthetic-test-A'
+343 |     role_env=(store,settings,client,*env[3:])
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:342:50
+    |
+340 |     from sim2act.db import principals
+341 |     store=Store(runtime_role,test_only=True);settings=replace(env[1],database_url=runtime_role)
+342 |     client=TestClient(create_app(store,settings));client.headers['Authorization']='Bearer synthetic-test-A'
+    |                                                  ^
+343 |     role_env=(store,settings,client,*env[3:])
+344 |     try:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:345:38
+    |
+343 |     role_env=(store,settings,client,*env[3:])
+344 |     try:
+345 |         _,_,_,_,rel=release(role_env);i=create(role_env,rel)
+    |                                      ^
+346 |         with store.engine.connect() as c:
+347 |             before=[c.execute(select(func.count()).select_from(t)).scalar_one() for t in [principals,grants]]
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:349:36
+    |
+347 | …         before=[c.execute(select(func.count()).select_from(t)).scalar_one() for t in [principals,grants]]
+348 | …         assert c.execute(text('SELECT rolsuper,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=current_user')).one()==(False,…
+349 | …     a,_=enqueue(role_env,i,rel);work(role_env,a)
+    |                                  ^
+350 | …     assert instances.inspect_job(store,env[3],a['run_id'],limits(role_env))['output']['sum']=='15'
+351 | …     with store.engine.connect() as c:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_csv_dag_instances.py:353:12
+    |
+351 |         with store.engine.connect() as c:
+352 |             assert before==[c.execute(select(func.count()).select_from(t)).scalar_one() for t in [principals,grants]]
+353 |     finally:client.close();store.engine.dispose()
+    |            ^
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:353:27
+    |
+351 |         with store.engine.connect() as c:
+352 |             assert before==[c.execute(select(func.count()).select_from(t)).scalar_one() for t in [principals,grants]]
+353 |     finally:client.close();store.engine.dispose()
+    |                           ^
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:358:29
+    |
+356 | def test_joint_pair_marker_and_join_deletion_cannot_hide_actual_accepted_event(env):
+357 |     from sim2act.db import delivery_graph_requests
+358 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                             ^
+359 |     with env[0].tx() as c:
+360 |         rows=c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id==i['source_app_id'],
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:358:47
+    |
+356 | def test_joint_pair_marker_and_join_deletion_cannot_hide_actual_accepted_event(env):
+357 |     from sim2act.db import delivery_graph_requests
+358 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                                               ^
+359 |     with env[0].tx() as c:
+360 |         rows=c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id==i['source_app_id'],
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:358:70
+    |
+356 | def test_joint_pair_marker_and_join_deletion_cannot_hide_actual_accepted_event(env):
+357 |     from sim2act.db import delivery_graph_requests
+358 |     _,_,_,_,rel=release(env);i=create(env,rel);a,_=enqueue(env,i,rel);work(env,a)
+    |                                                                      ^
+359 |     with env[0].tx() as c:
+360 |         rows=c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id==i['source_app_id'],
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_csv_dag_instances.py:364:53
+    |
+362 |         for row in rows:
+363 |             if row['snapshot']['response'].get('run_id')==a['run_id']:
+364 |                 value=copy.deepcopy(row['snapshot']);value['response'].pop('internal_instance')
+    |                                                     ^
+365 |                 c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.app_id==row['app_id'],
+366 |                     delivery_graph_requests.c.principal_id==row['principal_id'],delivery_graph_requests.c.kind==row['kind'],
+    |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_csv_dag_instances_ui.py:25:34
+   |
+23 |     aid,rid,plan,_,source=setup(env)
+24 |     plan.pop("cached", None)
+25 |     app=create_app(env[0],env[1]);worker=Worker(env[0],env[1],NoModel())
+   |                                  ^
+26 |     @app.post('/__fixture__/work')
+27 |     def work(body:dict,authorization:str=Header()):
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_csv_dag_instances_ui.py:34:35
+   |
+32 |         return {'run_id':job['id']}
+33 |     with socket.socket() as sock:
+34 |         sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+   |                                   ^
+35 |     (tmp_path/'info.json').write_text(json.dumps(dict(base=f'http://127.0.0.1:{port}',project=env[5],
+36 |         app=aid,resource=rid,source=source['id'],plan=plan,lost=lost)))
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_csv_dag_instances_ui.py:38:59
+   |
+36 |         app=aid,resource=rid,source=source['id'],plan=plan,lost=lost)))
+37 |     server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=port,log_level='error'))
+38 |     thread=threading.Thread(target=server.run,daemon=True);thread.start()
+   |                                                           ^
+39 |     try:
+40 |         deadline=time.monotonic()+10
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_csv_dag_instances_ui.py:53:32
+   |
+51 |         assert all(p['loaded_source_sha256']=={n:hashlib.sha256((web/n).read_bytes()).hexdigest() for n in p['loaded_source_sha256']} …
+52 |     finally:
+53 |         server.should_exit=True;thread.join(10);assert not thread.is_alive()
+   |                                ^
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_csv_dag_instances_ui.py:53:48
+   |
+51 |         assert all(p['loaded_source_sha256']=={n:hashlib.sha256((web/n).read_bytes()).hexdigest() for n in p['loaded_source_sha256']} …
+52 |     finally:
+53 |         server.should_exit=True;thread.join(10);assert not thread.is_alive()
+   |                                                ^
+   |
+
+Found 72 errors (6 fixed, 66 remaining).

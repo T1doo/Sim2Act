@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="4" time="37.410" timestamp="2026-10-10T04:35:10.562317+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_report_history_scoped_readback" name="test_multi_definition_cold_history_keeps_real_readback_and_fresh_authority[coherent_check]" time="10.587"><failure message="AttributeError: id">self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f75c47aaac0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+&gt;           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7f75c44c7e00&gt;, Settings(database_url='sqlite:////tmp/sim2act-read-stability-20261010/pr...ae1556cad74c0989f802363d865593', 'user_b7cb59d1c3e74b8cad3946295562b008', 'proj_e3a5c4aa0cf44537997f97c1aca390b9', ...)
+tmp_path = PosixPath('/tmp/sim2act-read-stability-20261010/probe-sqlite/test_multi_definition_cold_his0')
+damage = 'coherent_check'
+
+    @pytest.mark.parametrize("damage", ["coherent_check", "expired_owner_source"])
+    def test_multi_definition_cold_history_keeps_real_readback_and_fresh_authority(
+        env, tmp_path, damage
+    ):
+        app, _, url, body, output, wires = prepared(env, tmp_path)
+        expected = {}
+        for key, count in [("first-text", 2), ("second-text", 1)]:
+            definition = {**body, "request_key": key}
+            proposed = env[2].post(url, json=definition)
+            assert proposed.status_code == 201, proposed.text
+            patch = proposed.json()
+            expected[patch["patch_fingerprint"]] = []
+            for n in range(count):
+                checked = env[2].post(
+                    url + "/" + key + "/checks",
+                    json={
+                        "expected_patch_fingerprint": patch["patch_fingerprint"],
+                        "request_key": f"{key}-{n}",
+                    },
+                )
+                assert checked.status_code == 201, checked.text
+                expected[patch["patch_fingerprint"]].append(checked.json()["check_fingerprint"])
+        before = snapshot(env)
+        cold = env[2].get(url)
+        assert cold.status_code == 200, cold.text
+        history = cold.json()
+        assert len(history["items"]) == 2
+        for item in history["items"]:
+            assert [v["check_fingerprint"] for v in item["checks"]] == expected[
+                item["patch"]["patch_fingerprint"]
+            ]
+            assert all(
+                v["text"] == output["explanation"] and v["baseline_text"] == "ALLOW"
+                for v in item["checks"]
+            )
+            assert all(v["result_binding"] == item["patch"]["result_binding"] for v in item["checks"])
+        assert all(
+            item["patch"]["project_revalidation_status"] == "BLOCKED_PARTIAL"
+            for item in history["items"]
+        )
+        assert history["owner_acceptance"] == "PENDING" and history["semantic_status"] == "UNKNOWN"
+        assert not history["formal_publication_enabled"]
+        assert snapshot(env) == before
+        with env[0].tx() as c:
+            if damage == "coherent_check":
+                rows = (
+                    c.execute(
+                        select(requests).where(
+                            requests.c.app_id == app["id"],
+                            requests.c.request_key == "first-text-1",
+                            requests.c.kind.in_(
+                                ["report_presentation_check", "report_presentation_check_seal"]
+                            ),
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                assert len(rows) == 2
+                for row in rows:
+                    value = copy.deepcopy(row["snapshot"])
+                    value["response"]["text"] = "coherently forged explanation"
+                    answer = value["response"]
+                    answer["check_fingerprint"] = fingerprint(
+                        {k: v for k, v in answer.items() if k != "check_fingerprint"}
+                    )
+                    c.execute(
+                        update(requests)
+&gt;                       .where(requests.c.id == row["id"])
+                               ^^^^^^^^^^^^^
+                        .values(snapshot=value, fingerprint=fingerprint(value))
+                    )
+
+tests/test_report_history_scoped_readback.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f75c47aaac0&gt;
+key = 'id'
+
+    def __getattr__(self, key: str) -&gt; _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+&gt;           raise AttributeError(key) from err
+E           AttributeError: id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError</failure></testcase><testcase classname="tests.test_report_history_scoped_readback" name="test_multi_definition_cold_history_keeps_real_readback_and_fresh_authority[expired_owner_source]" time="9.480" /><testcase classname="tests.test_report_presentations" name="test_new_immutable_presentation_and_actual_archived_readback_preserve_canonical" time="7.787" /><testcase classname="tests.test_report_presentation_late_ui" name="test_actual_late_receipt_current_page_readback[same-checks]" time="9.425" /></testsuite></testsuites>

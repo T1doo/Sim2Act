@@ -13,6 +13,11 @@ HTTP200有效JSON坏证明导致晚回执自清页无提示的三处分支，已
 固定CSV DAG的“成功两步来源→不可变内部版本→独立实例→冷输入新Run→typed持久结果”已按冻结 `d716feda486fd6f0322c11b2e1b5112f718a94fa` 完成限定工程闭环。原807独审发现联合遗漏历史BLOCK，039产品修复后必要增量4例12检查LIMITED_PASS；69产品与d716全同字节。SQLite原74例72PASS/1测试钩子FAIL/1SKIP，钩子修正定向1PASS；PG最终74PASS，每库9真实HTTP页104检查、4实际旧源码升级。[本轮合同与失败归属](../evidence/csv-dag-internal-reuse-20261010/README.md)。仅同材料无条件read→sum，不扩成任意DAG或完整P-B。
 
 PG resources-history原失败节点在未改产品667上仅一次当前PASS（4.180秒），原Future10/测试字节/SQL observer不变，395graph锁跨度1.149秒，实际资源与graphHTTP200；仍未解释42b7a992历史17.59秒慢读，OPEN保留，不能以单次通过关闭。新增807 Report最终GET原6秒idle失败亦OPEN，相同冻结定向通过和最终集合通过均不证明根因或稳定性。下一步回到原F2-T01–T04不同实际任务族及P-A/P-B目标到应用合同，先核对确定性来源/输入/授权/预算/持久结果缺口；真实模型和新副作用需精确授权与预算，不能持续扩大低价值提示检查。PROJECT全局完整性、其他任务族、真实P-A/P-B/R0和原生Windows/owner/semantic依然需要原合同及外部环境；合成工程不能替代。
+
+本轮Report历史只读稳定性修复按冻结 `47388f573746daa27f8d5790ca358eef91378ad5` 完成限定闭环：每definition保留新鲜完整scope，同次history内matching纯比较复用；其余68产品文件、原scope/propose/check AST与前端/预算/SQL observer不变。作者59节点SQLite54PASS/5PG-onlySKIP、PG59PASS，每库18真实UI场景248检查、四种实际旧源码升级；独审17API147检查和4页84检查LIMITED_PASS。[本轮证据与失败归属](../evidence/readback-stability-20261010/README.md)。PG相同原页面实际SQL6132→4010、Report.load15→10，墙钟只诊断，两项历史超时仍OPEN。
+
+5427 native CI原72Ruff问题已由纯样式754修正，完整严格Ruff/mypy及新精确CI实际通过；新run38024430136工程pytest在原15分钟上限附近cancelled，JUnit属性863 tests/26 failures/38 skipped（未完成、失败详情NOT_RECORDED），Edge SKIP，Cleanup成功。因此新增native工程失败/取消OPEN，不能把修正lint等同CI整体绿；不改900/240/150预算或工作流，不关闭原生验收限制。
+
 ## 原方案必须交付的范围
 
 | 原任务 | 尚未被当前限定证据证明的交付项 | 依赖与推进方式 |

@@ -1,0 +1,5 @@
+from common import *
+proof=[]
+for case,key,definition in [('coherent-text','independent-alpha-1','alpha'),('cross-definition','independent-beta-1','beta'),('different-result-binding','independent-alpha-1','alpha')]:
+ folder=ROOT/('api-corrected-'+case);url='sqlite:///'+str(folder/'fixture.db');st=Store(url,test_only=True);s=Settings(url,ROOT/'seed',mode='mock');cl=TestClient(create_app(st,s));cl.headers['Authorization']='Bearer synthetic-test-A';cfg=json.loads((ROOT/'seed.json').read_text());body={'expected_patch_fingerprint':cfg['patches'][definition]['patch_fingerprint'],'request_key':key};before=fingerprint(state(st));r=cl.post(cfg['url']+'/independent-'+definition+'/checks',json=body);assert r.status_code==409 and fingerprint(state(st))==before,r.text;actual=json.loads(r.request.content);assert actual==body;proof.append({'case':case,'url':str(r.request.url),'actual_request_body':actual,'http':r.status_code,'response':r.json(),'zero_db_writes':True});cl.close();st.engine.dispose()
+(ROOT/'corrected-exact-body-capture.json').write_text(json.dumps(proof,indent=2));print({'actual_replayed_requests':len(proof),'all_409_zero_write':True})

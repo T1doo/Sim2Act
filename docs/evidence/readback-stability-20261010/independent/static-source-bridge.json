@@ -1,0 +1,34 @@
+{
+  "source_sha": "47388f573746daa27f8d5790ca358eef91378ad5",
+  "base_sha": "754f0c61dab111ada2db69bfeb8e8cccdfe2ad95",
+  "product_files": 69,
+  "unchanged_product_files": 68,
+  "changed_product_files": [
+    "src/sim2act/report_presentations.py"
+  ],
+  "scope_exact_source_bytes_equal": true,
+  "scope_sha256": "5dad1c7872b7536b93e60d705d4684fafb9fee92d67ccfadb2467670d9a9940a",
+  "helpers": {
+    "_build_from_scope": {
+      "source": "def _build_from_scope(body, validated):\n    saved, slot, outer, _ = validated\n    definition = dict(slot_id=slot[\"id\"], slot_key=slot[\"key\"],\n                      baseline_revision=slot[\"revision\"], baseline_view=slot[\"definition\"],\n                      presentation_revision=slot[\"revision\"] + 1, view=body.view.model_dump())\n    answer = dict(namespace=\"report-presentation.v1\", project_id=saved[\"project_id\"], app_id=saved[\"app_id\"],\n                  request_key=body.request_key, definition=definition,\n                  candidate_fingerprint=body.expected_candidate_fingerprint,\n                  baseline_graph_fingerprint=body.expected_graph_fingerprint,\n                  authorization_fingerprint=saved[\"authorization_fingerprint\"],\n                  result_binding=dict(run_id=body.run_id, version=body.expected_run_version,\n                                      fence=body.expected_run_fence,\n                                      result_fingerprint=body.expected_result_fingerprint),\n                  impact_plan=outer, preserved_objects=saved[\"graph\"][\"nodes\"],\n                  preserved_edges=saved[\"graph\"][\"edges\"], state=\"PRESENTATION_DRAFT\",\n                  project_revalidation_status=outer[\"scope_expansion\"][\"status\"],\n                  **flags())\n    answer[\"patch_fingerprint\"] = fingerprint(answer)\n    return answer",
+      "calls": [
+        "dict",
+        "dict",
+        "fingerprint",
+        "body.view.model_dump",
+        "dict",
+        "flags"
+      ]
+    },
+    "_readback_from_scope": {
+      "source": "def _readback_from_scope(body, patch, check_body, validated):\n    saved, slot, _, output = validated\n    if check_body.expected_patch_fingerprint != patch[\"patch_fingerprint\"]:\n        graph.conflict(\"Confirm the exact saved presentation version\")\n    answer = dict(namespace=\"report-presentation-readback.v1\", project_id=saved[\"project_id\"], app_id=saved[\"app_id\"],\n                  request_key=check_body.request_key, patch_fingerprint=patch[\"patch_fingerprint\"],\n                  result_binding=patch[\"result_binding\"], slot_id=slot[\"id\"],\n                  baseline_text=output[\"decision\"], text=output[\"explanation\"],\n                  view=body.view.model_dump(), display_readback_status=\"PASS\",\n                  project_revalidation_status=patch[\"project_revalidation_status\"],\n                  state=\"PRESENTATION_PREVIEW_ONLY\", **flags())\n    answer[\"check_fingerprint\"] = fingerprint(answer)\n    return answer",
+      "calls": [
+        "dict",
+        "fingerprint",
+        "graph.conflict",
+        "body.view.model_dump",
+        "flags"
+      ]
+    }
+  }
+}

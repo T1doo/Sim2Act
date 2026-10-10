@@ -1,0 +1,259 @@
+[
+  {
+    "case": "history-oracles",
+    "status": "PASS",
+    "checks": [
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "cold multidefinition history HTTP200 request1",
+      "three distinct definitions retained request1",
+      "exact matching check keys independent-alpha",
+      "actual independent output/binding oracle independent-alpha",
+      "conservative acceptance and zero effects independent-alpha",
+      "exact matching check keys independent-beta",
+      "actual independent output/binding oracle independent-beta",
+      "conservative acceptance and zero effects independent-beta",
+      "exact matching check keys independent-gamma",
+      "actual independent output/binding oracle independent-gamma",
+      "conservative acceptance and zero effects independent-gamma",
+      "one fresh scope per definition six pure matching checks",
+      "all DB tables cold history unchanged request1",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "cold multidefinition history HTTP200 request2",
+      "three distinct definitions retained request2",
+      "exact matching check keys independent-alpha",
+      "actual independent output/binding oracle independent-alpha",
+      "conservative acceptance and zero effects independent-alpha",
+      "exact matching check keys independent-beta",
+      "actual independent output/binding oracle independent-beta",
+      "conservative acceptance and zero effects independent-beta",
+      "exact matching check keys independent-gamma",
+      "actual independent output/binding oracle independent-gamma",
+      "conservative acceptance and zero effects independent-gamma",
+      "one fresh scope per definition six pure matching checks",
+      "all DB tables cold history unchanged request2",
+      "no validated object reused across definition or HTTP requests",
+      "history performs zero SQL writes"
+    ],
+    "seconds": 6.228161890998308
+  },
+  {
+    "case": "write-fresh-scope",
+    "status": "PASS",
+    "checks": [
+      "pure uses immediate current definition scope",
+      "no DB accesses between fresh scope and pure check",
+      "pure checker does zero SQL",
+      "normal check write accepted",
+      "write check retains separate load and readback full fresh scopes",
+      "write check uses actual second archived output",
+      "check changes no canonical or other DB table",
+      "check writes only exact independent two-row receipt pair"
+    ],
+    "seconds": 1.6781099139989237
+  },
+  {
+    "case": "coherent-text",
+    "status": "FAIL",
+    "checks": [
+      "coherent-text cold history refused",
+      "all DB tables unchanged on history denial"
+    ],
+    "error": "Traceback (most recent call last):\n  File \"/tmp/sim2act-read-stability-independent-20261010/backend.py\", line 53, in <module>\n    r2=client.post(url+'/independent-alpha/checks',json={'expected_patch_fingerprint':cfg['patches']['alpha']['patch_fingerprint'],'request_key':'independent-after-corruption-'+case});ck(r2.status_code in [400,403,409],case+' write-side still refuses bad current scope/proof',checks);ck(fingerprint(state(store))==before,'write-side refusal no durable write',checks);(folder/'write-response.json').write_text(json.dumps({'http':r2.status_code,'body':r2.json()},indent=2));ck(not any(s.lstrip().split()[0].upper() in ['INSERT','UPDATE','DELETE'] for s in sql[n:]),'history/write refusal issue zero SQL mutations',checks)\n                                                                                                                                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/sim2act-read-stability-independent-20261010/backend.py\", line 3, in ck\n    def ck(v,label,checks):assert v,label;checks.append(label)\n                                  ^\nAssertionError: coherent-text write-side still refuses bad current scope/proof\n"
+  },
+  {
+    "case": "cross-definition",
+    "status": "FAIL",
+    "checks": [
+      "cross-definition cold history refused",
+      "all DB tables unchanged on history denial"
+    ],
+    "error": "Traceback (most recent call last):\n  File \"/tmp/sim2act-read-stability-independent-20261010/backend.py\", line 53, in <module>\n    r2=client.post(url+'/independent-alpha/checks',json={'expected_patch_fingerprint':cfg['patches']['alpha']['patch_fingerprint'],'request_key':'independent-after-corruption-'+case});ck(r2.status_code in [400,403,409],case+' write-side still refuses bad current scope/proof',checks);ck(fingerprint(state(store))==before,'write-side refusal no durable write',checks);(folder/'write-response.json').write_text(json.dumps({'http':r2.status_code,'body':r2.json()},indent=2));ck(not any(s.lstrip().split()[0].upper() in ['INSERT','UPDATE','DELETE'] for s in sql[n:]),'history/write refusal issue zero SQL mutations',checks)\n                                                                                                                                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/sim2act-read-stability-independent-20261010/backend.py\", line 3, in ck\n    def ck(v,label,checks):assert v,label;checks.append(label)\n                                  ^\nAssertionError: cross-definition write-side still refuses bad current scope/proof\n"
+  },
+  {
+    "case": "different-result-binding",
+    "status": "FAIL",
+    "checks": [
+      "different-result-binding cold history refused",
+      "all DB tables unchanged on history denial"
+    ],
+    "error": "Traceback (most recent call last):\n  File \"/tmp/sim2act-read-stability-independent-20261010/backend.py\", line 53, in <module>\n    r2=client.post(url+'/independent-alpha/checks',json={'expected_patch_fingerprint':cfg['patches']['alpha']['patch_fingerprint'],'request_key':'independent-after-corruption-'+case});ck(r2.status_code in [400,403,409],case+' write-side still refuses bad current scope/proof',checks);ck(fingerprint(state(store))==before,'write-side refusal no durable write',checks);(folder/'write-response.json').write_text(json.dumps({'http':r2.status_code,'body':r2.json()},indent=2));ck(not any(s.lstrip().split()[0].upper() in ['INSERT','UPDATE','DELETE'] for s in sql[n:]),'history/write refusal issue zero SQL mutations',checks)\n                                                                                                                                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/sim2act-read-stability-independent-20261010/backend.py\", line 3, in ck\n    def ck(v,label,checks):assert v,label;checks.append(label)\n                                  ^\nAssertionError: different-result-binding write-side still refuses bad current scope/proof\n"
+  },
+  {
+    "case": "definition-result-binding",
+    "status": "PASS",
+    "checks": [
+      "definition-result-binding cold history refused",
+      "all DB tables unchanged on history denial",
+      "definition-result-binding write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 2.2346456039958866
+  },
+  {
+    "case": "source-bytes",
+    "status": "PASS",
+    "checks": [
+      "source-bytes cold history refused",
+      "all DB tables unchanged on history denial",
+      "source-bytes write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 0.23691579900332727
+  },
+  {
+    "case": "other-owner",
+    "status": "PASS",
+    "checks": [
+      "other-owner cold history refused",
+      "all DB tables unchanged on history denial",
+      "other-owner write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 0.08908383200468961
+  },
+  {
+    "case": "other-project",
+    "status": "PASS",
+    "checks": [
+      "other-project cold history refused",
+      "all DB tables unchanged on history denial",
+      "other-project write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 0.0956687400030205
+  },
+  {
+    "case": "archived-owner",
+    "status": "PASS",
+    "checks": [
+      "archived-owner cold history refused",
+      "all DB tables unchanged on history denial",
+      "archived-owner write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 2.0466553139995085
+  },
+  {
+    "case": "source-grant-revoked",
+    "status": "PASS",
+    "checks": [
+      "source-grant-revoked cold history refused",
+      "all DB tables unchanged on history denial",
+      "source-grant-revoked write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 0.11444747399946209
+  },
+  {
+    "case": "source-grant-expired",
+    "status": "PASS",
+    "checks": [
+      "source-grant-expired cold history refused",
+      "all DB tables unchanged on history denial",
+      "source-grant-expired write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 0.1484474160024547
+  },
+  {
+    "case": "peer-source",
+    "status": "PASS",
+    "checks": [
+      "peer-source cold history refused",
+      "all DB tables unchanged on history denial",
+      "peer-source write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 1.8909629539994057
+  },
+  {
+    "case": "report-lock",
+    "status": "PASS",
+    "checks": [
+      "report-lock cold history refused",
+      "all DB tables unchanged on history denial",
+      "report-lock write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 1.109602492004342
+  },
+  {
+    "case": "peer-lock",
+    "status": "PASS",
+    "checks": [
+      "peer-lock cold history refused",
+      "all DB tables unchanged on history denial",
+      "peer-lock write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 2.399380390997976
+  },
+  {
+    "case": "run-version",
+    "status": "PASS",
+    "checks": [
+      "run-version cold history refused",
+      "all DB tables unchanged on history denial",
+      "run-version write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 2.2691836659942055
+  },
+  {
+    "case": "run-fence",
+    "status": "PASS",
+    "checks": [
+      "run-fence cold history refused",
+      "all DB tables unchanged on history denial",
+      "run-fence write-side still refuses bad current scope/proof",
+      "write-side refusal no durable write",
+      "history/write refusal issue zero SQL mutations"
+    ],
+    "seconds": 2.1202777229991625
+  }
+]
