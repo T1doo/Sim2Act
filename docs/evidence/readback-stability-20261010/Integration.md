@@ -9,3 +9,5 @@
 自有PG schema/role/public前后0|0|0，正常stop/rm-v后原CID与卷均不存在，[实际清理证明](pg-cleanup.json)。只有已知0字节codex-index-refresh.lock保留，没有未知锁/merge/cherry-pick/rebase。未改main、强推、部署、凭据、安全网络设置或真实模型调用。
 
 754精确CI已实际读取最终cancelled、原nativeJUnit26FAIL/未完成，Ruff/mypy绿、Edge跳过、Cleanup成功；不是完整CI通过。此次源变化的正常dev push可能按现有workflow自动启动后续native run，不能把正在运行或未运行的后续CI写成PASS，也不使用其替换754失败原件；900/240/150及总体验收限制保持。
+
+开发普通push首次因无法读取HTTPS用户名exit128，默认配置重试1次成功，未更改凭据或Git配置；[原失败](ci-followup/dev-push.log)、[普通重试成功](ci-followup/dev-push-retry.log)。远端754→6eb42aae9ca6533ef608db9f0a834a9b2a9ccf3f，随后仅文档补记公开annotation与原26个F时间线，不改变473冻结。新CI仅此正常push自动run38025760656，核验时in_progress，不能算native通过或覆盖754未详解失败。

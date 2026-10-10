@@ -18,6 +18,8 @@
 
 [5427原CI](https://github.com/T1doo/Sim2Act/actions/runs/38023764691)：72 Ruff问题在三新测试文件，非72产品失败。754样式修复非import AST与全scope import/alias同义，产品与5427全同；完整严格Ruff/mypy通过。[新754精确CI](https://github.com/T1doo/Sim2Act/actions/runs/38024430136)也通过Ruff/mypy/Setup/smoke，但工程套件cancelled并记录26 failures、38 skipped、863 tests（未完成），Edge SKIP，Cleanup成功；失败详情NOT_RECORDED，不记整体PASS。[新CI实际结论](ci-754-verification.json)、[API步骤](ci-754-summary.json)、[原文摘录](ci-754-verification-excerpt.log)。原完整CI log私下保全，SHA在verification记录。
 
+补充只读核验：GitHub job公开annotation已确认取消是超过15m0s上限；754只有此1个run/attempt1，没有另一个有效成功run。26个F标记全部先于取消，首个04:34:42、最后8个04:46:50，因此不能归为取消产生的失败；node/产品或夹具具体归因仍NOT_RECORDED。artifact API实际为空。正常开发push自动触发后续 [run38025760656](https://github.com/T1doo/Sim2Act/actions/runs/38025760656)，精确6eb42aae9ca6533ef608db9f0a834a9b2a9ccf3f、产品/测试仍473全部358文件；核验时in_progress，不记通过，未手工rerun。见[取消原因与后续run](ci-followup/ci-754-cancellation-confirmed.json)、[原26个F时间线](ci-followup/ci-754-pre-cancel-failure-marks.json)。下一轮首要取回并处理这26项native失败；本轮Linux限定通过不能替代。
+
 [失败清单](FailureLedger.md)包括作者probe夹具FAIL、首次collection命令错误、独审3脚本错误、原72style及新native未完成、只读API限制。没有阈值变更或盲目重跑。
 
 ## 边界及证据原件

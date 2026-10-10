@@ -21,7 +21,7 @@
 
 5427 的 Windows native run 38023764691/job 114130132129 在 2026-10-10 04:22:29 UTC 失败：72 项 Ruff 风格/导入问题，分布为 CSV DAG fixture 8、backend 58、UI 6；E701 21、E702 45、I001 5、E401 1。Setup 与 native API-worker-PowerShell smoke 成功；工程套件在 JUnit 前停止，Edge 跳过。这不是 72 个产品测试失败，也不是已定位 Windows runtime 故障。
 
-`754f0c61dab111ada2db69bfeb8e8cccdfe2ad95` 只整理三份测试的样式和导入顺序，非导入 AST 与带作用域的全部导入/别名等价，69 产品字节与 5427 相同。完整 `ruff check src scripts tests` 与 `mypy src` 通过；未改检查严格度、CI、依赖或预算。新精确 [run 38024430136](https://github.com/T1doo/Sim2Act/actions/runs/38024430136)/job114132123197 的 Ruff、mypy、Setup 与 smoke 通过；2026-10-10 04:47 UTC 工程 pytest 在配置15分钟作业上限附近被取消，JUnit属性为863 tests、26 failures、38 skipped、0 errors（未完成，不能推算全部收集数量或整套通过）。Edge SKIP，Report及Cleanup成功。原始日志没有这26个失败节点与详情，未上传JUnit artifact；额外只读 job/check-run API受工具endpoint限制，细节 NOT_RECORDED。取消时间与900秒上限一致，但可见API未给精确取消原因；本代理没有取消、rerun、改CI或放宽时限。新的native工程失败/未完成保持OPEN。原日志私下保全，公开精确摘要和原文摘录。
+`754f0c61dab111ada2db69bfeb8e8cccdfe2ad95` 只整理三份测试的样式和导入顺序，非导入 AST 与带作用域的全部导入/别名等价，69 产品字节与 5427 相同。完整 `ruff check src scripts tests` 与 `mypy src` 通过；未改检查严格度、CI、依赖或预算。新精确 [run 38024430136](https://github.com/T1doo/Sim2Act/actions/runs/38024430136)/job114132123197 的 Ruff、mypy、Setup 与 smoke 通过；2026-10-10 04:47 UTC 工程 pytest 在配置15分钟作业上限附近被取消，JUnit属性为863 tests、26 failures、38 skipped、0 errors（未完成，不能推算全部收集数量或整套通过）。Edge SKIP，Report及Cleanup成功。原始日志没有这26个失败节点与详情，未上传JUnit artifact；额外只读 job/check-run API受工具endpoint限制，细节 NOT_RECORDED。后续只读GitHub job公开annotation已确认超过15m0s上限；26个F标记全部先于取消，不能将这些失败归为取消导致，具体产品/夹具归因仍未知。artifact API为空，754无其他run。正常开发push自动产生6eb42aa的后续run38025760656（同473全部358冻结字节），核验时in_progress，不是通过；本代理没有取消、手动rerun、改CI或放宽时限。新的native工程失败/未完成保持OPEN。原日志私下保全，公开精确摘要和原文摘录。
 
 ## 边界
 

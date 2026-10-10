@@ -16,7 +16,7 @@ PG resources-history原失败节点在未改产品667上仅一次当前PASS（4.
 
 本轮Report历史只读稳定性修复按冻结 `47388f573746daa27f8d5790ca358eef91378ad5` 完成限定闭环：每definition保留新鲜完整scope，同次history内matching纯比较复用；其余68产品文件、原scope/propose/check AST与前端/预算/SQL observer不变。作者59节点SQLite54PASS/5PG-onlySKIP、PG59PASS，每库18真实UI场景248检查、四种实际旧源码升级；独审17API147检查和4页84检查LIMITED_PASS。[本轮证据与失败归属](../evidence/readback-stability-20261010/README.md)。PG相同原页面实际SQL6132→4010、Report.load15→10，墙钟只诊断，两项历史超时仍OPEN。
 
-5427 native CI原72Ruff问题已由纯样式754修正，完整严格Ruff/mypy及新精确CI实际通过；新run38024430136工程pytest在原15分钟上限附近cancelled，JUnit属性863 tests/26 failures/38 skipped（未完成、失败详情NOT_RECORDED），Edge SKIP，Cleanup成功。因此新增native工程失败/取消OPEN，不能把修正lint等同CI整体绿；不改900/240/150预算或工作流，不关闭原生验收限制。
+5427 native CI原72Ruff问题已由纯样式754修正，完整严格Ruff/mypy及新精确CI实际通过；新run38024430136工程pytest在原15分钟上限附近cancelled，JUnit属性863 tests/26 failures/38 skipped（未完成、失败详情NOT_RECORDED），Edge SKIP，Cleanup成功。后续公开annotation确认超15m0s上限；26个F全部早于取消，不能忽略为单纯取消，artifact为空、细节未取回，下一轮首要核验/修正这26项。正常dev push自动后续run38025760656（6eb42aa，473同字节）核验时仍in_progress，不算通过。因此新增native工程失败/取消OPEN，不能把修正lint等同CI整体绿；不改900/240/150预算或工作流，不关闭原生验收限制。
 
 ## 原方案必须交付的范围
 
