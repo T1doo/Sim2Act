@@ -159,7 +159,9 @@ def load(store, c, user, lid, limits, *, active=True):
         formal_publication_enabled=False)
     instances.require(fingerprint(public(p)) == fingerprint(expected), "Canonical logic/software version changed")
     body, frozen = pair(c, user, p["private_audit"]["app_id"], AUTH_KIND, lid, AuthorizeInput)
-    instances.require(fingerprint(frozen) == fingerprint(p) and body.expected_release_fingerprint == p["private_audit"]["release_fingerprint"])
+    instances.require(lid == "csvlogic_" + fingerprint([user, p["private_audit"]["release_id"], body.request_key])[:32]
+        and fingerprint(frozen) == fingerprint(p)
+        and body.expected_release_fingerprint == p["private_audit"]["release_fingerprint"])
     revoke_rows = [graph.lookup(c, user, p["private_audit"]["app_id"], kind, lid)
                    for kind in (REVOKE, REVOKE + "_seal")]
     revoked = bool(row["consumed"] or any(revoke_rows))

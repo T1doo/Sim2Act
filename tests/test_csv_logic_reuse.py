@@ -277,6 +277,25 @@ def test_both_resigned_authority_origins_cannot_change_zero_to_bool(env):
     assert fingerprint(snapshot(env)) == before
 
 
+def test_both_resigned_authority_request_keys_cannot_change_original_intent(env):
+    obj, _, _, _, _, _, body, _ = setup_logic(env)
+    with env[0].tx() as c:
+        rows = c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.kind.in_(
+            [logic.AUTH_KIND, logic.AUTH_KIND + "_seal"]))).mappings().all()
+        assert len(rows) == 2
+        for row in rows:
+            value = copy.deepcopy(row["snapshot"])
+            value["request"]["request_key"] = "resigned-different-intent"
+            c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.app_id == row["app_id"],
+                delivery_graph_requests.c.principal_id == row["principal_id"], delivery_graph_requests.c.kind == row["kind"],
+                delivery_graph_requests.c.request_key == row["request_key"]).values(snapshot=value,
+                fingerprint=fingerprint(value), request_fingerprint=fingerprint(value["request"])))
+    before = fingerprint(snapshot(env))
+    assert env[2].get(f"/api/internal/csv-logics/{obj['id']}").status_code == 409
+    assert env[2].post(plan_path(obj), json=body).status_code == 409
+    assert fingerprint(snapshot(env)) == before
+
+
 def test_actual_fab_source_upgrade_denies_stale_mint_without_rewriting_old_proof(env, tmp_path):
     import os
     import subprocess
