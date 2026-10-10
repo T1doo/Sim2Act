@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="20" time="2.462" timestamp="2026-10-10T06:28:50.992888+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_native_pytest_diagnostics" name="test_fixed_remaining_manifest_rejects_missing_duplicate_and_changed_nodes" time="0.005" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[complete]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[skipped]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[interrupted]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[partial_tail]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[missing_selection]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[missing_full]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[wrong_full_hash]" time="0.009" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[wrong_full_count]" time="0.008" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[foreign_start]" time="0.005"><failure message="assert 1 == 0">tmp_path = PosixPath('/tmp/sim2act-native-remaining11-20261010/semantic-closed-tests/test_remaining_scope_requires_8')
+state = 'foreign_start'
+
+    @pytest.mark.parametrize("state", ["complete", "skipped", "interrupted", "partial_tail",
+                                       "missing_selection", "missing_full", "wrong_full_hash", "wrong_full_count",
+                                       "foreign_start", "foreign_finish", "wrong_header", "extra_session",
+                                       "foreign_phase", "swapped_events"])
+    def test_remaining_scope_requires_all_actual_phases_and_complete_tail(tmp_path, state):
+        load = runpy.run_path(str(ROOT / "scripts/native_pytest_diagnostics.py"))["remaining11_nodes"]
+        nodes = load()
+        full_nodes = nodes + ["tests/test_unselected_fixture.py::test_unselected"]
+        records = [dict(event="session_start", requested_scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=nodes),
+                   dict(event="full_collection", nodes=full_nodes),
+                   dict(event="selection", scope="DIAGNOSTIC_ONLY_REMAINING11", required_nodes=nodes,
+                        full_count=len(full_nodes), full_nodes_sha256=hashlib.sha256(json.dumps(full_nodes).encode()).hexdigest(), deselected_count=1),
+                   dict(event="collection", nodes=nodes)]
+        for node in nodes:
+            records.append(dict(event="node_start", nodeid=node))
+            if state == "interrupted" and node == nodes[-1]:
+                break
+            for phase in ("setup", "call", "teardown"):
+                outcome = "skipped" if state == "skipped" and node == nodes[-1] and phase == "call" else "passed"
+                records.append(dict(event="node_report", nodeid=node, phase=phase, outcome=outcome))
+            records.append(dict(event="node_finish", nodeid=node))
+        records.append(dict(event="session_finish", exitstatus=2 if state == "interrupted" else 0))
+        for record in records:
+            record["pid"] = 1  # Finite recorder fixture only, not a native execution.
+        if state in {"missing_selection", "missing_full"}:
+            removed = "selection" if state == "missing_selection" else "full_collection"
+            records = [r for r in records if r["event"] != removed]
+        elif state == "wrong_full_hash":
+            records[2]["full_nodes_sha256"] = "different"
+        elif state == "wrong_full_count":
+            records[2]["full_count"] += 1
+        elif state in {"foreign_start", "foreign_finish"}:
+            event = "node_start" if state == "foreign_start" else "node_finish"
+            next(r for r in records if r["event"] == event)["nodeid"] = "foreign-node"
+        elif state == "wrong_header":
+            records[0]["event"] = "different-event"
+        elif state == "extra_session":
+            records.insert(1, dict(event="session_start", pid=1))
+        elif state == "foreign_phase":
+            records.insert(-1, dict(event="node_report", nodeid="foreign-node", phase="call", outcome="passed", pid=1))
+        elif state == "swapped_events":
+            start = next(i for i, r in enumerate(records) if r["event"] == "node_start")
+            finish = next(i for i, r in enumerate(records) if r["event"] == "node_finish")
+            records[start], records[finish] = records[finish], records[start]
+        path = tmp_path / "events.jsonl"
+        path.write_text("\n".join(json.dumps(r) for r in records) + ('\n{"event":' if state == "partial_tail" else "\n"))
+        result = summarize(path)
+        assert result["scope"] == "DIAGNOSTIC_ONLY_REMAINING11"
+        assert result["required_targets_complete"] == (state == "complete")
+        assert len(result["required_outcomes"]) == 11
+&gt;       assert result["not_started_count"] == 0
+E       assert 1 == 0
+
+tests/test_native_pytest_diagnostics.py:80: AssertionError</failure></testcase><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[foreign_finish]" time="0.005" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[wrong_header]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[extra_session]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[foreign_phase]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_scope_requires_all_actual_phases_and_complete_tail[swapped_events]" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_remaining_requested_but_missing_selection_is_not_verified" time="0.004" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[interrupt]" time="0.939" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[collection_error]" time="0.519" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[failure]" time="0.802" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_partial_last_append_is_incomplete_evidence" time="0.002" /></testsuite></testsuites>

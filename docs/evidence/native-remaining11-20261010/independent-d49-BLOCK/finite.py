@@ -1,0 +1,47 @@
+import pathlib,json,hashlib,subprocess,sys,os,runpy,copy,traceback
+R=pathlib.Path('/tmp/sim2act-native-remaining11-independent-20261010');REPO=pathlib.Path('/workspace/Sim2Act');SHA='d49aab3e8023b3bf47a7f66577e557d2874c24ae';BASE='b5b53cd9a5dfe59bc8a6a5ed960f96b89e267e65';PLUGIN=REPO/'scripts/native_pytest_diagnostics.py';api=runpy.run_path(str(PLUGIN));nodes=api['remaining11_nodes']();results=[]
+def freeze(label):
+ m=json.loads(pathlib.Path('/tmp/sim2act-native-remaining11-20261010/source-freeze.json').read_text())['files'];a={p:hashlib.sha256((REPO/p).read_bytes()).hexdigest() for p in m};g={p:hashlib.sha256(subprocess.check_output(['git','show',SHA+':'+p],cwd=REPO)).hexdigest() for p in m};assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip()==SHA and a==g==m and len(m)==363;(R/('source-'+label+'.json')).write_text(json.dumps({'source_sha':SHA,'count':363,'files':a,'all_match':True},indent=2));return a
+before=freeze('before');env={**os.environ,'PYTHONPATH':str(REPO),'PYTEST_DISABLE_PLUGIN_AUTOLOAD':'1','PYTHONDONTWRITEBYTECODE':'1','PYTHONUTF8':'1'}
+for k in ['PYTEST_ADDOPTS','SIM2ACT_TEST_DATABASE_URL','GITHUB_STEP_SUMMARY']:env.pop(k,None)
+# Exact fixed-list loader independent negative materials.
+for name,material in [('canonical',nodes),('CRLF',nodes),('changed',nodes[:-1]+['foreign-node']),('duplicate',nodes[:-1]+[nodes[0]]),('missing',nodes[:-1]),('wrongtype',{'nodes':nodes})]:
+ p=R/(name+'-manifest.json');text=json.dumps(material,indent=2)+'\n';p.write_bytes((text.replace('\n','\r\n') if name=='CRLF' else text).encode());accepted=True
+ try:value=api['remaining11_nodes'](p)
+ except (ValueError,TypeError):accepted=False
+ assert accepted==(name in ['canonical','CRLF']);results.append({'case':'loader/'+name,'status':'PASS','accepted':accepted})
+try:api['remaining11_nodes'](R/'absent-manifest.json');raise AssertionError('missing file accepted')
+except FileNotFoundError:results.append({'case':'loader/absentfile','status':'PASS'})
+# Same real private selected fixture effects and result, observer default adds no deselection.
+f=R/'default';f.mkdir(exist_ok=True);(f/'test_own.py').write_text("import pytest\ndef test_good():pass\ndef test_bad():assert False,'plain bounded failure'\n@pytest.mark.skip(reason='own skip')\ndef test_skip():pass\n");(f/'conftest.py').write_text("from pathlib import Path\nimport pytest\n@pytest.fixture(autouse=True)\ndef fx(request):\n    with Path('effects.txt').open('a') as s:s.write('setup '+request.node.name+'\\n')\n    yield\n    with Path('effects.txt').open('a') as s:s.write('teardown '+request.node.name+'\\n')\n")
+base=[sys.executable,'-m','pytest','-q','-p','no:cacheprovider','test_own.py'];b=subprocess.run(base,cwd=f,env=env,capture_output=True,text=True);(f/'baseline.log').write_text(b.stdout+b.stderr);effects=(f/'effects.txt').read_text();(f/'effects.txt').unlink();q=subprocess.run(base+['-p','scripts.native_pytest_diagnostics','--ci-diagnostics',str(f/'events.jsonl')],cwd=f,env=env,capture_output=True,text=True);(f/'observer.log').write_text(q.stdout+q.stderr);s=api['summarize'](f/'events.jsonl');assert b.returncode==q.returncode==1 and effects==(f/'effects.txt').read_text() and s['collected']==s['started']==s['finished']==3 and 'scope' not in s and 'required_targets_complete' not in s;results.append({'case':'default-real-pytest-exit-fixture-fullscope','status':'PASS','node_count':3})
+# Metadata attack variants: actual Report CLI, not only pure summarize.
+full=['extra-test']+nodes;digest=hashlib.sha256(json.dumps(full).encode()).hexdigest();events=[{'event':'session_start','requested_scope':'DIAGNOSTIC_ONLY_REMAINING11','required_nodes':nodes},{'event':'full_collection','nodes':full},{'event':'selection','scope':'DIAGNOSTIC_ONLY_REMAINING11','required_nodes':nodes,'full_count':12,'full_nodes_sha256':digest,'deselected_count':1},{'event':'collection','nodes':nodes}]
+for node in nodes:
+ events.append({'event':'node_start','nodeid':node})
+ for phase in ['setup','call','teardown']:events.append({'event':'node_report','nodeid':node,'phase':phase,'outcome':'passed'})
+ events.append({'event':'node_finish','nodeid':node})
+events.append({'event':'session_finish','exitstatus':0})
+for name in ['valid','skip','interrupt','partialtail','missingselection','missingfull','wronghash','wrongcount','duplicatephase']:
+ records=copy.deepcopy(events)
+ if name=='skip':next(r for r in records if r['event']=='node_report' and r['phase']=='call')['outcome']='skipped'
+ if name=='interrupt':records[-1]['exitstatus']=2
+ if name=='missingselection':records=[r for r in records if r['event']!='selection']
+ if name=='missingfull':records=[r for r in records if r['event']!='full_collection']
+ if name=='wronghash':next(r for r in records if r['event']=='selection')['full_nodes_sha256']='0'*64
+ if name=='wrongcount':next(r for r in records if r['event']=='selection')['full_count']=22234
+ if name=='duplicatephase':records.insert(-1,next(copy.deepcopy(r) for r in records if r['event']=='node_report'))
+ folder=R/'Report'/name;folder.mkdir(parents=True,exist_ok=True);p=folder/'events.jsonl';p.write_text(''.join(json.dumps(r)+'\n' for r in records)+('{"event":' if name=='partialtail' else ''));s=api['summarize'](p);o=subprocess.run([sys.executable,str(PLUGIN),'--report',str(p),'--junit',str(folder/'absent.xml')],env=env,capture_output=True,text=True);(folder/'report.log').write_text(o.stdout+o.stderr);(folder/'summary.json').write_text(json.dumps(s,indent=2));expected=name=='valid';good=(o.returncode==0)==expected;results.append({'case':'Report/'+name,'status':'PASS' if good else 'BLOCK','actual_exit':o.returncode,'required_complete':s['required_targets_complete'],'expected_accept':expected})
+# Actual repository full collect, then fixed11 selection. No test or fixture execution.
+c=R/'repo-collect';c.mkdir();cmd=[sys.executable,'-m','pytest','-q','-p','no:cacheprovider','--collect-only','-p','scripts.native_pytest_diagnostics','--ci-diagnostics',str(c/'events.jsonl'),'--ci-remaining11'];(c/'command.json').write_text(json.dumps(cmd,indent=2));o=subprocess.run(cmd,cwd=REPO,env=env,capture_output=True,text=True,timeout=60);(c/'collect.log').write_text(o.stdout+o.stderr);assert o.returncode==0,o.stderr;rs=[json.loads(line) for line in (c/'events.jsonl').read_text().splitlines()];selection=next(r for r in rs if r['event']=='selection');fullactual=next(r for r in rs if r['event']=='full_collection')['nodes'];col=next(r for r in rs if r['event']=='collection')['nodes'];assert col==nodes and len(fullactual)==2240 and len(set(fullactual))==2240 and selection['deselected_count']==2229 and selection['full_count']==2240 and selection['full_nodes_sha256']==hashlib.sha256(json.dumps(fullactual).encode()).hexdigest();results.append({'case':'repo-real-full-collect-exact11','status':'PASS','full':2240,'selected':11,'deselected':2229})
+# Read-only static boundary/source bridges, no platform substitution.
+ci=(REPO/'scripts/WindowsCI.ps1').read_text();test=(REPO/'scripts/Test.ps1').read_text();workflow=(REPO/'.github/workflows/windows-native-mock.yml').read_text();oldwork=subprocess.check_output(['git','show',BASE+':.github/workflows/windows-native-mock.yml'],cwd=REPO,text=True);assert '-not $IsWindows' in test and "$env:GITHUB_ACTIONS -ne 'true'" in test and '-not $CITracePath' in test;assert "if ($Remaining11 -and $Phase -ne 'Test')" in ci and '$env:NODE_PATH = $PreviousNodePath' in ci and '$env:SIM2ACT_TEST_DATABASE_URL' in ci;assert 'timeout-minutes: 15' in workflow and 'timeout-minutes: 4' in workflow and "contains(github.event.head_commit.message, '[native-remaining11]')" in workflow;assert workflow[:workflow.index('      - name: Engineering or')]==oldwork[:oldwork.index('      - name: Existing PowerShell engineering')] and workflow[workflow.index('      - name: Protected installed Edge'):]==oldwork[oldwork.index('      - name: Protected installed Edge'):]
+for path in ['scripts/engineering-ci/package-lock.json','scripts/engineering-ci/package.json','scripts/WindowsBrowserCI.ps1','scripts/browser-ci/package-lock.json']:
+ assert (REPO/path).read_bytes()==subprocess.check_output(['git','show',BASE+':'+path],cwd=REPO)
+# Pure redaction function unchanged; necessary original leak samples remain redacted.
+oldapi={};oldsrc=subprocess.check_output(['git','show',BASE+':scripts/native_pytest_diagnostics.py'],cwd=REPO,text=True);exec(compile(oldsrc,str(PLUGIN),'exec'),oldapi);samples=["authorization='Basic OWN_BASIC' password='first OWN_SPACED'",'password="first OWN_MULTI\nsecond OWN_MULTI_TAIL"',r'api_key="escape\" OWN_ESCAPED"']
+for v in samples:assert api['redact'](v)==oldapi['redact'](v) and 'OWN_' not in api['redact'](v)
+products={p:v for p,v in before.items() if p.startswith('src/')};assert len(products)==69
+for path,v in products.items():assert hashlib.sha256(subprocess.check_output(['git','show','47388f573746daa27f8d5790ca358eef91378ad5:'+path],cwd=REPO)).hexdigest()==v
+results.append({'case':'static-native-workflow-budget-lock-product69-redaction-boundaries','status':'PASS','PS_runtime':False})
+after=freeze('after');assert before==after;(R/'finite-results.json').write_text(json.dumps({'source_sha':SHA,'results':results,'PASS':sum(r['status']=='PASS' for r in results),'BLOCK':sum(r['status']=='BLOCK' for r in results)},indent=2));print(json.dumps({'source_sha':SHA,'PASS':sum(r['status']=='PASS' for r in results),'BLOCK':sum(r['status']=='BLOCK' for r in results),'source363match':True}))
