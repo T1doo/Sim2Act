@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="9" time="4.038" timestamp="2026-10-10T05:15:08.435505+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[interrupt]" time="0.496"><failure message="assert 'fake-escaped-secret' not in 'SIM2ACT_CI_...tatus&quot;: 2}\n'&#10;  &#10;  'fake-escaped-secret' is contained here:&#10;    redacted&gt; fake-escaped-secret'; authorization=&lt;redacted&gt;\nE       AssertionError: diagnostic assertion; &lt;redacted-database-url&gt; Bearer &lt;redacted&gt; authorization=&lt;redacted&gt;; password=&lt;redacted&gt;; secret=&lt;redacted&gt;; authorization=&lt;redacted&gt;\nE       assert False\n\ntest_fixture.py:3: AssertionError&quot;}&#10;  ?           +++++++++++++++++++&#10;    SIM2ACT_CI_DIAGNOSTIC {&quot;event&quot;: &quot;node_start&quot;, &quot;utc&quot;: &quot;2026-10-10T05:15:08.806255+00:00&quot;, &quot;elapsed_seconds&quot;: 0.03901140699599637, &quot;pid&quot;: 121331, &quot;nodeid&quot;: &quot;test_fixture.py::test_pass&quot;}&#10;    SIM2ACT_CI_DIAGNOSTIC {&quot;ev...&#10;  &#10;  ...Full output truncated (19 lines hidden), use '-vv' to show">tmp_path = PosixPath('/tmp/sim2act-native-diagnostics-20261010/redaction-fixed/test_actual_pytest_failure_evi0')
+mode = 'interrupt'
+
+    @pytest.mark.parametrize("mode", ["interrupt", "collection_error", "failure"])
+    def test_actual_pytest_failure_evidence_survives_incomplete_suite(tmp_path, mode):
+        root = Path(__file__).resolve().parents[1]
+        trace = tmp_path / "events.jsonl"
+        xml = tmp_path / "junit.xml"
+        secrets = [
+            "fake-db-secret",
+            "fake-bearer-secret",
+            "fake-basic-secret",
+            "fake-spaced-password",
+            "fake-escaped-secret",
+            "fake-unquoted-secret",
+        ]
+        if mode != "collection_error":
+            code = r"""
+    def test_failure():
+        assert False, "diagnostic assertion; postgresql+psycopg://fixture:fake-db-secret@localhost/db; Bearer fake-bearer-secret; authorization='Basic fake-basic-secret'; password='first fake-spaced-password'; secret='first\\' fake-escaped-secret'; authorization=Basic fake-unquoted-secret"
+    
+    def test_pass():
+        assert True
+    
+    def test_interrupted():
+        raise KeyboardInterrupt
+    
+    def test_never_started():
+        assert False, "unexecuted fixture"
+    """
+            if mode == "failure":
+                code = code.split("def test_interrupted():")[0]
+        else:
+            code = 'raise RuntimeError("collection diagnostic assertion")\n'
+        (tmp_path / "test_fixture.py").write_text(code)
+        env = {**os.environ, "PYTHONPATH": str(root), "PYTHONUTF8": "1"}
+        # The isolated fixture must not overwrite the outer CI suite's JUnit output.
+        env.pop("PYTEST_ADDOPTS", None)
+        env.pop("GITHUB_STEP_SUMMARY", None)
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "scripts.native_pytest_diagnostics",
+                "--ci-diagnostics",
+                str(trace),
+                "--junitxml",
+                str(xml),
+            ],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert child.returncode == (1 if mode == "failure" else 2)
+        result = summarize(trace)
+        assert result["evidence_present"] and result["suite_complete"] == (mode == "failure")
+        assert result["exitstatuses"] == [child.returncode]
+        assert len(result["failures"]) == 1
+        assert "diagnostic assertion" in result["failures"][0]["failure"]
+        diagnostics = "\n".join(
+            line for line in child.stdout.splitlines() if line.startswith("SIM2ACT_CI_DIAGNOSTIC ")
+        )
+        assert "diagnostic assertion" in diagnostics
+        for secret in secrets:
+&gt;           assert secret not in diagnostics + trace.read_text()
+E           assert 'fake-escaped-secret' not in 'SIM2ACT_CI_...tatus": 2}\n'
+E             
+E             'fake-escaped-secret' is contained here:
+E               redacted&gt; fake-escaped-secret'; authorization=&lt;redacted&gt;\nE       AssertionError: diagnostic assertion; &lt;redacted-database-url&gt; Bearer &lt;redacted&gt; authorization=&lt;redacted&gt;; password=&lt;redacted&gt;; secret=&lt;redacted&gt;; authorization=&lt;redacted&gt;\nE       assert False\n\ntest_fixture.py:3: AssertionError"}
+E             ?           +++++++++++++++++++
+E               SIM2ACT_CI_DIAGNOSTIC {"event": "node_start", "utc": "2026-10-10T05:15:08.806255+00:00", "elapsed_seconds": 0.03901140699599637, "pid": 121331, "nodeid": "test_fixture.py::test_pass"}
+E               SIM2ACT_CI_DIAGNOSTIC {"ev...
+E             
+E             ...Full output truncated (19 lines hidden), use '-vv' to show
+
+tests/test_native_pytest_diagnostics.py:82: AssertionError</failure></testcase><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[collection_error]" time="0.439" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[failure]" time="0.340"><failure message="assert 'fake-escaped-secret' not in 'SIM2ACT_CI_...tatus&quot;: 1}\n'&#10;  &#10;  'fake-escaped-secret' is contained here:&#10;    redacted&gt; fake-escaped-secret'; authorization=&lt;redacted&gt;\nE       AssertionError: diagnostic assertion; &lt;redacted-database-url&gt; Bearer &lt;redacted&gt; authorization=&lt;redacted&gt;; password=&lt;redacted&gt;; secret=&lt;redacted&gt;; authorization=&lt;redacted&gt;\nE       assert False\n\ntest_fixture.py:3: AssertionError&quot;}&#10;  ?           +++++++++++++++++++&#10;    SIM2ACT_CI_DIAGNOSTIC {&quot;event&quot;: &quot;node_start&quot;, &quot;utc&quot;: &quot;2026-10-10T05:15:09.771703+00:00&quot;, &quot;elapsed_seconds&quot;: 0.03925397100101691, &quot;pid&quot;: 121334, &quot;nodeid&quot;: &quot;test_fixture.py::test_pass&quot;}&#10;    SIM2ACT_CI_DIAGNOSTIC {&quot;ev...&#10;  &#10;  ...Full output truncated (14 lines hidden), use '-vv' to show">tmp_path = PosixPath('/tmp/sim2act-native-diagnostics-20261010/redaction-fixed/test_actual_pytest_failure_evi2')
+mode = 'failure'
+
+    @pytest.mark.parametrize("mode", ["interrupt", "collection_error", "failure"])
+    def test_actual_pytest_failure_evidence_survives_incomplete_suite(tmp_path, mode):
+        root = Path(__file__).resolve().parents[1]
+        trace = tmp_path / "events.jsonl"
+        xml = tmp_path / "junit.xml"
+        secrets = [
+            "fake-db-secret",
+            "fake-bearer-secret",
+            "fake-basic-secret",
+            "fake-spaced-password",
+            "fake-escaped-secret",
+            "fake-unquoted-secret",
+        ]
+        if mode != "collection_error":
+            code = r"""
+    def test_failure():
+        assert False, "diagnostic assertion; postgresql+psycopg://fixture:fake-db-secret@localhost/db; Bearer fake-bearer-secret; authorization='Basic fake-basic-secret'; password='first fake-spaced-password'; secret='first\\' fake-escaped-secret'; authorization=Basic fake-unquoted-secret"
+    
+    def test_pass():
+        assert True
+    
+    def test_interrupted():
+        raise KeyboardInterrupt
+    
+    def test_never_started():
+        assert False, "unexecuted fixture"
+    """
+            if mode == "failure":
+                code = code.split("def test_interrupted():")[0]
+        else:
+            code = 'raise RuntimeError("collection diagnostic assertion")\n'
+        (tmp_path / "test_fixture.py").write_text(code)
+        env = {**os.environ, "PYTHONPATH": str(root), "PYTHONUTF8": "1"}
+        # The isolated fixture must not overwrite the outer CI suite's JUnit output.
+        env.pop("PYTEST_ADDOPTS", None)
+        env.pop("GITHUB_STEP_SUMMARY", None)
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "scripts.native_pytest_diagnostics",
+                "--ci-diagnostics",
+                str(trace),
+                "--junitxml",
+                str(xml),
+            ],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert child.returncode == (1 if mode == "failure" else 2)
+        result = summarize(trace)
+        assert result["evidence_present"] and result["suite_complete"] == (mode == "failure")
+        assert result["exitstatuses"] == [child.returncode]
+        assert len(result["failures"]) == 1
+        assert "diagnostic assertion" in result["failures"][0]["failure"]
+        diagnostics = "\n".join(
+            line for line in child.stdout.splitlines() if line.startswith("SIM2ACT_CI_DIAGNOSTIC ")
+        )
+        assert "diagnostic assertion" in diagnostics
+        for secret in secrets:
+&gt;           assert secret not in diagnostics + trace.read_text()
+E           assert 'fake-escaped-secret' not in 'SIM2ACT_CI_...tatus": 1}\n'
+E             
+E             'fake-escaped-secret' is contained here:
+E               redacted&gt; fake-escaped-secret'; authorization=&lt;redacted&gt;\nE       AssertionError: diagnostic assertion; &lt;redacted-database-url&gt; Bearer &lt;redacted&gt; authorization=&lt;redacted&gt;; password=&lt;redacted&gt;; secret=&lt;redacted&gt;; authorization=&lt;redacted&gt;\nE       assert False\n\ntest_fixture.py:3: AssertionError"}
+E             ?           +++++++++++++++++++
+E               SIM2ACT_CI_DIAGNOSTIC {"event": "node_start", "utc": "2026-10-10T05:15:09.771703+00:00", "elapsed_seconds": 0.03925397100101691, "pid": 121334, "nodeid": "test_fixture.py::test_pass"}
+E               SIM2ACT_CI_DIAGNOSTIC {"ev...
+E             
+E             ...Full output truncated (14 lines hidden), use '-vv' to show
+
+tests/test_native_pytest_diagnostics.py:82: AssertionError</failure></testcase><testcase classname="tests.test_native_pytest_diagnostics" name="test_partial_last_append_is_incomplete_evidence" time="0.001" /><testcase classname="tests.test_windows_phase_metrics" name="test_wrapped_call_preserves_value_exception_and_restores" time="0.001" /><testcase classname="tests.test_windows_phase_metrics" name="test_actual_sqlite_initialization_ddl_existence_errors_and_redaction" time="0.025" /><testcase classname="tests.test_windows_phase_metrics" name="test_uninstall_does_not_clobber_later_test_patch" time="0.000" /><testcase classname="tests.test_windows_phase_metrics" name="test_explicit_plugin_keeps_collection_outcomes_fixtures_and_secrets" time="1.303" /><testcase classname="tests.test_windows_phase_metrics" name="test_loaded_without_output_is_inert_and_missing_output_path_keeps_test_outcome" time="1.287" /></testsuite></testsuites>

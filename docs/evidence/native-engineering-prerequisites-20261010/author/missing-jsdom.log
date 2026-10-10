@@ -1,0 +1,48 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________________ test_background_poll_synthesized_api _____________________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-0/test_background_poll_synthesiz0')
+
+    def test_background_poll_synthesized_api(tmp_path):
+        source = Path(__file__).parents[1] / "src/sim2act/web/app.js"
+        result = subprocess.run(["node", "tests/background_poll.cjs", str(tmp_path), str(source)],
+                                capture_output=True, text=True, timeout=30)
+        (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: node:internal/modules/cjs/loader:1520
+E           throw err;
+E           ^
+E         
+E         Error: Cannot find module 'jsdom'
+E         Require stack:
+E         - /workspace/Sim2Act/tests/background_poll.cjs
+E             at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E             at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E             at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E             at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E             at Module._load (node:internal/modules/cjs/loader:1294:5)
+E             at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E             at Module.require (node:internal/modules/cjs/loader:1617:12)
+E             at require (node:internal/modules/helpers:153:16)
+E             at Object.<anonymous> (/workspace/Sim2Act/tests/background_poll.cjs:3:130)
+E             at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E           code: 'MODULE_NOT_FOUND',
+E           requireStack: [ '/workspace/Sim2Act/tests/background_poll.cjs' ]
+E         }
+E         
+E         Node.js v24.19.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', 'tests/background_poll.cjs', '/tmp/pytest-of-agent/pytest-0/test_background_poll_synthe...ode: 'MODULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/background_poll.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_background_poll.py:13: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_background_poll.py::test_background_poll_synthesized_api - ...
+1 failed, 1 warning in 0.17s

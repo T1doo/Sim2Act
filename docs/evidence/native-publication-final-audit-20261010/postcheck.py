@@ -1,0 +1,7 @@
+import pathlib,json,hashlib
+ROOT=pathlib.Path('/tmp/sim2act-native-final-publication-audit-20261010');REPO=pathlib.Path('/workspace/Sim2Act');OBS=REPO/'docs/evidence/native-interruption-diagnostics-20261010';P=pathlib.Path('/tmp/sim2act-native-diagnostics-20261010');prov=json.loads((OBS/'log-byte-provenance.json').read_text())
+for name in ['ci-88','ci-6eb']:
+ raw=(P/(name+'-full.raw.log')).read_bytes();saved=(P/(name+'-full.log')).read_bytes();lf=raw.replace(b'\r\n',b'\n');row=prov[name];assert len(saved)==row['normalized_saved_bytes'] and len(lf)==row['CRLF_to_LF_only_bytes'] and hashlib.sha256(lf).hexdigest()==row['CRLF_to_LF_only_sha256'] and row['added_trailing_LF_bytes']==1 and row['exact_transformation_verified'] and lf+b'\n'==saved
+for name in ['NativeEngineeringPrerequisites20261010.md','NativeInterruptionDiagnostics20261010.md']:
+ text=(REPO/'docs/F2'/name).read_text();assert 'trailing LF' in text or '尾随LF' in text or '尾随 LF' in text
+r=json.loads((ROOT/'FINAL_PUBLICATION_AUDIT.json').read_text());assert hashlib.sha256((OBS/'PUBLISHED_MANIFEST.json').read_bytes()).hexdigest()==r['manifests']['observer']['manifest_sha256'];assert hashlib.sha256((REPO/'docs/evidence/native-engineering-prerequisites-20261010/PUBLISHED_MANIFEST.json').read_bytes()).hexdigest()==r['manifests']['prerequisites']['manifest_sha256'];r['corrected_provenance_extra_fields_and_docs_verified']=True;(ROOT/'FINAL_PUBLICATION_AUDIT.json').write_text(json.dumps(r,indent=2));print('corrected provenance fields/docs and both terminal manifests unchanged: PASS')

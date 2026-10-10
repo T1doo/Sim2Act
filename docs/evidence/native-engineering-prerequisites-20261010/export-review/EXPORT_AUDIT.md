@@ -1,0 +1,5 @@
+EXPORT_EXACT_MATCH: exact source9002bf958f79972e576e831ebdf5e0d90fc44ea5. Author189 and independent45 whitelisted entries match both the original private files and recorded SHA256; the whitelist files themselves also match exactly. Each published directory contains only its listed entries plus its whitelist (190/46 actual files). All362 frozen files match exactGit, worktree and both public/private manifests. All69src product bytes remain identical to47388f573746daa27f8d5790ca358eef91378ad5.
+
+Independent LIMITED_PASS remains scoped to42 authored checks and6 existing UI nodes/234 existing driver checks. CRLF old-source negative, missing-jsdom negative and first AST-slice harness error are retained unchanged. Native9002run38028553382 remains awaiting supplied final materials; earlier754/6eb historical equivalence is still explicitly inference with assertions NOT_RECORDED. Historical OPEN and NOT_ACCEPTED boundaries remain.
+
+No tests, CI, PG or repository/ref writes were performed. This receipt covers the two exported directories and source freeze only; final native document/evidence audit is deferred until terminal artifacts are supplied.

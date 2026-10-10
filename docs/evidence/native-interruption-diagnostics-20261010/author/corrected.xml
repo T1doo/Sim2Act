@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="4" time="1.626" timestamp="2026-10-10T05:06:34.143780+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[interrupt]" time="0.529"><failure message="assert 'diagnostic assertion' in 'SIM2ACT_CI_DIAGNOSTIC {&quot;event&quot;: &quot;session_start&quot;, &quot;utc&quot;: &quot;2026-10-10T05:06:34.435606+00:00&quot;, &quot;elapsed_seconds&quot;: 0.0211...h&quot;, &quot;utc&quot;: &quot;2026-10-10T05:06:34.637180+00:00&quot;, &quot;elapsed_seconds&quot;: 0.22271201200055657, &quot;pid&quot;: 118634, &quot;exitstatus&quot;: 2}'">tmp_path = PosixPath('/tmp/sim2act-native-diagnostics-20261010/corrected/test_actual_pytest_failure_evi0')
+mode = 'interrupt'
+
+    @pytest.mark.parametrize("mode", ["interrupt", "collection_error", "failure"])
+    def test_actual_pytest_failure_evidence_survives_incomplete_suite(tmp_path, mode):
+        root = Path(__file__).resolve().parents[1]
+        trace = tmp_path / "events.jsonl"
+        xml = tmp_path / "junit.xml"
+        if mode != "collection_error":
+            code = """
+    def test_failure():
+        assert False, "diagnostic assertion; postgresql+psycopg://fixture:fake-db-secret@localhost/db; Bearer fake-bearer-secret"
+    
+    def test_pass():
+        assert True
+    
+    def test_interrupted():
+        raise KeyboardInterrupt
+    
+    def test_never_started():
+        assert False, "unexecuted fixture"
+    """
+            if mode == "failure":
+                code = code.split("def test_interrupted():")[0]
+        else:
+            code = 'raise RuntimeError("collection diagnostic assertion")\n'
+        (tmp_path / "test_fixture.py").write_text(code)
+        env = {**os.environ, "PYTHONPATH": str(root), "PYTHONUTF8": "1"}
+        # The isolated fixture must not overwrite the outer CI suite's JUnit output.
+        env.pop("PYTEST_ADDOPTS", None)
+        env.pop("GITHUB_STEP_SUMMARY", None)
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "scripts.native_pytest_diagnostics",
+                "--ci-diagnostics",
+                str(trace),
+                "--junitxml",
+                str(xml),
+            ],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert child.returncode == (1 if mode == "failure" else 2)
+        result = summarize(trace)
+        assert result["evidence_present"] and result["suite_complete"] == (mode == "failure")
+        assert result["exitstatuses"] == [child.returncode]
+        assert len(result["failures"]) == 1
+        assert "diagnostic assertion" in result["failures"][0]["failure"]
+        diagnostics = "\n".join(
+            line for line in child.stdout.splitlines() if line.startswith("SIM2ACT_CI_DIAGNOSTIC ")
+        )
+&gt;       assert "diagnostic assertion" in diagnostics
+E       assert 'diagnostic assertion' in 'SIM2ACT_CI_DIAGNOSTIC {"event": "session_start", "utc": "2026-10-10T05:06:34.435606+00:00", "elapsed_seconds": 0.0211...h", "utc": "2026-10-10T05:06:34.637180+00:00", "elapsed_seconds": 0.22271201200055657, "pid": 118634, "exitstatus": 2}'
+
+tests/test_native_pytest_diagnostics.py:72: AssertionError</failure></testcase><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[collection_error]" time="0.658" /><testcase classname="tests.test_native_pytest_diagnostics" name="test_actual_pytest_failure_evidence_survives_incomplete_suite[failure]" time="0.362"><failure message="assert 'diagnostic assertion' in 'SIM2ACT_CI_DIAGNOSTIC {&quot;event&quot;: &quot;session_start&quot;, &quot;utc&quot;: &quot;2026-10-10T05:06:35.667904+00:00&quot;, &quot;elapsed_seconds&quot;: 0.0234...5:06:35.688438+00:00&quot;, &quot;elapsed_seconds&quot;: 0.043962924006336834, &quot;pid&quot;: 118638, &quot;nodeid&quot;: &quot;test_fixture.py::test_pass&quot;}'">tmp_path = PosixPath('/tmp/sim2act-native-diagnostics-20261010/corrected/test_actual_pytest_failure_evi2')
+mode = 'failure'
+
+    @pytest.mark.parametrize("mode", ["interrupt", "collection_error", "failure"])
+    def test_actual_pytest_failure_evidence_survives_incomplete_suite(tmp_path, mode):
+        root = Path(__file__).resolve().parents[1]
+        trace = tmp_path / "events.jsonl"
+        xml = tmp_path / "junit.xml"
+        if mode != "collection_error":
+            code = """
+    def test_failure():
+        assert False, "diagnostic assertion; postgresql+psycopg://fixture:fake-db-secret@localhost/db; Bearer fake-bearer-secret"
+    
+    def test_pass():
+        assert True
+    
+    def test_interrupted():
+        raise KeyboardInterrupt
+    
+    def test_never_started():
+        assert False, "unexecuted fixture"
+    """
+            if mode == "failure":
+                code = code.split("def test_interrupted():")[0]
+        else:
+            code = 'raise RuntimeError("collection diagnostic assertion")\n'
+        (tmp_path / "test_fixture.py").write_text(code)
+        env = {**os.environ, "PYTHONPATH": str(root), "PYTHONUTF8": "1"}
+        # The isolated fixture must not overwrite the outer CI suite's JUnit output.
+        env.pop("PYTEST_ADDOPTS", None)
+        env.pop("GITHUB_STEP_SUMMARY", None)
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "scripts.native_pytest_diagnostics",
+                "--ci-diagnostics",
+                str(trace),
+                "--junitxml",
+                str(xml),
+            ],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert child.returncode == (1 if mode == "failure" else 2)
+        result = summarize(trace)
+        assert result["evidence_present"] and result["suite_complete"] == (mode == "failure")
+        assert result["exitstatuses"] == [child.returncode]
+        assert len(result["failures"]) == 1
+        assert "diagnostic assertion" in result["failures"][0]["failure"]
+        diagnostics = "\n".join(
+            line for line in child.stdout.splitlines() if line.startswith("SIM2ACT_CI_DIAGNOSTIC ")
+        )
+&gt;       assert "diagnostic assertion" in diagnostics
+E       assert 'diagnostic assertion' in 'SIM2ACT_CI_DIAGNOSTIC {"event": "session_start", "utc": "2026-10-10T05:06:35.667904+00:00", "elapsed_seconds": 0.0234...5:06:35.688438+00:00", "elapsed_seconds": 0.043962924006336834, "pid": 118638, "nodeid": "test_fixture.py::test_pass"}'
+
+tests/test_native_pytest_diagnostics.py:72: AssertionError</failure></testcase><testcase classname="tests.test_native_pytest_diagnostics" name="test_partial_last_append_is_incomplete_evidence" time="0.002" /></testsuite></testsuites>

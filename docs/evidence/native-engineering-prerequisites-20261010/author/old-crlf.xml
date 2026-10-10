@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.786" timestamp="2026-10-10T05:35:23.217065+00:00" hostname="5b45fac5b7b9"><testcase classname="test_csv_dag" name="test_three_actual_receipts_exact_report_and_old_request_recovery" time="0.710"><failure message="AssertionError: assert {'column': 'q...a59619f', ...} == {'column': 'q...d954559', ...}&#10;  &#10;  Omitting 5 identical items, use -vv to show&#10;  Differing items:&#10;  {'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f'} != {'source_hash': 'a2b7f0dbc76768404782e4198149caeb404f9b0d20b1ba675c5bbfda1d954559'}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7f983a4b7b00&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-1/test_thre...c85f71501d4412b43f19e1098325de', 'user_bd6d19ac0c0a477db56af5c44497101d', 'proj_e73df0b0f21949a89d80a412763898a8', ...)
+
+    def test_three_actual_receipts_exact_report_and_old_request_recovery(env):
+        rid, base, plan, body, worker, job = setup(env)
+        worker.process(job)
+        response = env[2].get(f"/api/runs/{job['id']}")
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["status"] == "SUCCEEDED"
+&gt;       assert result["result"]["output"] == dict(resource_id=rid, column="quantity", count=2, sum="15",
+            source_hash=hashlib.sha256(CSV.read_bytes()).hexdigest(), text="列 quantity；行数 2；合计 15")
+E       AssertionError: assert {'column': 'q...a59619f', ...} == {'column': 'q...d954559', ...}
+E         
+E         Omitting 5 identical items, use -vv to show
+E         Differing items:
+E         {'source_hash': 'd5851306dd3ce833d82bced0abef12728f3e64e1ef1266ee8a9fef209a59619f'} != {'source_hash': 'a2b7f0dbc76768404782e4198149caeb404f9b0d20b1ba675c5bbfda1d954559'}
+E         Use -v to get more diff
+
+/tmp/sim2act-native-prerequisites-20261010/old-crlf/test_csv_dag.py:59: AssertionError</failure></testcase></testsuite></testsuites>

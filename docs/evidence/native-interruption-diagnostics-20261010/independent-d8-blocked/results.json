@@ -1,0 +1,46 @@
+[
+  {
+    "case": "redaction",
+    "status": "FAIL",
+    "checks": [
+      "real synthetic failure exit1"
+    ],
+    "error": "Traceback (most recent call last):\n  File \"/tmp/sim2act-native-diagnostics-independent-20261010/independent.py\", line 26, in <module>\n    child=subprocess.run(command(folder),cwd=folder,env=ENV,capture_output=True,text=True,timeout=15);(folder/'child.log').write_text(child.stdout+child.stderr);ck(child.returncode==1,'real synthetic failure exit1',checks);r=report(folder);events=(folder/'events.jsonl').read_text();diag='\\n'.join(s for s in child.stdout.splitlines() if s.startswith('SIM2ACT_CI_DIAGNOSTIC '));channels={'file':events,'stdout_diagnostics':diag,'Report':r.stdout};tokens=['CI_SYNTHETIC_DB','CI_SYNTHETIC_BEARER','CI_SYNTHETIC_BASIC','CI_SYNTHETIC_SPACED_PASSWORD','CI_SYNTHETIC_API','CI_SYNTHETIC_TOKEN','CI_SYNTHETIC_SECRET'];leaks={name:[t for t in tokens if t in text] for name,text in channels.items()};(folder/'redaction-result.json').write_text(json.dumps({'leaks':leaks,'all_values_synthetic':True},indent=2));ck(not any(leaks.values()),'all credential-key values redacted in new diagnostic channels',checks)\n                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/sim2act-native-diagnostics-independent-20261010/independent.py\", line 17, in ck\n    def ck(v,label,checks):assert v,label;checks.append(label)\n                                  ^\nAssertionError: all credential-key values redacted in new diagnostic channels\n"
+  },
+  {
+    "case": "normal-selection",
+    "status": "PASS",
+    "checks": [
+      "observer preserves actual baseline exit status",
+      "observer preserves exact fixture setup/teardown effects and order",
+      "exact -k selected set remains3",
+      "normal selected failure reports complete suite without pass claim",
+      "Report preserves normal failing suite completeness"
+    ],
+    "seconds": 0.5646847460011486
+  },
+  {
+    "case": "hard-kill",
+    "status": "PASS",
+    "checks": [
+      "owned child actually hard-killed without Python cleanup",
+      "hard kill recovers exact active and unstarted count",
+      "hard kill is explicitly incomplete with no fake finish",
+      "earlier failed phase remains in closed JSONL append",
+      "failure and active node already flushed in stdout before kill",
+      "always-style Report recovers earlier failure and active after hard kill",
+      "step summary durable incomplete flag"
+    ],
+    "seconds": 0.2660667939999257
+  },
+  {
+    "case": "tail-and-missing",
+    "status": "PASS",
+    "checks": [
+      "missing trace incomplete",
+      "partial final append retains prior active and incomplete",
+      "Report survives incomplete final JSONL append"
+    ],
+    "seconds": 0.10719153300306061
+  }
+]

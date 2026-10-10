@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/tmp/sim2act-native-diagnostics-independent-20261010/independent.py", line 26, in <module>
+    child=subprocess.run(command(folder),cwd=folder,env=ENV,capture_output=True,text=True,timeout=15);(folder/'child.log').write_text(child.stdout+child.stderr);ck(child.returncode==1,'real synthetic failure exit1',checks);r=report(folder);events=(folder/'events.jsonl').read_text();diag='\n'.join(s for s in child.stdout.splitlines() if s.startswith('SIM2ACT_CI_DIAGNOSTIC '));channels={'file':events,'stdout_diagnostics':diag,'Report':r.stdout};tokens=['CI_SYNTHETIC_DB','CI_SYNTHETIC_BEARER','CI_SYNTHETIC_BASIC','CI_SYNTHETIC_SPACED_PASSWORD','CI_SYNTHETIC_API','CI_SYNTHETIC_TOKEN','CI_SYNTHETIC_SECRET'];leaks={name:[t for t in tokens if t in text] for name,text in channels.items()};(folder/'redaction-result.json').write_text(json.dumps({'leaks':leaks,'all_values_synthetic':True},indent=2));ck(not any(leaks.values()),'all credential-key values redacted in new diagnostic channels',checks)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/sim2act-native-diagnostics-independent-20261010/independent.py", line 17, in ck
+    def ck(v,label,checks):assert v,label;checks.append(label)
+                                  ^
+AssertionError: all credential-key values redacted in new diagnostic channels
+
+redaction FAIL 1
+normal-selection PASS 5
+hard-kill PASS 7
+tail-and-missing PASS 3
+Traceback (most recent call last):
+  File "/tmp/sim2act-native-diagnostics-independent-20261010/independent.py", line 68, in <module>
+    (ROOT/'results.json').write_text(json.dumps(results,indent=2));freeze('after');assert all(r['status']=='PASS' for r in results)
+                                                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

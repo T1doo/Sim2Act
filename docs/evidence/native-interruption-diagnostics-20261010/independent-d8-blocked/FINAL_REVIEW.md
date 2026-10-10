@@ -1,0 +1,15 @@
+# Independent review: BLOCK
+
+Exact candidate: `d8f2101b5259be5b51d00eca527db7cf3b4c5b37`; base `e4c75fa838064556bcdc972bad93ca9d6149f4d7`.
+
+The new diagnostic channels leak part of credential values. An independently authored real pytest failure containing `authorization='Basic CI_SYNTHETIC_BASIC'` and `password='first CI_SYNTHETIC_SPACED_PASSWORD'` leaves both final tokens visible in the closed JSONL append, flushed `SIM2ACT_CI_DIAGNOSTIC` stdout, and subsequent Report stdout. The credential-key regular expression consumes only the first word. All inputs are synthetic; no actual credential was used or disclosed. Database URI, Bearer and simple single-word API/token/secret inputs were redacted in this probe. Evidence: `redaction/redaction-result.json`, `events.jsonl`, `child.log`, `report.log`, `failure.log` and `test_fixture.py`. The raw original pytest traceback is retained separately; the failing oracle evaluates the three newly added diagnostic channels.
+
+Four independent scenarios ran: three PASS with 15 named checks, one BLOCK with one successful prerequisite (actual exit1) followed by the failed redaction oracle. The normal-selection comparison verifies identical baseline exit1, selected three-test set, and fixture setup/teardown effects and order. An owned private child was actually SIGKILLed during its second test: the earlier failed phase and exact active node were already durable in stdout/JSONL, Report recovered them with one not-started test, no session finish, and explicit incomplete status. Missing trace and a partial final JSONL append also remain incomplete and readable. These are self-authored fixtures and assertions, not author test results.
+
+Eight static PowerShell integration contract checks cover the unchanged workflow and setup/cleanup bytes, optional explicit observer CLI, absence of plugin injection into PYTEST_ADDOPTS, original -q selection, retained Ruff/mypy/R0 gates, and direct Report invocation against the owned JobRoot trace/JUnit. PowerShell and Windows were not executed. Existing CI was not started, restarted or accessed by this review.
+
+All 360 frozen paths matched Git, the provided freeze and worktree before execution, after execution and at final seal. The 69 src product files are byte-identical to `47388f573746daa27f8d5790ca358eef91378ad5`. See `source-before.json`, `source-after.json`, `source-final-after.json`, `product-freeze.json` and `PS-contract.json`.
+
+This review does not establish the identities or fix the original native 26 failures, accept Windows900/Edge240/Node150, or close either historical PG resources-history Future10 or Report GET idle6 OPEN. No PG, actual model, shared source/test/ref or author process was touched. PROJECT remains PENDING/BLOCKED_PARTIAL; LIVE0. The redaction issue blocks this diagnostic candidate. Preserve this failed freeze and perform only the corrected redaction delta and necessary boundary checks on a later exact freeze.
+
+Copy only the explicit SHA256-listed relative paths in `COPY_WHITELIST.json`; all raw failures and synthetic harness materials are retained. Cache files are excluded.
