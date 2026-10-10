@@ -97,11 +97,15 @@ def scope(store, c, user, pid, aid, body, limits):
 
 
 def build(store, c, user, pid, aid, body, limits):
-    saved, slot, outer, _ = scope(store, c, user, pid, aid, body, limits)
+    return _build_from_scope(body, scope(store, c, user, pid, aid, body, limits))
+
+
+def _build_from_scope(body, validated):
+    saved, slot, outer, _ = validated
     definition = dict(slot_id=slot["id"], slot_key=slot["key"],
                       baseline_revision=slot["revision"], baseline_view=slot["definition"],
                       presentation_revision=slot["revision"] + 1, view=body.view.model_dump())
-    answer = dict(namespace="report-presentation.v1", project_id=pid, app_id=aid,
+    answer = dict(namespace="report-presentation.v1", project_id=saved["project_id"], app_id=saved["app_id"],
                   request_key=body.request_key, definition=definition,
                   candidate_fingerprint=body.expected_candidate_fingerprint,
                   baseline_graph_fingerprint=body.expected_graph_fingerprint,
@@ -118,12 +122,18 @@ def build(store, c, user, pid, aid, body, limits):
 
 
 def load(store, c, user, pid, aid, key, limits):
+    body, answer, _ = _load_scoped(store, c, user, pid, aid, key, limits)
+    return body, answer
+
+
+def _load_scoped(store, c, user, pid, aid, key, limits):
     # Current authorization precedes any protected receipt access.
     graph.current(store, c, user, pid, aid, limits)
     body, answer = read_pair(c, user, aid, KIND, key, Definition)
-    if fingerprint(build(store, c, user, pid, aid, body, limits)) != fingerprint(answer):
+    validated = scope(store, c, user, pid, aid, body, limits)
+    if fingerprint(_build_from_scope(body, validated)) != fingerprint(answer):
         graph.conflict("Archived presentation binding changed")
-    return body, answer
+    return body, answer, validated
 
 
 @graph.controlled
@@ -142,10 +152,14 @@ def propose(store, user, pid, aid, body, limits):
 
 
 def readback(store, c, user, pid, aid, body, patch, check_body, limits):
-    _, slot, _, output = scope(store, c, user, pid, aid, body, limits)
+    return _readback_from_scope(body, patch, check_body, scope(store, c, user, pid, aid, body, limits))
+
+
+def _readback_from_scope(body, patch, check_body, validated):
+    saved, slot, _, output = validated
     if check_body.expected_patch_fingerprint != patch["patch_fingerprint"]:
         graph.conflict("Confirm the exact saved presentation version")
-    answer = dict(namespace="report-presentation-readback.v1", project_id=pid, app_id=aid,
+    answer = dict(namespace="report-presentation-readback.v1", project_id=saved["project_id"], app_id=saved["app_id"],
                   request_key=check_body.request_key, patch_fingerprint=patch["patch_fingerprint"],
                   result_binding=patch["result_binding"], slot_id=slot["id"],
                   baseline_text=output["decision"], text=output["explanation"],
@@ -185,11 +199,15 @@ def history(store, user, pid, aid, limits):
         items = []
         checks = [read_pair(c, user, aid, CHECK, key, CheckInput) for key in keys(CHECK)]
         for key in keys(KIND):
-            definition, patch = load(store, c, user, pid, aid, key, limits)
+            definition, patch, validated = _load_scoped(store, c, user, pid, aid, key, limits)
             matching = []
             for body, answer in checks:
                 if answer["patch_fingerprint"] == patch["patch_fingerprint"]:
-                    if fingerprint(readback(store, c, user, pid, aid, definition, patch, body, limits)) != fingerprint(answer):
+                    # No DB access, await, or writes occur between this freshly
+                    # validated definition and its deterministic readback checks.
+                    # Each definition still gets its own complete fresh scope;
+                    # nothing is retained across definitions or HTTP requests.
+                    if fingerprint(_readback_from_scope(definition, patch, body, validated)) != fingerprint(answer):
                         graph.conflict("Saved presentation readback changed")
                     matching.append(answer)
             items.append(dict(patch=patch, checks=matching))
