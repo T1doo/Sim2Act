@@ -218,14 +218,32 @@ $("project-select").onchange = safe(async () => {if(typeof clearCsvLogic === "fu
 document.querySelectorAll("#workspace-nav [data-tab]").forEach(b => b.onclick = () => selectWorkspace(b.dataset.tab));
 selectWorkspace("projects");
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
+function createHealthSampler(render) {
+  let generation = 0;
+  return async (readHealth) => {
+    const sample = ++generation;
+    let available = false, message = "后台健康检查失败";
+    try {
+      const h = await readHealth();
+      if (!h || !["MOCK", "LIVE"].includes(h.mode) || h.api !== "UP" || !["UP", "OFFLINE"].includes(h.worker))
+        throw new Error("健康响应结构无效");
+      message = `健康检查：${h.mode} · API ${h.api} · worker ${h.worker}`;
+      available = true;
+    } catch (_) { /* Only health sampling failures affect the health message. */ }
+    if (sample !== generation) return false;
+    render(message);
+    return available;
+  };
+}
+const sampleHealth = createHealthSampler(message => $("health").textContent = message);
 let backgroundRefreshInFlight=false;
 setInterval(async () => {
   if(backgroundRefreshInFlight)return;
   backgroundRefreshInFlight=true;
   try {
-    const h=await api("/health");$("health").textContent=`${h.mode} · API ${h.api} · worker ${h.worker}`;
+    if (!await sampleHealth(() => api("/health"))) return;
     if(token){await refresh();if(activeRun)await showRun(activeRun,false);}
-  } catch(e) {$("health").textContent="后台不可用";}
+  } catch(e) {$("error").textContent=e.message;}
   finally {backgroundRefreshInFlight=false;}
 },2500);
 
