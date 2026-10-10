@@ -179,6 +179,42 @@ def test_successful_broader_composition_cannot_acquire_the_closed_report_version
     assert fingerprint(snapshot(env)) == before
 
 
+@pytest.mark.parametrize("with_report", [False, True])
+@pytest.mark.parametrize("joint_output", [False, True])
+def test_resigned_float_count_cannot_impersonate_integer_receipt(env, with_report, joint_output):
+    _, _, _, _, rel = release(env, with_report=with_report)
+    i = create(env, rel)
+    accepted, _ = enqueue(env, i, rel)
+    work(env, accepted)
+    with env[0].tx() as c:
+        record = c.execute(select(internal_instance_data).where(
+            internal_instance_data.c.instance_id == i["id"])).mappings().one()
+        data = copy.deepcopy(record["data"])
+        assert type(data["result"]["count"]) is int and data["result"]["count"] == 2
+        data["result"]["count"] = 2.0
+        digest = fingerprint(data)
+        c.execute(update(internal_instance_data).where(
+            internal_instance_data.c.instance_id == i["id"],
+            internal_instance_data.c.version == record["version"]).values(data=data, fingerprint=digest))
+        if joint_output:
+            c.execute(update(internal_app_runs).where(
+                internal_app_runs.c.id == accepted["app_run_id"]).values(output=data["result"]))
+        saved = c.execute(select(runs.c.result).where(runs.c.id == accepted["run_id"])).scalar_one()
+        result = copy.deepcopy(saved)
+        result["instance_result"]["record_fingerprint"] = digest
+        c.execute(update(runs).where(runs.c.id == accepted["run_id"]).values(result=result))
+    before = fingerprint(snapshot(env))
+    for path in (
+        f"/api/internal/instances/{i['id']}",
+        f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}",
+        f"/api/csv-dag/runs/{accepted['run_id']}",
+    ):
+        reply = env[2].get(path)
+        assert reply.status_code in {400, 409}, reply.text
+        assert reply.json()["error"]["code"] in {"VERSION_CONFLICT", "VERIFICATION_FAILED"}
+    assert fingerprint(snapshot(env)) == before
+
+
 def test_actual_f13_upgrade_preserves_old_rows_and_requires_fresh_source(env, tmp_path):
     import json
     import os

@@ -265,9 +265,9 @@ def ledger_result(c, s, ar, base):
     record = c.execute(select(internal_instance_data).where(internal_instance_data.c.run_id == ar["id"])).mappings().first()
     require(record is not None and ar["status"] == "SUCCEEDED" and record["instance_id"] == s["instance_id"]
         and record["release_id"] == s["release_id"] and record["version"] == ar["result_version"]
-        and record["schema_version"] == 1 and record["data"] == {"result": ar["output"]}
+        and record["schema_version"] == 1 and fingerprint(record["data"]) == fingerprint({"result": ar["output"]})
         and fingerprint(record["data"]) == record["fingerprint"]
-        and ar["output"] == aggregate_result(base, s["execution_source"]))
+        and fingerprint(ar["output"]) == fingerprint(aggregate_result(base, s["execution_source"])))
     return {**base, "business_writes": 1, "instance_result": dict(instance_id=s["instance_id"],
         app_run_id=ar["id"], release_id=s["release_id"], result_version=record["version"],
         record_fingerprint=record["fingerprint"])}
