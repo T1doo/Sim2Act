@@ -1,0 +1,23 @@
+# 已核闭合 CSV 流程的新材料复用（限定）
+
+初轮产品838f9c3208792429dfa5080670144237d8f38967，经两次test-only夹具修复得到c9ea689a27308b94c998ced5cd0cb3fd981a5c49（70src完全相同）。最终源码709e0978c15236ed86bafc095d4cdf1301ad756c，经392/e76/709三次仅修改csv-dag.js新材料实例读回路径，373非文档文件、70src中69与c9相同，所有Python后端字节相同。基线开发977f88e2fd41630bd61298735c7ec4bad773de6a，原产品50b10417a99a070f6bcd614471cc00ec102b7836。
+
+已有两/三步实例仅接受column，resource_id/source_hash来自原版本。本次从已成功、已核内部版本提取严格无条件resource.read→data.aggregate_csv[→intern.csv_report.v1]结构，在同project另一份**已有注册、当前授权且已派生图**的CSV草案上重新编译普通计划。仅允许更换目标CSV及其数值列，须不同rid和不同真实bytes/hash；不接受自定义workflow/动作/预算。不会自动注册材料、创建Principal/Grant、执行、保存版本、创建实例或正式发布。
+
+页面冷读取来源版本→读取可用目标CSV（逻辑ID/hash/列/预算）→手动确认保存新材料计划→单独打开→核对精确计划并确认实际Run。原worker实读新CSV、独立数值核查及报告回执完成后，仍通过原有prepare/commit/createInstance手动保存新的独立版本和实例；新实例冷Store/页面可选另一数值列生成新的AppRun/typed结果。旧Release、Instance和历史不覆盖。目标注册入口是原create-and-authorize合同，会创建其既有app runtime及两个工具Grant，不能说注册CSV全路径零Grant；material-plan动作本身零新增身份/授权。
+
+来源与目标owner/project/runtime交集、schema、当前graph版本/授权指纹、真实CSV bytes/hash、源冻结及当前预算都在绑定写入前重核。固定material-plan- key绑定完整来源版本及原request_key；同key换目标/列拒绝。origin双receipt+普通plan marker持久关联；任何该前缀都要求origin双receipt，联合删除双origin及双plan marker、重签hash不能降级为普通计划。每次load/enqueue/worker证明仍重构真实来源。新Run合同使用来源冻结cap，不能扩大到较宽的当前平台默认值。转移仅一跳，新目标版本可正常按列复用，但不能作为下一材料转移的来源；应选择原闭合版本。
+
+UNKNOWN保存原source/target/hash/column/key。首次明确未接受拒绝才可释放；已有UNKNOWN后重试403保留。最低缓存门先核确定性exactkey、实际plan digest、owner、预算、anchor、完整plan_input及来源链接，再保存合法迟到回执；旧context不paint，known恢复只GET。打开目标还绑定本次showApp selection generation、identity/project，避免同target ABA。HTTP200其他入口的损坏响应提示/feedback/item-map限制保留；合法形状但虚假的accepted runID仍UNKNOWN且不显示未经核验结果，其自动恢复未签收。
+
+**旧文件依赖仍存在**：来源readRelease/sourceSnapshot实时核原CSV及当前授权。新增CSV注册会改变原source用户/project runtime Grant基线，已有旧版本可能403/409，需要在已注册目标存在后重新派生源图、执行并显式保存新的来源版本；不放宽历史授权门。退休/删除/撤权旧源仍拒绝。因此仅推进AT10/AT11有限子项，不满足完整“不依赖固定旧文件”。schema/precision/size支持仍限既有CSV注册与编译器；不是通用材料归纳/执行器。未验收跨project完整攻击、全部worker失败矩阵或真实模型自主生成。
+
+原50b实际源码升级回归启动旧archive建立真实历史，再用新源读/重放旧证明409；raw JSON历史字节不迁移、不覆盖，重新derive+exact确认的新Run可以完成。新旧源码证明不能伪称自动兼容。
+
+专项结果、独立18场景161检查、实际数据库/HTTP资产及全部失败/中止夹具日志见对应证据README。SQLite结果是15已通过观察加纠正后剩余15的明确聚合，原budget夹具FAIL保留；不能说单次30-clean-JUnit。原生固定remaining11只测试原11个node，**不覆盖新增30例**，不能升级为完整Windows900/Edge240/Node150验收；full inventory/未执行数按实际CI记录。
+
+PROJECT PENDING/BLOCKED_PARTIAL，overall NOT_ACCEPTED，semantic UNKNOWN，owner PENDING，formal publication关闭，LIVE=0，真实模型预算0。PG resources-history Future10及原Report GET idle6两历史OPEN保持。无改main、强推、部署、凭据/安全网络改动、真实模型调用或无目的全量重跑。
+
+新材料三步PG页面在c9单次30例中29PASS1冷实例DOM idle10失败，同源同预算1例重试仍失败；392仍失败在接受后Instance→Release→plan读取；e76已通过接受读回并真实写units17，但最后手动Instance→Release→plan读取仍idle10。四次产品失败的原FAILURE/log/JUnit均保留。不能将它们算作夹具错误。392删去material路径重复完整perRun GET；e76用fresh Instance GET精确release id/fingerprint匹配已sealed immutable intent release；709进一步用当前context已有sealed history release及已完整通过PlanSeal/jobSeal/typed/expected-ID/input门的最多50个immutable plan缓存减少重复GET。每次仍fresh Instance GET，后台live reauthorize/loadPlan/operations/typed证明，并且全部前端seal/input/ID/typed/current门重新校验后才cache/paint；缺cache正常GET，旧nonmaterial路径不改。DOM10/Node90均不提高。
+
+709上原失败invalid-budget三步PG页面1PASS42.18s，另两步/三步丢POST及冷页新结果2PASS86.67s，均原预算、无skip。此前22项PG/SQLite后端专项只通过全部Python/69其余src精确字节桥接；此前c9其余7个页面不冒充709重跑。最终SQLite12页及独立5场景结果按证据README。完整性能门仍未签收，不把限定用例通过升级为PG整体验收；历史Report GET idle6及resources-history Future10 OPEN均保留。

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="3.164" timestamp="2026-10-10T08:17:56.263982+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_csv_material_reuse" name="test_cold_new_material_actual_new_source_release_instance_and_preserved_old_rows[False]" time="3.073"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Column patch accepted parameters changed&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f2199530800&gt;, Settings(database_url='sqlite:////tmp/sim2act-dag-new-csv-20261010/probe...a93ca42f824085bc3b00ade69617e1', 'user_a21977e495d54966897a06ef577d2e5c', 'proj_c818acdeba5146cbba8c7ffa6aae494e', ...)
+with_report = False
+
+    @pytest.mark.parametrize("with_report", [False, True])
+    def test_cold_new_material_actual_new_source_release_instance_and_preserved_old_rows(env, with_report):
+        from fastapi.testclient import TestClient
+        from sim2act.api import create_app
+        rel, old, old_rid, target, body = setup_material(env, with_report)
+        before = snapshot(env)
+        options = env[2].get(f"/api/internal/releases/{rel['id']}/csv-materials")
+        assert options.status_code == 200 and [v["resource_id"] for v in options.json()["items"]] == [body["expected_resource_id"]]
+        assert fingerprint(snapshot(env)) == fingerprint(before)
+&gt;       value, accepted, url, confirm = accepted_target(env, rel, body)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_material_reuse.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f2199530800&gt;, Settings(database_url='sqlite:////tmp/sim2act-dag-new-csv-20261010/probe...a93ca42f824085bc3b00ade69617e1', 'user_a21977e495d54966897a06ef577d2e5c', 'proj_c818acdeba5146cbba8c7ffa6aae494e', ...)
+rel = {'approval_id': 'iapproval_0dbafbd8f6384f2a9cd24949296a9270', 'fingerprint': '7df9fc567c15a7b7a10b802bfbf66bcb1b7ccc37966008cdd3f8ca176adc7cee', 'formal_publication_enabled': False, 'id': 'irelease_33f28631ecff40a9920eb080f039e060', ...}
+body = {'column': 'price', 'expected_candidate_fingerprint': '073843aac69e8678d5cdb4816c6292ba006f5656ce467a8aac247f83c08c0fd...b72808d87139', 'expected_release_fingerprint': '7df9fc567c15a7b7a10b802bfbf66bcb1b7ccc37966008cdd3f8ca176adc7cee', ...}
+
+    def accepted_target(env, rel, body):
+        reply = env[2].post(path(rel), json=body)
+&gt;       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Column patch accepted parameters changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_csv_material_reuse.py:43: AssertionError</failure></testcase></testsuite></testsuites>

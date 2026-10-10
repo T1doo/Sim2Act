@@ -1,0 +1,69 @@
+...............F
+=================================== FAILURES ===================================
+_ test_complete_intent_current_authority_and_budget_reject_zero_write[budget] __
+
+env = (<sim2act.db.Store object at 0x7f3e4e448560>, Settings(database_url='sqlite:////tmp/sim2act-dag-new-csv-20261010/sqlit...c53fd808074774bc4a6a65ec4f498b', 'user_f53d3a96a9b746d5ad7f69d3c67e695a', 'proj_c1f751426af04211a74adc3aa3732456', ...)
+attack = 'budget'
+
+    @pytest.mark.parametrize(
+        "attack", ["column", "target", "source-grant", "target-version", "owner", "budget"]
+    )
+    def test_complete_intent_current_authority_and_budget_reject_zero_write(env, attack):
+        from test_internal_lifecycle import limits
+    
+        from sim2act.contracts import Limits
+        from sim2act.db import app_drafts
+        from sim2act.errors import DomainError
+    
+        rel, old, _, target, body = setup_material(env)
+        if attack in {"column", "target"}:
+            first = env[2].post(path(rel), json=body)
+            assert first.status_code == 201, first.text
+            body = copy.deepcopy(body)
+            if attack == "column":
+                body["column"] = "units"
+            else:
+                body["target_app_id"] = rel["snapshot"]["draft"]["id"]
+        elif attack == "source-grant":
+            with env[0].tx() as c:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.principal_id == rel["snapshot"]["draft"]["runtime_id"])
+                    .values(revoked=True)
+                )
+        elif attack == "target-version":
+            candidate = copy.deepcopy(target["candidate"])
+            candidate["goal"]["known"] += " changed"
+            with env[0].tx() as c:
+                c.execute(
+                    update(app_drafts)
+                    .where(app_drafts.c.id == target["id"])
+                    .values(candidate=candidate, fingerprint=fingerprint(candidate))
+                )
+        elif attack == "owner":
+            env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+        before = fingerprint(snapshot(env))
+        if attack == "budget":
+            cap = limits(env).model_dump()
+            cap["max_tool_calls"] = 2
+            with pytest.raises(DomainError):
+                material.propose(
+>                   env[0], env[3], rel["id"], material.MaterialInput(**body), Limits(**cap)
+                                                                               ^^^^^^^^^^^^^
+                )
+E               pydantic_core._pydantic_core.ValidationError: 1 validation error for Limits
+E               max_tool_calls
+E                 Extra inputs are not permitted [type=extra_forbidden, input_value=2, input_type=int]
+E                   For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+
+tests/test_csv_material_reuse.py:314: ValidationError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_material_reuse.py::test_complete_intent_current_authority_and_budget_reject_zero_write[budget]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 15 passed, 1 warning in 100.97s (0:01:40)

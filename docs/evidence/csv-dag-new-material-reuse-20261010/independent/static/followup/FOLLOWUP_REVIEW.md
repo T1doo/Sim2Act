@@ -1,0 +1,7 @@
+仍为未冻结只读静态审查，无动态测试或签收。此前两建议已见源码修复：material-plan-前缀完整origin强制，首次preflight使用非执行key；缓存前求exactKey、plan actualfingerprint和binding.plan_input精确匹配，原风险记录原样保留。
+
+另发现material-open ABA：await showApp(target,pid)后仅凭next当前且同targetID取得新context。showApp因导航B→A新代次返回false时，旧闭包可将旧plan读入用户后来新A。应捕获showApp现有onSelectionStart generation回调，要求next.parent.generation==此次捕获代次，并核原identity/project及所有后续current guards。不是以当前next==csvDagContext代替发起选择的generation。这是明确静态控制流风险，待冻结实页复现/修复后验证。
+
+HTTP200 minimum proof缓存门建议加完整owner/预算/anchor链：binding.principal_id==intent.release.principal_id；plan.definition.manifest.runtime_limits==source_execution.limits；plan.graph_revision、authorization_fingerprint==冻结target值。当前binding.limits核对不能自动证明plan预算，实际plan digest可被重签；后续current app planSeal是展示门，不能代替迟到缓存前所有frozen origin链接。后端definition/current/normalcompiler仍完整授权和源cap，未声称实际API安全失败。
+
+初始static/COPY_WHITELIST6和本followup独立保全，当前所有产物仅/tmp；不改repo/作者测试/refs/PG，最终精确源码后需要有限动态复核。

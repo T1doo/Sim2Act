@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="14" time="88.788" timestamp="2026-10-10T08:30:19.044574+00:00" hostname="5b45fac5b7b9"><testcase classname="tests.test_csv_material_reuse" name="test_cold_new_material_actual_new_source_release_instance_and_preserved_old_rows[False]" time="14.944" /><testcase classname="tests.test_csv_material_reuse" name="test_cold_new_material_actual_new_source_release_instance_and_preserved_old_rows[True]" time="22.208" /><testcase classname="tests.test_csv_material_reuse" name="test_new_material_rejects_changed_binding_before_any_write[column]" time="6.107" /><testcase classname="tests.test_csv_material_reuse" name="test_new_material_rejects_changed_binding_before_any_write[resource]" time="3.892" /><testcase classname="tests.test_csv_material_reuse" name="test_new_material_rejects_changed_binding_before_any_write[hash]" time="3.930" /><testcase classname="tests.test_csv_material_reuse" name="test_new_material_rejects_changed_binding_before_any_write[version]" time="3.953" /><testcase classname="tests.test_csv_material_reuse" name="test_new_material_rejects_changed_binding_before_any_write[runtime-grant]" time="3.295" /><testcase classname="tests.test_csv_material_reuse" name="test_new_material_rejects_changed_binding_before_any_write[bytes]" time="4.338" /><testcase classname="tests.test_csv_material_reuse" name="test_material_origin_pair_deletion_cannot_downgrade_accepted_target_run" time="5.109" /><testcase classname="tests.test_csv_material_reuse" name="test_target_revocation_between_real_steps_preserves_only_read_receipt" time="5.790" /><testcase classname="tests.test_csv_material_reuse" name="test_complete_intent_current_authority_and_budget_reject_zero_write[column]" time="5.648" /><testcase classname="tests.test_csv_material_reuse" name="test_complete_intent_current_authority_and_budget_reject_zero_write[target]" time="3.693" /><testcase classname="tests.test_csv_material_reuse" name="test_complete_intent_current_authority_and_budget_reject_zero_write[source-grant]" time="3.093" /><testcase classname="tests.test_csv_material_reuse" name="test_complete_intent_current_authority_and_budget_reject_zero_write[target-version]" time="2.632"><failure message="TypeError: unsupported operand type(s) for +=: 'dict' and 'str'">env = (&lt;sim2act.db.Store object at 0x7fccaff812e0&gt;, Settings(database_url='sqlite:////tmp/sim2act-dag-new-csv-20261010/probe...9b40d436df454fbb7bdd48900b6dc0', 'user_0ad4e0e8cf9742489bc0845de9c0fbb9', 'proj_04f475280e0a4a1291e6c16b93a8af2d', ...)
+attack = 'target-version'
+
+    @pytest.mark.parametrize(
+        "attack", ["column", "target", "source-grant", "target-version", "owner", "budget"]
+    )
+    def test_complete_intent_current_authority_and_budget_reject_zero_write(env, attack):
+        from test_internal_lifecycle import limits
+    
+        from sim2act.contracts import Limits
+        from sim2act.db import app_drafts
+        from sim2act.errors import DomainError
+    
+        rel, old, _, target, body = setup_material(env)
+        if attack in {"column", "target"}:
+            first = env[2].post(path(rel), json=body)
+            assert first.status_code == 201, first.text
+            body = copy.deepcopy(body)
+            if attack == "column":
+                body["column"] = "units"
+            else:
+                body["target_app_id"] = rel["snapshot"]["draft"]["id"]
+        elif attack == "source-grant":
+            with env[0].tx() as c:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.principal_id == rel["snapshot"]["draft"]["runtime_id"])
+                    .values(revoked=True)
+                )
+        elif attack == "target-version":
+            candidate = copy.deepcopy(target["candidate"])
+&gt;           candidate["goal"] += " changed"
+E           TypeError: unsupported operand type(s) for +=: 'dict' and 'str'
+
+tests/test_csv_material_reuse.py:299: TypeError</failure></testcase></testsuite></testsuites>
