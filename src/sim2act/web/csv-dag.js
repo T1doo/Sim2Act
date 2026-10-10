@@ -487,7 +487,7 @@ function dagReuseClear() {
   $("dag-reuse-confirm").checked=false;$("dag-reuse-run-confirm").checked=false;
   dagMaterialClear();
 }
-function dagReuseOpen(c) {c.reuse={busy:false,approval:null,release:null,instance:null,job:null};dagReuseButtons(c);}
+function dagReuseOpen(c) {c.reuse={busy:false,approval:null,release:null,instance:null,job:null,materialPlans:new Map()};dagReuseButtons(c);}
 function dagReuseButtons(c=csvDagContext) {
   if(!c||!csvDagCurrent(c)||!c.reuse)return;
   const r=c.reuse,intent=dagReuseIntents.get(csvDagKey(c)),locked=r.busy||!!intent;
@@ -532,18 +532,22 @@ async function dagReuseHistory(c=csvDagContext) {
 async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, expected=null) {
   if(!c||!csvDagCurrent(c)||!iid)return;
   const detail=await api(`/api/internal/instances/${iid}`);
-  // Instance GET reauthorizes read_release and returns its exact fingerprint.
-  // A frozen accepted intent may reuse that matching release; cold/manual reads
-  // still fetch the release. Every run/plan/typed seal below remains mandatory.
-  const rel=expected?.release||await api(`/api/internal/releases/${detail.release_id}`);
   if(!csvDagCurrent(c))return;
-  if(detail.id!==iid||detail.source_app_id!==c.parent.id||detail.project_id!==c.parent.project||detail.runtime_id!==c.parent.app.runtime_id||detail.release_fingerprint!==rel.fingerprint||!await dagReuseReleaseSeal(rel,c)||!Array.isArray(detail.runs)||!Array.isArray(detail.data))throw Error("VERSION_CONFLICT");
+  // Instance GET reauthorizes read_release and returns its exact fingerprint.
+  // Only a matching immutable material release/plan in this context can avoid
+  // duplicate GETs. Every fresh Instance proof and every seal remains mandatory.
+  const cachedRelease=[c.reuse.release,...(c.reuse.releases||[])].find(v=>v?.id===detail.release_id&&v.fingerprint===detail.release_fingerprint&&v.snapshot?.execution_source?.plan_key?.startsWith("material-plan-"));
+  const rel=expected?.release||cachedRelease||await api(`/api/internal/releases/${detail.release_id}`);
+  if(!csvDagCurrent(c))return;
+  if(detail.id!==iid||rel.id!==detail.release_id||detail.source_app_id!==c.parent.id||detail.project_id!==c.parent.project||detail.runtime_id!==c.parent.app.runtime_id||detail.release_fingerprint!==rel.fingerprint||!await dagReuseReleaseSeal(rel,c)||!Array.isArray(detail.runs)||!Array.isArray(detail.data))throw Error("VERSION_CONFLICT");
+  const material=rel.snapshot.execution_source.plan_key.startsWith("material-plan-"),verifiedPlans=[];
   for(const run of detail.runs) {
     const e=rel.snapshot.execution_source;
     if(run.instance_id!==iid||run.release_id!==rel.id||run.execution_version!==e.version||run.run_id!==run.proof?.id||run.status!==run.proof.status)throw Error("VERIFICATION_FAILED");
     const accepted=run.proof.internal_instance;
     if(accepted?.instance_id!==iid||accepted.app_run_id!==run.app_run_id||accepted.version!==e.version)throw Error("VERIFICATION_FAILED");
-    const bindingPlan=await api(csvDagBase(c)+"/"+encodeURIComponent(run.plan_key));
+    const planCacheKey=JSON.stringify([run.plan_key,run.proof.plan_fingerprint]);
+    const bindingPlan=(material&&c.reuse.materialPlans.get(planCacheKey))||await api(csvDagBase(c)+"/"+encodeURIComponent(run.plan_key));
     if(!csvDagCurrent(c))return;
     const shape=dagReuseShape(bindingPlan);
     if(!await csvDagPlanSeal(bindingPlan,c)||run.proof.plan_fingerprint!==bindingPlan.plan_fingerprint||!shape||shape.version!==e.version||shape.aggregate!==e.aggregate_step||(shape.report&&shape.report!==e.report_step)||bindingPlan.input[e.aggregate_step+"_column"]!==run.input.column)throw Error("VERIFICATION_FAILED");
@@ -553,6 +557,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
       const record=detail.data.find(v=>v.run_id===run.app_run_id),p=run.proof.result.instance_result;
       if(!record||p?.instance_id!==iid||p.app_run_id!==run.app_run_id||p.release_id!==rel.id||p.result_version!==run.result_version||record.version!==run.result_version||record.release_id!==rel.id||record.fingerprint!==await deliveryDigest(record.data)||p.record_fingerprint!==record.fingerprint||!deliverySame(record.data,{result:run.output})||!deliverySame(run.output,dagReuseAggregate(run.proof.result,e))||run.proof.business_writes!==1||run.proof.result.business_writes!==1)throw Error("VERIFICATION_FAILED");
     } else if(run.proof.business_writes!==0||run.result_version!==null||run.output!==null)throw Error("VERIFICATION_FAILED");
+    if(material)verifiedPlans.push([planCacheKey,bindingPlan]);
   }
   if(detail.data.length!==detail.runs.filter(v=>v.status==="SUCCEEDED").length)throw Error("VERIFICATION_FAILED");
   if(expected) {
@@ -560,6 +565,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
     if(rel.id!==detail.release_id||!run||run.app_run_id!==expected.app_run_id||run.instance_id!==expected.instance_id||!deliverySame(run.input,expected.input))throw Error("VERIFICATION_FAILED");
   }
   if(!csvDagCurrent(c))return;
+  for(const [key,plan] of verifiedPlans){c.reuse.materialPlans.set(key,plan);while(c.reuse.materialPlans.size>50)c.reuse.materialPlans.delete(c.reuse.materialPlans.keys().next().value);}
   c.reuse.instance=detail;c.reuse.release=rel;c.reuse.job=detail.runs.find(v=>["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"].includes(v.status))||detail.runs.slice().sort((a,b)=>(b.result_version||0)-(a.result_version||0))[0]||null;
   $("dag-reuse-column").replaceChildren(...rel.snapshot.execution_source.columns.map(value=>{const o=document.createElement("option");o.value=value;o.textContent=value;return o;}));
   $("dag-reuse-run-confirm").checked=false;
