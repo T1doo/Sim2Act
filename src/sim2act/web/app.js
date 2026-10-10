@@ -32,6 +32,54 @@ function row(text, action, label) {
   if (action) {const b = document.createElement("button"); b.textContent = label; b.onclick = safe(action); div.append(" ", b);}
   return div;
 }
+let resourceDownloadGeneration = 0;
+const resourceDownloadRequests = new Set();
+function resourceDownloadContext() {
+  return {identity: token, connection: identityConnectionGeneration, project: $("project-select").value, generation: resourceDownloadGeneration};
+}
+function resourceDownloadCurrent(context) {
+  return !!context.identity && !!context.project && context.identity === token && context.connection === identityConnectionGeneration && context.project === $("project-select").value && context.generation === resourceDownloadGeneration;
+}
+function saveResourceDownload(data) {
+  const url = URL.createObjectURL(new Blob([data.content], {type: "text/plain;charset=utf-8", endings: "transparent"}));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `sim2act-resource.${data.format}`;
+  anchor.hidden = true;
+  try {document.body.append(anchor);anchor.click();}
+  finally {anchor.remove();setTimeout(() => URL.revokeObjectURL(url), 0);}
+}
+async function downloadResource(resource, context, button) {
+  if (!resourceDownloadCurrent(context)) return;
+  const key = JSON.stringify([context.connection, context.project, context.generation, resource.id]);
+  if (resourceDownloadRequests.has(key)) return;
+  resourceDownloadRequests.add(key);
+  button.disabled = true;
+  button.textContent = "正在读取…";
+  try {
+    const data = await api(`/api/resources/${encodeURIComponent(resource.id)}`);
+    if (!resourceDownloadCurrent(context)) return;
+    if (!data || data.id !== resource.id || data.project_id !== context.project || !["txt", "md", "csv", "json"].includes(data.format) || typeof data.content !== "string")
+      throw new Error("材料响应无效，未下载文件");
+    saveResourceDownload(data);
+  } catch (error) {if (resourceDownloadCurrent(context)) throw error;}
+  finally {
+    resourceDownloadRequests.delete(key);
+    button.disabled = false;
+    button.textContent = "下载文件";
+  }
+}
+function resourceMaterialRow(resource) {
+  const context = resourceDownloadContext();
+  const div = row(`${resource.name} · ${resource.format} · ${resource.hash.slice(0, 12)}`, async () => {const data=await api(`/api/resources/${resource.id}`);$("resource-preview").hidden=false;$("resource-preview").textContent=data.content;}, "查看");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "下载文件";
+  button.onclick = safe(() => downloadResource(resource, context, button));
+  div.append(" ", button);
+  return div;
+}
+$("project-select").addEventListener("change", () => resourceDownloadGeneration++);
 async function refresh() {
   const pid = $("project-select").value; if (!pid) return;
   const identity=token,generation=++runHistoryGeneration;
@@ -47,7 +95,7 @@ async function refresh() {
   $("goal-card-resources").replaceChildren(...materials.map(m=>{const o=new Option(m.name,m.id);o.selected=selectedGoals.includes(m.id);return o;}));
   await refreshGoalCards(pid);
   if (!current()) return;
-  $("materials").replaceChildren(...materials.map(x => row(`${x.name} · ${x.format} · ${x.hash.slice(0, 12)}`, async () => {const data=await api(`/api/resources/${x.id}`);$("resource-preview").hidden=false;$("resource-preview").textContent=data.content;}, "查看")));
+  $("materials").replaceChildren(...materials.map(resourceMaterialRow));
   const oldResource = $("app-resource").value;
   $("app-resource").replaceChildren(...materials.filter(x => x.format === "csv").map(x => {const o=document.createElement("option");o.value=x.id;o.textContent=x.name;return o;}));
   if (materials.some(x => x.id === oldResource)) $("app-resource").value = oldResource;
