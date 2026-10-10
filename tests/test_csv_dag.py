@@ -50,14 +50,15 @@ def step_ids(env, job):
 
 
 def test_three_actual_receipts_exact_report_and_old_request_recovery(env):
-    rid, base, plan, body, worker, job = setup(env)
+    content = CSV.read_text(encoding="utf-8")
+    rid, base, plan, body, worker, job = setup(env, content)
     worker.process(job)
     response = env[2].get(f"/api/runs/{job['id']}")
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["status"] == "SUCCEEDED"
     assert result["result"]["output"] == dict(resource_id=rid, column="quantity", count=2, sum="15",
-        source_hash=hashlib.sha256(CSV.read_bytes()).hexdigest(), text="列 quantity；行数 2；合计 15")
+        source_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(), text="列 quantity；行数 2；合计 15")
     assert [r["step_id"] for r in result["steps"]] == ["preview", "aggregate", "report"]
     assert result["steps"][0]["predecessor_receipts"] == []
     assert len(result["steps"][1]["predecessor_receipts"]) == 1

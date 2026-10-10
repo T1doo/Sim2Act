@@ -99,13 +99,25 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $RuntimeU
     Write-Config $Config $RuntimeUrl
     Remove-Item -LiteralPath $MigrationConfig -Force
     'PASS: native PostgreSQL / existing Setup / migration; runtime role has no DDL grant.' | Add-Content $env:GITHUB_STEP_SUMMARY
+    # Engineering HTTP/DOM drivers need the already qualified developer lock.
+    # Install into this job's temporary directory, before pytest can use Node.
+    $NodeTools = Join-Path $JobRoot 'engineering-node'
+    New-Item -ItemType Directory -Path $NodeTools -Force | Out-Null
+    Copy-Item -LiteralPath 'scripts/engineering-ci/package.json', 'scripts/engineering-ci/package-lock.json' -Destination $NodeTools
+    & npm ci --prefix $NodeTools --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --cache (Join-Path $JobRoot 'npm-cache') --fetch-retries=0 --fetch-timeout=30000
+    if ($LASTEXITCODE -ne 0) { throw 'Locked engineering Node dependency install failed; no alternative source.' }
 } elseif ($Phase -eq 'Test') {
     $Xml = Join-Path $JobRoot 'engineering.xml'
     $env:PYTEST_ADDOPTS = "--junitxml=`"$Xml`" --durations=30 -ra"
+    $PreviousNodePath = $env:NODE_PATH
     try {
+        $env:NODE_PATH = Join-Path $JobRoot 'engineering-node/node_modules'
+        & node -e 'const p=require.resolve("jsdom/package.json"); if(require(p).version!=="30.1.2" || !p.startsWith(process.argv[1]+require("path").sep))process.exit(1); console.log("PASS: owned locked engineering jsdom30.1.2 before pytest")' $env:NODE_PATH
+        if ($LASTEXITCODE -ne 0) { throw 'Owned locked engineering jsdom verification failed.' }
         $env:SIM2ACT_TEST_DATABASE_URL = ([IO.File]::ReadAllText($TestOwnerConfig) -split '=', 2)[1]
         & ./scripts/Test.ps1 -Suite Engineering -CITracePath (Join-Path $JobRoot 'pytest-events.jsonl')
     } finally {
+        $env:NODE_PATH = $PreviousNodePath
         Remove-Item Env:SIM2ACT_TEST_DATABASE_URL -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $TestOwnerConfig -Force -ErrorAction SilentlyContinue
     }
