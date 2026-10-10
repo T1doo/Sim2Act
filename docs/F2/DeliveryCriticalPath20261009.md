@@ -8,7 +8,9 @@
 
 HTTP200有效JSON坏证明导致晚回执自清页无提示的三处分支，已按冻结 `c46093d4d9bdf2c6fda17405307b053d964d8ff2` 修复：作者双库各13PASS、每库12实际HTTP页面179检查与1实际旧源码Report升级；独审8页面111检查及3原112 JS敏感性负例LIMITED_PASS，[范围与失败保全](../evidence/report-history-feedback-20261010/README.md)。仅三处分支附原c错误标记；未放宽守卫，也未完成其他坏响应形式/入口、逐item历史map、PG超时或整体验收。
 
-下一真实缺口仍按原方案推进：PG resources-history历史超时需先核准原确切失败用例与冻结源码，限定复现/取证后定位，不能以本轮正常页面通过关闭OPEN，不能放宽原预算或跳过权限/源验证。PROJECT全局完整性、其余任务族、真实P-A/P-B/R0与原生Windows/owner/semantic依然需要原合同、精确真实模型授权和预算/外部环境；本轮不以合成离线fixture替代。
+本地CSV文件入口按冻结 `fdc91282b2107164ba33624246be6f50e007cd13` 接入既有链：选择只本地读取、显式保存及逐步授权/内部确认，正常worker两新列结果与冷历史均真实回读。作者SQLite26PASS/1PG角色SKIP、PG27PASS，每库新8例9页面67检查及3实际旧源码升级；[本轮证据](../evidence/local-csv-file-20261010/README.md)按其限定独审报告读取，不能扩为P-A/P-B或整体验收。
+
+PG resources-history原失败节点在未改产品667上仅一次当前PASS（4.180秒），原Future10/测试字节/SQL observer不变，395graph锁跨度1.149秒，实际资源与graphHTTP200；仍未解释42b7a992历史17.59秒慢读，OPEN保留，不能以单次通过关闭。下一可离线推进的实际业务缺口是已有固定CSV DAG到不可变内部版本、实例、冷输入新Run和持久结果的复用链；应先冻结来源/Release/输入/预算/CAS合同再实施，不能持续扩大低价值提示检查。PROJECT全局完整性、其他任务族、真实P-A/P-B/R0和原生Windows/owner/semantic依然需要原合同、精确真实模型授权及预算/外部环境；合成工程不能替代。
 ## 原方案必须交付的范围
 
 | 原任务 | 尚未被当前限定证据证明的交付项 | 依赖与推进方式 |
