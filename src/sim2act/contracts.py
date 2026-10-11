@@ -398,16 +398,17 @@ def validate_value(schema: dict, value, path="input"):
         if "enum" not in schema or any(x is None for x in schema["enum"]):
             return
         raise DomainError("INVALID_INPUT", path + " outside enum")
+    # Check only the declared type; Python integers are finite without float conversion.
     valid = {
-        "object": isinstance(value, dict),
-        "array": isinstance(value, list),
-        "string": isinstance(value, str),
-        "integer": type(value) is int,
-        "number": type(value) in {int, float} and math.isfinite(value),
-        "boolean": type(value) is bool,
-        "null": value is None,
+        "object": lambda: isinstance(value, dict),
+        "array": lambda: isinstance(value, list),
+        "string": lambda: isinstance(value, str),
+        "integer": lambda: type(value) is int,
+        "number": lambda: type(value) is int or (type(value) is float and math.isfinite(value)),
+        "boolean": lambda: type(value) is bool,
+        "null": lambda: value is None,
     }
-    if not valid[kind]:
+    if not valid[kind]():
         raise DomainError("INVALID_INPUT", path + " has wrong type")
     if "enum" in schema and not any(type(value) is type(x) and value == x for x in schema["enum"]):
         raise DomainError("INVALID_INPUT", path + " outside enum")
