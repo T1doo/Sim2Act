@@ -2,7 +2,7 @@ import csv
 import hashlib
 import io
 import json
-from decimal import Decimal, DecimalException
+from decimal import Context, Decimal, DecimalException, Inexact, ROUND_HALF_EVEN
 from typing import Any
 
 from sqlalchemy import insert, select, update
@@ -184,15 +184,55 @@ def authorized_read(store, c, principal, runtime, project_id, name, args):
     return read_data(c, rid, name, args)
 
 
+def _bounded_csv_reader(content):
+    if not isinstance(content, str) or len(content) > 32768:
+        raise ValueError("CSV 材料须为不超过 32768 字符的文本。")
+    return csv.DictReader(io.StringIO(content))
+
+
+def _exact_csv_sum(values):
+    """Exact addition with <=32768 working digits, independent of ambient context.
+
+    Include the original zero seed's scale; allow carry digits for <=1000 rows.
+    Exponent gaps cannot amplify tiny inputs into unbounded precision or output.
+    """
+    if not values:
+        return Decimal(0)
+    scale = min([0] + [value.as_tuple().exponent for value in values])
+    highest = max([0] + [value.adjusted() for value in values])
+    precision = max(28, highest - scale + 1 + len(str(len(values))))
+    if precision > 32768:
+        raise ValueError("CSV 合计超出 32768 位有界精确精度。")
+    # Keep the original 28-digit representation when every addition is exact.
+    # On value loss, restart from the inputs at the bounded sufficient precision.
+    for working_precision in (28, precision):
+        context = Context(
+            prec=working_precision, rounding=ROUND_HALF_EVEN,
+            Emin=-999999, Emax=999999, capitals=1, clamp=0,
+        )
+        context.traps[Inexact] = True
+        total = Decimal(0)
+        try:
+            for value in values:
+                total = context.add(total, value)
+        except Inexact:
+            if working_precision == precision:
+                raise
+            continue
+        if len(str(total)) > 32768:
+            raise ValueError("CSV 合计文本超出 32768 字符。")
+        return total
+
+
 def csv_column_options(content):
     """Bounded input guidance only; no cells, execution results or permissions returned."""
     try:
-        reader = csv.DictReader(io.StringIO(content))
+        reader = _bounded_csv_reader(content)
         names = reader.fieldnames
         if not names or any(not n for n in names) or len(names) != len(set(names)):
             raise ValueError("CSV 表头为空或重复，请保存修正后的材料并重建草案。")
         valid = dict.fromkeys(names, True)
-        totals = dict.fromkeys(names, Decimal(0))
+        values = {name: [] for name in names}
         count = 0
         for row in reader:
             count += 1
@@ -206,13 +246,19 @@ def csv_column_options(content):
                         number = Decimal(row[name])
                         valid[name] = number.is_finite()
                         if valid[name]:
-                            totals[name] += number
+                            values[name].append(number)
                 except (DecimalException, TypeError, ValueError):
+                    valid[name] = False
+        for name in names:
+            if valid[name]:
+                try:
+                    _exact_csv_sum(values[name])
+                except (DecimalException, ValueError):
                     valid[name] = False
         return {
             "row_count": count,
             "columns": [
-                {"name": n, "numeric": valid[n], "reason": None if valid[n] else "存在缺值、文本、非有限数或合计超出十进制范围"}
+                {"name": n, "numeric": valid[n], "reason": None if valid[n] else "存在缺值、文本、非有限数或合计超出有界精确十进制范围"}
                 for n in names
             ],
             "error": None,
@@ -245,7 +291,7 @@ def read_data(c, rid, name, args):
 def aggregate_csv_content(content, rid, column):
     """Registered CSV computation over an already authorized immutable read snapshot."""
     try:
-        reader = csv.DictReader(io.StringIO(content))
+        reader = _bounded_csv_reader(content)
         if (
             not reader.fieldnames
             or len(reader.fieldnames) != len(set(reader.fieldnames))
@@ -266,12 +312,12 @@ def aggregate_csv_content(content, rid, column):
             "resource_id": rid,
             "column": column,
             "count": len(vals),
-            "sum": str(sum(vals, Decimal(0))),
+            "sum": str(_exact_csv_sum(vals)),
             "source_hash": hashlib.sha256(content.encode()).hexdigest(),
         }
     except (DecimalException, ValueError, TypeError, csv.Error) as e:
         raise DomainError(
-            "INVALID_INPUT", "CSV column must contain finite decimal values"
+            "INVALID_INPUT", "CSV column must contain finite decimal values within the bounded exact computation limits"
         ) from e
     return data
 
