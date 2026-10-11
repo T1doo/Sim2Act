@@ -760,6 +760,10 @@ def create_app(store=None, settings=None):
     def natural_goal_script():
         return FileResponse(web / "natural-goal.js", media_type="text/javascript")
 
+    @app.get("/goal-application.js")
+    def goal_application_script():
+        return FileResponse(web / "goal-application.js", media_type="text/javascript")
+
     @app.get("/app.js")
     def js():
         return FileResponse(web / "app.js", media_type="text/javascript")

@@ -1,0 +1,686 @@
+....................................................................FFFF [ 98%]
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________________ test_natural_goal_actual_http_ui[valid] ____________________
+
+env = (<sim2act.db.Store object at 0x7fcbb67da690>, Settings(database_url='sqlite:////tmp/pa-text-edit-generation-author-fin...cc599e7f2c4669a87635e225990498', 'user_18af64f74b2049778c4578a5eafb00eb', 'proj_5d241a19e2a242feb38b40106a5c6461', ...)
+tmp_path = PosixPath('/tmp/pa-text-edit-generation-author-final-20261011/test_natural_goal_actual_http_0')
+case = 'valid'
+
+    @pytest.mark.parametrize("case", ["valid", "disabled", "invalid_schema", "cancel", "revoke"])
+    def test_natural_goal_actual_http_ui(env, tmp_path, case):
+        value = setup(env, provider="disabled" if case == "disabled" else "intern-s2")
+        store, settings, client, project, resource, card = value
+        other = store.project(env[3], "Other owned UI scope")
+        before = authority(store)
+        expected = plan(value)
+        expected["interpretation"]["objective"] = '<script>window.NL_XSS=1</script> 合成目标'
+        if case == "invalid_schema":
+            expected["steps"][0]["tool_ref"] = "unknown.execute"
+        wires = []
+    
+        def handler(request):
+            body = json.loads(request.content)
+            assert request.url.host == "chat.intern-ai.org.cn"
+            assert body["tools"] == [] and body["model"] == "intern-s2"
+            projected = json.loads(body["messages"][1]["content"])
+            assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+            wires.append(body)
+            return httpx.Response(200, json=response(expected))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-nl-worker")
+        def work():
+            if not store.test_only or settings.mode != "mock":
+                raise AssertionError("Offline test fixture only")
+            if not Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once():
+                raise AssertionError("Expected owned queued run")
+            return {"test_only": True}
+    
+        @app.get("/test-only-nl-state")
+        def state():
+            with store.tx() as connection:
+                return {
+                    "runs": [dict(row) for row in connection.execute(select(
+                        runs.c.id, runs.c.status, runs.c.version
+                    ).order_by(runs.c.id)).mappings()],
+                    "attempts": len(connection.execute(select(attempts)).all()),
+                    "operations": len(connection.execute(select(operations)).all()),
+                    "wires": len(wires), "test_only": True,
+                }
+    
+        @app.post("/test-only-nl-revoke")
+        def revoke():
+            if case != "revoke" or not store.test_only:
+                raise AssertionError("Closed revoke-only fixture")
+            with store.tx() as connection:
+                grant = connection.execute(select(grants).where(
+                    grants.c.project_id == project,
+                    grants.c.resource_id == resource,
+                    grants.c.principal_id == env[3],
+                    grants.c.tool_ref == "resource.read",
+                    grants.c.revoked.is_(False),
+                )).mappings().one()
+                connection.execute(update(grants).where(grants.c.id == grant["id"]).values(
+                    revoked=True, revision=grant["revision"] + 1,
+                ))
+            return {"test_only": True, "revoked_id": grant["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "project": project,
+            "card": card["id"], "version": card["version"], "fingerprint": card["fingerprint"],
+            "case": case, "resource": resource, "other_project": other,
+            "saved_title": card["content"]["title"], "saved_goal": card["content"]["goal"],
+        }))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(
+                ["node", "tests/natural_goal_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Uncaught [SyntaxError: Unexpected token ':']
+E                 at reportException (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/helpers/runtime-script-errors.js:66:24)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:239:7)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E                 at HTMLBodyElementImpl._insert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:836:14)
+E                 at HTMLBodyElementImpl._preInsert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:757:10) http://127.0.0.1:37305/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             http://127.0.0.1:37305/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_goal_ui.cjs', '/tmp/pa-text-edit-generation-author-final-20261011/test_n...ementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)\n').returncode
+
+tests/test_natural_goal_ui.py:101: AssertionError
+__________________ test_natural_goal_actual_http_ui[disabled] __________________
+
+env = (<sim2act.db.Store object at 0x7fcbb654e780>, Settings(database_url='sqlite:////tmp/pa-text-edit-generation-author-fin...0e46992a0c40dcb86a16fee33ce7e8', 'user_bb823c0e7f424543aa0ea9737e7be541', 'proj_26f0f6e55c4b43aea75a3295f31ee941', ...)
+tmp_path = PosixPath('/tmp/pa-text-edit-generation-author-final-20261011/test_natural_goal_actual_http_1')
+case = 'disabled'
+
+    @pytest.mark.parametrize("case", ["valid", "disabled", "invalid_schema", "cancel", "revoke"])
+    def test_natural_goal_actual_http_ui(env, tmp_path, case):
+        value = setup(env, provider="disabled" if case == "disabled" else "intern-s2")
+        store, settings, client, project, resource, card = value
+        other = store.project(env[3], "Other owned UI scope")
+        before = authority(store)
+        expected = plan(value)
+        expected["interpretation"]["objective"] = '<script>window.NL_XSS=1</script> 合成目标'
+        if case == "invalid_schema":
+            expected["steps"][0]["tool_ref"] = "unknown.execute"
+        wires = []
+    
+        def handler(request):
+            body = json.loads(request.content)
+            assert request.url.host == "chat.intern-ai.org.cn"
+            assert body["tools"] == [] and body["model"] == "intern-s2"
+            projected = json.loads(body["messages"][1]["content"])
+            assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+            wires.append(body)
+            return httpx.Response(200, json=response(expected))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-nl-worker")
+        def work():
+            if not store.test_only or settings.mode != "mock":
+                raise AssertionError("Offline test fixture only")
+            if not Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once():
+                raise AssertionError("Expected owned queued run")
+            return {"test_only": True}
+    
+        @app.get("/test-only-nl-state")
+        def state():
+            with store.tx() as connection:
+                return {
+                    "runs": [dict(row) for row in connection.execute(select(
+                        runs.c.id, runs.c.status, runs.c.version
+                    ).order_by(runs.c.id)).mappings()],
+                    "attempts": len(connection.execute(select(attempts)).all()),
+                    "operations": len(connection.execute(select(operations)).all()),
+                    "wires": len(wires), "test_only": True,
+                }
+    
+        @app.post("/test-only-nl-revoke")
+        def revoke():
+            if case != "revoke" or not store.test_only:
+                raise AssertionError("Closed revoke-only fixture")
+            with store.tx() as connection:
+                grant = connection.execute(select(grants).where(
+                    grants.c.project_id == project,
+                    grants.c.resource_id == resource,
+                    grants.c.principal_id == env[3],
+                    grants.c.tool_ref == "resource.read",
+                    grants.c.revoked.is_(False),
+                )).mappings().one()
+                connection.execute(update(grants).where(grants.c.id == grant["id"]).values(
+                    revoked=True, revision=grant["revision"] + 1,
+                ))
+            return {"test_only": True, "revoked_id": grant["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "project": project,
+            "card": card["id"], "version": card["version"], "fingerprint": card["fingerprint"],
+            "case": case, "resource": resource, "other_project": other,
+            "saved_title": card["content"]["title"], "saved_goal": card["content"]["goal"],
+        }))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(
+                ["node", "tests/natural_goal_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Uncaught [SyntaxError: Unexpected token ':']
+E                 at reportException (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/helpers/runtime-script-errors.js:66:24)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:239:7)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E                 at HTMLBodyElementImpl._insert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:836:14)
+E                 at HTMLBodyElementImpl._preInsert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:757:10) http://127.0.0.1:58703/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             http://127.0.0.1:58703/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_goal_ui.cjs', '/tmp/pa-text-edit-generation-author-final-20261011/test_n...ementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)\n').returncode
+
+tests/test_natural_goal_ui.py:101: AssertionError
+_______________ test_natural_goal_actual_http_ui[invalid_schema] _______________
+
+env = (<sim2act.db.Store object at 0x7fcbb50c4f50>, Settings(database_url='sqlite:////tmp/pa-text-edit-generation-author-fin...eea4791bda46b6b123dcabe4379eaa', 'user_0d1d332cc6954f948cc75eb231074cc9', 'proj_b4e091cd10e643898102ea3d6861187b', ...)
+tmp_path = PosixPath('/tmp/pa-text-edit-generation-author-final-20261011/test_natural_goal_actual_http_2')
+case = 'invalid_schema'
+
+    @pytest.mark.parametrize("case", ["valid", "disabled", "invalid_schema", "cancel", "revoke"])
+    def test_natural_goal_actual_http_ui(env, tmp_path, case):
+        value = setup(env, provider="disabled" if case == "disabled" else "intern-s2")
+        store, settings, client, project, resource, card = value
+        other = store.project(env[3], "Other owned UI scope")
+        before = authority(store)
+        expected = plan(value)
+        expected["interpretation"]["objective"] = '<script>window.NL_XSS=1</script> 合成目标'
+        if case == "invalid_schema":
+            expected["steps"][0]["tool_ref"] = "unknown.execute"
+        wires = []
+    
+        def handler(request):
+            body = json.loads(request.content)
+            assert request.url.host == "chat.intern-ai.org.cn"
+            assert body["tools"] == [] and body["model"] == "intern-s2"
+            projected = json.loads(body["messages"][1]["content"])
+            assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+            wires.append(body)
+            return httpx.Response(200, json=response(expected))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-nl-worker")
+        def work():
+            if not store.test_only or settings.mode != "mock":
+                raise AssertionError("Offline test fixture only")
+            if not Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once():
+                raise AssertionError("Expected owned queued run")
+            return {"test_only": True}
+    
+        @app.get("/test-only-nl-state")
+        def state():
+            with store.tx() as connection:
+                return {
+                    "runs": [dict(row) for row in connection.execute(select(
+                        runs.c.id, runs.c.status, runs.c.version
+                    ).order_by(runs.c.id)).mappings()],
+                    "attempts": len(connection.execute(select(attempts)).all()),
+                    "operations": len(connection.execute(select(operations)).all()),
+                    "wires": len(wires), "test_only": True,
+                }
+    
+        @app.post("/test-only-nl-revoke")
+        def revoke():
+            if case != "revoke" or not store.test_only:
+                raise AssertionError("Closed revoke-only fixture")
+            with store.tx() as connection:
+                grant = connection.execute(select(grants).where(
+                    grants.c.project_id == project,
+                    grants.c.resource_id == resource,
+                    grants.c.principal_id == env[3],
+                    grants.c.tool_ref == "resource.read",
+                    grants.c.revoked.is_(False),
+                )).mappings().one()
+                connection.execute(update(grants).where(grants.c.id == grant["id"]).values(
+                    revoked=True, revision=grant["revision"] + 1,
+                ))
+            return {"test_only": True, "revoked_id": grant["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "project": project,
+            "card": card["id"], "version": card["version"], "fingerprint": card["fingerprint"],
+            "case": case, "resource": resource, "other_project": other,
+            "saved_title": card["content"]["title"], "saved_goal": card["content"]["goal"],
+        }))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(
+                ["node", "tests/natural_goal_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Uncaught [SyntaxError: Unexpected token ':']
+E                 at reportException (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/helpers/runtime-script-errors.js:66:24)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:239:7)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E                 at HTMLBodyElementImpl._insert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:836:14)
+E                 at HTMLBodyElementImpl._preInsert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:757:10) http://127.0.0.1:36085/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             http://127.0.0.1:36085/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_goal_ui.cjs', '/tmp/pa-text-edit-generation-author-final-20261011/test_n...ementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)\n').returncode
+
+tests/test_natural_goal_ui.py:101: AssertionError
+___________________ test_natural_goal_actual_http_ui[cancel] ___________________
+
+env = (<sim2act.db.Store object at 0x7fcbb5e42bd0>, Settings(database_url='sqlite:////tmp/pa-text-edit-generation-author-fin...755564450841a8a94f5461ad486dc3', 'user_2de965a8e095434cbe14268ba5d0919e', 'proj_39bd7c31a8b14202b0e5a86b8203cdf5', ...)
+tmp_path = PosixPath('/tmp/pa-text-edit-generation-author-final-20261011/test_natural_goal_actual_http_3')
+case = 'cancel'
+
+    @pytest.mark.parametrize("case", ["valid", "disabled", "invalid_schema", "cancel", "revoke"])
+    def test_natural_goal_actual_http_ui(env, tmp_path, case):
+        value = setup(env, provider="disabled" if case == "disabled" else "intern-s2")
+        store, settings, client, project, resource, card = value
+        other = store.project(env[3], "Other owned UI scope")
+        before = authority(store)
+        expected = plan(value)
+        expected["interpretation"]["objective"] = '<script>window.NL_XSS=1</script> 合成目标'
+        if case == "invalid_schema":
+            expected["steps"][0]["tool_ref"] = "unknown.execute"
+        wires = []
+    
+        def handler(request):
+            body = json.loads(request.content)
+            assert request.url.host == "chat.intern-ai.org.cn"
+            assert body["tools"] == [] and body["model"] == "intern-s2"
+            projected = json.loads(body["messages"][1]["content"])
+            assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+            wires.append(body)
+            return httpx.Response(200, json=response(expected))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-nl-worker")
+        def work():
+            if not store.test_only or settings.mode != "mock":
+                raise AssertionError("Offline test fixture only")
+            if not Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once():
+                raise AssertionError("Expected owned queued run")
+            return {"test_only": True}
+    
+        @app.get("/test-only-nl-state")
+        def state():
+            with store.tx() as connection:
+                return {
+                    "runs": [dict(row) for row in connection.execute(select(
+                        runs.c.id, runs.c.status, runs.c.version
+                    ).order_by(runs.c.id)).mappings()],
+                    "attempts": len(connection.execute(select(attempts)).all()),
+                    "operations": len(connection.execute(select(operations)).all()),
+                    "wires": len(wires), "test_only": True,
+                }
+    
+        @app.post("/test-only-nl-revoke")
+        def revoke():
+            if case != "revoke" or not store.test_only:
+                raise AssertionError("Closed revoke-only fixture")
+            with store.tx() as connection:
+                grant = connection.execute(select(grants).where(
+                    grants.c.project_id == project,
+                    grants.c.resource_id == resource,
+                    grants.c.principal_id == env[3],
+                    grants.c.tool_ref == "resource.read",
+                    grants.c.revoked.is_(False),
+                )).mappings().one()
+                connection.execute(update(grants).where(grants.c.id == grant["id"]).values(
+                    revoked=True, revision=grant["revision"] + 1,
+                ))
+            return {"test_only": True, "revoked_id": grant["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "project": project,
+            "card": card["id"], "version": card["version"], "fingerprint": card["fingerprint"],
+            "case": case, "resource": resource, "other_project": other,
+            "saved_title": card["content"]["title"], "saved_goal": card["content"]["goal"],
+        }))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(
+                ["node", "tests/natural_goal_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Uncaught [SyntaxError: Unexpected token ':']
+E                 at reportException (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/helpers/runtime-script-errors.js:66:24)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:239:7)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E                 at HTMLBodyElementImpl._insert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:836:14)
+E                 at HTMLBodyElementImpl._preInsert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:757:10) http://127.0.0.1:42359/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             http://127.0.0.1:42359/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_goal_ui.cjs', '/tmp/pa-text-edit-generation-author-final-20261011/test_n...ementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)\n').returncode
+
+tests/test_natural_goal_ui.py:101: AssertionError
+___________________ test_natural_goal_actual_http_ui[revoke] ___________________
+
+env = (<sim2act.db.Store object at 0x7fcbb623c590>, Settings(database_url='sqlite:////tmp/pa-text-edit-generation-author-fin...4d15fb0cf74a89866aae2c39593851', 'user_693fba6978bf4a01ab5af541fe1eb306', 'proj_f0d9b299cf7d4a3ca26a2a0e99f7b49a', ...)
+tmp_path = PosixPath('/tmp/pa-text-edit-generation-author-final-20261011/test_natural_goal_actual_http_4')
+case = 'revoke'
+
+    @pytest.mark.parametrize("case", ["valid", "disabled", "invalid_schema", "cancel", "revoke"])
+    def test_natural_goal_actual_http_ui(env, tmp_path, case):
+        value = setup(env, provider="disabled" if case == "disabled" else "intern-s2")
+        store, settings, client, project, resource, card = value
+        other = store.project(env[3], "Other owned UI scope")
+        before = authority(store)
+        expected = plan(value)
+        expected["interpretation"]["objective"] = '<script>window.NL_XSS=1</script> 合成目标'
+        if case == "invalid_schema":
+            expected["steps"][0]["tool_ref"] = "unknown.execute"
+        wires = []
+    
+        def handler(request):
+            body = json.loads(request.content)
+            assert request.url.host == "chat.intern-ai.org.cn"
+            assert body["tools"] == [] and body["model"] == "intern-s2"
+            projected = json.loads(body["messages"][1]["content"])
+            assert projected["saved_goal"]["snapshot"]["content"] == card["content"]
+            wires.append(body)
+            return httpx.Response(200, json=response(expected))
+    
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-nl-worker")
+        def work():
+            if not store.test_only or settings.mode != "mock":
+                raise AssertionError("Offline test fixture only")
+            if not Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once():
+                raise AssertionError("Expected owned queued run")
+            return {"test_only": True}
+    
+        @app.get("/test-only-nl-state")
+        def state():
+            with store.tx() as connection:
+                return {
+                    "runs": [dict(row) for row in connection.execute(select(
+                        runs.c.id, runs.c.status, runs.c.version
+                    ).order_by(runs.c.id)).mappings()],
+                    "attempts": len(connection.execute(select(attempts)).all()),
+                    "operations": len(connection.execute(select(operations)).all()),
+                    "wires": len(wires), "test_only": True,
+                }
+    
+        @app.post("/test-only-nl-revoke")
+        def revoke():
+            if case != "revoke" or not store.test_only:
+                raise AssertionError("Closed revoke-only fixture")
+            with store.tx() as connection:
+                grant = connection.execute(select(grants).where(
+                    grants.c.project_id == project,
+                    grants.c.resource_id == resource,
+                    grants.c.principal_id == env[3],
+                    grants.c.tool_ref == "resource.read",
+                    grants.c.revoked.is_(False),
+                )).mappings().one()
+                connection.execute(update(grants).where(grants.c.id == grant["id"]).values(
+                    revoked=True, revision=grant["revision"] + 1,
+                ))
+            return {"test_only": True, "revoked_id": grant["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps({
+            "base": f"http://127.0.0.1:{port}", "project": project,
+            "card": card["id"], "version": card["version"], "fingerprint": card["fingerprint"],
+            "case": case, "resource": resource, "other_project": other,
+            "saved_title": card["content"]["title"], "saved_goal": card["content"]["goal"],
+        }))
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            completed = subprocess.run(
+                ["node", "tests/natural_goal_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=60,
+            )
+            (tmp_path / "driver.log").write_text(completed.stdout + completed.stderr)
+>           assert completed.returncode == 0, completed.stdout + completed.stderr
+E           AssertionError: Error: Uncaught [SyntaxError: Unexpected token ':']
+E                 at reportException (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/helpers/runtime-script-errors.js:66:24)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:239:7)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E                 at HTMLBodyElementImpl._insert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:836:14)
+E                 at HTMLBodyElementImpl._preInsert (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/Node-impl.js:757:10) http://127.0.0.1:60513/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             http://127.0.0.1:60513/:1
+E             {"detail":"Not Found"}
+E                      ^
+E             
+E             SyntaxError: Unexpected token ':'
+E                 at new Script (node:vm:117:7)
+E                 at createScript (node:vm:269:10)
+E                 at Object.runInContext (node:vm:300:10)
+E                 at processJavaScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:237:10)
+E                 at HTMLScriptElementImpl._innerEval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:172:5)
+E                 at /workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:113:12
+E                 at ResourceQueue.push (/workspace/node-tools/node_modules/jsdom/lib/jsdom/browser/resources/resource-queue.js:53:16)
+E                 at HTMLScriptElementImpl._fetchInternalScript (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:112:21)
+E                 at HTMLScriptElementImpl._eval (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:166:12)
+E                 at HTMLScriptElementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/natural_goal_ui.cjs', '/tmp/pa-text-edit-generation-author-final-20261011/test_n...ementImpl._attach (/workspace/node-tools/node_modules/jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js:48:12)\n').returncode
+
+tests/test_natural_goal_ui.py:101: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_goal_ui.py::test_natural_goal_actual_http_ui[valid]
+FAILED tests/test_natural_goal_ui.py::test_natural_goal_actual_http_ui[disabled]
+FAILED tests/test_natural_goal_ui.py::test_natural_goal_actual_http_ui[invalid_schema]
+FAILED tests/test_natural_goal_ui.py::test_natural_goal_actual_http_ui[cancel]
+FAILED tests/test_natural_goal_ui.py::test_natural_goal_actual_http_ui[revoke]
+5 failed, 68 passed, 1 warning in 182.77s (0:03:02)

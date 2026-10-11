@@ -25,6 +25,8 @@ from sim2act.worker import Worker
         "poison-accepted-fields",
         "late-confirm-navigation",
         "late-confirm-edit",
+        "late-confirm-edit-undo",
+        "late-confirm-read-edit-undo",
         "late-confirm-app",
         "late-confirm-goal",
         "late-app-read",
@@ -41,7 +43,6 @@ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
         )
         assert other.status_code == 201, other.text
         other_app = other.json()["id"]
-    web = Path(__file__).parents[1] / "src/sim2act/web"
     info = tmp_path / "info.json"
     info.write_text(
         json.dumps(
@@ -51,7 +52,6 @@ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
                 "scenario": scenario,
                 "other": store.project(user, "Other selection"),
                 "other_app": other_app,
-                "web": str(web),
                 "output": str(tmp_path / "results.json"),
             }
         )
@@ -141,6 +141,7 @@ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
         assert code == 0, errors
         proof = json.loads((tmp_path / "results.json").read_text())
         assert proof["status"] == "PASS" and len(proof["checks"]) >= 15
+        web = Path(__file__).parents[1] / "src/sim2act/web"
         assert proof["loaded_source_sha256"] == {
             name: hashlib.sha256((web / name).read_bytes()).hexdigest()
             for name in proof["loaded_source_sha256"]

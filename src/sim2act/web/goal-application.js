@@ -2,6 +2,11 @@
 // Immutable per-intent requests. Unknown POST outcomes recover through keyed GETs only.
 const goalApplications=new Map();
 let goalApplicationDisplayed=null;
+let goalApplicationDraftGeneration=0;
+for(const id of [...goalCardFields.map(field=>"goal-card-"+field),"goal-card-resources"]){
+  const edited=()=>{goalApplicationDraftGeneration++;};
+  $(id).addEventListener("input",edited);$(id).addEventListener("change",edited);
+}
 const goalApplicationKey=()=>activeGoalCard ? JSON.stringify([token,$("project-select").value,activeGoalCard.id,activeGoalCard.fingerprint]) : null;
 function renderGoalApplicationControls(){
   const key=goalApplicationKey(),entry=goalApplications.get(key);
@@ -39,8 +44,8 @@ async function readGoalApplication(entry,acceptedRunId=null){
 }
 function goalApplicationDraftState(){return JSON.stringify([goalCardFields.map(field=>$("goal-card-"+field).value),Array.from($("goal-card-resources").selectedOptions,option=>option.value)]);}
 function goalApplicationHandoff(entry){
-  const context={workspace:workspaceSelectionGeneration,app:appSelectionGeneration,draft:goalApplicationDraftState()};
-  context.current=()=>goalApplicationCurrent(entry)&&context.workspace===workspaceSelectionGeneration&&context.app===appSelectionGeneration&&context.draft===goalApplicationDraftState();
+  const context={workspace:workspaceSelectionGeneration,app:appSelectionGeneration,edit:goalApplicationDraftGeneration,draft:goalApplicationDraftState()};
+  context.current=()=>goalApplicationCurrent(entry)&&context.workspace===workspaceSelectionGeneration&&context.app===appSelectionGeneration&&context.edit===goalApplicationDraftGeneration&&context.draft===goalApplicationDraftState();
   return context;
 }
 async function openGoalApplication(entry,saved,context){

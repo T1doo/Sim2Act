@@ -45,3 +45,7 @@
 2026-10-11 上述共享私有读取修复 `1dadba831a4d15fc164398e2f1070f22d7a5d77d` 获接纳后，按明确授权恢复原 F2-T02/P-A 核心工程，而非继续CSV外围扩张。[有限非CSV目标到应用](PATextGoalPlan.md)已贯通完整GoalCard→实际resource.read反馈→一次候选修订→ActionSpec/AppManifest→精确指纹确认→既有内部版本→冷实例新词和错误输入。独立app身份仅获该材料读取权限；成功/失败/类型化历史与来源完整复核，未知发送只原key GET恢复。实际SQLite/普通Worker/进程内HTTP/JSDOM结果、失败保留和静态基线见[证据](../evidence/pa-text-goal-20261011/README.md)。生产生成仍默认disabled/LIVE0；合成provider与确定性字面检索不替代真实provider或语义接受，完整P-A/P-B、owner/正式发布、PG/Windows/native等门仍未关闭。
 
 2026-10-11 P-A 缺陷纠正：旧轮 4 场景/102 检查直接调用隐藏处理器，撤回其对用户可见确认→预览/实例链的证明；旧轮仅 STARTED 路径保存拒绝原 JSON，撤回「所有已收到拒绝原响应均留存」的宽泛表述，原 109 份证据字节保留。新 [合同补充](PATextGoalPlan.md) 和 [红轮/修复证据](../evidence/pa-text-handoff-20261011/README.md)覆盖可见导航/焦点与迟到保留、原 key 先核后保存 Run ID、RECEIVED 后完整 bounded JSON 留存与独立锚。超 32768 canonical ASCII 字节明确拒绝并仅留大小/hash/省略标记，旧无 raw 不补造；JSDOM 仍非原生浏览器，原未验收门不提升。
+
+同日 P2 接续：父复审指出 `7e86ec7` 的草稿最终值比较漏过同卡 A→B→A；上一轮 A→B 结果不证明编辑撤销后仍拒绝迟到交接。新增单调编辑代次保护确认及原 key 恢复，覆盖七字段与材料选择器，原值检查和未保存编辑保留；[新红轮/独审证据](../evidence/pa-text-edit-generation-20261011/README.md)另存，之前两个 P-A 目录共270份证据原字节不改。下一 owner 精确版本/新输入验收切片待本修复签收后续做，未以本测试提升 owner 或语义门。
+
+该轮相邻回归同时暴露 `/goal-application.js` 固定静态路由缺失；旧页面测试本地嵌入脚本未证明HTTP资源交付。只补这一路由，驱动现在对每次开页的HTML/CSS/16脚本实际GET并保留精确HTTP/hash回执。原68PASS/5FAIL和单脚本404红轮留存，不能把旧本地源码加载说成HTTP脚本加载。
