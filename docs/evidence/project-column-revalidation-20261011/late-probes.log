@@ -1,0 +1,28 @@
+..F..                                                                    [100%]
+=================================== FAILURES ===================================
+__________ test_finalize_revoke_after_receipt_insert_rolls_back_pair ___________
+
+env = (<sim2act.db.Store object at 0x7fa3bc22d7c0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-4/test_fina...87aa1a046f4948b12146f135321d51', 'user_c0a4464c9a424cbdb8e2d89e1c810f0e', 'proj_0af3e397195b4398987fa69f8a81fa40', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa3bc22d010>
+
+    def test_finalize_revoke_after_receipt_insert_rolls_back_pair(env, monkeypatch):
+        values, _, body, acceptance = start(env)
+        work(env, acceptance)
+        original = patches.save_pair
+    
+        def revoke(c, *args, **kwargs):
+            original(c, *args, **kwargs)
+            c.execute(update(grants).where(grants.c.resource_id == values[5]).values(revoked=True))
+    
+        monkeypatch.setattr(patches, "save_pair", revoke)
+        before = snapshot(env)
+        result = env[2].post(values[0] + "/project-binding/finalize", json=body)
+>       assert result.status_code == 403, result.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Current graph baseline changed; explicitly derive a new anchor","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 403
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_project_column_patches.py:376: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_project_column_patches.py::test_finalize_revoke_after_receipt_insert_rolls_back_pair
+1 failed, 4 passed, 29 deselected, 1 warning in 15.01s

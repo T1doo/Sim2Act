@@ -1,0 +1,216 @@
+F.......F.......FFF.F.F                                                  [100%]
+=================================== FAILURES ===================================
+_ test_actual_shared_workers_atomic_checked_overlay_cold_read_preserves_locks __
+
+env = (<sim2act.db.Store object at 0x7f6a007ee090>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_actu...11ae3d302d4899b16b8666ef37b91a', 'user_67a77164078b4914885cdaffe6e60fef', 'proj_0d815e728a804c64ba4a83658f9afd0f', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-2/test_actual_shared_workers_ato0')
+
+    def test_actual_shared_workers_atomic_checked_overlay_cold_read_preserves_locks(env, tmp_path):
+        values, patch, confirmation, acceptance = start(env)
+        base, _, aid, peer, unrelated, rid, _ = values
+        assert {x["app_id"] for x in patch["affected"]} == {aid, peer}
+        assert [x["app_id"] for x in patch["preserved"]] == [unrelated]
+        assert patch["budget"]["worker_tools"] == 12
+        preserved = patch["preserved"][0]["nodes"]
+        assert any(n["locked"] and n["kind"] == "VIEW" for n in preserved)
+        for item in patch["affected"]:
+            modified = item["patch"]["modified_objects"]
+            assert {n["kind"] for n in modified} == {"ACTION", "ARTIFACT", "VIEW", "CHECK", "MANIFEST"}
+            assert {n["kind"] for n in item["patch"]["preserved_objects"]} == {"SOURCE", "GOAL", "REQUIREMENT"}
+        before = snapshot(env)
+        early = env[2].post(base + "/project-binding/finalize", json=confirmation)
+>       assert early.status_code == 409 and early.json()["error"]["code"] == "VERIFICATION_FAILED", early.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"All affected actual worker jobs and independent checks must pass; no project patch committed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (400 == 409)
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_column_patches.py:106: AssertionError
+_________ test_atomic_start_later_peer_failure_leaves_no_partial_jobs __________
+
+env = (<sim2act.db.Store object at 0x7f6a002ade80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_atom...e77f3fc7ea4b6db4c6cc8e679e82b7', 'user_a0b95a3ca5374793a415b48e78012357', 'proj_90e4c3f8a4c04357b2836f174cc3c14b', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f69feb52e70>
+
+    def test_atomic_start_later_peer_failure_leaves_no_partial_jobs(env, monkeypatch):
+        values, _, body = preview(env)
+        before = snapshot(env)
+        original = dag.enqueue_tx
+        calls = []
+    
+        def fail(*args, **kwargs):
+            calls.append(1)
+            if len(calls) == 3:
+                raise DomainError("BUDGET_EXHAUSTED", "Injected later peer failure")
+            return original(*args, **kwargs)
+    
+        monkeypatch.setattr(dag, "enqueue_tx", fail)
+        result = env[2].post(values[0] + "/project-binding/runs", json=body)
+>       assert result.status_code == 409, result.text
+E       AssertionError: {"error":{"code":"BUDGET_EXHAUSTED","message":"Injected later peer failure","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_column_patches.py:177: AssertionError
+__ test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[cancel] ___
+
+env = (<sim2act.db.Store object at 0x7f6a00467710>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_fail...f32487821b4daebef00fa6362682e8', 'user_0cb116f8444e4d86b301781c843d8ab3', 'proj_fd8972b0652d4768a1f480d3d9972089', ...)
+attack = 'cancel'
+
+    @pytest.mark.parametrize("attack", ["cancel", "failed", "late", "grant", "forged_receipt"])
+    def test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize(env, attack):
+        values, _, body, acceptance = start(env)
+        base = values[0]
+        work(env, acceptance)
+        with env[0].tx() as c:
+            rid = acceptance["jobs"][0]["run_id"]
+            if attack == "grant":
+                c.execute(update(grants).where(grants.c.resource_id == values[5]).values(revoked=True))
+            elif attack == "forged_receipt":
+                row = c.execute(select(operations).where(operations.c.run_id == rid, operations.c.call_id == "aggregate")).mappings().one()
+                value = copy.deepcopy(row["receipt"])
+                value["data"]["sum"] = "999"
+                value["output_fingerprint"] = fingerprint(value["data"])
+                c.execute(update(operations).where(operations.c.id == row["id"]).values(receipt=value))
+            else:
+                c.execute(update(runs).where(runs.c.id == rid).values(**(
+                    {"cancel_intent": True} if attack == "cancel" else
+                    {"status": "FAILED", "result": None} if attack == "failed" else
+                    {"created_at": time.time() - 301})))
+        before = snapshot(env)
+        result = env[2].post(base + "/project-binding/finalize", json=body)
+>       assert result.status_code in {403, 409}, result.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"All affected actual worker jobs and independent checks must pass; no project patch committed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_column_patches.py:237: AssertionError
+__ test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[failed] ___
+
+env = (<sim2act.db.Store object at 0x7f69fe93c7a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_fail...1abeb5cc4940afb7d21ac1d8e681f6', 'user_6d53cd4e90824f37a7f6be11b5433595', 'proj_90a25f93c4064078aefff32e120c73b8', ...)
+attack = 'failed'
+
+    @pytest.mark.parametrize("attack", ["cancel", "failed", "late", "grant", "forged_receipt"])
+    def test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize(env, attack):
+        values, _, body, acceptance = start(env)
+        base = values[0]
+        work(env, acceptance)
+        with env[0].tx() as c:
+            rid = acceptance["jobs"][0]["run_id"]
+            if attack == "grant":
+                c.execute(update(grants).where(grants.c.resource_id == values[5]).values(revoked=True))
+            elif attack == "forged_receipt":
+                row = c.execute(select(operations).where(operations.c.run_id == rid, operations.c.call_id == "aggregate")).mappings().one()
+                value = copy.deepcopy(row["receipt"])
+                value["data"]["sum"] = "999"
+                value["output_fingerprint"] = fingerprint(value["data"])
+                c.execute(update(operations).where(operations.c.id == row["id"]).values(receipt=value))
+            else:
+                c.execute(update(runs).where(runs.c.id == rid).values(**(
+                    {"cancel_intent": True} if attack == "cancel" else
+                    {"status": "FAILED", "result": None} if attack == "failed" else
+                    {"created_at": time.time() - 301})))
+        before = snapshot(env)
+        result = env[2].post(base + "/project-binding/finalize", json=body)
+>       assert result.status_code in {403, 409}, result.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"All affected actual worker jobs and independent checks must pass; no project patch committed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_column_patches.py:237: AssertionError
+___ test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[late] ____
+
+env = (<sim2act.db.Store object at 0x7f69fe65b560>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_fail...2bf3b298b54793ae3a9336c070f499', 'user_8d591f3cc17b4521ae81e8a30167f9b4', 'proj_e80ef475e6c54ef3ab4140e3a8948d58', ...)
+attack = 'late'
+
+    @pytest.mark.parametrize("attack", ["cancel", "failed", "late", "grant", "forged_receipt"])
+    def test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize(env, attack):
+        values, _, body, acceptance = start(env)
+        base = values[0]
+        work(env, acceptance)
+        with env[0].tx() as c:
+            rid = acceptance["jobs"][0]["run_id"]
+            if attack == "grant":
+                c.execute(update(grants).where(grants.c.resource_id == values[5]).values(revoked=True))
+            elif attack == "forged_receipt":
+                row = c.execute(select(operations).where(operations.c.run_id == rid, operations.c.call_id == "aggregate")).mappings().one()
+                value = copy.deepcopy(row["receipt"])
+                value["data"]["sum"] = "999"
+                value["output_fingerprint"] = fingerprint(value["data"])
+                c.execute(update(operations).where(operations.c.id == row["id"]).values(receipt=value))
+            else:
+                c.execute(update(runs).where(runs.c.id == rid).values(**(
+                    {"cancel_intent": True} if attack == "cancel" else
+                    {"status": "FAILED", "result": None} if attack == "failed" else
+                    {"created_at": time.time() - 301})))
+        before = snapshot(env)
+        result = env[2].post(base + "/project-binding/finalize", json=body)
+>       assert result.status_code in {403, 409}, result.text
+E       AssertionError: {"error":{"code":"BUDGET_EXHAUSTED","message":"Project confirmation expired; late results cannot commit","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_column_patches.py:237: AssertionError
+_ test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[forged_receipt] _
+
+env = (<sim2act.db.Store object at 0x7f69ff1a11f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_fail...8b5611c3494b37af12357bff534398', 'user_33a7155f21024136a212faef42424f71', 'proj_887df285a4b7459fb9acac058107e9f4', ...)
+attack = 'forged_receipt'
+
+    @pytest.mark.parametrize("attack", ["cancel", "failed", "late", "grant", "forged_receipt"])
+    def test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize(env, attack):
+        values, _, body, acceptance = start(env)
+        base = values[0]
+        work(env, acceptance)
+        with env[0].tx() as c:
+            rid = acceptance["jobs"][0]["run_id"]
+            if attack == "grant":
+                c.execute(update(grants).where(grants.c.resource_id == values[5]).values(revoked=True))
+            elif attack == "forged_receipt":
+                row = c.execute(select(operations).where(operations.c.run_id == rid, operations.c.call_id == "aggregate")).mappings().one()
+                value = copy.deepcopy(row["receipt"])
+                value["data"]["sum"] = "999"
+                value["output_fingerprint"] = fingerprint(value["data"])
+                c.execute(update(operations).where(operations.c.id == row["id"]).values(receipt=value))
+            else:
+                c.execute(update(runs).where(runs.c.id == rid).values(**(
+                    {"cancel_intent": True} if attack == "cancel" else
+                    {"status": "FAILED", "result": None} if attack == "failed" else
+                    {"created_at": time.time() - 301})))
+        before = snapshot(env)
+        result = env[2].post(base + "/project-binding/finalize", json=body)
+>       assert result.status_code in {403, 409}, result.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"Actual DAG receipt differs from independent readback","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_column_patches.py:237: AssertionError
+_____ test_semantic_unknown_project_and_non_csv_dependencies_are_rejected ______
+
+env = (<sim2act.db.Store object at 0x7f69ff109ca0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_sema...da919277ee42e8b6380360e3a933fa', 'user_dc66f833ff5e4b1fb9179bbae7711fc2', 'proj_df193de4b287483c8b5cb1d5bb4259a4', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f69fedba120>
+
+    def test_semantic_unknown_project_and_non_csv_dependencies_are_rejected(env, monkeypatch):
+        values = setup(env)
+        original = patches.graph.current
+    
+        def opaque(*args, **kwargs):
+            saved = copy.deepcopy(original(*args, **kwargs))
+            saved["graph"]["unknown_dependencies"][0]["scope"] = "PROJECT"
+            return saved
+    
+        monkeypatch.setattr(patches.graph, "current", opaque)
+        before = snapshot(env)
+        response = env[2].post(values[0], json=values[1])
+>       assert response.status_code == 409 and response.json()["error"]["code"] == "UNSUPPORTED_CAPABILITY", response.text
+E       AssertionError: {"error":{"code":"UNSUPPORTED_CAPABILITY","message":"Project column patch requires only provable fixed CSV bindings; opaque or semantic dependencies remain unsupported","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (400 == 409)
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_project_column_patches.py:265: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_project_column_patches.py::test_actual_shared_workers_atomic_checked_overlay_cold_read_preserves_locks
+FAILED tests/test_project_column_patches.py::test_atomic_start_later_peer_failure_leaves_no_partial_jobs
+FAILED tests/test_project_column_patches.py::test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[cancel]
+FAILED tests/test_project_column_patches.py::test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[failed]
+FAILED tests/test_project_column_patches.py::test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[late]
+FAILED tests/test_project_column_patches.py::test_failed_cancelled_revoked_late_or_forged_jobs_cannot_finalize[forged_receipt]
+FAILED tests/test_project_column_patches.py::test_semantic_unknown_project_and_non_csv_dependencies_are_rejected
+7 failed, 16 passed, 1 warning in 45.04s

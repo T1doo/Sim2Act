@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="5" time="15.005" timestamp="2026-10-11T11:44:19.628427+00:00" hostname="9809f76d2248"><testcase classname="tests.test_project_column_patches" name="test_actual_worker_bad_sum_keeps_failure_history_and_no_checked_patch" time="5.902" /><testcase classname="tests.test_project_column_patches" name="test_actual_cancel_at_worker_boundary_blocks_late_worker_and_group_commit" time="3.744" /><testcase classname="tests.test_project_column_patches" name="test_finalize_revoke_after_receipt_insert_rolls_back_pair" time="2.727"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Current graph baseline changed; explicitly derive a new anchor&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 403&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fa3bc22d7c0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-4/test_fina...87aa1a046f4948b12146f135321d51', 'user_c0a4464c9a424cbdb8e2d89e1c810f0e', 'proj_0af3e397195b4398987fa69f8a81fa40', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fa3bc22d010&gt;
+
+    def test_finalize_revoke_after_receipt_insert_rolls_back_pair(env, monkeypatch):
+        values, _, body, acceptance = start(env)
+        work(env, acceptance)
+        original = patches.save_pair
+    
+        def revoke(c, *args, **kwargs):
+            original(c, *args, **kwargs)
+            c.execute(update(grants).where(grants.c.resource_id == values[5]).values(revoked=True))
+    
+        monkeypatch.setattr(patches, "save_pair", revoke)
+        before = snapshot(env)
+        result = env[2].post(values[0] + "/project-binding/finalize", json=body)
+&gt;       assert result.status_code == 403, result.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Current graph baseline changed; explicitly derive a new anchor","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 403
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_patches.py:376: AssertionError</failure></testcase><testcase classname="tests.test_project_column_patches" name="test_unrelated_lock_unlock_aba_expires_original_project_proof" time="1.557" /><testcase classname="tests.test_project_column_patches" name="test_affected_manual_lock_rejects_before_any_project_overlay" time="0.938" /></testsuite></testsuites>

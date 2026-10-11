@@ -684,6 +684,9 @@ def create_app(store=None, settings=None):
     from .project_revalidation import mount as mount_project_revalidation
 
     mount_project_revalidation(app, db, identity, platform_limits)
+    from .project_column_patches import mount as mount_project_column_patches
+
+    mount_project_column_patches(app, db, identity, platform_limits, s)
     mount_csv_dag(app, db, s, identity, platform_limits)
 
     web = Path(__file__).parent / "web"
@@ -735,6 +738,10 @@ def create_app(store=None, settings=None):
     @app.get("/project-revalidation.js")
     def project_revalidation_js():
         return FileResponse(web / "project-revalidation.js", media_type="text/javascript")
+
+    @app.get("/project-columns.js")
+    def project_columns_js():
+        return FileResponse(web / "project-columns.js", media_type="text/javascript")
 
     @app.get("/conditional-apps.js")
     def conditional_apps_js():

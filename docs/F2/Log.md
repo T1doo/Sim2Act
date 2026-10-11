@@ -274,3 +274,10 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 
 
 2026-10-08人工编辑锁候选独审限定通过后整合：source de6ba39，独审SQLite26P1PGskip/PG27P、每端15页面断言，独立105.50→13.875、旧包兼容/CRUD角色通过。dev72563fa快进执行2bde4eb，产品字节同已审版本，必要16例整合/旧源码升级，不重跑全量；跨进程/原生Edge/超过50历史未独审，整体F2-T07不签收。只归档并普通push，LIVE0/原900-240-150/权限不变。[范围与剩余短建议](ManualEditLockIntegrationLog.md)。
+
+
+2026-10-11 F2-T07 有限项目列修改与应变应用重验：从指定 3e890e329332d434e8f3aa245cb15f905bb41455 创建 dev/project-column-revalidation-20261011，至多16个 canonical 固定CSV单求和草案；全项目成员、来源/授权/图/原始人工锁与预算冻结。同材料全部应用各旧/新列两组既有三步worker，实际旧列30/新列15，再独立Fraction核来源/行数/完整输出；无关应用节点与人工锁不改，应变锁或额外未知/PROJECT/语义依赖拒绝。精确确认、整组排队/最终receipt+seal事务和末尾撤权/期限重验；真实错误与取消无候选提交、历史保留。页面明确预览/确认、UNKNOWN只原key GET恢复，迟到响应隔离。
+
+最后冻结关联SQLite 608PASS/9SKIP/0FAIL/0ERROR，另2旧源码升级deselected，1051.30秒；新增42后端+4HTTP/JSDOM例全部PASS，页面62检查。独审LIMITED PASS，11后端+12页面检查，首次空output产品FAIL及修复后结果保留；8源码/测试文件前后hash一致。全树Ruff10/mypy5与原基线一致，无新增，新增Python Ruff/Node/源码测试文档diff PASS。中途600/9与夹具/错误码/类型及末尾撤权断言失败均留档，不替代最终冻结结果。
+
+保存仅CHECKED_PROJECT_CANDIDATE、有限CSV扩验完成；semanticUNKNOWN/ownerPENDING/canonical_patch_executedfalse/publishablefalse，不改main/coredev/原CSV分支、资源内容/manifest/实例/正式版本或发布指针，0模型/0业务写入。PG/CRUD、Windows/native/视觉、真实旧源码升级、完整P-A/P-B、人工语义/真实模型/远端CI/部署NOT_RUN，无被拒浏览器重试/新权限/强推。完整合同、原失败、独审脚本、原始JUnit和复现见[本轮证据](../evidence/project-column-revalidation-20261011/README.md)。
