@@ -1,9 +1,12 @@
 """Synthetic pure CSV checks; never import sim2act or its business dependencies.
 
-Only the two CSV functions, their two pure helpers, and DomainError are compiled
+Only the two CSV functions, their three pure helpers, and DomainError are compiled
 from AST. The independent oracle parses decimal text into scaled Python integers;
 it never uses Decimal addition or any existing business/proof oracle.
 Run directly: python3 tests/test_csv_precision.py -v
+Functional tests use portable stdlib code. The AS/CPU resource probe is Linux-only
+and unittest explicitly reports it as skipped elsewhere; that is not Windows
+resource-limit validation. Direct --bounded-probe refuses unsupported platforms.
 """
 
 import ast
@@ -16,19 +19,21 @@ import re
 import subprocess
 import sys
 import unittest
-from decimal import Context, Decimal, DecimalException, Inexact, ROUND_DOWN, ROUND_HALF_EVEN, localcontext
+from unittest import mock
+from decimal import Context, Decimal, DecimalException, DefaultContext, DivisionByZero, Inexact, InvalidOperation, Overflow, ROUND_DOWN, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FUNCTIONS = {"_bounded_csv_reader", "_exact_csv_sum", "csv_column_options", "aggregate_csv_content"}
+FUNCTIONS = {"_bounded_csv_reader", "_csv_decimal_context", "_exact_csv_sum", "csv_column_options", "aggregate_csv_content"}
 tree = ast.parse((ROOT / "src/sim2act/tools.py").read_text())
 nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in FUNCTIONS]
 assert {node.name for node in nodes} == FUNCTIONS
 error_tree = ast.parse((ROOT / "src/sim2act/errors.py").read_text())
 error_node = next(node for node in error_tree.body if isinstance(node, ast.ClassDef) and node.name == "DomainError")
 namespace = {"csv": csv, "hashlib": hashlib, "io": io, "Context": Context, "Decimal": Decimal,
-             "DecimalException": DecimalException, "Inexact": Inexact, "ROUND_HALF_EVEN": ROUND_HALF_EVEN}
+             "DecimalException": DecimalException, "DivisionByZero": DivisionByZero, "Inexact": Inexact,
+             "InvalidOperation": InvalidOperation, "Overflow": Overflow, "ROUND_HALF_EVEN": ROUND_HALF_EVEN}
 exec(compile(ast.Module(body=[error_node, *nodes], type_ignores=[]), "<isolated-csv-functions>", "exec"), namespace)
 aggregate = namespace["aggregate_csv_content"]
 guidance = namespace["csv_column_options"]
@@ -183,6 +188,72 @@ class CsvPrecisionTests(unittest.TestCase):
             self.exact(csv_text(["1e100", "1", "1e-100"]))
             self.assertEqual((ambient.prec, ambient.rounding, ambient.Emax, ambient.Emin, dict(ambient.flags)), before)
 
+    def test_serialization_ignores_ambient_capitals_without_rounding(self):
+        for values in [["1e30"], ["1e-30"], ["1e30", "1"], [], ["1.20", "2.30"],
+                       ["1.23456789012345678901234567890123456789e-50", "1e-90"]]:
+            with self.subTest(values=values):
+                results = []
+                for capitals in [0, 1]:
+                    with localcontext() as ambient:
+                        ambient.capitals = capitals
+                        ambient.prec = 1
+                        ambient.Emax = 2
+                        ambient.Emin = -2
+                        ambient.traps[Inexact] = True
+                        ambient.clear_flags()
+                        results.append(self.exact(csv_text(values)))
+                        self.assertEqual(ambient.capitals, capitals)
+                        self.assertFalse(any(ambient.flags.values()))
+                self.assertEqual(results[0], results[1])
+                self.assertNotIn("e", results[0]["sum"])
+                if values == ["1e30"]:
+                    self.assertEqual(results[0]["sum"], "1.000000000000000000000000000E+30")
+        self.assertFalse(any(name == "sim2act" or name.startswith("sim2act.") or name == "sqlalchemy" for name in sys.modules))
+
+    def test_resource_probe_refuses_unsupported_platform_explicitly(self):
+        # Simulate the guard only, never simulate Windows execution or limits.
+        with mock.patch.object(sys, "platform", "win32"):
+            with self.assertRaisesRegex(RuntimeError, "Linux-only"):
+                bounded_probe()
+
+    def test_mutated_default_context_cannot_change_results_or_error_contract(self):
+        contents = [csv_text(values) for values in [["1e30"], ["1e30", "1"],
+                    ["1.23456789012345678901234567890123456789e-50", "1e-90"], []]]
+        baseline = [(aggregate(content, "synthetic-resource", "n"), guidance(content)) for content in contents]
+        invalid_contents = [csv_text(["1e1000000000"]), csv_text(["NaN"]), csv_text(["text"])]
+        invalid_baseline = [self.invalid(content) for content in invalid_contents]
+        def rejection_contract(content):
+            try:
+                aggregate(content, "synthetic-resource", "n")
+            except DomainError as error:
+                return error.public()
+            self.fail("expected INVALID_INPUT")
+        error_baseline = [rejection_contract(content) for content in invalid_contents]
+        original = DefaultContext.copy()
+        try:
+            DefaultContext.prec = 1
+            DefaultContext.rounding = ROUND_DOWN
+            DefaultContext.Emin = -1
+            DefaultContext.Emax = 1
+            DefaultContext.capitals = 0
+            DefaultContext.clamp = 1
+            for mapping in [DefaultContext.flags, DefaultContext.traps]:
+                for signal in mapping:
+                    mapping[signal] = True
+            configured_flags = DefaultContext.flags.copy()
+            configured_traps = DefaultContext.traps.copy()
+            self.assertEqual([(aggregate(content, "synthetic-resource", "n"), guidance(content)) for content in contents], baseline)
+            self.assertEqual([self.invalid(content) for content in invalid_contents], invalid_baseline)
+            self.assertEqual([rejection_contract(content) for content in invalid_contents], error_baseline)
+            self.assertEqual(DefaultContext.flags, configured_flags)
+            self.assertEqual(DefaultContext.traps, configured_traps)
+            self.assertEqual((DefaultContext.prec, DefaultContext.Emin, DefaultContext.Emax, DefaultContext.capitals, DefaultContext.clamp), (1, -1, 1, 0, 1))
+        finally:
+            for option in ["prec", "rounding", "Emin", "Emax", "capitals", "clamp"]:
+                setattr(DefaultContext, option, getattr(original, option))
+            DefaultContext.flags = original.flags.copy()
+            DefaultContext.traps = original.traps.copy()
+
     def test_seeded_synthetic_cases_against_independent_integer_oracle(self):
         generator = random.Random(771)
         for case in range(250):
@@ -193,6 +264,7 @@ class CsvPrecisionTests(unittest.TestCase):
             with self.subTest(case=case):
                 self.exact(csv_text(values))
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux-only AS/CPU resource probe; portable functional tests remain executable")
     def test_resource_bounded_subprocess_and_no_business_imports(self):
         child = subprocess.run([sys.executable, __file__, "--bounded-probe"], capture_output=True, text=True, timeout=10)
         self.assertEqual(child.returncode, 0, child.stderr)
@@ -201,10 +273,13 @@ class CsvPrecisionTests(unittest.TestCase):
         self.assertEqual(report["cpu_limit_seconds"], 5)
         self.assertEqual(report["probes"], 8)
         self.assertEqual(report["business_imports"], [])
+        self.assertTrue(report["platform"].startswith("linux"))
         self.assertFalse(any(name == "sim2act" or name.startswith("sim2act.") or name == "sqlalchemy" for name in sys.modules))
 
 
 def bounded_probe():
+    if not sys.platform.startswith("linux"):
+        raise RuntimeError("Linux-only AS/CPU resource probe; run portable functional tests instead")
     import resource
     resource.setrlimit(resource.RLIMIT_AS, (128 * 1024 * 1024, 128 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
@@ -217,7 +292,7 @@ def bounded_probe():
             aggregate(content, "synthetic-resource", "n")
         except DomainError as error:
             assert error.code == "INVALID_INPUT"
-    print(json.dumps({"memory_limit_bytes": 128 * 1024 * 1024, "cpu_limit_seconds": 5,
+    print(json.dumps({"platform": sys.platform, "memory_limit_bytes": 128 * 1024 * 1024, "cpu_limit_seconds": 5,
                       "probes": len(inputs), "business_imports": [name for name in sys.modules if name == "sim2act" or name.startswith("sim2act.") or name == "sqlalchemy"]}))
 
 

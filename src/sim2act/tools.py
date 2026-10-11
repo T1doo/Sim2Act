@@ -2,7 +2,7 @@ import csv
 import hashlib
 import io
 import json
-from decimal import Context, Decimal, DecimalException, Inexact, ROUND_HALF_EVEN
+from decimal import Context, Decimal, DecimalException, DivisionByZero, Inexact, InvalidOperation, Overflow, ROUND_HALF_EVEN
 from typing import Any
 
 from sqlalchemy import insert, select, update
@@ -190,6 +190,15 @@ def _bounded_csv_reader(content):
     return csv.DictReader(io.StringIO(content))
 
 
+def _csv_decimal_context(precision=28):
+    """Fixed arithmetic and serialization options; never inherit DefaultContext."""
+    return Context(
+        prec=precision, rounding=ROUND_HALF_EVEN,
+        Emin=-999999, Emax=999999, capitals=1, clamp=0,
+        flags=[], traps=[InvalidOperation, DivisionByZero, Overflow, Inexact],
+    )
+
+
 def _exact_csv_sum(values):
     """Exact addition with <=32768 working digits, independent of ambient context.
 
@@ -206,11 +215,7 @@ def _exact_csv_sum(values):
     # Keep the original 28-digit representation when every addition is exact.
     # On value loss, restart from the inputs at the bounded sufficient precision.
     for working_precision in (28, precision):
-        context = Context(
-            prec=working_precision, rounding=ROUND_HALF_EVEN,
-            Emin=-999999, Emax=999999, capitals=1, clamp=0,
-        )
-        context.traps[Inexact] = True
+        context = _csv_decimal_context(working_precision)
         total = Decimal(0)
         try:
             for value in values:
@@ -312,7 +317,9 @@ def aggregate_csv_content(content, rid, column):
             "resource_id": rid,
             "column": column,
             "count": len(vals),
-            "sum": str(_exact_csv_sum(vals)),
+            # Decimal.__str__ uses the caller's capitals setting. This formatter
+            # fixes scientific notation without rounding the exact coefficient.
+            "sum": _csv_decimal_context().to_sci_string(_exact_csv_sum(vals)),
             "source_hash": hashlib.sha256(content.encode()).hexdigest(),
         }
     except (DecimalException, ValueError, TypeError, csv.Error) as e:
