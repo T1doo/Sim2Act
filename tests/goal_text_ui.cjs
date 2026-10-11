@@ -49,6 +49,9 @@ async function boot(app){
  const css=await load("/app.css");hashes["app.css"]=crypto.createHash("sha256").update(css).digest("hex");const style=w.document.createElement("style");style.textContent=css;w.document.head.append(style);
  w.fetch=async(url,options={})=>{
   const request={path:url,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
+  const ownerCommand=request.method==="POST"&&url.endsWith("/owner-review-requests")?request.body.command:null;
+  if((fault==="owner-lost-prepare"&&ownerCommand==="PREPARE")||(fault==="owner-lost-decision"&&ownerCommand==="DECIDE")){fault="";assert.equal(result.status,201);throw Error("injected actual accepted owner response loss");}
+  if((fault==="owner-late-prepare"&&ownerCommand==="PREPARE")||(fault==="owner-late-decision"&&ownerCommand==="DECIDE")||(fault==="owner-late-read"&&request.method==="GET"&&url.endsWith("/owner-review"))){fault="";await new Promise(resolve=>hold=resolve);}
   if(fault==="generation"&&request.method==="POST"&&url.endsWith("/application-runs")){fault="";assert.equal(result.status,202);throw Error("injected accepted generation lost");}
   if(fault==="confirmation"&&request.method==="POST"&&url.endsWith("/confirm-application-candidate")){fault="";assert.equal(result.status,200);throw Error("injected accepted confirmation lost");}
   if(fault.startsWith("poison-")&&request.method==="POST"&&url.endsWith("/application-runs")){
@@ -138,6 +141,53 @@ function assertHandoff(label){
  await edit("internal-term","Beta");await click("internal-run-submit");await rpc({command:"worker"});await click("internal-refresh");
  check(visible($("internal-data"))&&$("internal-data").textContent.includes("Beta due tomorrow")&&$("internal-data").textContent.includes("<em>Beta literal</em>"),"cold unseen term yields visible actual whole-line results");
  check(!$("internal-data").querySelector("em"),"source quote renders literal text");check(!$("internal-data").textContent.includes("Alpha obligation"),"new result differs from preview sample");
+ if(info.scenario.startsWith("owner-")){
+  const ownerPosts=()=>requests.filter(r=>r.method==="POST"&&r.path.endsWith("/owner-review-requests"));
+  check(visible($("owner-panel"))&&$("owner-status").textContent.includes("PENDING"),"actual new-input success still requires explicit human decision");
+  check($("owner-proof").textContent.includes("义务解释未验")&&$("owner-proof").textContent.includes("全部命中完整行"),"frozen unresolved issues and constraints visible before preparing");
+  const run=[...$("owner-run").options].find(o=>o.value);check(!!run,"actual successful new-input job is manually selectable");await edit("owner-run",run.value);
+  const ownerUndo=async id=>{const value=$(id).value;await edit(id,value+" TEMP");await edit(id,value);check($(id).value===value,"owner input A B A remains same bytes after actual input/change events");};
+  if(info.scenario==="owner-lost-prepare")fault="owner-lost-prepare";
+  if(info.scenario==="owner-late-prepare-undo"){
+   fault="owner-late-prepare";const action=click("owner-prepare");await wait(()=>hold);const release=hold;hold=null;
+   await ownerUndo("owner-stop-reason");const focus=w.document.activeElement,count=requests.length;release();await action;
+   check(requests.length===count&&$("owner-form").hidden&&w.document.activeElement===focus,"late prepare after edit undo performs no readback or stale UI takeover");
+  }else await click("owner-prepare");
+  if(["owner-lost-prepare","owner-late-prepare-undo"].includes(info.scenario)){const count=ownerPosts().length;await click("owner-recover");check(ownerPosts().length===count,"lost prepare recovery GET only original key");}
+  check(visible($("owner-form"))&&$("owner-submit").disabled,"exact preview never automatically accepts owner criteria");
+  check($("owner-proof").textContent.includes("Beta due tomorrow")&&$("owner-proof").textContent.includes("VERIFIED"),"owner preview includes actual new-input result and checked Worker receipt");
+  const selections=[...$("owner-criteria").querySelectorAll("select")];check(selections.length===7&&selections.every(s=>s.value===""),"all seven original criteria require explicit individual decisions");
+  for(const [n,select] of selections.entries()){await edit(select.id,info.scenario==="owner-reject"&&n===0?"REJECT":"ACCEPT");await edit("owner-reason-"+select.dataset.itemId,"SIMULATED JSDOM owner declaration; real user signoff NOT RUN");}
+  await click("owner-ack");
+  if(info.scenario==="owner-cancel"){
+   await edit("owner-stop-reason","SIMULATED cancel pending preview");await click("owner-cancel");check($("owner-status").textContent.includes("CANCELLED")&&$("owner-form").hidden,"explicit cancellation appends immutable stop without owner acceptance");
+  }else{
+   if(info.scenario==="owner-lost-decision")fault="owner-lost-decision";
+   if(["owner-late-decision-undo","owner-late-navigation-undo"].includes(info.scenario)){
+    fault="owner-late-decision";const action=click("owner-submit");await wait(()=>hold);const release=hold;hold=null;
+    if(info.scenario==="owner-late-navigation-undo"){await nav("projects");await nav("apps");}else await ownerUndo("owner-reason-goal");
+    const focus=w.document.activeElement,reason=$("owner-reason-goal").value,count=requests.length;release();await action;
+    check(requests.length===count&&visible($("owner-form"))&&$("owner-reason-goal").value===reason&&w.document.activeElement===focus,"late decision cannot erase choices or focus after edit/navigation A B A");
+   }else if(info.scenario==="owner-late-read-undo"){
+    fault="owner-late-read";const action=click("owner-refresh");await wait(()=>hold);const release=hold;hold=null;
+    await ownerUndo("owner-reason-goal");const focus=w.document.activeElement,reason=$("owner-reason-goal").value;release();await action;
+    check($("owner-reason-goal").value===reason&&w.document.activeElement===focus&&$("owner-ack").checked,"late state read preserves edited and restored owner draft");await click("owner-submit");
+   }else await click("owner-submit");
+   if(["owner-lost-decision","owner-late-decision-undo","owner-late-navigation-undo"].includes(info.scenario)){const count=ownerPosts().length;await click("owner-recover");check(ownerPosts().length===count,"unknown decision outcome recovers by original key GET without another POST");}
+   const expected=info.scenario==="owner-reject"?"REJECTED":"ACCEPTED";check($("owner-status").textContent.includes(expected),"only explicit simulated human choices produce exact scoped owner status");
+   check($("owner-status").textContent.includes("UNKNOWN")&&$("owner-status").textContent.includes("正式发布关闭"),"human declaration does not alter technical semantic UNKNOWN or publication gate");
+   if(info.scenario==="owner-revoke"){
+    const oldKey=$("owner-key").value;await edit("owner-stop-reason","SIMULATED revoke exact declaration");await click("owner-revoke");check($("owner-status").textContent.includes("REVOKED"),"explicit revocation appends immutable status");
+    const count=ownerPosts().length;await edit("owner-key",oldKey);await click("owner-recover");check(ownerPosts().length===count&&$("owner-status").textContent.includes("REVOKED")&&$("owner-history").textContent.includes("ACCEPTED"),"historical accepted receipt does not reactivate revoked state");
+   }
+   if(info.scenario==="owner-accept"){
+    const count=posts();await boot(app);const reopen=[...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(instance));await click(reopen);
+    check(posts()===count&&$("owner-status").textContent.includes("ACCEPTED")&&$("owner-form").hidden,"cold visible read recovers exact human declaration without automatic POST");
+    await edit("owner-run",[...$("owner-run").options].find(o=>o.value).value);await click("owner-prepare");check($("owner-status").textContent.includes("PENDING")&&[...$("owner-criteria").querySelectorAll("select")].every(s=>s.value===""),"explicit revalidation requires fresh choices and cannot inherit prior acceptance");
+   }
+  }
+  check(ownerPosts().filter(r=>r.body.command==="DECIDE").length===(info.scenario==="owner-cancel"?0:1),"exactly one decision POST per explicit human intent");
+ }
  const dataBefore=$("internal-data").textContent;await edit("internal-term","");count=posts();await click("internal-run-submit");check(posts()===count,"native required input blocks blank submit before any POST");
  await edit("internal-term"," Beta");await click("internal-run-submit");await rpc({command:"worker"});await click("internal-refresh");
  check($("internal-runs").textContent.includes("FAILED"),"browser-valid but contract-invalid input leaves actual FAILED history");check($("internal-data").textContent===dataBefore,"failed input appends no partial result");

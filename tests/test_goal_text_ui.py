@@ -31,6 +31,16 @@ from sim2act.worker import Worker
         "late-confirm-goal",
         "late-app-read",
         "late-internal-read",
+        "owner-accept",
+        "owner-reject",
+        "owner-lost-prepare",
+        "owner-lost-decision",
+        "owner-late-prepare-undo",
+        "owner-late-decision-undo",
+        "owner-late-read-undo",
+        "owner-late-navigation-undo",
+        "owner-cancel",
+        "owner-revoke",
     ],
 )
 def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):

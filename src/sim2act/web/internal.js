@@ -13,6 +13,7 @@ function engineeringStatus(view,text,state="") {
   $("internal-status").textContent=text;$("internal-status").dataset.state=state;
 }
 function clearInternal() {
+  if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
   if(engineering)clearSwitch(engineering);
   $("internal-switch").hidden=true;$("internal-switch-history").replaceChildren();
@@ -86,6 +87,7 @@ async function refreshInternal(view=engineering) {
 }
 async function showInternalInstance(id,view=engineering) {
   if(!view || !engineeringCurrent(view))return;
+  if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
   clearSwitch(view);$("internal-switch").hidden=true;
   const selection=++view.instanceGeneration;view.runGeneration++;view.instance=null;view.run=null;
@@ -103,6 +105,7 @@ async function showInternalInstance(id,view=engineering) {
     $("internal-runs").replaceChildren(...instance.runs.map(run=>row(`${run.status} · ${run.id} · 结果版本 ${run.result_version ?? "无"}`,()=>showInternalRun(run.id,view,instance),"读取后台任务")));
     $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : (view.agent ? "加载对应离线响应并填写本次检索词；后台核查真实授权材料，不调用provider。关闭页面不会取消任务。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。");
     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
+    if(typeof openOwnerReview==="function")await openOwnerReview(view);
   } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
   engineeringButtons(view);
 }
@@ -250,6 +253,7 @@ function clearReleaseApproval(view) {
   $("internal-approval-detail").textContent="";$("internal-approval-label").textContent="";
 }
 function invalidateInternalContent(view) {
+  if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
   clearReleaseApproval(view);clearSwitch(view);
   view.instanceGeneration++;view.runGeneration++;view.instance=null;view.run=null;view.offlineReplay=null;

@@ -1,0 +1,74 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+__________________ test_owner_exact_explicit_decision[accept] __________________
+
+env = (<sim2act.db.Store object at 0x7fa9e0523bf0>, Settings(database_url='sqlite:////tmp/owner-original-red-20261011/test_o...ab1218974646639a35b0afc22c1697', 'user_a89c13ae2c87424f8a3c0ccf361c3f44', 'proj_9e6d3e381ee34d92ba196c117eef0792', ...)
+reject = False
+
+    @pytest.mark.parametrize("reject", [False, True], ids=["accept", "reject"])
+    def test_owner_exact_explicit_decision(env, reject):
+        data, release, instance, job = flow(env)
+        before = existing_rows(data[0])
+>       review, _ = prepare(data, release, instance, job)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_owner_acceptance.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_owner_acceptance.py:51: in prepare
+    "expected_sequence": state(data, instance)["sequence"] if sequence is None else sequence,
+                         ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7fa9e0523bf0>, Settings(database_url='sqlite:////tmp/owner-original-red-20261011/test_o...0ab1218974646639a35b0afc22c1697', 'proj_9e6d3e381ee34d92ba196c117eef0792', 'res_2ed2c3a7f04e47fcac6b1f0104f86acd', ...)
+instance = {'data_version': 0, 'formal_publication_enabled': False, 'history': [{'kind': 'created', 'release_id': 'irelease_5323704ea373452dbe63d2f1fb3eba23', 'revision': 1}], 'id': 'iinstance_b8a368dd3327db8e721d15ac630762a9', ...}
+key = None
+
+    def state(data, instance, key=None):
+        response = data[2].get(path(instance), params={"request_key": key} if key else {})
+>       assert response.status_code == 200, response.text
+E       AssertionError: {"detail":"Not Found"}
+E       assert 404 == 200
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_owner_acceptance.py:43: AssertionError
+__________________ test_owner_exact_explicit_decision[reject] __________________
+
+env = (<sim2act.db.Store object at 0x7fa9de90e9f0>, Settings(database_url='sqlite:////tmp/owner-original-red-20261011/test_o...63c5029a8a4ee799b8558d58997424', 'user_0986fd9723af45d8a4e9535e7a4ff2e0', 'proj_6924173f560f41fd9dcdcc646e9a863d', ...)
+reject = True
+
+    @pytest.mark.parametrize("reject", [False, True], ids=["accept", "reject"])
+    def test_owner_exact_explicit_decision(env, reject):
+        data, release, instance, job = flow(env)
+        before = existing_rows(data[0])
+>       review, _ = prepare(data, release, instance, job)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_owner_acceptance.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_owner_acceptance.py:51: in prepare
+    "expected_sequence": state(data, instance)["sequence"] if sequence is None else sequence,
+                         ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7fa9de90e9f0>, Settings(database_url='sqlite:////tmp/owner-original-red-20261011/test_o...d63c5029a8a4ee799b8558d58997424', 'proj_6924173f560f41fd9dcdcc646e9a863d', 'res_bdc17d89900d483881a34f8f609f8003', ...)
+instance = {'data_version': 0, 'formal_publication_enabled': False, 'history': [{'kind': 'created', 'release_id': 'irelease_ea1511f59c6146e6808773337f6a9e97', 'revision': 1}], 'id': 'iinstance_7e6d895f7f48e367cd82515a935f7be0', ...}
+key = None
+
+    def state(data, instance, key=None):
+        response = data[2].get(path(instance), params={"request_key": key} if key else {})
+>       assert response.status_code == 200, response.text
+E       AssertionError: {"detail":"Not Found"}
+E       assert 404 == 200
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_owner_acceptance.py:43: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_owner_acceptance.py::test_owner_exact_explicit_decision[accept]
+FAILED tests/test_owner_acceptance.py::test_owner_exact_explicit_decision[reject]
+2 failed, 23 deselected, 1 warning in 4.26s

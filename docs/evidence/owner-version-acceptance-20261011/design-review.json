@@ -1,0 +1,180 @@
+{
+  "status": "DESIGN_REVIEW_READY",
+  "baseline_commit": "d3b375d13e1b235015ec5344152eb9b4c9668120",
+  "repository_writes": 0,
+  "source_tests_run": 0,
+  "actual_owner_signed_off": false,
+  "observations": [
+    {
+      "file": "docs/sources/V5/平台产品设计.md",
+      "line": 109,
+      "finding": "P-A requires frozen goal/acceptance, privatepreview,new/errorinput,thenpublication. Human goal/permission confirmation is valid intervention but must be separately recorded. Schema correctness does not prove business correctness (§5.4,line177); sourcecitations do not prove semantics (§11,line478)."
+    },
+    {
+      "file": "src/sim2act/lifecycle.py",
+      "line": 162,
+      "finding": "Existing release approvals are short-lived engineering approvals. read_release validates immutable approval/snapshot/specs/current source gateway. create_instance,revision/history/data_version and switch CAS are reusable; they are not owner acceptance."
+    },
+    {
+      "file": "src/sim2act/app_jobs.py",
+      "line": 53,
+      "finding": "Use existing enqueue/durable normal Worker only. Frozen request binds instance/revision/release/input and actualjob+iapprun. Accepted bad inputs remainFAILED; no result append. Commit independentlychecks current source,records,verifiedreceipt and CAS. Ownerreview must not use synchronous run_instance."
+    },
+    {
+      "file": "src/sim2act/text_run_checks.py",
+      "line": 19,
+      "finding": "verify supplies actual selectedjob/binding/output/receipt/check/typedrecord proof in the sametransaction. It does not itself assert job.cancel_intent False, so owner admissibility must explicitly require it and nounknown Op; generation sourceRun legitimatelyPARTIAL, selected executionJob mustSUCCEEDED."
+    },
+    {
+      "file": "src/sim2act/goals.py",
+      "line": 88,
+      "finding": "validate_card_version authenticates historical GoalCard, not currenthead equality; goal_runs.verify_source likewise permits frozenoldversion. Owner current validity must additionally compare current goal_cards version+fingerprint; source A→B→A version cannot revive old acceptance."
+    },
+    {
+      "file": "src/sim2act/internal_api.py",
+      "line": 83,
+      "finding": "scope_run/control-status preserve ownerstop after grantrevocation without protected content. New ownerCANCEL/REVOKE should reuse this metadata-only principle; fullcriteria/evidence/currentACCEPT still require current gateway."
+    },
+    {
+      "file": "src/sim2act/internal_api.py",
+      "line": 221,
+      "finding": "Appinstance list data_rows is not independent literal verify_records. Do not build owner proof from this list or displayedPASS; use exact same-transaction validators."
+    },
+    {
+      "file": "src/sim2act/web/use.js",
+      "line": 87,
+      "finding": "Existing ownerPENDING is display/result contract only. CSV/Replay/DAG remain unsupported for this newliteral-owner slice, not silently promoted. New human attestation must preserve formalpublicationfalse and unrelated semanticNOT_RUN/UNKNOWN."
+    }
+  ],
+  "agreed_finite_contract": {
+    "scope": "goal_application-origin registered text.literal_evidence only; existing TXT/MD literal bounds; no CSV/Replay/DAG owner support",
+    "frozen_context": [
+      "authenticatedowner+project+app+runtime",
+      "releaseID/fingerprint/exact immutable snapshot and approval",
+      "instanceID/monotonic revision/data_version/history",
+      "current draftID/fingerprint independentlyvalidatedorigin",
+      "full original/current GoalCard versionhead/fingerprint/snapshot (allgoalfields preserved)",
+      "current resource exacthash/bytes/format and existing user/app grants plus authorizationversion",
+      "selected actualjob+iapprun+binding/request fingerprint+input",
+      "selected successrecord result_version/schema/output/data fingerprint",
+      "VERIFIED readoperation/intent/receipt/check independentlyrecomputed"
+    ],
+    "new_input": "ActualselectedWorkerinput must differ from release preparation sample_input_fingerprint; no preview/replay/uploadedanswer witness. Selectedbinding expected_revision must equalcurrentinstance revision and exact release.",
+    "criteria": "Server derives complete required constraints/acceptance_checks/unresolved from immutable source. Preserve full known/assumptions/goal; stablekind+position+text IDs prevent duplicate text collapse. Client cannot omit/reorder/change items or infer acceptancefromtechnicalPASS. Emptyrequiredcriterion set cannot vacuouslyACCEPT.",
+    "ledger": "Append immutable PREPARE/DECIDE/CANCEL/REVOKE with independentseals and monotonic instance sequence/currenthead. NewPREPARE supersedes oldACCEPT. Eachitem has one immutable ACCEPT/REJECT perreview; changeddecision requires newreview. Explicitcurrent validity is separate from historical userstatement.",
+    "state": "PENDING until allrequireditems explicitlyACCEPT; REJECT cannot be ignored; CANCEL/REVOKE retain decisions/history. Source/revision/data/grant/head change invalidates prior currentacceptance. User reasons and server timestamps recorded; elapsed timestamps not claimed as measuredactivehuman time.",
+    "authority": "No newprincipal/grant/action/model/executor mutation. Human attestation concerns exactversion/selectedinput evidence; does not promote modelsemantic acceptance or enableformalpublication. Testowner choices explicitlySIMULATED, not actualusersignoff.",
+    "idempotency": "Bounded originalrequest keys plus exactrequest fingerprint and expectedcurrentsequence/context. UnknownPOST recovers onlyoriginalkeyGET; cachedhistorical decisions cannot be exposed as currentvalidACCEPT after supersession/revocation. WrongPOSTID remainshint until verifiedkey read.",
+    "ui": "Visible fullcriteria+limits+actualnewinput/run/receipt; no precheckedACCEPT. ExactID/context/source checks and app/instance/run/workspace/edit generations. Nav/input ABA and delayedPOST/GET neveroverwrite newer selection or reason/decisiondraft. Everynewscript must use actualHTTPassetGET withstatus/ctype/bytes/SHA; noFSfallback."
+  },
+  "minimum_independent_acceptance_groups": [
+    {
+      "id": 1,
+      "name": "happy_exact_version",
+      "expected": "ActualSQLite generationmock/readrepair→confirmedliteralapp→existingrelease→coldinstance→differentinputnormalWorker→allitemexplicit simulatedACCEPT; coldGET sameimmutablehistory, formalpublicationfalse.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 2,
+      "name": "reject_partial_empty_duplicate",
+      "expected": "Partialitems stayPENDING; oneREJECT notignored; no requireditem omitted or changed; emptysetcannot autoACCEPT; equaltext item positions remaindistinct.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 3,
+      "name": "source_goal_aba",
+      "expected": "SaveGoalCardA→B→A incrementsheadversion; prior acceptanceSTALE and staleDECIDE denied evenwhencontent/hash restored.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 4,
+      "name": "release_revision_aba",
+      "expected": "Instance switchesreleaseA→B→A; revision differs, prior acceptance neverrevives; newreview bindsnewrevision.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 5,
+      "name": "data_version_race",
+      "expected": "NewWorker resultwhilependingreview changesdata_version; lateDECIDE cannot accept stalefrozencontext; resultappend/currentownerCAS outcomes exact.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 6,
+      "name": "origin_evidence_tamper",
+      "expected": "Generationmarker/rawcandidate/sourceGoalCard,draft,releaseapproval,snapshot,binding/job/resultrecord/receipt/check/hash/status/error/cancelintent/unknownOp tampering denies newACCEPT or invalidatescurrent.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 7,
+      "name": "new_input_guard",
+      "expected": "Releaseprepare sampleinput, previewrow, foreigninstance/project/release, failed/queued/cancelled/unknownjob cannot be accepted as newinputwitness; exactactualbindingrequired.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 8,
+      "name": "ledger_strip_resign",
+      "expected": "Recordself-resign,missingseal,changeditemset/order/choice,deleted/renumbered latestPREPARE/REVOKE cannot fallback to priorACCEPT. Match independentcurrenthead and complete sequence.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 9,
+      "name": "same_key_unknown_outcomes",
+      "expected": "LostPREPARE/DECIDE/CANCEL/REVOKEresponse recover originalkeyGET; oneeffect; samekeydifferentbodyconflict; poisonid/shape nevertaintsrecovery; historicalACCEPTvalidity recheckscurrentcontext.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 10,
+      "name": "cancel_revoke_after_grant_revocation",
+      "expected": "OwnerCANCEL/REVOKE stillworksusing metadata+anchors afterresourcesrevoked; no oldcriteria/output/notes leak throughstop/keyGET; no newsourcegrant.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 11,
+      "name": "new_review_supersession",
+      "expected": "ExplicitnewPREPARE invalidates prioracceptedreview evenwithidentical release/source/input; cancelled/rejected/revokedreview immutable; renewedACCEPTrequires allnewreviewitems.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 12,
+      "name": "concurrent_decisions_prepare",
+      "expected": "Sameitem competingACCEPT/REJECT or newPREPARE vsoldDECIDE: oneexpectedsequence/context wins, otherVERSION_CONFLICT, noduplicate/mixedledger.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 13,
+      "name": "scope_isolation",
+      "expected": "Otherauthenticatedowner/project/app/instance IDs denied beforeprotected read; CSV/Replay/DAGowner unsupported; ordinaryexecutionandexistingownerPENDINGunchanged.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 14,
+      "name": "ui_visible_and_late_aba",
+      "expected": "ActualHTTP HTML/CSS/allscripts, visibleenablednativeDOMclicks/forms; latecreate/decision/keyGET/revoke preservesnew app/instance/run/criterion choice/reason drafts inclnav/editundoABA; coldpage preciseversion.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 15,
+      "name": "no_automatic_publication_semantics",
+      "expected": "TechnicalPASS creates noownerDECIDE; simulatedallACCEPT doesnotmutate generationPARTIAL/semanticNOT_RUN/UNKNOWN, grants, formalpublicationfalse or task/Runledger.",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": 16,
+      "name": "history_preservation",
+      "expected": "Newtest evidence separatelysealed; previous130+manifest/56/270 andclaimwithdrawals unchanged. Existing70 samebyte bridge is not a rerun or owneracceptancetest.",
+      "status": "NOT_RUN"
+    }
+  ],
+  "root_adoption": "Root explicitly adopted narrowliteralP-A path, twoappendrecord/seal tables, monotonicsequence,currentGoalCardhead,actualselectedproof,newinput,metadatastop andGETonlyrecovery. Implementation begun; no codeorproductPASSreview claimed yet.",
+  "boundary_notes": [
+    "SQLiteStore.tx uses BEGINIMMEDIATE; laterconcurrencychecks prove this SQLite service contract, not PG/role qualification.",
+    "Protectedread and ownercurrentvalidity recheck grants/source evenon cachedresponses; cancellation/revoke metadata remainsavailable withoutcontent.",
+    "An independentseal is a platform provenance crosscheck, not a claim against arbitraryadministrative rewrites of allDB anchors.",
+    "Human timestamps record interventions; actualactivehuman duration requires independentmeasurement and cannot be inferred.",
+    "Allprior scopewithdrawals retained; oldsame-byte70 bridge not called currentretest."
+  ],
+  "read_helper_history": {
+    "missing_path_probe": "Initialrg included nonexistent src/sim2act/goal_cards.py (exit2, no permission refusal). Correct file discovered as goals.py and read. No source test, privilege escalation or denied-path workaround."
+  },
+  "future_validation": "Afterrootfreezesimplementation, run own/tmp probes with actualSQLite/normalWorker and actualin-processHTTP/JSDOMGETassets; real/paidprovider,nativebrowser,Windows,PG,deploymentNOT_RUN."
+}

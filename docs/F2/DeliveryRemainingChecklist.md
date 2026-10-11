@@ -49,3 +49,5 @@
 同日 P2 接续：父复审指出 `7e86ec7` 的草稿最终值比较漏过同卡 A→B→A；上一轮 A→B 结果不证明编辑撤销后仍拒绝迟到交接。新增单调编辑代次保护确认及原 key 恢复，覆盖七字段与材料选择器，原值检查和未保存编辑保留；[新红轮/独审证据](../evidence/pa-text-edit-generation-20261011/README.md)另存，之前两个 P-A 目录共270份证据原字节不改。下一 owner 精确版本/新输入验收切片待本修复签收后续做，未以本测试提升 owner 或语义门。
 
 该轮相邻回归同时暴露 `/goal-application.js` 固定静态路由缺失；旧页面测试本地嵌入脚本未证明HTTP资源交付。只补这一路由，驱动现在对每次开页的HTML/CSS/16脚本实际GET并保留精确HTTP/hash回执。原68PASS/5FAIL和单脚本404红轮留存，不能把旧本地源码加载说成HTTP脚本加载。
+
+2026-10-11 `d3b375d13e1b235015ec5344152eb9b4c9668120` 获接纳后，接续原 F2-T01/T08 [owner 精确版本逐项签收](OwnerVersionAcceptance.md)：有限生成文本应用显示完整冻结 GoalCard、未解决项与正常 Worker 新输入证据，人工逐项 ACCEPT/REJECT 及依据，追加精确版本声明；当前来源/目标/实例/授权/运行变化、ABA、并发和迟到提交重验，取消/撤销/新预览/原 key 仅读恢复保留历史。独审实测发现较早 payload 损坏仍可直接追加，已补当前内容授权后的全历史提交核验，原始失败及 withdrawn 候选验证保留于[本轮证据](../evidence/owner-version-acceptance-20261011/README.md)。此条只交付人工签收的有限工程流程；测试中的人工选择为 SIMULATED，真实用户语义、完整 P-A/P-B、正式发布、PG/Windows/native/旧源码升级/真实模型和远端 CI 均须单独验收。

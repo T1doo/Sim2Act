@@ -1,0 +1,10 @@
+[
+  "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+  "BEGIN IMMEDIATE",
+  "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+  "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+  "SELECT internal_owner_records.id, internal_owner_records.principal_id, internal_owner_records.project_id, internal_owner_records.instance_id, internal_owner_records.sequence, internal_owner_records.request_key, internal_owner_records.request_fingerprint, internal_owner_records.kind, internal_owner_records.status, internal_owner_records.previous_fingerprint, internal_owner_records.created_at, internal_owner_records.fingerprint \nFROM internal_owner_records \nWHERE internal_owner_records.instance_id = ? ORDER BY internal_owner_records.sequence",
+  "SELECT internal_owner_seals.record_id, internal_owner_seals.instance_id, internal_owner_seals.principal_id, internal_owner_seals.project_id, internal_owner_seals.sequence, internal_owner_seals.metadata_fingerprint, internal_owner_seals.payload_fingerprint \nFROM internal_owner_seals \nWHERE internal_owner_seals.instance_id = ?",
+  "INSERT INTO internal_owner_records (id, principal_id, project_id, instance_id, sequence, request_key, request_fingerprint, kind, status, previous_fingerprint, created_at, payload, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "INSERT INTO internal_owner_seals (record_id, instance_id, principal_id, project_id, sequence, metadata_fingerprint, payload_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)"
+]

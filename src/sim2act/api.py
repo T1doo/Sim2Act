@@ -728,6 +728,9 @@ def create_app(store=None, settings=None):
         }
 
     mount_internal_api(app, db, platform_limits, identity)
+    from .owner_acceptance import mount as mount_owner_acceptance
+
+    mount_owner_acceptance(app, db, platform_limits, identity)
     mount_protocol_api(app, db, platform_limits, identity, s)
     mount_protocol_recovery(app, db, identity)
     mount_protocol_reviews(app, db, identity)
@@ -763,6 +766,10 @@ def create_app(store=None, settings=None):
     @app.get("/goal-application.js")
     def goal_application_script():
         return FileResponse(web / "goal-application.js", media_type="text/javascript")
+
+    @app.get("/owner-review.js")
+    def owner_review_script():
+        return FileResponse(web / "owner-review.js", media_type="text/javascript")
 
     @app.get("/app.js")
     def js():

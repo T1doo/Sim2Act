@@ -367,6 +367,37 @@ internal_instance_data = Table(
     Column("fingerprint", String, nullable=False),
 )
 
+# Owner decisions are append-only and separate from engineering approvals and Run outcomes.
+internal_owner_records = Table(
+    "internal_owner_records", meta,
+    Column("id", String, primary_key=True),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("instance_id", String, nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("status", String, nullable=False),
+    Column("previous_fingerprint", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    UniqueConstraint("instance_id", "sequence"),
+    UniqueConstraint("instance_id", "principal_id", "request_key"),
+)
+internal_owner_seals = Table(
+    "internal_owner_seals", meta,
+    Column("record_id", String, primary_key=True),
+    Column("instance_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("metadata_fingerprint", String, nullable=False),
+    Column("payload_fingerprint", String, nullable=False),
+    UniqueConstraint("instance_id", "sequence"),
+)
+
 internal_run_bindings = Table(
     "internal_run_bindings",
     meta,

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="21" time="80.976" timestamp="2026-10-11T19:44:18.027858+00:00" hostname="9809f76d2248"><testcase classname="test_owner_independent" name="test_goal_head_real_http_aba[prepared]" time="3.197"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7f555e3ff830&gt;, Settings(database_url='sqlite:////tmp/owner-version-acceptance-review-20...178fe9d3b5459aba99158e0716c69f', 'user_6bc581ef75484206b1563f60de576dd0', 'proj_ea976c864232459482b0493e2b9f0633', ...)
+stage = 'prepared'
+
+    @pytest.mark.parametrize('stage', ['prepared', 'accepted'])
+    def test_goal_head_real_http_aba(env, stage):
+        data, release, instance, job = author.flow(env)
+        if stage == 'accepted':
+            review, accepted, body = accept(data, release, instance, job)
+        else:
+            review, _ = author.prepare(data, release, instance, job)
+            body = author.choice_body(review)
+        original = copy.deepcopy(data[-1]['content'])
+        middle = edit_goal(data, {**original, 'title': 'Independent B'}, data[-1]['version'])
+        restored = edit_goal(data, original, middle['version'])
+&gt;       assert restored['content'] == original
+               ^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'content'
+
+/tmp/owner-version-acceptance-review-20261011/test_owner_independent.py:93: KeyError</failure></testcase><testcase classname="test_owner_independent" name="test_goal_head_real_http_aba[accepted]" time="4.020"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7f555c9caea0&gt;, Settings(database_url='sqlite:////tmp/owner-version-acceptance-review-20...9530e5be9e4f7e8af84d033c18edbc', 'user_e66a4a9cbbcc4b5592191392ddcb244e', 'proj_845d26cce193498a88be55ce52efaa6f', ...)
+stage = 'accepted'
+
+    @pytest.mark.parametrize('stage', ['prepared', 'accepted'])
+    def test_goal_head_real_http_aba(env, stage):
+        data, release, instance, job = author.flow(env)
+        if stage == 'accepted':
+            review, accepted, body = accept(data, release, instance, job)
+        else:
+            review, _ = author.prepare(data, release, instance, job)
+            body = author.choice_body(review)
+        original = copy.deepcopy(data[-1]['content'])
+        middle = edit_goal(data, {**original, 'title': 'Independent B'}, data[-1]['version'])
+        restored = edit_goal(data, original, middle['version'])
+&gt;       assert restored['content'] == original
+               ^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'content'
+
+/tmp/owner-version-acceptance-review-20261011/test_owner_independent.py:93: KeyError</failure></testcase><testcase classname="test_owner_independent" name="test_real_instance_release_switch_aba[prepared]" time="3.986"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;message&quot;:&quot;A current successful new-input Worker run is required&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 == 409&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f555c2c45c0&gt;, Settings(database_url='sqlite:////tmp/owner-version-acceptance-review-20...b2c4f6c32943b0adab987376d55674', 'user_35064e5d02334914a42f23522a4038ef', 'proj_16409849e51944a9861558fd8c27db73', ...)
+stage = 'prepared'
+
+    @pytest.mark.parametrize('stage', ['prepared', 'accepted'])
+    def test_real_instance_release_switch_aba(env, stage):
+        data, release, instance, job = author.flow(env)
+        if stage == 'accepted':
+            review, accepted, body = accept(data, release, instance, job)
+        else:
+            review, _ = author.prepare(data, release, instance, job)
+            body = author.choice_body(review)
+        alternate = second_release(data, instance)
+        assert alternate['fingerprint'] != release['fingerprint']
+        b = switch(data, instance, alternate, 1)
+        a = switch(data, instance, release, 2)
+        assert b['revision'] == 2 and a['revision'] == 3
+        assert a['release_id'] == release['id']
+        assert author.state(data, instance)['owner_acceptance'] == 'STALE'
+        if stage == 'accepted':
+            recover_stale(data, instance, accepted)
+        else:
+            denied = data[2].post(author.path(instance) + '-requests', json=body)
+&gt;           assert denied.status_code == 409, denied.text
+E           AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"A current successful new-input Worker run is required","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E           assert 400 == 409
+E            +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+/tmp/owner-version-acceptance-review-20261011/test_owner_independent.py:127: AssertionError</failure></testcase><testcase classname="test_owner_independent" name="test_real_instance_release_switch_aba[accepted]" time="5.427" /><testcase classname="test_owner_independent" name="test_accepted_evidence_stale_exact_key_cannot_restore[unknown_op]" time="4.238" /><testcase classname="test_owner_independent" name="test_accepted_evidence_stale_exact_key_cannot_restore[cancel_intent]" time="3.854" /><testcase classname="test_owner_independent" name="test_accepted_evidence_stale_exact_key_cannot_restore[job_error]" time="3.618" /><testcase classname="test_owner_independent" name="test_accepted_evidence_stale_exact_key_cannot_restore[app_error]" time="2.994" /><testcase classname="test_owner_independent" name="test_accepted_evidence_stale_exact_key_cannot_restore[output]" time="4.175" /><testcase classname="test_owner_independent" name="test_stop_after_revocation_reads_only_owner_metadata[CANCEL]" time="3.168" /><testcase classname="test_owner_independent" name="test_stop_after_revocation_reads_only_owner_metadata[REVOKE]" time="3.522" /><testcase classname="test_owner_independent" name="test_prepare_foreign_or_non_app_run_is_denied[other_instance]" time="2.737" /><testcase classname="test_owner_independent" name="test_prepare_foreign_or_non_app_run_is_denied[generation_run]" time="2.344" /><testcase classname="test_owner_independent" name="test_prepare_foreign_or_non_app_run_is_denied[missing]" time="2.469" /><testcase classname="test_owner_independent" name="test_one_sided_anchor_loss_denies_read_and_stop[record-first]" time="4.452" /><testcase classname="test_owner_independent" name="test_one_sided_anchor_loss_denies_read_and_stop[seal-first]" time="3.931" /><testcase classname="test_owner_independent" name="test_one_sided_anchor_loss_denies_read_and_stop[record-last]" time="3.452" /><testcase classname="test_owner_independent" name="test_one_sided_anchor_loss_denies_read_and_stop[seal-last]" time="5.636" /><testcase classname="test_owner_independent" name="test_old_key_after_stop_and_new_prepare_never_restores_acceptance[CANCEL]" time="5.184" /><testcase classname="test_owner_independent" name="test_old_key_after_stop_and_new_prepare_never_restores_acceptance[REVOKE]" time="5.398" /><testcase classname="test_owner_independent" name="test_actual_release_sample_input_cannot_be_owner_new_input" time="3.017" /></testsuite></testsuites>

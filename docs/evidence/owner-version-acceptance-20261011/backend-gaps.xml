@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="7" time="18.069" timestamp="2026-10-11T19:40:12.262647+00:00" hostname="9809f76d2248"><testcase classname="tests.test_owner_acceptance" name="test_owner_selects_only_proven_current_new_input[sample]" time="3.041" /><testcase classname="tests.test_owner_acceptance" name="test_owner_selects_only_proven_current_new_input[failed]" time="1.814" /><testcase classname="tests.test_owner_acceptance" name="test_owner_selects_only_proven_current_new_input[foreign]" time="2.117" /><testcase classname="tests.test_owner_acceptance" name="test_owner_selects_only_proven_current_new_input[unknown]" time="1.838" /><testcase classname="tests.test_owner_acceptance" name="test_owner_accepted_exact_version_cannot_survive_changes_or_aba[new_result]" time="3.700" /><testcase classname="tests.test_owner_acceptance" name="test_owner_accepted_exact_version_cannot_survive_changes_or_aba[goal_aba]" time="2.712"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7f0b2253d5e0&gt;, Settings(database_url='sqlite:////tmp/owner-backend-gaps-20261011/test_o...2282aa8c3340bf9a41d85b990af0e8', 'user_ce618a4620434058992b426888db04bc', 'proj_0711b7934d574ef1a1a0c786ede84af3', ...)
+change = 'goal_aba'
+
+    @pytest.mark.parametrize("change", ["new_result", "goal_aba", "instance_aba"])
+    def test_owner_accepted_exact_version_cannot_survive_changes_or_aba(env, change):
+        data, release, instance, job = flow(env)
+        review, _ = prepare(data, release, instance, job)
+        body = choice_body(review)
+        assert data[2].post(path(instance) + "-requests", json=body).status_code == 201
+        assert state(data, instance)["owner_acceptance"] == "ACCEPTED"
+        if change == "new_result":
+            run_input(data, release, instance, {"term": "owner"}, "newer-after-accept")
+        elif change == "goal_aba":
+            card = data[-1]
+            for title in ["Changed goal title", card["content"]["title"]]:
+                response = data[2].put(
+                    f"/api/goal-cards/{card['id']}",
+&gt;                   json={**card["content"], "title": title, "expected_version": card["version"]},
+                            ^^^^^^^^^^^^^^^
+                )
+E               KeyError: 'content'
+
+tests/test_owner_acceptance.py:416: KeyError</failure></testcase><testcase classname="tests.test_owner_acceptance" name="test_owner_accepted_exact_version_cannot_survive_changes_or_aba[instance_aba]" time="2.636"><failure message="KeyError: 'source_app_id'">env = (&lt;sim2act.db.Store object at 0x7f0b224d85f0&gt;, Settings(database_url='sqlite:////tmp/owner-backend-gaps-20261011/test_o...228117587645368f72cf435b57ebc5', 'user_4ac5e9fc18d545e88618b7edaad01ce3', 'proj_8040704d81bc4300b9a2f9bb008d15f4', ...)
+change = 'instance_aba'
+
+    @pytest.mark.parametrize("change", ["new_result", "goal_aba", "instance_aba"])
+    def test_owner_accepted_exact_version_cannot_survive_changes_or_aba(env, change):
+        data, release, instance, job = flow(env)
+        review, _ = prepare(data, release, instance, job)
+        body = choice_body(review)
+        assert data[2].post(path(instance) + "-requests", json=body).status_code == 201
+        assert state(data, instance)["owner_acceptance"] == "ACCEPTED"
+        if change == "new_result":
+            run_input(data, release, instance, {"term": "owner"}, "newer-after-accept")
+        elif change == "goal_aba":
+            card = data[-1]
+            for title in ["Changed goal title", card["content"]["title"]]:
+                response = data[2].put(
+                    f"/api/goal-cards/{card['id']}",
+                    json={**card["content"], "title": title, "expected_version": card["version"]},
+                )
+                assert response.status_code == 200
+                card = response.json()
+            assert card["content"] == data[-1]["content"] and card["version"] == 3
+        else:
+&gt;           other_release, _ = release_instance(data, release["source_app_id"])
+                                                      ^^^^^^^^^^^^^^^^^^^^^^^^
+E           KeyError: 'source_app_id'
+
+tests/test_owner_acceptance.py:422: KeyError</failure></testcase></testsuite></testsuites>
