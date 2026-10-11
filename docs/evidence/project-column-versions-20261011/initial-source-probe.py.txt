@@ -1,0 +1,11 @@
+from test_project_column_versions import ready
+from test_internal_lifecycle import limits
+from sim2act import project_column_versions as v
+
+def test_preview_trace(env):
+ values, _, _, body = ready(env)
+ with env[0].tx() as c:
+  saved = v.checked(env[0], c, env[3], env[5], values[2], 'project-binding', limits(env))
+  for peer in saved['affected']:
+   origin = v.origin_for(saved, peer['app_id'], env[3])
+   v.snapshot_from_origin(env[0], c, env[3], origin, limits(env))

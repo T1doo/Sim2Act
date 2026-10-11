@@ -483,18 +483,32 @@ class Store:
         self.test_only = test_only  # Explicit fixture guard; production entrypoints leave False.
 
     @contextmanager
-    def tx(self):
+    def tx(self, *, wait_seconds=None):
         with self.engine.connect() as c:
-            if self.sqlite:
-                c.exec_driver_sql("BEGIN IMMEDIATE")
-            else:
-                c.begin()
+            prior_timeout = None
+            raw = None
             try:
-                yield c
-                c.commit()
-            except BaseException:
-                c.rollback()
-                raise
+                if self.sqlite and wait_seconds is not None:
+                    if type(wait_seconds) not in (int, float) or not 0 < wait_seconds <= 30:
+                        raise ValueError("Bounded transaction wait required")
+                    raw = c.connection.driver_connection
+                    if raw is None:
+                        raise RuntimeError("Database connection unavailable")
+                    prior_timeout = raw.execute("PRAGMA busy_timeout").fetchone()[0]
+                    raw.execute(f"PRAGMA busy_timeout = {int(wait_seconds * 1000)}")
+                if self.sqlite:
+                    c.exec_driver_sql("BEGIN IMMEDIATE")
+                else:
+                    c.begin()
+                try:
+                    yield c
+                    c.commit()
+                except BaseException:
+                    c.rollback()
+                    raise
+            finally:
+                if prior_timeout is not None and raw is not None:
+                    raw.execute(f"PRAGMA busy_timeout = {prior_timeout}")
 
     def initialize(self, quota_subject="default-intern-account", *, fresh_test_schema=None):
         # Explicit migration command only, never implicitly from API/worker.

@@ -1,0 +1,526 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="24" skipped="0" tests="24" time="180.185" timestamp="2026-10-11T12:38:51.359081+00:00" hostname="9809f76d2248"><testcase classname="tests.test_project_column_versions" name="test_group_cold_new_inputs_true_worker_old_version_preserved" time="7.183"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c945d9ac0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_group_...6d952cf365417a975d79ee08ef2b9b', 'user_132669fe99144cc785b08904d9f37d8c', 'proj_5144b40b6be24539bc40606ac53437f1', ...)
+
+    def test_group_cold_new_inputs_true_worker_old_version_preserved(env):
+        values, patch, base, body = ready(env)
+        # A genuine older immutable canonical version and its data survive group creation.
+        approval = lifecycle.prepare_release(env[0], env[3], values[2], patch["affected"][0]["patch"]["candidate_fingerprint"],
+                                             limits(env), {"column": "amount"})
+        old = lifecycle.commit_release(env[0], env[3], approval["id"], approval["fingerprint"], limits(env))
+        old_i = lifecycle.create_instance(env[0], env[3], old["id"], old["fingerprint"], limits(env))
+        before = snapshot(env)
+        p = env[2].post(base, json=body)
+&gt;       assert p.status_code == 201, p.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:78: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_entire_group_rolls_back_later_failure[release]" time="6.706"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c92997890&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...3f5b91b5ad48ce98b8cda2409c4bb2', 'user_4a83b47af47242c5b47b0adec0e65155', 'proj_f9bd9542c01245dcb34a752e4c9ea948', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c926363c0&gt;
+point = 'release'
+
+    @pytest.mark.parametrize("point", ["release", "instance", "final_revoke", "final_expiry"])
+    def test_entire_group_rolls_back_later_failure(env, monkeypatch, point):
+&gt;       _, _, base, _, p, confirm = preview(env)
+                                    ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c92997890&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...3f5b91b5ad48ce98b8cda2409c4bb2', 'user_4a83b47af47242c5b47b0adec0e65155', 'proj_f9bd9542c01245dcb34a752e4c9ea948', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_entire_group_rolls_back_later_failure[instance]" time="6.744"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c94239220&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...14c745e6c840628c9a88dcaeb24dc6', 'user_d1a2ca2f36b14fa2815d78c07e3a3ff7', 'proj_af8dc516c8244857a2ea0a68ca37941e', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c92e08500&gt;
+point = 'instance'
+
+    @pytest.mark.parametrize("point", ["release", "instance", "final_revoke", "final_expiry"])
+    def test_entire_group_rolls_back_later_failure(env, monkeypatch, point):
+&gt;       _, _, base, _, p, confirm = preview(env)
+                                    ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c94239220&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...14c745e6c840628c9a88dcaeb24dc6', 'user_d1a2ca2f36b14fa2815d78c07e3a3ff7', 'proj_af8dc516c8244857a2ea0a68ca37941e', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_entire_group_rolls_back_later_failure[final_revoke]" time="6.898"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c92d552e0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...85eaf1e3b34217a3d252a61447de32', 'user_e2aa27ccd9414bf0952506648d0899a8', 'proj_f95f60c433a044569a4b5c0030da2c3f', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c9466c1d0&gt;
+point = 'final_revoke'
+
+    @pytest.mark.parametrize("point", ["release", "instance", "final_revoke", "final_expiry"])
+    def test_entire_group_rolls_back_later_failure(env, monkeypatch, point):
+&gt;       _, _, base, _, p, confirm = preview(env)
+                                    ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c92d552e0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...85eaf1e3b34217a3d252a61447de32', 'user_e2aa27ccd9414bf0952506648d0899a8', 'proj_f95f60c433a044569a4b5c0030da2c3f', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_entire_group_rolls_back_later_failure[final_expiry]" time="6.509"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c9430bef0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...60363e11d944df8d1c8f6c95d2d1ca', 'user_f491edc4ce3941bbbf1c8279edc377a1', 'proj_2d3ee82381b646d49f3bf8db8787aac5', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c94381190&gt;
+point = 'final_expiry'
+
+    @pytest.mark.parametrize("point", ["release", "instance", "final_revoke", "final_expiry"])
+    def test_entire_group_rolls_back_later_failure(env, monkeypatch, point):
+&gt;       _, _, base, _, p, confirm = preview(env)
+                                    ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c9430bef0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_entire...60363e11d944df8d1c8f6c95d2d1ca', 'user_f491edc4ce3941bbbf1c8279edc377a1', 'proj_2d3ee82381b646d49f3bf8db8787aac5', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_single_approval_cannot_bypass_whole_group" time="6.549"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c940f73b0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_single...67730a90aa451280116198ea4493fb', 'user_ebb6bdd58c7142bdb698d44a20f73e65', 'proj_6ea36c56a70e4d51ba017c98d388fc38', ...)
+
+    def test_single_approval_cannot_bypass_whole_group(env):
+&gt;       _, _, _, _, p, _ = preview(env)
+                           ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c940f73b0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_single...67730a90aa451280116198ea4493fb', 'user_ebb6bdd58c7142bdb698d44a20f73e65', 'proj_6ea36c56a70e4d51ba017c98d388fc38', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_frozen_group_rejects_current_change_zero_writes[grant]" time="6.982"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c927c3680&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...93c3b75980410885bf62524abb3bd0', 'user_267620ae55a8485a96a975c347f42a75', 'proj_5995ed47b3854ac7aaff62675699eeb7', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c92f98f80&gt;
+attack = 'grant'
+
+    @pytest.mark.parametrize("attack", ["grant", "source", "expiry", "confirmation", "key", "budget"])
+    def test_frozen_group_rejects_current_change_zero_writes(env, monkeypatch, attack):
+&gt;       values, _, base, _, p, confirm = preview(env)
+                                         ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c927c3680&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...93c3b75980410885bf62524abb3bd0', 'user_267620ae55a8485a96a975c347f42a75', 'proj_5995ed47b3854ac7aaff62675699eeb7', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_frozen_group_rejects_current_change_zero_writes[source]" time="6.747"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c92ed8890&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...b254f0751343ab93c33c79b8b106f5', 'user_7a7aab533a064642b9664048b465cea9', 'proj_0134b7142e4c4da6b1d27fc051abf946', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c92ef5040&gt;
+attack = 'source'
+
+    @pytest.mark.parametrize("attack", ["grant", "source", "expiry", "confirmation", "key", "budget"])
+    def test_frozen_group_rejects_current_change_zero_writes(env, monkeypatch, attack):
+&gt;       values, _, base, _, p, confirm = preview(env)
+                                         ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c92ed8890&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...b254f0751343ab93c33c79b8b106f5', 'user_7a7aab533a064642b9664048b465cea9', 'proj_0134b7142e4c4da6b1d27fc051abf946', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_frozen_group_rejects_current_change_zero_writes[expiry]" time="6.562"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c92f1eea0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...588e9b97eb480581d88f55fd17b294', 'user_ff29de9a7442483391f0336393d6c1b7', 'proj_27cb42e778e74f4bb6189489319cf58a', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c92937560&gt;
+attack = 'expiry'
+
+    @pytest.mark.parametrize("attack", ["grant", "source", "expiry", "confirmation", "key", "budget"])
+    def test_frozen_group_rejects_current_change_zero_writes(env, monkeypatch, attack):
+&gt;       values, _, base, _, p, confirm = preview(env)
+                                         ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c92f1eea0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...588e9b97eb480581d88f55fd17b294', 'user_ff29de9a7442483391f0336393d6c1b7', 'proj_27cb42e778e74f4bb6189489319cf58a', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_frozen_group_rejects_current_change_zero_writes[confirmation]" time="6.606"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c925df770&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...e4517b6b3046bcba29fdcde7948653', 'user_b20e97a249584654be1a37ee808656dc', 'proj_05691c7801b34302a11c60d1c7c51700', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c926f8c80&gt;
+attack = 'confirmation'
+
+    @pytest.mark.parametrize("attack", ["grant", "source", "expiry", "confirmation", "key", "budget"])
+    def test_frozen_group_rejects_current_change_zero_writes(env, monkeypatch, attack):
+&gt;       values, _, base, _, p, confirm = preview(env)
+                                         ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c925df770&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...e4517b6b3046bcba29fdcde7948653', 'user_b20e97a249584654be1a37ee808656dc', 'proj_05691c7801b34302a11c60d1c7c51700', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_frozen_group_rejects_current_change_zero_writes[key]" time="6.577"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c9264c770&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...e510c748d14e5b85e645b7f57c946a', 'user_6ced5b8ca065482ca67578de80349a78', 'proj_7ded49c480be486f925c8b145681419e', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c9436f3e0&gt;
+attack = 'key'
+
+    @pytest.mark.parametrize("attack", ["grant", "source", "expiry", "confirmation", "key", "budget"])
+    def test_frozen_group_rejects_current_change_zero_writes(env, monkeypatch, attack):
+&gt;       values, _, base, _, p, confirm = preview(env)
+                                         ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c9264c770&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...e510c748d14e5b85e645b7f57c946a', 'user_6ced5b8ca065482ca67578de80349a78', 'proj_7ded49c480be486f925c8b145681419e', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_frozen_group_rejects_current_change_zero_writes[budget]" time="7.082"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c9280e6c0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...eefc12f4034bfdb9b1744753035392', 'user_500cbb63d506476eb7f2eba9035d655b', 'proj_712219e6e9ec4873af7a800969a7d3c0', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f1c94248830&gt;
+attack = 'budget'
+
+    @pytest.mark.parametrize("attack", ["grant", "source", "expiry", "confirmation", "key", "budget"])
+    def test_frozen_group_rejects_current_change_zero_writes(env, monkeypatch, attack):
+&gt;       values, _, base, _, p, confirm = preview(env)
+                                         ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c9280e6c0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_frozen...eefc12f4034bfdb9b1744753035392', 'user_500cbb63d506476eb7f2eba9035d655b', 'proj_712219e6e9ec4873af7a800969a7d3c0', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_cancel_original_group_and_late_commit" time="10.316"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c92ed9580&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_cancel...22f9e346384fb7b2164f9f399d4e55', 'user_30a3041c7e964a4abf0177baad4ed0c2', 'proj_4047b05e8e7d4b5d9020b5581aba19b0', ...)
+
+    def test_cancel_original_group_and_late_commit(env):
+&gt;       _, _, base, body, p, confirm = preview(env)
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c92ed9580&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_cancel...22f9e346384fb7b2164f9f399d4e55', 'user_30a3041c7e964a4abf0177baad4ed0c2', 'proj_4047b05e8e7d4b5d9020b5581aba19b0', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_concurrent_exact_confirmation_single_group" time="9.154"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c941f3ce0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_concur...e9145535d44af2a84ebb0700f25e90', 'user_b9b46fbf19334b128678916cdd2a27da', 'proj_4553519893194086979657df0d80c980', ...)
+
+    def test_concurrent_exact_confirmation_single_group(env):
+&gt;       values, _, base, _, _, confirm = preview(env)
+                                         ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:199: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c941f3ce0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_concur...e9145535d44af2a84ebb0700f25e90', 'user_b9b46fbf19334b128678916cdd2a27da', 'proj_4553519893194086979657df0d80c980', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[identity-read]" time="7.696"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c925ca9c0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...0bf29f747d4314a2cc9d532b3c4361', 'user_87a2fb682c684e65bae5e23122646a25', 'proj_3bba0bb189804e5a84d7dbb868c3ac20', ...)
+entry = 'read', scope = 'identity'
+
+    @pytest.mark.parametrize("entry", ["read", "definition", "preview", "commit", "cancel"])
+    @pytest.mark.parametrize("scope", ["identity", "project"])
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+&gt;       _, _, base, body, _, confirm = preview(env)
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c925ca9c0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...0bf29f747d4314a2cc9d532b3c4361', 'user_87a2fb682c684e65bae5e23122646a25', 'proj_3bba0bb189804e5a84d7dbb868c3ac20', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[identity-definition]" time="8.228"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c94383650&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...c7c19e31424bbc95f2daa36ac2611a', 'user_7bc6ac20740a4eeb8887a1af1023709b', 'proj_10e2e438d8fd47c48aad5fa824810d51', ...)
+entry = 'definition', scope = 'identity'
+
+    @pytest.mark.parametrize("entry", ["read", "definition", "preview", "commit", "cancel"])
+    @pytest.mark.parametrize("scope", ["identity", "project"])
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+&gt;       _, _, base, body, _, confirm = preview(env)
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c94383650&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...c7c19e31424bbc95f2daa36ac2611a', 'user_7bc6ac20740a4eeb8887a1af1023709b', 'proj_10e2e438d8fd47c48aad5fa824810d51', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[identity-preview]" time="7.522"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c926f8770&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...9f5df8c9804ae280f46637ec5fe546', 'user_3b2aaab312d24f14888acff33a48253f', 'proj_54f71441e2824ff29eb8552025ca19d5', ...)
+entry = 'preview', scope = 'identity'
+
+    @pytest.mark.parametrize("entry", ["read", "definition", "preview", "commit", "cancel"])
+    @pytest.mark.parametrize("scope", ["identity", "project"])
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+&gt;       _, _, base, body, _, confirm = preview(env)
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c926f8770&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...9f5df8c9804ae280f46637ec5fe546', 'user_3b2aaab312d24f14888acff33a48253f', 'proj_54f71441e2824ff29eb8552025ca19d5', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[identity-commit]" time="8.155"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c942a0140&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...9c0ebbde3942b29a729bc9ad15c1d8', 'user_9704a3367d7746fd8dcd4b34b0dcf697', 'proj_fe6bb6415df14a83a19797e62a08dfc1', ...)
+entry = 'commit', scope = 'identity'
+
+    @pytest.mark.parametrize("entry", ["read", "definition", "preview", "commit", "cancel"])
+    @pytest.mark.parametrize("scope", ["identity", "project"])
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+&gt;       _, _, base, body, _, confirm = preview(env)
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c942a0140&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...9c0ebbde3942b29a729bc9ad15c1d8', 'user_9704a3367d7746fd8dcd4b34b0dcf697', 'proj_fe6bb6415df14a83a19797e62a08dfc1', ...)
+
+    def preview(env):
+        values, patch, base, body = ready(env)
+        r = env[2].post(base, json=body)
+&gt;       assert r.status_code == 201, r.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[identity-cancel]" time="7.439"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c942a11f0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...e2edaa98ea48019c73db6986230f41', 'user_52518011ec1e4c3f83f36243ed534704', 'proj_7f2bfaae05a04712b2d304ee3c3089f8', ...)
+entry = 'cancel', scope = 'identity'
+
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+        _, _, base, body, _, confirm = preview(env)
+        if scope == "identity":
+&gt;           env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c942a11f0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...e2edaa98ea48019c73db6986230f41', 'user_52518011ec1e4c3f83f36243ed534704', 'proj_7f2bfaae05a04712b2d304ee3c3089f8', ...)
+
+    r = env[2].post(base, json=body)
+    assert r.status_code == 201, r.text
+    p = r.json()
+&gt;   confirm = dict(expected_preview_fingerprint=p["preview_fingerprint"],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   consent="CONFIRM_EXACT_PROJECT_COLUMN_INTERNAL_VERSIONS", request_key="project-binding")
+E   AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E   assert 409 == 201
+E    +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[project-read]" time="8.569"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c9276e600&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...5be1ca36d345b9a63b25f80bfdf17a', 'user_5836a59b35fc4a0583a7217842dfa24c', 'proj_ec2f7a28c32341e99de4c7d4c87cdb37', ...)
+entry = 'read', scope = 'project'
+
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+        _, _, base, body, _, confirm = preview(env)
+        if scope == "identity":
+&gt;           env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c9276e600&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...5be1ca36d345b9a63b25f80bfdf17a', 'user_5836a59b35fc4a0583a7217842dfa24c', 'proj_ec2f7a28c32341e99de4c7d4c87cdb37', ...)
+
+    r = env[2].post(base, json=body)
+    assert r.status_code == 201, r.text
+    p = r.json()
+&gt;   confirm = dict(expected_preview_fingerprint=p["preview_fingerprint"],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   consent="CONFIRM_EXACT_PROJECT_COLUMN_INTERNAL_VERSIONS", request_key="project-binding")
+E   AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E   assert 409 == 201
+E    +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[project-definition]" time="9.336"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c926ee330&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...2a99a2239b4f5b86a3687a7a0efc4d', 'user_9a7e39149fc04a9ab4755d67adc8cc1e', 'proj_b23918a83861453692e0625833036618', ...)
+entry = 'definition', scope = 'project'
+
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+        _, _, base, body, _, confirm = preview(env)
+        if scope == "identity":
+&gt;           env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c926ee330&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...2a99a2239b4f5b86a3687a7a0efc4d', 'user_9a7e39149fc04a9ab4755d67adc8cc1e', 'proj_b23918a83861453692e0625833036618', ...)
+
+    r = env[2].post(base, json=body)
+    assert r.status_code == 201, r.text
+    p = r.json()
+&gt;   confirm = dict(expected_preview_fingerprint=p["preview_fingerprint"],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   consent="CONFIRM_EXACT_PROJECT_COLUMN_INTERNAL_VERSIONS", request_key="project-binding")
+E   AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E   assert 409 == 201
+E    +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[project-preview]" time="7.673"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c93078fb0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...43bcd63209405080704fae76d5258c', 'user_dba8840a8c004a1db655eb0b95cd5d71', 'proj_3a7fc33d36954c82807754bb847dca26', ...)
+entry = 'preview', scope = 'project'
+
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+        _, _, base, body, _, confirm = preview(env)
+        if scope == "identity":
+&gt;           env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c93078fb0&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...43bcd63209405080704fae76d5258c', 'user_dba8840a8c004a1db655eb0b95cd5d71', 'proj_3a7fc33d36954c82807754bb847dca26', ...)
+
+    r = env[2].post(base, json=body)
+    assert r.status_code == 201, r.text
+    p = r.json()
+&gt;   confirm = dict(expected_preview_fingerprint=p["preview_fingerprint"],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   consent="CONFIRM_EXACT_PROJECT_COLUMN_INTERNAL_VERSIONS", request_key="project-binding")
+E   AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E   assert 409 == 201
+E    +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[project-commit]" time="6.818"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c92def290&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...3e54bb08b1431083363cbb5a0ee1dd', 'user_80ad3faa7c514264b217ad7698d73db4', 'proj_189ef153588e4e0a82f0a85c1747a7e4', ...)
+entry = 'commit', scope = 'project'
+
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+        _, _, base, body, _, confirm = preview(env)
+        if scope == "identity":
+&gt;           env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c92def290&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...3e54bb08b1431083363cbb5a0ee1dd', 'user_80ad3faa7c514264b217ad7698d73db4', 'proj_189ef153588e4e0a82f0a85c1747a7e4', ...)
+
+    r = env[2].post(base, json=body)
+    assert r.status_code == 201, r.text
+    p = r.json()
+&gt;   confirm = dict(expected_preview_fingerprint=p["preview_fingerprint"],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   consent="CONFIRM_EXACT_PROJECT_COLUMN_INTERNAL_VERSIONS", request_key="project-binding")
+E   AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E   assert 409 == 201
+E    +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_foreign_scope_before_protected_receipt_read[project-cancel]" time="7.645"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Malformed persisted DeliveryGraph binding&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f1c92829250&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...121ce322f741d1bdaee8add0967581', 'user_5945711639644d7b979ffa54a5dd69ad', 'proj_d8cd594c220d4f8fa14d6fadeda5afe1', ...)
+entry = 'cancel', scope = 'project'
+
+    def test_foreign_scope_before_protected_receipt_read(env, entry, scope):
+        _, _, base, body, _, confirm = preview(env)
+        if scope == "identity":
+&gt;           env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+                                       ^^^^^^^^^^^^
+
+tests/test_project_column_versions.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f1c92829250&gt;, Settings(database_url='sqlite:////tmp/project-versions-first/test_foreig...121ce322f741d1bdaee8add0967581', 'user_5945711639644d7b979ffa54a5dd69ad', 'proj_d8cd594c220d4f8fa14d6fadeda5afe1', ...)
+
+    r = env[2].post(base, json=body)
+    assert r.status_code == 201, r.text
+    p = r.json()
+&gt;   confirm = dict(expected_preview_fingerprint=p["preview_fingerprint"],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   consent="CONFIRM_EXACT_PROJECT_COLUMN_INTERNAL_VERSIONS", request_key="project-binding")
+E   AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E   assert 409 == 201
+E    +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_versions.py:37: AssertionError</failure></testcase></testsuite></testsuites>

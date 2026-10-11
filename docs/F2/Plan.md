@@ -475,3 +475,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 
 
 2026-10-11 F2-T07/AT13–15/AT26 接续：[有限项目列修改与受影响应用重验](ProjectColumnPatches20261011.md)。从指定3e890e3独立分支推进共享CSV固定单求和草案的列绑定overlay、全部成员/权限/锁/预算冻结、双phase实际worker与整组不可变检查回执；未知语义/PROJECT成员仍拒绝，未改canonical或正式发布。实测与独审状态以[本轮证据](../evidence/project-column-revalidation-20261011/README.md)为准；整体F2/R0、PG/Windows/真实模型/人工语义未签收。
+
+2026-10-11 F2-T07/T08有限候选复用接续：[项目列修改内部版本](ProjectColumnVersions20261011.md)将已保存的精确共享CSV overlay另行预览/确认，原子创建全部受影响应用的不可变内部版本和独立实例。固定单求和 read→sum→report 家族直接支持冷页面的新数值列输入；来源、批准、成员/保留集和预算保持冻结，旧版本与数据不移动。未知结果仅原键GET，真实来源指纹与当前授权先核对，再读出处账本；原失败与最终冻结结果见[证据](../evidence/project-column-versions-20261011/README.md)。publishable=false，semanticUNKNOWN/ownerPENDING；完整P-A/P-B、PG/Windows/native、旧源码升级和正式发布未验收。

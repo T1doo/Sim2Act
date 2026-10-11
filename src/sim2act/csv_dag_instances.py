@@ -31,7 +31,8 @@ from .tools import csv_column_options
 VERSION = "internal.csv-read-sum.v1"
 REPORT_VERSION = "internal.csv-read-sum-report.v1"
 TWO_SUM_VERSION = "internal.csv-read-two-sums.v1"
-VERSIONS = (VERSION, REPORT_VERSION, TWO_SUM_VERSION)
+FIXED_REPORT_VERSION = "internal.project-csv-read-sum-report.v1"
+VERSIONS = (VERSION, REPORT_VERSION, TWO_SUM_VERSION, FIXED_REPORT_VERSION)
 
 
 def require(ok, message="Internal DAG provenance changed"):
@@ -43,7 +44,13 @@ def marked(snapshot):
     return "execution_source" in snapshot
 
 
-def closed(plan):
+def closed(plan, *, fixed=False):
+    if fixed:
+        require(plan.get("namespace") == dag.PLAN and not any(k in plan for k in
+            ("composition", "wiring", "branch_semantics", "logical_reuse", "material_reuse"))
+            and [n["step_id"] for n in plan["definition"]["manifest"]["workflow"]] == list(dag.STEPS),
+            "Only the exact approved fixed read→sum→report source is reusable")
+        return "aggregate"
     nodes = plan.get("composition", {}).get("definition", {}).get("nodes", [])
     require(len(nodes) in (2, 3) and "branch_semantics" not in plan,
             "Only unconditional read→sum[→report] or read→two sums is reusable")
@@ -90,26 +97,28 @@ def aggregate_result(base, execution):
             and fingerprint(values[sid]) == fingerprint(next(p["data"] for p in base["steps"] if p["step_id"] == sid))
             for sid in steps), "Both complete sums must match actual operation receipts")
         return values
-    require(execution["version"] == REPORT_VERSION)
+    require(execution["version"] in (REPORT_VERSION, FIXED_REPORT_VERSION))
     totals = [p for p in base["steps"] if p["step_id"] == execution["aggregate_step"]]
     require(len(base["steps"]) == 3 and len(totals) == 1
         and all(p["status"] == "VERIFIED" for p in base["steps"]))
     value = totals[0]["data"]
-    require(base["output_by_step"] == {execution["report_step"]: report.render(value)},
+    require(fingerprint(base["output"] if execution["version"] == FIXED_REPORT_VERSION else
+                        base["output_by_step"]) == fingerprint(report.render(value) if
+                        execution["version"] == FIXED_REPORT_VERSION else {execution["report_step"]: report.render(value)}),
             "Report result differs from its actual aggregate receipt")
     return value
 
 
 @dag.graph.controlled
-def source_snapshot(store, c, user, rid, limits):
+def source_snapshot(store, c, user, rid, limits, *, fixed=False):
     dag.owner_lock(store, c, user, rid)
     job = dag.row(c, user, rid)
     bound = dag.binding(store, c, job, limits)
     require("internal_instance" not in bound, "A source must be an original completed DAG Run")
     proof = dag.inspect_job_tx(store, c, user, rid, limits)
     plan = bound["plan"]
-    sid = closed(plan)
-    count = len(plan["composition"]["definition"]["nodes"])
+    sid = closed(plan, fixed=fixed)
+    count = 3 if fixed else len(plan["composition"]["definition"]["nodes"])
     require(proof["status"] == "SUCCEEDED" and len(proof["steps"]) == count
         and all(p["status"] == "VERIFIED" for p in proof["steps"])
         and job["context"]["tools"] == count, "Every actual source operation must be verified")
@@ -123,7 +132,7 @@ def source_snapshot(store, c, user, rid, limits):
     dual = isinstance(sid, list)
     schema = (report.obj({"result": report.obj({step: copy.deepcopy(report.INPUT) for step in sid})})
               if dual else lifecycle.record_schema(frozen["candidate"]))
-    execution = dict(version=TWO_SUM_VERSION if dual else VERSION if count == 2 else REPORT_VERSION,
+    execution = dict(version=FIXED_REPORT_VERSION if fixed else TWO_SUM_VERSION if dual else VERSION if count == 2 else REPORT_VERSION,
         run_id=rid, run_version=job["version"], fence=job["fence"],
         accepted_fingerprint=job["fingerprint"], plan_key=bound["plan_key"],
         plan_fingerprint=plan["plan_fingerprint"], source_hash=plan["source_hash"],
@@ -143,7 +152,7 @@ def source_snapshot(store, c, user, rid, limits):
     else:
         execution["aggregate_step"] = sid
     if count == 3 and not dual:
-        execution["report_step"] = plan["composition"]["definition"]["nodes"][2]["step_id"]
+        execution["report_step"] = "report" if fixed else plan["composition"]["definition"]["nodes"][2]["step_id"]
     validate_value(schema, {"result": aggregate_result(proof["result"], execution)})
     return dict(namespace=lifecycle.NAMESPACE, draft=frozen,
         dependency_lock=frozen["candidate"]["manifest"]["dependency_lock"], data_schema=schema,
@@ -160,7 +169,12 @@ def validate_snapshot(store, c, user, snapshot, limits):
     execution = snapshot.get("execution_source")
     require(isinstance(execution, dict) and execution.get("version") in VERSIONS,
             "Unknown internal execution source")
-    expected = source_snapshot(store, c, user, execution["run_id"], limits)
+    if execution["version"] == FIXED_REPORT_VERSION:
+        from .project_column_versions import snapshot_from_origin
+        expected = snapshot_from_origin(store, c, user, snapshot.get("project_column_origin"), limits)
+    else:
+        require("project_column_origin" not in snapshot)
+        expected = source_snapshot(store, c, user, execution["run_id"], limits)
     require(fingerprint(snapshot) == fingerprint(expected), "Internal version no longer matches its actual source receipts")
     return snapshot
 
@@ -190,7 +204,8 @@ def apply_input(body, execution, value):
                 node["column"] = wanted[node["step_id"]]
     else:
         body["column"] = value["column"]
-        body["composition"]["nodes"][1]["column"] = value["column"]
+        if execution["version"] != FIXED_REPORT_VERSION:
+            body["composition"]["nodes"][1]["column"] = value["column"]
 
 
 @dag.graph.controlled
@@ -387,7 +402,7 @@ def validate_binding(store, c, job, accepted, limits, *, authorize=True, histori
             require(derived_plan.get("logical_reuse") == source_plan["logical_reuse"])
         require(fingerprint(derived_body.model_dump(exclude_none=True)) == fingerprint(expected))
         require(store.frozen_contract(c, job).limits.model_dump() == s["limits"])
-        closed(accepted["plan"])
+        closed(accepted["plan"], fixed=s["namespace"] == FIXED_REPORT_VERSION)
     return s, ar
 
 
@@ -422,7 +437,8 @@ def commit_result(store, c, job, accepted, base, limits):
     require(ar["status"] != "SUCCEEDED" and ar["result_version"] is None)
     i, r = lifecycle.instance(store, c, job["principal_id"], s["instance_id"], limits, lock=True)
     output = aggregate_result(base, s["execution_source"])
-    require(base["output_status"] == "PRODUCED" and len(base["steps"]) ==
+    require((base.get("output") is not None if s["namespace"] == FIXED_REPORT_VERSION else
+             base["output_status"] == "PRODUCED") and len(base["steps"]) ==
             (2 if s["namespace"] == VERSION else 3))
     validate_value(r["snapshot"]["data_schema"], {"result": output})
     content = dag.read_source(store, c, job)["content"]
@@ -546,4 +562,13 @@ def validate_family(c, user, approval_id, snapshot):
         and snapshot["execution_source"].get("run_id") == body.source_run_id
         and fingerprint(snapshot) == body.snapshot_fingerprint,
         "DAG release cannot change or downgrade execution family")
+    if body.version == FIXED_REPORT_VERSION:
+        from .project_column_versions import group_marker
+        origin = snapshot.get("project_column_origin")
+        require(isinstance(origin, dict))
+        payload = c.execute(select(internal_approvals.c.payload).where(
+            internal_approvals.c.id == approval_id, internal_approvals.c.principal_id == user)).scalar()
+        require(isinstance(payload, dict) and fingerprint(payload.get("project_column_group")) ==
+                fingerprint(group_marker(origin["project_id"], origin["app_id"], origin["patch_key"], origin["receipt_fingerprint"])),
+                "An exact project version approval cannot become an individual approval")
     return True

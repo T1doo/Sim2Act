@@ -281,3 +281,10 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 最后冻结关联SQLite 608PASS/9SKIP/0FAIL/0ERROR，另2旧源码升级deselected，1051.30秒；新增42后端+4HTTP/JSDOM例全部PASS，页面62检查。独审LIMITED PASS，11后端+12页面检查，首次空output产品FAIL及修复后结果保留；8源码/测试文件前后hash一致。全树Ruff10/mypy5与原基线一致，无新增，新增Python Ruff/Node/源码测试文档diff PASS。中途600/9与夹具/错误码/类型及末尾撤权断言失败均留档，不替代最终冻结结果。
 
 保存仅CHECKED_PROJECT_CANDIDATE、有限CSV扩验完成；semanticUNKNOWN/ownerPENDING/canonical_patch_executedfalse/publishablefalse，不改main/coredev/原CSV分支、资源内容/manifest/实例/正式版本或发布指针，0模型/0业务写入。PG/CRUD、Windows/native/视觉、真实旧源码升级、完整P-A/P-B、人工语义/真实模型/远端CI/部署NOT_RUN，无被拒浏览器重试/新权限/强推。完整合同、原失败、独审脚本、原始JUnit和复现见[本轮证据](../evidence/project-column-revalidation-20261011/README.md)。
+
+
+2026-10-11 F2-T07/T08 有限列候选→可运行内部版本：承接已推 a6dd6f401edb3aef997447fb41bd3f39cefd1f58，同一独立开发分支。保存的 CHECKED_PROJECT_CANDIDATE 经另行精确整组预览/确认，在单事务内消费全部批准、新建不可变 Release、独立实例及完整回执；结束前再次核成员/来源/权限/原始锁/预算/到期/取消。固定共享CSV单求和 read→sum→report 直接复用实际 patched Run，冷页以 quantity=15、amount=30 两新输入派发三步 Worker/各一条类型化结果；旧版本/数据、无关对象ID与人工锁保持，publishable=false/canonical未改，semanticUNKNOWN/ownerPENDING。
+
+最终冻结 SQLite 作者650唯一例：641PASS/9PG专用SKIP/0FAIL/0ERROR，另2旧源码升级deselected；核心33PASS1181.85秒、关联608PASS9SKIP1178.17秒（并行，时间不累计）。四实际HTTP/JSDOM病例103检查、各16页面文件hash一致，已包含在核心33中。独审当前freeze LIMITED PASS：14后端+2冷来源撤权、41页面检查执行（38不同页面标签），不累计旧轮。294源码/页面/测试和独审77产品文件前后hash一致，收集/JUnit节点完全一致。全仓Ruff10/mypy5逐诊断与a6基线一致，改动Ruff/Node及源码/测试/说明diff通过；原始失败日志的输出空白保持原字节。
+
+原 principal_id/column 回执字段误读、records参数缺失、默认SQLite等待并发失败、页面身份绑定误读、类型/夹具错误和所有中断留档；独审实际重签合法accepted指纹的页面错误启用、冷来源撤权前先读三条账本缺口均已修复并fresh复验。中断JUnit未完成占位不算PASS。当前有限范围无剩余阻断；PG/角色、Windows/native/视觉、真实模型/付费API、旧源码升级、完整P-A/P-B、人工语义、远端CI和部署NOT_RUN。没有新增权限/凭据/真实模型或重试被拒浏览器；仅本开发分支普通推送，main/coredev/原CSV分支不改，无强推。完整合同和原始证据见[范围](ProjectColumnVersions20261011.md)、[验收与失败](../evidence/project-column-versions-20261011/README.md)。

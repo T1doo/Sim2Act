@@ -1,0 +1,67 @@
+...........F.F..........                                                 [100%]
+=================================== FAILURES ===================================
+_________ test_frozen_group_rejects_current_change_zero_writes[budget] _________
+tests/test_project_column_versions.py:174: in test_frozen_group_rejects_current_change_zero_writes
+    env[1].max_tools -= 1
+    ^^^^^^^^^^^^^^^^
+<string>:4: in __setattr__
+    ???
+E   dataclasses.FrozenInstanceError: cannot assign to field 'max_tools'
+_______________ test_concurrent_exact_confirmation_single_group ________________
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlite3.OperationalError: database is locked
+
+The above exception was the direct cause of the following exception:
+tests/test_project_column_versions.py:200: in test_concurrent_exact_confirmation_single_group
+    results = list(pool.map(lambda _: versions.commit(*args), range(2)))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:619: in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:317: in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_project_column_versions.py:200: in <lambda>
+    results = list(pool.map(lambda _: versions.commit(*args), range(2)))
+                                      ^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/project_column_versions.py:202: in commit
+    with store.tx() as c:
+         ^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/db.py:489: in tx
+    c.exec_driver_sql("BEGIN IMMEDIATE")
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+E   [SQL: BEGIN IMMEDIATE]
+E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
+=========================== short test summary info ============================
+FAILED tests/test_project_column_versions.py::test_frozen_group_rejects_current_change_zero_writes[budget]
+FAILED tests/test_project_column_versions.py::test_concurrent_exact_confirmation_single_group
+2 failed, 22 passed, 1 warning in 356.93s (0:05:56)

@@ -246,51 +246,60 @@ def prepare_release(
 
 def commit_release(store, user, approval_id, exact_fp, limits):
     with store.tx() as c:
-        location = c.execute(
-            select(internal_approvals.c.project_id).where(internal_approvals.c.id == approval_id)
-        ).scalar()
-        store.lock_project(c, user, location)
-        a = approval(c, user, approval_id, exact_fp, "release", allow_consumed=True)
-        old = (
-            c.execute(
-                select(internal_releases).where(internal_releases.c.approval_id == approval_id)
-            )
-            .mappings()
-            .first()
-        )
-        if old:
-            return dict(read_release(store, c, user, old["id"], limits))
-        p = a["payload"]
-        snap = p["snapshot"]
-        draft = snap["draft"]
-        from .csv_dag_instances import validate_family
-        validate_family(c, user, approval_id, snap)
-        current, _, _, _ = load_draft(store, c, user, draft["id"], limits, lock=True)
-        validate_source_bytes(store, c, user, current)
-        if (
-            current["fingerprint"] != draft["fingerprint"]
-            or grant_version(c, location, user) != p["grant_version"]
-        ):
-            raise DomainError("VERSION_CONFLICT", "Source or grant precondition changed")
-        if "execution_source" in snap:
-            from .csv_dag_instances import validate_snapshot
-            validate_snapshot(store, c, user, snap, limits)
-        rid = new_id("irelease")
-        row = {
-            "id": rid,
-            "project_id": location,
-            "principal_id": user,
-            "approval_id": approval_id,
-            "snapshot": snap,
-            "fingerprint": fingerprint(snap),
-        }
-        c.execute(insert(internal_releases).values(**row))
+        return commit_release_tx(store, c, user, approval_id, exact_fp, limits)
+
+
+def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_group=None):
+    location = c.execute(
+        select(internal_approvals.c.project_id).where(internal_approvals.c.id == approval_id)
+    ).scalar()
+    store.lock_project(c, user, location)
+    a = approval(c, user, approval_id, exact_fp, "release", allow_consumed=True)
+    if (a["payload"]["snapshot"].get("execution_source", {}).get("version") ==
+            "internal.project-csv-read-sum-report.v1" and project_group is None):
+        raise DomainError("PERMISSION_DENIED", "Confirm the exact whole project version group")
+    if a["payload"].get("project_column_group") != project_group:
+        raise DomainError("PERMISSION_DENIED", "Confirm the exact whole project version group")
+    old = (
         c.execute(
-            update(internal_approvals)
-            .where(internal_approvals.c.id == approval_id)
-            .values(consumed=True)
+            select(internal_releases).where(internal_releases.c.approval_id == approval_id)
         )
-        return row
+        .mappings()
+        .first()
+    )
+    if old:
+        return dict(read_release(store, c, user, old["id"], limits))
+    p = a["payload"]
+    snap = p["snapshot"]
+    draft = snap["draft"]
+    from .csv_dag_instances import validate_family
+    validate_family(c, user, approval_id, snap)
+    current, _, _, _ = load_draft(store, c, user, draft["id"], limits, lock=True)
+    validate_source_bytes(store, c, user, current)
+    if (
+        current["fingerprint"] != draft["fingerprint"]
+        or grant_version(c, location, user) != p["grant_version"]
+    ):
+        raise DomainError("VERSION_CONFLICT", "Source or grant precondition changed")
+    if "execution_source" in snap:
+        from .csv_dag_instances import validate_snapshot
+        validate_snapshot(store, c, user, snap, limits)
+    rid = new_id("irelease")
+    row = {
+        "id": rid,
+        "project_id": location,
+        "principal_id": user,
+        "approval_id": approval_id,
+        "snapshot": snap,
+        "fingerprint": fingerprint(snap),
+    }
+    c.execute(insert(internal_releases).values(**row))
+    c.execute(
+        update(internal_approvals)
+        .where(internal_approvals.c.id == approval_id)
+        .values(consumed=True)
+    )
+    return row
 
 
 def validate_source_bytes(store, c, user, draft):
@@ -330,7 +339,12 @@ def read_release(store, c, user, rid, limits):
         raise DomainError("VERSION_CONFLICT", "Immutable release/approval mismatch")
     s = r["snapshot"]
     draft = s["draft"]
-    from .csv_dag_instances import validate_family
+    from .csv_dag_instances import FIXED_REPORT_VERSION, validate_family, validate_snapshot
+    fixed_project_source = s.get("execution_source", {}).get("version") == FIXED_REPORT_VERSION
+    if fixed_project_source:
+        # This family must authorize the current source before protected
+        # provenance ledgers, including cold release/peer/instance reads.
+        validate_snapshot(store, c, user, s, limits)
     validate_family(c, user, r["approval_id"], s)
     if (
         s["namespace"] != NAMESPACE
@@ -340,8 +354,8 @@ def read_release(store, c, user, rid, limits):
     ):
         raise DomainError("VERSION_CONFLICT")
     if "execution_source" in s:
-        from .csv_dag_instances import validate_snapshot
-        validate_snapshot(store, c, user, s, limits)
+        if not fixed_project_source:
+            validate_snapshot(store, c, user, s, limits)
         return r
     record_schema(draft["candidate"], s["data_schema"])
     validate_frozen_candidate(store, c, user, draft, limits)
@@ -350,51 +364,55 @@ def read_release(store, c, user, rid, limits):
 
 
 def create_instance(store, user, rid, expected_release_fp, limits, *, request_key=None):
+    with store.tx() as c:
+        return create_instance_tx(store, c, user, rid, expected_release_fp, limits, request_key=request_key)
+
+
+def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, request_key=None):
     if request_key is not None and (
         not isinstance(request_key, str) or not 1 <= len(request_key) <= 100
     ):
         raise DomainError("INVALID_INPUT")
-    with store.tx() as c:
-        location = c.execute(
-            select(internal_releases.c.project_id).where(internal_releases.c.id == rid)
-        ).scalar()
-        store.lock_project(c, user, location)
-        r = read_release(store, c, user, rid, limits)
-        if r["fingerprint"] != expected_release_fp:
+    location = c.execute(
+        select(internal_releases.c.project_id).where(internal_releases.c.id == rid)
+    ).scalar()
+    store.lock_project(c, user, location)
+    r = read_release(store, c, user, rid, limits)
+    if r["fingerprint"] != expected_release_fp:
+        raise DomainError("VERSION_CONFLICT")
+    draft = r["snapshot"]["draft"]
+    # Existing PK plus project lock gives durable per-intent idempotency without new DDL.
+    iid = (
+        "iinstance_" + fingerprint({"user": user, "release": rid, "key": request_key})[:32]
+        if request_key is not None
+        else new_id("iinstance")
+    )
+    existing = (
+        c.execute(select(internal_instances).where(internal_instances.c.id == iid))
+        .mappings()
+        .first()
+    )
+    if existing:
+        if (
+            existing["principal_id"] != user
+            or existing["project_id"] != location
+            or existing["release_id"] != rid
+        ):
             raise DomainError("VERSION_CONFLICT")
-        draft = r["snapshot"]["draft"]
-        # Existing PK plus project lock gives durable per-intent idempotency without new DDL.
-        iid = (
-            "iinstance_" + fingerprint({"user": user, "release": rid, "key": request_key})[:32]
-            if request_key is not None
-            else new_id("iinstance")
-        )
-        existing = (
-            c.execute(select(internal_instances).where(internal_instances.c.id == iid))
-            .mappings()
-            .first()
-        )
-        if existing:
-            if (
-                existing["principal_id"] != user
-                or existing["project_id"] != location
-                or existing["release_id"] != rid
-            ):
-                raise DomainError("VERSION_CONFLICT")
-            return dict(existing)
-        row = {
-            "id": iid,
-            "project_id": location,
-            "principal_id": user,
-            "source_app_id": draft["id"],
-            "runtime_id": draft["runtime_id"],
-            "release_id": rid,
-            "revision": 1,
-            "data_version": 0,
-            "history": [{"revision": 1, "release_id": rid, "kind": "created"}],
-        }
-        c.execute(insert(internal_instances).values(**row))
-        return row
+        return dict(existing)
+    row = {
+        "id": iid,
+        "project_id": location,
+        "principal_id": user,
+        "source_app_id": draft["id"],
+        "runtime_id": draft["runtime_id"],
+        "release_id": rid,
+        "revision": 1,
+        "data_version": 0,
+        "history": [{"revision": 1, "release_id": rid, "kind": "created"}],
+    }
+    c.execute(insert(internal_instances).values(**row))
+    return row
 
 
 def instance(store, c, user, iid, limits, *, lock=False):
