@@ -84,14 +84,22 @@ def recipe(store, c, user, rid, limits):
     source, plan = read_pair(
         c, user, s["draft"]["id"], "csv_dag_plan", execution["plan_key"], dag.PlanInput
     )
-    instances.closed(plan)
-    instances.require("material_reuse" not in plan and source.composition is not None)
+    fixed = execution["version"] == instances.FIXED_REPORT_VERSION
+    instances.closed(plan, fixed=fixed)
+    instances.require("material_reuse" not in plan)
+    if fixed:
+        # Only after read_release has rebuilt the actual approved overlay/Run.
+        from .csv_logic_reuse import canonical
+        composition = canonical(execution["version"], execution["default_column"])
+    else:
+        instances.require(source.composition is not None)
+        composition = copy.deepcopy(source.composition.model_dump(exclude_none=True))
     cap = Limits(**execution["limits"])
     if any(getattr(limits, k) < getattr(cap, k) for k in Limits.model_fields):
         raise DomainError(
             "BUDGET_EXHAUSTED", "Current budget is below the source's frozen envelope"
         )
-    return rel, copy.deepcopy(source.composition.model_dump(exclude_none=True)), cap
+    return rel, composition, cap
 
 
 def target(store, c, user, rel, aid, cap):
@@ -164,6 +172,9 @@ def definition(store, c, user, rid, body, limits, key):
     )
     if body.column not in t["columns"]:
         raise DomainError("INVALID_INPUT", "Choose a numeric column of the new CSV")
+    e = rel["snapshot"]["execution_source"]
+    if e["version"] == instances.FIXED_REPORT_VERSION and body.column != e["default_column"]:
+        raise DomainError("INVALID_INPUT", "Keep the exact approved column; authorize data-free logic separately to choose another")
     composition["nodes"][1]["column"] = body.column
     plan_body = dag.PlanInput(
         expected_candidate_fingerprint=t["candidate_fingerprint"],
@@ -299,7 +310,10 @@ def options(store, user, rid, limits):
         items = []
         for aid in ids:
             try:
-                items.append(target(store, c, user, rel, aid, cap))
+                item = target(store, c, user, rel, aid, cap)
+                e = rel["snapshot"]["execution_source"]
+                if e["version"] != instances.FIXED_REPORT_VERSION or e["default_column"] in item["columns"]:
+                    items.append(item)
             except DomainError:
                 continue
         return dict(

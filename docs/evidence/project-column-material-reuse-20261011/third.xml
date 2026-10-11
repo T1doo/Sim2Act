@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="6" time="246.082" timestamp="2026-10-11T14:24:43.609158+00:00" hostname="9809f76d2248"><testcase classname="tests.test_project_column_material_reuse" name="test_modified_version_new_bytes_or_data_free_deleted_source_cold_default_and_unseen[False]" time="112.073" /><testcase classname="tests.test_project_column_material_reuse" name="test_modified_version_new_bytes_or_data_free_deleted_source_cold_default_and_unseen[True]" time="48.071" /><testcase classname="tests.test_project_column_material_reuse" name="test_direct_missing_or_bad_approved_column_no_fallback_zero_write[label,amount\nA,1\n]" time="19.609" /><testcase classname="tests.test_project_column_material_reuse" name="test_direct_missing_or_bad_approved_column_no_fallback_zero_write[label,amount,quantity\nA,1,broken\n]" time="22.663" /><testcase classname="tests.test_project_column_material_reuse" name="test_direct_missing_or_bad_approved_column_no_fallback_zero_write[label,amount,quantity\nA,1,NaN\n]" time="19.978" /><testcase classname="tests.test_project_column_material_reuse" name="test_exact_input_budget_identity_current_target_grant_zero_write[False]" time="23.463"><failure message="AssertionError: assert 201 in (400, 409)&#10; +  where 201 = &lt;Response [201 Created]&gt;.status_code&#10; +    where &lt;Response [201 Created]&gt; = post('/api/internal/releases/irelease_60218a2c67534fdd94525bfded7f0c0e/csv-material-plans', json={'column': 'quantity', 'expected_candidate_fingerprint': '87e449859680b3d5b4f9fd24b220af25b5f3cf74f483821ef671bbcb9567...74656e3235e2', 'expected_release_fingerprint': '96d3582a6955b7e87447207f48e98f0d98e94cc1cc8700d63253e2d216fef555', ...})&#10; +      where post = &lt;starlette.testclient.TestClient object at 0x7f8b078c5fd0&gt;.post">env = (&lt;sim2act.db.Store object at 0x7f8b04df8230&gt;, Settings(database_url='sqlite:////tmp/project-material-third/test_exact_...a6c206527047c687774e1e091477f7', 'user_8c2691e8dd224971a446113d4c6af00c', 'proj_05c2e8315c6e45edb623d0b695b26490', ...)
+free = False
+
+    @pytest.mark.parametrize("free", [False, True])
+    def test_exact_input_budget_identity_current_target_grant_zero_write(env, free):
+        rel, _, _, obj, body, path = setup(env, free)
+        for patch in ({"column": "missing"}, {"expected_source_hash": "0" * 64}, {"expected_graph_fingerprint": "0" * 64}, {"expected_candidate_fingerprint": "0" * 64}):
+            before = snapshot(env)
+            assert env[2].post(path, json={**body, **patch}).status_code in (400, 409)
+            assert snapshot(env) == before
+        old = env[1].max_tools
+        object.__setattr__(env[1], "max_tools", old - 1)
+        before = snapshot(env)
+&gt;       assert env[2].post(path, json=body).status_code in (400, 409)
+E       AssertionError: assert 201 in (400, 409)
+E        +  where 201 = &lt;Response [201 Created]&gt;.status_code
+E        +    where &lt;Response [201 Created]&gt; = post('/api/internal/releases/irelease_60218a2c67534fdd94525bfded7f0c0e/csv-material-plans', json={'column': 'quantity', 'expected_candidate_fingerprint': '87e449859680b3d5b4f9fd24b220af25b5f3cf74f483821ef671bbcb9567...74656e3235e2', 'expected_release_fingerprint': '96d3582a6955b7e87447207f48e98f0d98e94cc1cc8700d63253e2d216fef555', ...})
+E        +      where post = &lt;starlette.testclient.TestClient object at 0x7f8b078c5fd0&gt;.post
+
+tests/test_project_column_material_reuse.py:222: AssertionError</failure></testcase></testsuite></testsuites>

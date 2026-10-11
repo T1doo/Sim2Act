@@ -153,7 +153,14 @@ def source_snapshot(store, c, user, rid, limits, *, fixed=False):
         execution["aggregate_step"] = sid
     if count == 3 and not dual:
         execution["report_step"] = "report" if fixed else plan["composition"]["definition"]["nodes"][2]["step_id"]
-    validate_value(schema, {"result": aggregate_result(proof["result"], execution)})
+    actual = aggregate_result(proof["result"], execution)
+    # Preserve the target's explicitly bound default for this finite adaptation.
+    # It comes from the new plan and its real receipt, never the old overlay.
+    if "material_reuse" in plan or "logical_reuse" in plan:
+        chosen = plan["input"][sid + "_column"]
+        require(not dual and chosen in columns and actual["column"] == chosen)
+        execution["default_column"] = chosen
+    validate_value(schema, {"result": actual})
     return dict(namespace=lifecycle.NAMESPACE, draft=frozen,
         dependency_lock=frozen["candidate"]["manifest"]["dependency_lock"], data_schema=schema,
         data_schema_version=1, execution_source=execution,

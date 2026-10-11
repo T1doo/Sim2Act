@@ -70,7 +70,7 @@ def implementation():
 
 
 def canonical(version, column=None):
-    instances.require(version in (instances.VERSION, instances.REPORT_VERSION))
+    instances.require(version in (instances.VERSION, instances.REPORT_VERSION, instances.FIXED_REPORT_VERSION))
     nodes = [dict(step_id="read", action="resource.read", depends_on=[],
                   inputs={"resource_id": dict(source="data", ref="source", field="resource_id")}),
              dict(step_id="aggregate", action="data.aggregate_csv", depends_on=["read"],
@@ -78,7 +78,7 @@ def canonical(version, column=None):
                           "column": dict(source="input", field="aggregate_column")})]
     if column is not None:
         nodes[1]["column"] = column
-    if version == instances.REPORT_VERSION:
+    if version in (instances.REPORT_VERSION, instances.FIXED_REPORT_VERSION):
         nodes.append(dict(step_id="report", action=report.REF, depends_on=["aggregate"],
                           inputs={k: dict(source="step", ref="aggregate", field=k)
                                   for k in report.FIELDS}))

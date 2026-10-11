@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.123" timestamp="2026-10-11T14:19:25.748442+00:00" hostname="9809f76d2248"><testcase classname="tests.test_project_column_material_reuse" name="test_modified_version_new_bytes_or_data_free_deleted_source_cold_default_and_unseen[False]" time="0.832"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;DeliveryGraph anchor has not been derived&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fe6301484d0&gt;, Settings(database_url='sqlite:////tmp/project-material-first/test_modifi...b95b4073ca405b83e990e8a2d7fc53', 'user_26a6de58d40a47e394d3949e6c922209', 'proj_70931c8b6975435f8361e87281e69fac', ...)
+tmp_path = PosixPath('/tmp/project-material-first/test_modified_version_new_byte0')
+free = False
+
+    @pytest.mark.parametrize("free", [False, True])
+    def test_modified_version_new_bytes_or_data_free_deleted_source_cold_default_and_unseen(env, tmp_path, free):
+&gt;       rel, old_rid, group, obj, body, path = setup(env, free)
+                                               ^^^^^^^^^^^^^^^^
+
+tests/test_project_column_material_reuse.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_project_column_material_reuse.py:65: in setup
+    rel, old_rid, group = source(env)
+                          ^^^^^^^^^^^
+tests/test_project_column_material_reuse.py:51: in source
+    values, _, _, _, _, _, group = created(env)
+                                   ^^^^^^^^^^^^
+tests/test_project_column_versions.py:44: in created
+    values, patch, base, body, p, confirm = preview(env)
+                                            ^^^^^^^^^^^^
+tests/test_project_column_versions.py:34: in preview
+    values, patch, base, body = ready(env)
+                                ^^^^^^^^^^
+tests/test_project_column_versions.py:24: in ready
+    values, patch, confirmation, acceptance = start(env)
+                                              ^^^^^^^^^^
+tests/test_project_column_patches.py:77: in start
+    values, patch, confirmation = preview(env)
+                                  ^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fe6301484d0&gt;, Settings(database_url='sqlite:////tmp/project-material-first/test_modifi...b95b4073ca405b83e990e8a2d7fc53', 'user_26a6de58d40a47e394d3949e6c922209', 'proj_70931c8b6975435f8361e87281e69fac', ...)
+
+    def preview(env):
+        values = setup(env)
+        response = env[2].post(values[0], json=values[1])
+&gt;       assert response.status_code == 201, response.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"DeliveryGraph anchor has not been derived","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_project_column_patches.py:69: AssertionError</failure></testcase></testsuite></testsuites>

@@ -477,3 +477,7 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 2026-10-11 F2-T07/AT13–15/AT26 接续：[有限项目列修改与受影响应用重验](ProjectColumnPatches20261011.md)。从指定3e890e3独立分支推进共享CSV固定单求和草案的列绑定overlay、全部成员/权限/锁/预算冻结、双phase实际worker与整组不可变检查回执；未知语义/PROJECT成员仍拒绝，未改canonical或正式发布。实测与独审状态以[本轮证据](../evidence/project-column-revalidation-20261011/README.md)为准；整体F2/R0、PG/Windows/真实模型/人工语义未签收。
 
 2026-10-11 F2-T07/T08有限候选复用接续：[项目列修改内部版本](ProjectColumnVersions20261011.md)将已保存的精确共享CSV overlay另行预览/确认，原子创建全部受影响应用的不可变内部版本和独立实例。固定单求和 read→sum→report 家族直接支持冷页面的新数值列输入；来源、批准、成员/保留集和预算保持冻结，旧版本与数据不移动。未知结果仅原键GET，真实来源指纹与当前授权先核对，再读出处账本；原失败与最终冻结结果见[证据](../evidence/project-column-versions-20261011/README.md)。publishable=false，semanticUNKNOWN/ownerPENDING；完整P-A/P-B、PG/Windows/native、旧源码升级和正式发布未验收。
+
+2026-10-11 F2-T03/AT10 接续任务 project-column-material-reuse：基线 d96e20e0f82793c5fe460d408ca48ff69fc0e01f，同 dev/project-column-revalidation-20261011。修改后的固定共享CSV内部版本另行精确绑定授权新CSV，保留批准默认列；独立无内容逻辑授权仅提取规范化三步结构，允许原数据不可读后以明确新列执行当前目标。冻结范围、默认列隔离、实际 Worker、原键只读恢复及剩余门见 [合同](ProjectColumnMaterialReuse20261011.md)。状态 IMPLEMENTED/VALIDATING，独审与最终冻结实证完成后追加结果；不签通用语义克隆或完整 P-B。
+
+2026-10-11 上述有限切片已完成实现、独审与最终冻结回归：作者 269 唯一选定节点为 262PASS/7SKIP/0FAIL/0ERROR，另2升级deselected；核心15PASS，关联247PASS/7SKIP。7SKIP分别为5PG角色与2缺真实旧源码归档。新四页面82检查、原四项目版本页面103检查，314代码文件及另32未改夹具实核。独审LIMITED PASS：13后端实测按JS-only精确字节桥保留、未重跑；最终fresh16页面/七种恶意200通过，原两来源分类FAIL保留并修复。状态 LIMITED_ENGINEERING_COMPLETE，仅同一开发分支普通推送；原P-A/P-B/AT10、语义/owner、PG/Windows/native/升级/真实模型/CI/正式发布不关闭。原日志与全部边界见 [证据](../evidence/project-column-material-reuse-20261011/README.md)。

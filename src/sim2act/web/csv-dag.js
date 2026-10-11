@@ -540,7 +540,7 @@ function dagReuseButtons(c=csvDagContext) {
   $("dag-reuse-switch-confirm").disabled=locked||!approval;
   $("dag-reuse-switch-commit").disabled=locked||!approval||approval.expires_at*1000<=Date.now()||!$("dag-reuse-switch-confirm").checked;
   for(const id of ["options","target","column","confirm","plan","open"])$("dag-material-"+id).disabled=locked;
-  $("dag-material-options").disabled=locked||!r.release||[dagReuseTwoSumVersion,dagReuseFixedVersion].includes(r.release.snapshot.execution_source.version);
+  $("dag-material-options").disabled=locked||!r.release||!dagMaterialSupported(r.release);
   $("dag-material-plan").disabled=locked||!r.release||!r.materials?.items.some(v=>v.target_app_id===$("dag-material-target").value)||!$("dag-material-column").value||!$("dag-material-confirm").checked;
   $("dag-material-open").disabled=locked||!r.material;
   for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).disabled=r.busy||!r.job||!(command==="pause"?["QUEUED","RUNNING"]:command==="resume"?["PAUSED","WAITING_RESOURCE"]:["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"]).includes(r.job.status);
@@ -548,6 +548,16 @@ function dagReuseButtons(c=csvDagContext) {
 async function dagReuseReleaseSeal(rel,c) {
   const s=rel?.snapshot,e=s?.execution_source;
   if(e?.version===dagReuseFixedVersion&&!await dagReuseFixedSeal(rel,c))return false;
+  if(e&&e.version!==dagReuseFixedVersion){
+    // The actual Run anchors the plan fingerprint before source classification.
+    // A resigned Release cannot hide a material origin by replacing its plan key.
+    const proof=await api(`/api/csv-dag/runs/${e.run_id}`);if(!csvDagCurrent(c))return false;
+    const plan=await api(csvDagBase(c)+"/"+encodeURIComponent(e.plan_key));if(!csvDagCurrent(c))return false;
+    if(proof.id!==e.run_id||proof.status!=="SUCCEEDED"||proof.version!==e.run_version||proof.plan_fingerprint!==e.plan_fingerprint||plan.plan_fingerprint!==e.plan_fingerprint||!await csvDagPlanSeal(plan,c)||!await csvDagJobSeal(proof,c,plan))return false;
+    if(plan.request_key.match(/^(material|logic)-plan-/)){
+      if(![dagReuseVersion,dagReuseReportVersion].includes(e.version)||typeof e.default_column!=="string"||!e.columns.includes(e.default_column)||plan.input?.[e.aggregate_step+"_column"]!==e.default_column||dagReuseAggregate(proof.result,e).column!==e.default_column)return false;
+    }
+  }
   if(!csvDagCurrent(c))return false;
   return !!e&&[dagReuseVersion,dagReuseReportVersion,dagReuseTwoSumVersion,dagReuseFixedVersion].includes(e.version)&&([dagReuseReportVersion,dagReuseFixedVersion].includes(e.version)?typeof e.report_step==="string":!Object.hasOwn(e,"report_step"))&&(e.version!==dagReuseTwoSumVersion||Array.isArray(e.aggregate_steps)&&e.aggregate_steps.length===2&&new Set(e.aggregate_steps).size===2&&e.aggregate_nodes&&deliverySame(Object.keys(e.aggregate_nodes).sort(),[...e.aggregate_steps].sort())&&!Object.hasOwn(e,"aggregate_step"))&&s.namespace==="INTERNAL_ENGINEERING_ONLY"&&s.formal_publication_enabled===false&&s.model_requests===0&&s.semantic_status==="UNKNOWN"&&s.owner_acceptance==="PENDING"&&rel.project_id===c.parent.project&&s.draft.id===c.parent.id&&s.draft.runtime_id===c.parent.app.runtime_id&&s.draft.fingerprint===c.parent.app.fingerprint&&e.source_hash===c.parent.app.candidate.source_hash&&Array.isArray(e.columns)&&e.columns.every(v=>typeof v==="string")&&Array.isArray(e.receipt_fingerprints)&&e.receipt_fingerprints.length===(e.version===dagReuseVersion?2:3)&&(e.version!==dagReuseFixedVersion||s.publishable===false&&s.project_column_origin?.namespace==="finite-project-column-versions.v1"&&s.project_column_origin.project_id===c.parent.project&&s.project_column_origin.source_app_id===c.parent.id&&s.project_column_origin.principal_id===rel.principal_id&&deliveryHash(s.project_column_origin.receipt_fingerprint)&&e.default_column===s.column_overlay?.column_binding?.value&&e.columns.includes(e.default_column)&&s.column_overlay_graph?.project_id===c.parent.project)&&rel.fingerprint===await deliveryDigest(s);
 }
@@ -622,7 +632,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   $("dag-reuse-column-label").textContent=dual?`${e.aggregate_steps[0]} 的数值列`:"本次数值列";
   $("dag-reuse-column-second-label").textContent=dual?`${e.aggregate_steps[1]} 的数值列`:"第二节点数值列";
   for(const [i,id] of ["dag-reuse-column","dag-reuse-column-second"].entries())$(id).replaceChildren(...(dual?e.aggregate_nodes[e.aggregate_steps[i]].columns:i?[]:e.columns).map(value=>new Option(value,value)));
-  if(e.version===dagReuseFixedVersion)$("dag-reuse-column").value=e.default_column;
+  if(e.default_column)$("dag-reuse-column").value=e.default_column;
   for(const record of detail.data) {
     const row=document.createElement("p");
     const values=dual?Object.entries(record.data.result):[["求和",record.data.result]];
@@ -674,7 +684,12 @@ async function dagReuseSubmit(kind,retry=false) {
       if(!detail?.history.some(h=>h.approval_id===intent.approval.id&&h.revision===p.revision+1&&h.release_id===p.target_release_id))throw Error("本次切换接受状态尚未确认；只读恢复不会重复提交");
       dagReuseIntents.delete(key);$("dag-reuse-status").textContent="本次精确切换已从持久历史确认；原结果保留";return;
     }
-    const made=intent.receipt||await api(intent.path,"POST",intent.body);returned=true;
+    let made=intent.receipt;
+    if(!made&&retry&&intent.kind==="material"&&intent.release.snapshot.execution_source.version===dagReuseFixedVersion){
+      const originalKey="material-plan-"+(await deliveryDigest([intent.release.id,intent.body.request_key])).slice(0,48);
+      made=await api(`${intent.path}/${intent.target.target_app_id}/${originalKey}`);
+    }else if(!made)made=await api(intent.path,"POST",intent.body);
+    returned=true;
     const validId=(value,prefix)=>typeof value==="string"&&new RegExp("^"+prefix+"_[a-f0-9]{32}$").test(value);
     const hash=value=>typeof value==="string"&&/^[a-f0-9]{64}$/.test(value);
     let accepted=false;
@@ -782,6 +797,7 @@ $("dag-reuse-switch-prepare").onclick=()=>dagReuseAction(async c=>{
 });
 
 const dagMaterialVersion="internal.csv-material-reuse.v1";
+function dagMaterialSupported(rel){const e=rel?.snapshot?.execution_source;return !!e&&[dagReuseVersion,dagReuseReportVersion,dagReuseFixedVersion].includes(e.version)&&!e.plan_key.match(/^(material|logic)-plan-/)&&(e.version!==dagReuseFixedVersion||rel.snapshot.column_overlay?.column_binding?.value===e.default_column&&e.columns.includes(e.default_column));}
 function dagMaterialClear(){for(const id of ["target","column"])$("dag-material-"+id).replaceChildren();$("dag-material-confirm").checked=false;$("dag-material-proof").textContent="";$("dag-material-status").textContent="";}
 async function dagMaterialReceipt(m,intent){
   const b=m?.binding,p=m?.plan,t=intent.target,e=intent.release.snapshot.execution_source,s=dagReuseShape(p);
@@ -789,16 +805,18 @@ async function dagMaterialReceipt(m,intent){
   const exactKey="material-plan-"+(await deliveryDigest([intent.release.id,intent.body.request_key])).slice(0,48);
   const {cached,plan_fingerprint,...value}=p;
   if(p.request_key!==exactKey||!deliveryHash(plan_fingerprint)||plan_fingerprint!==await deliveryDigest(value)||b.principal_id!==intent.release.principal_id||!deliverySame(p.definition?.manifest?.runtime_limits,e.limits)||p.graph_revision!==t.graph_revision||p.authorization_fingerprint!==t.authorization_fingerprint||!deliverySame(b.plan_input,{expected_candidate_fingerprint:t.candidate_fingerprint,expected_graph_fingerprint:t.graph_fingerprint,column:intent.body.column,composition:p.composition?.definition,request_key:exactKey}))return false;
-  if(!b||!p||m.namespace!==dagMaterialVersion||m.source_release_id!==intent.release.id||m.model_requests!==0||m.formal_publication_enabled!==false||b.version!==dagMaterialVersion||b.source_release_id!==intent.release.id||b.source_release_fingerprint!==intent.release.fingerprint||!deliverySame(b.source_execution,e)||!deliverySame(b.target,t)||!deliverySame(b.limits,e.limits)||b.column!==intent.body.column||b.request_key!==intent.body.request_key||b.model_requests!==0||b.semantic_status!=="UNKNOWN"||b.owner_acceptance!=="PENDING"||b.formal_publication_enabled!==false||m.binding_fingerprint!==await deliveryDigest(b)||!s||s.version!==e.version||s.aggregate!==e.aggregate_step||s.report!==(e.report_step||null)||p.app_id!==t.target_app_id||p.project_id!==t.project_id||p.runtime_id!==t.runtime_id||p.source_hash!==t.source_hash||p.candidate_fingerprint!==t.candidate_fingerprint||p.graph_fingerprint!==t.graph_fingerprint||p.input[s.aggregate+"_column"]!==intent.body.column||!deliverySame(p.material_reuse,{version:dagMaterialVersion,source_release_id:intent.release.id,binding_fingerprint:m.binding_fingerprint})||!/^material-plan-[a-f0-9]{48}$/.test(p.request_key))return false;
+  if(e.version===dagReuseFixedVersion&&intent.body.column!==e.default_column)return false;
+  if(!b||!p||m.namespace!==dagMaterialVersion||m.source_release_id!==intent.release.id||m.model_requests!==0||m.formal_publication_enabled!==false||b.version!==dagMaterialVersion||b.source_release_id!==intent.release.id||b.source_release_fingerprint!==intent.release.fingerprint||!deliverySame(b.source_execution,e)||!deliverySame(b.target,t)||!deliverySame(b.limits,e.limits)||b.column!==intent.body.column||b.request_key!==intent.body.request_key||b.model_requests!==0||b.semantic_status!=="UNKNOWN"||b.owner_acceptance!=="PENDING"||b.formal_publication_enabled!==false||m.binding_fingerprint!==await deliveryDigest(b)||!s||s.version!==(e.version===dagReuseFixedVersion?dagReuseReportVersion:e.version)||s.aggregate!==e.aggregate_step||s.report!==(e.report_step||null)||p.app_id!==t.target_app_id||p.project_id!==t.project_id||p.runtime_id!==t.runtime_id||p.source_hash!==t.source_hash||p.candidate_fingerprint!==t.candidate_fingerprint||p.graph_fingerprint!==t.graph_fingerprint||p.input[s.aggregate+"_column"]!==intent.body.column||!deliverySame(p.material_reuse,{version:dagMaterialVersion,source_release_id:intent.release.id,binding_fingerprint:m.binding_fingerprint})||!/^material-plan-[a-f0-9]{48}$/.test(p.request_key))return false;
   return true;
 }
 function dagMaterialPick(c){
   const t=c.reuse.materials?.items.find(v=>v.target_app_id===$("dag-material-target").value);
   c.reuse.material=null;$("dag-material-confirm").checked=false;$("dag-material-proof").textContent="";
-  $("dag-material-column").replaceChildren(...(t?.columns||[]).map(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;return o;}));dagReuseButtons(c);
+  const e=c.reuse.release?.snapshot.execution_source,columns=e?.version===dagReuseFixedVersion?(t?.columns.includes(e.default_column)?[e.default_column]:[]):(t?.columns||[]);
+  $("dag-material-column").replaceChildren(...columns.map(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;return o;}));dagReuseButtons(c);
 }
 $("dag-material-options").onclick=()=>dagReuseAction(async c=>{
-  const rel=c.reuse.release;if(!rel)return;
+  const rel=c.reuse.release;if(!dagMaterialSupported(rel))return;
   c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();
   const m=await api(`/api/internal/releases/${rel.id}/csv-materials`);if(!csvDagCurrent(c))return;
   if(m.namespace!==dagMaterialVersion||m.source_release_id!==rel.id||m.source_release_fingerprint!==rel.fingerprint||!deliverySame(m.limits,rel.snapshot.execution_source.limits)||!Array.isArray(m.items)||m.model_requests!==0||m.formal_publication_enabled!==false||m.items.some(t=>t.project_id!==c.parent.project||!/^app_[a-f0-9]{32}$/.test(t.target_app_id)||!/^res_[a-f0-9]{32}$/.test(t.resource_id)||!Array.isArray(t.columns)||!t.columns.length))throw Error("VERIFICATION_FAILED");

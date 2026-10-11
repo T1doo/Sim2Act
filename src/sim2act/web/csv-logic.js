@@ -8,7 +8,7 @@ const csvLogicFields=["resource_id","column","count","sum","source_hash"];
 function csvLogicRecipe(version,column=null){
   const nodes=[{step_id:"read",action:"resource.read",depends_on:[],inputs:{resource_id:{source:"data",ref:"source",field:"resource_id"}}},{step_id:"aggregate",action:"data.aggregate_csv",depends_on:["read"],inputs:{resource_id:{source:"step",ref:"read",field:"resource_id"},column:{source:"input",field:"aggregate_column"}}}];
   if(column!==null)nodes[1].column=column;
-  if(version==="internal.csv-read-sum-report.v1")nodes.push({step_id:"report",action:"intern.csv_report.v1",depends_on:["aggregate"],inputs:Object.fromEntries(csvLogicFields.map(k=>[k,{source:"step",ref:"aggregate",field:k}]))});
+  if(["internal.csv-read-sum-report.v1","internal.project-csv-read-sum-report.v1"].includes(version))nodes.push({step_id:"report",action:"intern.csv_report.v1",depends_on:["aggregate"],inputs:Object.fromEntries(csvLogicFields.map(k=>[k,{source:"step",ref:"aggregate",field:k}]))});
   return {version:"csv.composition.v1",nodes};
 }
 function csvLogicSchema(){const obj=fields=>({type:"object",properties:fields,required:Object.keys(fields),additionalProperties:false});return obj({result:obj(Object.fromEntries(csvLogicFields.map(k=>[k,{type:k==="count"?"integer":"string"}])))});}
@@ -32,13 +32,13 @@ function csvLogicButtons(){
   $("csv-logic-open").disabled=locked||!live||!c.plan;
   $("csv-logic-revoke").disabled=locked||!live||!c.logic||!$("csv-logic-revoke-confirm").checked;
   $("csv-logic-recover").hidden=!intent;$("csv-logic-recover").disabled=!!c?.busy;
-  const selectedSource=csvDagContext?.reuse?.release,source=selectedSource?.snapshot.execution_source.version==="internal.csv-read-two-sums.v1"?null:selectedSource,choice=source&&JSON.stringify([token,appSelectionGeneration,source.id,source.fingerprint]);
+  const selectedSource=csvDagContext?.reuse?.release,source=typeof dagMaterialSupported==="function"&&dagMaterialSupported(selectedSource)?selectedSource:null,choice=source&&JSON.stringify([token,appSelectionGeneration,source.id,source.fingerprint]);
   if(csvLogicAuthorizationChoice!==choice)$("csv-logic-authorize-confirm").checked=false;
   $("csv-logic-authorize").disabled=locked||!source||!csvDagCurrent(csvDagContext)||!$("csv-logic-authorize-confirm").checked;
   $("csv-logic-authorize-confirm").disabled=locked;
 }
 async function csvLogicSeal(obj,c,expected=null){
-  if(!obj||obj.namespace!==csvLogicVersion||!/^csvlogic_[a-f0-9]{32}$/.test(obj.id)||!/^user_[a-f0-9]{32}$/.test(obj.owner_id)||obj.project_id!==c.project||!Number.isFinite(obj.expires_at)||obj.scope!=="EXISTING_AUTHORIZED_CSV_DRAFTS_SAME_OWNER_PROJECT"||!["internal.csv-read-sum.v1","internal.csv-read-sum-report.v1"].includes(obj.execution_version)||obj.audit_ref!==obj.id||obj.model_requests!==0||obj.semantic_status!=="UNKNOWN"||obj.owner_acceptance!=="PENDING"||obj.formal_publication_enabled!==false||!deliveryHash(obj.implementation_fingerprint)||!["ACTIVE","REVOKED","EXPIRED"].includes(obj.status)||!deliverySame(obj.recipe,csvLogicRecipe(obj.execution_version))||!deliverySame(obj.data_schema,csvLogicSchema()))return false;
+  if(!obj||obj.namespace!==csvLogicVersion||!/^csvlogic_[a-f0-9]{32}$/.test(obj.id)||!/^user_[a-f0-9]{32}$/.test(obj.owner_id)||obj.project_id!==c.project||!Number.isFinite(obj.expires_at)||obj.scope!=="EXISTING_AUTHORIZED_CSV_DRAFTS_SAME_OWNER_PROJECT"||!["internal.csv-read-sum.v1","internal.csv-read-sum-report.v1","internal.project-csv-read-sum-report.v1"].includes(obj.execution_version)||obj.audit_ref!==obj.id||obj.model_requests!==0||obj.semantic_status!=="UNKNOWN"||obj.owner_acceptance!=="PENDING"||obj.formal_publication_enabled!==false||!deliveryHash(obj.implementation_fingerprint)||!["ACTIVE","REVOKED","EXPIRED"].includes(obj.status)||!deliverySame(obj.recipe,csvLogicRecipe(obj.execution_version))||!deliverySame(obj.data_schema,csvLogicSchema()))return false;
   const keys=["namespace","id","owner_id","project_id","expires_at","scope","execution_version","recipe","data_schema","limits","implementation_fingerprint","audit_ref","model_requests","semantic_status","owner_acceptance","formal_publication_enabled","fingerprint","status"];
   if(!deliverySame(Object.keys(obj).sort(),keys.sort())||!deliverySame(Object.keys(obj.limits).sort(),["max_requests","max_total_tokens","max_tools","max_repairs","max_output_tokens","run_seconds"].sort())||Object.entries(obj.limits).some(([k,v])=>!Number.isFinite(v)||v<0||k!=="run_seconds"&&!Number.isInteger(v)))return false;
   const {fingerprint,status,...body}=obj;if(await deliveryDigest(body)!==fingerprint)return false;
@@ -80,7 +80,15 @@ async function csvLogicSubmit(kind,recover=false){
       if(app.id!==i.target.target_app_id||app.project_id!==c.project||app.runtime_id!==i.target.runtime_id||app.fingerprint!==i.target.candidate_fingerprint||app.candidate?.source_hash!==i.target.source_hash)throw Error("VERIFICATION_FAILED");
       i.targetApp=app;
     }
-    if(!i.accepted){response=await api(i.path,"POST",i.body);
+    if(!i.accepted){
+      const fixed=(i.release?.snapshot.execution_source.version||i.logic?.execution_version)==="internal.project-csv-read-sum-report.v1";
+      if(recover&&fixed&&i.kind==="authorize"){
+        const id="csvlogic_"+(await deliveryDigest([i.release.principal_id,i.release.id,i.body.request_key])).slice(0,32);
+        response={logic:await api(`/api/internal/csv-logics/${id}`),model_requests:0,formal_publication_enabled:false};
+      }else if(recover&&fixed&&i.kind==="plan"){
+        const key="logic-plan-"+(await deliveryDigest([i.logic.id,i.body.request_key])).slice(0,48);
+        response=await api(`${i.path}/${i.target.target_app_id}/${key}`);
+      }else response=await api(i.path,"POST",i.body);
       if(i.kind==="authorize"){
         const exact="csvlogic_"+(await deliveryDigest([i.release.principal_id,i.release.id,i.body.request_key])).slice(0,32);
         if(response.model_requests!==0||response.formal_publication_enabled!==false||!await csvLogicSeal(response.logic,c,i.release)||response.logic.id!==exact||response.logic.status!=="ACTIVE")throw Error("VERIFICATION_FAILED");

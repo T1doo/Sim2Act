@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="121.414" timestamp="2026-10-11T14:20:27.438241+00:00" hostname="9809f76d2248"><testcase classname="tests.test_project_column_material_reuse" name="test_modified_version_new_bytes_or_data_free_deleted_source_cold_default_and_unseen[False]" time="99.864" /><testcase classname="tests.test_project_column_material_reuse" name="test_modified_version_new_bytes_or_data_free_deleted_source_cold_default_and_unseen[True]" time="21.383"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;PERMISSION_DENIED&quot;,&quot;message&quot;:&quot;Authorization state changed; explicitly derive a new anchor&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 403 == 201&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7ffa5ab38e00&gt;, Settings(database_url='sqlite:////tmp/project-material-second/test_modif...2dd4fa9d2d4e36bdddd49ae29e4aac', 'user_f40dcf57142145e7a29aefc34553ebb8', 'proj_7cf72d51ca42407086557c8add8ed2c7', ...)
+tmp_path = PosixPath('/tmp/project-material-second/test_modified_version_new_byte1')
+free = True
+
+    
+    @pytest.mark.parametrize("free", [False, True])
+    def test_modified_version_new_bytes_or_data_free_deleted_source_cold_default_and_unseen(env, tmp_path, free):
+        rel, old_rid, group, obj, body, path = setup(env, free)
+        if free:
+            public = json.dumps(obj)
+            for forbidden in ("amount", "quantity", "column_overlay", "default_column", old_rid,
+                              rel["snapshot"]["execution_source"]["source_hash"], rel["id"], rel["snapshot"]["execution_source"]["run_id"]):
+                assert forbidden not in public
+            assert obj["recipe"] == logic.canonical(instances.FIXED_REPORT_VERSION)
+            retire_old(env, old_rid)
+&gt;           assert env[2].get(f"/api/internal/releases/{rel['id']}").status_code != 200
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_project_column_material_reuse.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7ffa5ab38e00&gt;, Settings(database_url='sqlite:////tmp/project-material-second/test_modif...2dd4fa9d2d4e36bdddd49ae29e4aac', 'user_f40dcf57142145e7a29aefc34553ebb8', 'proj_7cf72d51ca42407086557c8add8ed2c7', ...)
+aid = 'app_cae6a9632a9c4bb3ad53cfe91dd41c94'
+rid = 'res_802b5f27f96b421eabf7a12061e932c4'
+rel = {'approval_id': 'iapproval_7de6863919be4430b7790197571e3d53', 'fingerprint': '07b0006378e17af35fb8f2ab76dd7d7ce8bb82faac953b3145a8ba9c78ad35a9', 'formal_publication_enabled': False, 'id': 'irelease_0d13f5ca33fe4123b885e387d7e8bc2b', ...}
+obj = {'audit_ref': 'csvlogic_df474451205112e0484936d49cf7fac0', 'data_schema': {'additionalProperties': False, 'properties'...type': 'object'}, 'execution_version': 'internal.project-csv-read-sum-report.v1', 'expires_at': 1791814948.552589, ...}
+column = 'net'
+
+    
+    def binding(env, aid, rid, rel=None, obj=None, column="quantity"):
+        app = env[2].get(f"/api/apps/{aid}").json()
+        anchor = env[2].post(f"/api/projects/{env[5]}/apps/{aid}/delivery-graph/derive", json=dict(
+&gt;           expected_candidate_fingerprint=app["fingerprint"], request_key="target-anchor"))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {"error":{"code":"PERMISSION_DENIED","message":"Authorization state changed; explicitly derive a new anchor","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 403 == 201
+E        +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code
+
+tests/test_project_column_material_reuse.py:42: AssertionError</failure></testcase></testsuite></testsuites>
