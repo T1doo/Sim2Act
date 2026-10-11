@@ -1,0 +1,32 @@
+{
+  "status": "COMPILE_ONLY",
+  "runtime": "NOT_RUN",
+  "queries": {
+    "run_ids_only": {
+      "sql": "SELECT runs.id \nFROM runs \nWHERE runs.id IN (__[POSTCOMPILE_id_1]) AND (CAST((runs.context ->> %(context_1)s) AS VARCHAR) = %(param_1)s OR CAST(((runs.result -> %(result_1)s) ->> %(param_2)s) AS VARCHAR) = %(param_3)s)",
+      "parameters": {
+        "id_1": [
+          "bounded-candidate"
+        ],
+        "context_1": "kind",
+        "param_1": "protocol_jobs.v1",
+        "result_1": "protocol_result",
+        "param_2": "kind",
+        "param_3": "model-protocol.v1"
+      }
+    },
+    "marked_contract_ids": {
+      "sql": "SELECT run_contracts.run_id \nFROM run_contracts \nWHERE run_contracts.run_id IN (__[POSTCOMPILE_run_id_1]) AND (EXISTS (SELECT anon_1.value \nFROM json_array_elements_text(CASE WHEN (json_typeof(((run_contracts.snapshot -> %(snapshot_1)s) -> %(param_1)s)) = %(json_typeof_1)s) THEN (run_contracts.snapshot -> %(snapshot_1)s) -> %(param_1)s ELSE %(param_2)s::JSON END) AS anon_1(value) \nWHERE anon_1.value = %(value_1)s))",
+      "parameters": {
+        "run_id_1": [
+          "bounded-candidate"
+        ],
+        "snapshot_1": "goal",
+        "param_1": "constraints",
+        "json_typeof_1": "array",
+        "param_2": [],
+        "value_1": "protocol_jobs.v1"
+      }
+    }
+  }
+}

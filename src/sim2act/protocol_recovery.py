@@ -20,7 +20,7 @@ class RecoveryInput(Strict):
 def _is_protocol(c, run):
     from .protocol_jobs import protocol_run_ids
 
-    return run["id"] in protocol_run_ids(c)
+    return run["id"] in protocol_run_ids(c, run["id"])
 
 
 def _evidence(c, rid):
@@ -101,12 +101,10 @@ def recover_expired_protocols(store):
     from .protocol_jobs import protocol_run_ids
 
     with store.engine.connect() as c:
-        ids = protocol_run_ids(c)
         candidates = (
             c.execute(
                 select(runs.c.id, runs.c.project_id, runs.c.principal_id)
                 .where(
-                    runs.c.id.in_(ids),
                     runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]),
                     runs.c.lease_until <= time.time(),
                 )
@@ -115,6 +113,8 @@ def recover_expired_protocols(store):
             .mappings()
             .all()
         )
+        ids = protocol_run_ids(c, candidates=[row["id"] for row in candidates])
+        candidates = [row for row in candidates if row["id"] in ids]
     for candidate in candidates:
         try:
             with store.tx() as c:

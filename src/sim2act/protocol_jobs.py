@@ -10,7 +10,7 @@ import time
 from dataclasses import replace
 
 from pydantic import Field, ValidationError
-from sqlalchemy import insert, select, update
+from sqlalchemy import JSON, case, func, insert, literal, or_, select, true, update
 
 from .contracts import FrozenRunContract, GoalSpec, Limits, ResourceSnapshot, Strict, strict_json
 from .db import (
@@ -214,39 +214,77 @@ def verified_pending(store, c, user, rid, *, stop_only=False):
     }, dict(run)
 
 
-def protocol_run_ids(c, rid=None):
-    """Central marker oracle; optional per-Run lookups avoid scanning unrelated rows."""
-    jobs_query = select(_table().c.run_id)
-    events_query = select(events.c.run_id).where(events.c.kind == "PROTOCOL_ACCEPTED")
-    runs_query = select(runs.c.id, runs.c.context, runs.c.result)
-    contracts_query = select(run_contracts)
-    if rid is not None:
-        jobs_query = jobs_query.where(_table().c.run_id == rid)
-        events_query = events_query.where(events.c.run_id == rid)
-        runs_query = runs_query.where(runs.c.id == rid)
-        contracts_query = contracts_query.where(run_contracts.c.run_id == rid)
-    ids = set(c.execute(jobs_query).scalars())
-    ids.update(c.execute(events_query).scalars())
-    for run in c.execute(runs_query).mappings():
-        context, result = run["context"], run["result"]
-        if isinstance(context, dict) and context.get("kind") == NAMESPACE:
-            ids.add(run["id"])
-        if (
-            isinstance(result, dict)
-            and isinstance(result.get("protocol_result"), dict)
-            and result["protocol_result"].get("kind") == "model-protocol.v1"
-        ):
-            ids.add(run["id"])
-    for contract in c.execute(contracts_query).mappings():
-        saved = contract["snapshot"]
-        goal = saved.get("goal") if isinstance(saved, dict) else None
-        constraints = goal.get("constraints") if isinstance(goal, dict) else None
-        if (
-            isinstance(constraints, list)
-            and NAMESPACE in constraints
-            and fingerprint(saved) == contract["fingerprint"]
-        ):
-            ids.add(contract["run_id"])
+def _sqlite_members(value, kind="object", *, row_type=None):
+    # json_each retains duplicate keys. A surviving namespace in a damaged
+    # object must still stop generic recovery, even if json_extract sees only
+    # its first occurrence. Guard non-container values before JSON evaluation.
+    predicate = func.json_type(value) == kind if row_type is None else row_type == kind
+    empty: list[object] | dict[str, object] = [] if kind == "array" else {}
+    return func.json_each(case((predicate, value), else_=literal(empty, type_=JSON))).table_valued("key", "value", "type")
+
+
+def _run_marker(c):
+    if c.dialect.name != "sqlite":
+        # PostgreSQL's JSON field extraction uses the last duplicate key,
+        # matching the existing decoded-object marker semantics.
+        return or_(runs.c.context["kind"].as_string() == NAMESPACE,
+                   runs.c.result["protocol_result"]["kind"].as_string() == "model-protocol.v1")
+    context = _sqlite_members(runs.c.context)
+    result = _sqlite_members(runs.c.result)
+    inner = _sqlite_members(result.c.value, row_type=result.c.type)
+    return or_(
+        select(context.c.key).where(context.c.key == "kind", context.c.type == "text",
+            context.c.value == NAMESPACE).correlate(runs).exists(),
+        select(inner.c.key).select_from(result.join(inner, true())).where(
+            result.c.key == "protocol_result", inner.c.key == "kind", inner.c.type == "text",
+            inner.c.value == "model-protocol.v1").correlate(runs).exists(),
+    )
+
+
+def _contract_marker(c):
+    """Exact array membership, returning a marker predicate rather than a goal."""
+    constraints = run_contracts.c.snapshot["goal"]["constraints"]
+    if c.dialect.name == "sqlite":
+        root = _sqlite_members(run_contracts.c.snapshot)
+        goal = _sqlite_members(root.c.value, row_type=root.c.type)
+        values = _sqlite_members(goal.c.value, "array", row_type=goal.c.type)
+        return select(values.c.key).select_from(root.join(goal, true()).join(values, true())).where(
+            root.c.key == "goal", goal.c.key == "constraints", values.c.type == "text",
+            values.c.value == NAMESPACE).correlate(run_contracts).exists()
+    # Store permits only PostgreSQL outside isolated SQLite tests.
+    array = case((func.json_typeof(constraints) == "array", constraints),
+                 else_=literal([], type_=JSON))
+    values = func.json_array_elements_text(array).table_valued("value").render_derived()
+    return select(values.c.value).where(values.c.value == NAMESPACE).correlate(run_contracts).exists()
+
+
+def protocol_run_ids(c, rid=None, *, candidates=None):
+    """Preserve every anti-downgrade marker within explicit candidate Run IDs.
+
+    Run queries return IDs only; JSON predicates inspect namespace markers, not
+    private payload projections. A full contract is read only when its exact
+    goal.constraints array marks a candidate as protocol, to verify its seal.
+    """
+    if (rid is None) == (candidates is None):
+        raise ValueError("Exactly one explicit Run ID or candidate set is required")
+    chosen = sorted(set([rid] if rid is not None else candidates))
+    ids = set()
+    # No silent cap: inspect every candidate, with bounded SQL bind batches.
+    for offset in range(0, len(chosen), 256):
+        batch = chosen[offset:offset + 256]
+        ids.update(c.execute(select(_table().c.run_id).where(_table().c.run_id.in_(batch))).scalars())
+        ids.update(c.execute(select(events.c.run_id).where(
+            events.c.run_id.in_(batch), events.c.kind == "PROTOCOL_ACCEPTED")).scalars())
+        ids.update(c.execute(select(runs.c.id).where(runs.c.id.in_(batch), _run_marker(c))).scalars())
+        for contract in c.execute(select(run_contracts).where(
+            run_contracts.c.run_id.in_(batch), _contract_marker(c),
+        )).mappings():
+            saved = contract["snapshot"]
+            goal = saved.get("goal") if isinstance(saved, dict) else None
+            constraints = goal.get("constraints") if isinstance(goal, dict) else None
+            if (isinstance(constraints, list) and NAMESPACE in constraints
+                    and fingerprint(saved) == contract["fingerprint"]):
+                ids.add(contract["run_id"])
     return ids
 
 

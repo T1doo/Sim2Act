@@ -1,0 +1,7 @@
+# 追加独审：原 SQL 无私有读取结论撤回
+
+已独立只读确认原2829条trace中0基1091/1097为全表Run.context/result读取，1092/1098为全表合同snapshot读取，参数均为空。原探针仅查oldrun是否出现在参数，漏检了这些实际读取，先前“没有读取旧Run私有字段”的结论撤回；不得用原13PASS或者75/76字节桥恢复该隐私结论。数值结果/typed门/UI探针的原事实仍在原证据，不据此推断没有用户泄露或旧输出复用。原字节原路径保持，哈希见prior-byte-preservation.json。
+
+新基线2b53572ded47f83d51898356dae0e99a97a61bc9，产品仅root写。独审仅/tmp写。正式新合同RunPrivateReadScope20261011.md要求调度候选元数据→显式Run IDs→最小协议标记；完整载荷仅当前claim或实际到期需恢复候选。job、accepted event、context.kind、result.protocol_result.kind及合法合同constraints array namespace+正确fingerprint五标记防降级必须保留。
+
+当前尚在实现，未把任何当前源码或未完成运行称最终PASS。后续以新的actual SQLite逐行逐列求值屏障、查询形态校准、残缺marker矩阵、实际worker及冷typed历史验证。额外只按参数/SQL文本记录只能支持调度范围审查，不能再单独证明旧私有读取不存在。

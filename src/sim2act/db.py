@@ -915,12 +915,10 @@ class Store:
         recover_expired_protocols(self)
         now = time.time()
         with self.tx() as c:
-            protocol_member = runs.c.id.in_(protocol_run_ids(c))
             expired = (
                 c.execute(
-                    select(runs)
+                    select(runs.c.id, runs.c.status, runs.c.fence, runs.c.version, runs.c.cancel_intent)
                     .where(
-                        ~protocol_member,
                         runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]),
                         runs.c.lease_until <= now,
                     )
@@ -929,7 +927,10 @@ class Store:
                 .mappings()
                 .all()
             )
+            protocol_ids = protocol_run_ids(c, candidates=[row["id"] for row in expired])
             for r in expired:
+                if r["id"] in protocol_ids:
+                    continue
                 c.execute(
                     update(runs)
                     .where(runs.c.id == r["id"])
@@ -969,17 +970,19 @@ class Store:
                 self.event(c, r["id"], "RECONCILED", {"status": state, "receipts_preserved": True})
             row = (
                 c.execute(
-                    select(runs)
+                    select(runs.c.id)
                     .where(runs.c.status == "QUEUED")
                     .order_by(runs.c.created_at)
                     .with_for_update(skip_locked=True)
                     .limit(1)
                 )
-                .mappings()
-                .first()
+                .scalar_one_or_none()
             )
-            if not row:
+            if row is None:
                 return None
+            # The queue's metadata lock selected this exact Run. Load only its
+            # payload, never the private fields of other queued/history rows.
+            row = c.execute(select(runs).where(runs.c.id == row)).mappings().one()
             data = dict(row)
             data.update(
                 status="RUNNING",

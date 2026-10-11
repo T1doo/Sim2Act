@@ -1,0 +1,69 @@
+{
+  "old_run": "run_2dfc22aa353048fdb4c189f16aa50ebd",
+  "target_run": "run_573a0e0825084171879d8a9121682c03",
+  "blocked": [],
+  "evaluated": [
+    {
+      "table": "runs",
+      "row_id": "run_573a0e0825084171879d8a9121682c03",
+      "column": "goal"
+    },
+    {
+      "table": "runs",
+      "row_id": "run_573a0e0825084171879d8a9121682c03",
+      "column": "resource_refs"
+    },
+    {
+      "table": "runs",
+      "row_id": "run_573a0e0825084171879d8a9121682c03",
+      "column": "context"
+    },
+    {
+      "table": "runs",
+      "row_id": "run_573a0e0825084171879d8a9121682c03",
+      "column": "result"
+    },
+    {
+      "table": "runs",
+      "row_id": "run_573a0e0825084171879d8a9121682c03",
+      "column": "error"
+    }
+  ],
+  "sql": [
+    {
+      "sql": "SELECT runs.id, runs.project_id, runs.principal_id \nFROM runs \nWHERE runs.status IN (?, ?, ?) AND runs.lease_until <= ? ORDER BY runs.project_id, runs.id",
+      "executed_sql": "SELECT \"private_read_runs\".id, \"private_read_runs\".project_id, \"private_read_runs\".principal_id \nFROM \"private_read_runs\" \nWHERE \"private_read_runs\".status IN (?, ?, ?) AND \"private_read_runs\".lease_until <= ? ORDER BY \"private_read_runs\".project_id, \"private_read_runs\".id",
+      "parameters": "('RUNNING', 'PAUSE_REQUESTED', 'CANCEL_REQUESTED', 1791734071.8128817)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT runs.id, runs.status, runs.fence, runs.version, runs.cancel_intent \nFROM runs \nWHERE runs.status IN (?, ?, ?) AND runs.lease_until <= ?",
+      "executed_sql": "SELECT \"private_read_runs\".id, \"private_read_runs\".status, \"private_read_runs\".fence, \"private_read_runs\".version, \"private_read_runs\".cancel_intent \nFROM \"private_read_runs\" \nWHERE \"private_read_runs\".status IN (?, ?, ?) AND \"private_read_runs\".lease_until <= ?",
+      "parameters": "('RUNNING', 'PAUSE_REQUESTED', 'CANCEL_REQUESTED', 1791734071.8135269)"
+    },
+    {
+      "sql": "SELECT runs.id \nFROM runs \nWHERE runs.status = ? ORDER BY runs.created_at\n LIMIT ? OFFSET ?",
+      "executed_sql": "SELECT \"private_read_runs\".id \nFROM \"private_read_runs\" \nWHERE \"private_read_runs\".status = ? ORDER BY \"private_read_runs\".created_at\n LIMIT ? OFFSET ?",
+      "parameters": "('QUEUED', 1, 0)"
+    },
+    {
+      "sql": "SELECT runs.id, runs.project_id, runs.principal_id, runs.runtime_id, runs.goal, runs.resource_refs, runs.status, runs.request_key, runs.fingerprint, runs.created_at, runs.lease_until, runs.fence, runs.worker_id, runs.context, runs.result, runs.error, runs.cancel_intent, runs.version \nFROM runs \nWHERE runs.id = ?",
+      "executed_sql": "SELECT \"private_read_runs\".id, \"private_read_runs\".project_id, \"private_read_runs\".principal_id, \"private_read_runs\".runtime_id, \"private_read_runs\".goal, \"private_read_runs\".resource_refs, \"private_read_runs\".status, \"private_read_runs\".request_key, \"private_read_runs\".fingerprint, \"private_read_runs\".created_at, \"private_read_runs\".lease_until, \"private_read_runs\".fence, \"private_read_runs\".worker_id, \"private_read_runs\".context, \"private_read_runs\".result, \"private_read_runs\".error, \"private_read_runs\".cancel_intent, \"private_read_runs\".version \nFROM \"private_read_runs\" \nWHERE \"private_read_runs\".id = ?",
+      "parameters": "('run_573a0e0825084171879d8a9121682c03',)"
+    },
+    {
+      "sql": "UPDATE runs SET status=?, lease_until=?, fence=?, worker_id=? WHERE runs.id = ?",
+      "executed_sql": "UPDATE runs SET status=?, lease_until=?, fence=?, worker_id=? WHERE runs.id = ?",
+      "parameters": "('RUNNING', 1791734101.8156939, 1, 'current-target-worker', 'run_573a0e0825084171879d8a9121682c03')"
+    },
+    {
+      "sql": "INSERT INTO events (id, run_id, created_at, kind, data) VALUES (?, ?, ?, ?, ?)",
+      "executed_sql": "INSERT INTO events (id, run_id, created_at, kind, data) VALUES (?, ?, ?, ?, ?)",
+      "parameters": "('event_c06bda32d40e443bb3b909f0f89f498f', 'run_573a0e0825084171879d8a9121682c03', 1791734071.816226, 'CLAIMED', '{\"fence\": 1}')"
+    }
+  ]
+}

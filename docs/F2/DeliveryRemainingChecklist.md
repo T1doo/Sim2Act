@@ -37,3 +37,7 @@
 2026-10-11 [有限列候选→可执行内部版本](ProjectColumnVersions20261011.md)补上保存后的实际复用：整组另行精确确认、同事务版本/实例/回执，冷页面以新输入派发既有三步worker并保留旧数据。当前来源授权与完整实际Run指纹不能用预览自引用代替；原键恢复、取消及合法A→B→A历史保持。范围仍为固定共享CSV单求和应用与冻结数值列，未知/语义依赖不获得执行资格。失败与最终结果见[证据](../evidence/project-column-versions-20261011/README.md)；更宽P-B、人工语义、正式发布以及未跑平台仍在清单中。
 
 2026-10-11 [修改后固定版本的新材料/无内容逻辑](ProjectColumnMaterialReuse20261011.md)补有限F2-T03/AT10：直接授权新CSV保留项目批准默认，另行无内容逻辑授权允许旧源删除后显式绑定目标新列；实际Worker、新版本默认与冷未见输入、旧数据/锁保持、原键只读恢复已实核。最终262PASS/7SKIP（5PG角色、2缺旧源码归档）、另2升级deselected，独审13后端实测字节桥/最终fresh16页面LIMITED PASS；原两页面产品FAIL修复且留档。此有限工程缺口已完成，完整P-A/P-B/AT10、通用语义、owner/正式发布、PG/Windows/native/旧源码升级/真实模型/远端CI仍未验收，不能用这些合成结果代替。完整边界与失败见 [证据](../evidence/project-column-material-reuse-20261011/README.md)。
+
+2026-10-11 后续证据纠正：上段与原材料独审的整个 Worker「未读取旧 Run 私有内容」结论撤回。原2b SQL trace 两次无 WHERE全表返回context/result，相邻全表合同读取；旧探针只匹配参数中的旧Run ID，漏检。原141文件/脚本/trace/报告原字节保留，不能以262窄窗或原LIMITED PASS签收该边界；尚未证明用户泄露或旧结果复用。新增功能暂停，按 [共享调度修复合同](RunPrivateReadScope20261011.md) 限定claim/恢复/池实际候选后读取，保留五标记31非空组合的防降级和当前lease/fence/CAS。实际原代码红轮、按行/列屏障校准、修复、独审及扩大回归见 [新证据](../evidence/run-private-read-scope-20261011/README.md)；原P-A/P-B、未知/语义依赖、人工锁与正式发布各门未提升。
+
+该修复最终作者1730唯一节点1664PASS/66SKIP/0FAIL/0ERROR，原650=641PASS/9SKIP，30页面原预算串行全PASS；独审59检查LIMITED PASS另计。401代码冻结、141原证据同字节，2升级deselected、63PG/2旧归档/1Windows的SKIP原因完整列明。历史两页面超时和隔离FAIL保留，具体既有冷读递归热点已测，新namespace样本调用0，完整超时因果仍未确定；不能认领性能/原生容量资格。全树Ruff10/mypy5与原2b同基线，改动Ruff通过。PG/角色、Windows/native/视觉、真实升级/模型、完整P-A/P-B/AT10、语义/owner、远端CI/部署仍NOT_RUN。

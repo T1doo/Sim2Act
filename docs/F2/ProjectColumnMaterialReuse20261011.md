@@ -1,5 +1,7 @@
 # 修改后的固定 CSV 内部版本：另一份材料与无内容逻辑
 
+2026-10-11 读取证据纠正：以下上一轮「无旧内容读取」及相应 LIMITED PASS 不能据此签收。原独审 trace 存在共享 Store.claim/recovery 的无 WHERE Run.context/result 全表加载，原脚本只查参数中的旧 ID，漏检。141 份原证据字节保留；未由此证明用户泄露或旧结果复用。共享调度修复的独立合同、实际红测与新验证见 [读取范围纠正](RunPrivateReadScope20261011.md) 和 [新证据](../evidence/run-private-read-scope-20261011/README.md)。上一轮 262 窄窗也不替代本次恢复原 650 节点的扩大回归。
+
 实现前合同：基线 d96e20e0f82793c5fe460d408ca48ff69fc0e01f，同一普通开发分支。对应原 F2-T03 / AT10 的有限纯 CSV 子项；遵循 CsvDataFreeLogicSafety20261010.md，未签通用语义提取或完整 P-B。
 
 1. 仅接纳完整实时核过的 internal.project-csv-read-sum-report.v1 来源。保留精确项目批准、overlay、实际源 Run 和双来源 seal；不放宽旧 Release/CSV 权限或允许双求和、条件分支、递归材料转移。

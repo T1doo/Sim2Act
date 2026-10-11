@@ -1,0 +1,52 @@
+.............................................................F.          [100%]
+=================================== FAILURES ===================================
+_______ test_pool_oracle_returns_ids_only_for_actual_attempt_candidates ________
+
+env = (<sim2act.db.Store object at 0x7f9952393290>, Settings(database_url='sqlite:////tmp/run-private-expanded/test_pool_ora...c06cd77fc74ad78fae81f4163d93b2', 'user_5ec0c2d593b44120a66136f935aec593', 'proj_68af1dbbab0749348ab68085f6dec28f', ...)
+tmp_path = PosixPath('/tmp/run-private-expanded/test_pool_oracle_returns_ids_o0')
+
+    def test_pool_oracle_returns_ids_only_for_actual_attempt_candidates(env, tmp_path):
+        unrelated, before = historical(env)
+        eligible = ordinary(env, "ordinary-attempt-candidate")
+        worker = Worker(env[0], env[1], NoModel())
+        owned = env[0].claim(worker.id, 30)
+        assert owned["id"] == eligible
+        # Real reserve only, no provider dispatch; ordinary F1 Attempt remains unclassified.
+>       worker.reserve(eligible, owned["fence"], owned["context"], request_tools=[])
+
+tests/test_run_private_read_scope.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:155: in reserve
+    reserve_slot(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7f9952393290>
+c = <sqlalchemy.engine.base.Connection object at 0x7f9950ba5b50>
+run = {'cancel_intent': False, 'context': {'messages': [], 'repairs': 0, 'requests': 0, 'reserved_tokens': 0, ...}, 'created_at': 1791733728.7240784, 'error': None, ...}
+fence = 1, attempt_id = 'attempt_2254710753bc490992dae7217fedc477'
+reserved_tokens = 1103
+request_fingerprint = '2fde8fa2d890dc2022936f191abb83d575ed7cac8f1d8de63ef58ab115314318'
+
+    def reserve_slot(
+        store, c, run, fence, attempt_id, reserved_tokens, request_fingerprint, *, clock=None
+    ):
+        """Called within Worker.reserve: slot+Attempt+context commit atomically."""
+        job = (
+            c.execute(select(protocol_jobs).where(protocol_jobs.c.run_id == run["id"]))
+            .mappings()
+            .first()
+        )
+        if not job:
+>           raise DomainError("PERMISSION_DENIED")
+E           sim2act.errors.DomainError: PERMISSION_DENIED
+
+src/sim2act/protocol_pool.py:256: DomainError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_run_private_read_scope.py::test_pool_oracle_returns_ids_only_for_actual_attempt_candidates
+1 failed, 62 passed, 1 warning in 62.92s (0:01:02)

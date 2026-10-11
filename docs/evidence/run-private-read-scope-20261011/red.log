@@ -1,0 +1,240 @@
+.........FF                                                              [100%]
+=================================== FAILURES ===================================
+_______ test_claim_does_not_evaluate_unrelated_historical_private_cells ________
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f8467444350>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f8468852930>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f8467261730>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f8467260200>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f8468852930>
+cursor = <sqlite3.Cursor object at 0x7f8466f743c0>
+statement = 'SELECT runs.id, runs.context, runs.result \nFROM runs'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f8467261730>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: user-defined function raised exception
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f8468851d00>, Settings(database_url='sqlite:////tmp/run-private-red/test_claim_does_no...71e569dbf549ad9c7a10464438b2ef', 'user_863276f751314966b395824ebcdc381d', 'proj_8b9d7ca3260649e89cbe595c2ce1bce9', ...)
+tmp_path = PosixPath('/tmp/run-private-red/test_claim_does_not_evaluate_u0')
+
+    def test_claim_does_not_evaluate_unrelated_historical_private_cells(env, tmp_path):
+        rid, before = historical(env)
+        target = ordinary(env, "current-target")
+        with PrivateReadBarrier(env[0], {rid}) as barrier:
+            try:
+>               claimed = env[0].claim("current-target-worker", 30)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_run_private_read_scope.py:67: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/db.py:915: in claim
+    recover_expired_protocols(self)
+src/sim2act/protocol_recovery.py:104: in recover_expired_protocols
+    ids = protocol_run_ids(c)
+          ^^^^^^^^^^^^^^^^^^^
+src/sim2act/protocol_jobs.py:230: in protocol_run_ids
+    for run in c.execute(runs_query).mappings():
+               ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f8468852930>
+cursor = <sqlite3.Cursor object at 0x7f8466f743c0>
+statement = 'SELECT runs.id, runs.context, runs.result \nFROM runs'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f8467261730>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) user-defined function raised exception
+E       [SQL: SELECT runs.id, runs.context, runs.result 
+E       FROM runs]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+_ test_data_free_actual_worker_and_cold_typed_inputs_keep_all_old_private_rows _
+
+env = (<sim2act.db.Store object at 0x7f8468a2d970>, Settings(database_url='sqlite:////tmp/run-private-red/test_data_free_act...c5e2eb79ad4247bfeb15f6775c6e70', 'user_38a705b3a2754d95b60f1174c1bb4a31', 'proj_40f525d1f7e74700bac11708ecfea695', ...)
+tmp_path = PosixPath('/tmp/run-private-red/test_data_free_actual_worker_a0')
+
+    def test_data_free_actual_worker_and_cold_typed_inputs_keep_all_old_private_rows(env, tmp_path):
+        rel, old_resource, group, obj, body, path = setup(env, free=True)
+        old_instance = env[2].get('/api/internal/instances/' + next(
+            entry['instance_id'] for entry in group['entries'] if entry['release_id'] == rel['id'])).json()
+>       seeded, _ = enqueue(env, old_instance, rel, column="quantity", key="old-typed-history")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_run_private_read_scope.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f8468a2d970>, Settings(database_url='sqlite:////tmp/run-private-red/test_data_free_act...c5e2eb79ad4247bfeb15f6775c6e70', 'user_38a705b3a2754d95b60f1174c1bb4a31', 'proj_40f525d1f7e74700bac11708ecfea695', ...)
+i = {'error': {'code': 'PERMISSION_DENIED', 'effect_known': True, 'message': 'Authorization state changed; explicitly derive a new anchor', 'safe_retry': False, ...}}
+rel = {'approval_id': 'iapproval_ad4d92c2e33e4b2ab47f3d0706b6d77a', 'fingerprint': '7eba43e57b284d3d1df643dbe52ccbf32eb2b31fd99afbdc1c074f8895c06bb8', 'formal_publication_enabled': False, 'id': 'irelease_d09fb88f9724417ca25784b21dcd3636', ...}
+column = 'quantity', key = 'old-typed-history'
+
+    def enqueue(env, i, rel, column="quantity", key="new-column"):
+        body = dict(
+>           expected_revision=i["revision"],
+                              ^^^^^^^^^^^^^
+            expected_release_fingerprint=rel["fingerprint"],
+            input=dict(column=column),
+            request_key=key,
+        )
+E       KeyError: 'revision'
+
+tests/test_csv_dag_instances.py:123: KeyError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_run_private_read_scope.py::test_claim_does_not_evaluate_unrelated_historical_private_cells
+FAILED tests/test_run_private_read_scope.py::test_data_free_actual_worker_and_cold_typed_inputs_keep_all_old_private_rows
+2 failed, 9 passed, 1 warning in 19.71s

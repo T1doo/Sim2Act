@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="5" time="1.539" timestamp="2026-10-11T15:50:46.588901+00:00" hostname="9809f76d2248"><testcase classname="tests.test_run_private_read_scope" name="test_pool_oracle_returns_ids_only_for_actual_attempt_candidates" time="0.384"><failure message="TypeError: '&lt;' not supported between instances of 'str' and 'NoneType'">env = (&lt;sim2act.db.Store object at 0x7f785ba06840&gt;, Settings(database_url='sqlite:////tmp/run-private-edge-red/test_pool_ora...5e03453d654415a7399423a4db2730', 'user_7b417651c3f9412fa6bfa6508ca0a26e', 'proj_a5b6add051d64f3591741751e0a64047', ...)
+tmp_path = PosixPath('/tmp/run-private-edge-red/test_pool_oracle_returns_ids_o0')
+
+    def test_pool_oracle_returns_ids_only_for_actual_attempt_candidates(env, tmp_path):
+        unrelated, before = historical(env)
+        eligible = ordinary(env, "ordinary-attempt-candidate")
+        worker = Worker(env[0], env[1], NoModel())
+        owned = env[0].claim(worker.id, 30)
+        assert owned["id"] == eligible
+        # Real reserve only, no provider dispatch; ordinary F1 Attempt remains unclassified.
+        worker.reserve(eligible, owned["fence"], owned["context"])
+        with env[0].tx() as c:
+            c.execute(insert(attempts).values(id="synthetic-orphan-with-null-run", run_id=None))
+        returned_columns = []
+    
+        def columns(conn, cursor, sql, params, context, many):
+            if cursor.description:
+                returned_columns.append({"sql": sql, "columns": [item[0] for item in cursor.description],
+                                         "parameters": repr(params)})
+    
+        event.listen(env[0].engine, "after_cursor_execute", columns)
+        try:
+            with PrivateReadBarrier(env[0], {unrelated}) as barrier:
+                with env[0].engine.connect() as c:
+&gt;                   assert _protocol_attempts(c) == []
+                           ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_run_private_read_scope.py:191: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/protocol_pool.py:21: in _protocol_attempts
+    ids = protocol_run_ids(c, candidates=candidates)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f785b4e07d0&gt;, rid = None
+
+    def protocol_run_ids(c, rid=None, *, candidates=None):
+        """Preserve every anti-downgrade marker within explicit candidate Run IDs.
+    
+        Run queries return IDs only; JSON predicates inspect namespace markers, not
+        private payload projections. A full contract is read only when its exact
+        goal.constraints array marks a candidate as protocol, to verify its seal.
+        """
+        if (rid is None) == (candidates is None):
+            raise ValueError("Exactly one explicit Run ID or candidate set is required")
+&gt;       chosen = sorted(set([rid] if rid is not None else candidates))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: '&lt;' not supported between instances of 'str' and 'NoneType'
+
+src/sim2act/protocol_jobs.py:240: TypeError</failure></testcase><testcase classname="tests.test_run_private_read_scope" name="test_duplicate_key_last_protocol_marker_never_downgrades[context-{&quot;kind&quot;:&quot;plain&quot;,&quot;kind&quot;:&quot;protocol_jobs.v1&quot;}]" time="0.209"><failure message="AssertionError: assert False&#10; +  where False = is_protocol_job(&lt;sim2act.db.Store object at 0x7f785a2b4aa0&gt;, 'run_df9cf4ee93c6442e82dec75b50224f27')">env = (&lt;sim2act.db.Store object at 0x7f785a2b4aa0&gt;, Settings(database_url='sqlite:////tmp/run-private-edge-red/test_duplicat...30e2ad1e614fa385262f10464a57b1', 'user_8eb31f2aeda24771a3e3957b30524b39', 'proj_bc752d1377e3416998a05800e565fef2', ...)
+field = 'context', raw = '{"kind":"plain","kind":"protocol_jobs.v1"}'
+
+    @pytest.mark.parametrize("field,raw", [
+        ("context", '{"kind":"plain","kind":"protocol_jobs.v1"}'),
+        ("result", '{"protocol_result":{"kind":"plain"},"protocol_result":{"kind":"model-protocol.v1"}}'),
+        ("snapshot", '{"goal":{"constraints":[],"constraints":["protocol_jobs.v1"]}}'),
+    ])
+    def test_duplicate_key_last_protocol_marker_never_downgrades(env, field, raw):
+        rid = ordinary(env, "duplicate-key-" + field)
+        with env[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(status="RUNNING", lease_until=0, fence=1))
+            if field == "snapshot":
+                c.exec_driver_sql("UPDATE run_contracts SET snapshot=?, fingerprint=? WHERE run_id=?",
+                                 (raw, fingerprint(json.loads(raw)), rid))
+            else:
+                c.exec_driver_sql("UPDATE runs SET " + field + "=? WHERE id=?", (raw, rid))
+&gt;       assert is_protocol_job(env[0], rid)
+E       AssertionError: assert False
+E        +  where False = is_protocol_job(&lt;sim2act.db.Store object at 0x7f785a2b4aa0&gt;, 'run_df9cf4ee93c6442e82dec75b50224f27')
+
+tests/test_run_private_read_scope.py:226: AssertionError</failure></testcase><testcase classname="tests.test_run_private_read_scope" name="test_duplicate_key_last_protocol_marker_never_downgrades[result-{&quot;protocol_result&quot;:{&quot;kind&quot;:&quot;plain&quot;},&quot;protocol_result&quot;:{&quot;kind&quot;:&quot;model-protocol.v1&quot;}}]" time="0.213"><failure message="AssertionError: assert False&#10; +  where False = is_protocol_job(&lt;sim2act.db.Store object at 0x7f7859fda210&gt;, 'run_0d3ab49d47f142b3ab964f12f2fbc1e5')">env = (&lt;sim2act.db.Store object at 0x7f7859fda210&gt;, Settings(database_url='sqlite:////tmp/run-private-edge-red/test_duplicat...9f1f833cda4569aac43f04b1f6b27a', 'user_053ca7d0072d4ab1aeb8cd9322d66fe8', 'proj_4b2be68b9c964a6b9788d24b3feda075', ...)
+field = 'result'
+raw = '{"protocol_result":{"kind":"plain"},"protocol_result":{"kind":"model-protocol.v1"}}'
+
+    @pytest.mark.parametrize("field,raw", [
+        ("context", '{"kind":"plain","kind":"protocol_jobs.v1"}'),
+        ("result", '{"protocol_result":{"kind":"plain"},"protocol_result":{"kind":"model-protocol.v1"}}'),
+        ("snapshot", '{"goal":{"constraints":[],"constraints":["protocol_jobs.v1"]}}'),
+    ])
+    def test_duplicate_key_last_protocol_marker_never_downgrades(env, field, raw):
+        rid = ordinary(env, "duplicate-key-" + field)
+        with env[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(status="RUNNING", lease_until=0, fence=1))
+            if field == "snapshot":
+                c.exec_driver_sql("UPDATE run_contracts SET snapshot=?, fingerprint=? WHERE run_id=?",
+                                 (raw, fingerprint(json.loads(raw)), rid))
+            else:
+                c.exec_driver_sql("UPDATE runs SET " + field + "=? WHERE id=?", (raw, rid))
+&gt;       assert is_protocol_job(env[0], rid)
+E       AssertionError: assert False
+E        +  where False = is_protocol_job(&lt;sim2act.db.Store object at 0x7f7859fda210&gt;, 'run_0d3ab49d47f142b3ab964f12f2fbc1e5')
+
+tests/test_run_private_read_scope.py:226: AssertionError</failure></testcase><testcase classname="tests.test_run_private_read_scope" name="test_duplicate_key_last_protocol_marker_never_downgrades[snapshot-{&quot;goal&quot;:{&quot;constraints&quot;:[],&quot;constraints&quot;:[&quot;protocol_jobs.v1&quot;]}}]" time="0.295"><failure message="AssertionError: assert False&#10; +  where False = is_protocol_job(&lt;sim2act.db.Store object at 0x7f785a10dc10&gt;, 'run_c56e2f541fba42989d702a317b3d981f')">env = (&lt;sim2act.db.Store object at 0x7f785a10dc10&gt;, Settings(database_url='sqlite:////tmp/run-private-edge-red/test_duplicat...bc9a25138647969bcf187a573783a6', 'user_1c7fd3c383764b0bbf0a9f7bbde8c878', 'proj_a739cc033cf84e1495bcb9dd0be78554', ...)
+field = 'snapshot'
+raw = '{"goal":{"constraints":[],"constraints":["protocol_jobs.v1"]}}'
+
+    @pytest.mark.parametrize("field,raw", [
+        ("context", '{"kind":"plain","kind":"protocol_jobs.v1"}'),
+        ("result", '{"protocol_result":{"kind":"plain"},"protocol_result":{"kind":"model-protocol.v1"}}'),
+        ("snapshot", '{"goal":{"constraints":[],"constraints":["protocol_jobs.v1"]}}'),
+    ])
+    def test_duplicate_key_last_protocol_marker_never_downgrades(env, field, raw):
+        rid = ordinary(env, "duplicate-key-" + field)
+        with env[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(status="RUNNING", lease_until=0, fence=1))
+            if field == "snapshot":
+                c.exec_driver_sql("UPDATE run_contracts SET snapshot=?, fingerprint=? WHERE run_id=?",
+                                 (raw, fingerprint(json.loads(raw)), rid))
+            else:
+                c.exec_driver_sql("UPDATE runs SET " + field + "=? WHERE id=?", (raw, rid))
+&gt;       assert is_protocol_job(env[0], rid)
+E       AssertionError: assert False
+E        +  where False = is_protocol_job(&lt;sim2act.db.Store object at 0x7f785a10dc10&gt;, 'run_c56e2f541fba42989d702a317b3d981f')
+
+tests/test_run_private_read_scope.py:226: AssertionError</failure></testcase><testcase classname="tests.test_run_private_read_scope" name="test_contract_marker_candidate_is_rechecked_after_duplicate_key_decoding" time="0.230"><failure message="AssertionError: assert not True&#10; +  where True = is_protocol_job(&lt;sim2act.db.Store object at 0x7f7859ca34a0&gt;, 'run_ca4006323be04cfb8a46b03b9e80bd5b')">env = (&lt;sim2act.db.Store object at 0x7f7859ca34a0&gt;, Settings(database_url='sqlite:////tmp/run-private-edge-red/test_contract...728d4970d74a43a2588f370935b534', 'user_34e83f769cf64356a8f33b64b34a74e9', 'proj_eb936577ed3b455ab6f668d1677a59d2', ...)
+
+    def test_contract_marker_candidate_is_rechecked_after_duplicate_key_decoding(env):
+        rid = ordinary(env, "contract-last-ordinary")
+        raw = '{"goal":{"constraints":["protocol_jobs.v1"],"constraints":[]}}'
+        with env[0].tx() as c:
+            c.exec_driver_sql("UPDATE run_contracts SET snapshot=?, fingerprint=? WHERE run_id=?",
+                             (raw, fingerprint(json.loads(raw)), rid))
+&gt;       assert not is_protocol_job(env[0], rid)
+E       AssertionError: assert not True
+E        +  where True = is_protocol_job(&lt;sim2act.db.Store object at 0x7f7859ca34a0&gt;, 'run_ca4006323be04cfb8a46b03b9e80bd5b')
+
+tests/test_run_private_read_scope.py:238: AssertionError</failure></testcase></testsuite></testsuites>

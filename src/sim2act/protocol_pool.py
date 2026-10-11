@@ -17,7 +17,9 @@ from .errors import DomainError
 def _protocol_attempts(c, pool_id=None):
     from .protocol_jobs import protocol_run_ids
 
-    ids = protocol_run_ids(c)
+    candidates = c.execute(select(attempts.c.run_id).where(
+        attempts.c.run_id.is_not(None)).distinct()).scalars().all()
+    ids = protocol_run_ids(c, candidates=candidates)
     rows = list(c.execute(select(attempts).where(attempts.c.run_id.in_(ids))).mappings())
     if pool_id is None:
         return rows
