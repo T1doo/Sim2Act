@@ -795,38 +795,49 @@ function clearResourceMaterial() {
   cancelResourceFileRead();resourceFileSnapshot=null;
   $("resource-file").value="";$("resource-name").value="";$("content").value="";$("format").value="csv";
   $("resource-file-status").textContent="";renderResourceMaterial();
+  $("resource-file-preview").textContent="";$("resource-file-preview").hidden=true;
 }
 function editResourceMaterial() {
   cancelResourceFileRead();resourceFileSnapshot=null;$("resource-file").value="";
   $("resource-file-status").textContent="手工文本模式：保存当前表单内容；已解除原文件绑定。";renderResourceMaterial();
+  $("resource-file-preview").textContent="";$("resource-file-preview").hidden=true;
 }
 function selectResourceFile() {
   if(resourceSaveRequests.has(resourceSaveKey()))return;
   cancelResourceFileRead();resourceFileSnapshot=null;
   $("resource-name").value="";$("content").value="";
+  $("resource-file-preview").textContent="";$("resource-file-preview").hidden=true;
   const c=resourceContext(),generation=resourceFileGeneration,files=$("resource-file").files;
   const current=()=>resourceContextCurrent(c) && generation===resourceFileGeneration;
   const fail=message=>{if(current()){$("resource-file").value="";$("resource-file-status").textContent=message;renderResourceMaterial();}};
   if(!files?.length){clearResourceMaterial();return;}
-  if(!c.project){fail("先选择项目，再选择 CSV 文件。");return;}
-  if(files.length!==1){fail("一次只能选择一个 CSV 文件。");return;}
+  if(!c.project){fail("先选择项目，再选择文本文件。");return;}
+  if(files.length!==1){fail("一次只能选择一个文本文件。");return;}
   const file=files[0];
-  if(!/\.csv$/i.test(file.name) || file.name.length>200){fail("请选择名称不超过200字的 .csv 文件。");return;}
-  if(file.size===0 || file.size>32768){fail("CSV 文件须为1–32768字节。");return;}
+  const format = /\.(txt|md|csv|json)$/i.exec(file.name)?.[1].toLowerCase();
+  if(!format || file.name.length>200){fail("请选择名称不超过200字的 .txt、.md、.csv 或 .json 文件。");return;}
+  if(file.size===0 || file.size>32768){fail("文本文件须为1–32768字节。");return;}
   const reader=new FileReader();resourceFileReader=reader;
-  $("resource-file-status").textContent="正在本页读取 CSV；尚未保存或授权。";renderResourceMaterial();
+  $("resource-file-status").textContent=`正在本页读取 ${format.toUpperCase()}；尚未保存或授权。`;renderResourceMaterial();
   reader.onload=()=>{
     if(!current())return;
     resourceFileReader=null;
     try {
       const bytes=new Uint8Array(reader.result);
-      if(bytes.length!==file.size || (bytes[0]===0xef && bytes[1]===0xbb && bytes[2]===0xbf))throw Error("请选择无 BOM 的 UTF-8 CSV；文件尚未保存。");
-      const content=new TextDecoder("utf-8",{fatal:true}).decode(bytes);
-      if(content.includes("\0"))throw Error("CSV 含不支持的空字节；文件尚未保存。");
-      $("resource-name").value=file.name;$("format").value="csv";$("content").value=content;
+      if(bytes.length!==file.size)throw Error("本地文件长度不一致；文件尚未保存。");
+      if(["csv", "json"].includes(format) && bytes[0]===0xef && bytes[1]===0xbb && bytes[2]===0xbf)throw Error(`请选择无 BOM 的 UTF-8 ${format.toUpperCase()}；文件尚未保存。`);
+      const content=new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(bytes);
+      if(format === "csv" && content.includes("\0"))throw Error("CSV 含不支持的空字节；文件尚未保存。");
+      if(format !== "csv" && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(content))throw Error("文件含不支持的二进制控制字符；文件尚未保存。");
+      if(format === "json") {
+        try {JSON.parse(content);}
+        catch (_) {throw Error("JSON 语法无效；请修正文件后重新选择，文件尚未保存。");}
+      }
+      $("resource-name").value=file.name;$("format").value=format;$("content").value=content;
       resourceFileSnapshot={...c,content,displayContent:$("content").value,name:file.name,bytes:file.size};
-      $("resource-file-status").textContent=`已在本页读取 ${file.name} · ${file.size}字节 · 目标项目：${$("project-select").selectedOptions[0].textContent}。请核对下方内容，再保存并授权；保存保留原文件换行，手改则转为文本模式。`;
-    } catch(error){fail(error.name==="TypeError" ? "文件不是有效 UTF-8 CSV；请另存为无 BOM UTF-8 后重选。" : error.message);}
+      $("resource-file-preview").textContent=format === "csv" ? content : $("content").value;$("resource-file-preview").hidden=false;
+      $("resource-file-status").textContent=`已在本页读取 ${file.name} · ${file.size}字节 · 目标项目：${$("project-select").selectedOptions[0].textContent}。尚未保存或授权。${format === "json" ? "JSON 语法已检查，保存仍需原校验。" : ""}请核对待保存文本，再点击原保存按钮；CSV 保留原换行，TXT/MD/JSON 按表单文本保存，编辑后转为手工文本。`;
+    } catch(error){fail(error.name==="TypeError" ? "文件不是有效 UTF-8；请另存为 UTF-8 后重选。" : error.message);}
     renderResourceMaterial();
   };
   reader.onerror=()=>{if(current()){resourceFileReader=null;fail("本地文件读取失败；未保存，请重新选择。");}};
