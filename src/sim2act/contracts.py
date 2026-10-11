@@ -239,6 +239,7 @@ class ApplicationGenerationPolicy(Strict):
     request_limit: Literal[3]
     repair_limit: Literal[1]
     live_request_allowance: Literal[0]
+    response_archive_policy: Literal["protected-json32768.v1"] | None = None
 
 
 class FrozenRunContract(Strict):

@@ -14,10 +14,33 @@ from sim2act.worker import Worker
 
 
 @pytest.mark.parametrize(
-    "scenario", ["valid", "lost-generation", "lost-confirm", "late-generation"]
+    "scenario",
+    [
+        "valid",
+        "lost-generation",
+        "lost-confirm",
+        "late-generation",
+        "poison-accepted-id",
+        "poison-accepted-shape",
+        "poison-accepted-fields",
+        "late-confirm-navigation",
+        "late-confirm-edit",
+        "late-confirm-app",
+        "late-confirm-goal",
+        "late-app-read",
+        "late-internal-read",
+    ],
 )
 def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
     store, settings, client, user, pid, text, card = setup(env)
+    other_app = None
+    if scenario == "late-confirm-app":
+        other = client.post(
+            f"/api/projects/{pid}/apps/csv-preview",
+            json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+        )
+        assert other.status_code == 201, other.text
+        other_app = other.json()["id"]
     web = Path(__file__).parents[1] / "src/sim2act/web"
     info = tmp_path / "info.json"
     info.write_text(
@@ -27,6 +50,7 @@ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
                 "card": card["id"],
                 "scenario": scenario,
                 "other": store.project(user, "Other selection"),
+                "other_app": other_app,
                 "web": str(web),
                 "output": str(tmp_path / "results.json"),
             }
@@ -106,6 +130,14 @@ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
         errors = process.stderr.read()
         code = process.wait(timeout=20)
         (tmp_path / "driver.log").write_text(errors)
+        output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+        if output:
+            target = Path(output)
+            target.mkdir(parents=True, exist_ok=True)
+            (target / (scenario + ".log")).write_text(errors)
+            result_path = tmp_path / "results.json"
+            if result_path.exists():
+                (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
         assert code == 0, errors
         proof = json.loads((tmp_path / "results.json").read_text())
         assert proof["status"] == "PASS" and len(proof["checks"]) >= 15

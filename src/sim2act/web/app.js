@@ -10,6 +10,7 @@ let activeApp = null, activeGoalCard = null;
 let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false;
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
 let appSelectionGeneration = 0, activeAppProject = null;
+let workspaceSelectionGeneration = 0;
 const candidateRequestKeys = new Map();
 const extractionRequestKeys = new Map();
 let extractionSource = null, extractionBusy = false;
@@ -400,14 +401,14 @@ function showPreviewResult(r,history=false){
   $("app-output").dataset.state=r.status === "FAILED" ? "error" : "success";
   $("app-output").replaceChildren(row(`${history ? "历史记录 · " : ""}${previewText(r)} · ${r.id.slice(0,16)}`));
 }
-async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
-  if(pid !== $("project-select").value)return false;
+async function showApp(id,pid=$("project-select").value,onSelectionStart=null,selectionCurrent=()=>true) {
+  if(pid !== $("project-select").value || !selectionCurrent())return false;
   clearApp();const generation=appSelectionGeneration;
   onSelectionStart?.(generation);
   const identity=token;
   const a=await api(`/api/apps/${id}`);
-  if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token)return false;
-  if(a.project_id !== pid)throw Error("候选不属于当前项目，请重新选择");
+  if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
+  if(a.id !== id || a.project_id !== pid)throw Error("候选不属于当前选择，请重新选择");
   activeApp=id;activeAppProject=pid;
   if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);
   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
@@ -458,7 +459,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
     $("app-preview-submit").disabled=appPreviewRequests.has(id);
     $("app-history").replaceChildren(...a.history.map(r=>row(`${r.input.term || "无效输入"} · ${r.status}`,()=>showPreviewResult(r,true),"回读历史")));
     if(typeof openInternal === "function")await openInternal(a,generation);
-    return true;
+    return generation === appSelectionGeneration && pid === $("project-select").value && identity === token && activeApp === id && selectionCurrent();
   }
   if(agent){
     const manifest=a.candidate.manifest;
@@ -705,6 +706,7 @@ $("goal-card-form").onsubmit=safe(async()=>{
 
 
 function selectWorkspace(id) {
+  workspaceSelectionGeneration++;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");

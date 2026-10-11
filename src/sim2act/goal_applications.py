@@ -58,6 +58,23 @@ READ_TOOLS = [
 ]
 
 
+def response_archive(raw):
+    """Protected Attempt evidence only; never copy private raw into public events/logs."""
+    if not isinstance(raw, dict):
+        return None, None
+    try:
+        original = json.dumps(raw, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
+        encoded = original.encode("ascii")
+    except (TypeError, ValueError, UnicodeError):
+        return None, {"status": "OMITTED_INVALID_JSON"}
+    metadata = {
+        "status": "COMPLETE" if len(encoded) <= 32768 else "OMITTED_OVERSIZE",
+        "bytes": len(encoded),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+    return (original if metadata["status"] == "COMPLETE" else None), metadata
+
+
 class ConfirmInput(Strict):
     expected_version: int = Field(ge=1)
     candidate_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -75,7 +92,8 @@ def policy(provider, user, pid, body):
         request_limit=3,
         repair_limit=1,
         live_request_allowance=0,
-    ).model_dump()
+        response_archive_policy="protected-json32768.v1",
+    ).model_dump(exclude_none=True)
 
 
 def source(store, c, run):
@@ -126,7 +144,7 @@ def initial_messages(store, c, run):
     action_input, output = schemas()
     value = {
         "saved_goal": contract.source_goal_card.model_dump(),
-        "server_ids": contract.application_generation.model_dump(),
+        "server_ids": contract.application_generation.model_dump(exclude_none=True),
         "source": {k: material[k] for k in ("resource_id", "hash", "format")},
         "action_schema": ActionSpec.model_json_schema(),
         "manifest_schema": AppManifest.model_json_schema(),
@@ -214,6 +232,27 @@ def history(store, c, run):
             "response_fingerprint": fingerprint(attempt["response"]),
             "usage_fingerprint": fingerprint(attempt["usage"]),
         }
+        if "generation_received_raw" in parameters:
+            original = parameters["generation_received_raw"]
+            if not isinstance(original, str):
+                raise DomainError("VERSION_CONFLICT", "Invalid protected response archive")
+            archived = strict_json(original, 32768)
+            canonical, metadata = response_archive(archived)
+            if (
+                canonical != original
+                or metadata != parameters.get("generation_raw_evidence")
+                or parse_response(archived)[0] != attempt["response"]
+                or normalize_usage(archived) != attempt["usage"]
+                or archived.get("model") != attempt["response_model"]
+            ):
+                raise DomainError("VERSION_CONFLICT", "Protected response archive changed")
+            expected["raw_fingerprint"] = metadata["sha256"]
+        elif (
+            "generation_raw_evidence" in parameters
+            or store.frozen_contract(c, run).application_generation.response_archive_policy
+            is not None
+        ):
+            raise DomainError("VERSION_CONFLICT", "Protected response archive missing")
         reserved = (
             c.execute(
                 select(events.c.data).where(
@@ -519,6 +558,11 @@ def process(worker, run, contract):
             started = time.monotonic()
             try:
                 raw = configured_provider(worker).request_serialized(wire, guard)
+                original, raw_metadata = response_archive(raw)
+                if original is None:
+                    raise DomainError(
+                        "BUDGET_EXHAUSTED", "Complete response exceeds protected evidence envelope"
+                    )
                 msg, calls = parse_response(raw)
                 require_returned_model(returned_model_identity("intern-s2", raw.get("model")))
                 usage = checked_usage(
@@ -537,6 +581,8 @@ def process(worker, run, contract):
                     current = locked(worker, c, rid, fence)
                     check_active(worker, c, current)
                     params = worker.attempt_parameters(c, aid, raw)
+                    params["generation_received_raw"] = original
+                    params["generation_raw_evidence"] = raw_metadata
                     c.execute(
                         update(attempts)
                         .where(attempts.c.id == aid)
@@ -558,6 +604,7 @@ def process(worker, run, contract):
                             "index": len(prior),
                             "response_fingerprint": fingerprint(msg),
                             "usage_fingerprint": fingerprint(usage),
+                            "raw_fingerprint": raw_metadata["sha256"],
                         },
                     )
                 if not prior:
@@ -588,6 +635,7 @@ def process(worker, run, contract):
                             raise
                         diagnostic = exc.public()
                         params["generation_diagnostic"] = diagnostic
+                        params["generation_rejected_raw"] = original
                         c.execute(
                             update(attempts)
                             .where(attempts.c.id == aid)
@@ -630,34 +678,30 @@ def process(worker, run, contract):
                     attempt = (
                         c.execute(select(attempts).where(attempts.c.id == aid)).mappings().one()
                     )
-                    if attempt["status"] == "STARTED":
+                    if attempt["status"] in {"STARTED", "RECEIVED"}:
                         failure = (
                             error
                             if isinstance(error, DomainError)
                             else DomainError("OUTCOME_UNKNOWN")
                         )
                         rejected_parameters = dict(attempt["parameters"])
-                        if isinstance(raw, dict):
-                            try:
-                                original = json.dumps(
-                                    raw, ensure_ascii=True, allow_nan=False, separators=(",", ":")
-                                )
-                            except (TypeError, ValueError, UnicodeError):
-                                original = None
-                            if original is not None and len(original.encode("ascii")) <= 32768:
-                                rejected_parameters["generation_rejected_raw"] = original
-                        c.execute(
-                            update(attempts)
-                            .where(attempts.c.id == aid)
-                            .values(
+                        original, raw_metadata = response_archive(raw)
+                        if raw_metadata is not None:
+                            rejected_parameters["generation_raw_evidence"] = raw_metadata
+                        if original is not None:
+                            rejected_parameters["generation_rejected_raw"] = original
+                        values: dict[str, object] = {
+                            "parameters": rejected_parameters,
+                            "error": failure.code,
+                        }
+                        if attempt["status"] == "STARTED":
+                            values.update(
                                 status="FAILED",
                                 response=safe_received_message(raw),
                                 usage=normalize_usage(raw),
-                                parameters=rejected_parameters,
-                                error=failure.code,
                                 elapsed=time.monotonic() - started,
                             )
-                        )
+                        c.execute(update(attempts).where(attempts.c.id == aid).values(**values))
                         worker.store.event(
                             c,
                             rid,

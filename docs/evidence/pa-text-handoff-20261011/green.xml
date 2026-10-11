@@ -1,0 +1,1782 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="13" skipped="0" tests="66" time="104.086" timestamp="2026-10-11T18:18:10.591657+00:00" hostname="9809f76d2248"><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[valid]" time="2.976"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2be108200&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...93bec6bcd84a30a2159b779c795464', 'user_f4e0cdefbf8b4950b487bda217453cd8', 'proj_4788938b733545bdbb90500c5249a89d', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[lost-generation]" time="2.736"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc554bf0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...19bb2cc0874d5298aabc74c484e3fc', 'user_d5b8ac0ad22a43ebba9a1dd6d3cb6405', 'proj_497df5d66e344a75bfaf59baca26687b', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac1')
+scenario = 'lost-generation'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[lost-confirm]" time="2.484"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2be0f9be0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...b186f5e46d453182382543c12f582b', 'user_0b42416c12b94447867b46be24c9e141', 'proj_56f45729af66432ba753c314c7c6183a', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac2')
+scenario = 'lost-confirm'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[late-generation]" time="2.882"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bca1ee40&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...541ac8a50a4e80b7e39b3eba1fde44', 'user_35bab409599c4d949ad981c842756809', 'proj_2e17c8eee69b44dcabbe246b3cd9bcbe', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac3')
+scenario = 'late-generation'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[poison-accepted-id]" time="2.620"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc2c6060&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...875804a9ac4f2fbdcc5ec39cfcb064', 'user_b7dd821dec5e466ca81ae46dc714b402', 'proj_17d7a284d77b4e36a9b9fa8e97e63b20', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac4')
+scenario = 'poison-accepted-id'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[poison-accepted-shape]" time="3.020"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc297260&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...020526658142d7af9c9d5371324458', 'user_2dad989f606a41309a5ef8ddeeabd2cb', 'proj_7269fea0578b4b9d8ee7168f886d436b', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac5')
+scenario = 'poison-accepted-shape'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[poison-accepted-fields]" time="2.805"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bdc889b0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...6bfbe0d4ce40b58c8c795287ad9c2b', 'user_beab1925b6654de6a88a8cba667d0459', 'proj_85576dd549844c90900442adfddde5dd', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac6')
+scenario = 'poison-accepted-fields'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[late-confirm-navigation]" time="2.514"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc62b7a0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...c83b0f13444ff286f9963f44638530', 'user_ffe79375e4c7426eb050b59e7d9b8032', 'proj_c647807d431846fbb517074c78e9cf66', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac7')
+scenario = 'late-confirm-navigation'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[late-confirm-edit]" time="2.696"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc3ce390&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...1c778f175744c0a6bf92e779b8fd28', 'user_0a38ba7fc8c142059851ebb5f6b23792', 'proj_612d6810e5494f8785e3d039fcd77ab1', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac8')
+scenario = 'late-confirm-edit'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[late-confirm-app]" time="2.762"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc644b90&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...5fb0d60e8f492bb5cf7dad798484e5', 'user_06c5460d62f349dd8869be07a69509f0', 'proj_88ba86085ed24cbbbf17e9071ac2e31b', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac9')
+scenario = 'late-confirm-app'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[late-confirm-goal]" time="2.622"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc1534a0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...2ece844d8345a7984e462c8e102492', 'user_e6808bc9a81942c8963784cb81baee83', 'proj_1bfb289dca014c43aad4afc4db8c42e9', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac10')
+scenario = 'late-confirm-goal'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[late-app-read]" time="2.668"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc42b770&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...62e327fe214cbaaea9c14535be2642', 'user_eecaef5c480f430fa875e80ba65dbe94', 'proj_9f61b27acab5427bbbb8b70820a88df3', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac11')
+scenario = 'late-app-read'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_ui" name="test_goal_text_offline_page_actual_worker[late-internal-read]" time="2.853"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent&#10;      at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)&#10;      at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff2bc188c50&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_goa...69a9f6dc8643d4bd6e7b4eddb857ca', 'user_dcca41f8be334110ba7eeefd0daf88a8', 'proj_a7d70fbbe3eb4b278c95b86a87194c8c', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-17/test_goal_text_offline_page_ac12')
+scenario = 'late-internal-read'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible exact approval requires consent
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:111:34
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:141: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_rejected_raw" name="test_received_rejected_original_json_is_preserved[usage]" time="0.574" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_received_rejected_original_json_is_preserved[identity]" time="0.478" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_received_rejected_original_json_is_preserved[truncated]" time="0.597" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_received_rejected_original_json_is_preserved[refusal]" time="0.568" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_rejection_after_received_preserves_original_json[wrong-target]" time="0.511" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_rejection_after_received_preserves_original_json[second-tools]" time="0.684" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_rejection_after_received_preserves_original_json[wrong-goal]" time="0.594" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_rejection_after_received_preserves_original_json[repair]" time="0.885" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_rejection_after_received_preserves_original_json[terminal]" time="0.811" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_oversized_original_json_cannot_execute_and_is_explicitly_omitted" time="0.490" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_new_archive_policy_and_original_response_cannot_be_downgraded[resigned-raw]" time="1.065" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_new_archive_policy_and_original_response_cannot_be_downgraded[stripped-archives]" time="0.990" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_new_archive_policy_and_original_response_cannot_be_downgraded[stripped-policy]" time="0.841" /><testcase classname="tests.test_goal_text_rejected_raw" name="test_legacy_shaped_acceptance_remains_readable_without_inventing_raw" time="1.012" /><testcase classname="tests.test_goal_text_applications" name="test_goal_feedback_repair_release_cold_worker" time="6.728" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[usage]" time="0.607" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[identity]" time="0.596" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[truncated]" time="0.531" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[wrong-tool]" time="0.658" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[frozen-goal]" time="0.626" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[extra-field]" time="0.869" /><testcase classname="tests.test_goal_text_applications" name="test_default_generation_has_no_model_send" time="0.628" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[candidate]" time="0.947" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[marker]" time="0.991" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[executor]" time="0.725" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[attempt]" time="0.969" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[route]" time="0.952" /><testcase classname="tests.test_goal_text_adversarial" name="test_frozen_aggregate_reservation_cannot_be_lowered[False]" time="1.548" /><testcase classname="tests.test_goal_text_adversarial" name="test_frozen_aggregate_reservation_cannot_be_lowered[True]" time="1.222" /><testcase classname="tests.test_goal_text_adversarial" name="test_app_origin_requires_intact_completed_generation[status-CANCELLED]" time="1.652" /><testcase classname="tests.test_goal_text_adversarial" name="test_app_origin_requires_intact_completed_generation[cancel_intent-True]" time="1.548" /><testcase classname="tests.test_goal_text_adversarial" name="test_app_origin_requires_intact_completed_generation[result-None]" time="0.906" /><testcase classname="tests.test_goal_text_adversarial" name="test_change_during_candidate_response_prevents_confirmation[cancel]" time="0.845" /><testcase classname="tests.test_goal_text_adversarial" name="test_change_during_candidate_response_prevents_confirmation[pause]" time="0.728" /><testcase classname="tests.test_goal_text_adversarial" name="test_change_during_candidate_response_prevents_confirmation[revoke]" time="0.583" /><testcase classname="tests.test_goal_text_adversarial" name="test_change_during_candidate_response_prevents_confirmation[goal-change]" time="0.754" /><testcase classname="tests.test_goal_text_adversarial" name="test_confirmation_failed_insert_rolls_back_identity_and_grant" time="0.809" /><testcase classname="tests.test_goal_text_adversarial" name="test_confirmation_authority_cannot_be_removed_after_creation[None]" time="0.741" /><testcase classname="tests.test_goal_text_adversarial" name="test_confirmation_authority_cannot_be_removed_after_creation[confirmation1]" time="0.876" /><testcase classname="tests.test_goal_text_adversarial" name="test_confirmation_authority_cannot_be_removed_after_creation[confirmation2]" time="0.851" /><testcase classname="tests.test_goal_text_adversarial" name="test_corrupt_attempt_parameters_fail_closed_with_typed_error[None]" time="0.867" /><testcase classname="tests.test_goal_text_adversarial" name="test_corrupt_attempt_parameters_fail_closed_with_typed_error[3]" time="1.000" /><testcase classname="tests.test_goal_text_adversarial" name="test_corrupt_attempt_parameters_fail_closed_with_typed_error[shape2]" time="1.063" /><testcase classname="tests.test_goal_text_adversarial" name="test_durable_literal_history_rejects_forged_saved_evidence[receipt]" time="2.293" /><testcase classname="tests.test_goal_text_adversarial" name="test_durable_literal_history_rejects_forged_saved_evidence[record]" time="3.709" /><testcase classname="tests.test_goal_text_adversarial" name="test_durable_literal_history_rejects_forged_saved_evidence[output]" time="3.243" /><testcase classname="tests.test_goal_text_adversarial" name="test_durable_literal_history_rejects_forged_saved_evidence[run_status]" time="3.856" /><testcase classname="tests.test_goal_text_adversarial" name="test_confirmation_read_recovery_uses_typed_authority[None]" time="2.533" /><testcase classname="tests.test_goal_text_adversarial" name="test_confirmation_read_recovery_uses_typed_authority[confirmation1]" time="2.081" /><testcase classname="tests.test_goal_text_adversarial" name="test_job_read_cannot_skip_literal_history_verification[FAILED]" time="3.536" /><testcase classname="tests.test_goal_text_adversarial" name="test_job_read_cannot_skip_literal_history_verification[CANCELLED]" time="2.399" /><testcase classname="tests.test_goal_text_adversarial" name="test_unknown_provider_response_never_resends_or_imports_candidate" time="1.344" /><testcase classname="tests.test_goal_text_adversarial" name="test_late_actual_response_preserved_without_old_fence_mutation" time="1.149" /></testsuite></testsuites>

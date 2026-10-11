@@ -79,7 +79,7 @@ def verify_source(store, c, run, contract):
                    "request_model": contract.request_model,
                    **({"natural_planning": contract.natural_planning.model_dump(exclude_none=True)}
                       if contract.natural_planning is not None else {}),
-                   **({"application_generation": contract.application_generation.model_dump()}
+                   **({"application_generation": contract.application_generation.model_dump(exclude_none=True)}
                       if contract.application_generation is not None else {})},
         "goal_source": source.model_dump(),
     })
@@ -92,7 +92,7 @@ def verify_source(store, c, run, contract):
                                              "fingerprint": source.fingerprint},
                              **({"natural_planning": contract.natural_planning.model_dump(exclude_none=True)}
                                 if contract.natural_planning is not None else {}),
-                             **({"application_generation": contract.application_generation.model_dump()}
+                             **({"application_generation": contract.application_generation.model_dump(exclude_none=True)}
                                 if contract.application_generation is not None else {})}])):
         raise DomainError("VERSION_CONFLICT", "Goal source differs from original acceptance")
 
