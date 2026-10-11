@@ -69,9 +69,35 @@ async function downloadResource(resource, context, button) {
     button.textContent = "下载文件";
   }
 }
+let resourcePreviewGeneration = 0;
+function invalidateResourcePreview() {
+  resourcePreviewGeneration++;
+  $("resource-preview").textContent = "";
+  $("resource-preview").hidden = true;
+}
+async function previewResource(resource, context) {
+  if (!resourceDownloadCurrent(context)) return;
+  invalidateResourcePreview();
+  const selection = resourcePreviewGeneration;
+  const current = () => resourceDownloadCurrent(context) && selection === resourcePreviewGeneration;
+  try {
+    const data = await api(`/api/resources/${encodeURIComponent(resource.id)}`);
+    if (!current()) return;
+    if (!data || data.id !== resource.id || data.project_id !== context.project || !["txt", "md", "csv", "json"].includes(data.format) || typeof data.content !== "string")
+      throw new Error("材料响应无效，未显示预览");
+    $("resource-preview").textContent = data.content;
+    $("resource-preview").hidden = false;
+  } catch (error) {
+    if (!current()) return;
+    invalidateResourcePreview();
+    $("error").textContent = error.message;
+  }
+}
 function resourceMaterialRow(resource) {
   const context = resourceDownloadContext();
-  const div = row(`${resource.name} · ${resource.format} · ${resource.hash.slice(0, 12)}`, async () => {const data=await api(`/api/resources/${resource.id}`);$("resource-preview").hidden=false;$("resource-preview").textContent=data.content;}, "查看");
+  const div = row(`${resource.name} · ${resource.format} · ${resource.hash.slice(0, 12)}`, () => previewResource(resource, context), "查看");
+  const viewButton = div.querySelector("button"), view = viewButton.onclick;
+  viewButton.onclick = event => resourceDownloadCurrent(context) ? view(event) : undefined;
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = "下载文件";
@@ -79,7 +105,7 @@ function resourceMaterialRow(resource) {
   div.append(" ", button);
   return div;
 }
-$("project-select").addEventListener("change", () => resourceDownloadGeneration++);
+$("project-select").addEventListener("change", () => {resourceDownloadGeneration++;invalidateResourcePreview();});
 async function refresh() {
   const pid = $("project-select").value; if (!pid) return;
   const identity=token,generation=++runHistoryGeneration;
@@ -231,6 +257,7 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  invalidateResourcePreview();
   if(typeof clearCsvLogic === "function")clearCsvLogic();
   if(typeof clearResourceMaterial === "function")clearResourceMaterial();
   if(typeof clearReportManifest === "function")clearReportManifest();
