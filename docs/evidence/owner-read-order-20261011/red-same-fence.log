@@ -1,0 +1,316 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+______ test_goal_text_offline_page_actual_worker[owner-read-order-revoke] ______
+
+env = (<sim2act.db.Store object at 0x7f0d912e2180>, Settings(database_url='sqlite:////tmp/owner-read-order-same-fence-red-20...b794e2d34d443e8940ee111db408ef', 'user_8a066951ee344c27b8ea7fedf47417a3', 'proj_ceefd1b9d53b4cb687d9fe7b1433786e', ...)
+tmp_path = PosixPath('/tmp/owner-read-order-same-fence-red-20261011/test_goal_text_offline_page_ac0')
+scenario = 'owner-read-order-revoke'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: old accepted initial read cannot roll back latest owner status or sequence
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:195:5
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:153: AssertionError
+_____ test_goal_text_offline_page_actual_worker[owner-read-order-prepare] ______
+
+env = (<sim2act.db.Store object at 0x7f0d8b7968a0>, Settings(database_url='sqlite:////tmp/owner-read-order-same-fence-red-20...7e004764b549baaac519807bd8bc9a', 'user_e4dc8e7802a647e2b971d2aa701d9b61', 'proj_428b5371386043c391f7e6123d254bf6', ...)
+tmp_path = PosixPath('/tmp/owner-read-order-same-fence-red-20261011/test_goal_text_offline_page_ac1')
+scenario = 'owner-read-order-prepare'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: old accepted initial read cannot roll back latest owner status or sequence
+E                 at check (/workspace/Sim2Act/tests/goal_text_ui.cjs:7:29)
+E                 at /workspace/Sim2Act/tests/goal_text_ui.cjs:195:5
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:153: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[owner-read-order-revoke]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[owner-read-order-prepare]
+2 failed, 25 deselected, 1 warning in 16.97s

@@ -333,9 +333,14 @@ def public_state(store, c, user, iid, limits, rows):
 
 def read(store, user, iid, limits, key=None):
     with store.tx() as c:
-        scope(store, c, user, iid)
+        pid = scope(store, c, user, iid)
+        app_id = c.execute(
+            select(internal_instances.c.source_app_id).where(internal_instances.c.id == iid)
+        ).scalar_one()
         rows = ledger(c, user, iid)
         state = public_state(store, c, user, iid, limits, rows)
+        # Owned-instance metadata binds even empty or redacted reads to the selected scope.
+        state.update(principal_id=user, project_id=pid, app_id=app_id)
         if key is not None:
             row = next((r for r in rows if r["request_key"] == key), None)
             if not row:

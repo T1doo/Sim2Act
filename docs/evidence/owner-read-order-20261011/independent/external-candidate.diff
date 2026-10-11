@@ -1,0 +1,40 @@
+--- frozen-owner-review.js
++++ external-candidate-owner-review.js
+@@ -110,7 +110,8 @@
+   $("owner-run").replaceChildren(new Option("手动选择已完成的新输入任务",""),...instance.runs.filter(run=>run.status==="SUCCEEDED").map(run=>new Option(`${run.id} · 结果 v${run.result_version}`,run.id)));
+   const pending=ownerPending.get(ownerKey(view));if(pending)$("owner-key").value=pending.request_key;
+   ownerButtons(view);
+-  try{await ownerRead(view);}catch(error){if(ownerCurrent(view))$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
++  const reading=ownerRead(view),readGeneration=view.readGeneration;
++  try{await reading;}catch(error){if(ownerCurrent(view) && readGeneration===view.readGeneration)$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
+   ownerButtons(view);
+ }
+ async function ownerAction(body){
+@@ -119,15 +120,16 @@
+   view.readGeneration++; // A new write intent invalidates every earlier read before POST.
+   ownerPending.set(ownerKey(view),request);$("owner-key").value=request.request_key;
+   view.busy=true;ownerButtons(view);$("owner-status").textContent="正在保存精确人工操作；回执未知时仅以原 key 读取恢复。";
++  let readGeneration=null;
+   try{
+     const saved=await api(`/api/internal/instances/${view.iid}/owner-review-requests`,"POST",request);
+     if(!current())return;
+     if(saved.formal_publication_enabled!==false || saved.record?.request_key!==request.request_key || saved.record.request_fingerprint!==await ownerHash(request))throw Error("人工回执绑定不一致");
+     if(!current())return;
+-    await ownerRead(view,request.request_key);
++    const reading=ownerRead(view,request.request_key);readGeneration=view.readGeneration;await reading;
+   }catch(error){
+     if(error.httpStatus>=400 && error.httpStatus<500 && ownerPending.get(ownerKey(view))===request)ownerPending.delete(ownerKey(view));
+-    if(current()){
++    if(current() && (readGeneration===null || readGeneration===view.readGeneration)){
+       $("owner-status").textContent=`操作未确认：${error.detail || error.message}。请手动读取原 key；不会自动重发。`;
+     }
+   }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
+@@ -149,6 +151,7 @@
+ for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id).onclick=safe(async()=>{
+   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy)return;
+   const current=ownerFence(view);view.busy=true;ownerButtons(view);
+-  try{await ownerRead(view,recover ? $("owner-key").value.trim() : null);}catch(error){if(current())$("owner-status").textContent=`读取未确认：${error.detail || error.message}；保留原 key 与人工草稿。`;}
++  const reading=ownerRead(view,recover ? $("owner-key").value.trim() : null),readGeneration=view.readGeneration;
++  try{await reading;}catch(error){if(current() && readGeneration===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail || error.message}；保留原 key 与人工草稿。`;}
+   finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
+ });

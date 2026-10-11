@@ -46,43 +46,91 @@ function ownerRender(view,state){
   }
   ownerButtons(view);
 }
-async function ownerRead(view,key=null){
-  const current=ownerFence(view);
-  const state=await api(`/api/internal/instances/${view.iid}/owner-review${key ? "?request_key="+encodeURIComponent(key) : ""}`);
-  if(!current())return false;
-  const pending=ownerPending.get(ownerKey(view));
-  if(key && pending?.request_key===key){
-    const receipt=state.recovered;
-    if(!receipt || receipt.request_key!==key || receipt.request_fingerprint!==await ownerHash(pending)){throw Error("原请求回执绑定不一致");}
-    if(!current())return false;
-    ownerPending.delete(ownerKey(view));
+function ownerSame(a,b){return goalRunCanonical(a)===goalRunCanonical(b);}
+function ownerScope(view,value){
+  return value?.principal_id===view.principal && value.project_id===view.project && value.instance_id===view.iid;
+}
+function ownerContract(view,value){
+  return ownerScope(view,value) && value.app_id===view.app && value.version==="owner.generated-text.v1" && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
+}
+async function ownerValidate(view,state,key,current){
+  const invalid=()=>{throw Error("签收读取身份、序列或回执绑定不一致");};
+  if(!ownerContract(view,state) || !Number.isSafeInteger(state.sequence) || state.sequence<0 || state.sequence>256 || !Array.isArray(state.history) || state.history.length!==state.sequence || typeof state.content_access!=="boolean")invalid();
+  const ids=new Set(),keys=new Set(),hash=/^[a-f0-9]{64}$/;
+  let previous="";
+  for(const [index,row] of state.history.entries()){
+    if(!ownerScope(view,row) || row.sequence!==index+1 || !row.id || ids.has(row.id) || !row.request_key || keys.has(row.request_key) || !hash.test(row.fingerprint) || !hash.test(row.request_fingerprint) || row.previous_fingerprint!==previous || !({PREPARE:["PENDING"],DECIDE:["ACCEPTED","REJECTED"],CANCEL:["CANCELLED"],REVOKE:["REVOKED"]}[row.kind]||[]).includes(row.status))invalid();
+    ids.add(row.id);keys.add(row.request_key);previous=row.fingerprint;
   }
-  ownerRender(view,state);return true;
+  if(!ownerSame(state.latest,state.history.at(-1)||null))invalid();
+  if(view.state && (state.sequence<view.state.sequence || !ownerSame(state.history.slice(0,view.state.sequence),view.state.history)))invalid();
+  if(state.content_access ? !ownerContract(view,state.current) : !!(state.current || state.record))invalid();
+  const last=state.latest,status=state.owner_acceptance;
+  const expected=last ? last.status : "PENDING";
+  if(!state.content_access && last && !["CANCEL","REVOKE"].includes(last.kind) && status!=="STALE")invalid();
+  if(status!==expected && !(status==="STALE" && last && !state.content_access && !["CANCEL","REVOKE"].includes(last.kind)) && !(status==="EXPIRED" && last?.kind==="PREPARE" && state.content_access))invalid();
+  const active=state.content_access && last && ["PREPARE","DECIDE"].includes(last.kind);
+  if(!!state.record!==!!active)invalid();
+  for(const [record,row] of [[state.record,active ? last : null],[state.recovered,key ? state.history.find(row=>row.request_key===key) : null]]){
+    if(!record && !row)continue;
+    if(!record || !row)invalid();
+    const {payload,...metadata}=record;
+    if(!ownerSame(metadata,row))invalid();
+    if(payload){
+      const {fingerprint,...unsigned}=row;
+      if(!state.content_access || !ownerSame(payload.metadata,unsigned) || payload.request?.command!==row.kind || payload.request.request_key!==row.request_key || payload.request.expected_sequence!==row.sequence-1 || (payload.contract && !ownerContract(view,payload.contract)))invalid();
+      const requestHash=await ownerHash(payload.request);
+      if(!current())return false;
+      if(requestHash!==row.request_fingerprint)invalid();
+    }else if(record===state.record)invalid();
+  }
+  return current();
+}
+async function ownerRead(view,key=null){
+  const fence=ownerFence(view),generation=++view.readGeneration;
+  const current=()=>fence() && generation===view.readGeneration;
+  try{
+    const state=await api(`/api/internal/instances/${view.iid}/owner-review${key ? "?request_key="+encodeURIComponent(key) : ""}`);
+    if(!current() || !await ownerValidate(view,state,key,current) || !current())return false;
+    const pending=ownerPending.get(ownerKey(view));
+    if(key && pending?.request_key===key){
+      const requestHash=await ownerHash(pending);
+      if(!current())return false;
+      if(state.recovered.request_fingerprint!==requestHash)throw Error("原请求回执绑定不一致");
+      ownerPending.delete(ownerKey(view));
+    }
+    ownerRender(view,state);return true;
+  }catch(error){if(!current())return false;throw error;}
 }
 async function openOwnerReview(engineeringView){
   clearOwnerReview();
   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
-  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,iid:instance.id,state:null,busy:false};
+  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,state:null,busy:false,readGeneration:0};
   ownerView=view;$("owner-panel").hidden=false;
   $("owner-run").replaceChildren(new Option("手动选择已完成的新输入任务",""),...instance.runs.filter(run=>run.status==="SUCCEEDED").map(run=>new Option(`${run.id} · 结果 v${run.result_version}`,run.id)));
   const pending=ownerPending.get(ownerKey(view));if(pending)$("owner-key").value=pending.request_key;
-  try{await ownerRead(view);}catch(error){if(ownerCurrent(view))$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
+  ownerButtons(view);
+  const current=ownerFence(view),reading=ownerRead(view),readGeneration=view.readGeneration;
+  try{await reading;}catch(error){if(current() && readGeneration===view.readGeneration)$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
   ownerButtons(view);
 }
 async function ownerAction(body){
   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy || ownerPending.has(ownerKey(view)))return;
   const request={...body,request_key:crypto.randomUUID(),expected_sequence:view.state.sequence},current=ownerFence(view);
+  view.readGeneration++; // A new write intent invalidates every earlier read before POST.
   ownerPending.set(ownerKey(view),request);$("owner-key").value=request.request_key;
   view.busy=true;ownerButtons(view);$("owner-status").textContent="正在保存精确人工操作；回执未知时仅以原 key 读取恢复。";
+  let readGeneration=null;
   try{
     const saved=await api(`/api/internal/instances/${view.iid}/owner-review-requests`,"POST",request);
     if(!current())return;
     if(saved.formal_publication_enabled!==false || saved.record?.request_key!==request.request_key || saved.record.request_fingerprint!==await ownerHash(request))throw Error("人工回执绑定不一致");
     if(!current())return;
-    await ownerRead(view,request.request_key);
+    const reading=ownerRead(view,request.request_key);readGeneration=view.readGeneration;
+    await reading;
   }catch(error){
     if(error.httpStatus>=400 && error.httpStatus<500 && ownerPending.get(ownerKey(view))===request)ownerPending.delete(ownerKey(view));
-    if(current()){
+    if(current() && (readGeneration===null || readGeneration===view.readGeneration)){
       $("owner-status").textContent=`操作未确认：${error.detail || error.message}。请手动读取原 key；不会自动重发。`;
     }
   }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
@@ -104,6 +152,7 @@ for(const id of ["owner-run","owner-ack","owner-stop-reason","owner-key"]){$(id)
 for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id).onclick=safe(async()=>{
   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy)return;
   const current=ownerFence(view);view.busy=true;ownerButtons(view);
-  try{await ownerRead(view,recover ? $("owner-key").value.trim() : null);}catch(error){if(current())$("owner-status").textContent=`读取未确认：${error.detail || error.message}；保留原 key 与人工草稿。`;}
+  const reading=ownerRead(view,recover ? $("owner-key").value.trim() : null),readGeneration=view.readGeneration;
+  try{await reading;}catch(error){if(current() && readGeneration===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail || error.message}；保留原 key 与人工草稿。`;}
   finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
 });

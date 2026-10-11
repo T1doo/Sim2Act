@@ -42,7 +42,12 @@ def path(instance):
 def state(data, instance, key=None):
     response = data[2].get(path(instance), params={"request_key": key} if key else {})
     assert response.status_code == 200, response.text
-    return response.json()
+    value = response.json()
+    assert value["principal_id"] == data[3]
+    assert value["project_id"] == data[4]
+    assert value["instance_id"] == instance["id"]
+    assert value["app_id"] == instance["source_app_id"]
+    return value
 
 
 def prepare(data, release, instance, job, key="prepare", sequence=None):

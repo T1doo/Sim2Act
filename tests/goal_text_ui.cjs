@@ -1,7 +1,7 @@
 "use strict";
 const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
 const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],hashes={},pending=new Map(),userActions=[],staticResourceLoads=[];
-let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null;
+let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null,heldOwnerState=null,readOrderEvidence=null;
 readline.createInterface({input:process.stdin}).on("line",line=>{const result=JSON.parse(line),resolve=pending.get(result.id);pending.delete(result.id);resolve(result);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
 const check=(value,label)=>{assert(value,label);checks.push(label);};
@@ -50,6 +50,18 @@ async function boot(app){
  w.fetch=async(url,options={})=>{
   const request={path:url,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
   const ownerCommand=request.method==="POST"&&url.endsWith("/owner-review-requests")?request.body.command:null;
+  if(fault==="owner-initial-read-order"&&request.method==="GET"&&url.endsWith("/owner-review")){fault="";heldOwnerState=JSON.parse(result.text);await new Promise(resolve=>hold=resolve);if(info.scenario==="owner-read-order-error")throw Error("controlled delayed initial HTTP response loss");}
+  if(fault.startsWith("owner-poison-")&&request.method==="GET"&&url.includes("/owner-review")){
+   const actual=JSON.parse(result.text),mode=fault;fault="";let value=structuredClone(actual);
+   if(mode==="owner-poison-lower")value=structuredClone(heldOwnerState);
+   if(["instance_id","project_id","principal_id","app_id"].some(k=>mode==="owner-poison-"+k)){const k=mode.slice("owner-poison-".length);value[k]="wrong-scope";}
+   if(mode==="owner-poison-latest")value.latest.id="wrong-latest";
+   if(mode==="owner-poison-history"){value.history[0].request_fingerprint="f".repeat(64);}
+   if(mode==="owner-poison-status")value.owner_acceptance="ACCEPTED";
+   if(mode==="owner-poison-key")value.recovered.request_key="different-original-key";
+   readOrderEvidence.response_faults.push({mode,actual_http_response:actual,controlled_response:value});
+   return new Response(JSON.stringify(value),{status:result.status,headers:{"Content-Type":"application/json"}});
+  }
   if((fault==="owner-lost-prepare"&&ownerCommand==="PREPARE")||(fault==="owner-lost-decision"&&ownerCommand==="DECIDE")){fault="";assert.equal(result.status,201);throw Error("injected actual accepted owner response loss");}
   if((fault==="owner-late-prepare"&&ownerCommand==="PREPARE")||(fault==="owner-late-decision"&&ownerCommand==="DECIDE")||(fault==="owner-late-read"&&request.method==="GET"&&url.endsWith("/owner-review"))){fault="";await new Promise(resolve=>hold=resolve);}
   if(fault==="generation"&&request.method==="POST"&&url.endsWith("/application-runs")){fault="";assert.equal(result.status,202);throw Error("injected accepted generation lost");}
@@ -176,6 +188,36 @@ function assertHandoff(label){
    if(["owner-lost-decision","owner-late-decision-undo","owner-late-navigation-undo"].includes(info.scenario)){const count=ownerPosts().length;await click("owner-recover");check(ownerPosts().length===count,"unknown decision outcome recovers by original key GET without another POST");}
    const expected=info.scenario==="owner-reject"?"REJECTED":"ACCEPTED";check($("owner-status").textContent.includes(expected),"only explicit simulated human choices produce exact scoped owner status");
    check($("owner-status").textContent.includes("UNKNOWN")&&$("owner-status").textContent.includes("正式发布关闭"),"human declaration does not alter technical semantic UNKNOWN or publication gate");
+   if(info.scenario.startsWith("owner-read-order-")){
+    const originalKey=$("owner-key").value;
+    fault="owner-initial-read-order";
+    const reopen=[...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(instance));
+    const initial=click(reopen);await wait(()=>hold);const release=hold;hold=null;
+    check(heldOwnerState.owner_acceptance==="ACCEPTED"&&heldOwnerState.sequence===2,"held initial read is actual older accepted HTTP response");
+    const operation=info.scenario.endsWith("revoke") ? {command:"REVOKE",target_id:heldOwnerState.latest.id,target_fingerprint:heldOwnerState.latest.fingerprint,reason:"SIMULATED other session revokes exact declaration"} : {command:"PREPARE",expected_revision:heldOwnerState.current.instance_revision,expected_release_fingerprint:heldOwnerState.current.release_fingerprint,run_ids:heldOwnerState.record.payload.run_ids};
+    const otherRequest={path:`/api/internal/instances/${instance}/owner-review-requests`,method:"POST",body:{...operation,expected_sequence:2,request_key:"other-session-read-order"},headers:{Authorization:"Bearer synthetic-test-A"}};
+    const otherResponse=await rpc(otherRequest);check(otherResponse.status===201,"separate authorized session performs actual append through HTTP");
+    const otherRecord=JSON.parse(otherResponse.text).record,latest=info.scenario.endsWith("revoke")?"REVOKED":"PENDING";
+    const count=posts();await click("owner-refresh");
+    check(posts()===count&&$("owner-status").textContent.includes(latest)&&w.eval("ownerView.state.sequence")===3,"newer manual read renders actual current sequence before old initial read returns");
+    const focus=w.document.activeElement,status=$("owner-status").textContent,proof=$("owner-proof").textContent,history=$("owner-history").textContent;
+    readOrderEvidence={older_actual_http:heldOwnerState,other_session:{request:otherRequest,status:otherResponse.status,body:JSON.parse(otherResponse.text)},newer_before_old_delivery:{status,proof,history},response_faults:[]};
+    release();await initial;
+    check($("owner-status").textContent===status&&w.eval("ownerView.state.sequence")===3&&w.eval("ownerView.state.latest.id")===otherRecord.id,"old accepted initial read cannot roll back latest owner status or sequence");
+    check($("owner-proof").textContent===proof&&$("owner-history").textContent===history&&w.document.activeElement===focus,"old initial read cannot replace proof history or focus");
+    if(latest==="PENDING"){check(visible($("owner-form"))&&[...$("owner-criteria").querySelectorAll("select")].every(s=>s.value===""),"old accepted read cannot remove newer pending criteria");await edit("owner-reason-goal","NEWER OWNER DRAFT MUST SURVIVE VALID READ");}
+    await edit("owner-key",originalKey);await click("owner-recover");
+    check(posts()===count&&$("owner-status").textContent.includes(latest)&&w.eval("ownerView.state.sequence")===3,"original decision key recovery remains GET only and cannot restore historical acceptance");
+    await click("owner-refresh");check(posts()===count&&$("owner-status").textContent.includes(latest),"valid refresh remains available after stale delivery and keyed recovery");
+    if(info.scenario==="owner-read-order-invalid")for(const mode of ["instance_id","project_id","principal_id","app_id","latest","history","status","lower","key"]){
+     const before={state:w.eval("JSON.stringify(ownerView.state)"),proof:$("owner-proof").textContent,history:$("owner-history").textContent,reason:$("owner-reason-goal").value};
+     fault="owner-poison-"+mode;await click(mode==="key"?"owner-recover":"owner-refresh");
+     check(w.eval("JSON.stringify(ownerView.state)")===before.state&&$("owner-proof").textContent===before.proof&&$("owner-history").textContent===before.history&&$("owner-reason-goal").value===before.reason,`controlled ${mode} response cannot install unrelated regressive or inconsistent state`);
+     check($("owner-status").textContent.includes("读取未确认"),`controlled ${mode} response fails visibly without state commit`);
+     await click("owner-refresh");check(posts()===count&&$("owner-status").textContent.includes(latest),`valid refresh recovers after controlled ${mode} fault without POST retry`);
+    }
+    if(latest==="PENDING")check($("owner-reason-goal").value==="NEWER OWNER DRAFT MUST SURVIVE VALID READ","valid same-preview reads preserve newer human draft");
+   }
    if(info.scenario==="owner-revoke"){
     const oldKey=$("owner-key").value;await edit("owner-stop-reason","SIMULATED revoke exact declaration");await click("owner-revoke");check($("owner-status").textContent.includes("REVOKED"),"explicit revocation appends immutable status");
     const count=ownerPosts().length;await edit("owner-key",oldKey);await click("owner-recover");check(ownerPosts().length===count&&$("owner-status").textContent.includes("REVOKED")&&$("owner-history").textContent.includes("ACCEPTED"),"historical accepted receipt does not reactivate revoked state");
@@ -193,5 +235,5 @@ function assertHandoff(label){
  check($("internal-runs").textContent.includes("FAILED"),"browser-valid but contract-invalid input leaves actual FAILED history");check($("internal-data").textContent===dataBefore,"failed input appends no partial result");
  check(requests.filter(request=>request.method==="POST"&&request.path.endsWith("/application-runs")).length===1,"one generation POST across all receipt recovery");
  check(requests.filter(request=>request.method==="POST"&&request.path.endsWith("/confirm-application-candidate")).length===1,"one precise confirmation POST");
- fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,app,instance},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
- }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,text:dom?.window.document.body.textContent},null,2));dom?.window.close();process.stderr.write(error.stack+"\n");process.exit(1);}})();
+ fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,read_order_evidence:readOrderEvidence,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,app,instance},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
+ }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,read_order_evidence:readOrderEvidence,text:dom?.window.document.body.textContent},null,2));dom?.window.close();process.stderr.write(error.stack+"\n");process.exit(1);}})();

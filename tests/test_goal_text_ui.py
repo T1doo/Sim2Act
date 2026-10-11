@@ -41,6 +41,10 @@ from sim2act.worker import Worker
         "owner-late-navigation-undo",
         "owner-cancel",
         "owner-revoke",
+        "owner-read-order-revoke",
+        "owner-read-order-prepare",
+        "owner-read-order-error",
+        "owner-read-order-invalid",
     ],
 )
 def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
@@ -169,3 +173,36 @@ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
             process.kill()
             process.wait(timeout=10)
         client.close()
+
+
+@pytest.mark.parametrize("scenario", ["initial", "refresh", "recover", "action-readback", "initial-edit"])
+def test_owner_read_error_microtask(tmp_path, scenario):
+    """Controlled same-realm scheduling; no HTTP, Worker, digest timing or user signoff."""
+    web = Path(__file__).parents[1] / "src/sim2act/web"
+    output = tmp_path / "controlled-result.json"
+    result = subprocess.run(
+        [
+            "node",
+            str(Path(__file__).with_name("owner_read_order_errors.cjs")),
+            scenario,
+            str(web / "owner-review.js"),
+            str(output),
+            str(web),
+        ],
+        text=True,
+        capture_output=True,
+        timeout=20,
+    )
+    evidence = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+    if evidence:
+        target = Path(evidence)
+        target.mkdir(parents=True, exist_ok=True)
+        stem = "controlled-owner-read-error-" + scenario
+        (target / (stem + ".log")).write_text(result.stdout + result.stderr)
+        if output.exists():
+            (target / (stem + ".json")).write_bytes(output.read_bytes())
+    assert result.returncode == 0, result.stdout + result.stderr
+    proof = json.loads(output.read_text())
+    assert proof["status"] == "PASS" and all(proof["checks"].values())
+    assert proof["classification"] == "CONTROLLED_LOCAL_SOURCE_JSDOM_MICROTASK"
+    assert proof["source_sha256"] == hashlib.sha256((web / "owner-review.js").read_bytes()).hexdigest()

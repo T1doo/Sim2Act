@@ -1,0 +1,287 @@
+diff --git a/src/sim2act/owner_acceptance.py b/src/sim2act/owner_acceptance.py
+index ecf831f..095a6b6 100644
+--- a/src/sim2act/owner_acceptance.py
++++ b/src/sim2act/owner_acceptance.py
+@@ -333,9 +333,14 @@ def public_state(store, c, user, iid, limits, rows):
+ 
+ def read(store, user, iid, limits, key=None):
+     with store.tx() as c:
+-        scope(store, c, user, iid)
++        pid = scope(store, c, user, iid)
++        app_id = c.execute(
++            select(internal_instances.c.source_app_id).where(internal_instances.c.id == iid)
++        ).scalar_one()
+         rows = ledger(c, user, iid)
+         state = public_state(store, c, user, iid, limits, rows)
++        # Owned-instance metadata binds even empty or redacted reads to the selected scope.
++        state.update(principal_id=user, project_id=pid, app_id=app_id)
+         if key is not None:
+             row = next((r for r in rows if r["request_key"] == key), None)
+             if not row:
+diff --git a/src/sim2act/web/owner-review.js b/src/sim2act/web/owner-review.js
+index 7cc75d0..044ced9 100644
+--- a/src/sim2act/web/owner-review.js
++++ b/src/sim2act/web/owner-review.js
+@@ -46,43 +46,91 @@ function ownerRender(view,state){
+   }
+   ownerButtons(view);
+ }
+-async function ownerRead(view,key=null){
+-  const current=ownerFence(view);
+-  const state=await api(`/api/internal/instances/${view.iid}/owner-review${key ? "?request_key="+encodeURIComponent(key) : ""}`);
+-  if(!current())return false;
+-  const pending=ownerPending.get(ownerKey(view));
+-  if(key && pending?.request_key===key){
+-    const receipt=state.recovered;
+-    if(!receipt || receipt.request_key!==key || receipt.request_fingerprint!==await ownerHash(pending)){throw Error("原请求回执绑定不一致");}
+-    if(!current())return false;
+-    ownerPending.delete(ownerKey(view));
++function ownerSame(a,b){return goalRunCanonical(a)===goalRunCanonical(b);}
++function ownerScope(view,value){
++  return value?.principal_id===view.principal && value.project_id===view.project && value.instance_id===view.iid;
++}
++function ownerContract(view,value){
++  return ownerScope(view,value) && value.app_id===view.app && value.version==="owner.generated-text.v1" && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
++}
++async function ownerValidate(view,state,key,current){
++  const invalid=()=>{throw Error("签收读取身份、序列或回执绑定不一致");};
++  if(!ownerContract(view,state) || !Number.isSafeInteger(state.sequence) || state.sequence<0 || state.sequence>256 || !Array.isArray(state.history) || state.history.length!==state.sequence || typeof state.content_access!=="boolean")invalid();
++  const ids=new Set(),keys=new Set(),hash=/^[a-f0-9]{64}$/;
++  let previous="";
++  for(const [index,row] of state.history.entries()){
++    if(!ownerScope(view,row) || row.sequence!==index+1 || !row.id || ids.has(row.id) || !row.request_key || keys.has(row.request_key) || !hash.test(row.fingerprint) || !hash.test(row.request_fingerprint) || row.previous_fingerprint!==previous || !({PREPARE:["PENDING"],DECIDE:["ACCEPTED","REJECTED"],CANCEL:["CANCELLED"],REVOKE:["REVOKED"]}[row.kind]||[]).includes(row.status))invalid();
++    ids.add(row.id);keys.add(row.request_key);previous=row.fingerprint;
+   }
+-  ownerRender(view,state);return true;
++  if(!ownerSame(state.latest,state.history.at(-1)||null))invalid();
++  if(view.state && (state.sequence<view.state.sequence || !ownerSame(state.history.slice(0,view.state.sequence),view.state.history)))invalid();
++  if(state.content_access ? !ownerContract(view,state.current) : !!(state.current || state.record))invalid();
++  const last=state.latest,status=state.owner_acceptance;
++  const expected=last ? last.status : "PENDING";
++  if(!state.content_access && last && !["CANCEL","REVOKE"].includes(last.kind) && status!=="STALE")invalid();
++  if(status!==expected && !(status==="STALE" && last && !state.content_access && !["CANCEL","REVOKE"].includes(last.kind)) && !(status==="EXPIRED" && last?.kind==="PREPARE" && state.content_access))invalid();
++  const active=state.content_access && last && ["PREPARE","DECIDE"].includes(last.kind);
++  if(!!state.record!==!!active)invalid();
++  for(const [record,row] of [[state.record,active ? last : null],[state.recovered,key ? state.history.find(row=>row.request_key===key) : null]]){
++    if(!record && !row)continue;
++    if(!record || !row)invalid();
++    const {payload,...metadata}=record;
++    if(!ownerSame(metadata,row))invalid();
++    if(payload){
++      const {fingerprint,...unsigned}=row;
++      if(!state.content_access || !ownerSame(payload.metadata,unsigned) || payload.request?.command!==row.kind || payload.request.request_key!==row.request_key || payload.request.expected_sequence!==row.sequence-1 || (payload.contract && !ownerContract(view,payload.contract)))invalid();
++      const requestHash=await ownerHash(payload.request);
++      if(!current())return false;
++      if(requestHash!==row.request_fingerprint)invalid();
++    }else if(record===state.record)invalid();
++  }
++  return current();
++}
++async function ownerRead(view,key=null){
++  const fence=ownerFence(view),generation=++view.readGeneration;
++  const current=()=>fence() && generation===view.readGeneration;
++  try{
++    const state=await api(`/api/internal/instances/${view.iid}/owner-review${key ? "?request_key="+encodeURIComponent(key) : ""}`);
++    if(!current() || !await ownerValidate(view,state,key,current) || !current())return false;
++    const pending=ownerPending.get(ownerKey(view));
++    if(key && pending?.request_key===key){
++      const requestHash=await ownerHash(pending);
++      if(!current())return false;
++      if(state.recovered.request_fingerprint!==requestHash)throw Error("原请求回执绑定不一致");
++      ownerPending.delete(ownerKey(view));
++    }
++    ownerRender(view,state);return true;
++  }catch(error){if(!current())return false;throw error;}
+ }
+ async function openOwnerReview(engineeringView){
+   clearOwnerReview();
+   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
+-  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,iid:instance.id,state:null,busy:false};
++  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,state:null,busy:false,readGeneration:0};
+   ownerView=view;$("owner-panel").hidden=false;
+   $("owner-run").replaceChildren(new Option("手动选择已完成的新输入任务",""),...instance.runs.filter(run=>run.status==="SUCCEEDED").map(run=>new Option(`${run.id} · 结果 v${run.result_version}`,run.id)));
+   const pending=ownerPending.get(ownerKey(view));if(pending)$("owner-key").value=pending.request_key;
+-  try{await ownerRead(view);}catch(error){if(ownerCurrent(view))$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
++  ownerButtons(view);
++  const reading=ownerRead(view),readGeneration=view.readGeneration;
++  try{await reading;}catch(error){if(ownerCurrent(view) && readGeneration===view.readGeneration)$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
+   ownerButtons(view);
+ }
+ async function ownerAction(body){
+   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy || ownerPending.has(ownerKey(view)))return;
+   const request={...body,request_key:crypto.randomUUID(),expected_sequence:view.state.sequence},current=ownerFence(view);
++  view.readGeneration++; // A new write intent invalidates every earlier read before POST.
+   ownerPending.set(ownerKey(view),request);$("owner-key").value=request.request_key;
+   view.busy=true;ownerButtons(view);$("owner-status").textContent="正在保存精确人工操作；回执未知时仅以原 key 读取恢复。";
++  let readGeneration=null;
+   try{
+     const saved=await api(`/api/internal/instances/${view.iid}/owner-review-requests`,"POST",request);
+     if(!current())return;
+     if(saved.formal_publication_enabled!==false || saved.record?.request_key!==request.request_key || saved.record.request_fingerprint!==await ownerHash(request))throw Error("人工回执绑定不一致");
+     if(!current())return;
+-    await ownerRead(view,request.request_key);
++    const reading=ownerRead(view,request.request_key);readGeneration=view.readGeneration;
++    await reading;
+   }catch(error){
+     if(error.httpStatus>=400 && error.httpStatus<500 && ownerPending.get(ownerKey(view))===request)ownerPending.delete(ownerKey(view));
+-    if(current()){
++    if(current() && (readGeneration===null || readGeneration===view.readGeneration)){
+       $("owner-status").textContent=`操作未确认：${error.detail || error.message}。请手动读取原 key；不会自动重发。`;
+     }
+   }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
+@@ -104,6 +152,7 @@ for(const id of ["owner-run","owner-ack","owner-stop-reason","owner-key"]){$(id)
+ for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id).onclick=safe(async()=>{
+   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy)return;
+   const current=ownerFence(view);view.busy=true;ownerButtons(view);
+-  try{await ownerRead(view,recover ? $("owner-key").value.trim() : null);}catch(error){if(current())$("owner-status").textContent=`读取未确认：${error.detail || error.message}；保留原 key 与人工草稿。`;}
++  const reading=ownerRead(view,recover ? $("owner-key").value.trim() : null),readGeneration=view.readGeneration;
++  try{await reading;}catch(error){if(current() && readGeneration===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail || error.message}；保留原 key 与人工草稿。`;}
+   finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
+ });
+diff --git a/tests/goal_text_ui.cjs b/tests/goal_text_ui.cjs
+index d3664fb..897fbac 100644
+--- a/tests/goal_text_ui.cjs
++++ b/tests/goal_text_ui.cjs
+@@ -1,7 +1,7 @@
+ "use strict";
+ const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
+ const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],hashes={},pending=new Map(),userActions=[],staticResourceLoads=[];
+-let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null;
++let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null,heldOwnerState=null,readOrderEvidence=null;
+ readline.createInterface({input:process.stdin}).on("line",line=>{const result=JSON.parse(line),resolve=pending.get(result.id);pending.delete(result.id);resolve(result);});
+ const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
+ const check=(value,label)=>{assert(value,label);checks.push(label);};
+@@ -50,6 +50,18 @@ async function boot(app){
+  w.fetch=async(url,options={})=>{
+   const request={path:url,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
+   const ownerCommand=request.method==="POST"&&url.endsWith("/owner-review-requests")?request.body.command:null;
++  if(fault==="owner-initial-read-order"&&request.method==="GET"&&url.endsWith("/owner-review")){fault="";heldOwnerState=JSON.parse(result.text);await new Promise(resolve=>hold=resolve);if(info.scenario==="owner-read-order-error")throw Error("controlled delayed initial HTTP response loss");}
++  if(fault.startsWith("owner-poison-")&&request.method==="GET"&&url.includes("/owner-review")){
++   const actual=JSON.parse(result.text),mode=fault;fault="";let value=structuredClone(actual);
++   if(mode==="owner-poison-lower")value=structuredClone(heldOwnerState);
++   if(["instance_id","project_id","principal_id","app_id"].some(k=>mode==="owner-poison-"+k)){const k=mode.slice("owner-poison-".length);value[k]="wrong-scope";}
++   if(mode==="owner-poison-latest")value.latest.id="wrong-latest";
++   if(mode==="owner-poison-history"){value.history[0].request_fingerprint="f".repeat(64);}
++   if(mode==="owner-poison-status")value.owner_acceptance="ACCEPTED";
++   if(mode==="owner-poison-key")value.recovered.request_key="different-original-key";
++   readOrderEvidence.response_faults.push({mode,actual_http_response:actual,controlled_response:value});
++   return new Response(JSON.stringify(value),{status:result.status,headers:{"Content-Type":"application/json"}});
++  }
+   if((fault==="owner-lost-prepare"&&ownerCommand==="PREPARE")||(fault==="owner-lost-decision"&&ownerCommand==="DECIDE")){fault="";assert.equal(result.status,201);throw Error("injected actual accepted owner response loss");}
+   if((fault==="owner-late-prepare"&&ownerCommand==="PREPARE")||(fault==="owner-late-decision"&&ownerCommand==="DECIDE")||(fault==="owner-late-read"&&request.method==="GET"&&url.endsWith("/owner-review"))){fault="";await new Promise(resolve=>hold=resolve);}
+   if(fault==="generation"&&request.method==="POST"&&url.endsWith("/application-runs")){fault="";assert.equal(result.status,202);throw Error("injected accepted generation lost");}
+@@ -176,6 +188,36 @@ function assertHandoff(label){
+    if(["owner-lost-decision","owner-late-decision-undo","owner-late-navigation-undo"].includes(info.scenario)){const count=ownerPosts().length;await click("owner-recover");check(ownerPosts().length===count,"unknown decision outcome recovers by original key GET without another POST");}
+    const expected=info.scenario==="owner-reject"?"REJECTED":"ACCEPTED";check($("owner-status").textContent.includes(expected),"only explicit simulated human choices produce exact scoped owner status");
+    check($("owner-status").textContent.includes("UNKNOWN")&&$("owner-status").textContent.includes("正式发布关闭"),"human declaration does not alter technical semantic UNKNOWN or publication gate");
++   if(info.scenario.startsWith("owner-read-order-")){
++    const originalKey=$("owner-key").value;
++    fault="owner-initial-read-order";
++    const reopen=[...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(instance));
++    const initial=click(reopen);await wait(()=>hold);const release=hold;hold=null;
++    check(heldOwnerState.owner_acceptance==="ACCEPTED"&&heldOwnerState.sequence===2,"held initial read is actual older accepted HTTP response");
++    const operation=info.scenario.endsWith("revoke") ? {command:"REVOKE",target_id:heldOwnerState.latest.id,target_fingerprint:heldOwnerState.latest.fingerprint,reason:"SIMULATED other session revokes exact declaration"} : {command:"PREPARE",expected_revision:heldOwnerState.current.instance_revision,expected_release_fingerprint:heldOwnerState.current.release_fingerprint,run_ids:heldOwnerState.record.payload.run_ids};
++    const otherRequest={path:`/api/internal/instances/${instance}/owner-review-requests`,method:"POST",body:{...operation,expected_sequence:2,request_key:"other-session-read-order"},headers:{Authorization:"Bearer synthetic-test-A"}};
++    const otherResponse=await rpc(otherRequest);check(otherResponse.status===201,"separate authorized session performs actual append through HTTP");
++    const otherRecord=JSON.parse(otherResponse.text).record,latest=info.scenario.endsWith("revoke")?"REVOKED":"PENDING";
++    const count=posts();await click("owner-refresh");
++    check(posts()===count&&$("owner-status").textContent.includes(latest)&&w.eval("ownerView.state.sequence")===3,"newer manual read renders actual current sequence before old initial read returns");
++    const focus=w.document.activeElement,status=$("owner-status").textContent,proof=$("owner-proof").textContent,history=$("owner-history").textContent;
++    readOrderEvidence={older_actual_http:heldOwnerState,other_session:{request:otherRequest,status:otherResponse.status,body:JSON.parse(otherResponse.text)},newer_before_old_delivery:{status,proof,history},response_faults:[]};
++    release();await initial;
++    check($("owner-status").textContent===status&&w.eval("ownerView.state.sequence")===3&&w.eval("ownerView.state.latest.id")===otherRecord.id,"old accepted initial read cannot roll back latest owner status or sequence");
++    check($("owner-proof").textContent===proof&&$("owner-history").textContent===history&&w.document.activeElement===focus,"old initial read cannot replace proof history or focus");
++    if(latest==="PENDING"){check(visible($("owner-form"))&&[...$("owner-criteria").querySelectorAll("select")].every(s=>s.value===""),"old accepted read cannot remove newer pending criteria");await edit("owner-reason-goal","NEWER OWNER DRAFT MUST SURVIVE VALID READ");}
++    await edit("owner-key",originalKey);await click("owner-recover");
++    check(posts()===count&&$("owner-status").textContent.includes(latest)&&w.eval("ownerView.state.sequence")===3,"original decision key recovery remains GET only and cannot restore historical acceptance");
++    await click("owner-refresh");check(posts()===count&&$("owner-status").textContent.includes(latest),"valid refresh remains available after stale delivery and keyed recovery");
++    if(info.scenario==="owner-read-order-invalid")for(const mode of ["instance_id","project_id","principal_id","app_id","latest","history","status","lower","key"]){
++     const before={state:w.eval("JSON.stringify(ownerView.state)"),proof:$("owner-proof").textContent,history:$("owner-history").textContent,reason:$("owner-reason-goal").value};
++     fault="owner-poison-"+mode;await click(mode==="key"?"owner-recover":"owner-refresh");
++     check(w.eval("JSON.stringify(ownerView.state)")===before.state&&$("owner-proof").textContent===before.proof&&$("owner-history").textContent===before.history&&$("owner-reason-goal").value===before.reason,`controlled ${mode} response cannot install unrelated regressive or inconsistent state`);
++     check($("owner-status").textContent.includes("读取未确认"),`controlled ${mode} response fails visibly without state commit`);
++     await click("owner-refresh");check(posts()===count&&$("owner-status").textContent.includes(latest),`valid refresh recovers after controlled ${mode} fault without POST retry`);
++    }
++    if(latest==="PENDING")check($("owner-reason-goal").value==="NEWER OWNER DRAFT MUST SURVIVE VALID READ","valid same-preview reads preserve newer human draft");
++   }
+    if(info.scenario==="owner-revoke"){
+     const oldKey=$("owner-key").value;await edit("owner-stop-reason","SIMULATED revoke exact declaration");await click("owner-revoke");check($("owner-status").textContent.includes("REVOKED"),"explicit revocation appends immutable status");
+     const count=ownerPosts().length;await edit("owner-key",oldKey);await click("owner-recover");check(ownerPosts().length===count&&$("owner-status").textContent.includes("REVOKED")&&$("owner-history").textContent.includes("ACCEPTED"),"historical accepted receipt does not reactivate revoked state");
+@@ -193,5 +235,5 @@ function assertHandoff(label){
+  check($("internal-runs").textContent.includes("FAILED"),"browser-valid but contract-invalid input leaves actual FAILED history");check($("internal-data").textContent===dataBefore,"failed input appends no partial result");
+  check(requests.filter(request=>request.method==="POST"&&request.path.endsWith("/application-runs")).length===1,"one generation POST across all receipt recovery");
+  check(requests.filter(request=>request.method==="POST"&&request.path.endsWith("/confirm-application-candidate")).length===1,"one precise confirmation POST");
+- fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,app,instance},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
+- }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,text:dom?.window.document.body.textContent},null,2));dom?.window.close();process.stderr.write(error.stack+"\n");process.exit(1);}})();
++ fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,read_order_evidence:readOrderEvidence,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,app,instance},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
++ }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,read_order_evidence:readOrderEvidence,text:dom?.window.document.body.textContent},null,2));dom?.window.close();process.stderr.write(error.stack+"\n");process.exit(1);}})();
+diff --git a/tests/test_goal_text_ui.py b/tests/test_goal_text_ui.py
+index 4b13f97..129aadd 100644
+--- a/tests/test_goal_text_ui.py
++++ b/tests/test_goal_text_ui.py
+@@ -41,6 +41,10 @@ from sim2act.worker import Worker
+         "owner-late-navigation-undo",
+         "owner-cancel",
+         "owner-revoke",
++        "owner-read-order-revoke",
++        "owner-read-order-prepare",
++        "owner-read-order-error",
++        "owner-read-order-invalid",
+     ],
+ )
+ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+@@ -169,3 +173,36 @@ def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+             process.kill()
+             process.wait(timeout=10)
+         client.close()
++
++
++@pytest.mark.parametrize("scenario", ["initial", "refresh", "recover", "action-readback"])
++def test_owner_read_error_microtask(tmp_path, scenario):
++    """Controlled same-realm scheduling; no HTTP, Worker, digest timing or user signoff."""
++    web = Path(__file__).parents[1] / "src/sim2act/web"
++    output = tmp_path / "controlled-result.json"
++    result = subprocess.run(
++        [
++            "node",
++            str(Path(__file__).with_name("owner_read_order_errors.cjs")),
++            scenario,
++            str(web / "owner-review.js"),
++            str(output),
++            str(web),
++        ],
++        text=True,
++        capture_output=True,
++        timeout=20,
++    )
++    evidence = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
++    if evidence:
++        target = Path(evidence)
++        target.mkdir(parents=True, exist_ok=True)
++        stem = "controlled-owner-read-error-" + scenario
++        (target / (stem + ".log")).write_text(result.stdout + result.stderr)
++        if output.exists():
++            (target / (stem + ".json")).write_bytes(output.read_bytes())
++    assert result.returncode == 0, result.stdout + result.stderr
++    proof = json.loads(output.read_text())
++    assert proof["status"] == "PASS" and all(proof["checks"].values())
++    assert proof["classification"] == "CONTROLLED_LOCAL_SOURCE_JSDOM_MICROTASK"
++    assert proof["source_sha256"] == hashlib.sha256((web / "owner-review.js").read_bytes()).hexdigest()
+diff --git a/tests/test_owner_acceptance.py b/tests/test_owner_acceptance.py
+index 3e42e40..41b6b34 100644
+--- a/tests/test_owner_acceptance.py
++++ b/tests/test_owner_acceptance.py
+@@ -42,7 +42,12 @@ def path(instance):
+ def state(data, instance, key=None):
+     response = data[2].get(path(instance), params={"request_key": key} if key else {})
+     assert response.status_code == 200, response.text
+-    return response.json()
++    value = response.json()
++    assert value["principal_id"] == data[3]
++    assert value["project_id"] == data[4]
++    assert value["instance_id"] == instance["id"]
++    assert value["app_id"] == instance["source_app_id"]
++    return value
+ 
+ 
+ def prepare(data, release, instance, job, key="prepare", sequence=None):

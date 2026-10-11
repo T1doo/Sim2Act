@@ -1,0 +1,32 @@
+{
+  "status": "DESIGN_REVIEW_ONLY",
+  "tests": "NOT_RUN",
+  "baseline": "ed5cda2e341f0601879ad3f1e42ad1667022d490",
+  "contract": "Every ownerRead monotonically owns a read generation; ownerAction invalidates preceding reads. Only latest eligible success/error may mutate state or pending cache. Validate response identity, exact ledger metadata relationships and monotonic unchanged history prefix before mutation. Same sequence may legally change to STALE/EXPIRED or regain current content authorization without severity ordering.",
+  "required_guards": [
+    "All success/error/caller catch/finally paths must preserve read ownership; checking only render path is insufficient",
+    "Awaited hash validation must recheck ownership before pending deletion or render",
+    "Top-level project/principal/app identity needs metadata-only server projection even when content is unavailable or history empty",
+    "history length matches safe integer sequence; contiguous chain, scoped rows, unique IDs/keys, kind/status and exact latest/record/recovered relations",
+    "recovered must bind requested key regardless of pending cache presence",
+    "No automatic POST or source/permission expansion"
+  ],
+  "actual_http_future_cases": [
+    "Delayed initial ACCEPTED, another session REVOKE, refresh returns newer first, release old success",
+    "Delayed initial ACCEPTED, another session new PREPARE, refresh returns newer first, release old success",
+    "Delayed initial error superseded by successful manual refresh",
+    "Read invalidated by starting action or by a newer key read; hash await supersession"
+  ],
+  "controlled_future_cases": [
+    "Wrong identity/version/publication/semantic flags, malformed ledger shape, wrong recovered key, payload/hash mismatch",
+    "Lower sequence and altered prefix rejected without clearing pending or draft",
+    "Same-sequence legal STALE/EXPIRED transitions allowed"
+  ],
+  "scope_boundaries": [
+    "SQLite/actual Worker/IPC HTTP/JSDOM only after final freeze; no live provider/native browser/PG",
+    "No shared product writes or old evidence modifications",
+    "Pure review is not counted as test PASS"
+  ],
+  "prior_evidence_files": 276,
+  "prior_evidence_mismatches": []
+}
