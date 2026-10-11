@@ -269,7 +269,7 @@ function clearIdentityView() {
   clearRunDetail();
   if(typeof clearProtocol === "function")clearProtocol();
   clearGoalCard();
-  for(const id of ["runs","materials","grants","app-list","goal-card-list","result","commands","events","raw-result","resource-preview","run-history-status","run-submit-status","project-select","app-resource","goal-card-resources","capabilities"]){$(id).replaceChildren();}
+  for(const id of ["runs","materials","grants","app-list","goal-card-list","result","commands","events","raw-result","resource-preview","run-history-status","run-submit-status","project-select","app-resource","goal-card-resources","capabilities","connections"]){$(id).replaceChildren();}
   $("reconcile-panel").hidden=true;$("resource-preview").hidden=true;
   $("goal").value="";
   renderRunSubmission();
@@ -281,7 +281,7 @@ $("connect").onclick = safe(async () => {
   try {
     await loadProjects();if(!current())return;
     $("token").value="";$("login").hidden=true;
-    const capabilities=await api("/api/capabilities");if(current())$("capabilities").textContent=JSON.stringify(capabilities,null,2);
+    const capabilities=await api("/api/capabilities");if(current())renderResourceCatalog(capabilities);
   } catch(error) {if(current())throw error;}
 });
 $("project-form").onsubmit = safe(async () => {await api("/api/projects","POST",{name:$("project-name").value}); await loadProjects();});
@@ -293,6 +293,27 @@ $("project-select").onchange = safe(async () => {if(typeof clearCsvLogic === "fu
 document.querySelectorAll("#workspace-nav [data-tab]").forEach(b => b.onclick = () => selectWorkspace(b.dataset.tab));
 selectWorkspace("projects");
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
+function selectResourceCategory(category) {
+  const categories = ["materials", "capabilities", "connections"];
+  if (!categories.includes(category)) return;
+  categories.forEach(id => $("resource-" + id).hidden = id !== category);
+  document.querySelectorAll("#resource-filters [data-resource-category]").forEach(button => {
+    if (button.dataset.resourceCategory === category) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  });
+}
+function renderResourceCatalog(data) {
+  $("capabilities").textContent = "";
+  $("connections").textContent = "";
+  const connection = data?.connection;
+  if (!Array.isArray(data?.tools) || !data.tools.every(tool => typeof tool === "string") || data.code_execution !== "DISABLED" || !connection || typeof connection.model !== "string" || !["MOCK", "LIVE"].includes(connection.mode) || connection.status !== (connection.mode === "MOCK" ? "MOCK_ENGINEERING" : "LIVE_NOT_ACCEPTED"))
+    throw new Error("能力与连接目录响应无效");
+  $("capabilities").textContent = JSON.stringify({tools: data.tools, code_execution: data.code_execution}, null, 2);
+  $("connections").textContent = JSON.stringify({model: connection.model, mode: connection.mode, status: connection.status}, null, 2);
+}
+document.querySelectorAll("#resource-filters [data-resource-category]").forEach(button => button.onclick = () => selectResourceCategory(button.dataset.resourceCategory));
+selectResourceCategory("materials");
+
 function createHealthSampler(render) {
   let generation = 0;
   return async (readHealth) => {
