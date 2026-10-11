@@ -32,7 +32,7 @@ function csvLogicButtons(){
   $("csv-logic-open").disabled=locked||!live||!c.plan;
   $("csv-logic-revoke").disabled=locked||!live||!c.logic||!$("csv-logic-revoke-confirm").checked;
   $("csv-logic-recover").hidden=!intent;$("csv-logic-recover").disabled=!!c?.busy;
-  const source=csvDagContext?.reuse?.release,choice=source&&JSON.stringify([token,appSelectionGeneration,source.id,source.fingerprint]);
+  const selectedSource=csvDagContext?.reuse?.release,source=selectedSource?.snapshot.execution_source.version==="internal.csv-read-two-sums.v1"?null:selectedSource,choice=source&&JSON.stringify([token,appSelectionGeneration,source.id,source.fingerprint]);
   if(csvLogicAuthorizationChoice!==choice)$("csv-logic-authorize-confirm").checked=false;
   $("csv-logic-authorize").disabled=locked||!source||!csvDagCurrent(csvDagContext)||!$("csv-logic-authorize-confirm").checked;
   $("csv-logic-authorize-confirm").disabled=locked;

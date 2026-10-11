@@ -1,4 +1,4 @@
-"""Closed read→sum[→report] adapter, using the existing DAG worker and typed ledger.
+"""Closed read→sum[→report] / read→two sums adapter on the existing worker.
 
 A completed, independently reconstructed source Run anchors each immutable version.
 No new manifest family, executor, principal, Grant or publication capability.
@@ -30,7 +30,8 @@ from .tools import csv_column_options
 
 VERSION = "internal.csv-read-sum.v1"
 REPORT_VERSION = "internal.csv-read-sum-report.v1"
-VERSIONS = (VERSION, REPORT_VERSION)
+TWO_SUM_VERSION = "internal.csv-read-two-sums.v1"
+VERSIONS = (VERSION, REPORT_VERSION, TWO_SUM_VERSION)
 
 
 def require(ok, message="Internal DAG provenance changed"):
@@ -45,7 +46,7 @@ def marked(snapshot):
 def closed(plan):
     nodes = plan.get("composition", {}).get("definition", {}).get("nodes", [])
     require(len(nodes) in (2, 3) and "branch_semantics" not in plan,
-            "Only unconditional read→sum[→report] composition is reusable")
+            "Only unconditional read→sum[→report] or read→two sums is reusable")
     read, total = nodes[:2]
     require(read["action"] == "resource.read" and total["action"] == "data.aggregate_csv"
         and read["depends_on"] == [] and total["depends_on"] == [read["step_id"]]
@@ -53,9 +54,19 @@ def closed(plan):
         and read["inputs"] == {"resource_id": dict(source="data", ref="source", field="resource_id")}
         and total["inputs"] == {
             "resource_id": dict(source="step", ref=read["step_id"], field="resource_id"),
-            "column": dict(source="input", field=total["step_id"] + "_column")}
-        and plan["composition"]["sinks"] == [nodes[-1]["step_id"]],
+            "column": dict(source="input", field=total["step_id"] + "_column")},
         "Only the closed read→sum ports can be reused")
+    if len(nodes) == 3 and nodes[2]["action"] == "data.aggregate_csv":
+        other = nodes[2]
+        require(other["depends_on"] == [read["step_id"]]
+            and other["inputs"] == {
+                "resource_id": dict(source="step", ref=read["step_id"], field="resource_id"),
+                "column": dict(source="input", field=other["step_id"] + "_column")}
+            and len({n["step_id"] for n in nodes}) == 3
+            and plan["composition"]["sinks"] == [total["step_id"], other["step_id"]],
+            "Both sums require the same read predecessor and two complete sinks")
+        return [total["step_id"], other["step_id"]]
+    require(plan["composition"]["sinks"] == [nodes[-1]["step_id"]])
     if len(nodes) == 3:
         formatted = nodes[2]
         require(formatted["action"] == report.REF
@@ -70,6 +81,15 @@ def aggregate_result(base, execution):
     """The typed ledger stays five fields; the complete report remains in Run proof."""
     if execution["version"] == VERSION:
         return base["output_by_step"][execution["aggregate_step"]]
+    if execution["version"] == TWO_SUM_VERSION:
+        steps = execution["aggregate_steps"]
+        require(len(base["steps"]) == 3 and all(p["status"] == "VERIFIED" for p in base["steps"])
+            and set(base["output_by_step"]) == set(steps))
+        values = {sid: base["output_by_step"][sid] for sid in steps}
+        require(all(sum(p["step_id"] == sid for p in base["steps"]) == 1
+            and fingerprint(values[sid]) == fingerprint(next(p["data"] for p in base["steps"] if p["step_id"] == sid))
+            for sid in steps), "Both complete sums must match actual operation receipts")
+        return values
     require(execution["version"] == REPORT_VERSION)
     totals = [p for p in base["steps"] if p["step_id"] == execution["aggregate_step"]]
     require(len(base["steps"]) == 3 and len(totals) == 1
@@ -100,21 +120,35 @@ def source_snapshot(store, c, user, rid, limits):
     cap = store.frozen_contract(c, job).limits
     declared = Limits(**plan["definition"]["manifest"]["runtime_limits"])
     effective = Limits(**{k: min(getattr(cap, k), getattr(declared, k)) for k in Limits.model_fields})
-    schema = lifecycle.record_schema(frozen["candidate"])
-    execution = dict(version=VERSION if count == 2 else REPORT_VERSION,
+    dual = isinstance(sid, list)
+    schema = (report.obj({"result": report.obj({step: copy.deepcopy(report.INPUT) for step in sid})})
+              if dual else lifecycle.record_schema(frozen["candidate"]))
+    execution = dict(version=TWO_SUM_VERSION if dual else VERSION if count == 2 else REPORT_VERSION,
         run_id=rid, run_version=job["version"], fence=job["fence"],
         accepted_fingerprint=job["fingerprint"], plan_key=bound["plan_key"],
         plan_fingerprint=plan["plan_fingerprint"], source_hash=plan["source_hash"],
         graph_fingerprint=plan["graph_fingerprint"], authorization_fingerprint=plan["authorization_fingerprint"],
-        receipt_fingerprints=[fingerprint(p) for p in proof["steps"]], aggregate_step=sid,
+        receipt_fingerprints=[fingerprint(p) for p in proof["steps"]],
         columns=columns, limits=effective.model_dump())
-    if count == 3:
+    if dual:
+        definition = plan["definition"]
+        bindings = {v["binding_id"]: v["action_id"] for v in definition["manifest"]["action_bindings"]}
+        actions = {v["action_id"]: v for v in definition["actions"]}
+        execution["read_step"] = plan["composition"]["definition"]["nodes"][0]["step_id"]
+        execution["aggregate_steps"] = sid
+        execution["aggregate_nodes"] = {n["step_id"]: dict(
+            inputs=copy.deepcopy(n["inputs"]), depends_on=n["depends_on"][:], columns=columns[:],
+            limits=copy.deepcopy(actions[bindings[n["step_id"]]]["limits"]))
+            for n in plan["composition"]["definition"]["nodes"][1:]}
+    else:
+        execution["aggregate_step"] = sid
+    if count == 3 and not dual:
         execution["report_step"] = plan["composition"]["definition"]["nodes"][2]["step_id"]
     validate_value(schema, {"result": aggregate_result(proof["result"], execution)})
     return dict(namespace=lifecycle.NAMESPACE, draft=frozen,
         dependency_lock=frozen["candidate"]["manifest"]["dependency_lock"], data_schema=schema,
         data_schema_version=1, execution_source=execution,
-        check_evidence=[dict(check="csv.read-sum.source-run.v1" if count == 2 else
+        check_evidence=[dict(check="csv.read-two-sums.source-run.v1" if dual else "csv.read-sum.source-run.v1" if count == 2 else
                             "csv.read-sum-report.source-run.v1", status="PASS", run_id=rid,
                             receipt_fingerprints=execution["receipt_fingerprints"])],
         model_requests=0, semantic_status="UNKNOWN", owner_acceptance="PENDING",
@@ -129,6 +163,34 @@ def validate_snapshot(store, c, user, snapshot, limits):
     expected = source_snapshot(store, c, user, execution["run_id"], limits)
     require(fingerprint(snapshot) == fingerprint(expected), "Internal version no longer matches its actual source receipts")
     return snapshot
+
+
+def validate_input(execution, value):
+    if execution["version"] == TWO_SUM_VERSION:
+        require(isinstance(value, dict) and set(value) == {"columns"}
+            and isinstance(value["columns"], dict)
+            and set(value["columns"]) == set(execution["aggregate_steps"])
+            and all(type(value["columns"][sid]) is str
+                and value["columns"][sid] in execution["aggregate_nodes"][sid]["columns"]
+                for sid in execution["aggregate_steps"]),
+            "Choose exactly one frozen column for each sum node; no structural override")
+    else:
+        require(isinstance(value, dict) and set(value) == {"column"}
+            and type(value["column"]) is str and value["column"] in execution["columns"],
+            "Choose one frozen numeric column; no resource or workflow override")
+
+
+def apply_input(body, execution, value):
+    validate_input(execution, value)
+    if execution["version"] == TWO_SUM_VERSION:
+        wanted = value["columns"]
+        body["column"] = wanted[execution["aggregate_steps"][0]]
+        for node in body["composition"]["nodes"]:
+            if node["step_id"] in wanted:
+                node["column"] = wanted[node["step_id"]]
+    else:
+        body["column"] = value["column"]
+        body["composition"]["nodes"][1]["column"] = value["column"]
 
 
 @dag.graph.controlled
@@ -163,9 +225,7 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
     snapshot = release["snapshot"]
     validate_snapshot(store, c, user, snapshot, limits)
     execution = snapshot["execution_source"]
-    require(isinstance(input_value, dict) and set(input_value) == {"column"}
-            and type(input_value["column"]) is str and input_value["column"] in execution["columns"],
-            "Choose one frozen numeric column; no resource or workflow override")
+    validate_input(execution, input_value)
     request = dict(instance_id=i["id"], expected_revision=revision,
         expected_release_fp=release_fp, input=input_value)
     old = c.execute(select(internal_app_runs).where(internal_app_runs.c.instance_id == i["id"],
@@ -181,8 +241,7 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
     require(i["revision"] == revision and release["fingerprint"] == release_fp)
     source_body, source_plan = read_pair(c, user, i["source_app_id"], "csv_dag_plan", execution["plan_key"], dag.PlanInput)
     body = source_body.model_dump(exclude_none=True)
-    body["column"] = input_value["column"]
-    body["composition"]["nodes"][1]["column"] = input_value["column"]
+    apply_input(body, execution, input_value)
     body["request_key"] = "instance-plan-" + fingerprint([i["id"], key])[:48]
     cap = Limits(**execution["limits"])
     # No broader platform defaults: compilation and the accepted contract use frozen caps.
@@ -256,7 +315,7 @@ def validate_switch(store, c, user, i, old, target, limits):
     a, b = old["snapshot"].get("execution_source"), target["snapshot"].get("execution_source")
     require(isinstance(a, dict) and isinstance(b, dict), "Cannot mix DAG and ordinary versions")
     require(a["version"] in VERSIONS and all(a.get(k) == b.get(k) for k in
-        ("version", "aggregate_step", "report_step", "columns", "limits")),
+        ("version", "aggregate_step", "report_step", "columns", "limits", "read_step", "aggregate_steps", "aggregate_nodes")),
         "DAG execution family, ports, columns and budget must match")
     validate_instance_history(c, i)
     records = lifecycle.data_rows(c, i["id"])
@@ -319,15 +378,14 @@ def validate_binding(store, c, job, accepted, limits, *, authorize=True, histori
         source_body, source_plan = read_pair(c, job["principal_id"], accepted["app_id"], "csv_dag_plan", s["execution_source"]["plan_key"], dag.PlanInput)
         derived_body, derived_plan = read_pair(c, job["principal_id"], accepted["app_id"], "csv_dag_plan", s["plan_key"], dag.PlanInput)
         expected = source_body.model_dump(exclude_none=True)
-        expected["column"] = s["input"]["column"]
-        expected["composition"]["nodes"][1]["column"] = s["input"]["column"]
+        apply_input(expected, s["execution_source"], s["input"])
         expected["request_key"] = "instance-plan-" + fingerprint([i["id"], s["request_key"]])[:48]
         if "logical_reuse" in source_plan:
             from .csv_logic_reuse import INSTANCE_PREFIX
             expected["request_key"] = INSTANCE_PREFIX + fingerprint([i["id"], s["request_key"]])[:48]
             expected["logic_origin"] = source_plan["logical_reuse"]
             require(derived_plan.get("logical_reuse") == source_plan["logical_reuse"])
-        require(derived_body.model_dump(exclude_none=True) == expected and s["input"]["column"] in s["execution_source"]["columns"])
+        require(fingerprint(derived_body.model_dump(exclude_none=True)) == fingerprint(expected))
         require(store.frozen_contract(c, job).limits.model_dump() == s["limits"])
         closed(accepted["plan"])
     return s, ar
@@ -367,7 +425,9 @@ def commit_result(store, c, job, accepted, base, limits):
     require(base["output_status"] == "PRODUCED" and len(base["steps"]) ==
             (2 if s["namespace"] == VERSION else 3))
     validate_value(r["snapshot"]["data_schema"], {"result": output})
-    dag.oracle(dag.read_source(store, c, job)["content"], output)
+    content = dag.read_source(store, c, job)["content"]
+    for value in output.values() if s["namespace"] == TWO_SUM_VERSION else [output]:
+        dag.oracle(content, value)
     version = i["data_version"] + 1
     data = {"result": output}
     c.execute(insert(internal_instance_data).values(instance_id=i["id"], version=version, run_id=ar["id"],

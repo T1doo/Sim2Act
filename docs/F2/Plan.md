@@ -470,3 +470,5 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 
 
 2026-10-08人工编辑锁候选独审限定通过后整合：source de6ba39，独审SQLite26P1PGskip/PG27P、每端15页面断言，独立105.50→13.875、旧包兼容/CRUD角色通过。dev72563fa快进执行2bde4eb，产品字节同已审版本，必要16例整合/旧源码升级，不重跑全量；跨进程/原生Edge/超过50历史未独审，整体F2-T07不签收。只归档并普通push，LIVE0/原900-240-150/权限不变。[范围与剩余短建议](ManualEditLockIntegrationLog.md)。
+
+2026-10-11 F2-T03/T04/AT10 有界双求和复用：[范围与页面步骤](CsvTwoSumInstances20261011.md)，基线8fefbc34，独立dev/csv-two-sum-instances-20261011。已完成读取→两个无条件求和来源可手动保存版本/独立实例，按两个稳定节点分别选列，实际worker重算并原子保存两份完整结果，冷页交换列与历史保留；旧单求和/报告格式与权限不变。关联SQLite229PASS/7SKIP（5PG角色、2旧源码升级）/另2旧源码升级未运行；最终实际HTTP/JSDOM四例102检查，独审19自编后端/2原格式/25受控JSDOM通过，不累计为正式验收。原失败、最终字节和全仓Ruff10/mypy5基线一致见[证据](../evidence/csv-two-sum-instances-20261011/README.md)。无新工具/模型/身份/Grant/表/部署/main变更；PG/Windows/native/完整P-A/P-B/AT10与语义签收仍开放。

@@ -1,0 +1,1 @@
+首个未redirect测试运行：15 PASS / 1 FAIL，40.32秒。作者在 SQLite BEGIN IMMEDIATE 写事务内部调用 dag.advance，另一事务 BEGIN IMMEDIATE 抛 sqlite3.OperationalError: database is locked。属于作者故障注入夹具错误，已将两次推进移到事务外；后续20与26例均通过。完整首个 traceback 仅在工具会话中，未另存原始文件；此文件是准确摘要，不冒充完整原始日志。

@@ -71,6 +71,8 @@ def recipe(store, c, user, rid, limits):
         raise DomainError("PERMISSION_DENIED")
     store.lock_project(c, user, row["project_id"])
     execution = row["snapshot"].get("execution_source", {})
+    if execution.get("version") == instances.TWO_SUM_VERSION:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "Two-sum versions reuse per-node inputs on their original material only")
     instances.require(execution.get("version") in instances.VERSIONS)
     # One material transfer, not a recursive chain of source-release interpreters.
     if execution["plan_key"].startswith((PREFIX, "logic-plan-", "logic-instance-plan-")):

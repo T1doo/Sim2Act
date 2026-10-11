@@ -468,22 +468,48 @@ for(const role of ["target","op","source","value"])$("csv-dag-branch-"+role).onc
 const dagReuseIntents = new Map();
 const dagReuseVersion = "internal.csv-read-sum.v1";
 const dagReuseReportVersion = "internal.csv-read-sum-report.v1";
+const dagReuseTwoSumVersion = "internal.csv-read-two-sums.v1";
+const dagReuseLabel = e => e.version===dagReuseTwoSumVersion?"读取与双求和":e.version===dagReuseVersion?"两步求和":"三步报告";
 function dagReuseShape(p) {
   const n=p?.composition?.definition?.nodes;
-  if(!Array.isArray(n)||![2,3].includes(n.length)||p.branch_semantics||n.some(v=>v.when)||n[0].action!=="resource.read"||n[1].action!=="data.aggregate_csv")return null;
-  if(!deliverySame(n[0].depends_on,[])||!deliverySame(n[1].depends_on,[n[0].step_id])||!deliverySame(n[0].inputs,{resource_id:{source:"data",ref:"source",field:"resource_id"}})||!deliverySame(n[1].inputs,{resource_id:{source:"step",ref:n[0].step_id,field:"resource_id"},column:{source:"input",field:n[1].step_id+"_column"}})||!deliverySame(p.composition.sinks,[n.at(-1).step_id]))return null;
+  if(!Array.isArray(n)||![2,3].includes(n.length)||p.branch_semantics||n.some(v=>Object.hasOwn(v,"when"))||n[0].action!=="resource.read"||n[1].action!=="data.aggregate_csv")return null;
+  const sum=v=>v.action==="data.aggregate_csv"&&deliverySame(v.depends_on,[n[0].step_id])&&deliverySame(v.inputs,{resource_id:{source:"step",ref:n[0].step_id,field:"resource_id"},column:{source:"input",field:v.step_id+"_column"}});
+  if(!deliverySame(n[0].depends_on,[])||!deliverySame(n[0].inputs,{resource_id:{source:"data",ref:"source",field:"resource_id"}})||!sum(n[1]))return null;
+  if(n.length===3&&n[2].action==="data.aggregate_csv") {
+    if(!sum(n[2])||new Set(n.map(v=>v.step_id)).size!==3||!deliverySame(p.composition.sinks,n.slice(1).map(v=>v.step_id)))return null;
+    return {version:dagReuseTwoSumVersion,count:3,aggregates:n.slice(1).map(v=>v.step_id),report:null};
+  }
+  if(!deliverySame(p.composition.sinks,[n.at(-1).step_id]))return null;
   if(n.length===3&&(n[2].action!=="intern.csv_report.v1"||!deliverySame(n[2].depends_on,[n[1].step_id])||!deliverySame(n[2].inputs,Object.fromEntries(["resource_id","column","count","sum","source_hash"].map(k=>[k,{source:"step",ref:n[1].step_id,field:k}])))))return null;
   return {version:n.length===2?dagReuseVersion:dagReuseReportVersion,count:n.length,aggregate:n[1].step_id,report:n.length===3?n[2].step_id:null};
 }
+function dagReuseInput(e) {
+  return e.version===dagReuseTwoSumVersion?{columns:Object.fromEntries(e.aggregate_steps.map((sid,i)=>[sid,$(i?"dag-reuse-column-second":"dag-reuse-column").value]))}:{column:$("dag-reuse-column").value};
+}
+function dagReuseExecutionMatches(e,p,input=null) {
+  const shape=dagReuseShape(p);
+  if(!shape||shape.version!==e.version)return false;
+  if(e.version!==dagReuseTwoSumVersion)return shape.aggregate===e.aggregate_step&&(shape.report||null)===(e.report_step||null)&&(!input||deliverySame(Object.keys(input),["column"])&&p.input[e.aggregate_step+"_column"]===input.column&&e.columns.includes(input.column));
+  if(!deliverySame(shape.aggregates,e.aggregate_steps)||e.read_step!==p.composition.definition.nodes[0].step_id||!deliverySame(Object.keys(e.aggregate_nodes).sort(),[...e.aggregate_steps].sort()))return false;
+  if(input&&(!deliverySame(Object.keys(input),["columns"])||!input.columns||!deliverySame(Object.keys(input.columns).sort(),[...e.aggregate_steps].sort())))return false;
+  return e.aggregate_steps.every(sid=>{
+    const node=p.composition.definition.nodes.find(n=>n.step_id===sid),binding=p.definition.manifest.action_bindings.find(v=>v.binding_id===sid),action=p.definition.actions.find(v=>v.action_id===binding?.action_id),f=e.aggregate_nodes[sid];
+    return f&&deliverySame(node.inputs,f.inputs)&&deliverySame(node.depends_on,f.depends_on)&&deliverySame(action?.limits,f.limits)&&Array.isArray(f.columns)&&f.columns.every(v=>typeof v==="string")&&(!input||f.columns.includes(input.columns[sid])&&p.input[sid+"_column"]===input.columns[sid]);
+  });
+}
 function dagReuseAggregate(result,e) {
+  if(e.version===dagReuseTwoSumVersion) {
+    if(!deliverySame(Object.keys(result.output_by_step).sort(),[...e.aggregate_steps].sort())||result.steps.length!==3||result.steps.some(v=>v.status!=="VERIFIED")||e.aggregate_steps.some(sid=>!deliverySame(result.output_by_step[sid],result.steps.find(v=>v.step_id===sid)?.data)))throw Error("VERIFICATION_FAILED");
+    return result.output_by_step;
+  }
   if(e.version===dagReuseVersion)return result.output_by_step[e.aggregate_step];
   const totals=result.steps.filter(p=>p.step_id===e.aggregate_step),value=totals[0]?.data;
   if(totals.length!==1||!value||!deliverySame(result.output_by_step,{[e.report_step]:{...value,text:`列 ${value.column}；行数 ${value.count}；合计 ${value.sum}`}}))throw Error("VERIFICATION_FAILED");
   return value;
 }
 function dagReuseClear() {
-  for(const id of ["release","instance","column"]) $("dag-reuse-"+id).replaceChildren();
-  $("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent="";
+  for(const id of ["release","instance","column","column-second"]) $("dag-reuse-"+id).replaceChildren();
+  $("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent="";$("dag-reuse-results").replaceChildren();$("dag-reuse-second-label").hidden=true;
   $("dag-reuse-confirm").checked=false;$("dag-reuse-run-confirm").checked=false;
   dagReuseSwitchClear();
   dagMaterialClear();
@@ -493,11 +519,11 @@ function dagReuseButtons(c=csvDagContext) {
   if(!c||!csvDagCurrent(c)||!c.reuse)return;
   if(typeof csvLogicButtons === "function")csvLogicButtons();
   const r=c.reuse,intent=dagReuseIntents.get(csvDagKey(c)),locked=r.busy||!!intent;
-  for(const id of ["prepare","commit","history","create","run","release","instance","column","confirm","run-confirm"])$("dag-reuse-"+id).disabled=locked;
+  for(const id of ["prepare","commit","history","create","run","release","instance","column","column-second","confirm","run-confirm"])$("dag-reuse-"+id).disabled=locked;
   $("dag-reuse-prepare").disabled=locked||c.job?.status!=="SUCCEEDED"||!dagReuseShape(c.plan);
   $("dag-reuse-commit").disabled=locked||!r.approval||!$("dag-reuse-confirm").checked;
   $("dag-reuse-create").disabled=locked||!r.release;
-  $("dag-reuse-run").disabled=locked||!r.instance||!r.release||!$("dag-reuse-column").value||!$("dag-reuse-run-confirm").checked;
+  $("dag-reuse-run").disabled=locked||!r.instance||!r.release||!$("dag-reuse-column").value||(r.release?.snapshot.execution_source.version===dagReuseTwoSumVersion&&!$("dag-reuse-column-second").value)||!$("dag-reuse-run-confirm").checked;
   $("dag-reuse-read").disabled=r.busy||!$("dag-reuse-instance").value;
   $("dag-reuse-recover").hidden=!intent;$("dag-reuse-recover").disabled=r.busy;
   const approval=r.switchApproval,active=r.instance?.runs.some(v=>!["SUCCEEDED","FAILED","CANCELLED"].includes(v.status));
@@ -506,14 +532,14 @@ function dagReuseButtons(c=csvDagContext) {
   $("dag-reuse-switch-confirm").disabled=locked||!approval;
   $("dag-reuse-switch-commit").disabled=locked||!approval||approval.expires_at*1000<=Date.now()||!$("dag-reuse-switch-confirm").checked;
   for(const id of ["options","target","column","confirm","plan","open"])$("dag-material-"+id).disabled=locked;
-  $("dag-material-options").disabled=locked||!r.release;
+  $("dag-material-options").disabled=locked||!r.release||r.release.snapshot.execution_source.version===dagReuseTwoSumVersion;
   $("dag-material-plan").disabled=locked||!r.release||!r.materials?.items.some(v=>v.target_app_id===$("dag-material-target").value)||!$("dag-material-column").value||!$("dag-material-confirm").checked;
   $("dag-material-open").disabled=locked||!r.material;
   for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).disabled=r.busy||!r.job||!(command==="pause"?["QUEUED","RUNNING"]:command==="resume"?["PAUSED","WAITING_RESOURCE"]:["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"]).includes(r.job.status);
 }
 async function dagReuseReleaseSeal(rel,c) {
   const s=rel?.snapshot,e=s?.execution_source;
-  return !!e&&[dagReuseVersion,dagReuseReportVersion].includes(e.version)&&(e.version===dagReuseVersion?!Object.hasOwn(e,"report_step"):typeof e.report_step==="string")&&s.namespace==="INTERNAL_ENGINEERING_ONLY"&&s.formal_publication_enabled===false&&s.model_requests===0&&s.semantic_status==="UNKNOWN"&&s.owner_acceptance==="PENDING"&&rel.project_id===c.parent.project&&s.draft.id===c.parent.id&&s.draft.runtime_id===c.parent.app.runtime_id&&s.draft.fingerprint===c.parent.app.fingerprint&&e.source_hash===c.parent.app.candidate.source_hash&&Array.isArray(e.columns)&&e.columns.every(v=>typeof v==="string")&&Array.isArray(e.receipt_fingerprints)&&e.receipt_fingerprints.length===(e.version===dagReuseVersion?2:3)&&rel.fingerprint===await deliveryDigest(s);
+  return !!e&&[dagReuseVersion,dagReuseReportVersion,dagReuseTwoSumVersion].includes(e.version)&&(e.version===dagReuseReportVersion?typeof e.report_step==="string":!Object.hasOwn(e,"report_step"))&&(e.version!==dagReuseTwoSumVersion||Array.isArray(e.aggregate_steps)&&e.aggregate_steps.length===2&&new Set(e.aggregate_steps).size===2&&e.aggregate_nodes&&deliverySame(Object.keys(e.aggregate_nodes).sort(),[...e.aggregate_steps].sort())&&!Object.hasOwn(e,"aggregate_step"))&&s.namespace==="INTERNAL_ENGINEERING_ONLY"&&s.formal_publication_enabled===false&&s.model_requests===0&&s.semantic_status==="UNKNOWN"&&s.owner_acceptance==="PENDING"&&rel.project_id===c.parent.project&&s.draft.id===c.parent.id&&s.draft.runtime_id===c.parent.app.runtime_id&&s.draft.fingerprint===c.parent.app.fingerprint&&e.source_hash===c.parent.app.candidate.source_hash&&Array.isArray(e.columns)&&e.columns.every(v=>typeof v==="string")&&Array.isArray(e.receipt_fingerprints)&&e.receipt_fingerprints.length===(e.version===dagReuseVersion?2:3)&&rel.fingerprint===await deliveryDigest(s);
 }
 function dagReusePick(id,items,label) {
   const select=$("dag-reuse-"+id),old=select.value;
@@ -530,7 +556,7 @@ async function dagReuseHistory(c=csvDagContext) {
   if(instances.items.some(v=>v.project_id!==c.parent.project||v.source_app_id!==c.parent.id||v.runtime_id!==c.parent.app.runtime_id||!validIds.has(v.release_id)||!Number.isInteger(v.revision)))throw Error("VERSION_CONFLICT");
   if(!csvDagCurrent(c))return;
   c.reuse.releases=releases.items;c.reuse.instances=instances.items;
-  dagReusePick("release",releases.items,v=>`${v.id} · ${v.snapshot.execution_source.version===dagReuseVersion?"两步求和":"三步报告"}内部版本`);
+  dagReusePick("release",releases.items,v=>`${v.id} · ${dagReuseLabel(v.snapshot.execution_source)}内部版本`);
   dagReusePick("instance",instances.items,v=>`${v.id} · 结果 ${v.data_version}`);
   c.reuse.release=releases.items.find(v=>v.id===$("dag-reuse-release").value)||null;
   $("dag-reuse-status").textContent="已有版本与实例已读回；选择实例后只读恢复结果";
@@ -538,6 +564,7 @@ async function dagReuseHistory(c=csvDagContext) {
 }
 async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, expected=null) {
   if(!c||!csvDagCurrent(c)||!iid)return;
+  $("dag-reuse-results").replaceChildren();
   const detail=await api(`/api/internal/instances/${iid}`);
   if(!csvDagCurrent(c))return;
   // Instance GET reauthorizes read_release and returns its exact fingerprint.
@@ -560,7 +587,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
     const bindingPlan=(material&&c.reuse.materialPlans.get(planCacheKey))||await api(csvDagBase(c)+"/"+encodeURIComponent(run.plan_key));
     if(!csvDagCurrent(c))return;
     const shape=dagReuseShape(bindingPlan);
-    if(!await csvDagPlanSeal(bindingPlan,c)||run.proof.plan_fingerprint!==bindingPlan.plan_fingerprint||!shape||shape.version!==e.version||shape.aggregate!==e.aggregate_step||(shape.report&&shape.report!==e.report_step)||bindingPlan.input[e.aggregate_step+"_column"]!==run.input.column)throw Error("VERIFICATION_FAILED");
+    if(!await csvDagPlanSeal(bindingPlan,c)||run.proof.plan_fingerprint!==bindingPlan.plan_fingerprint||!shape||!dagReuseExecutionMatches(e,bindingPlan,run.input))throw Error("VERIFICATION_FAILED");
     // Verify the unchanged DAG receipt protocol, then separately bind the one typed write.
     if(!await csvDagCompositionJobSeal({...run.proof,business_writes:0},c,bindingPlan))throw Error("VERIFICATION_FAILED");
     if(run.status==="SUCCEEDED") {
@@ -579,10 +606,20 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   c.reuse.instance=detail;c.reuse.release=rel;c.reuse.job=detail.runs.find(v=>["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"].includes(v.status))||detail.runs.slice().sort((a,b)=>(b.result_version||0)-(a.result_version||0))[0]||null;
   dagReuseSwitchClear(c);
   $("dag-reuse-switch-target").replaceChildren(new Option("请选择升级或回退的内部版本",""),...(c.reuse.releases||[]).filter(v=>v.id!==rel.id&&dagReuseSwitchCompatible(rel,v)).map(v=>new Option(v.id,v.id)));
-  $("dag-reuse-column").replaceChildren(...rel.snapshot.execution_source.columns.map(value=>{const o=document.createElement("option");o.value=value;o.textContent=value;return o;}));
+  const e=rel.snapshot.execution_source,dual=e.version===dagReuseTwoSumVersion;
+  $("dag-reuse-second-label").hidden=!dual;
+  $("dag-reuse-column-label").textContent=dual?`${e.aggregate_steps[0]} 的数值列`:"本次数值列";
+  $("dag-reuse-column-second-label").textContent=dual?`${e.aggregate_steps[1]} 的数值列`:"第二节点数值列";
+  for(const [i,id] of ["dag-reuse-column","dag-reuse-column-second"].entries())$(id).replaceChildren(...(dual?e.aggregate_nodes[e.aggregate_steps[i]].columns:i?[]:e.columns).map(value=>new Option(value,value)));
+  for(const record of detail.data) {
+    const row=document.createElement("p");
+    const values=dual?Object.entries(record.data.result):[["求和",record.data.result]];
+    row.textContent=`结果版本 ${record.version} · `+values.map(([sid,v])=>`${sid}：列 ${v.column}，行数 ${v.count}，合计 ${v.sum}`).join("；");
+    $("dag-reuse-results").append(row);
+  }
   $("dag-reuse-run-confirm").checked=false;
   $("dag-reuse-proof").textContent=JSON.stringify({release:rel,instance:detail},null,2);
-  $("dag-reuse-status").textContent=`实例已核读回 · ${detail.data_version} 条结果 · ${rel.snapshot.execution_source.version===dagReuseVersion?"两步求和":"三步报告"}复用 · 正式发布关闭`;
+  $("dag-reuse-status").textContent=`实例已核读回 · ${detail.data_version} 条结果 · ${dagReuseLabel(rel.snapshot.execution_source)}复用 · 正式发布关闭`;
   dagReuseButtons(c);return detail;
 }
 async function dagReuseSubmit(kind,retry=false) {
@@ -593,7 +630,7 @@ async function dagReuseSubmit(kind,retry=false) {
     if(kind==="prepare") {if(c.job?.status!=="SUCCEEDED"||!dagReuseShape(c.plan))throw Error("需要已完成的读取、求和及可选报告流程");intent={kind,path:`/api/csv-dag/runs/${c.job.id}/release-approvals`,body:{expected_plan_fingerprint:c.plan.plan_fingerprint,request_key:crypto.randomUUID()},sourceRun:c.job.id,sourcePlan:c.plan};}
     if(kind==="commit") {if(!r.approval||!$("dag-reuse-confirm").checked)throw Error("请确认已读回来源");intent={kind,path:`/api/internal/approvals/${r.approval.id}/commit`,body:{fingerprint:r.approval.fingerprint},approval:r.approval};}
     if(kind==="create") {if(!r.release)throw Error("先选择已核版本");intent={kind,path:`/api/internal/releases/${r.release.id}/instances`,body:{expected_release_fingerprint:r.release.fingerprint,request_key:crypto.randomUUID()},release:r.release};}
-    if(kind==="run") {if(!r.instance||!r.release||!$("dag-reuse-run-confirm").checked)throw Error("请确认版本和新列");intent={kind,path:`/api/internal/instances/${r.instance.id}/runs`,body:{expected_revision:r.instance.revision,expected_release_fingerprint:r.release.fingerprint,input:{column:$("dag-reuse-column").value},request_key:crypto.randomUUID()},instance:r.instance,release:r.release};}
+    if(kind==="run") {if(!r.instance||!r.release||!$("dag-reuse-run-confirm").checked)throw Error("请确认版本和新列");intent={kind,path:`/api/internal/instances/${r.instance.id}/runs`,body:{expected_revision:r.instance.revision,expected_release_fingerprint:r.release.fingerprint,input:dagReuseInput(r.release.snapshot.execution_source),request_key:crypto.randomUUID()},instance:r.instance,release:r.release};}
     if(kind==="switch") {
       const a=r.switchApproval;
       if(!a||!r.instance||!$("dag-reuse-switch-confirm").checked||a.expires_at*1000<=Date.now()||a.payload.revision!==r.instance.revision||a.payload.instance_id!==r.instance.id)throw Error("请重新核查并确认精确版本切换");
@@ -635,7 +672,7 @@ async function dagReuseSubmit(kind,retry=false) {
       if(!csvDagCurrent(c))return;
       if(a.id!==made.id||a.fingerprint!==made.fingerprint||a.fingerprint!==await deliveryDigest(a.payload)||a.payload.snapshot.execution_source?.run_id!==intent.sourceRun||a.payload.snapshot.execution_source.plan_fingerprint!==intent.sourcePlan.plan_fingerprint||!deliverySame(a.payload.dag_intent,{run_id:intent.sourceRun,...intent.body}))throw Error("VERSION_CONFLICT");
       if(!csvDagCurrent(c))return;
-      if(a.payload.snapshot.execution_source.version!==dagReuseShape(intent.sourcePlan)?.version)throw Error("VERSION_CONFLICT");
+      if(!dagReuseExecutionMatches(a.payload.snapshot.execution_source,intent.sourcePlan))throw Error("VERSION_CONFLICT");
       r.approval=a;$("dag-reuse-confirm").checked=false;$("dag-reuse-proof").textContent=JSON.stringify(a,null,2);$("dag-reuse-status").textContent="流程来源已核准备；核对允许列与预算后手动保存内部版本";
     } else if(intent.kind==="commit") {
       const rel=await api(`/api/internal/releases/${made.id}`);
@@ -676,29 +713,29 @@ async function dagReuseSubmit(kind,retry=false) {
   } catch(e) {
     if(!retry&&!intent.uncertain&&!returned&&[400,403,409,422].includes(e.httpStatus))dagReuseIntents.delete(key);
     else intent.uncertain=true;
-    if(csvDagCurrent(c)){$("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent=e.message+(dagReuseIntents.has(key)?" · 接受结果 UNKNOWN；保留原请求。已知回执只读恢复":" · 请求被拒绝");}
+    if(csvDagCurrent(c)){$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();$("dag-reuse-status").textContent=e.message+(dagReuseIntents.has(key)?" · 接受结果 UNKNOWN；保留原请求。已知回执只读恢复":" · 请求被拒绝");}
   } finally {r.busy=false;dagReuseButtons(c);}
 }
 async function dagReuseAction(action) {
   const c=csvDagContext;if(!c||!csvDagCurrent(c)||c.reuse.busy)return;
   c.reuse.busy=true;dagReuseButtons(c);
-  try {await action(c);} catch(e) {if(csvDagCurrent(c)){c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-status").textContent=e.message+" · 当前证明不可用；请只读恢复后重新核查";}} finally{c.reuse.busy=false;dagReuseButtons(c);}
+  try {await action(c);} catch(e) {if(csvDagCurrent(c)){c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();$("dag-reuse-status").textContent=e.message+" · 当前证明不可用；请只读恢复后重新核查";}} finally{c.reuse.busy=false;dagReuseButtons(c);}
 }
 for(const kind of ["prepare","commit","create","run"])$("dag-reuse-"+kind).onclick=()=>dagReuseSubmit(kind);
 $("dag-material-plan").onclick=()=>dagReuseSubmit("material");
 $("dag-reuse-recover").onclick=()=>dagReuseSubmit("",true);
 $("dag-reuse-history").onclick=()=>dagReuseAction(dagReuseHistory);
 $("dag-reuse-read").onclick=()=>dagReuseAction(c=>dagReuseRead(c));
-$("dag-reuse-release").onchange=()=>{const c=csvDagContext;if(!c)return;dagReuseSwitchClear(c);c.reuse.release=c.reuse.releases?.find(v=>v.id===$("dag-reuse-release").value)||null;c.reuse.instance=null;c.reuse.job=null;c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();$("dag-reuse-run-confirm").checked=false;$("dag-reuse-proof").textContent="";dagReuseButtons(c);};
-$("dag-reuse-instance").onchange=()=>{const c=csvDagContext;if(!c)return;dagReuseSwitchClear(c);c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-run-confirm").checked=false;dagReuseButtons(c);};
+$("dag-reuse-release").onchange=()=>{const c=csvDagContext;if(!c)return;dagReuseSwitchClear(c);c.reuse.release=c.reuse.releases?.find(v=>v.id===$("dag-reuse-release").value)||null;c.reuse.instance=null;c.reuse.job=null;c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();$("dag-reuse-run-confirm").checked=false;$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();dagReuseButtons(c);};
+$("dag-reuse-instance").onchange=()=>{const c=csvDagContext;if(!c)return;dagReuseSwitchClear(c);c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();$("dag-reuse-run-confirm").checked=false;dagReuseButtons(c);};
 $("dag-reuse-confirm").onchange=()=>dagReuseButtons();
 $("dag-reuse-run-confirm").onchange=()=>dagReuseButtons();
-$("dag-reuse-column").onchange=()=>{$("dag-reuse-run-confirm").checked=false;dagReuseButtons();};
+for(const id of ["dag-reuse-column","dag-reuse-column-second"])$(id).onchange=()=>{$("dag-reuse-run-confirm").checked=false;dagReuseButtons();};
 for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).onclick=()=>dagReuseAction(async c=>{const j=c.reuse.job,i=c.reuse.instance;if(!j||!i)return;await api(`/api/internal/instances/${i.id}/runs/${j.run_id}/commands`,"POST",{command,version:j.version});await dagReuseRead(c,i.id);});
 
 function dagReuseSwitchCompatible(a,b) {
   const x=a.snapshot.execution_source,y=b.snapshot.execution_source;
-  return deliverySame(a.snapshot.data_schema,b.snapshot.data_schema)&&a.snapshot.data_schema_version===b.snapshot.data_schema_version&&["version","aggregate_step","report_step","columns","limits"].every(k=>deliverySame(x[k]??null,y[k]??null));
+  return deliverySame(a.snapshot.data_schema,b.snapshot.data_schema)&&a.snapshot.data_schema_version===b.snapshot.data_schema_version&&["version","aggregate_step","report_step","columns","limits","read_step","aggregate_steps","aggregate_nodes"].every(k=>deliverySame(x[k]??null,y[k]??null));
 }
 function dagReuseSwitchClear(c=csvDagContext) {
   if(c?.reuse){c.reuse.switchGeneration=(c.reuse.switchGeneration||0)+1;c.reuse.switchApproval=null;}

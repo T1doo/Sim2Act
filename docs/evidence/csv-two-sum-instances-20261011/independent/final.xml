@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="21" time="70.585" timestamp="2026-10-11T11:00:38.554072+00:00" hostname="5dcdf8a1c748"><testcase classname="" name="test_cold_new_worker_decimal_oracle_and_idempotency" time="1.839"><failure message="AssertionError: ('/api/internal/instances/iinstance_8d87ae6b0ae7fbf8078eb0957c5f22ce/runs', 202, '{&quot;namespace&quot;:&quot;INTERNAL_ENGINEERING_O...bf8078eb0957c5f22ce&quot;,&quot;status&quot;:&quot;QUEUED&quot;,&quot;version&quot;:1,&quot;cached&quot;:true,&quot;execution_version&quot;:&quot;internal.csv-read-two-sums.v1&quot;}')&#10;assert 202 == 409&#10; +  where 202 = &lt;Response [202 Accepted]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f208cfc3890&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-1/test_cold...912d8aab1c4452a381b85a72506adc', 'user_4d858eae1f4f413cbe8e0248beb4cd23', 'proj_14f671bd85104446b9b67545aecf2b02', ...)
+
+    def test_cold_new_worker_decimal_oracle_and_idempotency(env):
+        aid,rid,base,body,plan,original,rel,i=fixture(env)
+        assert rel['snapshot']['execution_source']['aggregate_steps']==NAMES
+        assert all(n['columns']==['cost','units','tax'] for n in rel['snapshot']['execution_source']['aggregate_nodes'].values())
+        ids=[]
+        for j,cols in enumerate([dict(ledger_sum='units',subtotal='cost'),dict(ledger_sum='cost',subtotal='units')]):
+            request=run_body(i,rel,dict(columns=cols),str(j));url=f"/api/internal/instances/{i['id']}/runs"
+            a=reply(env[2],'post',url,request,202);ids.append(a['run_id'])
+            assert reply(env[2],'post',url,request,202)['run_id']==a['run_id']
+            changed=copy.deepcopy(request);changed['input']['columns']['subtotal']='cost'
+&gt;           before=fingerprint(snapshot(env));reply(env[2],'post',url,changed,409);assert fingerprint(snapshot(env))==before
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/two-sum-independent/test_independent_two_sums.py:106: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = &lt;starlette.testclient.TestClient object at 0x7f208ca23b60&gt;
+method = 'post'
+url = '/api/internal/instances/iinstance_8d87ae6b0ae7fbf8078eb0957c5f22ce/runs'
+data = {'expected_release_fingerprint': 'e4c2ff88e74b2eb8d3b8735b47ca6d660d643c8df7e3f6189f59142fff431ba2', 'expected_revision': 1, 'input': {'columns': {'ledger_sum': 'units', 'subtotal': 'cost'}}, 'request_key': '0'}
+status = 409
+
+    def reply(client, method, url, data=None, status=200):
+        r = getattr(client, method)(url, **({'json':data} if data is not None else {}))
+&gt;       assert r.status_code == status, (url, r.status_code, r.text)
+E       AssertionError: ('/api/internal/instances/iinstance_8d87ae6b0ae7fbf8078eb0957c5f22ce/runs', 202, '{"namespace":"INTERNAL_ENGINEERING_O...bf8078eb0957c5f22ce","status":"QUEUED","version":1,"cached":true,"execution_version":"internal.csv-read-two-sums.v1"}')
+E       assert 202 == 409
+E        +  where 202 = &lt;Response [202 Accepted]&gt;.status_code
+
+/tmp/two-sum-independent/test_independent_two_sums.py:31: AssertionError</failure></testcase><testcase classname="" name="test_input_rejection_atomic[None]" time="0.928" /><testcase classname="" name="test_input_rejection_atomic[bad1]" time="0.886" /><testcase classname="" name="test_input_rejection_atomic[bad2]" time="1.034" /><testcase classname="" name="test_input_rejection_atomic[bad3]" time="1.001" /><testcase classname="" name="test_input_rejection_atomic[bad4]" time="1.066" /><testcase classname="" name="test_input_rejection_atomic[bad5]" time="1.042" /><testcase classname="" name="test_input_rejection_atomic[bad6]" time="1.080" /><testcase classname="" name="test_input_rejection_atomic[bad7]" time="1.063" /><testcase classname="" name="test_input_rejection_atomic[bad8]" time="1.097" /><testcase classname="" name="test_two_sum_version_switch_roundtrip_preserves_data" time="9.484" /><testcase classname="" name="test_three_sums_not_mislabeled_as_two" time="0.611" /><testcase classname="" name="test_partial_worker_never_saves_two_result_record[cancel]" time="1.542" /><testcase classname="" name="test_partial_worker_never_saves_two_result_record[revoke]" time="1.262" /><testcase classname="" name="test_partial_worker_never_saves_two_result_record[budget]" time="1.189" /><testcase classname="" name="test_partial_worker_never_saves_two_result_record[release-type]" time="1.289" /><testcase classname="" name="test_consistent_ledger_operation_run_result_rewrite_rejected" time="1.951"><failure message="AssertionError: ('/api/internal/instances/iinstance_077be90955621cbfb285ff7d92414c56', 400, '{&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;m...endent readback&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}')&#10;assert 400 == 409&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f208c0270b0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-1/test_cons...f8dee7ab7d4f9286452b3e59a57b8c', 'user_33e8a1497f934d629c5f15c3f71e1e02', 'proj_42e43696f425465c8fe37cf717ab4777', ...)
+
+    def test_consistent_ledger_operation_run_result_rewrite_rejected(env):
+        *_,rel,i=fixture(env)
+        a=reply(env[2],'post',f"/api/internal/instances/{i['id']}/runs",run_body(i,rel),202);process(env,a)
+        with env[0].tx() as c:
+            ar=c.execute(select(internal_app_runs).where(internal_app_runs.c.id==a['app_run_id'])).mappings().one()
+            output=copy.deepcopy(ar['output']);output['subtotal']['sum']='29'
+            c.execute(update(internal_app_runs).where(internal_app_runs.c.id==ar['id']).values(output=output))
+            data={'result':output};c.execute(update(internal_instance_data).where(internal_instance_data.c.run_id==ar['id']).values(data=data,fingerprint=fingerprint(data)))
+            op=c.execute(select(operations).where(operations.c.run_id==a['run_id'],operations.c.receipt['step_id'].as_string()=='subtotal')).mappings().one()
+            receipt=copy.deepcopy(op['receipt']);receipt['data']=output['subtotal']
+            c.execute(update(operations).where(operations.c.id==op['id']).values(receipt=receipt))
+            row=c.execute(select(runs).where(runs.c.id==a['run_id'])).mappings().one()
+            result=copy.deepcopy(row['result']);result['output_by_step']['subtotal']=output['subtotal']
+            for p in result['steps']:
+                if p['step_id']=='subtotal': p['data']=output['subtotal']
+            if 'instance_result' in result:result['instance_result']['record_fingerprint']=fingerprint(data)
+            c.execute(update(runs).where(runs.c.id==a['run_id']).values(result=result))
+&gt;       before=fingerprint(snapshot(env));reply(env[2],'get',f"/api/internal/instances/{i['id']}",status=409)
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/two-sum-independent/test_independent_two_sums.py:191: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = &lt;starlette.testclient.TestClient object at 0x7f208cacfe60&gt;
+method = 'get'
+url = '/api/internal/instances/iinstance_077be90955621cbfb285ff7d92414c56'
+data = None, status = 409
+
+    def reply(client, method, url, data=None, status=200):
+        r = getattr(client, method)(url, **({'json':data} if data is not None else {}))
+&gt;       assert r.status_code == status, (url, r.status_code, r.text)
+E       AssertionError: ('/api/internal/instances/iinstance_077be90955621cbfb285ff7d92414c56', 400, '{"error":{"code":"VERIFICATION_FAILED","m...endent readback","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}')
+E       assert 400 == 409
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+/tmp/two-sum-independent/test_independent_two_sums.py:31: AssertionError</failure></testcase><testcase classname="" name="test_foreign_identity_and_same_owner_wrong_project_rejected" time="0.945" /><testcase classname="" name="test_readback_release_node_column_limit_tamper_closed" time="0.868" /><testcase classname="tests.test_csv_dag_version_switch" name="test_upgrade_rollback_new_columns_and_cold_history[False]" time="19.169" /><testcase classname="tests.test_csv_dag_version_switch" name="test_upgrade_rollback_new_columns_and_cold_history[True]" time="21.121" /></testsuite></testsuites>

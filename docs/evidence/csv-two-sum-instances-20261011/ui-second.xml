@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="32.148" timestamp="2026-10-11T10:58:13.171199+00:00" hostname="5dcdf8a1c748"><testcase classname="tests.test_csv_two_sum_instances_ui" name="test_original_editor_dual_source_version_instance_and_cold_swapped_columns[item,amount,quantity\nA,10,7\nB,20,8\n-30-15-post]" time="14.554" /><testcase classname="tests.test_csv_two_sum_instances_ui" name="test_original_editor_dual_source_version_instance_and_cold_swapped_columns[item,amount,quantity\nA,10,7\nB,20,8\n-30-15-read]" time="15.501" /><testcase classname="tests.test_csv_two_sum_instances_ui" name="test_original_editor_dual_source_version_instance_and_cold_swapped_columns[item,amount,quantity\nA,0.1,-2.125\nB,0.2,4.375\n-0.3-2.25-post]" time="1.990"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: actual original worker computes two independent source totals&#10;      at check (/workspace/Sim2Act/tests/csv_two_sum_instances.cjs:5:29)&#10;      at /workspace/Sim2Act/tests/csv_two_sum_instances.cjs:25:1&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/csv_two_sum_instances.cjs', '/tmp/sim2act-two-sum-ui-second/test_original_editor...space/Sim2Act/tests/csv_two_sum_instances.cjs:5:29)\n    at /workspace/Sim2Act/tests/csv_two_sum_instances.cjs:25:1\n').returncode">env = (&lt;sim2act.db.Store object at 0x7fd9a80c6510&gt;, Settings(database_url='sqlite:////tmp/sim2act-two-sum-ui-second/test_ori...c3a5dd4cd9480398ffc5022181d5f9', 'user_0a2cb499b7014c2f892de6fb1dfb1604', 'proj_e435971c16804e008b9ed751e1b62885', ...)
+tmp_path = PosixPath('/tmp/sim2act-two-sum-ui-second/test_original_editor_dual_sour2')
+lost = 'post', content = 'item,amount,quantity\nA,0.1,-2.125\nB,0.2,4.375\n'
+amount = '0.3', quantity = '2.25'
+
+    @pytest.mark.parametrize("lost", ["post", "read"])
+    @pytest.mark.parametrize("content,amount,quantity", [(INTEGER, "30", "15"), (DECIMAL, "0.3", "2.25")])
+    def test_original_editor_dual_source_version_instance_and_cold_swapped_columns(env, tmp_path, lost, content, amount, quantity):
+        aid, rid, _ = setup(env, content)
+        app = create_app(env[0], env[1])
+        worker = Worker(env[0], env[1], NoModel())
+    
+        @app.post("/__fixture__/work")
+        def work(body: dict, authorization: str = Header()):
+            assert authorization == "Bearer synthetic-test-A"
+            job = env[0].claim(worker.id, env[1].lease_seconds)
+            assert job["id"] == body["run_id"]
+            worker.process(job)
+            return {"run_id": job["id"]}
+    
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps(
+                dict(
+                    base=f"http://127.0.0.1:{port}",
+                    project=env[5],
+                    app=aid,
+                    resource=rid,
+                    amount=amount,
+                    quantity=quantity,
+                    lost=lost,
+                )
+            )
+        )
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(0.01)
+            assert shutil.which("node")
+            child = subprocess.run(
+                ["node", "tests/csv_two_sum_instances.cjs", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            (tmp_path / "driver.log").write_text(child.stdout + child.stderr)
+&gt;           assert child.returncode == 0, child.stdout + child.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: actual original worker computes two independent source totals
+E                 at check (/workspace/Sim2Act/tests/csv_two_sum_instances.cjs:5:29)
+E                 at /workspace/Sim2Act/tests/csv_two_sum_instances.cjs:25:1
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/csv_two_sum_instances.cjs', '/tmp/sim2act-two-sum-ui-second/test_original_editor...space/Sim2Act/tests/csv_two_sum_instances.cjs:5:29)\n    at /workspace/Sim2Act/tests/csv_two_sum_instances.cjs:25:1\n').returncode
+
+tests/test_csv_two_sum_instances_ui.py:69: AssertionError</failure></testcase></testsuite></testsuites>
