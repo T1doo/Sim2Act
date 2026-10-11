@@ -306,14 +306,22 @@ def inspect_job(store, user, rid):
             raise DomainError("PERMISSION_DENIED")
         limits = store.frozen_contract(c, job).limits
         s, a = load_binding(store, c, user, job, limits)
+        release = read_release(store, c, user, s["release_id"], limits)
         if job["status"] == "SUCCEEDED":
             from .agent_apps import is_agent, verified_source
 
-            release = read_release(store, c, user, s["release_id"], limits)
             if is_agent(release["snapshot"]["draft"]["candidate"]):
                 verified_source(store, c, user, rid, limits, require_initial=False)
         records = data_rows(c, s["instance_id"])
         result = next((dict(r) for r in records if r["run_id"] == a["id"]), None)
+        if (release["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence"
+                and (job["status"] == "SUCCEEDED" or a["output"] is not None or a["result_version"] is not None
+                     or job["result"] is not None or result is not None
+                     or c.execute(select(operations.c.id).where(operations.c.run_id == rid,
+                         operations.c.status == "VERIFIED")).first())):
+            from .text_run_checks import verify
+
+            verify(store, c, user, job, limits)
         return {
             "id": rid,
             "app_run_id": a["id"],
@@ -485,13 +493,14 @@ def prepare_dispatch(worker, run):
         validate_action_input(action, args)
         # Authorization includes both read and exact registered action before dispatch.
         agent = action.executor.kind == "bounded_agent"
+        literal = action.executor.ref == "text.literal_evidence"
         store.authorize(
             c,
             run["principal_id"],
             draft["runtime_id"],
             draft["project_id"],
             args["resource_id"],
-            "resource.read" if agent else action.executor.ref,
+            "resource.read" if agent or literal else action.executor.ref,
         )
         source = authorized_read(
             store,
@@ -504,7 +513,7 @@ def prepare_dispatch(worker, run):
         )
         intent = (
             {"tool": "resource.read", "args": {"resource_id": args["resource_id"]}}
-            if agent
+            if agent or literal
             else {"tool": action.executor.ref, "args": args}
         )
         old = (
@@ -562,6 +571,10 @@ def compute(plan, model=None, read=None):
         from .agent_apps import execute_protocol
 
         return execute_protocol(plan, model, read)
+    if plan["action"]["executor"]["ref"] == "text.literal_evidence":
+        from .text_apps import compute as compute_text
+
+        return compute_text(plan["source"], plan["args"])
     # No SQL transaction, arbitrary code or model: same registered trusted implementation.
     value = aggregate_csv_content(
         plan["source"]["content"], plan["args"]["resource_id"], plan["args"]["column"]
@@ -644,9 +657,10 @@ def commit_result(worker, run, plan, output):
             select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])
         ).scalar()
         agent = action.executor.kind == "bounded_agent"
+        literal = action.executor.ref == "text.literal_evidence"
         expected_intent = (
             {"tool": "resource.read", "args": {"resource_id": args["resource_id"]}}
-            if agent
+            if agent or literal
             else {"tool": plan["action"]["executor"]["ref"], "args": plan["args"]}
         )
         if (
@@ -677,6 +691,12 @@ def commit_result(worker, run, plan, output):
                 validate_accepted_replay(plan, s["offline_replay"], protocol, output)
             checks = [check]
             identities = {"resource_id": args["resource_id"], "source_hash": source["hash"]}
+        elif literal:
+            from .agent_apps import check_evidence
+
+            checks = [check_evidence(source, args, output)]
+            identities = {"resource_id": args["resource_id"], "source_hash": source["hash"],
+                          "term": args["term"]}
         else:
             exact_sum_oracle(source["content"], s["input"]["column"], output)
             checks = [{"check": "csv.exact_integer_sum.v1", "status": "PASS"}]

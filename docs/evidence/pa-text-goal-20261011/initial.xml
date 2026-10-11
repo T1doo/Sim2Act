@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="13" time="9.080" timestamp="2026-10-11T17:19:55.138177+00:00" hostname="9809f76d2248"><testcase classname="tests.test_goal_text_applications" name="test_goal_feedback_repair_release_cold_worker" time="0.902"><failure message="AssertionError: {'contract': {'fingerprint': '27d8cd04f268b8bba765502b076bfd95cfc15a83a9e135a01b8cc0a6c14105a3', 'snapshot': {'applica...045d1c37b644db292878c38c2dda1c9', 'kind': 'GA_RECEIVED', ...}, ...], 'id': 'run_4b5be8120be7464bb7dd211e5043dce6', ...}&#10;assert 'FAILED' == 'PARTIAL'&#10;  &#10;  - PARTIAL&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7f50b95c9850&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_goal...821178c7ff49568332e75895bf7567', 'user_47086af69ba54ef9a5480b8a7853dfac', 'proj_2682e02a763b40aab301696b8f7b71d9', ...)
+
+    def test_goal_feedback_repair_release_cold_worker(env):
+        data = setup(env)
+        store, settings, client, user, _, text, card = data
+        rid, result, sent = generate(data, repair=True)
+&gt;       assert result["status"] == "PARTIAL", result
+E       AssertionError: {'contract': {'fingerprint': '27d8cd04f268b8bba765502b076bfd95cfc15a83a9e135a01b8cc0a6c14105a3', 'snapshot': {'applica...045d1c37b644db292878c38c2dda1c9', 'kind': 'GA_RECEIVED', ...}, ...], 'id': 'run_4b5be8120be7464bb7dd211e5043dce6', ...}
+E       assert 'FAILED' == 'PARTIAL'
+E         
+E         - PARTIAL
+E         + FAILED
+
+tests/test_goal_text_applications.py:137: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[usage]" time="0.838" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[identity]" time="0.653" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[truncated]" time="0.689" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[wrong-tool]" time="0.493" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[frozen-goal]" time="0.669" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[extra-field]" time="0.587"><failure message="AssertionError: assert 2 == 3&#10; +  where 2 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli...ash and the full frozen goal object. No further tools.', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])">env = (&lt;sim2act.db.Store object at 0x7f50b81cc800&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_gene...eb53d63a1244dd802d7eb58f97c26c', 'user_62a8ad69037a4bb199c918b11bdaee2f', 'proj_7870c47f5d5343a1aad87ff53d91751b', ...)
+fault = 'extra-field'
+
+    @pytest.mark.parametrize("fault", ["usage", "identity", "truncated", "wrong-tool", "frozen-goal", "extra-field"])
+    def test_generation_failures_do_not_create_apps_or_retry(env, fault):
+        data = setup(env)
+        def mutate(raw, index, payload):
+            if fault == "usage" and index == 1: raw.pop("usage")
+            if fault == "identity" and index == 1: raw["model"] = "other"
+            if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+            if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_text"
+            if fault == "frozen-goal" and index == 2:
+                value = json.loads(raw["choices"][0]["message"]["content"]); value["goal"]["constraints"] = []
+                raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+            if fault == "extra-field" and index &gt;= 2:
+                value = json.loads(raw["choices"][0]["message"]["content"]); value["free_code"] = "bad"
+                raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+        rid, result, sent = generate(data, mutation=mutate)
+        assert result["status"] in {"FAILED", "WAITING_RESOURCE"}, result
+        assert result["result"] is None
+&gt;       assert len(sent) == (3 if fault == "extra-field" else 2 if fault == "frozen-goal" else 1)
+E       AssertionError: assert 2 == 3
+E        +  where 2 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli...ash and the full frozen goal object. No further tools.', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])
+
+tests/test_goal_text_applications.py:194: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_default_generation_has_no_model_send" time="0.605" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[candidate]" time="0.694"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x7f50b3675070&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...96a9b642934769a383c647233e912a', 'user_c1f9a4001c3542d187260e9ee4da2ab7', 'proj_0818978f20cc4bf8bb66ed0d4d136279', ...)
+change = 'candidate'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_text_applications.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7f50b3675070&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...c96a9b642934769a383c647233e912a', 'proj_0818978f20cc4bf8bb66ed0d4d136279', 'res_c373457c2c3d4698a27a16225e991b58', ...)
+rid = 'run_1c33cdf3b4404c248f9220f18fec2251'
+result = {'contract': {'fingerprint': '638a5e8aa12190e9328453f8f590fa1f0ae76bb5ae35a79a65aa1b366ba56bcb', 'snapshot': {'applica...af18e6e4d9e4fb688c7855e7e3eddde', 'kind': 'GA_RECEIVED', ...}, ...], 'id': 'run_1c33cdf3b4404c248f9220f18fec2251', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+&gt;       body = {"expected_version": result["version"], "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "request_key": "confirm-1", "name": "Literal app"}
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_goal_text_applications.py:98: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[marker]" time="0.622"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x7f50b2f6cdd0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...08b1c2149b4a3980781299faf9e997', 'user_18b4ef887faa4c91b1de92d39bd9596e', 'proj_4deddc0aad42426b9bde4fc5a90e9c0d', ...)
+change = 'marker'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_text_applications.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7f50b2f6cdd0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...f08b1c2149b4a3980781299faf9e997', 'proj_4deddc0aad42426b9bde4fc5a90e9c0d', 'res_e8130a76099f49158dcffc7fb2578d5f', ...)
+rid = 'run_234ae3b8496141be87c8353fde96c7f8'
+result = {'contract': {'fingerprint': '02c696b23364fa154da75124cf0ef409ced5ebb0e73421f84752da33e5e01476', 'snapshot': {'applica...551c4fbc7da424d9ac377def339e045', 'kind': 'GA_RECEIVED', ...}, ...], 'id': 'run_234ae3b8496141be87c8353fde96c7f8', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+&gt;       body = {"expected_version": result["version"], "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "request_key": "confirm-1", "name": "Literal app"}
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_goal_text_applications.py:98: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[executor]" time="0.686"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x7f50b3677b60&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...995086230d40c1870fbb046e298fe1', 'user_2e98c07f4d16469aacdbd320e1b8d90a', 'proj_fd6c715f507f4794a618660f9109baee', ...)
+change = 'executor'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_text_applications.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7f50b3677b60&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...4995086230d40c1870fbb046e298fe1', 'proj_fd6c715f507f4794a618660f9109baee', 'res_ba21f4ab9e03454b8959658fee306255', ...)
+rid = 'run_aaa268d10fa84c1eb6c415323bb5717c'
+result = {'contract': {'fingerprint': 'c5819c403d43b8d494970383ec900ea38913f55335d9226a5eb97dfcf9b66ebf', 'snapshot': {'applica...18663dfa1d942c0bd5f881cc977d923', 'kind': 'GA_RECEIVED', ...}, ...], 'id': 'run_aaa268d10fa84c1eb6c415323bb5717c', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+&gt;       body = {"expected_version": result["version"], "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "request_key": "confirm-1", "name": "Literal app"}
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_goal_text_applications.py:98: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[attempt]" time="0.612"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x7f50b8f1f320&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...9bc3d03d474f148559bc9b5668541e', 'user_cfbf6ef8b7d948e690083d984d6f194a', 'proj_bf62011ef0eb48ca9e1cf755bc902557', ...)
+change = 'attempt'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_text_applications.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7f50b8f1f320&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...59bc3d03d474f148559bc9b5668541e', 'proj_bf62011ef0eb48ca9e1cf755bc902557', 'res_83130f8d0bc748569c445f7c91a12aa4', ...)
+rid = 'run_1d680ef952cd46938621ac8e2e2dfe79'
+result = {'contract': {'fingerprint': 'ad8e51d5ae235bf21726b6a95809efeb6da17109c127dccc0a19a38c83ec9e15', 'snapshot': {'applica...16b9ca8fb2b4d059722700656ae2a6e', 'kind': 'GA_RECEIVED', ...}, ...], 'id': 'run_1d680ef952cd46938621ac8e2e2dfe79', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+&gt;       body = {"expected_version": result["version"], "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "request_key": "confirm-1", "name": "Literal app"}
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_goal_text_applications.py:98: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[route]" time="0.778"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x7f50b331db20&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...7e90bf63ca495e81cd3b7a0068e79d', 'user_de0535570842492b86c5f8cd06545e87', 'proj_67253b6655424002a250b74471afb884', ...)
+change = 'route'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_text_applications.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7f50b331db20&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-6/test_inde...d7e90bf63ca495e81cd3b7a0068e79d', 'proj_67253b6655424002a250b74471afb884', 'res_613f0a7dda584535bea5ecf85ae213d3', ...)
+rid = 'run_5a8cd474529e43d8abbb560166508977'
+result = {'contract': {'fingerprint': 'a211f60615b459111811d65b584b83e372e96bb1b3bcfc0ed7a80e12189a6905', 'snapshot': {'applica...6707be588a94356ac6e7cbb54980dc4', 'kind': 'GA_RECEIVED', ...}, ...], 'id': 'run_5a8cd474529e43d8abbb560166508977', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+&gt;       body = {"expected_version": result["version"], "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "request_key": "confirm-1", "name": "Literal app"}
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_goal_text_applications.py:98: TypeError</failure></testcase></testsuite></testsuites>

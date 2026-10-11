@@ -1,0 +1,103 @@
+/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+{"tamper": false, "status": "FAILED", "sent": 2, "actual_reserved": 35099, "frozen_limit": 45000}
+.{"tamper": true, "status": "PARTIAL", "sent": 3, "actual_reserved": 58452, "frozen_limit": 45000}
+F{"field": "status", "http_status": 200}
+F{"field": "cancel_intent", "http_status": 200}
+F{"field": "result", "http_status": 200}
+F.....
+=================================== FAILURES ===================================
+__________ test_frozen_aggregate_reservation_cannot_be_lowered[True] ___________
+
+env = (<sim2act.db.Store object at 0x7f8bb04e4170>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...bc430fb09340d8ac8da8e7c528b1d8', 'user_f993bf7d3d0b44cf9caeb754ada610a8', 'proj_999d6fac614541c7ba443b5c34d3b8a1', ...)
+tamper = True
+
+    @pytest.mark.parametrize("tamper", [False, True])
+    def test_frozen_aggregate_reservation_cannot_be_lowered(env, tamper):
+        data = helper.setup(env)
+        settings = replace(data[1], max_total_tokens=45000)
+        client = TestClient(create_app(data[0], settings))
+        client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        data = (data[0], settings, client, *data[3:])
+        def mutate(raw, index, payload):
+            if tamper and index == 2:
+                with data[0].tx() as c:
+                    row = c.execute(select(runs).where(runs.c.status == "RUNNING")).mappings().one()
+                    ctx = copy.deepcopy(row["context"])
+                    ctx["reserved_tokens"] = 0
+                    c.execute(update(runs).where(runs.c.id == row["id"]).values(context=ctx))
+        rid, result, sent = helper.generate(data, repair=True, mutation=mutate)
+        with data[0].tx() as c:
+            actual = c.execute(select(func.sum(attempts.c.reserved_tokens)).where(attempts.c.run_id == rid)).scalar_one()
+        print(json.dumps({"tamper": tamper, "status": result["status"], "sent": len(sent), "actual_reserved": actual, "frozen_limit": 45000}))
+>       assert actual <= 45000, "Actual durable reservations exceed frozen aggregate budget"
+E       AssertionError: Actual durable reservations exceed frozen aggregate budget
+E       assert 58452 <= 45000
+
+/tmp/pa-independent-review-20261011/test_independent.py:36: AssertionError
+____ test_app_origin_requires_intact_completed_generation[status-CANCELLED] ____
+
+env = (<sim2act.db.Store object at 0x7f8bab684d10>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...8db0fc6e814a5189285e957b63c351', 'user_dd2c753ba1b741fdb2f6ddd8d48ad946', 'proj_c911ca5a11e048358fccf43215e7bc68', ...)
+field = 'status', value = 'CANCELLED'
+
+    @pytest.mark.parametrize("field,value", [("status", "CANCELLED"), ("cancel_intent", True), ("result", None)])
+    def test_app_origin_requires_intact_completed_generation(env, field, value):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(**{field: value}))
+        reply = data[2].get(f"/api/apps/{aid}")
+        print(json.dumps({"field": field, "http_status": reply.status_code}))
+>       assert reply.status_code in {400, 403, 409}, "Invalidated generation still authorizes the application"
+E       AssertionError: Invalidated generation still authorizes the application
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:50: AssertionError
+___ test_app_origin_requires_intact_completed_generation[cancel_intent-True] ___
+
+env = (<sim2act.db.Store object at 0x7f8bb00d3020>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...85b48ec36e44b7bb40dbd602efda5b', 'user_b393fdcf3d3b4c3ea3445fcb5df183d5', 'proj_c6fbb6e83c6b420f892e45babb3ccac9', ...)
+field = 'cancel_intent', value = True
+
+    @pytest.mark.parametrize("field,value", [("status", "CANCELLED"), ("cancel_intent", True), ("result", None)])
+    def test_app_origin_requires_intact_completed_generation(env, field, value):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(**{field: value}))
+        reply = data[2].get(f"/api/apps/{aid}")
+        print(json.dumps({"field": field, "http_status": reply.status_code}))
+>       assert reply.status_code in {400, 403, 409}, "Invalidated generation still authorizes the application"
+E       AssertionError: Invalidated generation still authorizes the application
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:50: AssertionError
+______ test_app_origin_requires_intact_completed_generation[result-None] _______
+
+env = (<sim2act.db.Store object at 0x7f8bb0119fa0>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...2a7760db8345358d6f46b15a8f4a67', 'user_f637677f1102472fad543a7838ac2b96', 'proj_621fe5c14c6a4b348d06ad576dd231cd', ...)
+field = 'result', value = None
+
+    @pytest.mark.parametrize("field,value", [("status", "CANCELLED"), ("cancel_intent", True), ("result", None)])
+    def test_app_origin_requires_intact_completed_generation(env, field, value):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(**{field: value}))
+        reply = data[2].get(f"/api/apps/{aid}")
+        print(json.dumps({"field": field, "http_status": reply.status_code}))
+>       assert reply.status_code in {400, 403, 409}, "Invalidated generation still authorizes the application"
+E       AssertionError: Invalidated generation still authorizes the application
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:50: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tmp/pa-independent-review-20261011/test_independent.py::test_frozen_aggregate_reservation_cannot_be_lowered[True]
+FAILED ../../tmp/pa-independent-review-20261011/test_independent.py::test_app_origin_requires_intact_completed_generation[status-CANCELLED]
+FAILED ../../tmp/pa-independent-review-20261011/test_independent.py::test_app_origin_requires_intact_completed_generation[cancel_intent-True]
+FAILED ../../tmp/pa-independent-review-20261011/test_independent.py::test_app_origin_requires_intact_completed_generation[result-None]
+4 failed, 6 passed in 9.31s

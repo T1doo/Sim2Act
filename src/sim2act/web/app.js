@@ -396,6 +396,7 @@ function previewText(r) {
   return `预览成功（SUCCEEDED） · ${r.output.column} 合计 ${r.output.sum}，共 ${r.output.count} 条 · 0 模型请求 · 仅预览`;
 }
 function showPreviewResult(r,history=false){
+  if(r.output?.citations){$("app-output").dataset.state="success";$("app-output").textContent=(history ? "历史记录\n" : "本次预览\n")+JSON.stringify(r.output,null,2);return;}
   $("app-output").dataset.state=r.status === "FAILED" ? "error" : "success";
   $("app-output").replaceChildren(row(`${history ? "历史记录 · " : ""}${previewText(r)} · ${r.id.slice(0,16)}`));
 }
@@ -444,12 +445,21 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null) {
     });
   }
   $("app-title").textContent=`${a.name} · 未发布`;
-  const agent=a.input_guidance.mode === "OFFLINE_REPLAY_ONLY";
+  const agent=a.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal=a.input_guidance.mode === "REGISTERED_LITERAL";
   $("app-preview-form").hidden=false;
-  $("app-column-label").hidden=agent;$("app-column").required=!agent;
-  $("app-agent-term-label").hidden=!agent;$("app-agent-term").value="";
-  $("app-preview-submit").hidden=agent;$("csv-extraction-panel").hidden=agent;
+  $("app-column-label").hidden=agent||literal;$("app-column").required=!(agent||literal);
+  $("app-agent-term-label").hidden=!(agent||literal);$("app-agent-term").required=agent||literal;$("app-agent-term").value="";
+  $("app-preview-submit").hidden=agent;$("csv-extraction-panel").hidden=agent||literal;
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
+  if(literal){
+    $("app-origin").textContent=`来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
+    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(a.candidate.goal,null,2);
+    $("app-input-hint").textContent="TXT/MD 逐字匹配；输入非空无首尾空白、至多80字符的检索词。每次从授权材料重新计算全部匹配行，无需上传答案。";
+    $("app-preview-submit").disabled=appPreviewRequests.has(id);
+    $("app-history").replaceChildren(...a.history.map(r=>row(`${r.input.term || "无效输入"} · ${r.status}`,()=>showPreviewResult(r,true),"回读历史")));
+    if(typeof openInternal === "function")await openInternal(a,generation);
+    return true;
+  }
   if(agent){
     const manifest=a.candidate.manifest;
     $("app-origin").textContent=`${a.candidate.agent_provenance ? "来源：已验证的本地合成 AppRun "+manifest.source_run_ref : "来源：离线调用者提供的初始候选"} · OFFLINE_REPLAY_ONLY · semantic UNKNOWN · 未发布`;
@@ -552,13 +562,13 @@ $("app-preview-form").onsubmit=safe(async()=>{
   appPreviewRequests.add(id);$("app-preview-submit").disabled=true;
   $("app-output").dataset.state="loading";$("app-output").textContent="正在读取授权材料并运行新预览…";
   try {
-    result=await api(`/api/apps/${id}/previews`,"POST",{input:{column:$("app-column").value},request_key:crypto.randomUUID()});
+    result=await api(`/api/apps/${id}/previews`,"POST",{input:$("app-column-label").hidden ? {term:$("app-agent-term").value} : {column:$("app-column").value},request_key:crypto.randomUUID()});
     if(current() && await showApp(id,pid,g=>{generation=g;})){if(current() && activeApp===id)showPreviewResult(result);}
   }catch(e){if(current()){
     if(result)setAppReadFailure({id,pid,kind:"preview",result,goalGeneration},e);
     else{$("app-output").dataset.state="error";$("app-output").textContent=`预览未打开：${e.message}；可重新打开草案核对历史。`;}
   }}
-  finally{appPreviewRequests.delete(id);$("app-preview-submit").disabled=appPreviewRequests.has(activeApp) || !$("app-column").value;}
+  finally{appPreviewRequests.delete(id);$("app-preview-submit").disabled=appPreviewRequests.has(activeApp) || (!$("app-column-label").hidden && !$("app-column").value);}
 });
 
 
@@ -619,7 +629,7 @@ $("goal-card-run").onclick=safe(()=>executeGoalCard());
 $("goal-card-run-recover").onclick=safe(()=>executeGoalCard(true));
 const goalCardFields=["title","goal","known","assumptions","unresolved","constraints","acceptance_checks"];
 function updateGoalCardSave() {
-  if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();
+  if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();if(typeof renderGoalApplicationControls === "function")renderGoalApplicationControls();
   $("goal-card-save").disabled=goalCardLoading || goalCardSaving;
   updateCandidateCreate();
   renderGoalRun();
@@ -633,7 +643,7 @@ function clearGoalCard() {
   $("goal-candidate-form").hidden=true;$("goal-candidate-list").replaceChildren();
   $("goal-candidate-status").textContent="先打开已保存目标卡。";
   goalCardLoading=false;updateGoalCardSave();
-  activeGoalCard=null;renderGoalRun();if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
+  activeGoalCard=null;renderGoalRun();if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();if(typeof renderGoalApplicationControls === "function")renderGoalApplicationControls();$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
   $("goal-card-history").replaceChildren();$("goal-card-history-detail").textContent="";
 }
 async function refreshGoalCards(pid) {
@@ -665,7 +675,7 @@ async function showGoalCard(id, pid=$("project-select").value) {
   activeGoalCard={id,version:card.version,fingerprint:card.fingerprint,project_id:card.project_id,snapshot:card.history.find(v=>v.version===card.version&&v.fingerprint===card.fingerprint)?.snapshot};
   if(!activeGoalCard.snapshot){activeGoalCard=null;renderGoalRun();throw Error("VERSION_CONFLICT");}
   renderGoalRun();
-  if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();
+  if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();if(typeof renderGoalApplicationControls === "function")renderGoalApplicationControls();
   goalCardFields.forEach(f=>{$(`goal-card-${f}`).value=Array.isArray(card.content[f]) ? card.content[f].join("\n") : card.content[f];});
   Array.from($("goal-card-resources").options).forEach(o=>o.selected=card.content.resource_refs.includes(o.value));
   $("goal-card-status").textContent=`草案 v${card.version} · 目标验收 NOT_RUN · 执行使用已保存版本；保存将建立新版本`;

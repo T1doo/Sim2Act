@@ -453,7 +453,65 @@ def create_app(store=None, settings=None):
             db, user, cid, body.model_dump(exclude={"expected_version"}), body.expected_version
         )
 
+    from .goal_applications import ConfirmInput as ConfirmApplicationInput
     from .goal_runs import GoalRunInput, acceptance
+
+    @app.post("/api/projects/{pid}/goal-cards/{cid}/application-runs", status_code=202)
+    def generate_goal_application(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        from .goal_applications import policy
+
+        selected = policy(s.goal_planner_provider, user, pid, {"card_id": cid, **body.model_dump()})
+        rid = db.submit(user, pid, "", [], body.request_key, policy={
+            "limits": {**platform_limits.model_dump(), "max_requests": min(3, s.max_requests),
+                       "max_tools": 1, "max_repairs": min(1, s.max_repairs)},
+            "mode": "mock", "request_model": "intern-s2", "application_generation": selected,
+        }, goal_source={"card_id": cid, "version": body.expected_version,
+                        "fingerprint": body.expected_fingerprint})
+        return {**acceptance(db, user, rid), "generation_policy": selected}
+
+    @app.post("/api/runs/{rid}/confirm-application-candidate")
+    def confirm_goal_application(rid: str, body: ConfirmApplicationInput, user=user_dependency):
+        from .goal_applications import confirm
+
+        return confirm(db, user, rid, body, platform_limits)
+
+    @app.get("/api/projects/{pid}/goal-cards/{cid}/application-runs")
+    def recover_goal_application(pid: str, cid: str, request_key: str, user=user_dependency):
+        from .db import runs
+
+        if not 1 <= len(request_key) <= 100:
+            raise DomainError("INVALID_INPUT")
+        with db.tx() as c:
+            db.own_project(c, user, pid)
+            run = c.execute(select(runs).where(runs.c.project_id == pid,
+                runs.c.principal_id == user, runs.c.request_key == request_key)).mappings().first()
+            if not run:
+                raise DomainError("RESOURCE_UNAVAILABLE", "No accepted generation with this original key")
+            contract = db.frozen_contract(c, run)
+            if contract.application_generation is None or contract.source_goal_card.card_id != cid:
+                raise DomainError("VERSION_CONFLICT", "Original key belongs to another request")
+            rid = run["id"]
+        return db.inspect(user, rid)
+
+    @app.get("/api/runs/{rid}/confirmed-application-candidate")
+    def recover_confirmed_application(rid: str, request_key: str, user=user_dependency):
+        from .apps import inspect_draft
+        from .db import goal_application_candidates
+
+        if not 1 <= len(request_key) <= 100:
+            raise DomainError("INVALID_INPUT")
+        db.inspect(user, rid)
+        with db.tx() as c:
+            row = c.execute(select(goal_application_candidates).where(
+                goal_application_candidates.c.run_id == rid,
+                goal_application_candidates.c.principal_id == user)).mappings().first()
+            if not row:
+                raise DomainError("RESOURCE_UNAVAILABLE", "No confirmed candidate with this original key")
+            aid = row["app_id"]
+        inspect_draft(db, user, aid, platform_limits)
+        if row["confirmation"].get("request_key") != request_key:
+            raise DomainError("RESOURCE_UNAVAILABLE", "No confirmed candidate with this original key")
+        return {"id": aid, "state": "PREVIEW_ONLY", "recovered": True}
 
     @app.post("/api/projects/{pid}/goal-cards/{cid}/runs", status_code=202)
     def run_saved_goal(pid: str, cid: str, body: GoalRunInput, user=user_dependency):

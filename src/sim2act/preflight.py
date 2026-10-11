@@ -127,6 +127,12 @@ def preflight(raw, candidates, platform_limits):
             # validate_action enforces the exact pure schema, empty read/write
             # scope and no delegated tools. Other capability checks stay intact.
             effective_tools = set()
+        if action.executor.kind == "registered_tool" and action.executor.ref == "text.literal_evidence":
+            # Explicit pure transform of a read snapshot; its only I/O is the source read.
+            from .text_apps import check_action
+
+            check_action(action)
+            effective_tools = {"resource.read"}
         for tool in effective_tools:
             if tool == "artifact.save_text":
                 if not any(t == tool and ref.startswith("proj_") for t, ref in action_permissions):

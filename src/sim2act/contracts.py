@@ -231,6 +231,16 @@ class NaturalPlanningPolicy(Strict):
         return value
 
 
+class ApplicationGenerationPolicy(Strict):
+    version: Literal["goal-text-application.v1"]
+    provider: Literal["disabled", "intern-s2"]
+    app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
+    action_id: str = Field(pattern=r"^action_[a-f0-9]{32}$")
+    request_limit: Literal[3]
+    repair_limit: Literal[1]
+    live_request_allowance: Literal[0]
+
+
 class FrozenRunContract(Strict):
     run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
     # Existing project runtime or existing declarative app runtime; neither creates a grant.
@@ -243,6 +253,7 @@ class FrozenRunContract(Strict):
     request_model: Literal["intern-s2"]
     source_goal_card: GoalCardRunSource | None = None
     natural_planning: NaturalPlanningPolicy | None = None
+    application_generation: ApplicationGenerationPolicy | None = None
 
 
 class Run(Strict):
@@ -435,7 +446,7 @@ def check_dependencies(dependencies):
     from .csv_reports import REF
 
     registry = {
-        "tool": {"resource.read", "data.aggregate_csv", "artifact.save_text", REF},
+        "tool": {"resource.read", "data.aggregate_csv", "artifact.save_text", REF, "text.literal_evidence"},
         "check": {"receipt.readback.v1", "source.literal_evidence.v1", "source.conditional_report.v1"},
         "prompt": {"intern.system.v1"},
     }
@@ -456,7 +467,7 @@ def validate_action(raw: str):
     try:
         action = ActionSpec.model_validate(strict_json(raw))
         tools = {"resource.read", "data.aggregate_csv", "artifact.save_text"}
-        executors = tools | {REF} if action.executor.kind == "registered_tool" else ({"intern.conditional_report"} if action.executor.kind == "bounded_report" else {"intern.agent"})
+        executors = tools | {REF, "text.literal_evidence"} if action.executor.kind == "registered_tool" else ({"intern.conditional_report"} if action.executor.kind == "bounded_report" else {"intern.agent"})
         if action.executor.ref == REF:
             check_action(action)
         if action.executor.kind == "bounded_report" and action.allowed_tool_refs != ["resource.read"]:
@@ -489,7 +500,7 @@ def validate_action(raw: str):
         check_dependencies(action.dependencies)
         for req in action.permission_requirements:
             prerequisite_read = (
-                req.tool_ref == "resource.read" and "data.aggregate_csv" in effective
+                req.tool_ref == "resource.read" and bool({"data.aggregate_csv", "text.literal_evidence"} & effective)
             )
             if (
                 req.tool_ref not in effective and not prerequisite_read

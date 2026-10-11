@@ -1,0 +1,54 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto'),readline=require('node:readline'),{JSDOM}=require('jsdom');
+const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],hashes={},pending=new Map();let serial=0,dom,w,$,fault='',hold=null;
+readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),fn=pending.get(r.id);pending.delete(r.id);fn(r);});
+const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
+const check=(value,label)=>{assert(value,label);checks.push(label);};
+const wait=async fn=>{const end=Date.now()+15000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('offline bounded wait');};
+async function boot(app){if(dom)dom.window.close();const html=(await rpc({path:'/',method:'GET'})).text;hashes['index.html']=crypto.createHash('sha256').update(html).digest('hex');dom=new JSDOM(html,{url:'http://offline.test/',runScripts:'dangerously'});w=dom.window;$=id=>w.document.getElementById(id);w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,'subtle',{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
+ w.fetch=async(url,options={})=>{const request={path:url,method:options.method||'GET',body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const r=await rpc(request);if(fault==='generation'&&request.method==='POST'&&url.endsWith('/application-runs')){fault='';assert.equal(r.status,202);throw Error('injected accepted generation lost');}if(fault==='confirmation'&&request.method==='POST'&&url.endsWith('/confirm-application-candidate')){fault='';assert.equal(r.status,200);throw Error('injected accepted confirmation lost');}if(fault==='late'&&request.method==='POST'&&url.endsWith('/application-runs')){fault='';await new Promise(resolve=>hold=resolve);}return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});};
+ for(const script of [...w.document.querySelectorAll('script[src]')]){const name=script.getAttribute('src').slice(1),code=fs.readFileSync(path.join(info.web,name),'utf8');hashes[name]=crypto.createHash('sha256').update(code).digest('hex');const node=w.document.createElement('script');node.textContent=code;w.document.body.append(node);}
+ $('token').value='synthetic-test-A';$('connect').click();await wait(()=>$('login').hidden&&$('project-select').value===info.project);if(app)await w.showApp(app);else await w.showGoalCard(info.card,info.project);
+}
+const ack=id=>{$(id).checked=true;$(id).dispatchEvent(new w.Event('change'));};
+const posts=()=>requests.filter(r=>r.method==='POST').length;
+(async()=>{try{
+ await boot();check(!$('goal-application-start').disabled,'saved non-CSV goal has generation entry');$('goal-card-goal').value='UNSAVED MUST NOT BECOME GOAL';
+ if(info.scenario==='lost-generation')fault='generation';
+ if(info.scenario==='late-generation'){
+   fault='late';const action=$('goal-application-start').onclick();await wait(()=>hold);const release=hold;
+   $('project-select').value=info.other;$('project-select').dispatchEvent(new w.Event('change'));await wait(()=>!w.eval('activeGoalCard'));
+   const n=requests.length;release();await action;check(requests.length===n,'late accepted generation performs no followup request in changed selection');check(!$('goal-application-proof').textContent,'late response cannot paint protected source');
+   $('project-select').value=info.project;$('project-select').dispatchEvent(new w.Event('change'));await w.showGoalCard(info.card,info.project);
+ }else await $('goal-application-start').onclick();
+ const generation=requests.find(r=>r.method==='POST'&&r.path.endsWith('/application-runs'));
+ check(Object.keys(generation.body).sort().join(',')==='expected_fingerprint,expected_version,request_key','generation carries only exact saved-version intent');
+ check($('goal-application-confirm').disabled,'queued or unknown generation has no confirmation');
+ let n=posts();await $('goal-application-read').onclick();check(posts()===n,'unknown generation recovery is keyed GET only');
+ await rpc({command:'worker'});await $('goal-application-read').onclick();
+ const proof=JSON.parse($('goal-application-proof').textContent);check(proof.semantic_status==='UNKNOWN'&&proof.goal_acceptance==='NOT_RUN','candidate-ready keeps semantic and goal gaps visible');
+ check(proof.candidate.goal.goal!=='UNSAVED MUST NOT BECOME GOAL','full saved goal excludes unsaved editing');
+ check(proof.candidate.actions[0].executor.ref==='text.literal_evidence','provider graph uses explicit registered non-CSV executor');
+ check(proof.candidate.goal.constraints.length===2&&proof.candidate.goal.unresolved.length===1,'hard constraints and unresolved items preserved');
+ check($('goal-application-confirm').disabled,'exact candidate awaits new explicit confirmation');ack('goal-application-ack');check(!$('goal-application-confirm').disabled,'ack enables only exact verified candidate');
+ if(info.scenario==='lost-confirm')fault='confirmation';await $('goal-application-confirm').onclick();
+ n=posts();await $('goal-application-confirm-read').onclick();check(posts()===n,'confirmation recovery is original key GET only');
+ const app=w.eval('activeApp');check(/^app_[a-f0-9]{32}$/.test(app),'confirmed generated application opens');
+ check($('app-column-label').hidden&&!$('app-agent-term-label').hidden,'text app requires term rather than CSV column');
+ check($('internal-agent').hidden,'text app has no offline Replay upload requirement');
+ $('app-agent-term').value='Alpha';$('app-agent-term').dispatchEvent(new w.Event('input'));await $('internal-prepare').onclick();
+ check(!$('internal-approval').hidden&&$('internal-commit').disabled,'actual source sample produces exact approval requiring consent');
+ ack('internal-approval-ack');await $('internal-commit').onclick();
+ const create=$('internal-releases').querySelector('button');check(!!create,'verified non-CSV internal version available');await create.onclick();
+ const instance=w.eval('engineering.instance.id');check(!!instance,'new empty instance created');
+ n=posts();await boot(app);await w.showInternalInstance(instance);check(posts()===n,'cold page reads application and instance without automatic POST');
+ $('internal-term').value='Beta';await $('internal-run-form').onsubmit({preventDefault(){}});await rpc({command:'worker'});await $('internal-refresh').onclick();
+ check($('internal-data').textContent.includes('Beta due tomorrow')&&$('internal-data').textContent.includes('<em>Beta literal</em>'),'cold unseen term produces actual new whole-line results');
+ check(!$('internal-data').querySelector('em'),'untrusted source quote renders as literal text');
+ check(!$('internal-data').textContent.includes('Alpha obligation'),'new result is not reused sample answer');
+ const dataBefore=$('internal-data').textContent;$('internal-term').value='';await $('internal-run-form').onsubmit({preventDefault(){}});await rpc({command:'worker'});await $('internal-refresh').onclick();
+ check($('internal-runs').textContent.includes('FAILED'),'bad input preserves actual failed AppRun');check($('internal-data').textContent===dataBefore,'failed input appends no partial or wrong result');
+ check(requests.filter(r=>r.method==='POST'&&r.path.endsWith('/application-runs')).length===1,'one generation POST across lost receipts and cold pages');
+ check(requests.filter(r=>r.method==='POST'&&r.path.endsWith('/confirm-application-candidate')).length===1,'one precise candidate confirmation POST');
+ fs.writeFileSync(info.output,JSON.stringify({status:'PASS',checks,requests,loaded_source_sha256:hashes,browser:'JSDOM_NOT_NATIVE',api:'IPC_IN_PROCESS_HTTP',scenario:info.scenario,app,instance},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');process.exit(0);
+ }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',checks,requests,text:dom?.window.document.body.textContent},null,2));dom?.window.close();process.stderr.write(error.stack+'\n');process.exit(1);}})();

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="10" time="13.467" timestamp="2026-10-11T17:27:57.543322+00:00" hostname="9809f76d2248"><testcase classname="test_independent" name="test_confirmation_authority_cannot_be_removed_after_creation[None]" time="1.138"><failure message="AssertionError: Saved explicit authorization evidence was ignored&#10;assert 200 in {400, 403, 409}&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f21264c1f40&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...cd61aac319463880d1c14d438a9fb3', 'user_2d9951a6c9fa47a4977c6737c8f75fd2', 'proj_02f8b20edf764104af2e95e1f99f8b9d', ...)
+confirmation = None
+
+    @pytest.mark.parametrize("confirmation", [None, {}, {"candidate_fingerprint": "0" * 64}])
+    def test_confirmation_authority_cannot_be_removed_after_creation(env, confirmation):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(goal_application_candidates).where(goal_application_candidates.c.app_id == aid).values(confirmation=confirmation))
+        reply = data[2].get(f"/api/apps/{aid}")
+        print(json.dumps({"confirmation": confirmation, "http_status": reply.status_code}))
+&gt;       assert reply.status_code in {400, 403, 409}, "Saved explicit authorization evidence was ignored"
+E       AssertionError: Saved explicit authorization evidence was ignored
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:116: AssertionError</failure></testcase><testcase classname="test_independent" name="test_confirmation_authority_cannot_be_removed_after_creation[confirmation1]" time="1.118"><failure message="AssertionError: Saved explicit authorization evidence was ignored&#10;assert 200 in {400, 403, 409}&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f2124cb53d0&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...480dfe665a45b9b5961b599be35772', 'user_1f1c37241ba44eac8ebbeb366a81b705', 'proj_143e719d66e642898e3cf703acfc5bcb', ...)
+confirmation = {}
+
+    @pytest.mark.parametrize("confirmation", [None, {}, {"candidate_fingerprint": "0" * 64}])
+    def test_confirmation_authority_cannot_be_removed_after_creation(env, confirmation):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(goal_application_candidates).where(goal_application_candidates.c.app_id == aid).values(confirmation=confirmation))
+        reply = data[2].get(f"/api/apps/{aid}")
+        print(json.dumps({"confirmation": confirmation, "http_status": reply.status_code}))
+&gt;       assert reply.status_code in {400, 403, 409}, "Saved explicit authorization evidence was ignored"
+E       AssertionError: Saved explicit authorization evidence was ignored
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:116: AssertionError</failure></testcase><testcase classname="test_independent" name="test_confirmation_authority_cannot_be_removed_after_creation[confirmation2]" time="0.880"><failure message="AssertionError: Saved explicit authorization evidence was ignored&#10;assert 200 in {400, 403, 409}&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f2124d908c0&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...46e453c1664749bd7b2d9e3aed6d66', 'user_6f944d684f4646ac8b36f4b5f8684d8e', 'proj_2dd3609a87fa4ce698243b4c6e80052d', ...)
+confirmation = {'candidate_fingerprint': '0000000000000000000000000000000000000000000000000000000000000000'}
+
+    @pytest.mark.parametrize("confirmation", [None, {}, {"candidate_fingerprint": "0" * 64}])
+    def test_confirmation_authority_cannot_be_removed_after_creation(env, confirmation):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(goal_application_candidates).where(goal_application_candidates.c.app_id == aid).values(confirmation=confirmation))
+        reply = data[2].get(f"/api/apps/{aid}")
+        print(json.dumps({"confirmation": confirmation, "http_status": reply.status_code}))
+&gt;       assert reply.status_code in {400, 403, 409}, "Saved explicit authorization evidence was ignored"
+E       AssertionError: Saved explicit authorization evidence was ignored
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:116: AssertionError</failure></testcase><testcase classname="test_independent" name="test_corrupt_attempt_parameters_fail_closed_with_typed_error[None]" time="1.121"><failure message="AssertionError: Storage shape exception escaped as HTTP 500&#10;assert 500 in {400, 403, 409}&#10; +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f2124e47950&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...952b7da2c5492898924736247920f1', 'user_be57d77eb238404eb3dff7524076a2a9', 'proj_dfe4e24738d64b189338ad7da9886c6f', ...)
+shape = None
+
+    @pytest.mark.parametrize("shape", [None, 3, []])
+    def test_corrupt_attempt_parameters_fail_closed_with_typed_error(env, shape):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            item = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+            c.execute(update(attempts).where(attempts.c.id == item["id"]).values(parameters=shape))
+        reply = TestClient(create_app(data[0], data[1]), raise_server_exceptions=False)
+        reply.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        response = reply.get(f"/api/apps/{aid}")
+        print(json.dumps({"parameter_shape": shape, "http_status": response.status_code}))
+&gt;       assert response.status_code in {400, 403, 409}, "Storage shape exception escaped as HTTP 500"
+E       AssertionError: Storage shape exception escaped as HTTP 500
+E       assert 500 in {400, 403, 409}
+E        +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:131: AssertionError</failure></testcase><testcase classname="test_independent" name="test_corrupt_attempt_parameters_fail_closed_with_typed_error[3]" time="1.552"><failure message="AssertionError: Storage shape exception escaped as HTTP 500&#10;assert 500 in {400, 403, 409}&#10; +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f212495e9c0&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...bba31546b44cc78a67d022a8e55738', 'user_802837a69a7b4f37ba8e88db86682ce8', 'proj_79b1e23be8a54b3698c3efb5f785201b', ...)
+shape = 3
+
+    @pytest.mark.parametrize("shape", [None, 3, []])
+    def test_corrupt_attempt_parameters_fail_closed_with_typed_error(env, shape):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            item = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+            c.execute(update(attempts).where(attempts.c.id == item["id"]).values(parameters=shape))
+        reply = TestClient(create_app(data[0], data[1]), raise_server_exceptions=False)
+        reply.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        response = reply.get(f"/api/apps/{aid}")
+        print(json.dumps({"parameter_shape": shape, "http_status": response.status_code}))
+&gt;       assert response.status_code in {400, 403, 409}, "Storage shape exception escaped as HTTP 500"
+E       AssertionError: Storage shape exception escaped as HTTP 500
+E       assert 500 in {400, 403, 409}
+E        +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:131: AssertionError</failure></testcase><testcase classname="test_independent" name="test_corrupt_attempt_parameters_fail_closed_with_typed_error[shape2]" time="1.127"><failure message="AssertionError: Storage shape exception escaped as HTTP 500&#10;assert 500 in {400, 403, 409}&#10; +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f21261ccfe0&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...240a9467664cdda387ff615772b14e', 'user_94db0cddd4ac47f38ec33c042bd55260', 'proj_e51d606cc07842389a62878dac0719f8', ...)
+shape = []
+
+    @pytest.mark.parametrize("shape", [None, 3, []])
+    def test_corrupt_attempt_parameters_fail_closed_with_typed_error(env, shape):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            item = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+            c.execute(update(attempts).where(attempts.c.id == item["id"]).values(parameters=shape))
+        reply = TestClient(create_app(data[0], data[1]), raise_server_exceptions=False)
+        reply.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        response = reply.get(f"/api/apps/{aid}")
+        print(json.dumps({"parameter_shape": shape, "http_status": response.status_code}))
+&gt;       assert response.status_code in {400, 403, 409}, "Storage shape exception escaped as HTTP 500"
+E       AssertionError: Storage shape exception escaped as HTTP 500
+E       assert 500 in {400, 403, 409}
+E        +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:131: AssertionError</failure></testcase><testcase classname="test_independent" name="test_durable_literal_history_rejects_forged_saved_evidence[receipt]" time="1.668" /><testcase classname="test_independent" name="test_durable_literal_history_rejects_forged_saved_evidence[record]" time="1.702" /><testcase classname="test_independent" name="test_durable_literal_history_rejects_forged_saved_evidence[output]" time="1.471" /><testcase classname="test_independent" name="test_durable_literal_history_rejects_forged_saved_evidence[run_status]" time="1.577" /></testsuite></testsuites>

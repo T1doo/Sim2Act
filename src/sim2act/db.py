@@ -213,6 +213,15 @@ goal_card_versions = Table(
     Column("created_at", Float, nullable=False),
 )
 
+goal_application_candidates = Table(
+    "goal_application_candidates", meta,
+    Column("app_id", String, primary_key=True),
+    Column("run_id", String, nullable=False, unique=True),
+    Column("principal_id", String, nullable=False),
+    Column("candidate_fingerprint", String, nullable=False),
+    Column("confirmation", JSON, nullable=False),
+)
+
 app_drafts = Table(
     "app_drafts",
     meta,
@@ -833,6 +842,8 @@ class Store:
                                         "fingerprint": source.fingerprint}} if source else {}),
                     **({"natural_planning": policy["natural_planning"]}
                        if policy.get("natural_planning") is not None else {}),
+                    **({"application_generation": policy["application_generation"]}
+                       if policy.get("application_generation") is not None else {}),
                 })
                 return rid
         except IntegrityError:
@@ -1071,6 +1082,14 @@ class Store:
                     from .goal_planner import inspect_plan
 
                     inspect_plan(self, c, r)
+                if contract.application_generation is not None and r["result"] is not None:
+                    from .goal_applications import verified_candidate
+
+                    value = verified_candidate(self, c, r, contract.limits)
+                    if r["status"] != "PARTIAL" or r["cancel_intent"] or r["error"] is not None or r["result"] != {
+                        "candidate": value, "candidate_fingerprint": fingerprint(value),
+                        "goal_acceptance": "NOT_RUN", "semantic_status": "UNKNOWN", "app_created": False}:
+                        raise DomainError("VERSION_CONFLICT", "Goal generation result changed")
             natural_plan = None
             natural_deadline = None
             if source_contract and source_contract.get("natural_planning") is not None:
@@ -1335,6 +1354,8 @@ class Store:
             )
             if not run:
                 raise DomainError("PERMISSION_DENIED")
+            if self.frozen_contract(c, run).application_generation is not None:
+                raise DomainError("UNSUPPORTED_CAPABILITY", "Goal application response import and retry are disabled")
             if run["version"] != version or run["status"] not in {
                 "WAITING_RESOURCE",
                 "RECONCILING",

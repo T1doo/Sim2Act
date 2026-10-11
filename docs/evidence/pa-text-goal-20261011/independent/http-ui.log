@@ -1,0 +1,518 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_______________ test_goal_text_offline_page_actual_worker[valid] _______________
+
+env = (<sim2act.db.Store object at 0x7fce015a3e30>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/htt...45c72471c1498bb52807e8af6a913e', 'user_505a26de43fa482692374dccfc19e084', 'proj_df2a6637590d416cbd45854566ad5894', ...)
+tmp_path = PosixPath('/tmp/pa-independent-review-20261011/http-ui-temp/test_goal_text_offline_page_ac0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize(
+        "scenario", ["valid", "lost-generation", "lost-confirm", "late-generation"]
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/goal_text_ui.cjs:2:164)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:109: AssertionError
+__________ test_goal_text_offline_page_actual_worker[lost-generation] __________
+
+env = (<sim2act.db.Store object at 0x7fce016e2bd0>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/htt...df09c369ec4e52873fdf2e63849269', 'user_8ddb9d0fcbf84705b655a040db0d6149', 'proj_b225ff38bc6240b1bf77128b39aabf07', ...)
+tmp_path = PosixPath('/tmp/pa-independent-review-20261011/http-ui-temp/test_goal_text_offline_page_ac1')
+scenario = 'lost-generation'
+
+    @pytest.mark.parametrize(
+        "scenario", ["valid", "lost-generation", "lost-confirm", "late-generation"]
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/goal_text_ui.cjs:2:164)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:109: AssertionError
+___________ test_goal_text_offline_page_actual_worker[lost-confirm] ____________
+
+env = (<sim2act.db.Store object at 0x7fce00599730>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/htt...c4ac911bd14b219ccef9b252e4b5f1', 'user_8f2469af80964c05a18a5c62b760aa94', 'proj_8b828156431f47dcb3b7bc0387676465', ...)
+tmp_path = PosixPath('/tmp/pa-independent-review-20261011/http-ui-temp/test_goal_text_offline_page_ac2')
+scenario = 'lost-confirm'
+
+    @pytest.mark.parametrize(
+        "scenario", ["valid", "lost-generation", "lost-confirm", "late-generation"]
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/goal_text_ui.cjs:2:164)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:109: AssertionError
+__________ test_goal_text_offline_page_actual_worker[late-generation] __________
+
+env = (<sim2act.db.Store object at 0x7fce000eeb40>, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/htt...18aee24623401fa846105c955bea15', 'user_f5a5497861a348a7b7cee4f889e6a438', 'proj_b06e3b14e8fb44e2b7d9e5bbf09c2b17', ...)
+tmp_path = PosixPath('/tmp/pa-independent-review-20261011/http-ui-temp/test_goal_text_offline_page_ac3')
+scenario = 'late-generation'
+
+    @pytest.mark.parametrize(
+        "scenario", ["valid", "lost-generation", "lost-confirm", "late-generation"]
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        web = Path(__file__).parents[1] / "src/sim2act/web"
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "web": str(web),
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/goal_text_ui.cjs:2:164)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:109: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[valid]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[lost-generation]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[lost-confirm]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[late-generation]
+4 failed, 1 warning in 2.41s

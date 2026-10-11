@@ -200,6 +200,10 @@ def compile_preview(candidate, platform_limits):
         json.dumps(candidate["manifest"]), candidate["actions"], platform_limits
     )
     actions = [validate_action(json.dumps(a)) for a in candidate["actions"]]
+    if any(a.executor.ref == "text.literal_evidence" for a in actions):
+        from .text_apps import compile_text
+
+        return compile_text(candidate, manifest, actions, report)
     if any(a.executor.kind == "bounded_agent" for a in actions):
         from .agent_apps import compile_agent
 
@@ -282,8 +286,21 @@ def validate_source_family(c, user, draft):
             markers.append((expected_field, expected_kind))
     if len(markers) > 1 or not isinstance(candidate, dict):
         raise DomainError("VERSION_CONFLICT", "Independent extraction marker conflict")
+    from .db import goal_application_candidates
+    generated_text = c.execute(select(goal_application_candidates).where(
+        goal_application_candidates.c.app_id == draft["id"])).mappings().first()
+    if generated_text:
+        if generated_text["principal_id"] != user:
+            raise DomainError("VERSION_CONFLICT", "Independent generation owner changed")
+        markers.append(("goal_application", "registered_tool"))
+        if (not isinstance(candidate, dict) or not isinstance(candidate.get("actions"), list)
+                or len(candidate["actions"]) != 1
+                or candidate["actions"][0].get("executor", {}).get("ref") != "text.literal_evidence"):
+            raise DomainError("VERSION_CONFLICT", "Independent generation executor changed")
+    if len(markers) > 1:
+        raise DomainError("VERSION_CONFLICT", "Independent source markers conflict")
     claimed = {
-        k for k in ("generation", "extraction", "task_proof", "agent_provenance") if k in candidate
+        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application") if k in candidate
     }
     expected = {markers[0][0]} if markers else set()
     if claimed != expected:
@@ -321,6 +338,15 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     validate_source_family(c, user, draft)
     manifest, action, report = compile_preview(candidate, platform_limits)
+    if action.executor.ref == "text.literal_evidence":
+        from .text_apps import verify_origin
+
+        verify_origin(store, c, user, draft, platform_limits)
+        source = authorized_read(store, c, user, draft["runtime_id"], draft["project_id"],
+                                 "resource.read", {"resource_id": manifest.data_bindings[0].resource_ref})
+        if source["hash"] != candidate["source_hash"] or source["format"] not in {"txt", "md"}:
+            raise DomainError("VERSION_CONFLICT", "Frozen text source changed")
+        return draft, manifest, action, report
     if action.executor.kind == "bounded_agent":
         from .agent_apps import existing_runtime, validate_agent_origin
 
@@ -450,13 +476,20 @@ def preview(store, user, aid, input_value, key, platform_limits):
                 for field, source in step.inputs.items()
             }
             validate_action_input(action, args)
-            validate_call(action.executor.ref, args)
             # Dynamic argument must remain within the compiled declaration and app grants.
             if args["resource_id"] != manifest.data_bindings[0].resource_ref:
                 raise DomainError("PERMISSION_DENIED")
-            value = authorized_read(
-                store, c, user, draft["runtime_id"], draft["project_id"], action.executor.ref, args
-            )
+            if action.executor.ref == "text.literal_evidence":
+                from .text_apps import compute
+
+                source = authorized_read(store, c, user, draft["runtime_id"], draft["project_id"],
+                                         "resource.read", {"resource_id": args["resource_id"]})
+                value = compute(source, args)
+            else:
+                validate_call(action.executor.ref, args)
+                value = authorized_read(
+                    store, c, user, draft["runtime_id"], draft["project_id"], action.executor.ref, args
+                )
             validate_value(action.output_schema, value, "action_output")
             output = {field: value[source.field] for field, source in manifest.outputs.items()}
             validate_value(manifest.output_schema, output, "output")
@@ -531,6 +564,6 @@ def inspect_draft(store, user, aid, platform_limits):
             "input_guidance": (
                 csv_column_options(source["content"])
                 if manifest.validation_suite_ref == "receipt.readback.v1"
-                else {"mode": "OFFLINE_REPLAY_ONLY", "semantic_status": "UNKNOWN"}
+                else {"mode": ("REGISTERED_LITERAL" if draft["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence" else "OFFLINE_REPLAY_ONLY"), "semantic_status": "UNKNOWN"}
             ),
         }

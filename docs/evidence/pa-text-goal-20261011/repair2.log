@@ -1,0 +1,56 @@
+F............                                                            [100%]
+=================================== FAILURES ===================================
+________________ test_goal_feedback_repair_release_cold_worker _________________
+
+env = (<sim2act.db.Store object at 0x7fb84d6de330>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-8/test_goal...2c34bc3f5240318f0e31eaf0e278fd', 'user_3c3368ee1700422ca7bd332036e36163', 'proj_a2ef9dc3d9e74483bde8d0f6d45bef2a', ...)
+
+    def test_goal_feedback_repair_release_cold_worker(env):
+        data = setup(env)
+        store, settings, client, user, _, text, card = data
+        rid, result, sent = generate(data, repair=True)
+        assert result["status"] == "PARTIAL", result
+        assert len(sent) == 3 and sent[1]["tools"] == sent[2]["tools"] == []
+        assert result["result"]["candidate"]["goal"] == card["content"]
+        assert result["result"]["goal_acceptance"] == "NOT_RUN"
+        with store.tx() as c:
+            assert c.execute(select(func.count()).select_from(goal_application_candidates)).scalar() == 0
+            original = c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at)).mappings().all()
+            assert len(original) == 3 and original[1]["error"] == "INVALID_MANIFEST"
+            assert "term" not in json.loads(original[1]["response"]["content"])["manifest"]["workflow"][0]["inputs"]
+            assert all(a["mode"] == "MOCK" for a in original)
+        aid, body = confirm(data, rid, result)
+        assert client.post(f"/api/runs/{rid}/confirm-application-candidate", json=body).json()["cached"] is True
+        assert client.post(f"/api/runs/{rid}/confirm-application-candidate", json={**body, "name": "changed"}).status_code == 409
+        preview = client.post(f"/api/apps/{aid}/previews", json={"input": {"term": "Alpha"}, "request_key": "preview-1"})
+        assert preview.status_code == 200, preview.text
+        assert preview.json()["output"]["citations"] == [{"start_line": 1, "end_line": 1, "quote": "Alpha obligation retained"},
+                                                           {"start_line": 3, "end_line": 3, "quote": "Alpha owner undecided"}]
+>       release, instance = release_instance(data, aid)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_text_applications.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7fb84d6de330>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-8/test_goal...82c34bc3f5240318f0e31eaf0e278fd', 'proj_a2ef9dc3d9e74483bde8d0f6d45bef2a', 'res_4950be75e08f44188c2fd9140f46db06', ...)
+aid = 'app_2c07d4819d2642f18b4cdc74f127e78a'
+
+    def release_instance(data, aid):
+        _, _, client, _, _, _, _ = data
+        draft = client.get(f"/api/apps/{aid}").json()
+        prepared = client.post(f"/api/internal/apps/{aid}/release-approvals", json={
+            "expected_draft_fingerprint": draft["fingerprint"], "sample_input": {"term": "Alpha"}})
+>       assert prepared.status_code == 200, prepared.text
+E       AssertionError: {"id":"iapproval_ef66d6ef875c4e7fbc4b220fac14baf8","fingerprint":"e080809e549d3d52493c193d1bc11a92a8e178703fec51d68e5d57b95d9fe906","namespace":"INTERNAL_ENGINEERING_ONLY","formal_publication_enabled":false}
+E       assert 201 == 200
+E        +  where 201 = <Response [201 Created]>.status_code
+
+tests/test_goal_text_applications.py:111: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_goal_text_applications.py::test_goal_feedback_repair_release_cold_worker
+1 failed, 12 passed, 1 warning in 11.68s

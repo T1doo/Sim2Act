@@ -1,0 +1,62 @@
+F.........F..                                                            [100%]
+=================================== FAILURES ===================================
+________________ test_goal_feedback_repair_release_cold_worker _________________
+
+env = (<sim2act.db.Store object at 0x7f0a76416270>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-7/test_goal...35cbd582c74293b2bb04c99b54b80b', 'user_7cb0170f0f574aed8fb58b2c49707b3e', 'proj_1ee58411b0a84f2495d8c85fea046e8f', ...)
+
+    def test_goal_feedback_repair_release_cold_worker(env):
+        data = setup(env)
+        store, settings, client, user, _, text, card = data
+        rid, result, sent = generate(data, repair=True)
+        assert result["status"] == "PARTIAL", result
+        assert len(sent) == 3 and sent[1]["tools"] == sent[2]["tools"] == []
+>       assert result["result"]["candidate"]["goal"] == card["content"]
+                                                        ^^^^^^^^^^^^^^^
+E       KeyError: 'content'
+
+tests/test_goal_text_applications.py:139: KeyError
+_ test_independent_origin_blocks_resigned_candidate_and_route_downgrade[executor] _
+
+env = (<sim2act.db.Store object at 0x7f0a75e847a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-7/test_inde...7cc0d6409941859bbe131c4d224fba', 'user_db013abda7b84d79b2c2d65f7e4fd236', 'proj_c9a679fbdd704d0c8912ebb5bb9cac62', ...)
+change = 'executor'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+        aid, _ = confirm(data, rid, result)
+        store, _, client, _, _, _, _ = data
+        with store.tx() as c:
+            if change in {"candidate", "marker", "executor"}:
+                row = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
+                value = copy.deepcopy(row["candidate"])
+                if change == "candidate": value["goal"]["constraints"] = []
+                if change == "marker": value.pop("goal_application")
+                if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": "1"}
+                c.execute(update(app_drafts).where(app_drafts.c.id == aid).values(candidate=value, fingerprint=fingerprint(value)))
+            elif change == "attempt":
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at.desc())).mappings().first()
+                msg = dict(row["response"]); value = json.loads(msg["content"]); value["goal"]["unresolved"] = []
+                msg["content"] = json.dumps(value)
+                c.execute(update(attempts).where(attempts.c.id == row["id"]).values(response=msg))
+            else:
+                value = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == rid)).scalar()
+                value = {k: v for k, v in value.items() if k != "application_generation"}
+                c.execute(update(run_contracts).where(run_contracts.c.run_id == rid).values(snapshot=value, fingerprint=fingerprint(value)))
+>       assert client.get(f"/api/apps/{aid}").status_code == 409
+E       AssertionError: assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+E        +    where <Response [400 Bad Request]> = get('/api/apps/app_72da1cef148142a26343dff2540ba243')
+E        +      where get = <starlette.testclient.TestClient object at 0x7f0a747b9550>.get
+
+tests/test_goal_text_applications.py:229: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_goal_text_applications.py::test_goal_feedback_repair_release_cold_worker
+FAILED tests/test_goal_text_applications.py::test_independent_origin_blocks_resigned_candidate_and_route_downgrade[executor]
+2 failed, 11 passed, 1 warning in 10.38s

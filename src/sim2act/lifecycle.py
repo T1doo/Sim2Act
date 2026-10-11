@@ -66,6 +66,10 @@ def execute(store, c, user, draft, limits, input_value, replay=None):
                 store, c, user, draft["runtime_id"], draft["project_id"], "resource.read", call_args
             ),
         )
+    if action.executor.ref == "text.literal_evidence":
+        from .text_apps import compute
+
+        return compute(source, args)
     value = authorized_read(
         store, c, user, draft["runtime_id"], draft["project_id"], action.executor.ref, args
     )
@@ -217,7 +221,7 @@ def prepare_release(
             "check_evidence": {
                 "ref": (
                     "source.literal_evidence.v1"
-                    if action.executor.kind == "bounded_agent"
+                    if action.executor.kind == "bounded_agent" or action.executor.ref == "text.literal_evidence"
                     else "csv.exact_integer_sum.v1"
                 ),
                 "status": "PASS",
@@ -466,6 +470,10 @@ def inspect_instance(store, user, iid, limits):
         if "execution_source" in release["snapshot"]:
             from .csv_dag_instances import check_instance_records
             check_instance_records(store, c, user, i, records, limits)
+        elif release["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence":
+            from .text_run_checks import verify_records
+
+            verify_records(store, c, user, records, limits)
         return {**dict(i), "namespace": NAMESPACE, "data": [dict(x) for x in records]}
 
 
@@ -482,6 +490,8 @@ def run_instance(
         i, r = instance(store, c, user, iid, limits, lock=True)
         if "execution_source" in r["snapshot"]:
             raise DomainError("UNSUPPORTED_CAPABILITY", "DAG instances require the durable DAG worker")
+        if r["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence":
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Literal instances require the durable AppRun worker")
         request_fp = fingerprint(
             {
                 "instance_id": iid,

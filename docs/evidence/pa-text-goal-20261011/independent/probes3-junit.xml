@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="5.667" timestamp="2026-10-11T17:34:30.369363+00:00" hostname="9809f76d2248"><testcase classname="test_independent" name="test_confirmation_read_recovery_uses_typed_authority[None]" time="1.081"><failure message="AssertionError: Internal Server Error&#10;assert 500 in {400, 403, 409}&#10; +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7feeafa5aed0&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...e46dc997a84349ba6db2ecbf33538b', 'user_9ff7fa05e0974bf79144fad735b828b3', 'proj_ab9f841756e143d89c0f25017436c273', ...)
+confirmation = None
+
+    @pytest.mark.parametrize("confirmation", [None, []])
+    def test_confirmation_read_recovery_uses_typed_authority(env, confirmation):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(goal_application_candidates).where(goal_application_candidates.c.app_id == aid).values(confirmation=confirmation))
+        client = TestClient(create_app(data[0], data[1]), raise_server_exceptions=False)
+        client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        response = client.get(f"/api/runs/{rid}/confirmed-application-candidate?request_key=confirm-1")
+        print(json.dumps({"confirmation_recovery_shape": confirmation, "http_status": response.status_code}))
+&gt;       assert response.status_code in {400, 403, 409}, response.text
+E       AssertionError: Internal Server Error
+E       assert 500 in {400, 403, 409}
+E        +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:174: AssertionError</failure></testcase><testcase classname="test_independent" name="test_confirmation_read_recovery_uses_typed_authority[confirmation1]" time="1.029"><failure message="AssertionError: Internal Server Error&#10;assert 500 in {400, 403, 409}&#10; +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7feeae4f1e50&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...3382a4c5724f42a9283dedbbdd5602', 'user_b3808781efd34583b2656e750828bb56', 'proj_53a28dbc398a4deba496aab27c48ae5f', ...)
+confirmation = []
+
+    @pytest.mark.parametrize("confirmation", [None, []])
+    def test_confirmation_read_recovery_uses_typed_authority(env, confirmation):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        with data[0].tx() as c:
+            c.execute(update(goal_application_candidates).where(goal_application_candidates.c.app_id == aid).values(confirmation=confirmation))
+        client = TestClient(create_app(data[0], data[1]), raise_server_exceptions=False)
+        client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+        response = client.get(f"/api/runs/{rid}/confirmed-application-candidate?request_key=confirm-1")
+        print(json.dumps({"confirmation_recovery_shape": confirmation, "http_status": response.status_code}))
+&gt;       assert response.status_code in {400, 403, 409}, response.text
+E       AssertionError: Internal Server Error
+E       assert 500 in {400, 403, 409}
+E        +  where 500 = &lt;Response [500 Internal Server Error]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:174: AssertionError</failure></testcase><testcase classname="test_independent" name="test_job_read_cannot_skip_literal_history_verification[FAILED]" time="1.990"><failure message="AssertionError: Job history downgrade skips exact successful-result proof&#10;assert 200 in {400, 403, 409}&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7feead84b3b0&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...b6e3d370be4e348b43d9d6f82f798c', 'user_f37cec60581d4eec85b27c121cc0e5c7', 'proj_9fe8924b4c19456986170eaff82ab5bc', ...)
+status = 'FAILED'
+
+    @pytest.mark.parametrize("status", ["FAILED", "CANCELLED"])
+    def test_job_read_cannot_skip_literal_history_verification(env, status):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        release, instance = helper.release_instance(data, aid)
+        completed = helper.run_input(data, release, instance, {"term": "Beta"}, "job-history")
+        with data[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == completed["id"]).values(status=status))
+        response = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{completed['id']}")
+        print(json.dumps({"job_status": status, "http_status": response.status_code, "result_present": bool(response.json().get("result"))}))
+&gt;       assert response.status_code in {400, 403, 409}, "Job history downgrade skips exact successful-result proof"
+E       AssertionError: Job history downgrade skips exact successful-result proof
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:188: AssertionError</failure></testcase><testcase classname="test_independent" name="test_job_read_cannot_skip_literal_history_verification[CANCELLED]" time="1.450"><failure message="AssertionError: Job history downgrade skips exact successful-result proof&#10;assert 200 in {400, 403, 409}&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7feeaf676ab0&gt;, Settings(database_url='sqlite:////tmp/pa-independent-review-20261011/pro...b696d5e38e41cabb35af699ad62ea8', 'user_a26c740cfca0484a935453ac3b6c19ee', 'proj_166577bc1baf4f1c8377202c178374a3', ...)
+status = 'CANCELLED'
+
+    @pytest.mark.parametrize("status", ["FAILED", "CANCELLED"])
+    def test_job_read_cannot_skip_literal_history_verification(env, status):
+        data = helper.setup(env)
+        rid, result, _ = helper.generate(data)
+        aid, _ = helper.confirm(data, rid, result)
+        release, instance = helper.release_instance(data, aid)
+        completed = helper.run_input(data, release, instance, {"term": "Beta"}, "job-history")
+        with data[0].tx() as c:
+            c.execute(update(runs).where(runs.c.id == completed["id"]).values(status=status))
+        response = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{completed['id']}")
+        print(json.dumps({"job_status": status, "http_status": response.status_code, "result_present": bool(response.json().get("result"))}))
+&gt;       assert response.status_code in {400, 403, 409}, "Job history downgrade skips exact successful-result proof"
+E       AssertionError: Job history downgrade skips exact successful-result proof
+E       assert 200 in {400, 403, 409}
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pa-independent-review-20261011/test_independent.py:188: AssertionError</failure></testcase></testsuite></testsuites>

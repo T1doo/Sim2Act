@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="13" time="10.368" timestamp="2026-10-11T17:20:45.008070+00:00" hostname="9809f76d2248"><testcase classname="tests.test_goal_text_applications" name="test_goal_feedback_repair_release_cold_worker" time="0.921"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7f0a76416270&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-7/test_goal...35cbd582c74293b2bb04c99b54b80b', 'user_7cb0170f0f574aed8fb58b2c49707b3e', 'proj_1ee58411b0a84f2495d8c85fea046e8f', ...)
+
+    def test_goal_feedback_repair_release_cold_worker(env):
+        data = setup(env)
+        store, settings, client, user, _, text, card = data
+        rid, result, sent = generate(data, repair=True)
+        assert result["status"] == "PARTIAL", result
+        assert len(sent) == 3 and sent[1]["tools"] == sent[2]["tools"] == []
+&gt;       assert result["result"]["candidate"]["goal"] == card["content"]
+                                                        ^^^^^^^^^^^^^^^
+E       KeyError: 'content'
+
+tests/test_goal_text_applications.py:139: KeyError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[usage]" time="0.529" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[identity]" time="0.691" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[truncated]" time="0.608" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[wrong-tool]" time="0.523" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[frozen-goal]" time="0.713" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[extra-field]" time="0.689" /><testcase classname="tests.test_goal_text_applications" name="test_default_generation_has_no_model_send" time="0.575" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[candidate]" time="0.880" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[marker]" time="0.755" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[executor]" time="0.832"><failure message="AssertionError: assert 400 == 409&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code&#10; +    where &lt;Response [400 Bad Request]&gt; = get('/api/apps/app_72da1cef148142a26343dff2540ba243')&#10; +      where get = &lt;starlette.testclient.TestClient object at 0x7f0a747b9550&gt;.get">env = (&lt;sim2act.db.Store object at 0x7f0a75e847a0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-7/test_inde...7cc0d6409941859bbe131c4d224fba', 'user_db013abda7b84d79b2c2d65f7e4fd236', 'proj_c9a679fbdd704d0c8912ebb5bb9cac62', ...)
+change = 'executor'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+        aid, _ = confirm(data, rid, result)
+        store, _, client, _, _, _, _ = data
+        with store.tx() as c:
+            if change in {"candidate", "marker", "executor"}:
+                row = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
+                value = copy.deepcopy(row["candidate"])
+                if change == "candidate": value["goal"]["constraints"] = []
+                if change == "marker": value.pop("goal_application")
+                if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": "1"}
+                c.execute(update(app_drafts).where(app_drafts.c.id == aid).values(candidate=value, fingerprint=fingerprint(value)))
+            elif change == "attempt":
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at.desc())).mappings().first()
+                msg = dict(row["response"]); value = json.loads(msg["content"]); value["goal"]["unresolved"] = []
+                msg["content"] = json.dumps(value)
+                c.execute(update(attempts).where(attempts.c.id == row["id"]).values(response=msg))
+            else:
+                value = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == rid)).scalar()
+                value = {k: v for k, v in value.items() if k != "application_generation"}
+                c.execute(update(run_contracts).where(run_contracts.c.run_id == rid).values(snapshot=value, fingerprint=fingerprint(value)))
+&gt;       assert client.get(f"/api/apps/{aid}").status_code == 409
+E       AssertionError: assert 400 == 409
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+E        +    where &lt;Response [400 Bad Request]&gt; = get('/api/apps/app_72da1cef148142a26343dff2540ba243')
+E        +      where get = &lt;starlette.testclient.TestClient object at 0x7f0a747b9550&gt;.get
+
+tests/test_goal_text_applications.py:229: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[attempt]" time="0.859" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[route]" time="1.688" /></testsuite></testsuites>

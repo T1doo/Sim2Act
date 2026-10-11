@@ -1,0 +1,435 @@
+I001 [*] Import block is un-sorted or un-formatted
+   --> src/sim2act/api.py:456:5
+    |
+454 |           )
+455 |
+456 | /     from .goal_runs import GoalRunInput, acceptance
+457 | |     from .goal_applications import ConfirmInput as ConfirmApplicationInput
+    | |__________________________________________________________________________^
+458 |
+459 |       @app.post("/api/projects/{pid}/goal-cards/{cid}/application-runs", status_code=202)
+    |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+   --> src/sim2act/api.py:496:9
+    |
+494 |       @app.get("/api/runs/{rid}/confirmed-application-candidate")
+495 |       def recover_confirmed_application(rid: str, request_key: str, user=user_dependency):
+496 | /         from .db import goal_application_candidates
+497 | |         from .apps import inspect_draft
+    | |_______________________________________^
+498 |
+499 |           db.inspect(user, rid)
+    |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/goal_applications.py:6:1
+   |
+ 4 |   """
+ 5 |
+ 6 | / import copy
+ 7 | | import hashlib
+ 8 | | import json
+ 9 | | import threading
+10 | | import time
+11 | |
+12 | | import httpx
+13 | | from pydantic import Field
+14 | | from sqlalchemy import insert, select, update
+15 | |
+16 | | from .contracts import ActionSpec, AppManifest, ApplicationGenerationPolicy, Limits, Strict, strict_json
+17 | | from .db import (app_drafts, attempts, events, fingerprint, goal_application_candidates,
+18 | |                  goal_cards, grants, new_id, operation_intents, operations, principals, runs)
+19 | | from .errors import DomainError
+20 | | from .goal_planner import checked_usage, configured_provider, locked, safe_received_message
+21 | | from .model import InternModel, normalize_usage, parse_response, require_returned_model, returned_model_identity
+22 | | from .tools import TOOLS, authorized_read, dispatch
+   | |___________________________________________________^
+23 |
+24 |   SYSTEM = "Produce a finite declarative literal-text application under the supplied contract. First request exactly one resource.read f…
+   |
+help: Organize imports
+
+F401 [*] `.contracts.Limits` imported but unused
+  --> src/sim2act/goal_applications.py:16:78
+   |
+14 | from sqlalchemy import insert, select, update
+15 |
+16 | from .contracts import ActionSpec, AppManifest, ApplicationGenerationPolicy, Limits, Strict, strict_json
+   |                                                                              ^^^^^^
+17 | from .db import (app_drafts, attempts, events, fingerprint, goal_application_candidates,
+18 |                  goal_cards, grants, new_id, operation_intents, operations, principals, runs)
+   |
+help: Remove unused import: `.contracts.Limits`
+
+B023 Function definition does not bind loop variable `wire`
+   --> src/sim2act/goal_applications.py:258:39
+    |
+257 |             def guard(request):
+258 |                 if request.content != wire or str(request.url) != InternModel.ENDPOINT or request.method != "POST":
+    |                                       ^^^^
+259 |                     raise DomainError("VERSION_CONFLICT", "Generation wire changed")
+260 |                 with worker.store.tx() as c:
+    |
+
+B023 Function definition does not bind loop variable `aid`
+   --> src/sim2act/goal_applications.py:264:81
+    |
+262 | …     # The current STARTED row is excluded solely for this one send guard.
+263 | …     check_active(worker, c, current)
+264 | …     attempt = c.execute(select(attempts).where(attempts.c.id == aid)).mappings().one()
+    |                                                                   ^^^
+265 | …     if attempt["status"] != "STARTED" or attempt["parameters"].get("generation_wire") != hashlib.sha256(wire).hexdigest():
+266 | …         raise DomainError("VERSION_CONFLICT")
+    |
+
+B023 Function definition does not bind loop variable `wire`
+   --> src/sim2act/goal_applications.py:265:121
+    |
+263 | …         check_active(worker, c, current)
+264 | …         attempt = c.execute(select(attempts).where(attempts.c.id == aid)).mappings().one()
+265 | …         if attempt["status"] != "STARTED" or attempt["parameters"].get("generation_wire") != hashlib.sha256(wire).hexdigest():
+    |                                                                                                               ^^^^
+266 | …             raise DomainError("VERSION_CONFLICT")
+267 | …     return {"deadline": run["created_at"] + min(worker.s.run_seconds, contract.limits.run_seconds)}
+    |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/text_apps.py:77:5
+   |
+76 |   def verify_origin(store, c, user, draft, limits):
+77 | /     from sqlalchemy import select
+78 | |     from pydantic import ValidationError
+79 | |     from .db import events, goal_application_candidates, runs
+80 | |     from .goal_applications import ConfirmInput, verified_candidate
+   | |___________________________________________________________________^
+81 |
+82 |       marker = c.execute(select(goal_application_candidates).where(
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/text_run_checks.py:3:1
+   |
+ 1 |   """Independent current-source verification of durable literal AppRun history."""
+ 2 |
+ 3 | / from sqlalchemy import select
+ 4 | |
+ 5 | | from .agent_apps import check_evidence
+ 6 | | from .contracts import validate_action_input, validate_value
+ 7 | | from .db import (fingerprint, internal_instance_data, internal_run_bindings, operation_intents,
+ 8 | |                  operations, runs)
+ 9 | | from .errors import DomainError
+10 | | from .tools import authorized_read
+   | |__________________________________^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/tools.py:1:1
+   |
+ 1 | / import csv
+ 2 | | import hashlib
+ 3 | | import io
+ 4 | | import json
+ 5 | | from decimal import Context, Decimal, DecimalException, DivisionByZero, Inexact, InvalidOperation, Overflow, ROUND_HALF_EVEN
+ 6 | | from typing import Any
+ 7 | |
+ 8 | | from sqlalchemy import insert, select, update
+ 9 | |
+10 | | from .contracts import resource_id
+11 | | from .db import (
+12 | |     fingerprint,
+13 | |     local_effects,
+14 | |     new_id,
+15 | |     operation_intents,
+16 | |     operations,
+17 | |     resource_retirements,
+18 | |     resources,
+19 | |     run_contracts,
+20 | |     runs,
+21 | | )
+22 | | from .errors import DomainError
+   | |_______________________________^
+23 |
+24 |   TOOLS: dict[str, dict[str, Any]] = {
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_goal_text_applications.py:3:1
+   |
+ 1 |   """Explicit synthetic provider + actual SQLite HTTP/Worker + cold text AppRun."""
+ 2 |
+ 3 | / import copy
+ 4 | | import json
+ 5 | | from dataclasses import replace
+ 6 | |
+ 7 | | import httpx
+ 8 | | import pytest
+ 9 | | from fastapi.testclient import TestClient
+10 | | from sqlalchemy import func, select, update
+11 | |
+12 | | from sim2act.api import create_app
+13 | | from sim2act.contracts import Limits
+14 | | from sim2act.db import (Store, app_drafts, attempts, fingerprint, goal_application_candidates,
+15 | |                        grants, internal_instance_data, operations, principals, run_contracts, runs)
+16 | | from sim2act.errors import DomainError
+17 | | from sim2act.worker import Worker
+18 | | from test_bounded_agent_apps import candidate as agent_fixture
+   | |______________________________________________________________^
+19 |
+20 |   CONTENT = "Alpha obligation retained\nBeta due tomorrow\nAlpha owner undecided\n<em>Beta literal</em>\n"
+   |
+help: Organize imports
+
+F401 [*] `sim2act.contracts.Limits` imported but unused
+  --> tests/test_goal_text_applications.py:13:31
+   |
+12 | from sim2act.api import create_app
+13 | from sim2act.contracts import Limits
+   |                               ^^^^^^
+14 | from sim2act.db import (Store, app_drafts, attempts, fingerprint, goal_application_candidates,
+15 |                        grants, internal_instance_data, operations, principals, run_contracts, runs)
+   |
+help: Remove unused import: `sim2act.contracts.Limits`
+
+F401 [*] `sim2act.db.internal_instance_data` imported but unused
+  --> tests/test_goal_text_applications.py:15:32
+   |
+13 | from sim2act.contracts import Limits
+14 | from sim2act.db import (Store, app_drafts, attempts, fingerprint, goal_application_candidates,
+15 |                        grants, internal_instance_data, operations, principals, run_contracts, runs)
+   |                                ^^^^^^^^^^^^^^^^^^^^^^
+16 | from sim2act.errors import DomainError
+17 | from sim2act.worker import Worker
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.db.operations` imported but unused
+  --> tests/test_goal_text_applications.py:15:56
+   |
+13 | from sim2act.contracts import Limits
+14 | from sim2act.db import (Store, app_drafts, attempts, fingerprint, goal_application_candidates,
+15 |                        grants, internal_instance_data, operations, principals, run_contracts, runs)
+   |                                                        ^^^^^^^^^^
+16 | from sim2act.errors import DomainError
+17 | from sim2act.worker import Worker
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.db.principals` imported but unused
+  --> tests/test_goal_text_applications.py:15:68
+   |
+13 | from sim2act.contracts import Limits
+14 | from sim2act.db import (Store, app_drafts, attempts, fingerprint, goal_application_candidates,
+15 |                        grants, internal_instance_data, operations, principals, run_contracts, runs)
+   |                                                                    ^^^^^^^^^^
+16 | from sim2act.errors import DomainError
+17 | from sim2act.worker import Worker
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.db.runs` imported but unused
+  --> tests/test_goal_text_applications.py:15:95
+   |
+13 | from sim2act.contracts import Limits
+14 | from sim2act.db import (Store, app_drafts, attempts, fingerprint, goal_application_candidates,
+15 |                        grants, internal_instance_data, operations, principals, run_contracts, runs)
+   |                                                                                               ^^^^
+16 | from sim2act.errors import DomainError
+17 | from sim2act.worker import Worker
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.errors.DomainError` imported but unused
+  --> tests/test_goal_text_applications.py:16:28
+   |
+14 | from sim2act.db import (Store, app_drafts, attempts, fingerprint, goal_application_candidates,
+15 |                        grants, internal_instance_data, operations, principals, run_contracts, runs)
+16 | from sim2act.errors import DomainError
+   |                            ^^^^^^^^^^^
+17 | from sim2act.worker import Worker
+18 | from test_bounded_agent_apps import candidate as agent_fixture
+   |
+help: Remove unused import: `sim2act.errors.DomainError`
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:182:43
+    |
+180 |     data = setup(env)
+181 |     def mutate(raw, index, payload):
+182 |         if fault == "usage" and index == 1: raw.pop("usage")
+    |                                           ^
+183 |         if fault == "identity" and index == 1: raw["model"] = "other"
+184 |         if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:183:46
+    |
+181 |     def mutate(raw, index, payload):
+182 |         if fault == "usage" and index == 1: raw.pop("usage")
+183 |         if fault == "identity" and index == 1: raw["model"] = "other"
+    |                                              ^
+184 |         if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+185 |         if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_t…
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:184:47
+    |
+182 | …     if fault == "usage" and index == 1: raw.pop("usage")
+183 | …     if fault == "identity" and index == 1: raw["model"] = "other"
+184 | …     if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+    |                                             ^
+185 | …     if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_tex…
+186 | …     if fault == "frozen-goal" and index == 2:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:185:48
+    |
+183 | …     if fault == "identity" and index == 1: raw["model"] = "other"
+184 | …     if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+185 | …     if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_tex…
+    |                                              ^
+186 | …     if fault == "frozen-goal" and index == 2:
+187 | …         value = json.loads(raw["choices"][0]["message"]["content"]); value["goal"]["constraints"] = []
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:187:72
+    |
+185 | …     if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_tex…
+186 | …     if fault == "frozen-goal" and index == 2:
+187 | …         value = json.loads(raw["choices"][0]["message"]["content"]); value["goal"]["constraints"] = []
+    |                                                                      ^
+188 | …         raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+189 | …     if fault == "extra-field" and index >= 2:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:190:72
+    |
+188 |             raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+189 |         if fault == "extra-field" and index >= 2:
+190 |             value = json.loads(raw["choices"][0]["message"]["content"]); value["free_code"] = "bad"
+    |                                                                        ^
+191 |             raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+192 |     rid, result, sent = generate(data, mutation=mutate)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:217:37
+    |
+215 | …     row = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
+216 | …     value = copy.deepcopy(row["candidate"])
+217 | …     if change == "candidate": value["goal"]["constraints"] = []
+    |                               ^
+218 | …     if change == "marker": value.pop("goal_application")
+219 | …     if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": …
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:218:34
+    |
+216 | …     value = copy.deepcopy(row["candidate"])
+217 | …     if change == "candidate": value["goal"]["constraints"] = []
+218 | …     if change == "marker": value.pop("goal_application")
+    |                            ^
+219 | …     if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": …
+220 | …     c.execute(update(app_drafts).where(app_drafts.c.id == aid).values(candidate=value, fingerprint=fingerprint(value)))
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:219:36
+    |
+217 | …         if change == "candidate": value["goal"]["constraints"] = []
+218 | …         if change == "marker": value.pop("goal_application")
+219 | …         if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "versio…
+    |                                  ^
+220 | …         c.execute(update(app_drafts).where(app_drafts.c.id == aid).values(candidate=value, fingerprint=fingerprint(value)))
+221 | …     elif change == "attempt":
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:223:40
+    |
+221 | …     elif change == "attempt":
+222 | …         row = c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at.desc())).mappings().first()
+223 | …         msg = dict(row["response"]); value = json.loads(msg["content"]); value["goal"]["unresolved"] = []
+    |                                      ^
+224 | …         msg["content"] = json.dumps(value)
+225 | …         c.execute(update(attempts).where(attempts.c.id == row["id"]).values(response=msg))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:223:76
+    |
+221 | …     elif change == "attempt":
+222 | …         row = c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at.desc())).mappings().first()
+223 | …         msg = dict(row["response"]); value = json.loads(msg["content"]); value["goal"]["unresolved"] = []
+    |                                                                          ^
+224 | …         msg["content"] = json.dumps(value)
+225 | …         c.execute(update(attempts).where(attempts.c.id == row["id"]).values(response=msg))
+    |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:25:46
+   |
+23 |     wires = []
+24 |     def handler(request):
+25 |         payload = json.loads(request.content); wires.append(payload)
+   |                                              ^
+26 |         if len(wires) == 1:
+27 |             message = {"role": "assistant", "content": "", "tool_calls": [{"id": "page-read", "type": "function",
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:53:59
+   |
+51 |                 answer = {"id": request["id"], "status": r.status_code, "text": r.text,
+52 |                           "content_type": r.headers.get("content-type")}
+53 |             process.stdin.write(json.dumps(answer) + "\n"); process.stdin.flush()
+   |                                                           ^
+54 |         errors = process.stderr.read(); code = process.wait(timeout=20)
+55 |         (tmp_path / "driver.log").write_text(errors)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:54:39
+   |
+52 |                           "content_type": r.headers.get("content-type")}
+53 |             process.stdin.write(json.dumps(answer) + "\n"); process.stdin.flush()
+54 |         errors = process.stderr.read(); code = process.wait(timeout=20)
+   |                                       ^
+55 |         (tmp_path / "driver.log").write_text(errors)
+56 |         assert code == 0, errors
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:64:34
+   |
+62 |         output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+63 |         if output:
+64 |             target = Path(output); target.mkdir(parents=True, exist_ok=True)
+   |                                  ^
+65 |             (target / (scenario + ".json")).write_text(json.dumps(proof, ensure_ascii=False, indent=2) + "\n")
+66 |     finally:
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:68:27
+   |
+66 |     finally:
+67 |         if process.poll() is None:
+68 |             process.kill(); process.wait(timeout=10)
+   |                           ^
+69 |         client.close()
+   |
+
+Found 33 errors.
+[*] 14 fixable with the `--fix` option.

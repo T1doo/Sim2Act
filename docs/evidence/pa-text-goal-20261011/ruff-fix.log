@@ -1,0 +1,176 @@
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:187:43
+    |
+185 |     data = setup(env)
+186 |     def mutate(raw, index, payload):
+187 |         if fault == "usage" and index == 1: raw.pop("usage")
+    |                                           ^
+188 |         if fault == "identity" and index == 1: raw["model"] = "other"
+189 |         if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:188:46
+    |
+186 |     def mutate(raw, index, payload):
+187 |         if fault == "usage" and index == 1: raw.pop("usage")
+188 |         if fault == "identity" and index == 1: raw["model"] = "other"
+    |                                              ^
+189 |         if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+190 |         if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_t…
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:189:47
+    |
+187 | …     if fault == "usage" and index == 1: raw.pop("usage")
+188 | …     if fault == "identity" and index == 1: raw["model"] = "other"
+189 | …     if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+    |                                             ^
+190 | …     if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_tex…
+191 | …     if fault == "frozen-goal" and index == 2:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:190:48
+    |
+188 | …     if fault == "identity" and index == 1: raw["model"] = "other"
+189 | …     if fault == "truncated" and index == 1: raw["choices"][0]["finish_reason"] = "length"
+190 | …     if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_tex…
+    |                                              ^
+191 | …     if fault == "frozen-goal" and index == 2:
+192 | …         value = json.loads(raw["choices"][0]["message"]["content"]); value["goal"]["constraints"] = []
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:192:72
+    |
+190 | …     if fault == "wrong-tool" and index == 1: raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_tex…
+191 | …     if fault == "frozen-goal" and index == 2:
+192 | …         value = json.loads(raw["choices"][0]["message"]["content"]); value["goal"]["constraints"] = []
+    |                                                                      ^
+193 | …         raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+194 | …     if fault == "extra-field" and index >= 2:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:195:72
+    |
+193 |             raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+194 |         if fault == "extra-field" and index >= 2:
+195 |             value = json.loads(raw["choices"][0]["message"]["content"]); value["free_code"] = "bad"
+    |                                                                        ^
+196 |             raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+197 |     rid, result, sent = generate(data, mutation=mutate)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:222:37
+    |
+220 | …     row = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
+221 | …     value = copy.deepcopy(row["candidate"])
+222 | …     if change == "candidate": value["goal"]["constraints"] = []
+    |                               ^
+223 | …     if change == "marker": value.pop("goal_application")
+224 | …     if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": …
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:223:34
+    |
+221 | …     value = copy.deepcopy(row["candidate"])
+222 | …     if change == "candidate": value["goal"]["constraints"] = []
+223 | …     if change == "marker": value.pop("goal_application")
+    |                            ^
+224 | …     if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": …
+225 | …     c.execute(update(app_drafts).where(app_drafts.c.id == aid).values(candidate=value, fingerprint=fingerprint(value)))
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_goal_text_applications.py:224:36
+    |
+222 | …         if change == "candidate": value["goal"]["constraints"] = []
+223 | …         if change == "marker": value.pop("goal_application")
+224 | …         if change == "executor": value["actions"][0]["executor"] = {"kind": "registered_tool", "ref": "data.aggregate_csv", "versio…
+    |                                  ^
+225 | …         c.execute(update(app_drafts).where(app_drafts.c.id == aid).values(candidate=value, fingerprint=fingerprint(value)))
+226 | …     elif change == "attempt":
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:228:40
+    |
+226 | …     elif change == "attempt":
+227 | …         row = c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at.desc())).mappings().first()
+228 | …         msg = dict(row["response"]); value = json.loads(msg["content"]); value["goal"]["unresolved"] = []
+    |                                      ^
+229 | …         msg["content"] = json.dumps(value)
+230 | …         c.execute(update(attempts).where(attempts.c.id == row["id"]).values(response=msg))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_goal_text_applications.py:228:76
+    |
+226 | …     elif change == "attempt":
+227 | …         row = c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at.desc())).mappings().first()
+228 | …         msg = dict(row["response"]); value = json.loads(msg["content"]); value["goal"]["unresolved"] = []
+    |                                                                          ^
+229 | …         msg["content"] = json.dumps(value)
+230 | …         c.execute(update(attempts).where(attempts.c.id == row["id"]).values(response=msg))
+    |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:25:46
+   |
+23 |     wires = []
+24 |     def handler(request):
+25 |         payload = json.loads(request.content); wires.append(payload)
+   |                                              ^
+26 |         if len(wires) == 1:
+27 |             message = {"role": "assistant", "content": "", "tool_calls": [{"id": "page-read", "type": "function",
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:53:59
+   |
+51 |                 answer = {"id": request["id"], "status": r.status_code, "text": r.text,
+52 |                           "content_type": r.headers.get("content-type")}
+53 |             process.stdin.write(json.dumps(answer) + "\n"); process.stdin.flush()
+   |                                                           ^
+54 |         errors = process.stderr.read(); code = process.wait(timeout=20)
+55 |         (tmp_path / "driver.log").write_text(errors)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:54:39
+   |
+52 |                           "content_type": r.headers.get("content-type")}
+53 |             process.stdin.write(json.dumps(answer) + "\n"); process.stdin.flush()
+54 |         errors = process.stderr.read(); code = process.wait(timeout=20)
+   |                                       ^
+55 |         (tmp_path / "driver.log").write_text(errors)
+56 |         assert code == 0, errors
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:64:34
+   |
+62 |         output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+63 |         if output:
+64 |             target = Path(output); target.mkdir(parents=True, exist_ok=True)
+   |                                  ^
+65 |             (target / (scenario + ".json")).write_text(json.dumps(proof, ensure_ascii=False, indent=2) + "\n")
+66 |     finally:
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_goal_text_ui.py:68:27
+   |
+66 |     finally:
+67 |         if process.poll() is None:
+68 |             process.kill(); process.wait(timeout=10)
+   |                           ^
+69 |         client.close()
+   |
+
+Found 29 errors (13 fixed, 16 remaining).

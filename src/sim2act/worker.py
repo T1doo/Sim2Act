@@ -49,9 +49,9 @@ class Worker:
         self.stop = threading.Event()
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
-                planner_request=False):
+                planner_request=False, generation_request=False):
         s = self.s
-        protocol_request = request_tools is not None and not planner_request
+        protocol_request = request_tools is not None and not planner_request and not generation_request
         request_tools = definitions() if request_tools is None else request_tools
         wire_seal = None
         # Conservative byte envelope, not a claim of actual tokenizer usage.
@@ -63,7 +63,7 @@ class Worker:
             )
             + s.max_output_tokens
         )
-        if protocol_request or planner_request:
+        if protocol_request or planner_request or generation_request:
             import httpx
 
             serialized = httpx.Request(
@@ -94,6 +94,10 @@ class Worker:
                 )
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
+            if generation_request:
+                from .goal_applications import check_sender as check_generation_sender
+
+                check_generation_sender(self, c, run, context["messages"], request_tools)
             if planner_request:
                 from .goal_planner import check_sender, request_messages
 
@@ -193,8 +197,11 @@ class Worker:
                             }
                         ),
                         **({"planning_wire" if planner_request else "protocol_wire": wire_seal}
-                           if wire_seal is not None else {}),
+                           if wire_seal is not None and not generation_request else {}),
                         **({"planning_fence": fence} if planner_request else {}),
+                        **({"generation_wire": (wire_seal or {})["sha256"],
+                            "generation_fence": fence,
+                            "generation_index": context["requests"]} if generation_request else {}),
                     },
                 )
             )
@@ -203,13 +210,16 @@ class Worker:
 
                 assert wire_seal is not None
                 reserve_natural_slot(self.store, c, run, fence, aid, envelope, wire_seal["sha256"], s)
-            if wire_seal is not None:
+            if wire_seal is not None and not generation_request:
                 self.store.event(
                     c,
                     run_id,
                     "NL_PLANNING_WIRE_RESERVED" if planner_request else "PROTOCOL_WIRE_RESERVED",
                     {"attempt_id": aid, "fence": fence, "wire": wire_seal},
                 )
+            if generation_request:
+                self.store.event(c, run_id, "GA_WIRE_RESERVED", {
+                    "attempt_id": aid, "index": context["requests"], "fence": fence, "wire": wire_seal})
             context["requests"] += 1
             context["reserved_tokens"] += envelope
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
@@ -250,6 +260,14 @@ class Worker:
             run = self.store.guard(c, run_id, fence)
             if verify_goal_source:
                 frozen = self.store.frozen_contract(c, run)
+                if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
+                    from .goal_applications import verified_candidate
+
+                    candidate = verified_candidate(self.store, c, run, frozen.limits)
+                    if state != "PARTIAL" or result != {
+                        "candidate": candidate, "candidate_fingerprint": fingerprint(candidate),
+                        "goal_acceptance": "NOT_RUN", "semantic_status": "UNKNOWN", "app_created": False}:
+                        raise DomainError("VERIFICATION_FAILED", "Generation is candidate-ready only")
                 if frozen.natural_planning is not None and state in {"SUCCEEDED", "PARTIAL"} and result is None:
                     raise DomainError("VERIFICATION_FAILED", "Goal finalization requires verified result")
                 if frozen.natural_planning is not None and result is not None:
@@ -269,6 +287,8 @@ class Worker:
                 state = "PAUSED"
             if self.store.has_unknown(c, run_id):
                 state = "RECONCILING" if run["cancel_intent"] else "WAITING_RESOURCE"
+            if saved and saved.get("application_generation") and state != "PARTIAL":
+                result = None
             if state in {"SUCCEEDED", "PARTIAL"}:
                 for rid in run["resource_refs"]:
                     self.store.authorize(
@@ -327,6 +347,11 @@ class Worker:
                 for key, value in contract.limits.model_dump().items()
             },
         )
+        if contract.application_generation is not None:
+            from .goal_applications import process
+
+            process(self, run, contract)
+            return
         if contract.natural_planning is not None:
             from .goal_planner import process
 
