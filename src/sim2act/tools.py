@@ -187,7 +187,25 @@ def authorized_read(store, c, principal, runtime, project_id, name, args):
 def _bounded_csv_reader(content):
     if not isinstance(content, str) or len(content) > 32768:
         raise ValueError("CSV 材料须为不超过 32768 字符的文本。")
-    return csv.DictReader(io.StringIO(content))
+    if content.startswith("\ufeff"):
+        raise ValueError("CSV 材料不得以 BOM 开头，请保存无 BOM 的材料。")
+    return csv.DictReader(io.StringIO(content, newline=""), strict=True)
+
+
+def _validated_csv_rows(content):
+    """Shared bounded structure contract; keep header and cell text verbatim."""
+    reader = _bounded_csv_reader(content)
+    names = reader.fieldnames
+    if not names or "" in names or len(names) != len(set(names)):
+        raise ValueError("CSV 表头为空或重复，请保存修正后的材料并重建草案。")
+    rows = []
+    for row in reader:
+        if len(rows) >= 1000:
+            raise ValueError("CSV 超过 1000 条记录，请缩小材料范围。")
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError("CSV 行字段数须与表头一致，请修正材料。")
+        rows.append(row)
+    return names, rows
 
 
 def _csv_decimal_context(precision=28):
@@ -232,19 +250,10 @@ def _exact_csv_sum(values):
 def csv_column_options(content):
     """Bounded input guidance only; no cells, execution results or permissions returned."""
     try:
-        reader = _bounded_csv_reader(content)
-        names = reader.fieldnames
-        if not names or any(not n for n in names) or len(names) != len(set(names)):
-            raise ValueError("CSV 表头为空或重复，请保存修正后的材料并重建草案。")
+        names, rows = _validated_csv_rows(content)
         valid = dict.fromkeys(names, True)
         values = {name: [] for name in names}
-        count = 0
-        for row in reader:
-            count += 1
-            if count > 1000:
-                raise ValueError("CSV 超过 1000 条记录，请缩小材料范围。")
-            if None in row:
-                raise ValueError("CSV 行包含多余字段，请修正材料。")
+        for row in rows:
             for name in names:
                 try:
                     if valid[name]:
@@ -261,7 +270,7 @@ def csv_column_options(content):
                 except (DecimalException, ValueError):
                     valid[name] = False
         return {
-            "row_count": count,
+            "row_count": len(rows),
             "columns": [
                 {"name": n, "numeric": valid[n], "reason": None if valid[n] else "存在缺值、文本、非有限数或合计超出有界精确十进制范围"}
                 for n in names
@@ -296,23 +305,15 @@ def read_data(c, rid, name, args):
 def aggregate_csv_content(content, rid, column):
     """Registered CSV computation over an already authorized immutable read snapshot."""
     try:
-        reader = _bounded_csv_reader(content)
-        if (
-            not reader.fieldnames
-            or len(reader.fieldnames) != len(set(reader.fieldnames))
-            or column not in reader.fieldnames
-        ):
+        names, rows = _validated_csv_rows(content)
+        if column not in names:
             raise ValueError("column")
         vals = []
-        for row in reader:
-            if None in row or row[column] is None:
-                raise ValueError("row")
+        for row in rows:
             num = Decimal(row[column])
             if not num.is_finite():
                 raise ValueError("nonfinite")
             vals.append(num)
-            if len(vals) > 1000:
-                raise ValueError("row limit")
         data = {
             "resource_id": rid,
             "column": column,

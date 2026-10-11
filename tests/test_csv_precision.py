@@ -1,6 +1,6 @@
 """Synthetic pure CSV checks; never import sim2act or its business dependencies.
 
-Only the two CSV functions, their three pure helpers, and DomainError are compiled
+Only the two CSV functions, their four pure helpers, and DomainError are compiled
 from AST. The independent oracle parses decimal text into scaled Python integers;
 it never uses Decimal addition or any existing business/proof oracle.
 Run directly: python3 tests/test_csv_precision.py -v
@@ -25,7 +25,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FUNCTIONS = {"_bounded_csv_reader", "_csv_decimal_context", "_exact_csv_sum", "csv_column_options", "aggregate_csv_content"}
+FUNCTIONS = {"_bounded_csv_reader", "_validated_csv_rows", "_csv_decimal_context", "_exact_csv_sum", "csv_column_options", "aggregate_csv_content"}
 tree = ast.parse((ROOT / "src/sim2act/tools.py").read_text())
 nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in FUNCTIONS]
 assert {node.name for node in nodes} == FUNCTIONS
@@ -275,6 +275,108 @@ class CsvPrecisionTests(unittest.TestCase):
         self.assertEqual(report["business_imports"], [])
         self.assertTrue(report["platform"].startswith("linux"))
         self.assertFalse(any(name == "sim2act" or name.startswith("sim2act.") or name == "sqlalchemy" for name in sys.modules))
+
+
+class CsvStructureTests(unittest.TestCase):
+    """Literal synthetic inputs with explicit expected structure and numeric results."""
+
+    def rejected(self, content, column="n"):
+        self.assertEqual(guidance(content)["columns"], [])
+        self.assertIsNone(guidance(content)["row_count"])
+        self.assertIsNotNone(guidance(content)["error"])
+        with self.assertRaises(DomainError) as raised:
+            aggregate(content, "structure-resource", column)
+        self.assertEqual(raised.exception.code, "INVALID_INPUT")
+
+    def accepted(self, content, names, column, total, count, numeric=None):
+        expected_numeric = numeric if numeric is not None else [True] * len(names)
+        self.assertEqual(guidance(content), {
+            "row_count": count,
+            "columns": [{"name": name, "numeric": number,
+                         "reason": None if number else "存在缺值、文本、非有限数或合计超出有界精确十进制范围"}
+                        for name, number in zip(names, expected_numeric)],
+            "error": None,
+        })
+        self.assertEqual(aggregate(content, "structure-resource", column), {
+            "resource_id": "structure-resource", "column": column, "sum": total,
+            "count": count, "source_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        })
+
+    def test_empty_header_cells_reject_both_entries(self):
+        for content in ["n,\n1,2\n", ",n\n2,1\n", 'n,""\n1,2\n', '""\n1\n']:
+            with self.subTest(content=content):
+                self.rejected(content)
+
+    def test_missing_header_rejects_both_entries(self):
+        for content in ["", "\n", "\r", "\r\n"]:
+            with self.subTest(content=content):
+                self.rejected(content)
+
+    def test_exact_duplicate_headers_reject_both_entries(self):
+        for content in ["n,n\n1,2\n", 'n,"n"\n1,2\n', "n, , \n1,2,3\n"]:
+            with self.subTest(content=content):
+                self.rejected(content)
+
+    def test_short_rows_in_unselected_columns_reject_both_entries(self):
+        for content in ["n,other\n1\n", "n,a,b\n1,2\n", "n,other\n1,2\n3\n"]:
+            with self.subTest(content=content):
+                self.rejected(content)
+
+    def test_long_rows_reject_both_entries(self):
+        for content in ["n\n1,2\n", "n,other\n1,2,\n", "n\n1\n2,3\n"]:
+            with self.subTest(content=content):
+                self.rejected(content)
+
+    def test_whitespace_headers_are_preserved_and_selectable(self):
+        self.accepted(" ,\t,  \n1,2,3\n", [" ", "\t", "  "], " ", "1", 1)
+        self.accepted(" ,\t,  \n1,2,3\n", [" ", "\t", "  "], "\t", "2", 1)
+        self.accepted("n, n,n \n1,2,3\n", ["n", " n", "n "], "n ", "3", 1)
+
+    def test_file_start_bom_is_rejected_without_stripping(self):
+        for content in ["\ufeffn\n1\n", '\ufeff"n"\n1\n']:
+            with self.subTest(content=content):
+                self.rejected(content, "\ufeffn")
+
+    def test_internal_bom_is_literal_header_or_cell_text(self):
+        self.accepted("n,\ufefftag\n1,\ufefftext\n", ["n", "\ufefftag"], "n", "1", 1, [True, False])
+        self.accepted('"\ufeffn"\n2\n', ["\ufeffn"], "\ufeffn", "2", 1)
+        # An internal BOM is not deleted to turn a nonnumeric value into a number.
+        guide = guidance("n\n\ufeff1\n")
+        self.assertIsNone(guide["error"])
+        self.assertFalse(guide["columns"][0]["numeric"])
+        with self.assertRaises(DomainError):
+            aggregate("n\n\ufeff1\n", "structure-resource", "n")
+
+    def test_cr_lf_crlf_records_preserve_raw_source_hash(self):
+        hashes = []
+        for newline in ["\r", "\n", "\r\n"]:
+            content = newline.join(["n", "1.20", "2.30", ""])
+            with self.subTest(newline=newline):
+                self.accepted(content, ["n"], "n", "3.50", 2)
+                hashes.append(aggregate(content, "structure-resource", "n")["source_hash"])
+        self.assertEqual(len(set(hashes)), 3)
+        self.accepted("n\r1\n2\r\n", ["n"], "n", "3", 2)
+
+    def test_legal_quoted_commas_quotes_and_multiline_cells(self):
+        for newline in ["\r", "\n", "\r\n"]:
+            content = '"n",note' + newline + '"1.20","a,' + newline + 'b"' + newline + '2.30,"say ""ok"""' + newline
+            with self.subTest(newline=newline):
+                self.accepted(content, ["n", "note"], "n", "3.50", 2, [True, False])
+
+    def test_multiline_headers_keep_exact_newline_characters(self):
+        for newline in ["\r", "\n", "\r\n"]:
+            name = "line" + newline + "name"
+            with self.subTest(newline=newline):
+                self.accepted('"' + name + '"\n4\n', [name], name, "4", 1)
+
+    def test_unterminated_and_invalid_quoted_fields_reject_both_entries(self):
+        for content in ['n\n"1\n', 'n\n"1"tail\n', '"n\n1\n']:
+            with self.subTest(content=content):
+                self.rejected(content)
+
+    def test_empty_field_is_data_and_blank_records_keep_previous_semantics(self):
+        self.accepted("n,other\n1,\n\n2,text\n", ["n", "other"], "n", "3", 2, [True, False])
+        self.accepted("n,other\n", ["n", "other"], "n", "0", 0)
 
 
 def bounded_probe():
