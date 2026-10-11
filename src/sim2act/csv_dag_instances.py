@@ -213,7 +213,60 @@ def enqueue_tx(store, c, user, i, release, revision, release_fp, input_value, ke
 
 
 @dag.graph.controlled
-def validate_binding(store, c, job, accepted, limits, *, authorize=True):
+def validate_instance_history(c, i):
+    """Every pointer transition must have an exact consumed approval; never execute it."""
+    history = i["history"]
+    require(type(i["revision"]) is int and type(i["data_version"]) is int
+        and i["data_version"] >= 0 and isinstance(history, list)
+        and len(history) == i["revision"] and len(history) >= 1
+        and all(isinstance(entry, dict) for entry in history), "Invalid instance history structure")
+    require(fingerprint(history[0]) == fingerprint(dict(
+        revision=1, release_id=history[0].get("release_id"), kind="created")))
+    records = lifecycle.data_rows(c, i["id"])
+    previous_data_version = 0
+    for revision, entry in enumerate(history[1:], 2):
+        a = c.execute(select(internal_approvals).where(
+            internal_approvals.c.id == entry.get("approval_id"))).mappings().first()
+        require(a is not None and a["kind"] == "switch" and a["consumed"] is True
+            and a["principal_id"] == i["principal_id"] and a["project_id"] == i["project_id"]
+            and isinstance(a["payload"], dict)
+            and a["fingerprint"] == fingerprint(a["payload"]), "Unapproved instance history")
+        p = a["payload"]
+        lifecycle.require_switch_payload(p)
+        rel = c.execute(select(internal_releases).where(
+            internal_releases.c.id == p["target_release_id"])).mappings().first()
+        require(rel is not None and rel["principal_id"] == i["principal_id"]
+            and rel["project_id"] == i["project_id"] and rel["fingerprint"] == p["target_fingerprint"]
+            and fingerprint(rel["snapshot"]) == rel["fingerprint"]
+            and rel["snapshot"]["draft"]["id"] == i["source_app_id"]
+            and rel["snapshot"]["draft"]["runtime_id"] == i["runtime_id"])
+        require(p["instance_id"] == i["id"] and p["revision"] == revision - 1
+            and p["from_release_id"] == history[revision - 2]["release_id"]
+            and previous_data_version <= p["data_version"] <= i["data_version"]
+            and p["data_fingerprint"] == fingerprint([dict(r) for r in records if r["version"] <= p["data_version"]])
+            and fingerprint(entry) == fingerprint(dict(revision=revision, release_id=p["target_release_id"],
+                previous_release_id=p["from_release_id"], approval_id=a["id"], kind="switch")),
+            "Instance switch history changed")
+        previous_data_version = p["data_version"]
+    require(history[-1]["release_id"] == i["release_id"])
+
+
+def validate_switch(store, c, user, i, old, target, limits):
+    """Keep the closed execution contract and all earlier checked data, with no active Run."""
+    a, b = old["snapshot"].get("execution_source"), target["snapshot"].get("execution_source")
+    require(isinstance(a, dict) and isinstance(b, dict), "Cannot mix DAG and ordinary versions")
+    require(a["version"] in VERSIONS and all(a.get(k) == b.get(k) for k in
+        ("version", "aggregate_step", "report_step", "columns", "limits")),
+        "DAG execution family, ports, columns and budget must match")
+    validate_instance_history(c, i)
+    records = lifecycle.data_rows(c, i["id"])
+    check_instance_records(store, c, user, i, records, limits)
+    for rid in instance_run_ids(c, user, i):
+        require(dag.row(c, user, rid)["status"] in {"SUCCEEDED", "FAILED", "CANCELLED"},
+            "Finish or cancel outstanding instance Runs before switching")
+
+
+def validate_binding(store, c, job, accepted, limits, *, authorize=True, historical=False):
     marker = accepted.get("internal_instance")
     b = c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == job["id"])).mappings().first()
     if marker is None:
@@ -239,17 +292,27 @@ def validate_binding(store, c, job, accepted, limits, *, authorize=True):
     rel = c.execute(select(internal_releases).where(internal_releases.c.id == s["release_id"])).mappings().first()
     require(i is not None and rel is not None and i["principal_id"] == job["principal_id"]
         and i["project_id"] == job["project_id"] and i["runtime_id"] == job["runtime_id"]
-        and i["source_app_id"] == accepted["app_id"] and i["release_id"] == rel["id"]
+        and i["source_app_id"] == accepted["app_id"]
         and rel["principal_id"] == job["principal_id"] and rel["project_id"] == job["project_id"]
         and rel["snapshot"]["draft"]["project_id"] == job["project_id"]
         and rel["snapshot"]["draft"]["runtime_id"] == job["runtime_id"]
         and rel["snapshot"]["draft"]["id"] == accepted["app_id"]
         and rel["fingerprint"] == s["expected_release_fp"])
     validate_family(c, job["principal_id"], rel["approval_id"], rel["snapshot"])
+    archived = historical and job["status"] in {"SUCCEEDED", "FAILED", "CANCELLED"}
+    if archived:
+        validate_instance_history(c, i)
+        require(any(h["revision"] == s["expected_revision"] and h["release_id"] == s["release_id"]
+                    for h in i["history"]), "Run has no approved historical revision")
+    else:
+        require(i["release_id"] == rel["id"])
     if authorize:
         i, r = lifecycle.instance(store, c, job["principal_id"], s["instance_id"], limits, lock=True)
-        require(i["revision"] == s["expected_revision"] and i["release_id"] == s["release_id"]
-            and i["project_id"] == job["project_id"] and i["runtime_id"] == job["runtime_id"]
+        if archived:
+            r = lifecycle.read_release(store, c, job["principal_id"], s["release_id"], limits)
+        else:
+            require(i["revision"] == s["expected_revision"] and i["release_id"] == s["release_id"])
+        require(i["project_id"] == job["project_id"] and i["runtime_id"] == job["runtime_id"]
             and i["source_app_id"] == accepted["app_id"] and r["fingerprint"] == s["expected_release_fp"]
             and r["snapshot"]["execution_source"] == s["execution_source"]
             and s["limits"] == s["execution_source"]["limits"])
@@ -285,7 +348,7 @@ def ledger_result(c, s, ar, base):
 
 @dag.graph.controlled
 def checked_result(store, c, job, accepted, base, limits):
-    value = validate_binding(store, c, job, accepted, limits)
+    value = validate_binding(store, c, job, accepted, limits, historical=True)
     if value is None:
         return base
     s, ar = value
@@ -338,8 +401,8 @@ def inspect_job(store, user, rid, limits):
     with store.tx() as c:
         proof = dag.inspect_job_tx(store, c, user, rid, limits)
         job = dag.row(c, user, rid)
-        accepted = dag.binding(store, c, job, limits)
-        value = validate_binding(store, c, job, accepted, limits)
+        accepted = dag.binding(store, c, job, limits, historical=True)
+        value = validate_binding(store, c, job, accepted, limits, historical=True)
         require(value is not None)
         s, ar = value
         return {**dict(ar), "namespace": lifecycle.NAMESPACE, "execution_version": s["namespace"],

@@ -26,3 +26,5 @@
 最终修复d85f6f5随后获一次[完整PG回归](../evidence/engineering-pg-final-20261008/README.md)授权：实际1591集合含原1586+新5，1564PASS/27原SKIP，Ruff/mypy通过，报告1086.70秒、进程1089.253秒。284源码散列一致、24应用角色夹具节点通过，PG40P01/观测HTTP500均0；唯一503为原明确故障注入。自有schema/role/public均0、容器/卷移除核验通过。当前完整Linux正确性在原跳过范围内复验闭环，成本已超过900秒，不能据此关闭Windows900/Edge240/Node150与NO_GO；原生完整阶段和Edge尾段仍缺。核心整合提交2315fea+d85f6f5与证据祖先关系已列明，开发分支只能在远端未变条件下普通快进，不main/force/新CI。
 
 2026-10-08继续48accbb进行[请求内相邻指纹去重](../evidence/engineering-request-hash-20261008/README.md)：仅protocol_jobs两行复用同一snapshot的紧邻纯hash，保留所有SQL、授权、新鲜性和异常顺序；7个精确同输入9对阶段样本减少47.292%–50.858%，旧DOM第二hash累计143.371毫秒。固定27次历史读取hash1512→756；两个DOM原49检查/7MOCKwire均PASS，但进程39.490→40.551秒，不认领端到端提速。必要PG回归191PASS/0FAIL/0SKIP、ruff/mypy通过，未再全量或死锁验收。原284源码仅一文件两行变化，原断言/驱动/预算保留；独审及原生最小实测条件随证据保存。此小收益不能关闭Windows900/Edge240/Node150容量，NO_GO/LIVE0保持；不main/force/新CI，原实例未提交计划/日志未复制。
+
+2026-10-11 接续原P-B声明式路径与内部版本需求：[CSV流程实例版本切换](CsvDagVersionSwitch20261011.md)补同应用、相同两/三步执行合同的显式升级/回退、保留旧结果与冷历史、当前版本的新输入worker运行；有未终止Run时拒切换，不混合执行家族或改签旧来源。精确作者/独审范围与原失败见[本轮证据](../evidence/csv-dag-version-switch-20261011/README.md)。不将这项内部工程交付提升为完整P-A/P-B、正式发布、Windows或真实模型验收。

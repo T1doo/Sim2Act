@@ -80,7 +80,7 @@ def mount(app, store, limits, identity):
     def dag_release(rid: str, body: DagPrepareInput, user=user_dependency):
         return csv_dag_instances.prepare_release(store, user, rid, body.expected_plan_fingerprint, limits, request_key=body.request_key)
 
-    def scope_run(user, iid, rid):
+    def scope_run(user, iid, rid, *, historical=False):
         # Stop must remain possible after grant revocation; immutable binding/owner still required.
         with store.tx() as c:
             job = c.execute(select(runs).where(runs.c.id == rid)).mappings().first()
@@ -88,8 +88,8 @@ def mount(app, store, limits, identity):
                 raise DomainError("PERMISSION_DENIED")
             store.own_project(c, user, job["project_id"])
             if csv_dag.is_job(store, rid):
-                accepted = csv_dag.binding(store, c, job, None, authorize=False)
-                value = csv_dag_instances.validate_binding(store, c, job, accepted, None, authorize=False)
+                accepted = csv_dag.binding(store, c, job, None, authorize=False, historical=historical)
+                value = csv_dag_instances.validate_binding(store, c, job, accepted, None, authorize=False, historical=historical)
                 if value is None:
                     raise DomainError("PERMISSION_DENIED")
                 snapshot, _ = value
@@ -312,7 +312,7 @@ def mount(app, store, limits, identity):
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}")
     def inspect_run(iid: str, rid: str, user=user_dependency):
-        scope_run(user, iid, rid)
+        scope_run(user, iid, rid, historical=True)
         return envelope(**inspect_job(user, rid))
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/extraction-options")

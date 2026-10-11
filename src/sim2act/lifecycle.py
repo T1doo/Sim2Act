@@ -552,7 +552,7 @@ def compatible(old, new):
         )
 
 
-def switch_target(c, i, old, target):
+def switch_target(store, c, user, i, old, target, limits):
     if (
         target["project_id"] != i["project_id"]
         or target["snapshot"]["draft"]["id"] != i["source_app_id"]
@@ -562,7 +562,8 @@ def switch_target(c, i, old, target):
             "PERMISSION_DENIED", "Cannot switch another app/runtime into this instance"
         )
     if "execution_source" in old["snapshot"] or "execution_source" in target["snapshot"]:
-        raise DomainError("UNSUPPORTED_CAPABILITY", "DAG instance version switching is not supported")
+        from .csv_dag_instances import validate_switch
+        validate_switch(store, c, user, i, old, target, limits)
     compatible(old["snapshot"]["data_schema"], target["snapshot"]["data_schema"])
     same_schema = target["snapshot"]["data_schema"] == old["snapshot"]["data_schema"]
     old_version = old["snapshot"]["data_schema_version"]
@@ -589,7 +590,7 @@ def prepare_switch(
         target = read_release(store, c, user, target_id, limits)
         if i["revision"] != expected_revision:
             raise DomainError("VERSION_CONFLICT")
-        records = switch_target(c, i, old, target)
+        records = switch_target(store, c, user, i, old, target, limits)
         if (
             expected_target_fingerprint is not None
             and target["fingerprint"] != expected_target_fingerprint
@@ -666,7 +667,7 @@ def inspect_switch_approval(store, user, iid, aid, limits):
             raise DomainError("PERMISSION_DENIED")
         i, old = instance(store, c, user, iid, limits, lock=True)
         target = read_release(store, c, user, p["target_release_id"], limits)
-        records = switch_target(c, i, old, target)
+        records = switch_target(store, c, user, i, old, target, limits)
         if (
             i["revision"] != p["revision"]
             or i["release_id"] != p["from_release_id"]
@@ -713,7 +714,7 @@ def commit_switch(store, user, approval_id, exact_fp, limits):
             or fingerprint([dict(x) for x in data_rows(c, i["id"])]) != p["data_fingerprint"]
         ):
             raise DomainError("VERSION_CONFLICT", "Switch preconditions changed")
-        switch_target(c, i, old, target)
+        switch_target(store, c, user, i, old, target, limits)
         history = [
             *i["history"],
             {

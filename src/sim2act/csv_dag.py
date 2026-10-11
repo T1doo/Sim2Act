@@ -432,7 +432,7 @@ def owner_lock(store, c, user, rid):
     store.lock_project(c, user, pid)
 
 
-def binding(store, c, job, limits, *, authorize=True):
+def binding(store, c, job, limits, *, authorize=True, historical=False):
     store.lock_project(c, job["principal_id"], job["project_id"])
     accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "CSV_DAG_ACCEPTED")).scalars().all()
     if len(accepted) != 1 or fingerprint(accepted[0]) != job["fingerprint"]:
@@ -466,7 +466,7 @@ def binding(store, c, job, limits, *, authorize=True):
     elif confirmation.branch_inputs is not None or "inputs" in value:
         graph.conflict("Unexpected legacy branch inputs")
     from . import csv_dag_instances as instances
-    instances.validate_binding(store, c, job, value, limits, authorize=authorize)
+    instances.validate_binding(store, c, job, value, limits, authorize=authorize, historical=historical)
     return value
 
 
@@ -830,7 +830,7 @@ def inspect_job_tx(store, c, user, rid, limits):
     owner_lock(store, c, user, rid)
     job = row(c, user, rid)
     limits = limits or store.frozen_contract(c, job).limits
-    bound = binding(store, c, job, limits)
+    bound = binding(store, c, job, limits, historical=True)
     source = read_source(store, c, job)
     outputs, proved = receipts(store, c, job, bound["plan"], source, bound.get("inputs"))
     if job["context"]["tools"] != executed_count(proved):
@@ -894,7 +894,7 @@ def history(store, user, pid, aid, limits):
                 _, receipt = read_pair(c, user, aid, "csv_dag_run", run_key, RunInput)
                 if receipt["plan_key"] == key:
                     job = row(c, user, receipt["run_id"])
-                    run_binding = binding(store, c, job, limits)
+                    run_binding = binding(store, c, job, limits, historical=True)
                     if "internal_instance" in run_binding:
                         instance_only = True
                         continue

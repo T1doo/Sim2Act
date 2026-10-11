@@ -1,0 +1,52 @@
+F
+=================================== FAILURES ===================================
+__________ test_upgrade_rollback_new_columns_and_cold_history[False] ___________
+
+env = (<sim2act.db.Store object at 0x7f3040376720>, Settings(database_url='sqlite:////tmp/sim2act-version-switch-first/test_...1b742d58314a0bba853b25e507e738', 'user_7106fad320d14be0b6876e92a80a5a09', 'proj_2c048cd3c7bc4e0d9cb83192fe860a23', ...)
+with_report = False
+
+    @pytest.mark.parametrize("with_report", [False, True])
+    def test_upgrade_rollback_new_columns_and_cold_history(env, with_report):
+        aid, _, plan, _, old = release(env, with_report=with_report)
+        target = next_release(env, aid, plan)
+        i = create(env, old)
+        first, _ = enqueue(env, i, old, "amount", "old-run")
+        work(env, first)
+        original = lifecycle.inspect_instance(env[0], env[3], i["id"], limits(env))["data"]
+        before = snapshot(env)
+        i, _ = switch(env, i, target)
+        assert i["revision"] == 2 and i["data_version"] == 1 and i["data"] == original
+        second, _ = enqueue(env, i, target, "quantity", "new-run")
+        work(env, second)
+        i, _ = switch(env, i, old)
+        assert i["revision"] == 3 and i["data_version"] == 2
+        third, _ = enqueue(env, i, old, "amount", "rollback-run")
+        work(env, third)
+        frozen = fingerprint(snapshot(env))
+        cold = Store(env[1].database_url, test_only=True)
+        try:
+            data = lifecycle.inspect_instance(cold, env[3], i["id"], limits(env))
+            assert data["data_version"] == 3
+            assert [r["data"]["result"]["sum"] for r in data["data"]] == ["30", "15", "30"]
+            assert [r["release_id"] for r in data["data"]] == [old["id"], target["id"], old["id"]]
+            response = env[2].get(f"/api/internal/instances/{i['id']}")
+            assert response.status_code == 200, response.text
+            assert len(response.json()["runs"]) == 3
+            for accepted in [first, second, third]:
+                response = env[2].get(f"/api/internal/instances/{i['id']}/runs/{accepted['run_id']}")
+>               assert response.status_code == 200, response.text
+E               AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Internal DAG provenance changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E               assert 409 == 200
+E                +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_csv_dag_version_switch.py:101: AssertionError
+=============================== warnings summary ===============================
+../../tmp/sim2act-version-switch-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /tmp/sim2act-version-switch-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_dag_version_switch.py::test_upgrade_rollback_new_columns_and_cold_history[False]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 16.58s
