@@ -31,16 +31,19 @@ def render(value):
 
     validate_value(INPUT, value)
     resource_id(value["resource_id"])
+    if value["column"] == "":
+        raise DomainError("INVALID_INPUT", "CSV report column must not be empty")
     try:
         valid = Decimal(value["sum"]).is_finite()
     except DecimalException:
         valid = False
     if (not valid or not 0 <= value["count"] <= 1000
-            or len(value["column"]) > 200
             or len(value["source_hash"]) != 64
             or any(c not in "0123456789abcdef" for c in value["source_hash"])):
         raise DomainError("VERIFICATION_FAILED", "Invalid typed CSV report provenance")
     text = f"列 {value['column']}；行数 {value['count']}；合计 {value['sum']}"
     if len(text) > 32768:
         text = f"列 {value['column']}；行数 {value['count']}；合计摘要：完整合计见sum字段"
+        if len(text) > 32768:
+            text = f"报告摘要：完整列名见column字段；行数 {value['count']}；完整合计见sum字段"
     return {**value, "text": text}

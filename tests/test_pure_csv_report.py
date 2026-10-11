@@ -7,6 +7,8 @@ The render function's local import is replaced only by those selected validators
 
 import ast
 import copy
+import csv
+import io
 import math
 import re
 import sys
@@ -125,9 +127,10 @@ class PureCsvReportTests(unittest.TestCase):
         self.accepted(fixture(total + "9", column, 1000),
                       "列 " + column + "；行数 1000；合计摘要：完整合计见sum字段")
 
-    def test_empty_and_whitespace_columns_keep_original_policy_and_text(self):
-        self.accepted(fixture("0", "", 0), "列 ；行数 0；合计 0")
+    def test_empty_column_rejects_and_whitespace_name_is_verbatim(self):
+        self.rejected(fixture("0", "", 0), "INVALID_INPUT", "CSV report column must not be empty")
         self.accepted(fixture("1", " \t "), "列  \t ；行数 1；合计 1")
+        self.accepted(fixture("1", " " * 201), "列 " + " " * 201 + "；行数 1；合计 1")
 
     def test_oversized_sum_rejects_at_original_input_limit(self):
         self.rejected(fixture("9" * 32769), "INVALID_INPUT", "String exceeds limit")
@@ -144,13 +147,64 @@ class PureCsvReportTests(unittest.TestCase):
             self.rejected(fixture(count=count), "INVALID_INPUT")
         self.accepted(fixture("0", count=0), "列 n；行数 0；合计 0")
 
-    def test_resource_id_hash_and_column_checks_are_unchanged(self):
+    def test_resource_id_and_hash_checks_are_unchanged(self):
         value = fixture(); value["resource_id"] = "bad"
         self.rejected(value, "INVALID_INPUT", "Expected logical resource ID")
         for digest in ("a" * 63, "a" * 65, "A" * 64, "g" * 64):
             value = fixture(); value["source_hash"] = digest
             self.rejected(value, "VERIFICATION_FAILED")
-        self.rejected(fixture(column="n" * 201), "VERIFICATION_FAILED")
+
+    def test_200_and_201_character_columns_keep_full_original_text(self):
+        for size in (200, 201):
+            column = "n" * size
+            with self.subTest(size=size):
+                self.accepted(fixture("1", column), "列 " + column + "；行数 1；合计 1")
+
+    def test_32765_column_and_maximum_declared_column_are_preserved(self):
+        for size in (32765, 32768):
+            column = "n" * size
+            with self.subTest(size=size):
+                self.accepted(fixture("1", column),
+                              "报告摘要：完整列名见column字段；行数 1；完整合计见sum字段")
+
+    def test_201_column_full_text_boundary_and_previous_summary(self):
+        column = "n" * 201
+        prefix = "列 " + column + "；行数 1；合计 "
+        total = "9" * (32768 - len(prefix))
+        self.accepted(fixture(total, column), prefix + total)
+        self.assertEqual(len(prefix + total + "9"), 32769)
+        self.accepted(fixture(total + "9", column),
+                      "列 " + column + "；行数 1；合计摘要：完整合计见sum字段")
+
+    def test_previous_summary_exactly_32768_is_preserved(self):
+        column = "n" * 32745
+        total = "9" * 13
+        expected = "列 " + column + "；行数 1；合计摘要：完整合计见sum字段"
+        self.assertEqual(len("列 " + column + "；行数 1；合计 " + total), 32769)
+        self.assertEqual(len(expected), 32768)
+        self.accepted(fixture(total, column), expected)
+
+    def test_previous_summary_exceeding_limit_by_one_uses_field_references(self):
+        column = "n" * 32746
+        total = "9" * 13
+        self.assertEqual(len("列 " + column + "；行数 1；合计摘要：完整合计见sum字段"), 32769)
+        self.accepted(fixture(total, column),
+                      "报告摘要：完整列名见column字段；行数 1；完整合计见sum字段")
+
+    def test_column_and_sum_both_long_remain_complete_with_1000_rows(self):
+        self.accepted(fixture("9" * 32768, "列" * 32765, 1000),
+                      "报告摘要：完整列名见column字段；行数 1000；完整合计见sum字段")
+
+    def test_quoted_unicode_multiline_header_is_preserved_verbatim(self):
+        content = '"name,""quoted""\n汉💡"\n1\n'
+        column = next(csv.reader(io.StringIO(content, newline="")))[0]
+        self.assertEqual(column, 'name,"quoted"\n汉💡')
+        self.accepted(fixture("1", column), '列 name,"quoted"\n汉💡；行数 1；合计 1')
+        column = '"汉💡"' * 60
+        self.accepted(fixture("1", column), "列 " + column + "；行数 1；合计 1")
+
+    def test_oversized_column_rejects_at_original_input_limit(self):
+        self.rejected(fixture(column="n" * 32769), "INVALID_INPUT", "String exceeds limit")
 
     def test_required_fields_unknown_fields_and_types_are_unchanged(self):
         for field in fixture():
