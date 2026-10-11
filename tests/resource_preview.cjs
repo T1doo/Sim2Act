@@ -12,7 +12,12 @@ const api = app.match(/^async function api\([^\n]*\) \{\n[\s\S]*?^\}/m)?.[0];
 const safe = app.match(/^const safe = [^\n]+;/m)?.[0];
 const row = app.match(/^function row\([^\n]*\) \{\n[\s\S]*?^\}/m)?.[0];
 const controls = app.match(/^let resourceDownloadGeneration = 0;\n[\s\S]*?^\$\("project-select"\)\.addEventListener\("change", [^\n]+;/m)?.[0];
+const revokeSuccess = app.split("\n").find(line => line.startsWith('  $("grants").replaceChildren('));
+const revokeReset = revokeSuccess?.match(/invalidateResourcePreview\(\);/)?.[0];
 assert.ok(api && safe && row && controls);
+assert.ok(revokeReset, "extract only the preview reset from the actual revocation success callback");
+assert.ok(revokeSuccess.indexOf('await api(`/api/grants/${g.id}/revoke`') < revokeSuccess.indexOf(revokeReset));
+assert.ok(revokeSuccess.indexOf(revokeReset) < revokeSuccess.indexOf('await refresh();'));
 assert.match(app, /^function clearIdentityView\(\) \{\n  invalidateResourcePreview\(\);/m);
 assert.doesNotMatch(controls, /\b(?:refresh|showRun|proof|rederive|grant)\s*\(/);
 const A = {id: "res-A", project_id: "project-A", name: "材料 A", format: "txt", content: "中文 A\r\n", hash: "0123456789abcdef"};
@@ -45,6 +50,8 @@ test("isolated saved-resource preview", async t => {
       ${safe}
       ${row}
       ${controls}
+      // Synthetic success UI signal only: the real revocation POST never executes.
+      window.revocationSuccessUISignal = () => {${revokeReset}};
       window.switchIdentity = identity => {
         token = identity; identityConnectionGeneration++;
         // This is the verified first statement of the real identity-clear hook.
@@ -207,6 +214,38 @@ test("isolated saved-resource preview", async t => {
         }, change);
         await finish(0, {error: {code: "PERMISSION_DENIED"}}, {status: 403});
         await assertPreview("new result", "new feedback");
+      }
+    });
+
+    await t.test("synthetic revocation-success UI clears visible content and prevents an in-flight old success from reviving it", async () => {
+      await reset(); await view(0); await finish(0, A); await assertPreview(A.content);
+      await page.evaluate(() => window.revocationSuccessUISignal());
+      await assertPreview();
+      await view(0);
+      await page.evaluate(() => window.revocationSuccessUISignal());
+      await finish(1, A); await assertPreview();
+      // A new explicit view still reaches the original GET adapter and can be denied.
+      await view(0);
+      await finish(2, {error: {code: "PERMISSION_DENIED"}}, {status: 403});
+      await assertPreview(null, "PERMISSION_DENIED");
+      assert.deepEqual(await page.evaluate(() => window.reads.map(({url, method, body}) => ({url, method, body}))), [
+        {url: "/api/resources/res-A", method: "GET", body: null},
+        {url: "/api/resources/res-A", method: "GET", body: null},
+        {url: "/api/resources/res-A", method: "GET", body: null},
+      ]);
+    });
+
+    await t.test("old failures after synthetic revocation-success UI do not erase a newer GET result or feedback", async () => {
+      for (const oldError of ["denial", "transport", "json"]) {
+        await reset(); await view(0);
+        await page.evaluate(() => window.revocationSuccessUISignal());
+        await view(1); await finish(1, B);
+        await page.locator("#error").evaluate(element => element.textContent = "new preview feedback");
+        if (oldError === "denial") await finish(0, {error: {code: "PERMISSION_DENIED"}}, {status: 403});
+        else if (oldError === "transport") await finish(0, null, {transportError: "old transport failure"});
+        else await finish(0, null, {raw: "not-json"});
+        await assertPreview(B.content, "new preview feedback");
+        assert.equal(await page.evaluate(() => window.reads.every(read => read.method === "GET")), true);
       }
     });
 
