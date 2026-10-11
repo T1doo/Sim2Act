@@ -1,0 +1,183 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_goal_text_offline_page_actual_worker[valid] _______________
+
+env = (<sim2act.db.Store object at 0x7f4d5216ed20>, Settings(database_url='sqlite:////tmp/pb-author-pa-debug3-20261011/test_...e4c85e4b6b4e86a46c414cbf4ff8ff', 'user_e75bd45a619c41e39407b7e3391d6332', 'proj_374f82018b5d429cb1fdda29081b934b', ...)
+tmp_path = PosixPath('/tmp/pb-author-pa-debug3-20261011/test_goal_text_offline_page_ac0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+            "owner-read-order-error",
+            "owner-read-order-invalid",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/goal_text_ui.cjs:2:138)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:155: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[valid]
+1 failed, 1 warning in 1.35s

@@ -268,8 +268,16 @@ def validate_source_family(c, user, draft):
                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
                 if isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
                     expected_field, expected_kind = "agent_provenance", "bounded_agent"
-                elif isinstance(snapshot, dict) and snapshot.get("kind") in {"registered_csv_source.v1", "natural_csv_receipt_candidate.v1"}:
+                elif isinstance(snapshot, dict) and snapshot.get("kind") in {"registered_csv_source.v1", "registered_text_source.v1", "natural_csv_receipt_candidate.v1"}:
                     expected_field, expected_kind = "task_proof", "registered_tool"
+                    if snapshot["kind"] == "registered_text_source.v1":
+                        actions = candidate.get("actions") if isinstance(candidate, dict) else None
+                        executor = actions[0].get("executor") if isinstance(actions, list) and len(actions) == 1 and isinstance(actions[0], dict) else None
+                        if (not isinstance(actions, list) or len(actions) != 1
+                                or not isinstance(actions[0], dict)
+                                or not isinstance(executor, dict)
+                                or executor.get("ref") != "text.literal_evidence"):
+                            raise DomainError("VERSION_CONFLICT", "Independent text extraction executor changed")
                 elif (
                     isinstance(snapshot, dict)
                     and "kind" not in snapshot

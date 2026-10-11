@@ -32,6 +32,7 @@ def compile_text(candidate, manifest, actions, report):
     if set(candidate) not in (
         {"manifest", "actions", "source_hash", "goal"},
         {"manifest", "actions", "source_hash", "goal", "goal_application"},
+        {"manifest", "actions", "source_hash", "goal", "task_proof"},
     ):
         raise DomainError("INVALID_MANIFEST", "Closed text candidate required")
     if len(actions) != 1 or len(manifest.workflow) != 1 or len(manifest.data_bindings) != 1:
@@ -51,8 +52,8 @@ def compile_text(candidate, manifest, actions, report):
         }
         or manifest.output_schema != output
         or manifest.validation_suite_ref != CHECK
-        or manifest.origin != "goal"
-        or manifest.source_run_ref is not None
+        or (manifest.origin, manifest.source_run_ref is None)
+        != (("task_run", False) if "task_proof" in candidate else ("goal", True))
         or action.dependencies[0].ref != binding.resource_ref
         or [p.model_dump() for p in manifest.permission_requirements]
         != [p.model_dump() for p in action.permission_requirements]
@@ -112,6 +113,11 @@ def compute(source, args):
 
 
 def verify_origin(store, c, user, draft, limits):
+    if "task_proof" in draft["candidate"]:
+        from .registered_run_extraction import validate_registered_candidate
+
+        validate_registered_candidate(store, c, user, draft, limits)
+        return
     from pydantic import ValidationError
     from sqlalchemy import select
 

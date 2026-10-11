@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.006" timestamp="2026-10-11T21:11:40.175826+00:00" hostname="9809f76d2248"><testcase classname="tests.test_registered_text_extraction" name="test_completed_text_apprun_extracts_new_material_cold_worker" time="1.830"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Request key belongs to another goal input&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 202&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fdea4d04a70&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-24/test_com...d3186543b94f77a0c2e5f6a1b07396', 'user_8db65b39fcd4437b8a5c8cee537e0d32', 'proj_7ae861ae445d40d7bce140c5da5474af', ...)
+
+    def test_completed_text_apprun_extracts_new_material_cold_worker(env):
+&gt;       data, aid, _, source_instance, source_run, target, resource, url = prepared(env)
+                                                                           ^^^^^^^^^^^^^
+
+tests/test_registered_text_extraction.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_registered_text_extraction.py:78: in prepared
+    target = make_app(target_data, "target")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7fdea4d04a70&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-24/test_com...fd3186543b94f77a0c2e5f6a1b07396', 'proj_7ae861ae445d40d7bce140c5da5474af', 'res_6d360d476ac548619f38c3952a01229d', ...)
+name = 'target'
+
+    def make_app(data, name):
+        store, settings, client, _, pid, resource, card = data
+        sent = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            sent.append(payload)
+            initial = json.loads(payload["messages"][1]["content"])
+            if len(sent) == 1:
+                message = {"role": "assistant", "content": "", "tool_calls": [{
+                    "id": "actual-source-read", "type": "function", "function": {
+                        "name": "resource.read", "arguments": json.dumps({"resource_id": resource}),
+                    },
+                }]}
+                return httpx.Response(200, json=wire(message, "tool_calls"))
+            receipt = json.loads(next(m["content"] for m in payload["messages"] if m["role"] == "tool"))
+            assert receipt["status"] == "VERIFIED" and receipt["data"]["resource_id"] == resource
+            value = fixture_candidate(initial)
+            value["source_hash"] = receipt["data"]["hash"]
+            return httpx.Response(200, json=wire({"role": "assistant", "content": json.dumps(value)}))
+    
+        queued = client.post(f"/api/projects/{pid}/goal-cards/{card['id']}/application-runs", json={
+            "expected_version": card["version"], "expected_fingerprint": card["fingerprint"],
+            "request_key": "pb-fixture-generation",
+        })
+&gt;       assert queued.status_code == 202, queued.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Request key belongs to another goal input","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 202
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_registered_text_extraction.py:50: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="11" time="110.553" timestamp="2026-10-11T21:40:11.729788+00:00" hostname="9809f76d2248"><testcase classname="tests.test_registered_text_extraction" name="test_completed_text_apprun_extracts_new_material_cold_worker[txt]" time="13.459" /><testcase classname="tests.test_registered_text_extraction" name="test_completed_text_apprun_extracts_new_material_cold_worker[md]" time="13.259" /><testcase classname="tests.test_registered_text_extraction" name="test_resigned_text_candidate_does_not_replace_independent_origin[request-key]" time="2.877" /><testcase classname="tests.test_registered_text_extraction" name="test_actual_late_compute_cannot_commit_after_invalidation[cancel]" time="5.072" /><testcase classname="tests.test_registered_text_extraction" name="test_actual_late_compute_cannot_commit_after_invalidation[revoke]" time="5.049" /><testcase classname="tests.test_registered_text_extraction" name="test_actual_late_compute_cannot_commit_after_invalidation[source-version]" time="4.557" /><testcase classname="tests.test_registered_text_extraction" name="test_text_cold_worker_never_reads_unrelated_private_history" time="6.910" /><testcase classname="tests.test_registered_text_ui" name="test_registered_text_actual_http_page[valid]" time="15.667" /><testcase classname="tests.test_registered_text_ui" name="test_registered_text_actual_http_page[wrong-existing-app]" time="18.190" /><testcase classname="tests.test_registered_text_ui" name="test_registered_text_actual_http_page[candidate-fp]" time="5.742"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: invalid keyed receipt cannot install any candidate&#10;      at check (/workspace/Sim2Act/tests/registered_text_ui.cjs:8:29)&#10;      at /workspace/Sim2Act/tests/registered_text_ui.cjs:61:5&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f5f461711f0&gt;, Settings(database_url='sqlite:////tmp/pb-author-smoke2-20261011/test_reg...0cb325728146a998d7be4a16f05124', 'user_6268eaab83df4f6b81ee2c77102bce5b', 'proj_8867aaf936974ce7819e4b8784a66757', ...)
+tmp_path = PosixPath('/tmp/pb-author-smoke2-20261011/test_registered_text_actual_ht2')
+scenario = 'candidate-fp'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost",
+            "poison",
+            "late-options-edit-undo",
+            "late-post-nav",
+            "late-app-nav",
+            "wrong-existing-app",
+            "candidate-fp",
+            "wrong-other-key-app",
+        ],
+    )
+    def test_registered_text_actual_http_page(env, tmp_path, scenario):
+        data, aid, _, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        poison_app = poison_fingerprint = None
+        if scenario == "wrong-other-key-app":
+            url = f"/api/internal/instances/{instance['id']}/runs/{run['id']}"
+            _, other_body = extraction_request(data, url, target)
+            other_body.update(name="Extracted visible text", request_key="other-independent-key")
+            other = client.post(url + "/extract", json=other_body)
+            assert other.status_code == 201, other.text
+            poison_app, poison_fingerprint = other.json()["id"], other.json()["candidate_fingerprint"]
+        elif scenario == "wrong-existing-app":
+            poison_app = make_app(data, "third-unrelated-authorized")
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": data[4],
+                    "source": aid,
+                    "instance": instance["id"],
+                    "run": run["id"],
+                    "target": target,
+                    "resource": resource,
+                    "scenario": scenario,
+                    "poison_app": poison_app,
+                    "poison_fingerprint": poison_fingerprint,
+                    "output": str(tmp_path / "result.json"),
+                }
+            )
+        )
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        cold_runs = 0
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold, settings, NoModel()).once()
+                        cold_runs += 1
+                    finally:
+                        cold.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    response = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            exit_code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_PB_EVIDENCE_DIR")
+            if output:
+                destination = Path(output)
+                destination.mkdir(parents=True, exist_ok=True)
+                (destination / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (destination / (scenario + ".json")).write_bytes(
+                        (tmp_path / "result.json").read_bytes()
+                    )
+&gt;           assert exit_code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: invalid keyed receipt cannot install any candidate
+E                 at check (/workspace/Sim2Act/tests/registered_text_ui.cjs:8:29)
+E                 at /workspace/Sim2Act/tests/registered_text_ui.cjs:61:5
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_ui.py:110: AssertionError</failure></testcase><testcase classname="tests.test_registered_text_ui" name="test_registered_text_actual_http_page[wrong-other-key-app]" time="19.537" /></testsuite></testsuites>

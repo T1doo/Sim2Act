@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.137" timestamp="2026-10-11T21:47:00.903469+00:00" hostname="9809f76d2248"><testcase classname="test_foreign_source_private_gate" name="test_foreign_extraction_api_scopes_metadata_before_private_run" time="2.090"><failure message="AssertionError: Foreign source Run private fields selected before principal/project scope rejection&#10;assert not [{'params': ('run_0cfedeeb1fed43fb890fbe53810d8f57',), 'sql': 'SELECT runs.id, runs.project_id, runs.principal_id, run...s.worker_id, runs.context, runs.result, runs.error, runs.cancel_intent, runs.version \nFROM runs \nWHERE runs.id = ?'}]">env = (&lt;sim2act.db.Store object at 0x7fd7694af380&gt;, Settings(database_url='sqlite:////tmp/pb-text-extraction-review-20261011...9f166a48e54faab1b61e3df0f688a4', 'user_f6ebc1b6ab9f4a508b9b8171ca4de4d0', 'proj_ac9b8f8c4d6f43f9bdbeca86ebf1abc1', ...)
+
+    def test_foreign_extraction_api_scopes_metadata_before_private_run(env):
+        data,_,_,_,source,_,_,url=prepared(env)
+        statements=[]
+        def trace(c,cursor,statement,params,ctx,many):
+            statements.append({'sql':statement,'params':params})
+        event.listen(data[0].engine,'before_cursor_execute',trace)
+        try:
+            data[2].headers['Authorization']='Bearer synthetic-test-B'
+            response=data[2].get(url+'/extraction-options')
+        finally:
+            event.remove(data[0].engine,'before_cursor_execute',trace)
+        assert response.status_code==403,response.text
+        violations=[row for row in statements if 'SELECT runs.id,' in row['sql'] and 'runs.context' in row['sql'] and 'runs.result' in row['sql'] and 'WHERE runs.id =' in row['sql'] and 'runs.principal_id =' not in row['sql']]
+        p=OUT/'candidate2-foreign-private-red.json'
+        assert not p.exists()
+        p.write_text(json.dumps({'classification':'ACTUAL_SQLITE_API_SQL_SCOPE_AUDIT','status':response.status_code,'response':response.text,'foreign_run_id':source['id'],'sql':statements,'private_unscoped_selects':violations,'scope':'One request to owned-by-A source using B credentials. SQL only; no foreign row payload copied.'},ensure_ascii=False,indent=2)+'\n')
+&gt;       assert not violations,'Foreign source Run private fields selected before principal/project scope rejection'
+E       AssertionError: Foreign source Run private fields selected before principal/project scope rejection
+E       assert not [{'params': ('run_0cfedeeb1fed43fb890fbe53810d8f57',), 'sql': 'SELECT runs.id, runs.project_id, runs.principal_id, run...s.worker_id, runs.context, runs.result, runs.error, runs.cancel_intent, runs.version \nFROM runs \nWHERE runs.id = ?'}]
+
+/tmp/pb-text-extraction-review-20261011/test_foreign_source_private_gate.py:24: AssertionError</failure></testcase></testsuite></testsuites>

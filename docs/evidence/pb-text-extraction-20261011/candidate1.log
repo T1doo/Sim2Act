@@ -1,0 +1,49 @@
+..............................F......................................... [ 15%]
+.....s...................................................
+=================================== FAILURES ===================================
+_________ test_text_cold_worker_never_reads_unrelated_private_history __________
+
+env = (<sim2act.db.Store object at 0x7f21425efec0>, Settings(database_url='sqlite:////tmp/pb-author-candidate1-20261011/test...d48895a341475a983f94c6922de3a1', 'user_cb8614e128444b39a56420c840fe13f1', 'proj_6da467240035482aac9e3228699f69db', ...)
+tmp_path = PosixPath('/tmp/pb-author-candidate1-20261011/test_text_cold_worker_never_re0')
+
+    def test_text_cold_worker_never_reads_unrelated_private_history(env, tmp_path):
+        from sql_private_barrier import PrivateReadBarrier
+        from test_run_private_read_scope import historical
+    
+        data, _, _, _, _, target, _, url = prepared(env)
+        _, body = request(data, url, target)
+        old, old_row = historical(env)
+        # This synthetic unrelated history is a read barrier, not a completed extraction source.
+        barrier = PrivateReadBarrier(data[0], {old}, {env[6]})
+>       with barrier:
+             ^^^^^^^
+
+tests/test_registered_text_extraction.py:640: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sql_private_barrier.PrivateReadBarrier object at 0x7f2140778f20>
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pb-author-candidate1-20261011/test_text_cold_worker_never_re0/fixture.db)
+raw = <sqlite3.Connection object at 0x7f2142125b70>, name = 'operation_intents'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+>           raw.set_authorizer(None)
+E           sqlite3.ProgrammingError: Cannot operate on a closed database.
+
+tests/sql_private_barrier.py:109: ProgrammingError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_registered_text_extraction.py::test_text_cold_worker_never_reads_unrelated_private_history
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/workspace/Sim2Act/.venv/lib/python3.12/site-packages/pydantic/plugin/_schema_validator.py:51: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+1 failed, 127 passed, 1 skipped, 1 deselected, 1 warning in 320.83s (0:05:20)

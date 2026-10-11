@@ -5,6 +5,11 @@ const engineeringPending = new Map();
 const engineeringInstanceKeys = new Map();
 const registeredExtractionRequests = new Map();
 let registeredExtraction = null, registeredExtractionGeneration = 0;
+let registeredExtractionEditGeneration = 0;
+for(const id of ["registered-extraction-target","registered-extraction-name"]){
+  $(id).addEventListener("input",()=>{registeredExtractionEditGeneration++;});
+  $(id).addEventListener("change",()=>{registeredExtractionEditGeneration++;});
+}
 function engineeringCurrent(view) {
   return engineering === view && view.token === token && view.project === $("project-select").value && view.app === activeApp && view.appGeneration === appSelectionGeneration;
 }
@@ -325,25 +330,52 @@ function registeredBody(state) {
   return {expected_proof_fingerprint:state.options.source_proof_fingerprint || state.options.proof_fingerprint,target_app_id:target.id,expected_target_draft_fingerprint:target.fingerprint,name:$("registered-extraction-name").value};
 }
 function registeredKey(state,body) {return JSON.stringify([state.token,state.project,state.iid,state.rid,state.version,body]);}
+function registeredTextContext(state){
+  const context={workspace:workspaceSelectionGeneration,app:appSelectionGeneration,goal:goalSelectionGeneration,connection:identityConnectionGeneration,edit:registeredExtractionEditGeneration,instance:state.view.instanceGeneration,run:state.view.runGeneration,handoff:false};
+  context.current=()=>state.token===token&&state.project===$("project-select").value&&context.connection===identityConnectionGeneration&&context.workspace===workspaceSelectionGeneration&&context.app===appSelectionGeneration&&context.goal===goalSelectionGeneration&&context.edit===registeredExtractionEditGeneration&&(context.handoff||(registeredCurrent(state)&&context.instance===state.view.instanceGeneration&&context.run===state.view.runGeneration));
+  return context;
+}
+async function registeredHash(value){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");}
+async function registeredTextReceipt(state,pending,saved,current){
+  const target=state.options.targets.find(t=>t.id===pending.target_app_id);
+  const {request_key,...body}=pending;
+  const digest=await registeredHash({instance_id:state.iid,source_run_id:state.rid,...body});
+  if(!current())return false;
+  if(!saved||!/^app_[a-f0-9]{32}$/.test(saved.id)||!/^[a-f0-9]{64}$/.test(saved.candidate_fingerprint)||[state.view.app,target.id].includes(saved.id)||saved.instance_id!==state.iid||saved.source_run_id!==state.rid||saved.project_id!==state.project||saved.principal_id!==state.view.instance.principal_id||saved.request_key!==request_key||saved.request_fingerprint!==digest||saved.source_proof_fingerprint!==pending.expected_proof_fingerprint||saved.target_resource_hash!==target.source_hash||saved.authorization_domain!==target.runtime_id||saved.generator!=="TRUSTED_REGISTERED_TEXT_FROM_APPRUN.v1"||saved.state!=="PREVIEW_ONLY"||saved.publishable!==false||saved.formal_publication_enabled!==false||saved.model_requests!==0||saved.semantic_goal_acceptance!=="NOT_RUN"||saved.technical_semantic_status!=="UNKNOWN"||saved.owner_acceptance!=="PENDING"||typeof saved.cached!=="boolean")throw Error("VERSION_CONFLICT");
+  return true;
+}
+async function registeredTextCandidate(state,pending,saved,candidate,current){
+  const target=state.options.targets.find(t=>t.id===pending.target_app_id),value=candidate.candidate,marker=value?.task_proof;
+  const expectedTarget={app_id:target.id,fingerprint:target.fingerprint,resource_id:target.resource_id,source_hash:target.source_hash,runtime_id:target.runtime_id};
+  const digest=await registeredHash(value);
+  if(!current())return;
+  if(candidate.id!==saved.id||candidate.project_id!==state.project||candidate.runtime_id!==target.runtime_id||candidate.name!==pending.name||candidate.fingerprint!==saved.candidate_fingerprint||digest!==saved.candidate_fingerprint||value?.manifest?.app_id!==saved.id||value.manifest.origin!=="task_run"||value.manifest.source_run_ref!==state.rid||value.goal_application||value.source_hash!==target.source_hash||value.manifest.data_bindings?.length!==1||value.manifest.data_bindings[0].resource_ref!==target.resource_id||marker?.generator!==saved.generator||marker.proof_fingerprint!==pending.expected_proof_fingerprint||goalRunCanonical(marker.proof)!==goalRunCanonical(state.options.proof)||goalRunCanonical(marker.target)!==goalRunCanonical(expectedTarget)||goalRunCanonical(marker.extraction_request)!==goalRunCanonical({instance_id:state.iid,source_run_id:state.rid,...pending}))throw Error("VERSION_CONFLICT");
+}
 function registeredSelectionChanged() {
   const state=registeredExtraction;if(!state || !registeredCurrent(state))return;
   const body=registeredBody(state),target=state.options?.targets.find(t=>t.id===body?.target_app_id);
   $("registered-extraction-target-info").textContent=target ? `材料 ${target.resource_id} · hash ${target.source_hash || target.hash} · 沿用授权域 ${target.runtime_id}；共享授权撤回同时影响此草案。` : "";
   $("registered-extraction-retry").hidden=!body || !registeredExtractionRequests.has(registeredKey(state,body));
-  $("registered-extraction-submit").disabled=state.busy || !body || !body.name.trim();
+  $("registered-extraction-submit").disabled=state.busy || !body || !body.name.trim() || (state.view.literal&&registeredExtractionRequests.has(registeredKey(state,body)));
 }
 $("registered-extraction-target").onchange=registeredSelectionChanged;
 $("registered-extraction-name").oninput=registeredSelectionChanged;
 $("registered-extraction-open").onclick=safe(async()=>{
   const state=registeredExtraction;if(!state || !registeredCurrent(state) || state.busy)return;
+  const context=state.view.literal?registeredTextContext(state):null,current=()=>context?context.current():registeredCurrent(state);
   state.busy=true;$("registered-extraction-open").disabled=true;$("registered-extraction-status").textContent="正在核查真实成功任务与已有授权…";
   try {
     const options=await api(`/api/internal/instances/${state.iid}/runs/${state.rid}/extraction-options`);
-    if(!registeredCurrent(state))return;
+    if(!current())return;
+    if(state.view.literal){
+      const proof=options.proof,digest=await registeredHash(proof);
+      if(!current())return;
+      if(proof?.kind!=="completed_registered_text_apprun.v1"||proof.instance_id!==state.iid||proof.source_run_id!==state.rid||proof.project_id!==state.project||proof.principal_id!==state.view.instance.principal_id||proof.run_version!==state.version||options.source_proof_fingerprint!==digest||options.proof_fingerprint!==digest||options.owner_acceptance!=="PENDING"||options.technical_semantic_status!=="UNKNOWN"||options.model_requests!==0||options.formal_publication_enabled!==false||!Array.isArray(options.targets)||!options.targets.length)throw Error("VERSION_CONFLICT");
+    }
     state.options=options;$("registered-extraction-proof").textContent=JSON.stringify({proof:options.proof,proof_fingerprint:options.source_proof_fingerprint || options.proof_fingerprint},null,2);
-    $("registered-extraction-target").replaceChildren(new Option("请选择已有授权的新 CSV 应用",""),...options.targets.map(t=>new Option(t.name,t.id)));
-    $("registered-extraction-form").hidden=false;$("registered-extraction-status").textContent="来源已核查。选择不同 CSV 的既有授权域；不会自动创建权限。";
-  }catch(error){if(registeredCurrent(state)){if(["GRANT_REVOKED","PERMISSION_DENIED","VERSION_CONFLICT"].includes(error.message)){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else $("registered-extraction-status").textContent=error.detail || error.message;}}
+    $("registered-extraction-target").replaceChildren(new Option(state.view.literal?"请选择已有授权的新 TXT/MD 应用":"请选择已有授权的新 CSV 应用",""),...options.targets.map(t=>new Option(t.name,t.id)));
+    $("registered-extraction-form").hidden=false;$("registered-extraction-status").textContent=state.view.literal?"来源已核查。选择不同 TXT/MD 的既有授权域；term 为运行变量，owner PENDING，语义 UNKNOWN。":"来源已核查。选择不同 CSV 的既有授权域；不会自动创建权限。";
+  }catch(error){if(current()){if(["GRANT_REVOKED","PERMISSION_DENIED","VERSION_CONFLICT"].includes(error.message)){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else $("registered-extraction-status").textContent=error.detail || error.message;}}
   finally {state.busy=false;if(registeredCurrent(state)){$("registered-extraction-open").disabled=false;registeredSelectionChanged();}}
 });
 async function submitRegisteredExtraction(retry=false) {
@@ -352,17 +384,30 @@ async function submitRegisteredExtraction(retry=false) {
   const key=registeredKey(state,body);let pending=registeredExtractionRequests.get(key);
   if(!pending && !retry){pending={...body,request_key:crypto.randomUUID()};registeredExtractionRequests.set(key,pending);}
   if(!pending)return;
-  const current=()=>registeredCurrent(state) && registeredKey(state,registeredBody(state))===key;
+  if(state.view.literal&&!retry&&$("registered-extraction-submit").disabled)return;
+  const context=state.view.literal?registeredTextContext(state):null;
+  const current=()=>context?context.current():registeredCurrent(state) && registeredKey(state,registeredBody(state))===key;
   state.busy=true;$("registered-extraction-submit").disabled=true;$("registered-extraction-retry").disabled=true;$("registered-extraction-target").disabled=true;$("registered-extraction-name").disabled=true;
   $("registered-extraction-status").textContent="正在由服务端生成可复用草案…";
   let made=null,readGeneration=null;const readGoalGeneration=goalSelectionGeneration;
   try {
-    made=await api(`/api/internal/instances/${state.iid}/runs/${state.rid}/extract`,"POST",pending);
+    const base=`/api/internal/instances/${state.iid}/runs/${state.rid}`;
+    if(state.view.literal){
+      let hint=null;
+      if(!retry){hint=await api(base+"/extract","POST",pending);if(!await registeredTextReceipt(state,pending,hint,current))return;}
+      const saved=await api(base+`/extraction-receipts?request_key=${encodeURIComponent(pending.request_key)}`);
+      if(!await registeredTextReceipt(state,pending,saved,current))return;
+      if(hint&&saved.id!==hint.id)throw Error("VERSION_CONFLICT");
+      made=saved;
+    }else made=await api(base+"/extract","POST",pending);
     if(!current())return;
     $("registered-extraction-status").textContent=`已生成 ${made.id}；正在回读草案。`;
     await refreshApps();if(!current())return;
-    if(await showApp(made.id,state.project,g=>{readGeneration=g;})){selectWorkspace("apps");registeredExtractionRequests.delete(key);}
-  }catch(error){if(made && readGeneration===appSelectionGeneration && state.token===token && state.project===$("project-select").value && readGoalGeneration===goalSelectionGeneration){selectWorkspace("apps");setAppReadFailure({id:made.id,pid:state.project,kind:"created",goalGeneration:readGoalGeneration},error);registeredExtractionRequests.delete(key);}else if(current()){if(["GRANT_REVOKED","PERMISSION_DENIED","VERSION_CONFLICT"].includes(error.message)){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else {$("registered-extraction-status").textContent=`生成回执或草案回读未确认：${error.detail || error.message}。可用原请求键手动恢复；不会自动重发。`;$("registered-extraction-retry").hidden=false;}}}
+    if(await showApp(made.id,state.project,g=>{readGeneration=g;if(context){context.app=g;context.handoff=true;}},context?current:()=>true,context?a=>registeredTextCandidate(state,pending,made,a,current):null)&&(!context||current())){
+      selectWorkspace("apps");registeredExtractionRequests.delete(key);
+      if(state.view.literal){$("app-create-status").textContent=`已只读核对独立应用 ${made.id} · owner PENDING · 语义 UNKNOWN · 未发布`;$("app-agent-term").focus();}
+    }
+  }catch(error){if(made && readGeneration===appSelectionGeneration && state.token===token && state.project===$("project-select").value && readGoalGeneration===goalSelectionGeneration&&(!context||current())){selectWorkspace("apps");if(context){$("app-create-status").dataset.state="error";$("app-create-status").textContent=`独立应用未通过回执与候选核对：${error.detail || error.message}。请重开来源任务，用原请求键恢复；不会自动重发。`;}else{setAppReadFailure({id:made.id,pid:state.project,kind:"created",goalGeneration:readGoalGeneration},error);registeredExtractionRequests.delete(key);}}else if(current()){if(["GRANT_REVOKED","PERMISSION_DENIED"].includes(error.message)||(!state.view.literal&&error.message==="VERSION_CONFLICT")){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else {$("registered-extraction-status").textContent=`生成回执或草案回读未确认：${error.detail || error.message}。可用原请求键手动恢复；不会自动重发。`;$("registered-extraction-retry").hidden=false;}}}
   finally {state.busy=false;if(registeredCurrent(state)){$("registered-extraction-target").disabled=false;$("registered-extraction-name").disabled=false;$("registered-extraction-retry").disabled=false;registeredSelectionChanged();}}
 }
 $("registered-extraction-form").onsubmit=event=>{event.preventDefault();return safe(()=>submitRegisteredExtraction())();};

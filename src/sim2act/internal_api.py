@@ -83,10 +83,17 @@ def mount(app, store, limits, identity):
     def scope_run(user, iid, rid, *, historical=False):
         # Stop must remain possible after grant revocation; immutable binding/owner still required.
         with store.tx() as c:
-            job = c.execute(select(runs).where(runs.c.id == rid)).mappings().first()
-            if not job or job["principal_id"] != user:
+            pid = c.execute(select(runs.c.project_id).where(
+                runs.c.id == rid, runs.c.principal_id == user,
+            )).scalar_one_or_none()
+            if pid is None:
                 raise DomainError("PERMISSION_DENIED")
-            store.own_project(c, user, job["project_id"])
+            store.own_project(c, user, pid)
+            job = c.execute(select(runs).where(
+                runs.c.id == rid, runs.c.principal_id == user, runs.c.project_id == pid,
+            )).mappings().first()
+            if not job:
+                raise DomainError("PERMISSION_DENIED")
             if csv_dag.is_job(store, rid):
                 accepted = csv_dag.binding(store, c, job, None, authorize=False, historical=historical)
                 value = csv_dag_instances.validate_binding(store, c, job, accepted, None, authorize=False, historical=historical)
@@ -341,6 +348,13 @@ def mount(app, store, limits, identity):
                 limits,
             )
         )
+
+    @app.get("/api/internal/instances/{iid}/runs/{rid}/extraction-receipts")
+    def extraction_receipt(iid: str, rid: str, request_key: str, user=user_dependency):
+        from .registered_run_extraction import recover
+
+        scope_run(user, iid, rid)
+        return envelope(**recover(store, user, iid, rid, request_key, limits))
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/control-status")
     def control_status(iid: str, rid: str, user=user_dependency):

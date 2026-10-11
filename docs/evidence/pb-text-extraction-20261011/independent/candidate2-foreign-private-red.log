@@ -1,0 +1,32 @@
+/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________ test_foreign_extraction_api_scopes_metadata_before_private_run ________
+
+env = (<sim2act.db.Store object at 0x7fd7694af380>, Settings(database_url='sqlite:////tmp/pb-text-extraction-review-20261011...9f166a48e54faab1b61e3df0f688a4', 'user_f6ebc1b6ab9f4a508b9b8171ca4de4d0', 'proj_ac9b8f8c4d6f43f9bdbeca86ebf1abc1', ...)
+
+    def test_foreign_extraction_api_scopes_metadata_before_private_run(env):
+        data,_,_,_,source,_,_,url=prepared(env)
+        statements=[]
+        def trace(c,cursor,statement,params,ctx,many):
+            statements.append({'sql':statement,'params':params})
+        event.listen(data[0].engine,'before_cursor_execute',trace)
+        try:
+            data[2].headers['Authorization']='Bearer synthetic-test-B'
+            response=data[2].get(url+'/extraction-options')
+        finally:
+            event.remove(data[0].engine,'before_cursor_execute',trace)
+        assert response.status_code==403,response.text
+        violations=[row for row in statements if 'SELECT runs.id,' in row['sql'] and 'runs.context' in row['sql'] and 'runs.result' in row['sql'] and 'WHERE runs.id =' in row['sql'] and 'runs.principal_id =' not in row['sql']]
+        p=OUT/'candidate2-foreign-private-red.json'
+        assert not p.exists()
+        p.write_text(json.dumps({'classification':'ACTUAL_SQLITE_API_SQL_SCOPE_AUDIT','status':response.status_code,'response':response.text,'foreign_run_id':source['id'],'sql':statements,'private_unscoped_selects':violations,'scope':'One request to owned-by-A source using B credentials. SQL only; no foreign row payload copied.'},ensure_ascii=False,indent=2)+'\n')
+>       assert not violations,'Foreign source Run private fields selected before principal/project scope rejection'
+E       AssertionError: Foreign source Run private fields selected before principal/project scope rejection
+E       assert not [{'params': ('run_0cfedeeb1fed43fb890fbe53810d8f57',), 'sql': 'SELECT runs.id, runs.project_id, runs.principal_id, run...s.worker_id, runs.context, runs.result, runs.error, runs.cancel_intent, runs.version \nFROM runs \nWHERE runs.id = ?'}]
+
+/tmp/pb-text-extraction-review-20261011/test_foreign_source_private_gate.py:24: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tmp/pb-text-extraction-review-20261011/test_foreign_source_private_gate.py::test_foreign_extraction_api_scopes_metadata_before_private_run
+1 failed in 2.14s

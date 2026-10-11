@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="15.762" timestamp="2026-10-11T21:36:24.580366+00:00" hostname="9809f76d2248"><testcase classname="test_keyed_receipt_poison_v2" name="test_keyed_receipt_requires_exact_actual_candidate[wrong-existing-app]" time="7.535"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: invalid original-key receipt cannot install a candidate before exact candidate/proof binding is checked&#10;      at check (/tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:8:29)&#10;      at /tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:57:23&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff8d8acaed0&gt;, Settings(database_url='sqlite:////tmp/pb-text-extraction-review-20261011...32d2783c44461aa7948ce42013b40e', 'user_c161ed80f814465c8e184cbe056569ef', 'proj_559cdc7b4a8342bcb96853035609282e', ...)
+tmp_path = PosixPath('/tmp/pb-text-extraction-review-20261011/keyed-poison-v2-db/test_keyed_receipt_requires_ex0')
+poison_kind = 'wrong-existing-app'
+
+    @pytest.mark.parametrize('poison_kind',['wrong-existing-app','candidate-fp','wrong-other-key-app'])
+    def test_keyed_receipt_requires_exact_actual_candidate(env,tmp_path,poison_kind):
+        data, aid, _, instance, run, target, resource, _=prepared(env)
+        if poison_kind=='wrong-other-key-app':
+            _,other_body=request(data,data[7] if len(data)&gt;7 else f"/api/internal/instances/{instance['id']}/runs/{run['id']}",target)
+            other_body.update(name='Extracted visible text',request_key='other-independent-original-key')
+            other_reply=data[2].post(f"/api/internal/instances/{instance['id']}/runs/{run['id']}/extract",json=other_body)
+            assert other_reply.status_code==201,other_reply.text
+            third=other_reply.json()['id'];other_fp=other_reply.json()['candidate_fingerprint']
+        else:
+            third=make_app(data,'third-unrelated-authorized');other_fp=None
+        prefix=os.environ.get('PB_PROBE_PREFIX','keyed-receipt-red-v2-')+poison_kind
+        info=tmp_path/'info.json'
+        info.write_text(json.dumps({'project':data[4],'source':aid,'instance':instance['id'],'run':run['id'],'target':target,'resource':resource,'scenario':'lost','poison_kind':poison_kind,'poison_app':third,'poison_fingerprint':other_fp,'output':str(OUT/(prefix+'.json'))}))
+        p=subprocess.Popen(['node',str(OUT/'keyed_receipt_poison_v2.cjs'),str(info)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env={**os.environ,'NODE_PATH':'/workspace/node-tools/node_modules'})
+        worker_calls=0
+        try:
+            for line in p.stdout:
+                request=json.loads(line)
+                if request.get('done'):break
+                if request.get('command')=='worker':
+                    worker_calls+=1
+                    raise AssertionError('Unexpected cold Worker; poison guard must be evaluated before running a candidate')
+                response=data[2].request(request['method'],request['path'],json=request.get('body'),headers=request.get('headers'))
+                answer={'id':request['id'],'status':response.status_code,'text':response.text,'content_type':response.headers.get('content-type')}
+                p.stdin.write(json.dumps(answer)+'\n');p.stdin.flush()
+            p.stdin.close();error=p.stderr.read();code=p.wait(timeout=20)
+            (OUT/(prefix+'.log')).write_text(error)
+            (OUT/(prefix+'-process.json')).write_text(json.dumps({'exit_code':code,'worker_calls':worker_calls,'scope':'Actual API and HTTP assets; only keyed receipt response substituted in JSDOM fetch; no native browser or real provider'},indent=2)+'\n')
+&gt;           assert code==0,error
+E           AssertionError: AssertionError [ERR_ASSERTION]: invalid original-key receipt cannot install a candidate before exact candidate/proof binding is checked
+E                 at check (/tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:8:29)
+E                 at /tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:57:23
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+/tmp/pb-text-extraction-review-20261011/test_keyed_receipt_poison_v2.py:36: AssertionError</failure></testcase><testcase classname="test_keyed_receipt_poison_v2" name="test_keyed_receipt_requires_exact_actual_candidate[candidate-fp]" time="6.145"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: invalid original-key receipt cannot install a candidate before exact candidate/proof binding is checked&#10;      at check (/tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:8:29)&#10;      at /tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:57:23&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff8d71ab200&gt;, Settings(database_url='sqlite:////tmp/pb-text-extraction-review-20261011...fb45c1e511491b8f0824fbf10dc329', 'user_9fb3085009284a00acc78e42d5ef4270', 'proj_d9a180aabf454c799e9f5ca54892c889', ...)
+tmp_path = PosixPath('/tmp/pb-text-extraction-review-20261011/keyed-poison-v2-db/test_keyed_receipt_requires_ex1')
+poison_kind = 'candidate-fp'
+
+    @pytest.mark.parametrize('poison_kind',['wrong-existing-app','candidate-fp','wrong-other-key-app'])
+    def test_keyed_receipt_requires_exact_actual_candidate(env,tmp_path,poison_kind):
+        data, aid, _, instance, run, target, resource, _=prepared(env)
+        if poison_kind=='wrong-other-key-app':
+            _,other_body=request(data,data[7] if len(data)&gt;7 else f"/api/internal/instances/{instance['id']}/runs/{run['id']}",target)
+            other_body.update(name='Extracted visible text',request_key='other-independent-original-key')
+            other_reply=data[2].post(f"/api/internal/instances/{instance['id']}/runs/{run['id']}/extract",json=other_body)
+            assert other_reply.status_code==201,other_reply.text
+            third=other_reply.json()['id'];other_fp=other_reply.json()['candidate_fingerprint']
+        else:
+            third=make_app(data,'third-unrelated-authorized');other_fp=None
+        prefix=os.environ.get('PB_PROBE_PREFIX','keyed-receipt-red-v2-')+poison_kind
+        info=tmp_path/'info.json'
+        info.write_text(json.dumps({'project':data[4],'source':aid,'instance':instance['id'],'run':run['id'],'target':target,'resource':resource,'scenario':'lost','poison_kind':poison_kind,'poison_app':third,'poison_fingerprint':other_fp,'output':str(OUT/(prefix+'.json'))}))
+        p=subprocess.Popen(['node',str(OUT/'keyed_receipt_poison_v2.cjs'),str(info)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env={**os.environ,'NODE_PATH':'/workspace/node-tools/node_modules'})
+        worker_calls=0
+        try:
+            for line in p.stdout:
+                request=json.loads(line)
+                if request.get('done'):break
+                if request.get('command')=='worker':
+                    worker_calls+=1
+                    raise AssertionError('Unexpected cold Worker; poison guard must be evaluated before running a candidate')
+                response=data[2].request(request['method'],request['path'],json=request.get('body'),headers=request.get('headers'))
+                answer={'id':request['id'],'status':response.status_code,'text':response.text,'content_type':response.headers.get('content-type')}
+                p.stdin.write(json.dumps(answer)+'\n');p.stdin.flush()
+            p.stdin.close();error=p.stderr.read();code=p.wait(timeout=20)
+            (OUT/(prefix+'.log')).write_text(error)
+            (OUT/(prefix+'-process.json')).write_text(json.dumps({'exit_code':code,'worker_calls':worker_calls,'scope':'Actual API and HTTP assets; only keyed receipt response substituted in JSDOM fetch; no native browser or real provider'},indent=2)+'\n')
+&gt;           assert code==0,error
+E           AssertionError: AssertionError [ERR_ASSERTION]: invalid original-key receipt cannot install a candidate before exact candidate/proof binding is checked
+E                 at check (/tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:8:29)
+E                 at /tmp/pb-text-extraction-review-20261011/keyed_receipt_poison_v2.cjs:57:23
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+/tmp/pb-text-extraction-review-20261011/test_keyed_receipt_poison_v2.py:36: AssertionError</failure></testcase><testcase classname="test_keyed_receipt_poison_v2" name="test_keyed_receipt_requires_exact_actual_candidate[wrong-other-key-app]" time="2.016"><failure message="UnboundLocalError: cannot access local variable 'request' where it is not associated with a value">env = (&lt;sim2act.db.Store object at 0x7ff8d84b18b0&gt;, Settings(database_url='sqlite:////tmp/pb-text-extraction-review-20261011...c61b7dadba4b2c83d336db3faabceb', 'user_2d70369b17be4345b586a981640f99a1', 'proj_6d4730fec324469f88a6dc155343ac6f', ...)
+tmp_path = PosixPath('/tmp/pb-text-extraction-review-20261011/keyed-poison-v2-db/test_keyed_receipt_requires_ex2')
+poison_kind = 'wrong-other-key-app'
+
+    @pytest.mark.parametrize('poison_kind',['wrong-existing-app','candidate-fp','wrong-other-key-app'])
+    def test_keyed_receipt_requires_exact_actual_candidate(env,tmp_path,poison_kind):
+        data, aid, _, instance, run, target, resource, _=prepared(env)
+        if poison_kind=='wrong-other-key-app':
+&gt;           _,other_body=request(data,data[7] if len(data)&gt;7 else f"/api/internal/instances/{instance['id']}/runs/{run['id']}",target)
+                         ^^^^^^^
+E           UnboundLocalError: cannot access local variable 'request' where it is not associated with a value
+
+/tmp/pb-text-extraction-review-20261011/test_keyed_receipt_poison_v2.py:11: UnboundLocalError</failure></testcase></testsuite></testsuites>

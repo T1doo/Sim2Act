@@ -1,0 +1,198 @@
+...F.F                                                                   [100%]
+=================================== FAILURES ===================================
+________ test_registered_text_actual_http_page[late-options-edit-undo] _________
+
+env = (<sim2act.db.Store object at 0x7f70eecb5dc0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-29/test_reg...024f2f7def4ab58fddedeeb0822566', 'user_414e3c7e978142d89c8581333aa52da1', 'proj_bdd2b3664fc34a038f196ebda730acf0', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-29/test_registered_text_actual_ht3')
+scenario = 'late-options-edit-undo'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost",
+            "poison",
+            "late-options-edit-undo",
+            "late-post-nav",
+            "late-app-nav",
+        ],
+    )
+    def test_registered_text_actual_http_page(env, tmp_path, scenario):
+        data, aid, _, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": data[4],
+                    "source": aid,
+                    "instance": instance["id"],
+                    "run": run["id"],
+                    "target": target,
+                    "resource": resource,
+                    "scenario": scenario,
+                    "output": str(tmp_path / "result.json"),
+                }
+            )
+        )
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        cold_runs = 0
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold, settings, NoModel()).once()
+                        cold_runs += 1
+                    finally:
+                        cold.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    response = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            exit_code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_PB_EVIDENCE_DIR")
+            if output:
+                destination = Path(output)
+                destination.mkdir(parents=True, exist_ok=True)
+                (destination / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (destination / (scenario + ".json")).write_bytes(
+                        (tmp_path / "result.json").read_bytes()
+                    )
+>           assert exit_code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: enabled action registered-extraction-submit
+E                 at gesture (/workspace/Sim2Act/tests/registered_text_ui.cjs:11:129)
+E                 at click (/workspace/Sim2Act/tests/registered_text_ui.cjs:12:81)
+E                 at /workspace/Sim2Act/tests/registered_text_ui.cjs:50:9
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_ui.py:95: AssertionError
+_____________ test_registered_text_actual_http_page[late-app-nav] ______________
+
+env = (<sim2act.db.Store object at 0x7f70f07f7830>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-29/test_reg...2a2588a7114e099f0c1ed413b41bea', 'user_71790feda23c430fb858c947865411f0', 'proj_8f1177dd7cb74cc7b79fdcecce6e9cc0', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-29/test_registered_text_actual_ht5')
+scenario = 'late-app-nav'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost",
+            "poison",
+            "late-options-edit-undo",
+            "late-post-nav",
+            "late-app-nav",
+        ],
+    )
+    def test_registered_text_actual_http_page(env, tmp_path, scenario):
+        data, aid, _, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": data[4],
+                    "source": aid,
+                    "instance": instance["id"],
+                    "run": run["id"],
+                    "target": target,
+                    "resource": resource,
+                    "scenario": scenario,
+                    "output": str(tmp_path / "result.json"),
+                }
+            )
+        )
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        cold_runs = 0
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold, settings, NoModel()).once()
+                        cold_runs += 1
+                    finally:
+                        cold.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    response = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            exit_code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_PB_EVIDENCE_DIR")
+            if output:
+                destination = Path(output)
+                destination.mkdir(parents=True, exist_ok=True)
+                (destination / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (destination / (scenario + ".json")).write_bytes(
+                        (tmp_path / "result.json").read_bytes()
+                    )
+>           assert exit_code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: late accepted or app read after workspace A B A cannot hand off or focus
+E                 at check (/workspace/Sim2Act/tests/registered_text_ui.cjs:8:29)
+E                 at /workspace/Sim2Act/tests/registered_text_ui.cjs:48:3
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_ui.py:95: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_registered_text_ui.py::test_registered_text_actual_http_page[late-options-edit-undo]
+FAILED tests/test_registered_text_ui.py::test_registered_text_actual_http_page[late-app-nav]
+2 failed, 4 passed, 1 warning in 93.43s (0:01:33)

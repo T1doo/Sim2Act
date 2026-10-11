@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="26.856" timestamp="2026-10-11T21:43:24.535787+00:00" hostname="9809f76d2248"><testcase classname="test_independent_source_gates" name="test_independent_exact_source_and_marker_gates[source-generation-response]" time="4.665"><failure message="KeyError: 'choices'">env = (&lt;sim2act.db.Store object at 0x7efff9ed3740&gt;, Settings(database_url='sqlite:////tmp/pb-text-extraction-review-20261011...296e5123b0467e806e074ea4279291', 'user_f44d9759bc944423949ada3139c115cb', 'proj_767326314eb746469ca61b39918c732a', ...)
+fault = 'source-generation-response'
+
+    @pytest.mark.parametrize('fault',['source-generation-response','source-generation-raw','source-generation-unknown','source-app-error','selected-attempt-started','marker-deleted','source-generation-marker-deleted'])
+    def test_independent_exact_source_and_marker_gates(env,fault):
+        data,source_app,_,instance,source,target,_,url=prepared(env)
+        _,body=request(data,url,target)
+        accepted=data[2].post(url+'/extract',json=body)
+        assert accepted.status_code==201,accepted.text
+        made=accepted.json()
+        with data[0].tx() as c:
+            raw_source=c.execute(select(app_drafts).where(app_drafts.c.id==source_app)).mappings().one()
+            origin=raw_source['candidate']['goal_application']['run_id']
+            if fault=='source-generation-response':
+                attempt=c.execute(select(attempts).where(attempts.c.run_id==origin).order_by(attempts.c.created_at)).mappings().first()
+&gt;               response=copy.deepcopy(attempt['response']);response['choices'][0]['message']['tool_calls'][0]['function']['arguments']=json.dumps({'resource_id':'res_wrong'})
+                                                            ^^^^^^^^^^^^^^^^^^^
+E               KeyError: 'choices'
+
+/tmp/pb-text-extraction-review-20261011/test_independent_source_gates.py:30: KeyError</failure></testcase><testcase classname="test_independent_source_gates" name="test_independent_exact_source_and_marker_gates[source-generation-raw]" time="4.946" /><testcase classname="test_independent_source_gates" name="test_independent_exact_source_and_marker_gates[source-generation-unknown]" time="4.601" /><testcase classname="test_independent_source_gates" name="test_independent_exact_source_and_marker_gates[source-app-error]" time="4.174" /><testcase classname="test_independent_source_gates" name="test_independent_exact_source_and_marker_gates[selected-attempt-started]" time="2.949" /><testcase classname="test_independent_source_gates" name="test_independent_exact_source_and_marker_gates[marker-deleted]" time="3.087" /><testcase classname="test_independent_source_gates" name="test_independent_exact_source_and_marker_gates[source-generation-marker-deleted]" time="2.338" /></testsuite></testsuites>

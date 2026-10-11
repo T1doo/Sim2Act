@@ -54,3 +54,6 @@
 
 
 同日父复审 P2 的 [owner 页读取顺序纠正](OwnerReadOrder20261011.md)已完成有限代码与实测：真实 HTTP 旧 ACCEPTED 初读在新 REVOKED/PENDING 刷新后不得回滚；初始/刷新/原 key/提交后读取统一最新请求资格及范围、序列、历史回执绑定。独审还发现两层 catch 间新读取或编辑再撤销的旧错误污染，五项调度回归及初始完整 fence 已修，所有旧 FAIL/撤回候选按[新证据](../evidence/owner-read-order-20261011/README.md)保留。最终页面/调度作者及独审各34 PASS；同字节后端48实际子集另列复用，非一次完整82重跑。独立附加API2及受控37通过；人工选择仍SIMULATED、语义UNKNOWN、正式发布false，真实owner/PG/Windows/native/升级/真实模型/完整P-A/P-B/CI等原验收条件不提升。
+
+
+2026-10-11 接续 F2-T03 / AT-10 的[有限非CSV成功运行提取](PBTextExtraction20261011.md)：原实际 SUCCEEDED 文本 AppRun 经独立来源、步骤和完整字面结果重验，提取为绑定不同已授权 TXT/MD、接收新 term 的独立应用，再通过冷正常 Worker 复用。新 task 来源自身封印完整请求/key，原 key 仅读回执与实际候选指纹/来源绑定匹配后才安装；错误第三应用、指纹替换和协调替换另 key 应用的独审红证据保留并修复。新 owner PENDING，不继承旧声明；沿用登记字面算子，LIVE0、语义 UNKNOWN、发布 false。精确工程范围及最终实际轮次见[本轮证据](../evidence/pb-text-extraction-20261011/README.md)。原来源授权/证据仍参与审计，完整 P-B/AT-10、真实模型/真实owner语义、PG/Windows/native/旧源码升级/CI等门未据此关闭。

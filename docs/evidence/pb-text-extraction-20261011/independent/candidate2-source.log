@@ -1,0 +1,29 @@
+/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+F......                                                                  [100%]
+=================================== FAILURES ===================================
+__ test_independent_exact_source_and_marker_gates[source-generation-response] __
+
+env = (<sim2act.db.Store object at 0x7efff9ed3740>, Settings(database_url='sqlite:////tmp/pb-text-extraction-review-20261011...296e5123b0467e806e074ea4279291', 'user_f44d9759bc944423949ada3139c115cb', 'proj_767326314eb746469ca61b39918c732a', ...)
+fault = 'source-generation-response'
+
+    @pytest.mark.parametrize('fault',['source-generation-response','source-generation-raw','source-generation-unknown','source-app-error','selected-attempt-started','marker-deleted','source-generation-marker-deleted'])
+    def test_independent_exact_source_and_marker_gates(env,fault):
+        data,source_app,_,instance,source,target,_,url=prepared(env)
+        _,body=request(data,url,target)
+        accepted=data[2].post(url+'/extract',json=body)
+        assert accepted.status_code==201,accepted.text
+        made=accepted.json()
+        with data[0].tx() as c:
+            raw_source=c.execute(select(app_drafts).where(app_drafts.c.id==source_app)).mappings().one()
+            origin=raw_source['candidate']['goal_application']['run_id']
+            if fault=='source-generation-response':
+                attempt=c.execute(select(attempts).where(attempts.c.run_id==origin).order_by(attempts.c.created_at)).mappings().first()
+>               response=copy.deepcopy(attempt['response']);response['choices'][0]['message']['tool_calls'][0]['function']['arguments']=json.dumps({'resource_id':'res_wrong'})
+                                                            ^^^^^^^^^^^^^^^^^^^
+E               KeyError: 'choices'
+
+/tmp/pb-text-extraction-review-20261011/test_independent_source_gates.py:30: KeyError
+=========================== short test summary info ============================
+FAILED ../../tmp/pb-text-extraction-review-20261011/test_independent_source_gates.py::test_independent_exact_source_and_marker_gates[source-generation-response]
+1 failed, 6 passed in 26.86s

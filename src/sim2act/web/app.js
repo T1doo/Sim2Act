@@ -401,7 +401,7 @@ function showPreviewResult(r,history=false){
   $("app-output").dataset.state=r.status === "FAILED" ? "error" : "success";
   $("app-output").replaceChildren(row(`${history ? "历史记录 · " : ""}${previewText(r)} · ${r.id.slice(0,16)}`));
 }
-async function showApp(id,pid=$("project-select").value,onSelectionStart=null,selectionCurrent=()=>true) {
+async function showApp(id,pid=$("project-select").value,onSelectionStart=null,selectionCurrent=()=>true,validateSelected=null) {
   if(pid !== $("project-select").value || !selectionCurrent())return false;
   clearApp();const generation=appSelectionGeneration;
   onSelectionStart?.(generation);
@@ -409,6 +409,8 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   const a=await api(`/api/apps/${id}`);
   if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
   if(a.id !== id || a.project_id !== pid)throw Error("候选不属于当前选择，请重新选择");
+  if(validateSelected)await validateSelected(a);
+  if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
   activeApp=id;activeAppProject=pid;
   if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);
   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
@@ -453,8 +455,8 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   $("app-preview-submit").hidden=agent;$("csv-extraction-panel").hidden=agent||literal;
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
   if(literal){
-    $("app-origin").textContent=`来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
-    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(a.candidate.goal,null,2);
+    $("app-origin").textContent=taskProof ? `来源：已成功内部文本 AppRun ${taskProof.proof.source_run_id} · 独立回执与完整字面证据核查 · 新 TXT/MD 绑定 + term 参数 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收` : `来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
+    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof ? {source_goal:a.candidate.goal,source:taskProof,new_material:a.candidate.manifest.data_bindings} : a.candidate.goal,null,2);
     $("app-input-hint").textContent="TXT/MD 逐字匹配；输入非空无首尾空白、至多80字符的检索词。每次从授权材料重新计算全部匹配行，无需上传答案。";
     $("app-preview-submit").disabled=appPreviewRequests.has(id);
     $("app-history").replaceChildren(...a.history.map(r=>row(`${r.input.term || "无效输入"} · ${r.status}`,()=>showPreviewResult(r,true),"回读历史")));
