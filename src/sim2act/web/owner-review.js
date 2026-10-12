@@ -188,14 +188,45 @@ async function appOwnGoalValidate(v,value,key,current){
 }
 async function appOwnGoalRead(v,key=null){
   const fence=appOwnGoalFence(v),reading=++v.readGeneration,current=()=>fence()&&reading===v.readGeneration;
-  const value=await api(`/api/internal/apps/${v.app}/owner-goals${key?"?request_key="+encodeURIComponent(key):""}`);
-  if(!current()||!await appOwnGoalValidate(v,value,key,current)||!current())return false;
-  if(key){const pending=appOwnGoalPending.get(appOwnGoalKey(v));if(pending?.request_key===key){if(value.recovered.request_fingerprint!==await ownerHash(pending))throw Error("原key目标回执不一致");if(!current())return false;appOwnGoalPending.delete(appOwnGoalKey(v));}}
-  v.state=value;$("app-own-goal-proof").textContent=JSON.stringify(value,null,2);$("app-own-goal-status").textContent=`自有目标 ${value.status} · 版本 ${value.head?.version||0} · 签收须新版本下的正常Worker证据；人工声明，语义 UNKNOWN、发布关闭。`;$("app-own-goal-ack").checked=false;appOwnGoalButtons(v);return true;
+  try{
+    const value=await api(`/api/internal/apps/${v.app}/owner-goals${key?"?request_key="+encodeURIComponent(key):""}`);
+    if(!current()||!await appOwnGoalValidate(v,value,key,current)||!current())return false;
+    if(key){const pending=appOwnGoalPending.get(appOwnGoalKey(v));if(pending?.request_key===key){if(value.recovered.request_fingerprint!==await ownerHash(pending))throw Error("原key目标回执不一致");if(!current())return false;appOwnGoalPending.delete(appOwnGoalKey(v));}}
+    v.state=value;$("app-own-goal-proof").textContent=JSON.stringify(value,null,2);$("app-own-goal-status").textContent=`自有目标 ${value.status} · 版本 ${value.head?.version||0} · 签收须新版本下的正常Worker证据；人工声明，语义 UNKNOWN、发布关闭。`;$("app-own-goal-ack").checked=false;appOwnGoalButtons(v);return true;
+  }catch(error){if(!current())return false;throw error;}
 }
-async function openAppOwnGoal(engineeringView){clearAppOwnGoal();if(engineeringView.draft.candidate.task_proof?.proof?.kind!=="authorized_data_free_text_logic.v1")return;const v={engineering:engineeringView,token,project:engineeringView.project,app:engineeringView.app,generation:appOwnGoalGeneration,busy:false,state:null,readGeneration:0};appOwnGoalView=v;$("app-own-goal-panel").hidden=false;const pending=appOwnGoalPending.get(appOwnGoalKey(v));if(pending)$("app-own-goal-key").value=pending.request_key;try{await appOwnGoalRead(v);}catch(e){if(appOwnGoalCurrent(v))$("app-own-goal-status").textContent=e.message;}appOwnGoalButtons(v);}
+async function openAppOwnGoal(engineeringView){
+  clearAppOwnGoal();if(engineeringView.draft.candidate.task_proof?.proof?.kind!=="authorized_data_free_text_logic.v1")return;
+  const v={engineering:engineeringView,token,project:engineeringView.project,app:engineeringView.app,generation:appOwnGoalGeneration,busy:false,state:null,readGeneration:0};appOwnGoalView=v;$("app-own-goal-panel").hidden=false;
+  const pending=appOwnGoalPending.get(appOwnGoalKey(v));if(pending)$("app-own-goal-key").value=pending.request_key;
+  const current=appOwnGoalFence(v),reading=appOwnGoalRead(v),readGeneration=v.readGeneration;
+  try{await reading;}catch(e){if(current()&&readGeneration===v.readGeneration)$("app-own-goal-status").textContent=e.message;}
+  appOwnGoalButtons(v);
+}
 function appOwnGoalBody(v){const fields=Object.fromEntries(appOwnGoalFields.map(f=>[f,["title","goal"].includes(f)?$("app-own-goal-"+f).value:$("app-own-goal-"+f).value.split(/\r?\n/).filter(s=>s.trim())]));const {applicability,...goal}=fields;goal.resource_refs=[v.engineering.draft.candidate.manifest.data_bindings[0].resource_ref];return {expected_candidate_fingerprint:v.engineering.draft.fingerprint,expected_goal_version:v.state.head?.version||0,expected_goal_fingerprint:v.state.head?.fingerprint||null,expected_binding_fingerprint:v.state.binding_fingerprint,goal,applicability,consent:"AUTHOR_THIS_APPLICATION_OWN_GOAL_AND_SCOPE",request_key:crypto.randomUUID().replaceAll("-","")};}
-$("app-own-goal-form").onsubmit=event=>{event.preventDefault();return safe(async()=>{const v=appOwnGoalView;if(!appOwnGoalCurrent(v)||v.busy||appOwnGoalPending.has(appOwnGoalKey(v))||!v.state||!$("app-own-goal-ack").checked)return;const body=appOwnGoalBody(v),current=appOwnGoalFence(v);appOwnGoalPending.set(appOwnGoalKey(v),body);$("app-own-goal-key").value=body.request_key;v.readGeneration++;v.busy=true;appOwnGoalButtons(v);try{await api(`/api/internal/apps/${v.app}/owner-goals`,"POST",body);if(!current())return;await appOwnGoalRead(v,body.request_key);if(current()&&v.engineering.instance)await openOwnerReview(v.engineering);}catch(e){if(e.httpStatus>=400&&e.httpStatus<500&&appOwnGoalPending.get(appOwnGoalKey(v))===body){appOwnGoalPending.delete(appOwnGoalKey(v));v.state=null;}if(current())$("app-own-goal-status").textContent=`操作未确认 ${e.message}；只读原key，不自动重发。`;}finally{v.busy=false;if(appOwnGoalCurrent(v))appOwnGoalButtons(v);}})();};
+$("app-own-goal-form").onsubmit=event=>{event.preventDefault();return safe(async()=>{
+  const v=appOwnGoalView;if(!appOwnGoalCurrent(v)||v.busy||appOwnGoalPending.has(appOwnGoalKey(v))||!v.state||!$("app-own-goal-ack").checked)return;
+  const body=appOwnGoalBody(v),current=appOwnGoalFence(v);appOwnGoalPending.set(appOwnGoalKey(v),body);$("app-own-goal-key").value=body.request_key;v.readGeneration++;v.busy=true;appOwnGoalButtons(v);
+  let readGeneration=null;
+  try{
+    await api(`/api/internal/apps/${v.app}/owner-goals`,"POST",body);if(!current())return;
+    const reading=appOwnGoalRead(v,body.request_key);readGeneration=v.readGeneration;
+    const readBack=await reading;
+    if(readBack&&current()&&readGeneration===v.readGeneration&&v.engineering.instance)await openOwnerReview(v.engineering);
+  }catch(e){
+    if(current()&&(readGeneration===null||readGeneration===v.readGeneration)){
+      // A failed GET cannot establish that the preceding save had no effect.
+      if(readGeneration===null&&e.httpStatus>=400&&e.httpStatus<500&&appOwnGoalPending.get(appOwnGoalKey(v))===body){appOwnGoalPending.delete(appOwnGoalKey(v));v.state=null;}
+      $("app-own-goal-status").textContent=`操作未确认 ${e.message}；只读原key，不自动重发。`;
+    }
+  }finally{v.busy=false;if(appOwnGoalCurrent(v))appOwnGoalButtons(v);}
+})();// no automatic retry
+};
 for(const f of appOwnGoalFields)for(const event of ["input","change"])$("app-own-goal-"+f).addEventListener(event,()=>{appOwnGoalEdit++;ownerEdited();$("app-own-goal-ack").checked=false;$("owner-ack").checked=false;appOwnGoalButtons(appOwnGoalView);});
 for(const id of ["app-own-goal-ack","app-own-goal-key"])$(id).onchange=$(id).oninput=()=>appOwnGoalButtons(appOwnGoalView);
-for(const [id,recover] of [["app-own-goal-read",false],["app-own-goal-recover",true]])$(id).onclick=safe(async()=>{const v=appOwnGoalView;if(!appOwnGoalCurrent(v)||v.busy)return;v.busy=true;appOwnGoalButtons(v);const current=appOwnGoalFence(v);try{await appOwnGoalRead(v,recover?$("app-own-goal-key").value.trim():null);}catch(e){if(current())$("app-own-goal-status").textContent=e.message;}finally{v.busy=false;if(appOwnGoalCurrent(v))appOwnGoalButtons(v);}});
+for(const [id,recover] of [["app-own-goal-read",false],["app-own-goal-recover",true]])$(id).onclick=safe(async()=>{
+  const v=appOwnGoalView;if(!appOwnGoalCurrent(v)||v.busy)return;v.busy=true;appOwnGoalButtons(v);
+  const current=appOwnGoalFence(v),reading=appOwnGoalRead(v,recover?$("app-own-goal-key").value.trim():null),readGeneration=v.readGeneration;
+  try{await reading;}catch(e){if(current()&&readGeneration===v.readGeneration)$("app-own-goal-status").textContent=e.message;}
+  finally{v.busy=false;if(appOwnGoalCurrent(v))appOwnGoalButtons(v);}
+});
