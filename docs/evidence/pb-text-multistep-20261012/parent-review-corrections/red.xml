@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="8.141" timestamp="2026-10-12T18:13:05.566457+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_workflows_ui" name="test_actual_four_step_text_page_cold_extraction[late-open-workspace]" time="4.076"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: stale Open GET cannot install another selected application&#10;      at check (/workspace/Sim2Act/tests/text_workflows_ui.cjs:8:26)&#10;      at /workspace/Sim2Act/tests/text_workflows_ui.cjs:24:775&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fd555a92660&gt;, Settings(database_url='sqlite:////tmp/text-workflow-open-fence-20261012/...6209dbeb7849db8bab4ad855b0e659', 'user_6a6351c353064060abfb216bf92d3ac1', 'proj_bd27346a44b84feaaecc6dbc7d83ddcf', ...)
+tmp_path = PosixPath('/tmp/text-workflow-open-fence-20261012/red-fixtures/test_actual_four_step_text_pag0')
+scenario = 'late-open-workspace'
+
+    @pytest.mark.parametrize("scenario", ["valid", "creation-lost", "run-lost", "false-branch", "late-open-workspace", "late-open-edit"])
+    def test_actual_four_step_text_page_cold_extraction(env, tmp_path, scenario):
+        source, _ = draft(env)
+        release, inst = instance(env, source["id"])
+        source_run = enqueue(env, release, inst)
+        once(env)
+        rid, card = material(env, "Cedar new owner\nQuartz tomorrow\nCedar reserved\n", "md")
+        # Synthetic fixture title only; real page loads the full native saved version.
+        with env[0].tx() as c:
+            saved = c.execute(select(goal_card_versions.c.snapshot).where(goal_card_versions.c.card_id == card["id"])).scalar()
+            saved["content"]["title"] = "Unseen own target four-step goal"
+            c.execute(update(goal_card_versions).where(goal_card_versions.c.card_id == card["id"]).values(snapshot=saved, fingerprint=digest(saved)))
+            c.execute(update(goal_cards).where(goal_cards.c.id == card["id"]).values(title=saved["content"]["title"], fingerprint=digest(saved)))
+        info = dict(project=env[5], source_run=source_run, resource=rid, scenario=scenario,
+            goal_title=saved["content"]["title"], output=str(tmp_path / "page-result.json"))
+        info_path = tmp_path / "info.json"
+        info_path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr_path.open("w") as errors:
+            process = subprocess.Popen(["node", "tests/text_workflows_ui.cjs", str(info_path)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(env[1].database_url, test_only=True)
+                        cold_stores.append(cold)
+                        assert Worker(cold, env[1], NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = env[2].request(request["method"], request["path"],
+                            json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                            content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+&gt;               assert code == 0, stderr_path.read_text()
+E               AssertionError: AssertionError [ERR_ASSERTION]: stale Open GET cannot install another selected application
+E                     at check (/workspace/Sim2Act/tests/text_workflows_ui.cjs:8:26)
+E                     at /workspace/Sim2Act/tests/text_workflows_ui.cjs:24:775
+E                     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 
+E               assert 1 == 0
+
+tests/test_text_workflows_ui.py:63: AssertionError</failure></testcase><testcase classname="tests.test_text_workflows_ui" name="test_actual_four_step_text_page_cold_extraction[late-open-edit]" time="3.959"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: stale Open GET cannot install another selected application&#10;      at check (/workspace/Sim2Act/tests/text_workflows_ui.cjs:8:26)&#10;      at /workspace/Sim2Act/tests/text_workflows_ui.cjs:24:775&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fd554462e70&gt;, Settings(database_url='sqlite:////tmp/text-workflow-open-fence-20261012/...79d5a45e284504a471fc8242af9809', 'user_c59a5d04b8c344f5b4dac7c739c6a387', 'proj_a92b3e2ca753485db14108231eec824b', ...)
+tmp_path = PosixPath('/tmp/text-workflow-open-fence-20261012/red-fixtures/test_actual_four_step_text_pag1')
+scenario = 'late-open-edit'
+
+    @pytest.mark.parametrize("scenario", ["valid", "creation-lost", "run-lost", "false-branch", "late-open-workspace", "late-open-edit"])
+    def test_actual_four_step_text_page_cold_extraction(env, tmp_path, scenario):
+        source, _ = draft(env)
+        release, inst = instance(env, source["id"])
+        source_run = enqueue(env, release, inst)
+        once(env)
+        rid, card = material(env, "Cedar new owner\nQuartz tomorrow\nCedar reserved\n", "md")
+        # Synthetic fixture title only; real page loads the full native saved version.
+        with env[0].tx() as c:
+            saved = c.execute(select(goal_card_versions.c.snapshot).where(goal_card_versions.c.card_id == card["id"])).scalar()
+            saved["content"]["title"] = "Unseen own target four-step goal"
+            c.execute(update(goal_card_versions).where(goal_card_versions.c.card_id == card["id"]).values(snapshot=saved, fingerprint=digest(saved)))
+            c.execute(update(goal_cards).where(goal_cards.c.id == card["id"]).values(title=saved["content"]["title"], fingerprint=digest(saved)))
+        info = dict(project=env[5], source_run=source_run, resource=rid, scenario=scenario,
+            goal_title=saved["content"]["title"], output=str(tmp_path / "page-result.json"))
+        info_path = tmp_path / "info.json"
+        info_path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr_path.open("w") as errors:
+            process = subprocess.Popen(["node", "tests/text_workflows_ui.cjs", str(info_path)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(env[1].database_url, test_only=True)
+                        cold_stores.append(cold)
+                        assert Worker(cold, env[1], NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = env[2].request(request["method"], request["path"],
+                            json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                            content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+&gt;               assert code == 0, stderr_path.read_text()
+E               AssertionError: AssertionError [ERR_ASSERTION]: stale Open GET cannot install another selected application
+E                     at check (/workspace/Sim2Act/tests/text_workflows_ui.cjs:8:26)
+E                     at /workspace/Sim2Act/tests/text_workflows_ui.cjs:24:775
+E                     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 
+E               assert 1 == 0
+
+tests/test_text_workflows_ui.py:63: AssertionError</failure></testcase></testsuite></testsuites>

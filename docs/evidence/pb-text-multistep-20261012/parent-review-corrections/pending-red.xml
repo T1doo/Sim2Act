@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="1.193" timestamp="2026-10-12T18:18:09.290025+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_workflow_pending" name="test_text_workflow_pending_request_identity[late-r1-after-r2]" time="0.597"><failure message="AssertionError: {&quot;scenario&quot;:&quot;late-r1-after-r2&quot;,&quot;status&quot;:&quot;FAIL&quot;,&quot;checks&quot;:{&quot;r2_pending_identity_kept&quot;:false,&quot;r2_original_key_kept&quot;:false,&quot;stale_view_no_readback&quot;:true,&quot;stale_view_no_status&quot;:true,&quot;original_key_get_only&quot;:true,&quot;exact_two_posts&quot;:true,&quot;r2_clears_own_pending&quot;:true,&quot;r2_normal_readback&quot;:true}}&#10;  AssertionError [ERR_ASSERTION]: only the exact pending request may settle its recovery key&#10;  &#10;  'FAIL' !== 'PASS'&#10;  &#10;      at /workspace/Sim2Act/tests/text_workflow_pending.cjs:39:144&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', '/workspace/Sim2Act/tests/text_workflow_pending.cjs', 'late-r1-after-r2', '/workspace/S...ext_workflow_pending.cjs:39:144\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n&quot;).returncode">tmp_path = PosixPath('/tmp/text-workflow-open-fence-20261012/pending-red-fixtures/test_text_workflow_pending_req0')
+scenario = 'late-r1-after-r2'
+
+    @pytest.mark.parametrize("scenario", ["late-r1-after-r2", "normal-r1"])
+    def test_text_workflow_pending_request_identity(tmp_path, scenario):
+        root = Path(__file__).parents[1]
+        source = root / "src/sim2act/web/internal.js"
+        output = tmp_path / "result.json"
+        process = subprocess.run(
+            ["node", str(root / "tests/text_workflow_pending.cjs"), scenario,
+             str(source), str(output)],
+            text=True, capture_output=True, timeout=20,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        evidence = os.environ.get("SIM2ACT_PENDING_EVIDENCE_DIR")
+        if evidence:
+            folder = Path(evidence)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / (scenario + ".log")).write_text(process.stdout + process.stderr)
+            if output.exists():
+                (folder / (scenario + ".json")).write_bytes(output.read_bytes())
+&gt;       assert process.returncode == 0, process.stdout + process.stderr
+E       AssertionError: {"scenario":"late-r1-after-r2","status":"FAIL","checks":{"r2_pending_identity_kept":false,"r2_original_key_kept":false,"stale_view_no_readback":true,"stale_view_no_status":true,"original_key_get_only":true,"exact_two_posts":true,"r2_clears_own_pending":true,"r2_normal_readback":true}}
+E         AssertionError [ERR_ASSERTION]: only the exact pending request may settle its recovery key
+E         
+E         'FAIL' !== 'PASS'
+E         
+E             at /workspace/Sim2Act/tests/text_workflow_pending.cjs:39:144
+E             at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', '/workspace/Sim2Act/tests/text_workflow_pending.cjs', 'late-r1-after-r2', '/workspace/S...ext_workflow_pending.cjs:39:144\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n").returncode
+
+tests/test_text_workflow_pending.py:30: AssertionError</failure></testcase><testcase classname="tests.test_text_workflow_pending" name="test_text_workflow_pending_request_identity[normal-r1]" time="0.514" /></testsuite></testsuites>

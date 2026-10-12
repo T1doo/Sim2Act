@@ -1,0 +1,47 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+________ test_text_workflow_pending_request_identity[late-r1-after-r2] _________
+
+tmp_path = PosixPath('/tmp/text-workflow-open-fence-20261012/pending-red-fixtures/test_text_workflow_pending_req0')
+scenario = 'late-r1-after-r2'
+
+    @pytest.mark.parametrize("scenario", ["late-r1-after-r2", "normal-r1"])
+    def test_text_workflow_pending_request_identity(tmp_path, scenario):
+        root = Path(__file__).parents[1]
+        source = root / "src/sim2act/web/internal.js"
+        output = tmp_path / "result.json"
+        process = subprocess.run(
+            ["node", str(root / "tests/text_workflow_pending.cjs"), scenario,
+             str(source), str(output)],
+            text=True, capture_output=True, timeout=20,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        evidence = os.environ.get("SIM2ACT_PENDING_EVIDENCE_DIR")
+        if evidence:
+            folder = Path(evidence)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / (scenario + ".log")).write_text(process.stdout + process.stderr)
+            if output.exists():
+                (folder / (scenario + ".json")).write_bytes(output.read_bytes())
+>       assert process.returncode == 0, process.stdout + process.stderr
+E       AssertionError: {"scenario":"late-r1-after-r2","status":"FAIL","checks":{"r2_pending_identity_kept":false,"r2_original_key_kept":false,"stale_view_no_readback":true,"stale_view_no_status":true,"original_key_get_only":true,"exact_two_posts":true,"r2_clears_own_pending":true,"r2_normal_readback":true}}
+E         AssertionError [ERR_ASSERTION]: only the exact pending request may settle its recovery key
+E         
+E         'FAIL' !== 'PASS'
+E         
+E             at /workspace/Sim2Act/tests/text_workflow_pending.cjs:39:144
+E             at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', '/workspace/Sim2Act/tests/text_workflow_pending.cjs', 'late-r1-after-r2', '/workspace/S...ext_workflow_pending.cjs:39:144\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n").returncode
+
+tests/test_text_workflow_pending.py:30: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflow_pending.py::test_text_workflow_pending_request_identity[late-r1-after-r2]
+1 failed, 1 passed, 1 warning in 1.20s

@@ -164,11 +164,12 @@ async function submitInternal(view,retry=false) {
   let pending=engineeringPending.get(instance.id);
   if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
+  const requestKey=pending.request_key;
   const generation=view.instanceGeneration;
   $("internal-run-status").textContent="正在提交持久任务…";
   const accepted=view.workflow && retry ? await api(`/api/internal/instances/${instance.id}/text-workflow-run-requests/${encodeURIComponent(pending.request_key)}`) : await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
   if(view.workflow && retry){accepted.run_id=accepted.id;}
-  engineeringPending.delete(instance.id);
+  if(engineeringPending.get(instance.id)===pending && pending.request_key===requestKey)engineeringPending.delete(instance.id);
   if(!engineeringCurrent(view) || generation!==view.instanceGeneration)return;
   $("internal-run-status").textContent=`已接受 ${accepted.run_id}，关闭页面不取消。`;
   await showInternalInstance(instance.id,view);

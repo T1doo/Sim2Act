@@ -15,7 +15,7 @@ from sim2act.db import fingerprint as digest
 from sim2act.worker import Worker
 
 
-@pytest.mark.parametrize("scenario", ["valid", "creation-lost", "run-lost", "false-branch"])
+@pytest.mark.parametrize("scenario", ["valid", "creation-lost", "run-lost", "false-branch", "late-open-workspace", "late-open-edit"])
 def test_actual_four_step_text_page_cold_extraction(env, tmp_path, scenario):
     source, _ = draft(env)
     release, inst = instance(env, source["id"])
@@ -62,7 +62,7 @@ def test_actual_four_step_text_page_cold_extraction(env, tmp_path, scenario):
             errors.flush()
             assert code == 0, stderr_path.read_text()
             proof = json.loads((tmp_path / "page-result.json").read_text())
-            assert proof["status"] == "PASS" and worked == 1
+            assert proof["status"] == "PASS" and worked == (0 if scenario.startswith("late-open-") else 1)
             assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
             for row in proof["static_resource_loads"]:
                 path = Path("src/sim2act/web") / (row["path"].lstrip("/") or "index.html")
