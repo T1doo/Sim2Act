@@ -1,0 +1,819 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_project_index_checks_actual_binding_before_returning_opaque_recovery_item[instance_id] _
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+>           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'app_id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f21ab922180>, Settings(database_url='sqlite:////tmp/pb-cold-author-metadata-fix-first/...79935b533b4d12ae9122298fad662f', 'user_e686b47103a94e4aa583fdf4f805f3be', 'proj_c2ea0041b15440f494e583b3d9d47b05', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-metadata-fix-first/test_project_index_checks_actu0')
+field = 'instance_id'
+
+    @pytest.mark.parametrize("field", ["instance_id", "source_app_id"])
+    def test_project_index_checks_actual_binding_before_returning_opaque_recovery_item(
+        env, tmp_path, field
+    ):
+        from sql_private_barrier import PrivateReadBarrier
+    
+        from sim2act.db import (
+            internal_app_runs,
+            internal_instances,
+            internal_releases,
+            internal_run_bindings,
+        )
+    
+>       values, body = ready(env)
+                       ^^^^^^^^^^
+
+tests/test_registered_text_recovery.py:445: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_registered_text_recovery.py:21: in ready
+    _, body = request(data, url, target)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_registered_text_extraction.py:139: in request
+    prepare_request(data, url, body)
+tests/test_registered_text_extraction.py:144: in prepare_request
+    index = data[2].get(url + "/extraction-requests").json()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1053: in get
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/internal_api.py:368: in extraction_requests
+    return JSONResponse(envelope(**(index(store, user, iid, rid, limits) if request_key is None
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:201: in index
+    source, _ = _source(store, c, user, iid, rid, limits)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:177: in _source
+    pid = _scope(store, c, user, iid, rid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:59: in _scope
+    binding = _actual_binding(c, user, rid)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:71: in _actual_binding
+    internal_releases.c.app_id,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+>           raise AttributeError(key) from err
+E           AttributeError: app_id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError
+_ test_project_index_checks_actual_binding_before_returning_opaque_recovery_item[source_app_id] _
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+>           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'app_id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f21a9f7b740>, Settings(database_url='sqlite:////tmp/pb-cold-author-metadata-fix-first/...49d952d87140659a2e55056d249b40', 'user_10ecd0f8be8b479f9eab05375b2ca1b3', 'proj_48196597cb0540a69998c18e8f4570fe', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-metadata-fix-first/test_project_index_checks_actu1')
+field = 'source_app_id'
+
+    @pytest.mark.parametrize("field", ["instance_id", "source_app_id"])
+    def test_project_index_checks_actual_binding_before_returning_opaque_recovery_item(
+        env, tmp_path, field
+    ):
+        from sql_private_barrier import PrivateReadBarrier
+    
+        from sim2act.db import (
+            internal_app_runs,
+            internal_instances,
+            internal_releases,
+            internal_run_bindings,
+        )
+    
+>       values, body = ready(env)
+                       ^^^^^^^^^^
+
+tests/test_registered_text_recovery.py:445: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_registered_text_recovery.py:21: in ready
+    _, body = request(data, url, target)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_registered_text_extraction.py:139: in request
+    prepare_request(data, url, body)
+tests/test_registered_text_extraction.py:144: in prepare_request
+    index = data[2].get(url + "/extraction-requests").json()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1053: in get
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/internal_api.py:368: in extraction_requests
+    return JSONResponse(envelope(**(index(store, user, iid, rid, limits) if request_key is None
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:201: in index
+    source, _ = _source(store, c, user, iid, rid, limits)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:177: in _source
+    pid = _scope(store, c, user, iid, rid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:59: in _scope
+    binding = _actual_binding(c, user, rid)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:71: in _actual_binding
+    internal_releases.c.app_id,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+>           raise AttributeError(key) from err
+E           AttributeError: app_id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError
+_ test_install_receipt_requires_latest_while_old_committed_history_remains_readable _
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+>           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'app_id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f21a8672030>, Settings(database_url='sqlite:////tmp/pb-cold-author-metadata-fix-first/...856546678642bfa599b051cace85bf', 'user_0135d7105060470ba30c4d82ac1e8eeb', 'proj_d96d4b675ae1481a91b2e7af5e4d22c7', ...)
+
+    def test_install_receipt_requires_latest_while_old_committed_history_remains_readable(env):
+>       values, body = ready(env)
+                       ^^^^^^^^^^
+
+tests/test_registered_text_recovery.py:499: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_registered_text_recovery.py:21: in ready
+    _, body = request(data, url, target)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_registered_text_extraction.py:139: in request
+    prepare_request(data, url, body)
+tests/test_registered_text_extraction.py:144: in prepare_request
+    index = data[2].get(url + "/extraction-requests").json()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1053: in get
+    return self.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/internal_api.py:368: in extraction_requests
+    return JSONResponse(envelope(**(index(store, user, iid, rid, limits) if request_key is None
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:201: in index
+    source, _ = _source(store, c, user, iid, rid, limits)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:177: in _source
+    pid = _scope(store, c, user, iid, rid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:59: in _scope
+    binding = _actual_binding(c, user, rid)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:71: in _actual_binding
+    internal_releases.c.app_id,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+>           raise AttributeError(key) from err
+E           AttributeError: app_id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError
+____ test_text_request_cold_actual_http_new_process[poison-project-source] _____
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+>           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'app_id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f21a95be780>, Settings(database_url='sqlite:////tmp/pb-cold-author-metadata-fix-first/...cb7f1fd6284bbe8aa20e4f21e8a5ef', 'user_22f40e8711e44aaebc47ba2eb4b7d854', 'proj_f5829be9a68a4d01bee71d7313c41d69', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-metadata-fix-first/test_text_request_cold_actual_0')
+scenario = 'poison-project-source'
+
+    @pytest.mark.parametrize("scenario", SCENARIOS)
+    def test_text_request_cold_actual_http_new_process(env, tmp_path, scenario):
+        data, source, _, instance, run, target, resource, url = prepared(env)
+        store, settings, client, *_ = data
+        initial = snapshot(store)
+        info = {
+            "project": data[4],
+            "original_project": data[4],
+            "source": source,
+            "instance": instance["id"],
+            "run": run["id"],
+            "target": target,
+            "resource": resource,
+            "scenario": scenario,
+            "phase": "first",
+            "owner": "A",
+        }
+    
+        def reject_commit(conn, cursor, sql, args, context, many):
+            if sql.startswith("UPDATE registered_extraction_requests"):
+                raise DomainError("VERSION_CONFLICT", "Controlled journal write rollback")
+    
+        if scenario == "rolled-back":
+            event.listen(store.engine, "before_cursor_execute", reject_commit)
+        try:
+>           first, count = page(client, store, settings, info, tmp_path)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_registered_text_recovery_ui.py:180: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_registered_text_recovery_ui.py:108: in page
+    response = client.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/internal_api.py:368: in extraction_requests
+    return JSONResponse(envelope(**(index(store, user, iid, rid, limits) if request_key is None
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:201: in index
+    source, _ = _source(store, c, user, iid, rid, limits)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:177: in _source
+    pid = _scope(store, c, user, iid, rid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:59: in _scope
+    binding = _actual_binding(c, user, rid)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:71: in _actual_binding
+    internal_releases.c.app_id,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+>           raise AttributeError(key) from err
+E           AttributeError: app_id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError
+_________ test_text_request_cold_actual_http_new_process[lost-commit] __________
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+>           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'app_id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f21a9786c30>, Settings(database_url='sqlite:////tmp/pb-cold-author-metadata-fix-first/...776a6150f5420eba8e87115b479fb0', 'user_8381fa99cb2c48b48f6da99429f5688a', 'proj_0bae56081b7f4a4ab6034c144fdb9d3f', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-metadata-fix-first/test_text_request_cold_actual_1')
+scenario = 'lost-commit'
+
+    @pytest.mark.parametrize("scenario", SCENARIOS)
+    def test_text_request_cold_actual_http_new_process(env, tmp_path, scenario):
+        data, source, _, instance, run, target, resource, url = prepared(env)
+        store, settings, client, *_ = data
+        initial = snapshot(store)
+        info = {
+            "project": data[4],
+            "original_project": data[4],
+            "source": source,
+            "instance": instance["id"],
+            "run": run["id"],
+            "target": target,
+            "resource": resource,
+            "scenario": scenario,
+            "phase": "first",
+            "owner": "A",
+        }
+    
+        def reject_commit(conn, cursor, sql, args, context, many):
+            if sql.startswith("UPDATE registered_extraction_requests"):
+                raise DomainError("VERSION_CONFLICT", "Controlled journal write rollback")
+    
+        if scenario == "rolled-back":
+            event.listen(store.engine, "before_cursor_execute", reject_commit)
+        try:
+>           first, count = page(client, store, settings, info, tmp_path)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_registered_text_recovery_ui.py:180: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_registered_text_recovery_ui.py:108: in page
+    response = client.request(
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/internal_api.py:368: in extraction_requests
+    return JSONResponse(envelope(**(index(store, user, iid, rid, limits) if request_key is None
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:201: in index
+    source, _ = _source(store, c, user, iid, rid, limits)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:177: in _source
+    pid = _scope(store, c, user, iid, rid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:59: in _scope
+    binding = _actual_binding(c, user, rid)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/registered_request_recovery.py:71: in _actual_binding
+    internal_releases.c.app_id,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7f21abc8abb0>
+key = 'app_id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+>           raise AttributeError(key) from err
+E           AttributeError: app_id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_registered_text_recovery.py::test_project_index_checks_actual_binding_before_returning_opaque_recovery_item[instance_id]
+FAILED tests/test_registered_text_recovery.py::test_project_index_checks_actual_binding_before_returning_opaque_recovery_item[source_app_id]
+FAILED tests/test_registered_text_recovery.py::test_install_receipt_requires_latest_while_old_committed_history_remains_readable
+FAILED tests/test_registered_text_recovery_ui.py::test_text_request_cold_actual_http_new_process[poison-project-source]
+FAILED tests/test_registered_text_recovery_ui.py::test_text_request_cold_actual_http_new_process[lost-commit]
+5 failed, 1 warning in 19.08s

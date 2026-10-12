@@ -19,7 +19,7 @@ let appReadRecovery = null, appReadBusy = false;
 const appPreviewRequests = new Set();
 const $ = (id) => document.getElementById(id);
 async function api(path, method = "GET", body) {
-  const response = await fetch(path, {method, headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
+  const response = await fetch(path, {method, cache: "no-store", headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
   const data = await response.json();
   const clockHeader=response.headers?.get?.("X-Sim2Act-Server-Time");
   if(clockHeader && data?.natural_deadline && Number.isFinite(Number(clockHeader)))

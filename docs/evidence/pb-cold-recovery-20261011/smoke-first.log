@@ -1,0 +1,562 @@
+.FFF.F                                                                   [100%]
+=================================== FAILURES ===================================
+_________ test_text_request_cold_actual_http_new_process[lost-commit] __________
+
+env = (<sim2act.db.Store object at 0x7fe1ef65ef90>, Settings(database_url='sqlite:////tmp/pb-cold-author-smoke-first/test_te...929dbef0f54a5aa9addffdb9e49f59', 'user_fac7019db0ff464f98f5374aea48e404', 'proj_86eb56ba04d04aad9649cfbebdabaf4c', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_0')
+scenario = 'lost-commit'
+
+    @pytest.mark.parametrize("scenario", SCENARIOS)
+    def test_text_request_cold_actual_http_new_process(env, tmp_path, scenario):
+        data, source, _, instance, run, target, resource, url = prepared(env)
+        store, settings, client, *_ = data
+        initial = snapshot(store)
+        info = {
+            "project": data[4],
+            "original_project": data[4],
+            "source": source,
+            "instance": instance["id"],
+            "run": run["id"],
+            "target": target,
+            "resource": resource,
+            "scenario": scenario,
+            "phase": "first",
+            "owner": "A",
+        }
+    
+        def reject_commit(conn, cursor, sql, args, context, many):
+            if sql.startswith("UPDATE registered_extraction_requests"):
+                raise DomainError("VERSION_CONFLICT", "Controlled journal write rollback")
+    
+        if scenario == "rolled-back":
+            event.listen(store.engine, "before_cursor_execute", reject_commit)
+        try:
+>           first, count = page(client, store, settings, info, tmp_path)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_registered_text_recovery_ui.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7fe1f0a23440>
+store = <sim2act.db.Store object at 0x7fe1ef65ef90>
+settings = Settings(database_url='sqlite:////tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_0/fixture.db', data_dir..., lease_seconds=30, goal_planner_provider='intern-s2', natural_activation_enabled=False, natural_activation_live_id='')
+info = {'instance': 'iinstance_95fa3561fa8026189122d3a5c29b2eee', 'original_project': 'proj_86eb56ba04d04aad9649cfbebdabaf4c', 'output': '/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_0/first-page.json', 'owner': 'A', ...}
+tmp_path = PosixPath('/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_0')
+
+    def page(client, store, settings, info, tmp_path):
+        path = tmp_path / (info["phase"] + "-info.json")
+        info["output"] = str(tmp_path / (info["phase"] + "-page.json"))
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_recovery_ui.cjs", str(path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        worked = 0
+        private_proofs = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold_worker = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold_worker, settings, NoModel()).once()
+                        worked += 1
+                    finally:
+                        cold_worker.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    # The cold revoke discovery/stop path must evaluate no private Run/body cells.
+                    barrier = None
+                    if (
+                        info["phase"] == "cold"
+                        and info["scenario"] == "revoke-source"
+                        and (
+                            request["path"].endswith("/registered-text-requests")
+                            or request["path"].endswith("/extraction-request-close")
+                        )
+                    ):
+                        from sql_private_barrier import PrivateReadBarrier
+    
+                        barrier = PrivateReadBarrier(store, {info["run"]})
+                        with store.tx() as c:
+                            key = c.execute(select(journal.c.request_key)).scalar_one()
+                        barrier.rules["registered_extraction_requests"] = (
+                            journal,
+                            "request_key",
+                            {key},
+                            {"request"},
+                        )
+                        with barrier:
+                            response = client.request(
+                                request["method"],
+                                request["path"],
+                                json=request.get("body"),
+                                headers=request.get("headers"),
+                            )
+                        assert not barrier.blocked and not barrier.evaluated
+                        private_proofs.append(
+                            {
+                                "path": request["path"],
+                                "sql": barrier.statements,
+                                "blocked": barrier.blocked,
+                                "evaluated": barrier.evaluated,
+                            }
+                        )
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                        "cache_control": response.headers.get("cache-control"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_COLD_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                stem = info["scenario"] + "-" + info["phase"]
+                (target / (stem + ".log")).write_text(error)
+                (target / (stem + "-private.json")).write_text(json.dumps(private_proofs, indent=2))
+                if Path(info["output"]).exists():
+                    (target / (stem + ".json")).write_bytes(Path(info["output"]).read_bytes())
+>           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: all actual page API fetches disable HTTP caching
+E                 at check (/workspace/Sim2Act/tests/registered_text_recovery_ui.cjs:8:29)
+E                 at /workspace/Sim2Act/tests/registered_text_recovery_ui.cjs:104:143
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_recovery_ui.py:134: AssertionError
+_______ test_text_request_cold_actual_http_new_process[late-prepare-ABA] _______
+
+env = (<sim2act.db.Store object at 0x7fe1ef5816d0>, Settings(database_url='sqlite:////tmp/pb-cold-author-smoke-first/test_te...17f19077024342b472f447f327c202', 'user_64dd1c7ac8134a808da060df94ee9067', 'proj_aeb8bffaca904cdf91b4e4715db4ff06', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_1')
+scenario = 'late-prepare-ABA'
+
+    @pytest.mark.parametrize("scenario", SCENARIOS)
+    def test_text_request_cold_actual_http_new_process(env, tmp_path, scenario):
+        data, source, _, instance, run, target, resource, url = prepared(env)
+        store, settings, client, *_ = data
+        initial = snapshot(store)
+        info = {
+            "project": data[4],
+            "original_project": data[4],
+            "source": source,
+            "instance": instance["id"],
+            "run": run["id"],
+            "target": target,
+            "resource": resource,
+            "scenario": scenario,
+            "phase": "first",
+            "owner": "A",
+        }
+    
+        def reject_commit(conn, cursor, sql, args, context, many):
+            if sql.startswith("UPDATE registered_extraction_requests"):
+                raise DomainError("VERSION_CONFLICT", "Controlled journal write rollback")
+    
+        if scenario == "rolled-back":
+            event.listen(store.engine, "before_cursor_execute", reject_commit)
+        try:
+>           first, count = page(client, store, settings, info, tmp_path)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_registered_text_recovery_ui.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7fe1eeb8e930>
+store = <sim2act.db.Store object at 0x7fe1ef5816d0>
+settings = Settings(database_url='sqlite:////tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_1/fixture.db', data_dir..., lease_seconds=30, goal_planner_provider='intern-s2', natural_activation_enabled=False, natural_activation_live_id='')
+info = {'instance': 'iinstance_508c2361a37ea235179d65f525427d1c', 'original_project': 'proj_aeb8bffaca904cdf91b4e4715db4ff06', 'output': '/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_1/first-page.json', 'owner': 'A', ...}
+tmp_path = PosixPath('/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_1')
+
+    def page(client, store, settings, info, tmp_path):
+        path = tmp_path / (info["phase"] + "-info.json")
+        info["output"] = str(tmp_path / (info["phase"] + "-page.json"))
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_recovery_ui.cjs", str(path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        worked = 0
+        private_proofs = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold_worker = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold_worker, settings, NoModel()).once()
+                        worked += 1
+                    finally:
+                        cold_worker.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    # The cold revoke discovery/stop path must evaluate no private Run/body cells.
+                    barrier = None
+                    if (
+                        info["phase"] == "cold"
+                        and info["scenario"] == "revoke-source"
+                        and (
+                            request["path"].endswith("/registered-text-requests")
+                            or request["path"].endswith("/extraction-request-close")
+                        )
+                    ):
+                        from sql_private_barrier import PrivateReadBarrier
+    
+                        barrier = PrivateReadBarrier(store, {info["run"]})
+                        with store.tx() as c:
+                            key = c.execute(select(journal.c.request_key)).scalar_one()
+                        barrier.rules["registered_extraction_requests"] = (
+                            journal,
+                            "request_key",
+                            {key},
+                            {"request"},
+                        )
+                        with barrier:
+                            response = client.request(
+                                request["method"],
+                                request["path"],
+                                json=request.get("body"),
+                                headers=request.get("headers"),
+                            )
+                        assert not barrier.blocked and not barrier.evaluated
+                        private_proofs.append(
+                            {
+                                "path": request["path"],
+                                "sql": barrier.statements,
+                                "blocked": barrier.blocked,
+                                "evaluated": barrier.evaluated,
+                            }
+                        )
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                        "cache_control": response.headers.get("cache-control"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_COLD_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                stem = info["scenario"] + "-" + info["phase"]
+                (target / (stem + ".log")).write_text(error)
+                (target / (stem + "-private.json")).write_text(json.dumps(private_proofs, indent=2))
+                if Path(info["output"]).exists():
+                    (target / (stem + ".json")).write_bytes(Path(info["output"]).read_bytes())
+>           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: enabled action registered-extraction-name
+E                 at gesture (/workspace/Sim2Act/tests/registered_text_recovery_ui.cjs:11:129)
+E                 at edit (/workspace/Sim2Act/tests/registered_text_recovery_ui.cjs:13:52)
+E                 at /workspace/Sim2Act/tests/registered_text_recovery_ui.cjs:59:168
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_recovery_ui.py:134: AssertionError
+________ test_text_request_cold_actual_http_new_process[revoke-source] _________
+
+env = (<sim2act.db.Store object at 0x7fe1eea818e0>, Settings(database_url='sqlite:////tmp/pb-cold-author-smoke-first/test_te...adbd9c5ff9488b9247263fff36d347', 'user_05b3eafda46a41e0ac9d9bcba20669bb', 'proj_f76ae36e649644d4aaf63fa798316f73', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_2')
+scenario = 'revoke-source'
+
+    @pytest.mark.parametrize("scenario", SCENARIOS)
+    def test_text_request_cold_actual_http_new_process(env, tmp_path, scenario):
+        data, source, _, instance, run, target, resource, url = prepared(env)
+        store, settings, client, *_ = data
+        initial = snapshot(store)
+        info = {
+            "project": data[4],
+            "original_project": data[4],
+            "source": source,
+            "instance": instance["id"],
+            "run": run["id"],
+            "target": target,
+            "resource": resource,
+            "scenario": scenario,
+            "phase": "first",
+            "owner": "A",
+        }
+    
+        def reject_commit(conn, cursor, sql, args, context, many):
+            if sql.startswith("UPDATE registered_extraction_requests"):
+                raise DomainError("VERSION_CONFLICT", "Controlled journal write rollback")
+    
+        if scenario == "rolled-back":
+            event.listen(store.engine, "before_cursor_execute", reject_commit)
+        try:
+>           first, count = page(client, store, settings, info, tmp_path)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_registered_text_recovery_ui.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = <starlette.testclient.TestClient object at 0x7fe1f0ca3830>
+store = <sim2act.db.Store object at 0x7fe1eea818e0>
+settings = Settings(database_url='sqlite:////tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_2/fixture.db', data_dir..., lease_seconds=30, goal_planner_provider='intern-s2', natural_activation_enabled=False, natural_activation_live_id='')
+info = {'instance': 'iinstance_4b0a979b1a57518bf80cf6fb4f5876d9', 'original_project': 'proj_f76ae36e649644d4aaf63fa798316f73', 'output': '/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_2/first-page.json', 'owner': 'A', ...}
+tmp_path = PosixPath('/tmp/pb-cold-author-smoke-first/test_text_request_cold_actual_2')
+
+    def page(client, store, settings, info, tmp_path):
+        path = tmp_path / (info["phase"] + "-info.json")
+        info["output"] = str(tmp_path / (info["phase"] + "-page.json"))
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_recovery_ui.cjs", str(path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        worked = 0
+        private_proofs = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold_worker = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold_worker, settings, NoModel()).once()
+                        worked += 1
+                    finally:
+                        cold_worker.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    # The cold revoke discovery/stop path must evaluate no private Run/body cells.
+                    barrier = None
+                    if (
+                        info["phase"] == "cold"
+                        and info["scenario"] == "revoke-source"
+                        and (
+                            request["path"].endswith("/registered-text-requests")
+                            or request["path"].endswith("/extraction-request-close")
+                        )
+                    ):
+                        from sql_private_barrier import PrivateReadBarrier
+    
+                        barrier = PrivateReadBarrier(store, {info["run"]})
+                        with store.tx() as c:
+                            key = c.execute(select(journal.c.request_key)).scalar_one()
+                        barrier.rules["registered_extraction_requests"] = (
+                            journal,
+                            "request_key",
+                            {key},
+                            {"request"},
+                        )
+                        with barrier:
+                            response = client.request(
+                                request["method"],
+                                request["path"],
+                                json=request.get("body"),
+                                headers=request.get("headers"),
+                            )
+                        assert not barrier.blocked and not barrier.evaluated
+                        private_proofs.append(
+                            {
+                                "path": request["path"],
+                                "sql": barrier.statements,
+                                "blocked": barrier.blocked,
+                                "evaluated": barrier.evaluated,
+                            }
+                        )
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                        "cache_control": response.headers.get("cache-control"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_COLD_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                stem = info["scenario"] + "-" + info["phase"]
+                (target / (stem + ".log")).write_text(error)
+                (target / (stem + "-private.json")).write_text(json.dumps(private_proofs, indent=2))
+                if Path(info["output"]).exists():
+                    (target / (stem + ".json")).write_bytes(Path(info["output"]).read_bytes())
+>           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: all actual page API fetches disable HTTP caching
+E                 at check (/workspace/Sim2Act/tests/registered_text_recovery_ui.cjs:8:29)
+E                 at /workspace/Sim2Act/tests/registered_text_recovery_ui.cjs:104:143
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_recovery_ui.py:134: AssertionError
+__________ test_registered_text_actual_http_page[wrong-other-key-app] __________
+
+env = (<sim2act.db.Store object at 0x7fe1eecc4bf0>, Settings(database_url='sqlite:////tmp/pb-cold-author-smoke-first/test_re...bf94ce36b04051a51a249e96f8b264', 'user_d908ed320e46483eb94ad3506699af49', 'proj_98225d522b584484ba9b085813454d46', ...)
+tmp_path = PosixPath('/tmp/pb-cold-author-smoke-first/test_registered_text_actual_ht1')
+scenario = 'wrong-other-key-app'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost",
+            "poison",
+            "late-options-edit-undo",
+            "late-post-nav",
+            "late-app-nav",
+            "wrong-existing-app",
+            "candidate-fp",
+            "wrong-other-key-app",
+        ],
+    )
+    def test_registered_text_actual_http_page(env, tmp_path, scenario):
+        data, aid, _, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        poison_app = poison_fingerprint = None
+        if scenario == "wrong-other-key-app":
+            url = f"/api/internal/instances/{instance['id']}/runs/{run['id']}"
+            _, other_body = extraction_request(data, url, target)
+            data[2].post(url + "/extraction-request-close", json={
+                "request_key": other_body["request_key"],
+                "expected_request_fingerprint": data[2].get(url + "/extraction-requests").json()["latest"]["request_fingerprint"],
+                "expected_latest_key": other_body["request_key"],
+            }).raise_for_status()
+            other_body.update(name="Extracted visible text", request_key="other-independent-key")
+            prepare_request(data, url, other_body)
+            other = client.post(url + "/extract", json=other_body)
+            assert other.status_code == 201, other.text
+            poison_app, poison_fingerprint = other.json()["id"], other.json()["candidate_fingerprint"]
+        elif scenario == "wrong-existing-app":
+            poison_app = make_app(data, "third-unrelated-authorized")
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": data[4],
+                    "source": aid,
+                    "instance": instance["id"],
+                    "run": run["id"],
+                    "target": target,
+                    "resource": resource,
+                    "scenario": scenario,
+                    "poison_app": poison_app,
+                    "poison_fingerprint": poison_fingerprint,
+                    "output": str(tmp_path / "result.json"),
+                }
+            )
+        )
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        cold_runs = 0
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold, settings, NoModel()).once()
+                        cold_runs += 1
+                    finally:
+                        cold.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    response = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            exit_code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_PB_EVIDENCE_DIR")
+            if output:
+                destination = Path(output)
+                destination.mkdir(parents=True, exist_ok=True)
+                (destination / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (destination / (scenario + ".json")).write_bytes(
+                        (tmp_path / "result.json").read_bytes()
+                    )
+>           assert exit_code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: variable and unaccepted scope visible before confirmation
+E                 at check (/workspace/Sim2Act/tests/registered_text_ui.cjs:8:29)
+E                 at /workspace/Sim2Act/tests/registered_text_ui.cjs:46:2
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_ui.py:117: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_registered_text_recovery_ui.py::test_text_request_cold_actual_http_new_process[lost-commit]
+FAILED tests/test_registered_text_recovery_ui.py::test_text_request_cold_actual_http_new_process[late-prepare-ABA]
+FAILED tests/test_registered_text_recovery_ui.py::test_text_request_cold_actual_http_new_process[revoke-source]
+FAILED tests/test_registered_text_ui.py::test_registered_text_actual_http_page[wrong-other-key-app]
+4 failed, 2 passed, 1 warning in 39.41s

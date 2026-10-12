@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from test_persistent_app_runs import NoModel
-from test_registered_text_extraction import make_app, prepared
+from test_registered_text_extraction import make_app, prepare_request, prepared
 from test_registered_text_extraction import request as extraction_request
 
 from sim2act.db import Store
@@ -36,7 +36,13 @@ def test_registered_text_actual_http_page(env, tmp_path, scenario):
     if scenario == "wrong-other-key-app":
         url = f"/api/internal/instances/{instance['id']}/runs/{run['id']}"
         _, other_body = extraction_request(data, url, target)
+        data[2].post(url + "/extraction-request-close", json={
+            "request_key": other_body["request_key"],
+            "expected_request_fingerprint": data[2].get(url + "/extraction-requests").json()["latest"]["request_fingerprint"],
+            "expected_latest_key": other_body["request_key"],
+        }).raise_for_status()
         other_body.update(name="Extracted visible text", request_key="other-independent-key")
+        prepare_request(data, url, other_body)
         other = client.post(url + "/extract", json=other_body)
         assert other.status_code == 201, other.text
         poison_app, poison_fingerprint = other.json()["id"], other.json()["candidate_fingerprint"]

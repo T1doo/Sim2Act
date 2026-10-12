@@ -1,6 +1,7 @@
 """Authenticated INTERNAL_ENGINEERING_ONLY adapter; formal deployment stays disabled."""
 
 from fastapi import Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy import select
 
@@ -16,6 +17,7 @@ from .db import (
     runs,
 )
 from .errors import DomainError
+from .registered_request_recovery import CloseRequestInput, PrepareRequestInput
 from .registered_run_extraction import RegisteredExtractionInput
 
 
@@ -350,11 +352,43 @@ def mount(app, store, limits, identity):
         )
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/extraction-receipts")
-    def extraction_receipt(iid: str, rid: str, request_key: str, user=user_dependency):
+    def extraction_receipt(iid: str, rid: str, request_key: str,
+                           require_latest: bool = False, user=user_dependency):
         from .registered_run_extraction import recover
 
         scope_run(user, iid, rid)
-        return envelope(**recover(store, user, iid, rid, request_key, limits))
+        return JSONResponse(envelope(**recover(store, user, iid, rid, request_key, limits,
+                                              require_latest=require_latest)),
+                            headers={"Cache-Control": "no-store", "Vary": "Authorization"})
+
+    @app.get("/api/internal/instances/{iid}/runs/{rid}/extraction-requests")
+    def extraction_requests(iid: str, rid: str, request_key: str | None = None, user=user_dependency):
+        from .registered_request_recovery import index, read
+
+        return JSONResponse(envelope(**(index(store, user, iid, rid, limits) if request_key is None
+                           else read(store, user, iid, rid, request_key, limits))),
+                            headers={"Cache-Control": "no-store", "Vary": "Authorization"})
+
+    @app.get("/api/projects/{pid}/registered-text-requests")
+    def project_extraction_requests(pid: str, user=user_dependency):
+        from .registered_request_recovery import project_index
+
+        return JSONResponse(envelope(**project_index(store, user, pid)),
+                            headers={"Cache-Control": "no-store", "Vary": "Authorization"})
+
+    @app.post("/api/internal/instances/{iid}/runs/{rid}/extraction-requests", status_code=201)
+    def prepare_extraction_request(iid: str, rid: str,
+                                   body: PrepareRequestInput, user=user_dependency):
+        from .registered_request_recovery import prepare
+
+        return envelope(**prepare(store, user, iid, rid, body, limits))
+
+    @app.post("/api/internal/instances/{iid}/runs/{rid}/extraction-request-close")
+    def close_extraction_request(iid: str, rid: str,
+                                 body: CloseRequestInput, user=user_dependency):
+        from .registered_request_recovery import close
+
+        return envelope(**close(store, user, iid, rid, body))
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/control-status")
     def control_status(iid: str, rid: str, user=user_dependency):

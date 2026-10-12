@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="63.665" timestamp="2026-10-11T23:47:55.384169+00:00" hostname="9809f76d2248"><testcase classname="test_project_source_budget" name="test_project64_sources_budget_is_enforced_before65th_prepare" time="63.565"><failure message="AssertionError: 65th actual successful source was allowed to persist; expected budget rejection before write to keep cold project discovery available&#10;assert (201 == 400)&#10; +  where 201 = &lt;Response [201 Created]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f33374d0ad0&gt;, Settings(database_url='sqlite:////tmp/pb-cold-recovery-review-20261011/b...9fbf9185104712b808d9d3164616c7', 'user_316658d738cc488cbadc44aa553ead43', 'proj_d5420ed97fe84af9b1bb30bb3621457b', ...)
+
+    def test_project64_sources_budget_is_enforced_before65th_prepare(env):
+        started = time.monotonic()
+        values = prepared(env)
+        data, source, release, instance, first_run, target, resource, first_url = values
+        store, settings, client, user, project, *_ = data
+        worker = Worker(store, settings, NoModel())
+        project_url = f'/api/projects/{project}/registered-text-requests'
+        records = []
+        stage = 'SETUP'
+        report = {'classification':'ACTUAL_SQLITE_AUTHENTICATED_HTTP_NORMAL_WORKER_65_SUCCEEDED_APPRUNS_SAME_INSTANCE','source_app':source,'instance':instance['id'],'project':project,'target_app':target,'target_resource':resource,'scope':'Synthetic upstream fixture only; repeated literal Worker must use NoModel. No DB row insertion/update, fake Run/journal, runtime limit overrides, new grant, or provider calls by this script.','records':records}
+        final_prepare = None
+        index64 = None
+        index65 = None
+        try:
+            for number in range(1, 66):
+                stage = f'APP_RUN_{number}'
+                if number == 1:
+                    actual = first_run
+                    queued = None
+                else:
+                    queued_response = client.post(
+                        f"/api/internal/instances/{instance['id']}/runs",
+                        json={'expected_revision':instance['revision'],'expected_release_fingerprint':release['fingerprint'],'input':{'term':'Beta'},'request_key':f'independent-budget-run-{number:03d}'},
+                    )
+                    queued = {'status':queued_response.status_code,'body':queued_response.json()}
+                    assert queued_response.status_code == 202, queued_response.text
+                    assert worker.once(), 'Normal Worker did not claim a queued AppRun'
+                    read_response = client.get(f"/api/internal/instances/{instance['id']}/runs/{queued['body']['run_id']}")
+                    assert read_response.status_code == 200, read_response.text
+                    actual = read_response.json()
+                record = {'number':number,'queued':queued,'run_id':actual['id'],'status':actual['status'],'result_version':actual['result_version'],'result':actual['result']}
+                records.append(record)
+                assert actual['status'] == 'SUCCEEDED', actual
+                assert actual['result_version'] == number
+                with store.tx() as c:
+                    record['attempts'] = [dict(r) for r in c.execute(select(attempts).where(attempts.c.run_id==actual['id'])).mappings()]
+                    record['operations'] = [dict(r) for r in c.execute(select(operations).where(operations.c.run_id==actual['id'])).mappings()]
+                    bound = dict(c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id==actual['id'])).mappings().one())
+                    record['binding'] = bound
+                    record['app_run'] = dict(c.execute(select(internal_app_runs).where(internal_app_runs.c.id==bound['app_run_id'])).mappings().one())
+                    typed = [dict(r) for r in c.execute(select(internal_instance_data).where(internal_instance_data.c.run_id==bound['app_run_id'])).mappings()]
+                    record['typed_records'] = typed
+                assert record['attempts'] == [], 'Literal AppRun unexpectedly called a provider'
+                assert record['app_run']['status'] == 'SUCCEEDED'
+                assert record['app_run']['instance_id'] == instance['id']
+                assert len(record['typed_records']) == 1
+                assert len(record['operations']) == 1 and record['operations'][0]['status'] == 'VERIFIED'
+                url = f"/api/internal/instances/{instance['id']}/runs/{actual['id']}"
+                stage = f'OPTIONS_{number}'
+                options = client.get(url+'/extraction-options')
+                assert options.status_code == 200, options.text
+                value = options.json()
+                selected = next(t for t in value['targets'] if t['id']==target)
+                body = {'expected_proof_fingerprint':value['source_proof_fingerprint'],'target_app_id':target,'expected_target_draft_fingerprint':selected['fingerprint'],'name':f'Explicit first request for source {number}','request_key':f'independent-budget-original-{number:03d}','expected_latest_key':None,'expected_latest_candidate_fingerprint':None}
+                record['options'] = value
+                record['prepare_request'] = body
+                with store.tx() as c:
+                    journal_before = [dict(r) for r in c.execute(select(journal)).mappings()]
+                stage = f'PREPARE_{number}'
+                reply = client.post(url+'/extraction-requests',json=body)
+                record['prepare_response'] = {'status':reply.status_code,'body':reply.json()}
+                with store.tx() as c:
+                    journal_after = [dict(r) for r in c.execute(select(journal)).mappings()]
+                record['journal_count_before'] = len(journal_before)
+                record['journal_count_after'] = len(journal_after)
+                record['journal_unchanged'] = journal_before==journal_after
+                if number &lt; 65:
+                    assert reply.status_code == 201, reply.text
+                    assert reply.json()['sequence']==1 and reply.json()['state']=='PREPARED'
+                    assert len(journal_after)==number
+                else:
+                    final_prepare = reply
+                if number in (64,65):
+                    index = client.get(project_url)
+                    record['project_index'] = {'status':index.status_code,'body':index.json(),'cache_control':index.headers.get('cache-control')}
+                    if number == 64:
+                        index64 = index
+                        assert index.status_code==200 and len(index.json()['items'])==64, index.text
+                    else:
+                        index65 = index
+            stage = 'FINAL_BUDGET_ASSERTION'
+            report['succeeded_source_runs'] = len(records)
+            report['distinct_run_ids'] = len({r['run_id'] for r in records})
+            report['source64_index_status'] = index64.status_code
+            report['source65_prepare_status'] = final_prepare.status_code
+            report['source65_index_status'] = index65.status_code
+            report['source65_index_body'] = index65.json()
+&gt;           assert final_prepare.status_code==400 and final_prepare.json()['error']['code']=='BUDGET_EXHAUSTED' and records[-1]['journal_unchanged'], '65th actual successful source was allowed to persist; expected budget rejection before write to keep cold project discovery available'
+E           AssertionError: 65th actual successful source was allowed to persist; expected budget rejection before write to keep cold project discovery available
+E           assert (201 == 400)
+E            +  where 201 = &lt;Response [201 Created]&gt;.status_code
+
+/tmp/pb-cold-recovery-review-20261011/budget-new/test_project_source_budget.py:104: AssertionError</failure></testcase></testsuite></testsuites>

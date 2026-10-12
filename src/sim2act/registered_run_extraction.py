@@ -481,6 +481,11 @@ def extract(
             raise DomainError("VERSION_CONFLICT")
         request = _request(iid, rid, expected_proof_fp, target_app_id, expected_target_fp, name)
         request_fp = fingerprint(request)
+        intent = None
+        if proof["kind"] == TEXT_PROOF:
+            from .registered_request_recovery import guard
+
+            intent = guard(c, user, iid, rid, key, source, request)
         old = (
             c.execute(
                 select(task_extractions).where(
@@ -496,11 +501,19 @@ def extract(
             if old["request_fingerprint"] != request_fp:
                 raise DomainError("VERSION_CONFLICT")
             draft, _, _, _ = load_draft(store, c, user, old["app_id"], limits)
+            if intent is not None:
+                if intent["state"] != "COMMITTED":
+                    raise DomainError("VERSION_CONFLICT")
+                from .registered_request_recovery import committed
+
+                committed(c, intent, draft)
             return {
                 **_result(draft, proof, target, True),
                 "request_key": key,
                 "request_fingerprint": request_fp,
             }
+        if intent is not None and intent["state"] != "PREPARED":
+            raise DomainError("VERSION_CONFLICT")
         candidate = _candidate(
             source, proof, target, extraction_request={**request, "request_key": key}
         )
@@ -533,6 +546,10 @@ def extract(
                 },
             )
         )
+        if intent is not None:
+            from .registered_request_recovery import committed
+
+            committed(c, intent, draft)
         return {
             **_result(draft, proof, target, False),
             "request_key": key,
@@ -540,7 +557,7 @@ def extract(
         }
 
 
-def recover(store, user, iid, rid, key, limits):
+def recover(store, user, iid, rid, key, limits, *, require_latest=False):
     """Read an existing exact-key receipt; never creates or resubmits an extraction."""
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
@@ -570,10 +587,23 @@ def recover(store, user, iid, rid, key, limits):
         if request["instance_id"] != iid:
             raise DomainError("PERMISSION_DENIED")
         target, _ = _target(store, c, user, source, request["target_app_id"], limits)
+        latest = {}
+        if require_latest:
+            if proof["kind"] != TEXT_PROOF:
+                raise DomainError("UNSUPPORTED_CAPABILITY")
+            from .registered_request_recovery import guard
+
+            row = guard(c, user, iid, rid, key, source, request)
+            if (row["state"] != "COMMITTED" or row["app_id"] != draft["id"]
+                    or row["candidate_fingerprint"] != draft["fingerprint"]):
+                raise DomainError("VERSION_CONFLICT")
+            latest = {"latest_verified": True, "latest_request_key": key,
+                      "journal_sequence": row["sequence"]}
         return {
             **_result(draft, proof, target, True),
             "request_key": key,
             "request_fingerprint": old["request_fingerprint"],
+            **latest,
         }
 
 

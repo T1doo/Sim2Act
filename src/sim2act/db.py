@@ -290,6 +290,29 @@ task_extractions = Table(
     Column("app_id", String, unique=True, nullable=False),
     Column("snapshot", JSON, nullable=False),
 )
+# Explicit additive migration only; private original-key identity before text extraction.
+registered_extraction_requests = Table(
+    "registered_extraction_requests",
+    meta,
+    Column("source_run_id", String, primary_key=True),
+    Column("principal_id", String, primary_key=True),
+    Column("request_key", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("instance_id", String, nullable=False),
+    Column("source_app_id", String, nullable=False),
+    Column("target_app_id", String, nullable=False),
+    Column("expected_proof_fingerprint", String, nullable=False),
+    Column("expected_target_draft_fingerprint", String, nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("previous_key", String),
+    Column("request_fingerprint", String, nullable=False),
+    Column("request", JSON, nullable=False),
+    Column("state", String, nullable=False),
+    Column("app_id", String),
+    Column("candidate_fingerprint", String),
+    Column("history", JSON, nullable=False),
+    UniqueConstraint("source_run_id", "principal_id", "sequence"),
+)
 resource_retirements = Table(
     "resource_retirements",
     meta,

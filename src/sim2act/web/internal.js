@@ -313,7 +313,8 @@ function clearRegisteredExtraction() {
   $("registered-extraction-target").replaceChildren();$("registered-extraction-status").textContent="";
   $("registered-extraction-name").value="从成功任务保存的汇总";
   $("registered-extraction-retry").hidden=true;
-  for(const id of ["registered-extraction-target","registered-extraction-name","registered-extraction-retry","registered-extraction-submit"])$(id).disabled=false;
+  $("registered-extraction-new").hidden=true;$("registered-extraction-request-info").textContent="";
+  for(const id of ["registered-extraction-target","registered-extraction-name","registered-extraction-retry","registered-extraction-submit","registered-extraction-new"])$(id).disabled=false;
 }
 function registeredCurrent(state) {
   return registeredExtraction===state && engineeringCurrent(state.view) && state.token===token && state.project===$("project-select").value && state.view.instance?.id===state.iid && state.view.run?.id===state.rid && state.view.run.version===state.version;
@@ -336,10 +337,38 @@ function registeredTextContext(state){
   return context;
 }
 async function registeredHash(value){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");}
+function registeredJournalMeta(state,row){
+  if(!row||row.namespace!=="registered-text-request-identity.v1"||row.principal_id!==state.view.instance.principal_id||row.project_id!==state.project||row.source_app_id!==state.view.app||row.instance_id!==state.iid||row.source_run_id!==state.rid||typeof row.request_key!=="string"||!row.request_key.length||row.request_key.length>100||!Number.isSafeInteger(row.sequence)||row.sequence<1||row.sequence>64||!['PREPARED','COMMITTED','CLOSED'].includes(row.state)||!['request_fingerprint','expected_proof_fingerprint','expected_target_draft_fingerprint'].every(k=>/^[a-f0-9]{64}$/.test(row[k]))||!/^app_[a-f0-9]{32}$/.test(row.target_app_id)||(row.state==='COMMITTED'&&(!/^app_[a-f0-9]{32}$/.test(row.app_id)||!/^[a-f0-9]{64}$/.test(row.candidate_fingerprint)))||(row.state!=='COMMITTED'&&(row.app_id!==null||row.candidate_fingerprint!==null)))throw Error('VERSION_CONFLICT');
+  return row;
+}
+async function registeredJournalRequest(state,meta,record,current){
+  registeredJournalMeta(state,record);
+  if(goalRunCanonical(Object.fromEntries(Object.entries(record).filter(([k])=>!['request','latest_key','formal_publication_enabled'].includes(k))))!==goalRunCanonical(Object.fromEntries(Object.entries(meta).filter(([k])=>k!=='formal_publication_enabled'))))throw Error('VERSION_CONFLICT');
+  const request=record.request,{request_key,...body}=request||{};
+  const digest=await registeredHash(body);
+  if(!current())return null;
+  const target=state.options.targets.find(t=>t.id===record.target_app_id);
+  if(!target||record.latest_key!==record.request_key||request_key!==record.request_key||digest!==record.request_fingerprint||body.instance_id!==state.iid||body.source_run_id!==state.rid||body.expected_proof_fingerprint!==state.options.source_proof_fingerprint||body.expected_proof_fingerprint!==record.expected_proof_fingerprint||body.target_app_id!==record.target_app_id||body.expected_target_draft_fingerprint!==target.fingerprint||body.expected_target_draft_fingerprint!==record.expected_target_draft_fingerprint||typeof body.name!=='string'||!body.name.trim()||goalRunCanonical(Object.keys(body).sort())!==goalRunCanonical(['instance_id','source_run_id','expected_proof_fingerprint','target_app_id','expected_target_draft_fingerprint','name'].sort()))throw Error('VERSION_CONFLICT');
+  const {instance_id,source_run_id,...pending}=request;
+  return pending;
+}
+function registeredJournalControls(state){
+  const latest=state.latest,pending=state.pending;
+  const blocked=!!pending||!!latest&&latest.state!=='CLOSED'&&!state.newReady;
+  $("registered-extraction-request-info").textContent=latest?`原请求 ${latest.request_key} · 序列 ${latest.sequence} · ${latest.state} · 指纹 ${latest.request_fingerprint}。先只读核对；未知结果不自动重发。`:"尚无持久请求。保存前会先记录此精确请求身份。";
+  $("registered-extraction-retry").hidden=!blocked;
+  $("registered-extraction-submit").disabled=state.busy||!state.discovered||blocked||!registeredBody(state)?.name.trim();
+  $("registered-extraction-new").hidden=!latest||latest.state==='CLOSED'||state.newReady;
+  $("registered-extraction-new").disabled=state.busy;
+  $("registered-extraction-new").textContent=latest?.state==='PREPARED'?"明确结束未受理的原请求":"核对原请求后开始另一次明确提取";
+}
 async function registeredTextReceipt(state,pending,saved,current){
-  const target=state.options.targets.find(t=>t.id===pending.target_app_id);
   const {request_key,...body}=pending;
   const digest=await registeredHash({instance_id:state.iid,source_run_id:state.rid,...body});
+  return registeredTextReceiptMatches(state,pending,saved,digest,current);
+}
+function registeredTextReceiptMatches(state,pending,saved,digest,current){
+  const target=state.options.targets.find(t=>t.id===pending.target_app_id),request_key=pending.request_key;
   if(!current())return false;
   if(!saved||!/^app_[a-f0-9]{32}$/.test(saved.id)||!/^[a-f0-9]{64}$/.test(saved.candidate_fingerprint)||[state.view.app,target.id].includes(saved.id)||saved.instance_id!==state.iid||saved.source_run_id!==state.rid||saved.project_id!==state.project||saved.principal_id!==state.view.instance.principal_id||saved.request_key!==request_key||saved.request_fingerprint!==digest||saved.source_proof_fingerprint!==pending.expected_proof_fingerprint||saved.target_resource_hash!==target.source_hash||saved.authorization_domain!==target.runtime_id||saved.generator!=="TRUSTED_REGISTERED_TEXT_FROM_APPRUN.v1"||saved.state!=="PREVIEW_ONLY"||saved.publishable!==false||saved.formal_publication_enabled!==false||saved.model_requests!==0||saved.semantic_goal_acceptance!=="NOT_RUN"||saved.technical_semantic_status!=="UNKNOWN"||saved.owner_acceptance!=="PENDING"||typeof saved.cached!=="boolean")throw Error("VERSION_CONFLICT");
   return true;
@@ -350,6 +379,12 @@ async function registeredTextCandidate(state,pending,saved,candidate,current){
   const digest=await registeredHash(value);
   if(!current())return;
   if(candidate.id!==saved.id||candidate.project_id!==state.project||candidate.runtime_id!==target.runtime_id||candidate.name!==pending.name||candidate.fingerprint!==saved.candidate_fingerprint||digest!==saved.candidate_fingerprint||value?.manifest?.app_id!==saved.id||value.manifest.origin!=="task_run"||value.manifest.source_run_ref!==state.rid||value.goal_application||value.source_hash!==target.source_hash||value.manifest.data_bindings?.length!==1||value.manifest.data_bindings[0].resource_ref!==target.resource_id||marker?.generator!==saved.generator||marker.proof_fingerprint!==pending.expected_proof_fingerprint||goalRunCanonical(marker.proof)!==goalRunCanonical(state.options.proof)||goalRunCanonical(marker.target)!==goalRunCanonical(expectedTarget)||goalRunCanonical(marker.extraction_request)!==goalRunCanonical({instance_id:state.iid,source_run_id:state.rid,...pending}))throw Error("VERSION_CONFLICT");
+  const {request_key,...body}=pending;
+  const requestDigest=await registeredHash({instance_id:state.iid,source_run_id:state.rid,...body});
+  if(!current())return;
+  const fresh=await api(`/api/internal/instances/${state.iid}/runs/${state.rid}/extraction-receipts?request_key=${encodeURIComponent(pending.request_key)}&require_latest=true`);
+  if(!registeredTextReceiptMatches(state,pending,fresh,requestDigest,current))return;
+  if(fresh.latest_verified!==true||fresh.latest_request_key!==pending.request_key||fresh.journal_sequence!==saved.journal_sequence||fresh.id!==saved.id||fresh.candidate_fingerprint!==saved.candidate_fingerprint)throw Error('VERSION_CONFLICT');
 }
 function registeredSelectionChanged() {
   const state=registeredExtraction;if(!state || !registeredCurrent(state))return;
@@ -357,6 +392,7 @@ function registeredSelectionChanged() {
   $("registered-extraction-target-info").textContent=target ? `材料 ${target.resource_id} · hash ${target.source_hash || target.hash} · 沿用授权域 ${target.runtime_id}；共享授权撤回同时影响此草案。` : "";
   $("registered-extraction-retry").hidden=!body || !registeredExtractionRequests.has(registeredKey(state,body));
   $("registered-extraction-submit").disabled=state.busy || !body || !body.name.trim() || (state.view.literal&&registeredExtractionRequests.has(registeredKey(state,body)));
+  if(state.view.literal)registeredJournalControls(state);
 }
 $("registered-extraction-target").onchange=registeredSelectionChanged;
 $("registered-extraction-name").oninput=registeredSelectionChanged;
@@ -375,16 +411,26 @@ $("registered-extraction-open").onclick=safe(async()=>{
     state.options=options;$("registered-extraction-proof").textContent=JSON.stringify({proof:options.proof,proof_fingerprint:options.source_proof_fingerprint || options.proof_fingerprint},null,2);
     $("registered-extraction-target").replaceChildren(new Option(state.view.literal?"请选择已有授权的新 TXT/MD 应用":"请选择已有授权的新 CSV 应用",""),...options.targets.map(t=>new Option(t.name,t.id)));
     $("registered-extraction-form").hidden=false;$("registered-extraction-status").textContent=state.view.literal?"来源已核查。选择不同 TXT/MD 的既有授权域；term 为运行变量，owner PENDING，语义 UNKNOWN。":"来源已核查。选择不同 CSV 的既有授权域；不会自动创建权限。";
+    if(state.view.literal){
+      const index=await api(`/api/internal/instances/${state.iid}/runs/${state.rid}/extraction-requests`);
+      if(!current())return;
+      if(index.namespace!=="registered-text-request-identity.v1"||!Array.isArray(index.items)||index.items.length>64||goalRunCanonical(index.latest)!==goalRunCanonical(index.items.at(-1)||null))throw Error('VERSION_CONFLICT');
+      index.items.forEach((row,i)=>{registeredJournalMeta(state,row);if(row.sequence!==i+1||row.previous_key!==(i?index.items[i-1].request_key:null))throw Error('VERSION_CONFLICT');});
+      state.latest=index.latest;state.newReady=false;state.discovered=true;
+      if(!state.latest){for(const [key,value] of registeredExtractionRequests){const scope=JSON.parse(key);if(scope[0]===state.token&&scope[1]===state.project&&scope[2]===state.iid&&scope[3]===state.rid&&scope[4]===state.version){state.pending=value;break;}}}
+      if(state.latest&&state.latest.state!=='CLOSED')$("registered-extraction-status").textContent="找到持久原请求身份。请只读核对原 key；未确定结果前不能重复保存。term 为变量，owner PENDING，语义 UNKNOWN。";
+    }
   }catch(error){if(current()){if(["GRANT_REVOKED","PERMISSION_DENIED","VERSION_CONFLICT"].includes(error.message)){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else $("registered-extraction-status").textContent=error.detail || error.message;}}
   finally {state.busy=false;if(registeredCurrent(state)){$("registered-extraction-open").disabled=false;registeredSelectionChanged();}}
 });
 async function submitRegisteredExtraction(retry=false) {
   const state=registeredExtraction;if(!state || !registeredCurrent(state) || state.busy)return;
-  const body=registeredBody(state);if(!body || !body.name.trim())return;
-  const key=registeredKey(state,body);let pending=registeredExtractionRequests.get(key);
+  const body=registeredBody(state);if((!body || !body.name.trim())&&!(state.view.literal&&retry))return;
+  let key=body?registeredKey(state,body):null,pending=state.view.literal?(state.newReady?null:state.pending||registeredExtractionRequests.get(key)):registeredExtractionRequests.get(key);
+  if(state.view.literal&&!retry&&(!state.discovered||$("registered-extraction-submit").disabled))return;
   if(!pending && !retry){pending={...body,request_key:crypto.randomUUID()};registeredExtractionRequests.set(key,pending);}
-  if(!pending)return;
-  if(state.view.literal&&!retry&&$("registered-extraction-submit").disabled)return;
+  if(!pending&&!(state.view.literal&&retry&&state.latest))return;
+  if(state.view.literal&&pending)state.pending=pending;
   const context=state.view.literal?registeredTextContext(state):null;
   const current=()=>context?context.current():registeredCurrent(state) && registeredKey(state,registeredBody(state))===key;
   state.busy=true;$("registered-extraction-submit").disabled=true;$("registered-extraction-retry").disabled=true;$("registered-extraction-target").disabled=true;$("registered-extraction-name").disabled=true;
@@ -394,10 +440,31 @@ async function submitRegisteredExtraction(retry=false) {
     const base=`/api/internal/instances/${state.iid}/runs/${state.rid}`;
     if(state.view.literal){
       let hint=null;
-      if(!retry){hint=await api(base+"/extract","POST",pending);if(!await registeredTextReceipt(state,pending,hint,current))return;}
-      const saved=await api(base+`/extraction-receipts?request_key=${encodeURIComponent(pending.request_key)}`);
+      if(!retry){
+        const prepared=await api(base+'/extraction-requests','POST',{...pending,expected_latest_key:state.latest?.request_key||null,expected_latest_candidate_fingerprint:state.newReady&&state.latest?.state==='COMMITTED'?state.latest.candidate_fingerprint:null});
+        if(!current())return;registeredJournalMeta(state,prepared);
+        const {request_key,...fields}=pending,digest=await registeredHash({instance_id:state.iid,source_run_id:state.rid,...fields});
+        if(!current())return;
+        if(prepared.request_key!==request_key||prepared.request_fingerprint!==digest||prepared.state!=='PREPARED')throw Error('VERSION_CONFLICT');
+        state.latest=prepared;state.newReady=false;
+        hint=await api(base+"/extract","POST",pending);if(!await registeredTextReceipt(state,pending,hint,current))return;
+      }
+      const originalKey=pending?.request_key||state.latest.request_key;
+      const record=await api(base+`/extraction-requests?request_key=${encodeURIComponent(originalKey)}`);
+      if(!current())return;
+      registeredJournalMeta(state,record);
+      if(record.request_key!==originalKey||(state.latest&&state.latest.request_key===originalKey&&record.request_fingerprint!==state.latest.request_fingerprint))throw Error('VERSION_CONFLICT');
+      if(pending){const {request_key,...known}=pending,knownHash=await registeredHash({instance_id:state.iid,source_run_id:state.rid,...known});if(!current())return;if(record.request_fingerprint!==knownHash)throw Error('VERSION_CONFLICT');}
+      const meta=Object.fromEntries(Object.entries(record).filter(([k])=>!['request','latest_key'].includes(k)));
+      pending=await registeredJournalRequest(state,meta,record,current);if(!pending)return;
+      key=registeredKey(state,registeredBody(state)||pending);state.pending=pending;registeredExtractionRequests.set(key,pending);state.latest=meta;
+      if(record.state!=='COMMITTED'){
+        $("registered-extraction-status").textContent=record.state==='CLOSED'?"原请求已明确关闭，不得重发；下一次明确保存使用新身份。":"原请求已准备但提交结果尚未确定。保留原 key，只读核对或明确结束未受理请求；不会自动重发。";
+        if(record.state==='CLOSED'){state.pending=null;registeredExtractionRequests.delete(key);}return;
+      }
+      const saved=await api(base+`/extraction-receipts?request_key=${encodeURIComponent(pending.request_key)}&require_latest=true`);
       if(!await registeredTextReceipt(state,pending,saved,current))return;
-      if(hint&&saved.id!==hint.id)throw Error("VERSION_CONFLICT");
+      if(saved.latest_verified!==true||saved.latest_request_key!==originalKey||saved.journal_sequence!==record.sequence||(hint&&saved.id!==hint.id)||saved.id!==record.app_id||saved.candidate_fingerprint!==record.candidate_fingerprint)throw Error("VERSION_CONFLICT");
       made=saved;
     }else made=await api(base+"/extract","POST",pending);
     if(!current())return;
@@ -405,6 +472,7 @@ async function submitRegisteredExtraction(retry=false) {
     await refreshApps();if(!current())return;
     if(await showApp(made.id,state.project,g=>{readGeneration=g;if(context){context.app=g;context.handoff=true;}},context?current:()=>true,context?a=>registeredTextCandidate(state,pending,made,a,current):null)&&(!context||current())){
       selectWorkspace("apps");registeredExtractionRequests.delete(key);
+      if(state.view.literal){state.pending=null;for(const [entry,value] of registeredExtractionRequests)if(value.request_key===pending.request_key)registeredExtractionRequests.delete(entry);}
       if(state.view.literal){$("app-create-status").textContent=`已只读核对独立应用 ${made.id} · owner PENDING · 语义 UNKNOWN · 未发布`;$("app-agent-term").focus();}
     }
   }catch(error){if(made && readGeneration===appSelectionGeneration && state.token===token && state.project===$("project-select").value && readGoalGeneration===goalSelectionGeneration&&(!context||current())){selectWorkspace("apps");if(context){$("app-create-status").dataset.state="error";$("app-create-status").textContent=`独立应用未通过回执与候选核对：${error.detail || error.message}。请重开来源任务，用原请求键恢复；不会自动重发。`;}else{setAppReadFailure({id:made.id,pid:state.project,kind:"created",goalGeneration:readGoalGeneration},error);registeredExtractionRequests.delete(key);}}else if(current()){if(["GRANT_REVOKED","PERMISSION_DENIED"].includes(error.message)||(!state.view.literal&&error.message==="VERSION_CONFLICT")){clearRegisteredExtraction();engineeringStatus(state.view,error.message,"error");}else {$("registered-extraction-status").textContent=`生成回执或草案回读未确认：${error.detail || error.message}。可用原请求键手动恢复；不会自动重发。`;$("registered-extraction-retry").hidden=false;}}}
@@ -412,3 +480,82 @@ async function submitRegisteredExtraction(retry=false) {
 }
 $("registered-extraction-form").onsubmit=event=>{event.preventDefault();return safe(()=>submitRegisteredExtraction())();};
 $("registered-extraction-retry").onclick=safe(()=>submitRegisteredExtraction(true));
+$("registered-extraction-new").onclick=safe(async()=>{
+  const state=registeredExtraction;if(!state?.view.literal||!registeredCurrent(state)||state.busy||!state.latest)return;
+  const context=registeredTextContext(state),current=()=>context.current(),latest=state.latest;
+  state.busy=true;registeredSelectionChanged();
+  try{
+    const base=`/api/internal/instances/${state.iid}/runs/${state.rid}`;
+    if(latest.state==='PREPARED'){
+      const closed=await api(base+'/extraction-request-close','POST',{request_key:latest.request_key,expected_request_fingerprint:latest.request_fingerprint,expected_latest_key:latest.request_key});
+      if(!current())return;registeredJournalMeta(state,closed);
+      if(closed.request_key!==latest.request_key||closed.request_fingerprint!==latest.request_fingerprint)throw Error('VERSION_CONFLICT');
+      state.latest=closed;state.pending=null;
+      for(const [key,value] of registeredExtractionRequests)if(value.request_key===latest.request_key)registeredExtractionRequests.delete(key);
+      if(closed.state!=='CLOSED'){$("registered-extraction-status").textContent="原请求已经提交。请先用原 key 只读核对，不得将它关闭或重复安装。";return;}
+    }else{
+      const record=await api(base+`/extraction-requests?request_key=${encodeURIComponent(latest.request_key)}`);
+      if(!current())return;const pending=await registeredJournalRequest(state,latest,record,current);if(!pending)return;
+      const saved=await api(base+`/extraction-receipts?request_key=${encodeURIComponent(latest.request_key)}&require_latest=true`);
+      if(!await registeredTextReceipt(state,pending,saved,current))return;
+      if(saved.latest_verified!==true||saved.latest_request_key!==latest.request_key||saved.journal_sequence!==latest.sequence||saved.id!==latest.app_id||saved.candidate_fingerprint!==latest.candidate_fingerprint)throw Error('VERSION_CONFLICT');
+      const candidate=await api(`/api/apps/${saved.id}`);if(!current())return;
+      await registeredTextCandidate(state,pending,saved,candidate,current);if(!current())return;
+      state.pending=null;
+    }
+    for(const [entry,value] of registeredExtractionRequests)if(value.request_key===latest.request_key)registeredExtractionRequests.delete(entry);
+    state.newReady=true;$("registered-extraction-status").textContent="已核对前序请求。下一次手动保存是新的明确请求，使用新 key；term 为变量，owner PENDING，语义 UNKNOWN；原历史保留。";
+  }catch(error){if(current())$("registered-extraction-status").textContent=`无法确定原请求状态：${error.detail||error.message}。保留原 key，阻止重复保存。`;}
+  finally{state.busy=false;if(registeredCurrent(state))registeredSelectionChanged();}
+});
+
+let registeredRecoveryGeneration=0;
+function clearRegisteredRecoveries(){registeredRecoveryGeneration++;$("registered-recovery-list").replaceChildren();$("registered-recovery-status").textContent="";}
+$("project-select").addEventListener('change',clearRegisteredRecoveries);
+$("connect").addEventListener('click',clearRegisteredRecoveries);
+function registeredRecoveryContext(){
+  const ctx={token,project:$("project-select").value,connection:identityConnectionGeneration,workspace:workspaceSelectionGeneration,app:appSelectionGeneration,goal:goalSelectionGeneration,generation:registeredRecoveryGeneration};
+  ctx.current=()=>ctx.token===token&&ctx.project===$("project-select").value&&ctx.connection===identityConnectionGeneration&&ctx.workspace===workspaceSelectionGeneration&&ctx.app===appSelectionGeneration&&ctx.goal===goalSelectionGeneration&&ctx.generation===registeredRecoveryGeneration;
+  return ctx;
+}
+$("registered-recovery-refresh").onclick=safe(async()=>{
+  const ctx=registeredRecoveryContext();registeredRecoveryGeneration++;ctx.generation=registeredRecoveryGeneration;
+  $("registered-recovery-list").replaceChildren();$("registered-recovery-status").textContent="正在只读发现本项目的原请求身份…";
+  try{
+    const index=await api(`/api/projects/${ctx.project}/registered-text-requests`);if(!ctx.current())return;
+    if(index.namespace!=='registered-text-request-identity.v1'||index.project_id!==ctx.project||typeof index.principal_id!=='string'||!Array.isArray(index.items)||index.items.length>64)throw Error('VERSION_CONFLICT');
+    const elements=index.items.map(item=>{
+      const fake={view:{app:item.source_app_id,instance:{principal_id:index.principal_id}},project:ctx.project,iid:item.instance_id,rid:item.source_run_id};registeredJournalMeta(fake,item);
+      const entry=document.createElement('div'),label=document.createElement('p'),open=document.createElement('button'),close=document.createElement('button');
+      label.textContent=`原请求 ${item.request_key} · ${item.state} · 序列 ${item.sequence} · 来源 ${item.source_app_id}/${item.instance_id}/${item.source_run_id}`;
+      open.type=close.type='button';open.textContent="重新核查来源并打开原 key 恢复入口";close.textContent="明确结束未受理的原请求";close.disabled=item.state!=='PREPARED';
+      open.onclick=safe(async()=>{
+        const reading=registeredRecoveryContext();
+        if(reading.project!==ctx.project||reading.token!==ctx.token||reading.connection!==ctx.connection||reading.generation!==ctx.generation)return;
+        try{
+          const scoped=await api(`/api/internal/instances/${item.instance_id}/runs/${item.source_run_id}/extraction-requests`);
+          if(!reading.current())return;
+          if(scoped.namespace!=='registered-text-request-identity.v1'||!scoped.latest)throw Error('VERSION_CONFLICT');
+          for(const field of ['principal_id','project_id','source_app_id','instance_id','source_run_id','request_key','sequence','previous_key','request_fingerprint','target_app_id','expected_proof_fingerprint','expected_target_draft_fingerprint'])if(scoped.latest[field]!==item[field])throw Error('VERSION_CONFLICT');
+          if(!await showApp(item.source_app_id,ctx.project,g=>reading.app=g,reading.current))return;
+          if(!reading.current())return;const view=engineering;
+          await showInternalInstance(item.instance_id,view);if(!reading.current()||!view.instance)return;
+          await showInternalRun(item.source_run_id,view,view.instance);if(!reading.current())return;
+          $("registered-recovery-status").textContent="来源重新读取。打开任务提取入口后，用原 key 只读核对；不会自动重发。";
+        }catch(error){if(reading.current())$("registered-recovery-status").textContent=`当前权限或来源不允许恢复：${error.detail||error.message}。原身份保留，不会重发；未受理请求仍可明确结束。`;}
+      });
+      close.onclick=safe(async()=>{
+        const closing=registeredRecoveryContext();if(closing.project!==ctx.project||closing.token!==ctx.token||closing.connection!==ctx.connection||closing.generation!==ctx.generation)return;
+        close.disabled=true;
+        try{
+          const result=await api(`/api/internal/instances/${item.instance_id}/runs/${item.source_run_id}/extraction-request-close`,'POST',{request_key:item.request_key,expected_request_fingerprint:item.request_fingerprint,expected_latest_key:item.request_key});
+          if(!closing.current())return;registeredJournalMeta(fake,result);
+          if(result.request_key!==item.request_key||result.request_fingerprint!==item.request_fingerprint)throw Error('VERSION_CONFLICT');
+          label.textContent=`原请求 ${result.request_key} · ${result.state} · 序列 ${result.sequence}`;
+          $("registered-recovery-status").textContent=result.state==='CLOSED'?"原请求已明确关闭。迟到的原提取将拒绝；历史身份保留。":"原请求已提交，不能关闭。请在当前授权允许时按原 key 只读核对。";
+        }catch(error){if(closing.current()){$("registered-recovery-status").textContent=`无法结束原请求：${error.detail||error.message}。原 key 保留。`;close.disabled=false;}}
+      });entry.append(label,open,close);return entry;
+    });
+    $("registered-recovery-list").replaceChildren(...elements);$("registered-recovery-status").textContent=elements.length?"仅显示受保护请求身份元数据。正文仍须当前权限；恢复不重发。":"本项目尚无本协议的持久请求。";
+  }catch(error){if(ctx.current())$("registered-recovery-status").textContent=`无法发现原请求：${error.detail||error.message}。先核对，不自动提交。`;}
+});

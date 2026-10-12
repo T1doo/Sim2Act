@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.209" timestamp="2026-10-11T22:31:15.533459+00:00" hostname="9809f76d2248"><testcase classname="tests.test_registered_text_recovery" name="test_prepared_original_request_is_discovered_by_cold_authenticated_get" time="2.138"><failure message="AssertionError: {&quot;detail&quot;:&quot;Not Found&quot;}&#10;assert 404 == 201&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f97bf31e330&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-30/test_pre...613ad769f24943acf81aab288a223e', 'user_2abff732098442049a68ea37047dabb9', 'proj_a44e1c8331f2436c9794e8b9b466ec45', ...)
+
+    def test_prepared_original_request_is_discovered_by_cold_authenticated_get(env):
+        data, _, _, instance, run, target, _, url = prepared(env)
+        _, body = request(data, url, target)
+        response = data[2].post(
+            url + "/extraction-requests",
+            json={**body, "expected_latest_key": None, "expected_latest_candidate_fingerprint": None},
+        )
+&gt;       assert response.status_code == 201, response.text
+E       AssertionError: {"detail":"Not Found"}
+E       assert 404 == 201
+E        +  where 404 = &lt;Response [404 Not Found]&gt;.status_code
+
+tests/test_registered_text_recovery.py:17: AssertionError</failure></testcase></testsuite></testsuites>

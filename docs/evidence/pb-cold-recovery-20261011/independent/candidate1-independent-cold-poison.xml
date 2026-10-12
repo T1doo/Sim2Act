@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="8.286" timestamp="2026-10-11T23:01:24.564641+00:00" hostname="9809f76d2248"><testcase classname="test_poison_project_source" name="test_cold_project_metadata_source_matches_actual_owned_run_before_install" time="8.222"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: misbound project recovery metadata must not install unrelated authorized target as the source preview&#10;      at check (/tmp/pb-cold-recovery-review-20261011/poison_project_source.cjs:8:29)&#10;      at /tmp/pb-cold-recovery-review-20261011/poison_project_source.cjs:66:3&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f123cd217f0&gt;, Settings(database_url='sqlite:////tmp/pb-cold-recovery-review-20261011/c...b6aa6e90804b288c7472323b4f2aeb', 'user_8bd263e69de84d81806ac7a88802ac8c', 'proj_b7af3a27a53240d5ac163d12c985efbf', ...)
+tmp_path = PosixPath('/tmp/pb-cold-recovery-review-20261011/candidate1-independent-cold-poison-db/test_cold_project_metadata_sou0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f123c6b50a0&gt;
+
+    def test_cold_project_metadata_source_matches_actual_owned_run_before_install(env,tmp_path,monkeypatch):
+        data,source,_,instance,run,target,resource,_=prepared(env)
+        info={'project':data[4],'original_project':data[4],'source':source,'instance':instance['id'],'run':run['id'],'target':target,'resource':resource,'scenario':'poison-project-source','phase':'first','owner':'A'}
+        original=subprocess.Popen
+        def start(args,*a,**kw):
+            if args[:2]==['node','tests/registered_text_recovery_ui.cjs']:args=[args[0],str(OUT/'poison_project_source.cjs'),*args[2:]]
+            return original(args,*a,**kw)
+        monkeypatch.setattr(subprocess,'Popen',start);monkeypatch.setenv('SIM2ACT_COLD_EVIDENCE_DIR',str(OUT/'candidate1-independent-cold-pages'))
+        first,worked=page(data[2],data[0],data[1],info,tmp_path);assert worked==0
+        with data[0].tx() as c:c.execute(update(journal).values(source_app_id=target))
+        data[2].close();cold=Store(data[1].database_url,test_only=True)
+        try:
+            with TestClient(create_app(cold,data[1])) as client:
+&gt;               info['phase']='cold';page(client,cold,data[1],info,tmp_path)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/pb-cold-recovery-review-20261011/test_poison_project_source.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+client = &lt;starlette.testclient.TestClient object at 0x7f123b02ef00&gt;
+store = &lt;sim2act.db.Store object at 0x7f123b0e8980&gt;
+settings = Settings(database_url='sqlite:////tmp/pb-cold-recovery-review-20261011/candidate1-independent-cold-poison-db/test_cold..., lease_seconds=30, goal_planner_provider='intern-s2', natural_activation_enabled=False, natural_activation_live_id='')
+info = {'instance': 'iinstance_687c008a748e369e581ce1617c631b57', 'original_project': 'proj_b7af3a27a53240d5ac163d12c985efbf'...view-20261011/candidate1-independent-cold-poison-db/test_cold_project_metadata_sou0/cold-page.json', 'owner': 'A', ...}
+tmp_path = PosixPath('/tmp/pb-cold-recovery-review-20261011/candidate1-independent-cold-poison-db/test_cold_project_metadata_sou0')
+
+    def page(client, store, settings, info, tmp_path):
+        path = tmp_path / (info["phase"] + "-info.json")
+        info["output"] = str(tmp_path / (info["phase"] + "-page.json"))
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(
+            ["node", "tests/registered_text_recovery_ui.cjs", str(path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        worked = 0
+        private_proofs = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold_worker = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold_worker, settings, NoModel()).once()
+                        worked += 1
+                    finally:
+                        cold_worker.engine.dispose()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    # The cold revoke discovery/stop path must evaluate no private Run/body cells.
+                    barrier = None
+                    if (
+                        info["phase"] == "cold"
+                        and info["scenario"] == "revoke-source"
+                        and (
+                            request["path"].endswith("/registered-text-requests")
+                            or request["path"].endswith("/extraction-request-close")
+                        )
+                    ):
+                        from sql_private_barrier import PrivateReadBarrier
+    
+                        with store.tx() as c:
+                            key = c.execute(select(journal.c.request_key)).scalar_one()
+                        barrier = PrivateReadBarrier(store, {info["run"]})
+                        barrier.rules["registered_extraction_requests"] = (
+                            journal,
+                            "request_key",
+                            {key},
+                            {"request"},
+                        )
+                        with barrier:
+                            response = client.request(
+                                request["method"],
+                                request["path"],
+                                json=request.get("body"),
+                                headers=request.get("headers"),
+                            )
+                        assert not barrier.blocked and not barrier.evaluated
+                        private_proofs.append(
+                            {
+                                "path": request["path"],
+                                "sql": barrier.statements,
+                                "blocked": barrier.blocked,
+                                "evaluated": barrier.evaluated,
+                            }
+                        )
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                    answer = {
+                        "id": request["id"],
+                        "status": response.status_code,
+                        "text": response.text,
+                        "content_type": response.headers.get("content-type"),
+                        "cache_control": response.headers.get("cache-control"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_COLD_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                stem = info["scenario"] + "-" + info["phase"]
+                (target / (stem + ".log")).write_text(error)
+                (target / (stem + "-private.json")).write_text(json.dumps(private_proofs, indent=2))
+                if Path(info["output"]).exists():
+                    (target / (stem + ".json")).write_bytes(Path(info["output"]).read_bytes())
+&gt;           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: misbound project recovery metadata must not install unrelated authorized target as the source preview
+E                 at check (/tmp/pb-cold-recovery-review-20261011/poison_project_source.cjs:8:29)
+E                 at /tmp/pb-cold-recovery-review-20261011/poison_project_source.cjs:66:3
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_registered_text_recovery_ui.py:134: AssertionError</failure></testcase></testsuite></testsuites>

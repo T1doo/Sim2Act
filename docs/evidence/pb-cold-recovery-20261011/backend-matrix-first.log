@@ -1,0 +1,43 @@
+.............F..                                                         [100%]
+=================================== FAILURES ===================================
+__ test_corrupt_request_journal_cannot_install_or_start_new_request[request] ___
+
+env = (<sim2act.db.Store object at 0x7f56a1f9a960>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-32/test_cor...7cf87fa0f945cb91a83b2ea929c960', 'user_7efe011eed144260a20a71312c5fead3', 'proj_49dfffc692a345a69fddd13df9458a5a', ...)
+field = 'request'
+
+    @pytest.mark.parametrize('field', ['request','state','history'])
+    def test_corrupt_request_journal_cannot_install_or_start_new_request(env, field):
+        values, body = ready(env)
+        data, *_, url = values
+        with data[0].tx() as c:
+            row = c.execute(select(journal)).mappings().one()
+            changed = copy.deepcopy(row[field])
+            if field == 'request':
+                changed['name'] = 'polluted secret request'
+            elif field == 'state':
+                changed = 'CLOSED'
+            else:
+                changed.append({'state':'COMMITTED','at':1})
+            c.execute(update(journal).values(**{field:changed}))
+        before = snapshot(data[0])
+        for method,path,payload in [
+            ('GET',url+'/extraction-requests?request_key='+body['request_key'],None),
+            ('POST',url+'/extract',body),
+            ('POST',url+'/extraction-requests',prepare_body({**body,'request_key':'new'})),
+        ]:
+            reply = data[2].request(method,path,json=payload)
+>           assert reply.status_code == 409, reply.text
+E           AssertionError: {"namespace":"INTERNAL_ENGINEERING_ONLY","formal_publication_enabled":false,"state":"PREVIEW_ONLY","publishable":false,"generator":"TRUSTED_REGISTERED_TEXT_FROM_APPRUN.v1","model_requests":0,"semantic_goal_acceptance":"NOT_RUN","id":"app_a0366420e31e44f7bebf87c379ac8ec5","candidate_fingerprint":"fac82928a14e0658f16fb6ad341fe268581f4a80efdd4d01d158d807985babc9","cached":false,"source_proof_fingerprint":"2312d6d98afdf012668826a35d76d490a376c77c531519723e1767557c4e6c63","target_resource_hash":"1a7ff6ecd150cdaaf229aa9d92f79e0d1745d95685482122552e8ae15b2172e3","authorization_domain":"appruntime_dfd0b4dd798b4a268cc60c1219f42c01","owner_acceptance":"PENDING","technical_semantic_status":"UNKNOWN","source_run_id":"run_f47fec0b4c4240839fa70efaf1725d10","instance_id":"iinstance_14c4ca1b86ef2e6a4900bac181dd8ebd","principal_id":"user_5e7cf87fa0f945cb91a83b2ea929c960","project_id":"proj_49dfffc692a345a69fddd13df9458a5a","request_key":"text-extraction","request_fingerprint":"68c642d0f690b8c3e1fb9b6c1db20c185b54803080ea3b6fb09aa99dbf4234c8"}
+E           assert 201 == 409
+E            +  where 201 = <Response [201 Created]>.status_code
+
+tests/test_registered_text_recovery.py:270: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_registered_text_recovery.py::test_corrupt_request_journal_cannot_install_or_start_new_request[request]
+1 failed, 15 passed, 1 warning in 50.31s

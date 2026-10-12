@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="4" time="13.199" timestamp="2026-10-11T22:59:42.743526+00:00" hostname="9809f76d2248"><testcase classname="test_independent_journal_gates" name="test_project_discovery_does_not_return_unbound_request_source_metadata[instance]" time="2.579"><failure message="AssertionError: Project discovery exposed unbound source metadata as valid recovery entry&#10;assert 200 in {403, 409}&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f19268db950&gt;, Settings(database_url='sqlite:////tmp/pb-cold-recovery-review-20261011/c...d7e0c88f9c46b8873cb7168f0c31a4', 'user_d5ddb2f5949b48ef82acbe99a21979a8', 'proj_60c075ea0d114ec9a2cc20d4c65548c4', ...)
+fault = 'instance'
+
+    @pytest.mark.parametrize('fault',['instance','source-app'])
+    def test_project_discovery_does_not_return_unbound_request_source_metadata(env,fault):
+        values,body=ready(env);data,_,_,_,_,target,_,url=values
+        with data[0].tx() as c:
+            c.execute(update(journal).values(**({'instance_id':'iinstance_'+'0'*32} if fault=='instance' else {'source_app_id':target})))
+        before=snapshot(data[0]);response=data[2].get('/api/projects/'+data[4]+'/registered-text-requests');assert snapshot(data[0])==before
+        p=OUT/(os.environ.get('COLD_PROBE_PREFIX','candidate1-independent-')+'discovery-'+fault+'.json');assert not p.exists();p.write_text(json.dumps({'classification':'ACTUAL_SQLITE_API_CONTROLLED_IMMUTABLE_SCOPE_METADATA_CORRUPTION','fault':fault,'status':response.status_code,'text':response.text,'db_unchanged':True,'expected':'Reject metadata whose source_app or instance is not bound to actual owned source Run, without reading protected body.'},indent=2)+'\n')
+&gt;       assert response.status_code in {403,409},'Project discovery exposed unbound source metadata as valid recovery entry'
+E       AssertionError: Project discovery exposed unbound source metadata as valid recovery entry
+E       assert 200 in {403, 409}
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pb-cold-recovery-review-20261011/test_independent_journal_gates.py:19: AssertionError</failure></testcase><testcase classname="test_independent_journal_gates" name="test_project_discovery_does_not_return_unbound_request_source_metadata[source-app]" time="2.404"><failure message="AssertionError: Project discovery exposed unbound source metadata as valid recovery entry&#10;assert 200 in {403, 409}&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f19241d5490&gt;, Settings(database_url='sqlite:////tmp/pb-cold-recovery-review-20261011/c...ca4d2f408a4fcd9d161aa37e937ecb', 'user_3e8818fa878e44f7a745c358c3822ff3', 'proj_18556406b5f2400fafa6f714b92889ba', ...)
+fault = 'source-app'
+
+    @pytest.mark.parametrize('fault',['instance','source-app'])
+    def test_project_discovery_does_not_return_unbound_request_source_metadata(env,fault):
+        values,body=ready(env);data,_,_,_,_,target,_,url=values
+        with data[0].tx() as c:
+            c.execute(update(journal).values(**({'instance_id':'iinstance_'+'0'*32} if fault=='instance' else {'source_app_id':target})))
+        before=snapshot(data[0]);response=data[2].get('/api/projects/'+data[4]+'/registered-text-requests');assert snapshot(data[0])==before
+        p=OUT/(os.environ.get('COLD_PROBE_PREFIX','candidate1-independent-')+'discovery-'+fault+'.json');assert not p.exists();p.write_text(json.dumps({'classification':'ACTUAL_SQLITE_API_CONTROLLED_IMMUTABLE_SCOPE_METADATA_CORRUPTION','fault':fault,'status':response.status_code,'text':response.text,'db_unchanged':True,'expected':'Reject metadata whose source_app or instance is not bound to actual owned source Run, without reading protected body.'},indent=2)+'\n')
+&gt;       assert response.status_code in {403,409},'Project discovery exposed unbound source metadata as valid recovery entry'
+E       AssertionError: Project discovery exposed unbound source metadata as valid recovery entry
+E       assert 200 in {403, 409}
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pb-cold-recovery-review-20261011/test_independent_journal_gates.py:19: AssertionError</failure></testcase><testcase classname="test_independent_journal_gates" name="test_committed_owner_close_after_revocation_never_reads_body_or_false_cancels" time="3.750" /><testcase classname="test_independent_journal_gates" name="test_close_a_then_close_b_cannot_make_original_empty_latest_cas_valid" time="4.396" /></testsuite></testsuites>

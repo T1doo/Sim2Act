@@ -1,0 +1,44 @@
+/workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+FF..                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_project_discovery_does_not_return_unbound_request_source_metadata[instance] _
+
+env = (<sim2act.db.Store object at 0x7f19268db950>, Settings(database_url='sqlite:////tmp/pb-cold-recovery-review-20261011/c...d7e0c88f9c46b8873cb7168f0c31a4', 'user_d5ddb2f5949b48ef82acbe99a21979a8', 'proj_60c075ea0d114ec9a2cc20d4c65548c4', ...)
+fault = 'instance'
+
+    @pytest.mark.parametrize('fault',['instance','source-app'])
+    def test_project_discovery_does_not_return_unbound_request_source_metadata(env,fault):
+        values,body=ready(env);data,_,_,_,_,target,_,url=values
+        with data[0].tx() as c:
+            c.execute(update(journal).values(**({'instance_id':'iinstance_'+'0'*32} if fault=='instance' else {'source_app_id':target})))
+        before=snapshot(data[0]);response=data[2].get('/api/projects/'+data[4]+'/registered-text-requests');assert snapshot(data[0])==before
+        p=OUT/(os.environ.get('COLD_PROBE_PREFIX','candidate1-independent-')+'discovery-'+fault+'.json');assert not p.exists();p.write_text(json.dumps({'classification':'ACTUAL_SQLITE_API_CONTROLLED_IMMUTABLE_SCOPE_METADATA_CORRUPTION','fault':fault,'status':response.status_code,'text':response.text,'db_unchanged':True,'expected':'Reject metadata whose source_app or instance is not bound to actual owned source Run, without reading protected body.'},indent=2)+'\n')
+>       assert response.status_code in {403,409},'Project discovery exposed unbound source metadata as valid recovery entry'
+E       AssertionError: Project discovery exposed unbound source metadata as valid recovery entry
+E       assert 200 in {403, 409}
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pb-cold-recovery-review-20261011/test_independent_journal_gates.py:19: AssertionError
+_ test_project_discovery_does_not_return_unbound_request_source_metadata[source-app] _
+
+env = (<sim2act.db.Store object at 0x7f19241d5490>, Settings(database_url='sqlite:////tmp/pb-cold-recovery-review-20261011/c...ca4d2f408a4fcd9d161aa37e937ecb', 'user_3e8818fa878e44f7a745c358c3822ff3', 'proj_18556406b5f2400fafa6f714b92889ba', ...)
+fault = 'source-app'
+
+    @pytest.mark.parametrize('fault',['instance','source-app'])
+    def test_project_discovery_does_not_return_unbound_request_source_metadata(env,fault):
+        values,body=ready(env);data,_,_,_,_,target,_,url=values
+        with data[0].tx() as c:
+            c.execute(update(journal).values(**({'instance_id':'iinstance_'+'0'*32} if fault=='instance' else {'source_app_id':target})))
+        before=snapshot(data[0]);response=data[2].get('/api/projects/'+data[4]+'/registered-text-requests');assert snapshot(data[0])==before
+        p=OUT/(os.environ.get('COLD_PROBE_PREFIX','candidate1-independent-')+'discovery-'+fault+'.json');assert not p.exists();p.write_text(json.dumps({'classification':'ACTUAL_SQLITE_API_CONTROLLED_IMMUTABLE_SCOPE_METADATA_CORRUPTION','fault':fault,'status':response.status_code,'text':response.text,'db_unchanged':True,'expected':'Reject metadata whose source_app or instance is not bound to actual owned source Run, without reading protected body.'},indent=2)+'\n')
+>       assert response.status_code in {403,409},'Project discovery exposed unbound source metadata as valid recovery entry'
+E       AssertionError: Project discovery exposed unbound source metadata as valid recovery entry
+E       assert 200 in {403, 409}
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pb-cold-recovery-review-20261011/test_independent_journal_gates.py:19: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tmp/pb-cold-recovery-review-20261011/test_independent_journal_gates.py::test_project_discovery_does_not_return_unbound_request_source_metadata[instance]
+FAILED ../../tmp/pb-cold-recovery-review-20261011/test_independent_journal_gates.py::test_project_discovery_does_not_return_unbound_request_source_metadata[source-app]
+2 failed, 2 passed in 13.20s

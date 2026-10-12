@@ -129,13 +129,28 @@ def request(data, url, target):
     assert response.status_code == 200, response.text
     values = response.json()
     selected = next(t for t in values["targets"] if t["id"] == target)
-    return values, {
+    body = {
         "expected_proof_fingerprint": values["source_proof_fingerprint"],
         "target_app_id": target,
         "expected_target_draft_fingerprint": selected["fingerprint"],
         "name": "Extracted literal task",
         "request_key": "text-extraction",
     }
+    prepare_request(data, url, body)
+    return values, body
+
+
+def prepare_request(data, url, body):
+    index = data[2].get(url + "/extraction-requests").json()
+    latest = index["latest"]
+    result = data[2].post(
+        url + "/extraction-requests",
+        json={**body, "expected_latest_key": latest["request_key"] if latest else None,
+              "expected_latest_candidate_fingerprint": latest["candidate_fingerprint"]
+              if latest and latest["state"] == "COMMITTED" else None},
+    )
+    assert result.status_code == 201, result.text
+    return result.json()
 
 
 def authority(store):
@@ -232,7 +247,14 @@ def snapshot(store):
 def assert_old_rows(store, before):
     after = snapshot(store)
     for table, rows in before.items():
-        if table in {"app_drafts", "task_extractions"}:
+        if table == "registered_extraction_requests":
+            for row in rows:
+                actual = next(r for r in after[table] if r["request_key"] == row["request_key"])
+                assert {k: v for k, v in actual.items() if k not in {"state", "app_id", "candidate_fingerprint", "history"}} == {k: v for k, v in row.items() if k not in {"state", "app_id", "candidate_fingerprint", "history"}}
+                assert actual["history"][:len(row["history"])] == row["history"]
+                assert actual["state"] == "COMMITTED"
+                assert actual["app_id"] in {r["app_id"] for r in after["task_extractions"]}
+        elif table in {"app_drafts", "task_extractions"}:
             for row in rows:
                 assert row in after[table], table
         else:

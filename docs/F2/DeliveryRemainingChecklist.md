@@ -57,3 +57,6 @@
 
 
 2026-10-11 接续 F2-T03 / AT-10 的[有限非CSV成功运行提取](PBTextExtraction20261011.md)：原实际 SUCCEEDED 文本 AppRun 经独立来源、步骤和完整字面结果重验，提取为绑定不同已授权 TXT/MD、接收新 term 的独立应用，再通过冷正常 Worker 复用。新 task 来源自身封印完整请求/key，原 key 仅读回执与实际候选指纹/来源绑定匹配后才安装；错误第三应用、指纹替换和协调替换另 key 应用的独审红证据保留并修复。新 owner PENDING，不继承旧声明；沿用登记字面算子，LIVE0、语义 UNKNOWN、发布 false。精确工程范围及最终实际轮次见[本轮证据](../evidence/pb-text-extraction-20261011/README.md)。原来源授权/证据仍参与审计，完整 P-B/AT-10、真实模型/真实owner语义、PG/Windows/native/旧源码升级/CI等门未据此关闭。
+
+
+2026-10-11启动、实际延续至2026-10-12的F2-T09 / AT-05/18 [有限原请求身份冷恢复](PBColdRecovery20261011.md)完成：受保护服务端journal先保存精确key/主体/项目/来源/目标/请求指纹及单调历史；未知仅原key GET复核当前授权/真实候选后安装，不自动重发。候选/回执/COMMITTED同事务，metadata-only CLOSE不把已有提交伪签为关闭；CLOSED与latest CAS拒绝迟到/重复意图，浏览器不新增正文或秘密持久存储。独审真实发现错误source绑定、最后GET后异步hash竞争，以及第65来源写入后项目冷索引失效，均修复，三撤回候选和输出路径夹具事故全留原证。最终同项目事务冻结64来源/每来源64历史预算，第65首prepare拒绝全DB0变，原64冷索引与既有来源明确新请求可用。作者一轮503 collected/502 selected/1 deselected，492PASS/10PG前提SKIP/0FAIL/ERROR；独审39、43、6、1分别PASS，有限LIMITED_PASS，不加总为语义或一次完整AT覆盖。369源码前后一致，精确HTTP/JSDOM/SQLite/普通Worker及失败档见[本轮证据](../evidence/pb-cold-recovery-20261011/README.md)。原GoalCard/source授权仍参与审计，新owner PENDING、语义UNKNOWN、LIVE0、发布false；PG/Windows/native/设备崩溃/旧源码升级/真实模型/真实owner语义/完整P-A/P-B/AT05/18/source退休/长期容量性能/远端CI/部署等原验收条件不提升。
