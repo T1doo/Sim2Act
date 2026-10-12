@@ -466,6 +466,8 @@ def claim(data, rid):
         "terminal_event",
         "late_stop",
         "expired_lease",
+        "audit_attempt_extra",
+        "audit_event_extra",
     ],
 )
 def test_final_save_failure_rolls_back_artifact_grants_effect_and_result(env, monkeypatch, fault):
@@ -477,7 +479,7 @@ def test_final_save_failure_rolls_back_artifact_grants_effect_and_result(env, mo
     from sim2act.errors import DomainError
 
     data = setup(env)
-    _, _, release, inst = prepared(data)
+    origin, _, release, inst = prepared(data)
     job = enqueue(data, release, inst)
     worker, run, limits = claim(data, job)
     for _ in range(3):
@@ -515,7 +517,7 @@ def test_final_save_failure_rolls_back_artifact_grants_effect_and_result(env, mo
             return original(table)
 
         monkeypatch.setattr(spec, "insert", insertion)
-    elif fault in {"terminal_event", "late_stop"}:
+    elif fault in {"terminal_event", "late_stop", "audit_attempt_extra", "audit_event_extra"}:
         original = data[0].event
 
         def event(c, rid, kind, value):
@@ -523,6 +525,22 @@ def test_final_save_failure_rolls_back_artifact_grants_effect_and_result(env, mo
             if kind == "SPEC_COMMITTED":
                 if fault == "late_stop":
                     worker.stop.set()
+                elif fault in {"audit_attempt_extra", "audit_event_extra"}:
+                    from sqlalchemy import update
+
+                    from sim2act.db import events
+
+                    table = attempts if fault == "audit_attempt_extra" else events
+                    query = select(table).where(table.c.run_id == origin)
+                    if table is events:
+                        query = query.where(events.c.kind == "STATE")
+                    row = c.execute(query.order_by(table.c.id)).mappings().first()
+                    field = "parameters" if table is attempts else "data"
+                    changed = copy.deepcopy(row[field])
+                    changed["controlled_late_extra"] = "Must roll back these unused protected bytes"
+                    c.execute(
+                        update(table).where(table.c.id == row["id"]).values(**{field: changed})
+                    )
                 else:
                     raise DomainError("VERIFICATION_FAILED", "Injected final event failure")
             return result

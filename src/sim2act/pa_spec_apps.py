@@ -1008,7 +1008,9 @@ def advance(worker, run):
                 and type(final_instance["data_version"]) is int and final_instance["data_version"] == version)
             current_job = c.execute(select(runs).where(runs.c.id == job["id"], runs.c.principal_id == job["principal_id"],
                 runs.c.project_id == job["project_id"], runs.c.runtime_id == job["runtime_id"])).mappings().one()
-            verify_job(store, c, job["principal_id"], current_job, limits)
+            final_binding, _, _ = verify_job(store, c, job["principal_id"], current_job, limits)
+            require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
+                "Original model audit bytes changed during the final save transaction")
             require(not worker.stop.is_set() and time.time() < live["lease_until"]
                 and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
             return False
