@@ -461,6 +461,8 @@ def draft_gate(store, c, user, aid):
     from .pa_material_bindings import scope_gate as pa_binding_scope_gate
 
     pa_binding_scope_gate(store, c, user, aid)
+    from .pa_spec_apps import scope_gate as spec_scope_gate
+    spec_scope_gate(store, c, user, aid)
 
     # Indexed origin metadata identifies this family before protected app bodies.
     exists = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid,
@@ -486,6 +488,8 @@ def release_gate(store, c, user, rid):
 
 
 def job_gate(store, c, user, rid):
+    from .pa_spec_apps import job_scope_gate as spec_job_gate
+    spec_job_gate(store, c, user, rid)
     from .text_workflows import job_scope_gate
 
     job_scope_gate(store, c, user, rid)

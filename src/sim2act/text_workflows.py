@@ -881,7 +881,7 @@ def advance(worker, run):
         return True
 
 
-def process_job(worker, run):
+def process_job(worker, run, advance_fn=None):
     from .app_jobs import fail_job
     stopped = threading.Event()
 
@@ -895,7 +895,7 @@ def process_job(worker, run):
     thread = threading.Thread(target=beat, daemon=True)
     thread.start()
     try:
-        while advance(worker, run):
+        while (advance_fn or advance)(worker, run):
             pass
     except DomainError as exc:
         fail_job(worker, run, exc)

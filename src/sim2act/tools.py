@@ -2,12 +2,21 @@ import csv
 import hashlib
 import io
 import json
-from decimal import Context, Decimal, DecimalException, DivisionByZero, Inexact, InvalidOperation, Overflow, ROUND_HALF_EVEN
+from decimal import (
+    ROUND_HALF_EVEN,
+    Context,
+    Decimal,
+    DecimalException,
+    DivisionByZero,
+    Inexact,
+    InvalidOperation,
+    Overflow,
+)
 from typing import Any
 
 from sqlalchemy import insert, select, update
 
-from .contracts import resource_id
+from .contracts import resource_id, strict_json
 from .db import (
     fingerprint,
     local_effects,
@@ -406,17 +415,21 @@ def reconcile_readback(store, c, run, operation):
     return "VERIFIED", receipt
 
 
-def write_text_artifact(store, c, principal, runtime, project_id, content):
+def write_text_artifact(store, c, principal, runtime, project_id, content, *, artifact_format="md"):
     """Existing registered project artifact effect; caller owns transaction/idempotency.
 
     No new tool or write grant. Derived artifact read grants match normal dispatch.
     """
     validate_call("artifact.save_text", {"text": content})
+    if artifact_format not in {"md", "json"}:
+        raise DomainError("INVALID_INPUT", "Registered text artifact format required")
+    if artifact_format == "json":
+        strict_json(content, 32768)
     store.authorize(c, principal, runtime, project_id, project_id, "artifact.save_text")
     output_id = new_id("res")
     content_hash = hashlib.sha256(content.encode()).hexdigest()
     c.execute(insert(resources).values(
-        id=output_id, project_id=project_id, name="Run artifact", format="md",
+        id=output_id, project_id=project_id, name="Constraint checklist.json" if artifact_format == "json" else "Run artifact", format=artifact_format,
         content=content, hash=content_hash,
     ))
     store.add_grants(c, principal, runtime, project_id, output_id, ["resource.read"])

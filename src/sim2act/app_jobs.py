@@ -179,7 +179,15 @@ def enqueue(
             mode="mock",
             request_model="intern-s2",
         ).model_dump()
-        from . import text_workflows
+        from . import pa_spec_apps, text_workflows
+        if pa_spec_apps.is_candidate(draft["candidate"]):
+            _, _, _, source_goal = pa_spec_apps.verify_origin(store, c, user, draft, limits)
+            snapshot["spec_goal"] = source_goal
+            content = source_goal["snapshot"]["content"]
+            contract["goal"].update(goal_id=source_goal["card_id"], goal=content["goal"],
+                constraints=content["constraints"], unresolved=pa_spec_apps.goal_unresolved(source_goal))
+            FrozenRunContract.model_validate(contract)
+            goal = content["goal"]
 
         if text_workflows.is_candidate(draft["candidate"]):
             _, _, _, source_goal = text_workflows.verify_origin(store, c, user, draft, limits)
@@ -216,6 +224,7 @@ def enqueue(
                     "repairs": 0,
                     "reserved_tokens": 0,
                     **({"text_workflow": text_workflows.VERSION} if text_workflows.is_candidate(draft["candidate"]) else {}),
+                    **({"spec_family": pa_spec_apps.VERSION} if pa_spec_apps.is_candidate(draft["candidate"]) else {}),
                 },
                 version=1,
                 cancel_intent=False,
@@ -243,6 +252,8 @@ def enqueue(
         )
         if text_workflows.is_candidate(draft["candidate"]):
             text_workflows.seal_job_scope(c, user, draft, snapshot)
+        if pa_spec_apps.is_candidate(draft["candidate"]):
+            pa_spec_apps.seal_job_scope(c, user, draft, snapshot)
         store.event(
             c,
             jid,
@@ -356,6 +367,10 @@ def inspect_job(store, user, rid):
 
         workflow = text_workflows.is_candidate(release["snapshot"]["draft"]["candidate"])
         proof_steps: list[dict] = []
+        from . import pa_spec_apps
+        spec = pa_spec_apps.is_candidate(release["snapshot"]["draft"]["candidate"])
+        if spec:
+            _, _, proof_steps = pa_spec_apps.verify_job(store, c, user, job, limits)
         if workflow:
             _, _, proof_steps = text_workflows.verify_job(store, c, user, job, limits)
         if job["status"] == "SUCCEEDED":
@@ -394,7 +409,10 @@ def inspect_job(store, user, rid):
             "namespace": KIND,
             **({"steps": [dict(step_id=p["step_id"], status=p["status"], fingerprint=fingerprint(p)) for p in proof_steps],
                 "semantic_status": "UNKNOWN", "owner_acceptance": "PENDING", "formal_publication_enabled": False}
-               if workflow else {}),
+               if workflow or spec else {}),
+            **({"citation_status": "PASS" if job["status"] == "SUCCEEDED" else "NOT_RUN",
+                "semantic_goal_acceptance": "NOT_RUN", "markdown_view": pa_spec_apps.oracle.markdown_view(a["output"]["checklist"]) if a["output"] else None}
+                if spec else {}),
         }
 
 
@@ -925,6 +943,9 @@ def fail_job(worker, run, error):
 
 
 def process_job(worker, run):
+    from . import pa_spec_apps
+    if pa_spec_apps.is_job(worker.store, run):
+        return pa_spec_apps.process_job(worker, run)
     from . import text_workflows
 
     if text_workflows.is_job(worker.store, run):

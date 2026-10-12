@@ -468,17 +468,24 @@ def create_app(store=None, settings=None):
         from .goal_applications import policy
 
         scope = None
+        app_limits = None
+        if body.family == "spec_checklist":
+            if body.activation is not None or platform_limits.max_tools < 4:
+                raise DomainError("PERMISSION_DENIED", "Spec checklist uses an isolated offline four-tool app budget")
+            app_limits = Limits(max_requests=1, max_tools=4, max_repairs=0, max_total_tokens=1, max_output_tokens=1,
+                run_seconds=min(300, platform_limits.run_seconds))
         if body.activation is not None:
             from .generation_approvals import submission
 
             scope = submission(db, user, pid, cid, body, s)
         selected = policy(s.goal_planner_provider, user, pid,
             {"card_id": cid, **body.model_dump(exclude_none=True)},
-            **({"activation": body.activation} if body.activation is not None else {}))
+            **({"activation": body.activation} if body.activation is not None else {}),
+            **({"app_limits": app_limits} if app_limits is not None else {}))
         limits = scope.limits if scope else platform_limits
         rid = db.submit(user, pid, "", [], body.request_key, policy={
             "limits": {**limits.model_dump(), "max_requests": min(3, s.max_requests, limits.max_requests),
-                       "max_tools": min(1, limits.max_tools), "max_repairs": min(1, s.max_repairs, limits.max_repairs)},
+                       "max_tools": min(2 if body.family else 1, limits.max_tools), "max_repairs": min(1, s.max_repairs, limits.max_repairs)},
             "mode": "live" if scope and scope.mode == "LIVE" else "mock", "request_model": "intern-s2", "application_generation": selected,
         }, goal_source={"card_id": cid, "version": body.expected_version,
                         "fingerprint": body.expected_fingerprint})
@@ -816,6 +823,8 @@ def create_app(store=None, settings=None):
     from .text_workflows import mount as mount_text_workflows
 
     mount_text_workflows(app, db, platform_limits, identity)
+    from .pa_spec_apps import mount as mount_spec_apps
+    mount_spec_apps(app, db, platform_limits, identity)
     mount_protocol_api(app, db, platform_limits, identity, s)
     mount_protocol_recovery(app, db, identity)
     mount_protocol_reviews(app, db, identity)

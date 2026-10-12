@@ -277,7 +277,7 @@ class Worker:
                 if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
                     from .goal_applications import check_active, verified_candidate
 
-                    if frozen.application_generation.activation is not None:
+                    if frozen.application_generation.activation is not None or frozen.application_generation.version == "goal-spec-checklist-application.v1":
                         check_active(self, c, run)
                     candidate = verified_candidate(self.store, c, run, frozen.limits)
                     if state != "PARTIAL" or result != {
@@ -328,10 +328,15 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
-            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and frozen.application_generation.activation is not None:
+            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and (frozen.application_generation.activation is not None or frozen.application_generation.version == "goal-spec-checklist-application.v1"):
                 check_active(self, c, run)
                 if run["lease_until"] <= time.time():
                     raise DomainError("VERSION_CONFLICT", "Original worker lease expired before final commit")
+                if frozen.application_generation.version == "goal-spec-checklist-application.v1":
+                    current = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence, runs.c.version)
+                        .where(runs.c.id == run_id)).mappings().one()
+                    if current["status"] != state or current["cancel_intent"] or current["fence"] != fence or current["version"] != run["version"] + 1:
+                        raise DomainError("VERSION_CONFLICT", "Spec generation terminal ownership changed")
 
     def process(self, run):
         from .csv_dag import is_job as is_csv_dag

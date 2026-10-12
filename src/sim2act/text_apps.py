@@ -161,7 +161,7 @@ def verify_origin(store, c, user, draft, limits):
         "project_id": draft["project_id"],
         "runtime_id": draft["runtime_id"],
         "candidate_fingerprint": fingerprint(raw),
-        "confirmation": confirmation.model_dump(),
+        "confirmation": confirmation.model_dump(exclude_none=True),
     }
     sealed = (
         c.execute(

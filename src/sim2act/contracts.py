@@ -238,7 +238,7 @@ class ApplicationGenerationActivation(Strict):
 
 
 class ApplicationGenerationPolicy(Strict):
-    version: Literal["goal-text-application.v1"]
+    version: Literal["goal-text-application.v1", "goal-spec-checklist-application.v1"]
     provider: Literal["disabled", "intern-s2"]
     app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
     action_id: str = Field(pattern=r"^action_[a-f0-9]{32}$")
@@ -247,6 +247,7 @@ class ApplicationGenerationPolicy(Strict):
     live_request_allowance: Literal[0]
     response_archive_policy: Literal["protected-json32768.v1"] | None = None
     activation: ApplicationGenerationActivation | None = None
+    app_limits: Limits | None = None
 
 
 class FrozenRunContract(Strict):

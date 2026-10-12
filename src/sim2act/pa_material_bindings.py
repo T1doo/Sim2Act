@@ -112,7 +112,7 @@ def scope_gate(store, c, user, aid):
 
 
 @controlled
-def model_source(store, c, user, rid, limits, expected_pid=None):
+def model_source(store, c, user, rid, limits, expected_pid=None, *, family="literal"):
     from .goal_applications import verified_candidate
 
     metadata = c.execute(select(runs.c.project_id, runs.c.principal_id, runs.c.runtime_id, runs.c.resource_refs)
@@ -128,6 +128,11 @@ def model_source(store, c, user, rid, limits, expected_pid=None):
     require(confirmed is not None, "Only an explicitly confirmed P-A model candidate can be rebound")
     run = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
     raw = verified_candidate(store, c, run, limits)
+    if family == "spec":
+        require(raw.get("namespace") == "pa-spec-checklist-app.v1")
+    else:
+        require(family == "literal" and raw.get("namespace") is None and len(raw.get("actions", [])) == 1
+            and raw["actions"][0].get("executor", {}).get("ref") == "text.literal_evidence")
     from .apps import load_draft
 
     original, _, _, _ = load_draft(store, c, user, confirmed["app_id"], limits)

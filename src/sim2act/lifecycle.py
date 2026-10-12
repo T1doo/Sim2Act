@@ -46,6 +46,10 @@ def execute(store, c, user, draft, limits, input_value, replay=None):
 
     no_context(store, c, user, draft)
     _, manifest, action, _ = validate_frozen_candidate(store, c, user, draft, limits)
+    from . import pa_spec_apps
+    if pa_spec_apps.is_candidate(draft["candidate"]):
+        _, _, source, _ = pa_spec_apps.verify_origin(store, c, user, draft, limits)
+        return pa_spec_apps.preview(source, draft["candidate"], input_value)
     from . import text_workflows
 
     if text_workflows.is_candidate(draft["candidate"]):
@@ -228,6 +232,9 @@ def prepare_release(
             "data_schema_version": data_schema_version,
             "check_evidence": {
                 "ref": (
+                    "spec.labeled_citations.v1"
+                    if draft["candidate"].get("namespace") == "pa-spec-checklist-app.v1"
+                    else
                     "text.four_step_readback.v1"
                     if draft["candidate"].get("namespace") == "closed-text-four-step.v1"
                     else
@@ -497,7 +504,9 @@ def inspect_instance(store, user, iid, limits):
     with store.tx() as c:
         i, release = instance(store, c, user, iid, limits)
         records = data_rows(c, iid)
-        from . import text_workflows
+        from . import pa_spec_apps, text_workflows
+        if pa_spec_apps.is_candidate(release["snapshot"]["draft"]["candidate"]):
+            pa_spec_apps.verify_instance_records(store, c, user, i, records, limits)
 
         if text_workflows.is_candidate(release["snapshot"]["draft"]["candidate"]):
             text_workflows.verify_instance_records(store, c, user, i, records, limits)

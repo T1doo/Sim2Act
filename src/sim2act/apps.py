@@ -188,6 +188,9 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
 
 
 def compile_preview(candidate, platform_limits):
+    from . import pa_spec_apps
+    if pa_spec_apps.is_candidate(candidate):
+        return pa_spec_apps.compile_candidate(candidate, platform_limits)
     from . import pa_material_bindings
 
     if isinstance(candidate, dict) and candidate.get("namespace") == pa_material_bindings.VERSION:
@@ -283,6 +286,11 @@ def validate_source_family(c, user, draft):
                     if candidate.get("namespace") != VERSION:
                         raise DomainError("VERSION_CONFLICT", "P-A model binding cannot be downgraded")
                     expected_field, expected_kind = "pa_binding", "registered_tool"
+                elif isinstance(snapshot, dict) and snapshot.get("kind") == "pa_model_spec_material_binding.v1":
+                    from .pa_spec_apps import is_candidate
+                    if not is_candidate(candidate):
+                        raise DomainError("VERSION_CONFLICT", "Spec model binding cannot be downgraded")
+                    expected_field, expected_kind = "spec_binding", "registered_tool"
                 elif isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
                     from .text_workflows import is_candidate
 
@@ -324,14 +332,22 @@ def validate_source_family(c, user, draft):
         if generated_text["principal_id"] != user:
             raise DomainError("VERSION_CONFLICT", "Independent generation owner changed")
         markers.append(("goal_application", "registered_tool"))
-        if (not isinstance(candidate, dict) or not isinstance(candidate.get("actions"), list)
+        from .db import run_contracts
+        from .pa_spec_apps import GENERATION
+        from .pa_spec_apps import is_candidate as spec_candidate
+        generation_kind = c.execute(select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
+            .where(run_contracts.c.run_id == generated_text["run_id"])).scalar()
+        if generation_kind == GENERATION:
+            if not spec_candidate(candidate):
+                raise DomainError("VERSION_CONFLICT", "Independent spec generation cannot be downgraded")
+        elif (not isinstance(candidate, dict) or not isinstance(candidate.get("actions"), list)
                 or len(candidate["actions"]) != 1
                 or candidate["actions"][0].get("executor", {}).get("ref") != "text.literal_evidence"):
             raise DomainError("VERSION_CONFLICT", "Independent generation executor changed")
     if len(markers) > 1:
         raise DomainError("VERSION_CONFLICT", "Independent source markers conflict")
     claimed = {
-        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application", "pa_binding") if k in candidate
+        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application", "pa_binding", "spec_binding") if k in candidate
     }
     expected = {markers[0][0]} if markers else set()
     if claimed != expected:
@@ -372,6 +388,10 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     validate_source_family(c, user, draft)
     manifest, action, report = compile_preview(candidate, platform_limits)
+    from . import pa_spec_apps
+    if pa_spec_apps.is_candidate(candidate):
+        pa_spec_apps.verify_origin(store, c, user, draft, platform_limits)
+        return draft, manifest, action, report
     from . import text_workflows
 
     if text_workflows.is_candidate(candidate):
@@ -510,7 +530,7 @@ def preview(store, user, aid, input_value, key, platform_limits):
             return public_preview(old)
         output, error = None, None
         try:
-            if draft["candidate"].get("namespace") == "closed-text-four-step.v1":
+            if draft["candidate"].get("namespace") in {"closed-text-four-step.v1", "pa-spec-checklist-app.v1"}:
                 from .lifecycle import execute
 
                 output = execute(store, c, user, draft, platform_limits, input_value)
@@ -614,12 +634,15 @@ def inspect_draft(store, user, aid, platform_limits):
             "input_schema": manifest.input_schema,
             "validation": {
                 k: report[k]
-                for k in ("state", "execution_performed", "publishable", "topological_order")
+                for k in ("state", "execution_performed", "publishable", "topological_order") if k in report
             },
             "history": [public_preview(r) for r in history],
             **({"text_workflow_origin": text_workflow_origin(c, user, draft)}
                if draft["candidate"].get("namespace") == "closed-text-four-step.v1" else {}),
             "input_guidance": (
+                {"mode": "MODEL_SPEC_CHECKLIST", "citation_status": "PREVIEW_ONLY", "semantic_status": "UNKNOWN", "semantic_goal_acceptance": "NOT_RUN"}
+                if draft["candidate"].get("namespace") == "pa-spec-checklist-app.v1"
+                else
                 {"mode": "CLOSED_TEXT_WORKFLOW", "semantic_status": "UNKNOWN"}
                 if draft["candidate"].get("namespace") == "closed-text-four-step.v1"
                 else

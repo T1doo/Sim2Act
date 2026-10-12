@@ -45,7 +45,7 @@ def require_returned_model(identity):
         )
 
 
-def parse_response(raw):
+def parse_response(raw, registered_schemas=None):
     try:
         if (
             not isinstance(raw, dict)
@@ -87,7 +87,15 @@ def parse_response(raw):
             if not isinstance(fn, dict) or set(fn) != {"name", "arguments"}:
                 raise ValueError("function fields")
             args = strict_json(fn["arguments"], 32768)
-            validate_call(fn["name"], args)
+            if registered_schemas is not None and fn["name"] in registered_schemas:
+                validator = registered_schemas[fn["name"]]
+                if callable(validator):
+                    validator(args)
+                else:
+                    from .contracts import validate_value
+                    validate_value(validator, args)
+            else:
+                validate_call(fn["name"], args)
             parsed.append({"id": call["id"], "function": fn, "args": args})
         if not calls and (
             reason != "stop"

@@ -55,11 +55,12 @@ async function engineeringAction(view,fn) {
   finally {view.busy=false;engineeringButtons(view);}
 }
 async function openInternal(app,appGeneration) {
-  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",offlineReplay:null,inputGeneration:0,workflow:app.input_guidance.mode === "CLOSED_TEXT_WORKFLOW"};
+  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",spec:app.input_guidance.mode === "MODEL_SPEC_CHECKLIST",offlineReplay:null,inputGeneration:0,workflow:app.input_guidance.mode === "CLOSED_TEXT_WORKFLOW"};
   engineering=view;$("apps").append($("internal-panel"));$("internal-panel").hidden=false;
   $("internal-agent").hidden=!view.agent;
   $("internal-replay-status").textContent=view.agent ? "尚未加载离线响应；审批与新运行暂不可提交。" : "";
   $("internal-prepare-hint").textContent=view.agent ? "使用上方样例字面检索词与已加载的离线响应核查当前材料。先查看精确快照，再手动确认保存内部版本；语义仍为 UNKNOWN。" : "使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。";
+  if(view.spec)$("internal-prepare-hint").textContent="先预览引用和有限模型步骤图；确认内部版本后，后台逐步核验并在一个事务中保存本项目 JSON 清单。语义完整性 NOT_RUN。";
   if(view.literal)$("internal-prepare-hint").textContent="用上方检索词独立核查完整匹配行；精确确认后保存内部版本。新实例直接输入新词，无需 Replay。语义 UNKNOWN。";
   if(view.workflow){$("internal-prepare-hint").textContent="用两次独立检索和报告分支核查完整引用，再确认精确内部快照。后台每步独立留存回执；owner PENDING、语义 UNKNOWN。";}
   engineeringButtons(view);engineeringStatus(view,"正在读取内部版本与实例…","loading");
@@ -105,7 +106,7 @@ async function showInternalInstance(id,view=engineering) {
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
     view.instance=instance;renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
-    $("internal-column-label").hidden=view.agent||view.literal||view.workflow;$("internal-column").required=!(view.agent||view.literal||view.workflow);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
+    $("internal-column-label").hidden=view.agent||view.literal||view.workflow||view.spec;$("internal-column").required=!(view.agent||view.literal||view.workflow||view.spec);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
     if(typeof showTextWorkflowInputs === "function")showTextWorkflowInputs("internal",!!view.workflow);
     $("internal-run-form").hidden=false;
@@ -162,7 +163,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
 async function submitInternal(view,retry=false) {
   const instance=view.instance;if(!instance)return;
   let pending=engineeringPending.get(instance.id);
-  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
+  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.spec ? {} : view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
   const requestKey=pending.request_key;
   const generation=view.instanceGeneration;
@@ -179,7 +180,7 @@ $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
   const inputGeneration=view.inputGeneration;
   const current=()=>engineeringCurrent(view) && inputGeneration===view.inputGeneration;
-  const sample=view.workflow ? {...textWorkflowInput("app"),emit_report:true} : (view.agent||view.literal) ? {term:$("app-agent-term").value} : {column:$("app-column").value};
+  const sample=view.spec ? {} : view.workflow ? {...textWorkflowInput("app"),emit_report:true} : (view.agent||view.literal) ? {term:$("app-agent-term").value} : {column:$("app-column").value};
   const prepared=await api(`/api/internal/apps/${view.app}/release-approvals`,"POST",{expected_draft_fingerprint:view.draft.fingerprint,sample_input:sample,...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {})});
   if(!current())return;
   const detail=await api(`/api/internal/approvals/${prepared.id}`);
