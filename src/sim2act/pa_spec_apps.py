@@ -8,7 +8,7 @@ import copy
 import hashlib
 import json
 import time
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 from sqlalchemy import insert, select, update
@@ -131,7 +131,7 @@ def expand(recipe, aid, cid, pid, source_hash, resource, goal, limits, checked_s
     for index, step in enumerate(steps):
         sid, ref = step["step_id"], step["operator"]
         previous = steps[index - 1]["step_id"] if index else None
-        expected = ({"resource_id": dict(source="data", ref="source", field="resource_id")} if not index
+        expected: dict[str, dict[str, Any]] = ({"resource_id": dict(source="data", ref="source", field="resource_id")} if not index
             else {key: dict(source="step", ref=previous, field=key) for key in inputs[ref]["properties"]})
         if step["inputs"] != expected or step["depends_on"] != ([previous] if previous else []):
             raise DomainError("INVALID_MANIFEST", "Recipe must consume the exact verified predecessor ports")
@@ -217,7 +217,7 @@ def pure(ref, args, source):
 def preview(source, candidate, input_value):
     validate_value(candidate["manifest"]["input_schema"], input_value)
     plan = dict(definition=candidate, input=input_value)
-    outputs = {}
+    outputs: dict[str, dict] = {}
     for step, action in zip(candidate["manifest"]["workflow"], candidate["actions"], strict=True):
         if action["executor"]["ref"] == SAVE:
             break
@@ -713,7 +713,7 @@ def audit_fingerprint(store, c, user, draft):
     contract = c.execute(select(run_contracts).where(run_contracts.c.run_id == rid)).mappings().one()
     original = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
     goal = contract["snapshot"]["source_goal_card"]
-    rows = dict(run=dict(source_run), contract=dict(contract), original=dict(original))
+    rows: dict[str, Any] = dict(run=dict(source_run), contract=dict(contract), original=dict(original))
     for name, _table, query in [
         ("attempts", attempts, select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.id)),
         ("operations", operations, select(operations).where(operations.c.run_id == rid).order_by(operations.c.id)),
@@ -754,7 +754,8 @@ def receipts(store, c, job, binding):
     steps = plan["definition"]["manifest"]["workflow"]
     ids = [s["step_id"] for s in steps]
     require(len(by_step) == len(ops) and not (set(by_step) - set(ids)))
-    outputs, proved = {}, []
+    outputs: dict[str, dict] = {}
+    proved: list[dict] = []
     for index, (step, action) in enumerate(zip(steps, plan["definition"]["actions"], strict=True)):
         sid = step["step_id"]
         if sid not in by_step:
