@@ -750,3 +750,25 @@ def test_default_off_real_adapter_has_zero_attempts(env):
     with data[0].tx() as c:
         assert c.execute(select(attempts.c.id)).first() is None
         assert c.execute(select(app_drafts.c.id)).first() is None
+
+
+def test_native_goal_all_sixteen_unresolved_remain_executable_and_frozen(env):
+    from sim2act.db import run_contracts
+
+    data = setup(env)
+    content = copy.deepcopy(data[6]["content"])
+    content["unresolved"] = [f"Original unresolved condition {i}" for i in range(16)]
+    made = data[2].post(f"/api/projects/{data[4]}/goal-cards", json=content)
+    assert made.status_code == 201, made.text
+    card = data[2].get(f"/api/goal-cards/{made.json()['id']}").json()
+    data = (*data[:6], card)
+    _, _, release, inst = prepared(data)
+    job = enqueue(data, release, inst)
+    with data[0].tx() as c:
+        frozen = c.execute(
+            select(run_contracts.c.snapshot).where(run_contracts.c.run_id == job)
+        ).scalar_one()
+        assert frozen["goal"]["unresolved"] == content["unresolved"]
+    assert Worker(data[0], data[1]).once()
+    response = inspect(data, inst, job)
+    assert response.status_code == 200 and response.json()["status"] == "SUCCEEDED", response.text

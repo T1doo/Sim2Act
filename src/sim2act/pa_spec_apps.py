@@ -647,8 +647,10 @@ def source_index(store, user, pid, limits):
 
 
 def goal_unresolved(goal):
-    return [*goal["snapshot"]["content"]["unresolved"],
-        f"{VERSION}:card={goal['card_id']};version={goal['version']};fingerprint={goal['fingerprint']}"]
+    # The complete card identity/version/fingerprint already lives in spec_goal,
+    # independently sealed by the accepted binding. Keep the human field intact
+    # at its existing sixteen-item capacity, without adding metadata to it.
+    return copy.deepcopy(goal["snapshot"]["content"]["unresolved"])
 
 
 @controlled
