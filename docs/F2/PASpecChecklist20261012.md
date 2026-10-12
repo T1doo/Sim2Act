@@ -29,4 +29,14 @@ citation correctness、显式标签覆盖与结构检查可 PASS；自然语言�
 
 PG、Windows、native browser、真实模型/付费 API、真实 V5 材料、旧源码冷升级、wheel 安装与精确 SHA 远端 CI 均未跑。先前 wheel 缺 setuptools 的实际失败保持；本次不安装/重试工具链、不部署、不走已拒浏览器路径。
 
-验证记录和完整 SHA 在实现/独审完成后补入本页；未将中间通过或中断结果称为最终验收。
+## 最终实际工程复验
+
+冻结源码 `a396acb7fbfcb7393ae8cbcd4aa42a53b8d8e3a8`，精确资格核心修复提交 `d91586745b543d4ff9f26c2ece5415b8279fc0bc`；原 anchor/CHANGED 不改，仅 71 个实现文件的完整精确新目标。不是所有旧软件或实例自动续用。
+
+作者 final-r4 单次实际 379 个相关节点：**378 PASS / 1 PG 前提 SKIP / 0 FAIL/ERROR**，退出0，pytest1705.19秒、runner1706.696秒。包含本切片37后端+3页面全部PASS、原旧续用100、资格22和其它相关家族；不是全仓工程。429 Git 跟踪源码/测试/配置项前后一致。独审79唯一PASS来自fresh selected63和此前完整extra16的相同源码桥，63与作者重叠，不能累加作者分母。作者/独审之间完整429项源码桥也零差异。
+
+双方实际HTTP/IPC/JSDOM规范页面分别22/22/26检查（70），每场景20种源码资产、40次实际GET与两次开页；新材料实际NoModel Worker重新计算，不复用旧答案。独审原audit Attempt/STATE字段两个真实FAIL及Goal16容量真实FAIL均修复复验；人工全部16条保留，不扩GoalSpec容量。所有原红轮、主动中断、磁盘ENOSPC未完成轮、报告夹具错误与恢复工具记录分开保留。早期作者默认pytest临时DB部分已自动清理，未冒称完整保留；最终固定夹具和独审原红DB保留并逐文件封存。
+
+改动文件Ruff PASS；全树Ruff9/mypy5既有问题保留，不称全树绿。引用/标记覆盖工程为有限PASS；自然业务语义、真实模型/费用、完整P-A/P-B及前述平台/发布条件不提升。原取消精确安装竞态仍永久NOT_VERIFIED，未重试。
+
+完整日志、JSON/JUnit、失败修复链、独立报告、SQL/SQLite和归档完整性见[证据](../evidence/pa-spec-checklist-20261012/README.md)。最终文档/证据提交与远端精确SHA由交付回执给出，不把自引用SHA写入自身提交。
