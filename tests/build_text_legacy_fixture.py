@@ -57,11 +57,27 @@ if __import__('os').environ.get('SIM2ACT_LEGACY_INCLUDE_FAILURE')=='1':
   failed=run_input(data,release,instance,{'term':' padded '},'old-invalid-input')
  assert failed['status']=='FAILED' and failed['result_version'] is None
 other=client.post('/api/internal/releases/'+release['id']+'/instances',json={'expected_release_fingerprint':release['fingerprint'],'request_key':'other-unapproved-instance'});assert other.status_code==201,other.text
+terminal_only={}
+if __import__('os').environ.get('SIM2ACT_LEGACY_EMPTY_TERMINALS')=='1':
+ for terminal in ('FAILED','CANCELLED'):
+  reply=client.post('/api/internal/releases/'+release['id']+'/instances',json={'expected_release_fingerprint':release['fingerprint'],'request_key':'empty-'+terminal});assert reply.status_code==201,reply.text
+  empty=reply.json()
+  if terminal=='FAILED':
+   actual=own_run(data,made,release,empty,term=' padded ',key='empty-invalid-input') if goal else run_input(data,release,empty,{'term':' padded '},'empty-invalid-input')
+  else:
+   request=dict(expected_revision=empty['revision'],expected_release_fingerprint=release['fingerprint'],input={'term':'Gamma'},request_key='empty-queued-cancel')
+   if goal:request['expected_owner_goal_binding_fingerprint']=client.get(f"/api/internal/apps/{made['id']}/owner-goals").json()['binding_fingerprint']
+   queued=client.post(f"/api/internal/instances/{empty['id']}/runs",json=request);assert queued.status_code==202,queued.text
+   assert store.command(a,queued.json()['run_id'],'cancel',1)=='CANCELLED'
+   result=client.get(f"/api/internal/instances/{empty['id']}/runs/{queued.json()['run_id']}");assert result.status_code==200,result.text
+   actual=result.json()
+  assert actual['status']==terminal and actual['result'] is None and actual['result_version'] is None and actual['known_effects']==[]
+  terminal_only[terminal]={'instance':empty,'run':actual}
 revoke_source(data)
 with store.tx() as c:
  snapshot={t.name:[dict(r) for r in c.execute(select(t)).mappings()] for t in meta.sorted_tables}
 (root/'old-rows.json').write_text(json.dumps(snapshot,ensure_ascii=False,indent=2))
-info={'software_fp':logic['implementation_fingerprint'],'logic':logic,'app':made,'release':release,'instance':instance,'successful_old_run_id':job['id'],'failed_old_run_id':failed['id'] if failed else None,'other_instance':other.json(),'project':pid,'owner':a,'resource':resource,'old_private':{'app':source,'release':oldrel,'instance':oldinst,'run':oldrun,'resource':data[5]},'goal':goal,'old_signature':signature,'fixture_time':logic['created_at']+20,'kind':'ACTUAL_SQLITE_CREATED_BY_EXACT_APPROVED_GIT_TESTCLIENT_AND_NORMAL_WORKER','real_model_requests':0}
+info={'software_fp':logic['implementation_fingerprint'],'logic':logic,'app':made,'release':release,'instance':instance,'successful_old_run_id':job['id'],'failed_old_run_id':failed['id'] if failed else None,'other_instance':other.json(),'terminal_only_instances':terminal_only,'project':pid,'owner':a,'resource':resource,'old_private':{'app':source,'release':oldrel,'instance':oldinst,'run':oldrun,'resource':data[5]},'goal':goal,'old_signature':signature,'fixture_time':logic['created_at']+20,'kind':'ACTUAL_SQLITE_CREATED_BY_EXACT_APPROVED_GIT_TESTCLIENT_AND_NORMAL_WORKER','real_model_requests':0}
 (root/'old-info.json').write_text(json.dumps(info,ensure_ascii=False,indent=2))
 print(json.dumps({'status':'PASS','old_worker_status':job['status'],'actual_data_version':1,'old_owner_status':signature['owner_acceptance'] if signature else 'ABSENT','software_fp':logic['implementation_fingerprint'],'real_model_requests':0}))
 client.close();store.engine.dispose()

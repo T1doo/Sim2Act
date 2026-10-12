@@ -29,6 +29,7 @@ from .db import (
     internal_releases,
     internal_run_bindings,
     new_id,
+    operations,
     runs,
 )
 from .errors import DomainError
@@ -290,16 +291,19 @@ def preconditions(store, c, user, iid, body, limits):
         and type(i["data_version"]) is int and i["data_version"] >= 0
         and 1 <= len(i["history"]) < MAX and i["history"][-1]["release_id"] == r["id"]
         and i["history"][-1]["revision"] == i["revision"])
-    jobs = c.execute(select(internal_app_runs.c.id, internal_app_runs.c.status, internal_app_runs.c.release_id, internal_run_bindings.c.run_id)
+    jobs = c.execute(select(internal_app_runs.c.id, internal_app_runs.c.principal_id, internal_app_runs.c.status, internal_app_runs.c.release_id, internal_run_bindings.c.run_id)
         .outerjoin(internal_run_bindings, internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
         .where(internal_app_runs.c.instance_id == iid).order_by(internal_app_runs.c.id).limit(MAX + 1)).mappings().all()
     if len(jobs) > MAX:
         raise DomainError("BUDGET_EXHAUSTED", "Finite software preflight supports at most64 historical jobs")
     frozen_jobs = []
+    verified_results = set()
     for j in jobs:
-        job = c.execute(select(runs).where(runs.c.id == j["run_id"])).mappings().first()
-        logic.require(job is not None and job["principal_id"] == user and job["project_id"] == i["project_id"]
-                      and job["runtime_id"] == i["runtime_id"])
+        logic.require(j["principal_id"] == user)
+        # A persisted wrong binding must not project another scope's private Run.
+        job = c.execute(select(runs).where(runs.c.id == j["run_id"], runs.c.principal_id == user,
+            runs.c.project_id == i["project_id"], runs.c.runtime_id == i["runtime_id"])).mappings().first()
+        logic.require(job is not None)
         if j["status"] not in TERMINAL or job["status"] not in TERMINAL or store.has_unknown(c, job["id"]):
             raise DomainError("OUTCOME_UNKNOWN", "Stop or reconcile outstanding instance jobs before software preflight")
         logic.require(j["status"] == job["status"])
@@ -310,11 +314,25 @@ def preconditions(store, c, user, iid, body, limits):
         from .app_jobs import load_binding
 
         accepted, actual = load_binding(store, c, user, job, limits, archival_software=old_fp)
-        logic.require(accepted["instance_id"] == iid and accepted["release_id"] == j["release_id"])
+        logic.require(accepted["instance_id"] == iid and accepted["release_id"] == j["release_id"] and actual["id"] == j["id"])
+        record = c.execute(select(internal_instance_data.c.run_id).where(
+            internal_instance_data.c.instance_id == iid, internal_instance_data.c.run_id == actual["id"])).first()
+        # Match cold inspect_job: any result residue requires the full proof,
+        # including genuine SUCCEEDED jobs whose typed row has gone missing.
+        if (job["status"] == "SUCCEEDED" or actual["output"] is not None or actual["result_version"] is not None
+                or job["result"] is not None or record is not None
+                or c.execute(select(operations.c.id).where(operations.c.run_id == job["id"],
+                    operations.c.status == "VERIFIED")).first()):
+            from .text_run_checks import verify
+
+            verify(store, c, user, job, limits, archival_software=old_fp)
+            verified_results.add(actual["id"])
         frozen_jobs.append({"job": dict(job), "accepted": accepted, "app_run": dict(actual)})
     rows = c.execute(select(internal_instance_data).where(internal_instance_data.c.instance_id == iid)
         .order_by(internal_instance_data.c.version).limit(MAX + 1)).mappings().all()
     logic.require(len(rows) == i["data_version"] <= MAX)
+    logic.require(len({row["run_id"] for row in rows}) == len(rows)
+                  and {row["run_id"] for row in rows} == verified_results)
     rid = draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
     source = authorized_read(store, c, user, draft["runtime_id"], i["project_id"], "resource.read", {"resource_id": rid})
     logic.require(source["hash"] == draft["candidate"]["source_hash"] and source["format"] in {"txt", "md"})
@@ -325,12 +343,6 @@ def preconditions(store, c, user, iid, body, limits):
         validate_value(r["snapshot"]["data_schema"], row["data"])
         result = row["data"]["result"]
         check_evidence(source, {"resource_id": rid, "term": result["term"]}, result)
-        from .text_run_checks import verify
-
-        run_id = next((j["run_id"] for j in jobs if j["id"] == row["run_id"]), None)
-        logic.require(run_id is not None)
-        job = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
-        verify(store, c, user, job, limits, archival_software=old_fp)
     manifest, _, report = compile_preview(draft["candidate"], limits)
     validate_value(manifest.input_schema, body.input)
     output = text_apps.compute(source, {"resource_id": rid, **body.input})
