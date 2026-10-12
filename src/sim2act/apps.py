@@ -188,6 +188,10 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
 
 
 def compile_preview(candidate, platform_limits):
+    from . import pa_material_bindings
+
+    if isinstance(candidate, dict) and candidate.get("namespace") == pa_material_bindings.VERSION:
+        return pa_material_bindings.compile_candidate(candidate, platform_limits)
     from . import text_workflows
 
     if text_workflows.is_candidate(candidate):
@@ -273,7 +277,13 @@ def validate_source_family(c, user, draft):
             if table is task_extractions:
                 snapshot = row["snapshot"]
                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
-                if isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
+                if isinstance(snapshot, dict) and snapshot.get("kind") == "pa_model_literal_material_binding.v1":
+                    from .pa_material_bindings import VERSION
+
+                    if candidate.get("namespace") != VERSION:
+                        raise DomainError("VERSION_CONFLICT", "P-A model binding cannot be downgraded")
+                    expected_field, expected_kind = "pa_binding", "registered_tool"
+                elif isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
                     from .text_workflows import is_candidate
 
                     if not is_candidate(candidate):
@@ -321,7 +331,7 @@ def validate_source_family(c, user, draft):
     if len(markers) > 1:
         raise DomainError("VERSION_CONFLICT", "Independent source markers conflict")
     claimed = {
-        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application") if k in candidate
+        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application", "pa_binding") if k in candidate
     }
     expected = {markers[0][0]} if markers else set()
     if claimed != expected:

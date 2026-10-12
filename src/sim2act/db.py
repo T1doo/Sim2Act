@@ -905,6 +905,9 @@ class Store:
             return self.submit(principal, project_id, goal, refs, key, policy=policy, goal_source=goal_source)
 
     def guard(self, c, run_id, fence):
+        from .goal_applications import source_scope_gate
+
+        source_scope_gate(self, c, run_id)
         r = c.execute(select(runs).where(runs.c.id == run_id).with_for_update()).mappings().one()
         if (
             r["fence"] != fence
@@ -916,6 +919,9 @@ class Store:
         return dict(r)
 
     def frozen_contract(self, c, run):
+        from .goal_applications import source_scope_gate
+
+        source_scope_gate(self, c, run["id"])
         if not isinstance(run["context"], dict):
             raise DomainError("VERSION_CONFLICT", "Invalid persisted Run context")
         saved = (
@@ -1045,6 +1051,15 @@ class Store:
             )
             if row is None:
                 return None
+            from .goal_applications import source_scope_gate
+
+            try:
+                source_scope_gate(self, c, row)
+            except DomainError as exc:
+                c.execute(update(runs).where(runs.c.id == row).values(
+                    status="FAILED", error=exc.public(), lease_until=0))
+                self.event(c, row, "CONTRACT_REJECTED", exc.public())
+                return None
             # The queue's metadata lock selected this exact Run. Load only its
             # payload, never the private fields of other queued/history rows.
             row = c.execute(select(runs).where(runs.c.id == row)).mappings().one()
@@ -1097,6 +1112,10 @@ class Store:
 
     def inspect(self, principal, run_id):
         self.require_run_owner(principal, run_id)
+        from .goal_applications import source_scope_gate
+
+        with self.tx() as c:
+            source_scope_gate(self, c, run_id)
         from .csv_dag import inspect_job as inspect_csv_dag
         from .csv_dag import is_job as is_csv_dag
 
@@ -1112,6 +1131,9 @@ class Store:
         if is_app_job(self, run_id):
             return inspect_job(self, principal, run_id)
         with self.tx() as c:
+            from .goal_applications import source_scope_gate
+
+            source_scope_gate(self, c, run_id)
             r = (
                 c.execute(select(runs).where(runs.c.id == run_id, runs.c.principal_id == principal))
                 .mappings()

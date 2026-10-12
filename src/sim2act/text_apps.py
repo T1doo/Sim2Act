@@ -113,6 +113,11 @@ def compute(source, args):
 
 
 def verify_origin(store, c, user, draft, limits):
+    from . import pa_material_bindings
+
+    if draft["candidate"].get("namespace") == pa_material_bindings.VERSION:
+        pa_material_bindings.verify(store, c, user, draft, limits)
+        return
     if "task_proof" in draft["candidate"]:
         marker = draft["candidate"]["task_proof"]
         if not isinstance(marker, dict) or not isinstance(marker.get("proof"), dict):

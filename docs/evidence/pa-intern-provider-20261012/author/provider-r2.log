@@ -1,0 +1,27 @@
+....F..........                                                          [100%]
+=================================== FAILURES ===================================
+_____ test_default_scope_is_closed_and_plain_live_flags_never_grant_calls ______
+
+env = (<sim2act.db.Store object at 0x7f0153de4170>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...d9be5a5e5548dab7eb885104c3f582', 'user_f913fe966f704b7cbd84b4f5d902eb9b', 'proj_dde7d40e65624622898c5d996ce75a4a', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f01534f0890>
+
+    def test_default_scope_is_closed_and_plain_live_flags_never_grant_calls(env, monkeypatch):
+        data = setup(env)
+        calls = []
+        response = data[2].post(f"/api/projects/{data[4]}/application-provider-scopes",
+            json=dict(card_id=data[6]["id"], expected_version=data[6]["version"],
+                expected_fingerprint=data[6]["fingerprint"], generation_request_key="not-approved", request_key="scope"))
+>       assert response.status_code == 409 and response.json()["error"]["code"] == "RESOURCE_UNAVAILABLE"
+E       assert (400 == 409)
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_pa_generation_provider.py:188: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_pa_generation_provider.py::test_default_scope_is_closed_and_plain_live_flags_never_grant_calls
+1 failed, 14 passed, 1 warning in 28.62s

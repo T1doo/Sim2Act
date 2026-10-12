@@ -1,0 +1,211 @@
+FFFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+________ test_provider_is_rechecked_at_actual_wire_guard[live_enabled] _________
+
+env = (<sim2act.db.Store object at 0x7f9482998d70>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...a6e77703644a4f84d736798af4ce99', 'user_ad3f18c2b5db42a997f353b2c032c08a', 'proj_58e69442a70b471996f56a752e2079a7', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9482998a40>
+change = 'live_enabled'
+
+    @pytest.mark.parametrize("change", ["live_enabled", "token", "token_replaced", "live_id", "mode"])
+    def test_provider_is_rechecked_at_actual_wire_guard(env, monkeypatch, change):
+        data, clock = configured(env, monkeypatch, production=True)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        production_http(monkeypatch, transport)
+        selected = replace(data[1], application_generation_live_id=scope["approval_id"])
+        worker = Worker(data[0], selected)
+        build = httpx.Client.build_request
+    
+        def after_construction(client, *args, **kwargs):
+            request = build(client, *args, **kwargs)
+            updates = {"live_enabled": False} if change == "live_enabled" else {"token": ""} if change == "token" else {"token": "other-synthetic-token"} if change == "token_replaced" else {"application_generation_live_id": "gaapproval_" + "a" * 32} if change == "live_id" else {"mode": "mock"}
+            worker.s = replace(worker.s, **updates)
+            return request
+    
+        monkeypatch.setattr(httpx.Client, "build_request", after_construction)
+        assert worker.once()
+>       assert sent == [], "settings captured before the actual wire guard must not authorize a later revoked send"
+E       AssertionError: settings captured before the actual wire guard must not authorize a later revoked send
+E       assert [{'max_tokens...: False, ...}] == []
+E         
+E         Left contains one more item: {'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the supplie...,"source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}
+E         Use -v to get more diff
+
+tests/test_pa_generation_provider.py:291: AssertionError
+____________ test_provider_is_rechecked_at_actual_wire_guard[token] ____________
+
+env = (<sim2act.db.Store object at 0x7f9480ac5af0>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...39f8e4792b4f4fa6b53b17522912dd', 'user_fbff748dcb364eb8a5329de75f571699', 'proj_a4d981d0b23b4e3883e97f5f10eaeaef', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9480e644a0>
+change = 'token'
+
+    @pytest.mark.parametrize("change", ["live_enabled", "token", "token_replaced", "live_id", "mode"])
+    def test_provider_is_rechecked_at_actual_wire_guard(env, monkeypatch, change):
+        data, clock = configured(env, monkeypatch, production=True)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        production_http(monkeypatch, transport)
+        selected = replace(data[1], application_generation_live_id=scope["approval_id"])
+        worker = Worker(data[0], selected)
+        build = httpx.Client.build_request
+    
+        def after_construction(client, *args, **kwargs):
+            request = build(client, *args, **kwargs)
+            updates = {"live_enabled": False} if change == "live_enabled" else {"token": ""} if change == "token" else {"token": "other-synthetic-token"} if change == "token_replaced" else {"application_generation_live_id": "gaapproval_" + "a" * 32} if change == "live_id" else {"mode": "mock"}
+            worker.s = replace(worker.s, **updates)
+            return request
+    
+        monkeypatch.setattr(httpx.Client, "build_request", after_construction)
+        assert worker.once()
+>       assert sent == [], "settings captured before the actual wire guard must not authorize a later revoked send"
+E       AssertionError: settings captured before the actual wire guard must not authorize a later revoked send
+E       assert [{'max_tokens...: False, ...}] == []
+E         
+E         Left contains one more item: {'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the supplie...,"source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}
+E         Use -v to get more diff
+
+tests/test_pa_generation_provider.py:291: AssertionError
+_______ test_provider_is_rechecked_at_actual_wire_guard[token_replaced] ________
+
+env = (<sim2act.db.Store object at 0x7f94807bd3d0>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...cf431eb691481bb510da85e7197627', 'user_ac6deee9676f4c68bf24d9c07475e26e', 'proj_65351c20fe1042a380f3b6f5949d9feb', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f94806bab70>
+change = 'token_replaced'
+
+    @pytest.mark.parametrize("change", ["live_enabled", "token", "token_replaced", "live_id", "mode"])
+    def test_provider_is_rechecked_at_actual_wire_guard(env, monkeypatch, change):
+        data, clock = configured(env, monkeypatch, production=True)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        production_http(monkeypatch, transport)
+        selected = replace(data[1], application_generation_live_id=scope["approval_id"])
+        worker = Worker(data[0], selected)
+        build = httpx.Client.build_request
+    
+        def after_construction(client, *args, **kwargs):
+            request = build(client, *args, **kwargs)
+            updates = {"live_enabled": False} if change == "live_enabled" else {"token": ""} if change == "token" else {"token": "other-synthetic-token"} if change == "token_replaced" else {"application_generation_live_id": "gaapproval_" + "a" * 32} if change == "live_id" else {"mode": "mock"}
+            worker.s = replace(worker.s, **updates)
+            return request
+    
+        monkeypatch.setattr(httpx.Client, "build_request", after_construction)
+        assert worker.once()
+>       assert sent == [], "settings captured before the actual wire guard must not authorize a later revoked send"
+E       AssertionError: settings captured before the actual wire guard must not authorize a later revoked send
+E       assert [{'max_tokens...: False, ...}] == []
+E         
+E         Left contains 2 more items, first extra item: {'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the supplie...,"source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}
+E         Use -v to get more diff
+
+tests/test_pa_generation_provider.py:291: AssertionError
+___________ test_provider_is_rechecked_at_actual_wire_guard[live_id] ___________
+
+env = (<sim2act.db.Store object at 0x7f9482541280>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...e16867143d427e800452a922b2af76', 'user_dda7afb55ae4401f9227cacd2a7d539c', 'proj_495a0f47150440688247c576b9422804', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9482542cf0>
+change = 'live_id'
+
+    @pytest.mark.parametrize("change", ["live_enabled", "token", "token_replaced", "live_id", "mode"])
+    def test_provider_is_rechecked_at_actual_wire_guard(env, monkeypatch, change):
+        data, clock = configured(env, monkeypatch, production=True)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        production_http(monkeypatch, transport)
+        selected = replace(data[1], application_generation_live_id=scope["approval_id"])
+        worker = Worker(data[0], selected)
+        build = httpx.Client.build_request
+    
+        def after_construction(client, *args, **kwargs):
+            request = build(client, *args, **kwargs)
+            updates = {"live_enabled": False} if change == "live_enabled" else {"token": ""} if change == "token" else {"token": "other-synthetic-token"} if change == "token_replaced" else {"application_generation_live_id": "gaapproval_" + "a" * 32} if change == "live_id" else {"mode": "mock"}
+            worker.s = replace(worker.s, **updates)
+            return request
+    
+        monkeypatch.setattr(httpx.Client, "build_request", after_construction)
+        assert worker.once()
+>       assert sent == [], "settings captured before the actual wire guard must not authorize a later revoked send"
+E       AssertionError: settings captured before the actual wire guard must not authorize a later revoked send
+E       assert [{'max_tokens...: False, ...}] == []
+E         
+E         Left contains one more item: {'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the supplie...,"source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}
+E         Use -v to get more diff
+
+tests/test_pa_generation_provider.py:291: AssertionError
+____________ test_provider_is_rechecked_at_actual_wire_guard[mode] _____________
+
+env = (<sim2act.db.Store object at 0x7f94810065d0>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...04b2389fe941b8b90a8395325a6d39', 'user_6ce863eebddf45afa5cbc8cd29a44b38', 'proj_70c665cacd87439ea7f4175d396fe39e', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9480f5b380>
+change = 'mode'
+
+    @pytest.mark.parametrize("change", ["live_enabled", "token", "token_replaced", "live_id", "mode"])
+    def test_provider_is_rechecked_at_actual_wire_guard(env, monkeypatch, change):
+        data, clock = configured(env, monkeypatch, production=True)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        production_http(monkeypatch, transport)
+        selected = replace(data[1], application_generation_live_id=scope["approval_id"])
+        worker = Worker(data[0], selected)
+        build = httpx.Client.build_request
+    
+        def after_construction(client, *args, **kwargs):
+            request = build(client, *args, **kwargs)
+            updates = {"live_enabled": False} if change == "live_enabled" else {"token": ""} if change == "token" else {"token": "other-synthetic-token"} if change == "token_replaced" else {"application_generation_live_id": "gaapproval_" + "a" * 32} if change == "live_id" else {"mode": "mock"}
+            worker.s = replace(worker.s, **updates)
+            return request
+    
+        monkeypatch.setattr(httpx.Client, "build_request", after_construction)
+        assert worker.once()
+>       assert sent == [], "settings captured before the actual wire guard must not authorize a later revoked send"
+E       AssertionError: settings captured before the actual wire guard must not authorize a later revoked send
+E       assert [{'max_tokens...: False, ...}] == []
+E         
+E         Left contains one more item: {'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the supplie...,"source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}
+E         Use -v to get more diff
+
+tests/test_pa_generation_provider.py:291: AssertionError
+_ test_post_settlement_finalization_failure_keeps_original_attempt_and_failure_event _
+
+env = (<sim2act.db.Store object at 0x7f9482407a70>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...157e60be6b43c2b03d7c56f7d8b1b0', 'user_08d2a2e46eba46948ef10cecd091851c', 'proj_4fa99272186a44f881ce8761ea2208ed', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f94807f7d70>
+
+    def test_post_settlement_finalization_failure_keeps_original_attempt_and_failure_event(env, monkeypatch):
+        data, clock = configured(env, monkeypatch)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        original = Worker.finish
+    
+        def injected_finalizer(worker, run_id, fence, state, *args, **kwargs):
+            if state == "PARTIAL":
+                raise DomainError("BUDGET_EXHAUSTED", "Synthetic final commit failure after settled response")
+            return original(worker, run_id, fence, state, *args, **kwargs)
+    
+        monkeypatch.setattr(Worker, "finish", injected_finalizer)
+        assert Worker(data[0], data[1], goal_planner_transport=transport).once()
+        with data[0].tx() as c:
+            row = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+            assert row["result"] is None and row["status"] == "FAILED"
+>           assert row["error"]["code"] == "BUDGET_EXHAUSTED", "a completed immutable response must not hide the final commit failure"
+E           AssertionError: a completed immutable response must not hide the final commit failure
+E           assert 'VERSION_CONFLICT' == 'BUDGET_EXHAUSTED'
+E             
+E             - BUDGET_EXHAUSTED
+E             + VERSION_CONFLICT
+
+tests/test_pa_generation_provider.py:314: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_pa_generation_provider.py::test_provider_is_rechecked_at_actual_wire_guard[live_enabled]
+FAILED tests/test_pa_generation_provider.py::test_provider_is_rechecked_at_actual_wire_guard[token]
+FAILED tests/test_pa_generation_provider.py::test_provider_is_rechecked_at_actual_wire_guard[token_replaced]
+FAILED tests/test_pa_generation_provider.py::test_provider_is_rechecked_at_actual_wire_guard[live_id]
+FAILED tests/test_pa_generation_provider.py::test_provider_is_rechecked_at_actual_wire_guard[mode]
+FAILED tests/test_pa_generation_provider.py::test_post_settlement_finalization_failure_keeps_original_attempt_and_failure_event
+6 failed, 15 deselected, 1 warning in 10.10s

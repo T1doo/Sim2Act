@@ -137,9 +137,14 @@ class Worker:
                 )
             activation_request = (planner_request and
                 self.store.frozen_contract(c, run).natural_planning.activation is not None)
+            generation_activation = (generation_request and
+                self.store.frozen_contract(c, run).application_generation.activation is not None)
             if activation_request:
                 from .natural_activations import now as activation_now
                 now = activation_now()
+            elif generation_activation:
+                from .generation_approvals import now as generation_now
+                now = generation_now()
             else:
                 now = time.time()
             count = len(
@@ -150,7 +155,7 @@ class Worker:
                     )
                 ).all()
             )
-            if q["blocked_until"] > now or count >= (min(s.rpm, 1) if activation_request else s.rpm):
+            if q["blocked_until"] > now or count >= (min(s.rpm, 1) if activation_request or generation_activation else s.rpm):
                 raise DomainError("RATE_LIMITED", "Account-wide quota waiting", retryable=True)
             aid = new_id("attempt")
             if protocol_request:
@@ -220,6 +225,12 @@ class Worker:
             if generation_request:
                 self.store.event(c, run_id, "GA_WIRE_RESERVED", {
                     "attempt_id": aid, "index": context["requests"], "fence": fence, "wire": wire_seal})
+                if generation_activation:
+                    from .generation_approvals import reserve_slot as reserve_generation_slot
+
+                    if wire_seal is None:
+                        raise DomainError("VERSION_CONFLICT", "Missing generation wire proof")
+                    reserve_generation_slot(self, c, run, aid, envelope, wire_seal["sha256"])
             context["requests"] += 1
             context["reserved_tokens"] += envelope
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
@@ -248,6 +259,9 @@ class Worker:
     def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False):
         with self.store.tx() as c:
             from .db import run_contracts
+            from .goal_applications import source_scope_gate
+
+            source_scope_gate(self.store, c, run_id)
             saved = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == run_id)).scalar_one_or_none()
             if saved is not None and not isinstance(saved, dict):
                 raise DomainError("VERSION_CONFLICT", "Invalid frozen finalization contract")
@@ -261,8 +275,10 @@ class Worker:
             if verify_goal_source:
                 frozen = self.store.frozen_contract(c, run)
                 if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
-                    from .goal_applications import verified_candidate
+                    from .goal_applications import check_active, verified_candidate
 
+                    if frozen.application_generation.activation is not None:
+                        check_active(self, c, run)
                     candidate = verified_candidate(self.store, c, run, frozen.limits)
                     if state != "PARTIAL" or result != {
                         "candidate": candidate, "candidate_fingerprint": fingerprint(candidate),
@@ -312,6 +328,10 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
+            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and frozen.application_generation.activation is not None:
+                check_active(self, c, run)
+                if run["lease_until"] <= time.time():
+                    raise DomainError("VERSION_CONFLICT", "Original worker lease expired before final commit")
 
     def process(self, run):
         from .csv_dag import is_job as is_csv_dag
@@ -609,8 +629,8 @@ class Worker:
                     fail_job(self, run, e)
                     return True
                 with self.store.tx() as c:
-                    current = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
-                    if current["fence"] == run["fence"]:
+                    current_fence = c.execute(select(runs.c.fence).where(runs.c.id == run["id"])).scalar_one()
+                    if current_fence == run["fence"]:
                         c.execute(
                             update(runs)
                             .where(runs.c.id == run["id"])

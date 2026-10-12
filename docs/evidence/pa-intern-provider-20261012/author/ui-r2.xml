@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="27.838" timestamp="2026-10-12T19:27:19.714304+00:00" hostname="9809f76d2248"><testcase classname="tests.test_pa_provider_ui" name="test_scoped_model_generation_and_new_material_page[valid]" time="7.003"><failure message="AssertionError: TypeError: Cannot read properties of undefined (reading 'run_id')&#10;      at showApp (http://offline.test/:461:234)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async openGoalApplication (http://offline.test/:61:15)&#10;      at async $.onclick (http://offline.test/:189:2)&#10;      at async Promise.all (index 0)&#10;      at async gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:23:16)&#10;      at async /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:132:49&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fd8e6666cf0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...69b2b41c874f76a4f12c271a0d76b0', 'user_93a850be716341548bdfd0e0550bc982', 'proj_5431d715f1e34325b89590fb54162c9a', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fd8e6332570&gt;
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/ui-r2-fixtures/test_scoped_model_generation_a0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        scope, _, _ = approved(data)  # Freeze all authorized material only after fixture setup.
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: TypeError: Cannot read properties of undefined (reading 'run_id')
+E                 at showApp (http://offline.test/:461:234)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async openGoalApplication (http://offline.test/:61:15)
+E                 at async $.onclick (http://offline.test/:189:2)
+E                 at async Promise.all (index 0)
+E                 at async gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:23:16)
+E                 at async /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:132:49
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError</failure></testcase><testcase classname="tests.test_pa_provider_ui" name="test_scoped_model_generation_and_new_material_page[binding-lost]" time="7.663"><failure message="AssertionError: TypeError: Cannot read properties of undefined (reading 'run_id')&#10;      at showApp (http://offline.test/:461:234)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async openGoalApplication (http://offline.test/:61:15)&#10;      at async $.onclick (http://offline.test/:189:2)&#10;      at async Promise.all (index 0)&#10;      at async gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:23:16)&#10;      at async /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:132:49&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fd8e489aed0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...58a88e036249edb64e6dc752d14c11', 'user_ca68ae57d8604e6188382e471798944a', 'proj_acc7d6692a3c4ecb98b6774dd57ca724', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fd8e46418b0&gt;
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/ui-r2-fixtures/test_scoped_model_generation_a1')
+scenario = 'binding-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        scope, _, _ = approved(data)  # Freeze all authorized material only after fixture setup.
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: TypeError: Cannot read properties of undefined (reading 'run_id')
+E                 at showApp (http://offline.test/:461:234)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async openGoalApplication (http://offline.test/:61:15)
+E                 at async $.onclick (http://offline.test/:189:2)
+E                 at async Promise.all (index 0)
+E                 at async gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:23:16)
+E                 at async /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:132:49
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError</failure></testcase><testcase classname="tests.test_pa_provider_ui" name="test_scoped_model_generation_and_new_material_page[binding-late]" time="6.039"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: User action must be enabled: pa-binding-recover&#10;      at usable (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:18:119)&#10;      at gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:20:2)&#10;      at click (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:25:81)&#10;      at /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:131:29&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fd8dfe8edb0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...c2e1a5bb7942778aae6d9f40ed9c17', 'user_73f654be372f47988573c9d3c942c03b', 'proj_a72642c14ca24a24b6b6f893d6e08d7f', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fd8e45f6660&gt;
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/ui-r2-fixtures/test_scoped_model_generation_a2')
+scenario = 'binding-late'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        scope, _, _ = approved(data)  # Freeze all authorized material only after fixture setup.
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: User action must be enabled: pa-binding-recover
+E                 at usable (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:18:119)
+E                 at gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:20:2)
+E                 at click (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:25:81)
+E                 at /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:131:29
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError</failure></testcase><testcase classname="tests.test_pa_provider_ui" name="test_scoped_model_generation_and_new_material_page[scope-late]" time="6.989"><failure message="AssertionError: TypeError: Cannot read properties of undefined (reading 'run_id')&#10;      at showApp (http://offline.test/:461:234)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async openGoalApplication (http://offline.test/:61:15)&#10;      at async $.onclick (http://offline.test/:189:2)&#10;      at async Promise.all (index 0)&#10;      at async gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:23:16)&#10;      at async /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:132:49&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fd8e4b7fce0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...6883079db44deb8578bc6ca6e78852', 'user_b7083ff67d294cb9a2b03adf768c1d88', 'proj_4f804e7a843449acaa24846a2fc99091', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fd8e47530b0&gt;
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/ui-r2-fixtures/test_scoped_model_generation_a3')
+scenario = 'scope-late'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        scope, _, _ = approved(data)  # Freeze all authorized material only after fixture setup.
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: TypeError: Cannot read properties of undefined (reading 'run_id')
+E                 at showApp (http://offline.test/:461:234)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async openGoalApplication (http://offline.test/:61:15)
+E                 at async $.onclick (http://offline.test/:189:2)
+E                 at async Promise.all (index 0)
+E                 at async gesture (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:23:16)
+E                 at async /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:132:49
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError</failure></testcase></testsuite></testsuites>

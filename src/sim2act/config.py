@@ -24,6 +24,8 @@ class Settings:
     goal_planner_provider: str = "disabled"
     natural_activation_enabled: bool = False
     natural_activation_live_id: str = ""
+    application_generation_activation_enabled: bool = False
+    application_generation_live_id: str = ""
 
     @classmethod
     def from_env(cls):
@@ -45,6 +47,8 @@ class Settings:
             goal_planner_provider=os.environ.get("SIM2ACT_GOAL_PLANNER_PROVIDER", "disabled"),
             natural_activation_enabled=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_ENABLED", "false").lower() == "true",
             natural_activation_live_id=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_LIVE_ID", ""),
+            application_generation_activation_enabled=os.environ.get("SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED", "false").lower() == "true",
+            application_generation_live_id=os.environ.get("SIM2ACT_APPLICATION_GENERATION_LIVE_ID", ""),
             **{
                 k: int(os.environ.get("SIM2ACT_" + k.upper(), str(v)))
                 for k, v in {
@@ -65,6 +69,10 @@ class Settings:
             r"nlactivation_[a-f0-9]{32}", s.natural_activation_live_id
         ):
             raise ValueError("A specific natural activation ID is required")
+        if s.application_generation_live_id and not re.fullmatch(
+            r"gaapproval_[a-f0-9]{32}", s.application_generation_live_id
+        ):
+            raise ValueError("A specific application generation approval ID is required")
         if not 1 <= s.rpm <= 30 or not s.quota_subject:
             raise ValueError("Unverified quota must be between 1 and 30 RPM")
         bounds = [

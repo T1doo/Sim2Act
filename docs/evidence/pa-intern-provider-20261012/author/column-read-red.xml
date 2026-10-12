@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="23.255" timestamp="2026-10-12T20:15:17.833082+00:00" hostname="9809f76d2248"><testcase classname="tests.test_project_column_versions" name="test_approval_source_evidence_actual_run_read_only_and_authorized" time="22.851"><failure message="AssertionError: ['SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_...very_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?']&#10;assert not ['SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_...very_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?']">env = (&lt;sim2act.db.Store object at 0x7f6f87f584d0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...53e1366f684655ab980ae77499810c', 'user_28646a9b87284605a61f1d3bcde8651d', 'proj_4d78967fa3294d0da05a1a1d3374e503', ...)
+
+    def test_approval_source_evidence_actual_run_read_only_and_authorized(env):
+        values, _, base, _, p, confirm = preview(env)
+        before = snapshot(env)
+        for entry in p["entries"]:
+            endpoint = f"/api/internal/approvals/{entry['approval']['id']}/project-column-origin"
+            r = env[2].get(endpoint)
+            assert r.status_code == 200, r.text
+            actual = r.json()
+            assert set(actual) == {"namespace", "approval_id", "approval_fingerprint", "origin", "execution_source"}
+            assert actual["execution_source"] == entry["snapshot"]["execution_source"]
+            assert actual["origin"] == entry["snapshot"]["project_column_origin"]
+            with env[0].tx() as c:
+                source = dag.row(c, env[3], actual["execution_source"]["run_id"])
+                assert actual["execution_source"]["accepted_fingerprint"] == source["fingerprint"]
+            assert snapshot(env) == before
+        group = env[2].post(base + "/commit", json=confirm)
+        assert group.status_code == 201, group.text
+        entry = group.json()["entries"][0]
+        release_path = f"/api/internal/releases/{entry['release_id']}"
+        endpoints = [endpoint, release_path, release_path + "/project-column-origin"]
+        before = snapshot(env)
+        env[2].headers["Authorization"] = "Bearer synthetic-test-B"
+        for path in endpoints:
+            with statements(env[0]) as seen:
+                assert env[2].get(path).status_code == 403
+            assert_no_ledger_read(seen)
+            assert snapshot(env) == before
+        env[2].headers["Authorization"] = "Bearer synthetic-test-A"
+        with env[0].tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == values[5]).values(revoked=True))
+        before = snapshot(env)
+        for path in endpoints:
+            with statements(env[0]) as seen:
+                assert env[2].get(path).status_code == 403
+&gt;           assert_no_ledger_read(seen)
+
+tests/test_project_column_versions.py:197: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+seen = ['SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?', 'BEGIN IMMEDIATE', 'SELECT internal_appro... app_drafts.candidate, app_drafts.fingerprint, app_drafts.created_at \nFROM app_drafts \nWHERE app_drafts.id = ?', ...]
+
+    def assert_no_ledger_read(seen):
+        forbidden = re.compile(r"\b(events|operations|operation_intents|run_contracts|internal_run_bindings|protocol_jobs|delivery_graph_requests)\b|\bcontext\b|\bresult\b", re.I)
+        protected = [sql for sql in seen if sql.lstrip().lower().startswith("select") and forbidden.search(sql)]
+&gt;       assert not protected, protected
+E       AssertionError: ['SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_...very_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?']
+E       assert not ['SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_...very_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?']
+
+tests/test_run_dispatch_owner.py:72: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,47 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+__ test_exact_old_db_cold_current_continuation_preserves_and_new_worker[233] ___
+
+legacy = (<sim2act.db.Store object at 0x7fb9ea5295e0>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def test_exact_old_db_cold_current_continuation_preserves_and_new_worker(legacy):
+        store, settings, client, info = legacy
+        before = rows(store)
+        assert client.get("/api/apps/" + info["app"]["id"]).status_code == 409
+        assert rows(store) == before
+>       _, _, body, receipt = continued(legacy)
+                              ^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:135: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_text_continuations.py:96: in continued
+    approval, body, commit = prepared(data)
+                             ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7fb9ea5295e0>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Independent text logic binding changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:87: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_continuations.py::test_exact_old_db_cold_current_continuation_preserves_and_new_worker[233]
+1 failed, 1 passed, 1 warning in 11.34s

@@ -409,6 +409,9 @@ def draft_gate(store, c, user, aid):
     from .text_workflows import scope_gate
 
     scope_gate(store, c, user, aid)
+    from .pa_material_bindings import scope_gate as pa_binding_scope_gate
+
+    pa_binding_scope_gate(store, c, user, aid)
 
     # Indexed origin metadata identifies this family before protected app bodies.
     exists = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid,

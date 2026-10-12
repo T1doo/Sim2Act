@@ -15,6 +15,7 @@ from sqlalchemy import insert, select, update
 
 from .contracts import (
     ActionSpec,
+    ApplicationGenerationActivation,
     ApplicationGenerationPolicy,
     AppManifest,
     Strict,
@@ -32,6 +33,7 @@ from .db import (
     operation_intents,
     operations,
     principals,
+    run_contracts,
     runs,
 )
 from .errors import DomainError
@@ -82,7 +84,14 @@ class ConfirmInput(Strict):
     name: str = Field(min_length=1, max_length=100)
 
 
-def policy(provider, user, pid, body):
+class GenerationRunInput(Strict):
+    expected_version: int = Field(strict=True, ge=1)
+    expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    request_key: str = Field(min_length=1, max_length=100)
+    activation: ApplicationGenerationActivation | None = None
+
+
+def policy(provider, user, pid, body, activation=None):
     intent = fingerprint({"user": user, "project": pid, "input": body})
     return ApplicationGenerationPolicy(
         version="goal-text-application.v1",
@@ -93,10 +102,59 @@ def policy(provider, user, pid, body):
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
+        activation=activation,
     ).model_dump(exclude_none=True)
 
 
+def source_scope_gate(store, c, rid):
+    """Only identifier projections before authorization; never fetch protected bodies."""
+    metadata = c.execute(select(runs.c.principal_id, runs.c.project_id,
+        runs.c.runtime_id, runs.c.resource_refs).where(runs.c.id == rid)).mappings().first()
+    hints = c.execute(select(
+        run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
+        run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),
+        run_contracts.c.snapshot["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
+        run_contracts.c.snapshot["runtime_id"].as_string().label("runtime"),
+        run_contracts.c.snapshot["goal"]["owner_id"].as_string().label("owner"),
+        run_contracts.c.snapshot["goal"]["project_id"].as_string().label("project"),
+        run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+        run_contracts.c.snapshot["resources"][0]["resource_id"].as_string().label("resource"),
+        run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"]["resource_refs"].label("goal_refs"))
+        .where(run_contracts.c.run_id == rid)).mappings().first()
+    anchored = c.execute(select(
+        events.c.data["application_generation"]["version"].as_string().label("kind"),
+        events.c.data["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
+        events.c.data["application_generation"]["app_id"].as_string().label("app_id"))
+        .where(events.c.run_id == rid, events.c.kind == "ACCEPTED")).mappings().all()
+    marked = any(r["kind"] is not None or r["aid"] is not None or r["app_id"] is not None for r in anchored)
+    if not marked and (not hints or all(hints[k] is None for k in ("kind", "aid", "app_id"))):
+        return False
+    if metadata is None or len(metadata["resource_refs"]) != 1:
+        raise DomainError("VERSION_CONFLICT")
+    store.own_project(c, metadata["principal_id"], metadata["project_id"])
+    store.authorize(c, metadata["principal_id"], metadata["runtime_id"],
+        metadata["project_id"], metadata["resource_refs"][0], "resource.read")
+    if len(anchored) != 1 or hints is None:
+        raise DomainError("VERSION_CONFLICT")
+    aid = anchored[0]["aid"] or hints["aid"]
+    if aid is not None:
+        from .generation_approvals import _meta
+
+        meta = _meta(store, c, metadata["principal_id"], aid, content=True)
+        if (meta.project_id, meta.runtime_id, [meta.resource_id]) != (
+                metadata["project_id"], metadata["runtime_id"], metadata["resource_refs"]):
+            raise DomainError("VERSION_CONFLICT")
+    if (any(hints[k] != anchored[0][k] for k in ("kind", "aid", "app_id"))
+        or hints["kind"] != "goal-text-application.v1" or hints["runtime"] != metadata["runtime_id"]
+        or hints["owner"] != metadata["principal_id"] or hints["project"] != metadata["project_id"]
+        or hints["refs"] != metadata["resource_refs"] or hints["goal_refs"] != metadata["resource_refs"]
+        or hints["resource"] != metadata["resource_refs"][0]):
+        raise DomainError("VERSION_CONFLICT")
+    return True
+
+
 def source(store, c, run):
+    source_scope_gate(store, c, run["id"])
     contract = store.frozen_contract(c, run)
     if (
         contract.application_generation is None
@@ -188,6 +246,11 @@ def body(messages, tools, max_output):
 def history(store, c, run):
     """Reconstruct every request from frozen input and separately anchored received responses."""
     messages = initial_messages(store, c, run)
+    selected = store.frozen_contract(c, run).application_generation
+    if selected.activation is not None:
+        from .generation_approvals import validate_run
+
+        validate_run(store, c, run)
     rows = (
         c.execute(
             select(attempts)
@@ -284,11 +347,17 @@ def history(store, c, run):
             or parameters.get("generation_wire") != hashlib.sha256(wire).hexdigest()
             or parameters.get("request_fingerprint")
             != fingerprint({"messages": messages, "tools": tools, "model": "intern-s2"})
-            or attempt["response_model"] != "intern-s2"
-            or attempt["mode"] != "MOCK"
+            or attempt["request_model"] != "intern-s2"
+            or attempt["mode"] != ("LIVE" if store.frozen_contract(c, run).mode == "live" else "MOCK")
             or attempt["usage"]["status"] != "known"
         ):
             raise DomainError("VERSION_CONFLICT", "Generation differs from actual provider wire")
+        identity = returned_model_identity("intern-s2", attempt["response_model"], enforced=attempt["mode"] == "LIVE")
+        require_returned_model(identity)
+        if selected.activation is not None and identity["normalized_returned_model"] != "intern-s2":
+            raise DomainError("VERSION_CONFLICT", "Scoped provider response identity changed")
+        if fingerprint(parameters.get("model_identity")) != fingerprint(identity):
+            raise DomainError("VERSION_CONFLICT", "Actual provider identity evidence changed")
         checked_usage(
             {"usage": attempt["usage"]["tokens"]},
             store.frozen_contract(c, run).limits,
@@ -443,6 +512,31 @@ def verified_candidate(store, c, run, limits):
     return value
 
 
+def check_provider(worker, c, run, contract, attempt_id=None):
+    """Reusable at the actual wire guard without replaying a STARTED Attempt."""
+    if (contract.application_generation.provider != "intern-s2"
+        or worker.s.goal_planner_provider != "intern-s2"):
+        raise DomainError("RESOURCE_UNAVAILABLE", "Explicit Intern generation provider required")
+    activation = contract.application_generation.activation
+    if activation is not None:
+        from .generation_approvals import validate_run
+
+        scope, _, _, _, _ = validate_run(worker.store, c, run, worker.s, active=True, transition=attempt_id)
+        if worker.goal_planner_transport is None:
+            if (worker.store.test_only or scope.mode != "LIVE" or worker.s.mode != "live"
+                or not worker.s.live_enabled or not worker.s.token
+                or worker.s.application_generation_live_id != activation.approval_id):
+                raise DomainError("RESOURCE_UNAVAILABLE", "No exact P-A LIVE approval selected")
+        elif (scope.mode != "OFFLINE_TEST" or not worker.store.test_only or worker.s.mode != "mock"
+              or worker.s.live_enabled or not isinstance(worker.goal_planner_transport, httpx.MockTransport)):
+            raise DomainError("PERMISSION_DENIED", "Isolated P-A approval adapter required")
+    elif worker.goal_planner_transport is None:
+        raise DomainError("RESOURCE_UNAVAILABLE", "Generation LIVE allowance is zero; exact approval required")
+    elif (not worker.store.test_only or worker.s.mode != "mock" or worker.s.live_enabled
+          or not isinstance(worker.goal_planner_transport, httpx.MockTransport)):
+        raise DomainError("PERMISSION_DENIED", "Offline test-only generation adapter required")
+
+
 def check_sender(worker, c, run, messages, tools):
     contract, _ = source(worker.store, c, run)
     card = (
@@ -460,21 +554,7 @@ def check_sender(worker, c, run, messages, tools):
         raise DomainError("VERSION_CONFLICT", "Goal changed or generation stopped")
     if time.time() >= run["created_at"] + min(worker.s.run_seconds, contract.limits.run_seconds):
         raise DomainError("BUDGET_EXHAUSTED")
-    if (
-        contract.application_generation.provider != "intern-s2"
-        or worker.s.goal_planner_provider != "intern-s2"
-        or worker.goal_planner_transport is None
-    ):
-        raise DomainError(
-            "RESOURCE_UNAVAILABLE", "Generation LIVE allowance is zero; offline adapter required"
-        )
-    if (
-        not worker.store.test_only
-        or worker.s.mode != "mock"
-        or worker.s.live_enabled
-        or not isinstance(worker.goal_planner_transport, httpx.MockTransport)
-    ):
-        raise DomainError("PERMISSION_DENIED", "Offline test-only generation adapter required")
+    check_provider(worker, c, run, contract)
     expected, rows = history(worker.store, c, run)
     if (
         messages != expected
@@ -518,14 +598,24 @@ def process(worker, run, contract):
             wire = body(messages, tools, worker.s.max_output_tokens)
             if len(wire) > 32768:
                 raise DomainError("BUDGET_EXHAUSTED", "Complete generation wire exceeds geometry")
-            aid = worker.reserve(
-                rid,
-                fence,
-                ctx,
-                request_tools=tools,
-                verify_goal_source=True,
-                generation_request=True,
-            )
+            try:
+                aid = worker.reserve(
+                    rid,
+                    fence,
+                    ctx,
+                    request_tools=tools,
+                    verify_goal_source=True,
+                    generation_request=True,
+                )
+            except DomainError as limited:
+                if limited.code != "RATE_LIMITED" or contract.application_generation.activation is None:
+                    raise
+                # Only an unreserved next stage waits; a received/unknown send is
+                # never retried. The ordinary heartbeat and all live gates remain
+                # active, and the approval's absolute deadline cannot be renewed.
+                if worker.stop.wait(1):
+                    raise DomainError("VERSION_CONFLICT", "Generation stopped before reservation") from limited
+                continue
 
             def guard(request, *, sent_wire=wire, attempt_id=aid):
                 if (
@@ -537,7 +627,11 @@ def process(worker, run, contract):
                 with worker.store.tx() as c:
                     current = locked(worker, c, rid, fence)
                     # The current STARTED row is excluded solely for this one send guard.
-                    check_active(worker, c, current)
+                    check_active(worker, c, current, attempt_id)
+                    if (contract.application_generation.activation is not None
+                        and worker.goal_planner_transport is None
+                        and request.headers.get("Authorization") != "Bearer " + worker.s.token):
+                        raise DomainError("PERMISSION_DENIED", "Provider credential selection changed before send")
                     attempt = (
                         c.execute(select(attempts).where(attempts.c.id == attempt_id))
                         .mappings()
@@ -549,6 +643,10 @@ def process(worker, run, contract):
                         != hashlib.sha256(sent_wire).hexdigest()
                     ):
                         raise DomainError("VERSION_CONFLICT")
+                    if contract.application_generation.activation is not None:
+                        from .generation_approvals import mark_sending
+
+                        return {"deadline": mark_sending(worker, c, current, attempt_id)}
                 return {
                     "deadline": run["created_at"]
                     + min(worker.s.run_seconds, contract.limits.run_seconds)
@@ -579,7 +677,7 @@ def process(worker, run, contract):
                     )
                 with worker.store.tx() as c:
                     current = locked(worker, c, rid, fence)
-                    check_active(worker, c, current)
+                    check_active(worker, c, current, aid)
                     params = worker.attempt_parameters(c, aid, raw)
                     params["generation_received_raw"] = original
                     params["generation_raw_evidence"] = raw_metadata
@@ -618,12 +716,13 @@ def process(worker, run, contract):
                         )
                     call = {**calls[0], "id": "ga_read"}
                     dispatch(worker.store, rid, fence, call)
+                    settle_generation(worker, contract, rid, aid)
                     continue
                 if calls:
                     raise DomainError("PERMISSION_DENIED", "Candidate and repair cannot call tools")
                 with worker.store.tx() as c:
                     current = locked(worker, c, rid, fence)
-                    check_active(worker, c, current)
+                    check_active(worker, c, current, aid)
                     try:
                         candidate = parse_candidate(worker.store, c, current, msg, contract.limits)
                     except DomainError as exc:
@@ -648,6 +747,10 @@ def process(worker, run, contract):
                         c.execute(
                             update(runs).where(runs.c.id == rid).values(context=repair_context)
                         )
+                        if contract.application_generation.activation is not None:
+                            from .generation_approvals import settle
+
+                            settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
                         continue
                     worker.store.event(
                         c,
@@ -655,6 +758,10 @@ def process(worker, run, contract):
                         "GA_CANDIDATE_VALIDATED",
                         {"attempt_id": aid, "candidate_fingerprint": fingerprint(candidate)},
                     )
+                    if contract.application_generation.activation is not None:
+                        from .generation_approvals import settle
+
+                        settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
                 worker.finish(
                     rid,
                     fence,
@@ -684,34 +791,19 @@ def process(worker, run, contract):
                             if isinstance(error, DomainError)
                             else DomainError("OUTCOME_UNKNOWN")
                         )
-                        rejected_parameters = dict(attempt["parameters"])
-                        original, raw_metadata = response_archive(raw)
-                        if raw_metadata is not None:
-                            rejected_parameters["generation_raw_evidence"] = raw_metadata
-                        if original is not None:
-                            rejected_parameters["generation_rejected_raw"] = original
-                        values: dict[str, object] = {
-                            "parameters": rejected_parameters,
-                            "error": failure.code,
-                        }
-                        if attempt["status"] == "STARTED":
-                            values.update(
-                                status="FAILED",
-                                response=safe_received_message(raw),
-                                usage=normalize_usage(raw),
-                                elapsed=time.monotonic() - started,
-                            )
-                        c.execute(update(attempts).where(attempts.c.id == aid).values(**values))
-                        worker.store.event(
-                            c,
-                            rid,
-                            "GA_REJECTED_RESPONSE",
-                            {
-                                "attempt_id": aid,
-                                "error": failure.code,
-                                "response_fingerprint": fingerprint(safe_received_message(raw)),
-                            },
-                        )
+                        already_settled = False
+                        if contract.application_generation.activation is not None:
+                            from .generation_approvals import SETTLE, _keys
+
+                            already_settled = aid in _keys(c, run["principal_id"],
+                                contract.application_generation.activation.approval_id, SETTLE)
+                        if already_settled:
+                            worker.store.event(c, rid, "GA_POST_SETTLEMENT_REJECTION",
+                                {"attempt_id": aid, "error": failure.code, "fence": fence})
+                            # Received response stays immutable; the finalization
+                            # failure is a separate event, never another settlement.
+                        else:
+                            reject_unsettled(worker, c, run, contract, attempt, raw, failure, started)
                 raise
     except DomainError as exc:
         worker.finish(
@@ -735,7 +827,50 @@ def process(worker, run, contract):
         thread.join(2)
 
 
-def check_active(worker, c, run):
+def reject_unsettled(worker, c, run, contract, attempt, raw, failure, started):
+    aid, rid = attempt["id"], run["id"]
+    rejected_parameters = dict(attempt["parameters"])
+    original, raw_metadata = response_archive(raw)
+    if raw_metadata is not None:
+        rejected_parameters["generation_raw_evidence"] = raw_metadata
+    if original is not None:
+        rejected_parameters["generation_rejected_raw"] = original
+    values: dict[str, object] = {
+        "parameters": rejected_parameters,
+        "error": failure.code,
+    }
+    if attempt["status"] == "STARTED":
+        values.update(
+            status="FAILED",
+            response=safe_received_message(raw),
+            usage=normalize_usage(raw),
+            elapsed=time.monotonic() - started,
+        )
+    c.execute(update(attempts).where(attempts.c.id == aid).values(**values))
+    worker.store.event(
+        c,
+        rid,
+        "GA_REJECTED_RESPONSE",
+        {
+            "attempt_id": aid,
+            "error": failure.code,
+            "response_fingerprint": fingerprint(safe_received_message(raw)),
+        },
+    )
+    if contract.application_generation.activation is not None:
+        from .generation_approvals import settle
+
+        settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
+
+def settle_generation(worker, contract, rid, aid):
+    if contract.application_generation.activation is not None:
+        from .generation_approvals import settle
+
+        with worker.store.tx() as c:
+            settle(worker.store, c, contract.goal.owner_id, contract.application_generation.activation, aid)
+
+
+def check_active(worker, c, run, attempt_id=None):
     contract, _ = source(worker.store, c, run)
     rows = c.execute(select(attempts).where(attempts.c.run_id == run["id"])).mappings().all()
     check_counters(worker.store, c, run, rows)
@@ -754,6 +889,8 @@ def check_active(worker, c, run):
         raise DomainError("VERSION_CONFLICT", "Generation stopped or goal version changed")
     if time.time() >= run["created_at"] + min(worker.s.run_seconds, contract.limits.run_seconds):
         raise DomainError("BUDGET_EXHAUSTED")
+    if contract.application_generation.activation is not None:
+        check_provider(worker, c, run, contract, attempt_id)
 
 
 def check_counters(store, c, run, rows):
@@ -797,6 +934,7 @@ def confirm(store, user, rid, request, limits):
             select(runs.c.project_id).where(runs.c.id == rid, runs.c.principal_id == user)
         ).scalar()
         project = store.lock_project(c, user, location)
+        source_scope_gate(store, c, rid)
         run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
         candidate = verified_candidate(store, c, run, limits)
         fp = fingerprint(candidate)
@@ -840,6 +978,20 @@ def confirm(store, user, rid, request, limits):
             load_draft(store, c, user, aid, limits, lock=True)
             return {"id": aid, "state": "PREVIEW_ONLY", "cached": True}
         contract, material = source(store, c, run)
+        def confirmation_gate():
+            source(store, c, run)
+            current = c.execute(select(goal_cards.c.version, goal_cards.c.fingerprint)
+                .where(goal_cards.c.id == contract.source_goal_card.card_id)).mappings().one()
+            if current["version"] != contract.source_goal_card.version or current["fingerprint"] != contract.source_goal_card.fingerprint:
+                raise DomainError("VERSION_CONFLICT", "Saved goal changed before confirmation")
+            if contract.application_generation.activation is not None:
+                from .generation_approvals import REVOKE, _keys, validate_run
+
+                validate_run(store, c, run)
+                if _keys(c, user, contract.application_generation.activation.approval_id, REVOKE):
+                    raise DomainError("VERSION_CONFLICT", "P-A generation approval revoked")
+
+        confirmation_gate()
         card = (
             c.execute(
                 select(goal_cards).where(goal_cards.c.id == contract.source_goal_card.card_id)
@@ -901,4 +1053,5 @@ def confirm(store, user, rid, request, limits):
                 "confirmation": accepted,
             },
         )
+        confirmation_gate()
         return {"id": aid, "state": "PREVIEW_ONLY", "publishable": False, "cached": False}

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="15" time="18.227" timestamp="2026-10-12T18:56:41.123871+00:00" hostname="9809f76d2248"><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[False-False]" time="3.224" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[False-True]" time="3.504" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[True-False]" time="0.577"><failure message="ValueError: PostgreSQL required outside engineering tests">env = (&lt;sim2act.db.Store object at 0x7fe33476a7b0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...5665be280842d9af88e8a275e3ce8e', 'user_ef84d84f57e34bfc9dbee3b49dcd557b', 'proj_4d913f6589984cfd906c362c67f62746', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fe334681d90&gt;
+production = True, repair = False
+
+    @pytest.mark.parametrize("production,repair", [(False, False), (False, True), (True, False), (True, True)])
+    def test_exact_approved_provider_actual_feedback_candidate_and_cold_worker(env, monkeypatch, production, repair):
+&gt;       data, clock = configured(env, monkeypatch, production=production)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pa_generation_provider.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_pa_generation_provider.py:41: in configured
+    store = Store(settings.database_url)  # Already initialized synthetic SQLite, no new DDL.
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.db.Store object at 0x7fe32fa0e930&gt;
+url = 'sqlite:////tmp/pa-intern-provider-20261012/author/provider-r1-fixtures/test_exact_approved_provider_a2/fixture.db'
+
+    def __init__(self, url: str, *, test_only=False):
+        if not url.startswith("postgresql+psycopg://") and not (
+            test_only and url.startswith("sqlite://")
+        ):
+&gt;           raise ValueError("PostgreSQL required outside engineering tests")
+E           ValueError: PostgreSQL required outside engineering tests
+
+src/sim2act/db.py:543: ValueError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[True-True]" time="0.459"><failure message="ValueError: PostgreSQL required outside engineering tests">env = (&lt;sim2act.db.Store object at 0x7fe335c1c9b0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...e36280445b4c33aed7178ac24854ed', 'user_225e99ee385e4ddaa4971472f1de0a53', 'proj_d92766beb10741f0b35fd55b668c9143', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fe32fb59c40&gt;
+production = True, repair = True
+
+    @pytest.mark.parametrize("production,repair", [(False, False), (False, True), (True, False), (True, True)])
+    def test_exact_approved_provider_actual_feedback_candidate_and_cold_worker(env, monkeypatch, production, repair):
+&gt;       data, clock = configured(env, monkeypatch, production=production)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pa_generation_provider.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_pa_generation_provider.py:41: in configured
+    store = Store(settings.database_url)  # Already initialized synthetic SQLite, no new DDL.
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.db.Store object at 0x7fe33436f110&gt;
+url = 'sqlite:////tmp/pa-intern-provider-20261012/author/provider-r1-fixtures/test_exact_approved_provider_a3/fixture.db'
+
+    def __init__(self, url: str, *, test_only=False):
+        if not url.startswith("postgresql+psycopg://") and not (
+            test_only and url.startswith("sqlite://")
+        ):
+&gt;           raise ValueError("PostgreSQL required outside engineering tests")
+E           ValueError: PostgreSQL required outside engineering tests
+
+src/sim2act/db.py:543: ValueError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_default_scope_is_closed_and_plain_live_flags_never_grant_calls" time="0.543"><failure message="AttributeError: 'NoneType' object has no attribute 'status_code'">env = (&lt;sim2act.db.Store object at 0x7fe335be7950&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...692677fd7245da90309f4e86a40311', 'user_14570ababb1a44199e87d965b0a7d179', 'proj_1fe6b2edbb5040b78c4690d790f8eed4', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fe3343c3410&gt;
+
+    def test_default_scope_is_closed_and_plain_live_flags_never_grant_calls(env, monkeypatch):
+        data = setup(env)
+        calls = []
+        monkeypatch.setattr(httpx.Client, "send", lambda *a, **k: calls.append("FORBIDDEN SEND"))
+        response = data[2].post(f"/api/projects/{data[4]}/application-provider-scopes",
+            json=dict(card_id=data[6]["id"], expected_version=data[6]["version"],
+                expected_fingerprint=data[6]["fingerprint"], generation_request_key="not-approved", request_key="scope"))
+&gt;       assert response.status_code == 409 and response.json()["error"]["code"] == "RESOURCE_UNAVAILABLE"
+               ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'NoneType' object has no attribute 'status_code'
+
+tests/test_pa_generation_provider.py:173: AttributeError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[key]" time="0.836" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[goal]" time="0.791" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[approval-fp]" time="0.704" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[scope-fp]" time="0.834" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[unknown-usage]" time="1.023" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[wrong-model]" time="1.109" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[extra-tool]" time="1.121" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[truncated]" time="1.148" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[oversized]" time="1.024" /><testcase classname="tests.test_pa_generation_provider" name="test_revoke_stops_generation_without_recovering_old_goal_body" time="1.094" /></testsuite></testsuites>

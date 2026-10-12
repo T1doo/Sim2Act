@@ -458,7 +458,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
   if(literal){
     const independent=taskProof?.proof?.kind==="authorized_data_free_text_logic.v1";
-    $("app-origin").textContent=taskProof ? `来源：已成功内部文本 AppRun ${taskProof.proof.source_run_id} · 独立回执与完整字面证据核查 · 新 TXT/MD 绑定 + term 参数 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收` : `来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
+    $("app-origin").textContent=taskProof ? `来源：已成功内部文本 AppRun ${taskProof.proof.source_run_id} · 独立回执与完整字面证据核查 · 新 TXT/MD 绑定 + term 参数 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收` : a.candidate.namespace==="pa-model-literal-material-binding.v1" ? `来源：实际模型图 ${a.candidate.pa_binding.model_candidate_fingerprint} · 明确绑定自己的新目标与新 TXT/MD · 原源仍需审计权限 · owner PENDING · 语义 UNKNOWN · 未发布` : `来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof ? {source_goal:a.candidate.goal,source:taskProof,new_material:a.candidate.manifest.data_bindings} : a.candidate.goal,null,2);
     if(independent){$("app-origin").textContent=`来源：项目独立文本逻辑 ${taskProof.proof.logic_id} · 新材料与新只读身份 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收`;$("app-frozen-goal-text").textContent=JSON.stringify({logic:taskProof,new_material:a.candidate.manifest.data_bindings},null,2);}
     $("app-input-hint").textContent="TXT/MD 逐字匹配；输入非空无首尾空白、至多80字符的检索词。每次从授权材料重新计算全部匹配行，无需上传答案。";

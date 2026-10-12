@@ -460,20 +460,65 @@ def create_app(store=None, settings=None):
         )
 
     from .goal_applications import ConfirmInput as ConfirmApplicationInput
+    from .goal_applications import GenerationRunInput
     from .goal_runs import GoalRunInput, acceptance
 
     @app.post("/api/projects/{pid}/goal-cards/{cid}/application-runs", status_code=202)
-    def generate_goal_application(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
+    def generate_goal_application(pid: str, cid: str, body: GenerationRunInput, user=user_dependency):
         from .goal_applications import policy
 
-        selected = policy(s.goal_planner_provider, user, pid, {"card_id": cid, **body.model_dump()})
+        scope = None
+        if body.activation is not None:
+            from .generation_approvals import submission
+
+            scope = submission(db, user, pid, cid, body, s)
+        selected = policy(s.goal_planner_provider, user, pid,
+            {"card_id": cid, **body.model_dump(exclude_none=True)},
+            **({"activation": body.activation} if body.activation is not None else {}))
+        limits = scope.limits if scope else platform_limits
         rid = db.submit(user, pid, "", [], body.request_key, policy={
-            "limits": {**platform_limits.model_dump(), "max_requests": min(3, s.max_requests),
-                       "max_tools": 1, "max_repairs": min(1, s.max_repairs)},
-            "mode": "mock", "request_model": "intern-s2", "application_generation": selected,
+            "limits": {**limits.model_dump(), "max_requests": min(3, s.max_requests, limits.max_requests),
+                       "max_tools": min(1, limits.max_tools), "max_repairs": min(1, s.max_repairs, limits.max_repairs)},
+            "mode": "live" if scope and scope.mode == "LIVE" else "mock", "request_model": "intern-s2", "application_generation": selected,
         }, goal_source={"card_id": cid, "version": body.expected_version,
                         "fingerprint": body.expected_fingerprint})
         return {**acceptance(db, user, rid), "generation_policy": selected}
+
+    from . import generation_approvals as generation_provider
+
+    @app.get("/api/projects/{pid}/goal-cards/{cid}/application-provider-scopes")
+    def generation_provider_options(pid: str, cid: str, user=user_dependency):
+        return generation_provider.approved_options(db, user, pid, cid, s)
+
+    @app.post("/api/projects/{pid}/application-provider-scopes", status_code=201)
+    def prepare_generation_provider(pid: str, body: generation_provider.PrepareInput, user=user_dependency):
+        return generation_provider.prepare(db, user, pid, body, s)
+
+    @app.post("/api/application-provider-scopes/{aid}/approve")
+    def approve_generation_provider(aid: str, body: generation_provider.ApproveInput, user=user_dependency):
+        return generation_provider.approve(db, user, aid, body, s)
+
+    @app.post("/api/application-provider-scopes/{aid}/revoke")
+    def revoke_generation_provider(aid: str, body: generation_provider.RevokeInput, user=user_dependency):
+        return generation_provider.revoke(db, user, aid, body)
+
+    from . import pa_material_bindings as pa_binding
+
+    @app.get("/api/projects/{pid}/pa-model-candidates")
+    def pa_model_candidates(pid: str, user=user_dependency):
+        return pa_binding.source_index(db, user, pid, platform_limits)
+
+    @app.get("/api/projects/{pid}/pa-model-candidates/{rid}/material-binding-options")
+    def pa_binding_options(pid: str, rid: str, card_id: str, user=user_dependency):
+        return pa_binding.options(db, user, pid, rid, card_id, platform_limits)
+
+    @app.post("/api/projects/{pid}/pa-model-candidates/{rid}/material-bindings", status_code=201)
+    def bind_pa_material(pid: str, rid: str, body: pa_binding.BindInput, user=user_dependency):
+        return pa_binding.bind(db, user, pid, rid, body, platform_limits)
+
+    @app.get("/api/projects/{pid}/pa-model-candidates/{rid}/material-binding-requests/{key}")
+    def recover_pa_binding(pid: str, rid: str, key: str, user=user_dependency):
+        return pa_binding.recover(db, user, pid, rid, key, platform_limits)
 
     @app.post("/api/runs/{rid}/confirm-application-candidate")
     def confirm_goal_application(rid: str, body: ConfirmApplicationInput, user=user_dependency):
@@ -489,10 +534,14 @@ def create_app(store=None, settings=None):
             raise DomainError("INVALID_INPUT")
         with db.tx() as c:
             db.own_project(c, user, pid)
-            run = c.execute(select(runs).where(runs.c.project_id == pid,
-                runs.c.principal_id == user, runs.c.request_key == request_key)).mappings().first()
-            if not run:
+            rid = c.execute(select(runs.c.id).where(runs.c.project_id == pid,
+                runs.c.principal_id == user, runs.c.request_key == request_key)).scalar()
+            if not rid:
                 raise DomainError("RESOURCE_UNAVAILABLE", "No accepted generation with this original key")
+            from .goal_applications import source_scope_gate
+
+            source_scope_gate(db, c, rid)
+            run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
             contract = db.frozen_contract(c, run)
             if contract.application_generation is None or contract.source_goal_card.card_id != cid:
                 raise DomainError("VERSION_CONFLICT", "Original key belongs to another request")

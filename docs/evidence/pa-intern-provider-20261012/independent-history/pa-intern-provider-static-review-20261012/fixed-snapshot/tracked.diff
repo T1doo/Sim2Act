@@ -1,0 +1,585 @@
+diff --git a/src/sim2act/api.py b/src/sim2act/api.py
+index 597a261..bcbf5ef 100644
+--- a/src/sim2act/api.py
++++ b/src/sim2act/api.py
+@@ -460,21 +460,56 @@ def create_app(store=None, settings=None):
+         )
+ 
+     from .goal_applications import ConfirmInput as ConfirmApplicationInput
++    from .goal_applications import GenerationRunInput
+     from .goal_runs import GoalRunInput, acceptance
+ 
+     @app.post("/api/projects/{pid}/goal-cards/{cid}/application-runs", status_code=202)
+-    def generate_goal_application(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
++    def generate_goal_application(pid: str, cid: str, body: GenerationRunInput, user=user_dependency):
+         from .goal_applications import policy
+ 
+-        selected = policy(s.goal_planner_provider, user, pid, {"card_id": cid, **body.model_dump()})
++        scope = None
++        if body.activation is not None:
++            from .generation_approvals import submission
++
++            scope = submission(db, user, pid, cid, body, s)
++        selected = policy(s.goal_planner_provider, user, pid,
++            {"card_id": cid, **body.model_dump(exclude_none=True)}, activation=body.activation)
+         rid = db.submit(user, pid, "", [], body.request_key, policy={
+-            "limits": {**platform_limits.model_dump(), "max_requests": min(3, s.max_requests),
++            "limits": {**(scope.limits.model_dump() if scope else platform_limits.model_dump()), "max_requests": min(3, s.max_requests),
+                        "max_tools": 1, "max_repairs": min(1, s.max_repairs)},
+-            "mode": "mock", "request_model": "intern-s2", "application_generation": selected,
++            "mode": "live" if scope and scope.mode == "LIVE" else "mock", "request_model": "intern-s2", "application_generation": selected,
+         }, goal_source={"card_id": cid, "version": body.expected_version,
+                         "fingerprint": body.expected_fingerprint})
+         return {**acceptance(db, user, rid), "generation_policy": selected}
+ 
++    from . import generation_approvals as generation_provider
++
++    @app.post("/api/projects/{pid}/application-provider-scopes", status_code=201)
++    def prepare_generation_provider(pid: str, body: generation_provider.PrepareInput, user=user_dependency):
++        return generation_provider.prepare(db, user, pid, body, s)
++
++    @app.post("/api/application-provider-scopes/{aid}/approve")
++    def approve_generation_provider(aid: str, body: generation_provider.ApproveInput, user=user_dependency):
++        return generation_provider.approve(db, user, aid, body, s)
++
++    @app.post("/api/application-provider-scopes/{aid}/revoke")
++    def revoke_generation_provider(aid: str, body: generation_provider.RevokeInput, user=user_dependency):
++        return generation_provider.revoke(db, user, aid, body)
++
++    from . import pa_material_bindings as pa_binding
++
++    @app.get("/api/projects/{pid}/pa-model-candidates/{rid}/material-binding-options")
++    def pa_binding_options(pid: str, rid: str, card_id: str, user=user_dependency):
++        return pa_binding.options(db, user, pid, rid, card_id, platform_limits)
++
++    @app.post("/api/projects/{pid}/pa-model-candidates/{rid}/material-bindings", status_code=201)
++    def bind_pa_material(pid: str, rid: str, body: pa_binding.BindInput, user=user_dependency):
++        return pa_binding.bind(db, user, pid, rid, body, platform_limits)
++
++    @app.get("/api/projects/{pid}/pa-model-candidates/{rid}/material-binding-requests/{key}")
++    def recover_pa_binding(pid: str, rid: str, key: str, user=user_dependency):
++        return pa_binding.recover(db, user, pid, rid, key, platform_limits)
++
+     @app.post("/api/runs/{rid}/confirm-application-candidate")
+     def confirm_goal_application(rid: str, body: ConfirmApplicationInput, user=user_dependency):
+         from .goal_applications import confirm
+diff --git a/src/sim2act/apps.py b/src/sim2act/apps.py
+index b00c494..85c886f 100644
+--- a/src/sim2act/apps.py
++++ b/src/sim2act/apps.py
+@@ -188,6 +188,10 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
+ 
+ 
+ def compile_preview(candidate, platform_limits):
++    from . import pa_material_bindings
++
++    if isinstance(candidate, dict) and candidate.get("namespace") == pa_material_bindings.VERSION:
++        return pa_material_bindings.compile_candidate(candidate, platform_limits)
+     from . import text_workflows
+ 
+     if text_workflows.is_candidate(candidate):
+@@ -273,7 +277,13 @@ def validate_source_family(c, user, draft):
+             if table is task_extractions:
+                 snapshot = row["snapshot"]
+                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
+-                if isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
++                if isinstance(snapshot, dict) and snapshot.get("kind") == "pa_model_literal_material_binding.v1":
++                    from .pa_material_bindings import VERSION
++
++                    if candidate.get("namespace") != VERSION:
++                        raise DomainError("VERSION_CONFLICT", "P-A model binding cannot be downgraded")
++                    expected_field, expected_kind = "pa_binding", "registered_tool"
++                elif isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
+                     from .text_workflows import is_candidate
+ 
+                     if not is_candidate(candidate):
+@@ -321,7 +331,7 @@ def validate_source_family(c, user, draft):
+     if len(markers) > 1:
+         raise DomainError("VERSION_CONFLICT", "Independent source markers conflict")
+     claimed = {
+-        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application") if k in candidate
++        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application", "pa_binding") if k in candidate
+     }
+     expected = {markers[0][0]} if markers else set()
+     if claimed != expected:
+diff --git a/src/sim2act/config.py b/src/sim2act/config.py
+index dcec626..45700c4 100644
+--- a/src/sim2act/config.py
++++ b/src/sim2act/config.py
+@@ -24,6 +24,8 @@ class Settings:
+     goal_planner_provider: str = "disabled"
+     natural_activation_enabled: bool = False
+     natural_activation_live_id: str = ""
++    application_generation_activation_enabled: bool = False
++    application_generation_live_id: str = ""
+ 
+     @classmethod
+     def from_env(cls):
+@@ -45,6 +47,8 @@ class Settings:
+             goal_planner_provider=os.environ.get("SIM2ACT_GOAL_PLANNER_PROVIDER", "disabled"),
+             natural_activation_enabled=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_ENABLED", "false").lower() == "true",
+             natural_activation_live_id=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_LIVE_ID", ""),
++            application_generation_activation_enabled=os.environ.get("SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED", "false").lower() == "true",
++            application_generation_live_id=os.environ.get("SIM2ACT_APPLICATION_GENERATION_LIVE_ID", ""),
+             **{
+                 k: int(os.environ.get("SIM2ACT_" + k.upper(), str(v)))
+                 for k, v in {
+@@ -65,6 +69,10 @@ class Settings:
+             r"nlactivation_[a-f0-9]{32}", s.natural_activation_live_id
+         ):
+             raise ValueError("A specific natural activation ID is required")
++        if s.application_generation_live_id and not re.fullmatch(
++            r"gaapproval_[a-f0-9]{32}", s.application_generation_live_id
++        ):
++            raise ValueError("A specific application generation approval ID is required")
+         if not 1 <= s.rpm <= 30 or not s.quota_subject:
+             raise ValueError("Unverified quota must be between 1 and 30 RPM")
+         bounds = [
+diff --git a/src/sim2act/contracts.py b/src/sim2act/contracts.py
+index b070d51..203818e 100644
+--- a/src/sim2act/contracts.py
++++ b/src/sim2act/contracts.py
+@@ -231,6 +231,12 @@ class NaturalPlanningPolicy(Strict):
+         return value
+ 
+ 
++class ApplicationGenerationActivation(Strict):
++    approval_id: str = Field(pattern=r"^gaapproval_[a-f0-9]{32}$")
++    scope_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    approval_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++
++
+ class ApplicationGenerationPolicy(Strict):
+     version: Literal["goal-text-application.v1"]
+     provider: Literal["disabled", "intern-s2"]
+@@ -240,6 +246,7 @@ class ApplicationGenerationPolicy(Strict):
+     repair_limit: Literal[1]
+     live_request_allowance: Literal[0]
+     response_archive_policy: Literal["protected-json32768.v1"] | None = None
++    activation: ApplicationGenerationActivation | None = None
+ 
+ 
+ class FrozenRunContract(Strict):
+diff --git a/src/sim2act/goal_applications.py b/src/sim2act/goal_applications.py
+index 4a1895e..580b857 100644
+--- a/src/sim2act/goal_applications.py
++++ b/src/sim2act/goal_applications.py
+@@ -15,6 +15,7 @@ from sqlalchemy import insert, select, update
+ 
+ from .contracts import (
+     ActionSpec,
++    ApplicationGenerationActivation,
+     ApplicationGenerationPolicy,
+     AppManifest,
+     Strict,
+@@ -82,7 +83,14 @@ class ConfirmInput(Strict):
+     name: str = Field(min_length=1, max_length=100)
+ 
+ 
+-def policy(provider, user, pid, body):
++class GenerationRunInput(Strict):
++    expected_version: int = Field(strict=True, ge=1)
++    expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    request_key: str = Field(min_length=1, max_length=100)
++    activation: ApplicationGenerationActivation | None = None
++
++
++def policy(provider, user, pid, body, activation=None):
+     intent = fingerprint({"user": user, "project": pid, "input": body})
+     return ApplicationGenerationPolicy(
+         version="goal-text-application.v1",
+@@ -93,6 +101,7 @@ def policy(provider, user, pid, body):
+         repair_limit=1,
+         live_request_allowance=0,
+         response_archive_policy="protected-json32768.v1",
++        activation=activation,
+     ).model_dump(exclude_none=True)
+ 
+ 
+@@ -188,6 +197,11 @@ def body(messages, tools, max_output):
+ def history(store, c, run):
+     """Reconstruct every request from frozen input and separately anchored received responses."""
+     messages = initial_messages(store, c, run)
++    selected = store.frozen_contract(c, run).application_generation
++    if selected.activation is not None:
++        from .generation_approvals import validate_run
++
++        validate_run(store, c, run)
+     rows = (
+         c.execute(
+             select(attempts)
+@@ -284,11 +298,15 @@ def history(store, c, run):
+             or parameters.get("generation_wire") != hashlib.sha256(wire).hexdigest()
+             or parameters.get("request_fingerprint")
+             != fingerprint({"messages": messages, "tools": tools, "model": "intern-s2"})
+-            or attempt["response_model"] != "intern-s2"
+-            or attempt["mode"] != "MOCK"
++            or attempt["request_model"] != "intern-s2"
++            or attempt["mode"] != ("LIVE" if store.frozen_contract(c, run).mode == "live" else "MOCK")
+             or attempt["usage"]["status"] != "known"
+         ):
+             raise DomainError("VERSION_CONFLICT", "Generation differs from actual provider wire")
++        identity = returned_model_identity("intern-s2", attempt["response_model"], enforced=attempt["mode"] == "LIVE")
++        require_returned_model(identity)
++        if fingerprint(parameters.get("model_identity")) != fingerprint(identity):
++            raise DomainError("VERSION_CONFLICT", "Actual provider identity evidence changed")
+         checked_usage(
+             {"usage": attempt["usage"]["tokens"]},
+             store.frozen_contract(c, run).limits,
+@@ -443,6 +461,31 @@ def verified_candidate(store, c, run, limits):
+     return value
+ 
+ 
++def check_provider(worker, c, run, contract, attempt_id=None):
++    """Reusable at the actual wire guard without replaying a STARTED Attempt."""
++    if (contract.application_generation.provider != "intern-s2"
++        or worker.s.goal_planner_provider != "intern-s2"):
++        raise DomainError("RESOURCE_UNAVAILABLE", "Explicit Intern generation provider required")
++    activation = contract.application_generation.activation
++    if activation is not None:
++        from .generation_approvals import validate_run
++
++        scope, _, _, _, _ = validate_run(worker.store, c, run, worker.s, active=True, transition=attempt_id)
++        if worker.goal_planner_transport is None:
++            if (worker.store.test_only or scope.mode != "LIVE" or worker.s.mode != "live"
++                or not worker.s.live_enabled or not worker.s.token
++                or worker.s.application_generation_live_id != activation.approval_id):
++                raise DomainError("RESOURCE_UNAVAILABLE", "No exact P-A LIVE approval selected")
++        elif (scope.mode != "OFFLINE_TEST" or not worker.store.test_only or worker.s.mode != "mock"
++              or worker.s.live_enabled or not isinstance(worker.goal_planner_transport, httpx.MockTransport)):
++            raise DomainError("PERMISSION_DENIED", "Isolated P-A approval adapter required")
++    elif worker.goal_planner_transport is None:
++        raise DomainError("RESOURCE_UNAVAILABLE", "Generation LIVE allowance is zero; exact approval required")
++    elif (not worker.store.test_only or worker.s.mode != "mock" or worker.s.live_enabled
++          or not isinstance(worker.goal_planner_transport, httpx.MockTransport)):
++        raise DomainError("PERMISSION_DENIED", "Offline test-only generation adapter required")
++
++
+ def check_sender(worker, c, run, messages, tools):
+     contract, _ = source(worker.store, c, run)
+     card = (
+@@ -460,21 +503,7 @@ def check_sender(worker, c, run, messages, tools):
+         raise DomainError("VERSION_CONFLICT", "Goal changed or generation stopped")
+     if time.time() >= run["created_at"] + min(worker.s.run_seconds, contract.limits.run_seconds):
+         raise DomainError("BUDGET_EXHAUSTED")
+-    if (
+-        contract.application_generation.provider != "intern-s2"
+-        or worker.s.goal_planner_provider != "intern-s2"
+-        or worker.goal_planner_transport is None
+-    ):
+-        raise DomainError(
+-            "RESOURCE_UNAVAILABLE", "Generation LIVE allowance is zero; offline adapter required"
+-        )
+-    if (
+-        not worker.store.test_only
+-        or worker.s.mode != "mock"
+-        or worker.s.live_enabled
+-        or not isinstance(worker.goal_planner_transport, httpx.MockTransport)
+-    ):
+-        raise DomainError("PERMISSION_DENIED", "Offline test-only generation adapter required")
++    check_provider(worker, c, run, contract)
+     expected, rows = history(worker.store, c, run)
+     if (
+         messages != expected
+@@ -518,14 +547,24 @@ def process(worker, run, contract):
+             wire = body(messages, tools, worker.s.max_output_tokens)
+             if len(wire) > 32768:
+                 raise DomainError("BUDGET_EXHAUSTED", "Complete generation wire exceeds geometry")
+-            aid = worker.reserve(
+-                rid,
+-                fence,
+-                ctx,
+-                request_tools=tools,
+-                verify_goal_source=True,
+-                generation_request=True,
+-            )
++            try:
++                aid = worker.reserve(
++                    rid,
++                    fence,
++                    ctx,
++                    request_tools=tools,
++                    verify_goal_source=True,
++                    generation_request=True,
++                )
++            except DomainError as limited:
++                if limited.code != "RATE_LIMITED" or contract.application_generation.activation is None:
++                    raise
++                # Only an unreserved next stage waits; a received/unknown send is
++                # never retried. The ordinary heartbeat and all live gates remain
++                # active, and the approval's absolute deadline cannot be renewed.
++                if worker.stop.wait(1):
++                    raise DomainError("VERSION_CONFLICT", "Generation stopped before reservation") from limited
++                continue
+ 
+             def guard(request, *, sent_wire=wire, attempt_id=aid):
+                 if (
+@@ -537,7 +576,11 @@ def process(worker, run, contract):
+                 with worker.store.tx() as c:
+                     current = locked(worker, c, rid, fence)
+                     # The current STARTED row is excluded solely for this one send guard.
+-                    check_active(worker, c, current)
++                    check_active(worker, c, current, attempt_id)
++                    if (contract.application_generation.activation is not None
++                        and worker.goal_planner_transport is None
++                        and request.headers.get("Authorization") != "Bearer " + worker.s.token):
++                        raise DomainError("PERMISSION_DENIED", "Provider credential selection changed before send")
+                     attempt = (
+                         c.execute(select(attempts).where(attempts.c.id == attempt_id))
+                         .mappings()
+@@ -549,6 +592,10 @@ def process(worker, run, contract):
+                         != hashlib.sha256(sent_wire).hexdigest()
+                     ):
+                         raise DomainError("VERSION_CONFLICT")
++                    if contract.application_generation.activation is not None:
++                        from .generation_approvals import mark_sending
++
++                        return {"deadline": mark_sending(worker, c, current, attempt_id)}
+                 return {
+                     "deadline": run["created_at"]
+                     + min(worker.s.run_seconds, contract.limits.run_seconds)
+@@ -579,7 +626,7 @@ def process(worker, run, contract):
+                     )
+                 with worker.store.tx() as c:
+                     current = locked(worker, c, rid, fence)
+-                    check_active(worker, c, current)
++                    check_active(worker, c, current, aid)
+                     params = worker.attempt_parameters(c, aid, raw)
+                     params["generation_received_raw"] = original
+                     params["generation_raw_evidence"] = raw_metadata
+@@ -618,12 +665,13 @@ def process(worker, run, contract):
+                         )
+                     call = {**calls[0], "id": "ga_read"}
+                     dispatch(worker.store, rid, fence, call)
++                    settle_generation(worker, contract, rid, aid)
+                     continue
+                 if calls:
+                     raise DomainError("PERMISSION_DENIED", "Candidate and repair cannot call tools")
+                 with worker.store.tx() as c:
+                     current = locked(worker, c, rid, fence)
+-                    check_active(worker, c, current)
++                    check_active(worker, c, current, aid)
+                     try:
+                         candidate = parse_candidate(worker.store, c, current, msg, contract.limits)
+                     except DomainError as exc:
+@@ -648,6 +696,10 @@ def process(worker, run, contract):
+                         c.execute(
+                             update(runs).where(runs.c.id == rid).values(context=repair_context)
+                         )
++                        if contract.application_generation.activation is not None:
++                            from .generation_approvals import settle
++
++                            settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
+                         continue
+                     worker.store.event(
+                         c,
+@@ -655,6 +707,10 @@ def process(worker, run, contract):
+                         "GA_CANDIDATE_VALIDATED",
+                         {"attempt_id": aid, "candidate_fingerprint": fingerprint(candidate)},
+                     )
++                    if contract.application_generation.activation is not None:
++                        from .generation_approvals import settle
++
++                        settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
+                 worker.finish(
+                     rid,
+                     fence,
+@@ -684,34 +740,19 @@ def process(worker, run, contract):
+                             if isinstance(error, DomainError)
+                             else DomainError("OUTCOME_UNKNOWN")
+                         )
+-                        rejected_parameters = dict(attempt["parameters"])
+-                        original, raw_metadata = response_archive(raw)
+-                        if raw_metadata is not None:
+-                            rejected_parameters["generation_raw_evidence"] = raw_metadata
+-                        if original is not None:
+-                            rejected_parameters["generation_rejected_raw"] = original
+-                        values: dict[str, object] = {
+-                            "parameters": rejected_parameters,
+-                            "error": failure.code,
+-                        }
+-                        if attempt["status"] == "STARTED":
+-                            values.update(
+-                                status="FAILED",
+-                                response=safe_received_message(raw),
+-                                usage=normalize_usage(raw),
+-                                elapsed=time.monotonic() - started,
+-                            )
+-                        c.execute(update(attempts).where(attempts.c.id == aid).values(**values))
+-                        worker.store.event(
+-                            c,
+-                            rid,
+-                            "GA_REJECTED_RESPONSE",
+-                            {
+-                                "attempt_id": aid,
+-                                "error": failure.code,
+-                                "response_fingerprint": fingerprint(safe_received_message(raw)),
+-                            },
+-                        )
++                        already_settled = False
++                        if contract.application_generation.activation is not None:
++                            from .generation_approvals import SETTLE, _keys
++
++                            already_settled = aid in _keys(c, run["principal_id"],
++                                contract.application_generation.activation.approval_id, SETTLE)
++                        if already_settled:
++                            worker.store.event(c, rid, "GA_POST_SETTLEMENT_REJECTION",
++                                {"attempt_id": aid, "error": failure.code, "fence": fence})
++                            # Received response stays immutable; the finalization
++                            # failure is a separate event, never another settlement.
++                        else:
++                            reject_unsettled(worker, c, run, contract, attempt, raw, failure, started)
+                 raise
+     except DomainError as exc:
+         worker.finish(
+@@ -735,7 +776,50 @@ def process(worker, run, contract):
+         thread.join(2)
+ 
+ 
+-def check_active(worker, c, run):
++def reject_unsettled(worker, c, run, contract, attempt, raw, failure, started):
++    aid, rid = attempt["id"], run["id"]
++    rejected_parameters = dict(attempt["parameters"])
++    original, raw_metadata = response_archive(raw)
++    if raw_metadata is not None:
++        rejected_parameters["generation_raw_evidence"] = raw_metadata
++    if original is not None:
++        rejected_parameters["generation_rejected_raw"] = original
++    values: dict[str, object] = {
++        "parameters": rejected_parameters,
++        "error": failure.code,
++    }
++    if attempt["status"] == "STARTED":
++        values.update(
++            status="FAILED",
++            response=safe_received_message(raw),
++            usage=normalize_usage(raw),
++            elapsed=time.monotonic() - started,
++        )
++    c.execute(update(attempts).where(attempts.c.id == aid).values(**values))
++    worker.store.event(
++        c,
++        rid,
++        "GA_REJECTED_RESPONSE",
++        {
++            "attempt_id": aid,
++            "error": failure.code,
++            "response_fingerprint": fingerprint(safe_received_message(raw)),
++        },
++    )
++    if contract.application_generation.activation is not None:
++        from .generation_approvals import settle
++
++        settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
++
++def settle_generation(worker, contract, rid, aid):
++    if contract.application_generation.activation is not None:
++        from .generation_approvals import settle
++
++        with worker.store.tx() as c:
++            settle(worker.store, c, contract.goal.owner_id, contract.application_generation.activation, aid)
++
++
++def check_active(worker, c, run, attempt_id=None):
+     contract, _ = source(worker.store, c, run)
+     rows = c.execute(select(attempts).where(attempts.c.run_id == run["id"])).mappings().all()
+     check_counters(worker.store, c, run, rows)
+@@ -754,6 +838,8 @@ def check_active(worker, c, run):
+         raise DomainError("VERSION_CONFLICT", "Generation stopped or goal version changed")
+     if time.time() >= run["created_at"] + min(worker.s.run_seconds, contract.limits.run_seconds):
+         raise DomainError("BUDGET_EXHAUSTED")
++    if contract.application_generation.activation is not None:
++        check_provider(worker, c, run, contract, attempt_id)
+ 
+ 
+ def check_counters(store, c, run, rows):
+diff --git a/src/sim2act/text_apps.py b/src/sim2act/text_apps.py
+index e05d346..85bf6af 100644
+--- a/src/sim2act/text_apps.py
++++ b/src/sim2act/text_apps.py
+@@ -113,6 +113,11 @@ def compute(source, args):
+ 
+ 
+ def verify_origin(store, c, user, draft, limits):
++    from . import pa_material_bindings
++
++    if draft["candidate"].get("namespace") == pa_material_bindings.VERSION:
++        pa_material_bindings.verify(store, c, user, draft, limits)
++        return
+     if "task_proof" in draft["candidate"]:
+         marker = draft["candidate"]["task_proof"]
+         if not isinstance(marker, dict) or not isinstance(marker.get("proof"), dict):
+diff --git a/src/sim2act/text_continuations.py b/src/sim2act/text_continuations.py
+index d931ff9..84e688d 100644
+--- a/src/sim2act/text_continuations.py
++++ b/src/sim2act/text_continuations.py
+@@ -409,6 +409,9 @@ def draft_gate(store, c, user, aid):
+     from .text_workflows import scope_gate
+ 
+     scope_gate(store, c, user, aid)
++    from .pa_material_bindings import scope_gate as pa_binding_scope_gate
++
++    pa_binding_scope_gate(store, c, user, aid)
+ 
+     # Indexed origin metadata identifies this family before protected app bodies.
+     exists = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid,
+diff --git a/src/sim2act/worker.py b/src/sim2act/worker.py
+index 8f4abbd..e5dd339 100644
+--- a/src/sim2act/worker.py
++++ b/src/sim2act/worker.py
+@@ -137,9 +137,14 @@ class Worker:
+                 )
+             activation_request = (planner_request and
+                 self.store.frozen_contract(c, run).natural_planning.activation is not None)
++            generation_activation = (generation_request and
++                self.store.frozen_contract(c, run).application_generation.activation is not None)
+             if activation_request:
+                 from .natural_activations import now as activation_now
+                 now = activation_now()
++            elif generation_activation:
++                from .generation_approvals import now as generation_now
++                now = generation_now()
+             else:
+                 now = time.time()
+             count = len(
+@@ -150,7 +155,7 @@ class Worker:
+                     )
+                 ).all()
+             )
+-            if q["blocked_until"] > now or count >= (min(s.rpm, 1) if activation_request else s.rpm):
++            if q["blocked_until"] > now or count >= (min(s.rpm, 1) if activation_request or generation_activation else s.rpm):
+                 raise DomainError("RATE_LIMITED", "Account-wide quota waiting", retryable=True)
+             aid = new_id("attempt")
+             if protocol_request:
+@@ -220,6 +225,10 @@ class Worker:
+             if generation_request:
+                 self.store.event(c, run_id, "GA_WIRE_RESERVED", {
+                     "attempt_id": aid, "index": context["requests"], "fence": fence, "wire": wire_seal})
++                if generation_activation:
++                    from .generation_approvals import reserve_slot as reserve_generation_slot
++
++                    reserve_generation_slot(self, c, run, aid, envelope, wire_seal["sha256"])
+             context["requests"] += 1
+             context["reserved_tokens"] += envelope
+             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
+@@ -261,8 +270,10 @@ class Worker:
+             if verify_goal_source:
+                 frozen = self.store.frozen_contract(c, run)
+                 if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
+-                    from .goal_applications import verified_candidate
++                    from .goal_applications import check_active, verified_candidate
+ 
++                    if frozen.application_generation.activation is not None:
++                        check_active(self, c, run)
+                     candidate = verified_candidate(self.store, c, run, frozen.limits)
+                     if state != "PARTIAL" or result != {
+                         "candidate": candidate, "candidate_fingerprint": fingerprint(candidate),
+@@ -312,6 +323,8 @@ class Worker:
+                 )
+             )
+             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
++            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and frozen.application_generation.activation is not None:
++                check_active(self, c, run)
+ 
+     def process(self, run):
+         from .csv_dag import is_job as is_csv_dag

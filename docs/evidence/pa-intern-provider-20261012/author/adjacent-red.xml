@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="11.336" timestamp="2026-10-12T20:11:44.349578+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_continuations" name="test_exact_old_db_cold_current_continuation_preserves_and_new_worker[233]" time="0.490"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Independent text logic binding changed&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 409 == 201&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code">legacy = (&lt;sim2act.db.Store object at 0x7fb9ea5295e0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def test_exact_old_db_cold_current_continuation_preserves_and_new_worker(legacy):
+        store, settings, client, info = legacy
+        before = rows(store)
+        assert client.get("/api/apps/" + info["app"]["id"]).status_code == 409
+        assert rows(store) == before
+&gt;       _, _, body, receipt = continued(legacy)
+                              ^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:135: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_text_continuations.py:96: in continued
+    approval, body, commit = prepared(data)
+                             ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7fb9ea5295e0&gt;, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+&gt;       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Independent text logic binding changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+
+tests/test_text_continuations.py:87: AssertionError</failure></testcase><testcase classname="tests.test_project_column_versions" name="test_single_approval_cannot_bypass_whole_group" time="10.687" /></testsuite></testsuites>

@@ -231,6 +231,12 @@ class NaturalPlanningPolicy(Strict):
         return value
 
 
+class ApplicationGenerationActivation(Strict):
+    approval_id: str = Field(pattern=r"^gaapproval_[a-f0-9]{32}$")
+    scope_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    approval_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class ApplicationGenerationPolicy(Strict):
     version: Literal["goal-text-application.v1"]
     provider: Literal["disabled", "intern-s2"]
@@ -240,6 +246,7 @@ class ApplicationGenerationPolicy(Strict):
     repair_limit: Literal[1]
     live_request_allowance: Literal[0]
     response_archive_policy: Literal["protected-json32768.v1"] | None = None
+    activation: ApplicationGenerationActivation | None = None
 
 
 class FrozenRunContract(Strict):

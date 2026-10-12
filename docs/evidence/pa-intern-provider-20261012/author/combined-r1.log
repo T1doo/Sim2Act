@@ -1,0 +1,254 @@
+.....................................FFFF                                [100%]
+=================================== FAILURES ===================================
+__________ test_scoped_model_generation_and_new_material_page[valid] ___________
+
+env = (<sim2act.db.Store object at 0x7f6493af0650>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...dae8fa7eb14bf1a1595b6cf561a839', 'user_d2ad04efe27841b3863b027be6226e57', 'proj_b756094c79a44d96806b791178a8e078', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f64982b6330>
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/combined-r1-fixtures/test_scoped_model_generation_a0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        scope, _, _ = approved(data)
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: existing scope read uses GET and creates no approval or Run
+E                 at check (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:7:29)
+E                 at /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:104:2
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError
+_______ test_scoped_model_generation_and_new_material_page[binding-lost] _______
+
+env = (<sim2act.db.Store object at 0x7f6493dace90>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...0f0bf4a99244f7a8a471ef92244b14', 'user_c194656a181a4e78990928f4258d940b', 'proj_5dbc2f54f7a843e2a6889ca628aeb9bd', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f649985f680>
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/combined-r1-fixtures/test_scoped_model_generation_a1')
+scenario = 'binding-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        scope, _, _ = approved(data)
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: existing scope read uses GET and creates no approval or Run
+E                 at check (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:7:29)
+E                 at /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:104:2
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError
+_______ test_scoped_model_generation_and_new_material_page[binding-late] _______
+
+env = (<sim2act.db.Store object at 0x7f64981fca10>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...87e73e4e62480ab43b94a748cc76ca', 'user_1f4c72fe7d3e4e8db991dad89428d5a9', 'proj_97a3e131af3348e994fdf761669549eb', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f64983eef90>
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/combined-r1-fixtures/test_scoped_model_generation_a2')
+scenario = 'binding-late'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        scope, _, _ = approved(data)
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: existing scope read uses GET and creates no approval or Run
+E                 at check (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:7:29)
+E                 at /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:104:2
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError
+________ test_scoped_model_generation_and_new_material_page[scope-late] ________
+
+env = (<sim2act.db.Store object at 0x7f649383e0f0>, Settings(database_url='sqlite:////tmp/pa-intern-provider-20261012/author...0915f78adc4dab887910dcffa7ffb9', 'user_344de802e5f14ae29e47c43b936b0d95', 'proj_1d489d475b3a4051815ed84c47a1dbf3', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f64983686e0>
+tmp_path = PosixPath('/tmp/pa-intern-provider-20261012/author/combined-r1-fixtures/test_scoped_model_generation_a3')
+scenario = 'scope-late'
+
+    @pytest.mark.parametrize("scenario", ["valid", "binding-lost", "binding-late", "scope-late"])
+    def test_scoped_model_generation_and_new_material_page(env, monkeypatch, tmp_path, scenario):
+        data, clock = configured(env, monkeypatch)
+        store, settings, client, _, pid, _, card = data
+        scope, _, _ = approved(data)
+        resource = client.post(f"/api/projects/{pid}/resources", json=dict(name="fresh.md", format="md", content=NEW_CONTENT)).json()["id"]
+        goal = copy.deepcopy(card["content"])
+        goal.update(title="Explicit UI new-material goal", goal="逐字引用新材料全部匹配行", resource_refs=[resource])
+        target = client.post(f"/api/projects/{pid}/goal-cards", json=goal).json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(json.dumps(dict(project=pid, card=card["id"], target_card=target, target_resource=resource,
+            approval_id=scope["approval_id"], scenario=scenario, output=str(tmp_path / "results.json"))))
+        transport, sent = provider(data, clock)
+        process = subprocess.Popen(["node", "tests/pa_provider_ui.cjs", str(info)], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        cold = None
+        cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(store, settings, goal_planner_transport=transport).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        if cold is None:
+                            cold = Store(settings.database_url, test_only=True)
+                            cold_settings = replace(settings, goal_planner_provider="disabled",
+                                application_generation_activation_enabled=False, application_generation_live_id="", live_enabled=False, token="")
+                            cold_client = TestClient(create_app(cold, cold_settings))
+                            cold_client.headers.update({"Authorization": "Bearer synthetic-test-A"})
+                        assert Worker(cold, cold_settings).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    r = (cold_client or client).request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=r.status_code, text=r.text, content_type=r.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: existing scope read uses GET and creates no approval or Run
+E                 at check (/workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:7:29)
+E                 at /workspace/Sim2Act-pa-provider/tests/pa_provider_ui.cjs:104:2
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_pa_provider_ui.py:66: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_pa_provider_ui.py::test_scoped_model_generation_and_new_material_page[valid]
+FAILED tests/test_pa_provider_ui.py::test_scoped_model_generation_and_new_material_page[binding-lost]
+FAILED tests/test_pa_provider_ui.py::test_scoped_model_generation_and_new_material_page[binding-late]
+FAILED tests/test_pa_provider_ui.py::test_scoped_model_generation_and_new_material_page[scope-late]
+4 failed, 37 passed, 1 warning in 148.73s (0:02:28)
