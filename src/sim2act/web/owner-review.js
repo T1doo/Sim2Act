@@ -18,7 +18,7 @@ function clearOwnerReview(){
 function ownerButtons(view){
   if(!ownerCurrent(view))return;
   const pending=ownerPending.get(ownerKey(view)),latest=view.state?.latest;
-  $("owner-prepare").disabled=view.busy || !!pending || !view.state?.content_access || !$("owner-run").value;
+  $("owner-prepare").disabled=view.busy || !!pending || !(view.state?.content_access||view.state?.prepare_current) || !$("owner-run").value;
   $("owner-submit").disabled=view.busy || !!pending || !$("owner-ack").checked || view.state?.owner_acceptance!=="PENDING" || !view.state?.record;
   $("owner-cancel").disabled=view.busy || !!pending || latest?.kind!=="PREPARE" || !$("owner-stop-reason").value.trim();
   $("owner-revoke").disabled=view.busy || !!pending || latest?.kind!=="DECIDE" || !$("owner-stop-reason").value.trim();
@@ -30,8 +30,8 @@ function ownerRender(view,state){
   const previous=view.state?.record?.id;view.state=state;
   $("owner-status").textContent=`人工声明 ${state.owner_acceptance} · 序列 ${state.sequence} · 语义 UNKNOWN · 正式发布关闭${state.invalidation_reason ? " · 当前内容不可核验："+state.invalidation_reason : ""}`;
   $("owner-history").textContent=JSON.stringify({latest:state.latest,history:state.history,recovered_receipt:state.recovered ? {id:state.recovered.id,status:state.recovered.status,request_key:state.recovered.request_key,fingerprint:state.recovered.fingerprint} : null},null,2);
-  const record=state.record,contract=record?.payload?.contract || state.current;
-  $("owner-proof").textContent=state.content_access && contract ? JSON.stringify({record_id:record?.id,record_fingerprint:record?.fingerprint,expires_at:record?.payload?.expires_at,contract,choices:record?.payload?.choices},null,2) : "当前仅可读取本人停止控制元数据；历史回执不代表当前版本仍获签收。";
+  const record=state.record,contract=record?.payload?.contract || state.current || state.prepare_current;
+  $("owner-proof").textContent=(state.content_access || state.prepare_current) && contract ? JSON.stringify({record_id:record?.id,record_fingerprint:record?.fingerprint,expires_at:record?.payload?.expires_at,contract,choices:record?.payload?.choices},null,2) : "当前仅可读取本人停止控制元数据；历史回执不代表当前版本仍获签收。";
   const canDecide=state.content_access && state.owner_acceptance==="PENDING" && record?.kind==="PREPARE";
   $("owner-form").hidden=!canDecide;
   if(!canDecide || record.id!==previous){
@@ -65,6 +65,7 @@ async function ownerValidate(view,state,key,current){
   if(!ownerSame(state.latest,state.history.at(-1)||null))invalid();
   if(view.state && (state.sequence<view.state.sequence || !ownerSame(state.history.slice(0,view.state.sequence),view.state.history)))invalid();
   if(state.content_access ? !ownerContract(view,state.current) : !!(state.current || state.record))invalid();
+  if(state.prepare_current && (!ownerContract(view,state.prepare_current)||state.prepare_current.declaration_scope!=="EXACT_OWN_GOAL_RELEASE_INSTANCE_WORKER_EVIDENCE"||!state.prepare_current.own_goal_binding_fingerprint||state.prepare_current.source_goal?.origin!=="THIS_APPLICATION_OWNER_AUTHORED"))invalid();
   const last=state.latest,status=state.owner_acceptance;
   const expected=last ? last.status : "PENDING";
   if(!state.content_access && last && !["CANCEL","REVOKE"].includes(last.kind) && status!=="STALE")invalid();
@@ -136,8 +137,8 @@ async function ownerAction(body){
   }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
 }
 $("owner-prepare").onclick=safe(()=>{
-  const view=ownerView;if(!view?.state?.content_access)return;
-  return ownerAction({command:"PREPARE",expected_revision:view.state.current.instance_revision,expected_release_fingerprint:view.state.current.release_fingerprint,run_ids:[$("owner-run").value]});
+  const view=ownerView;if(!(view?.state?.content_access||view?.state?.prepare_current))return;
+  return ownerAction({command:"PREPARE",expected_revision:(view.state.current||view.state.prepare_current).instance_revision,expected_release_fingerprint:(view.state.current||view.state.prepare_current).release_fingerprint,run_ids:[$("owner-run").value]});
 });
 $("owner-form").onsubmit=event=>{event.preventDefault();return safe(()=>{
   const view=ownerView,review=view?.state?.record;if(!review || !$("owner-ack").checked)return;
@@ -156,3 +157,45 @@ for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id)
   try{await reading;}catch(error){if(current() && readGeneration===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail || error.message}；保留原 key 与人工草稿。`;}
   finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
 });
+
+// Application-owned GoalCard authoring; unknown acceptance recovers by original GET.
+let appOwnGoalView=null,appOwnGoalGeneration=0,appOwnGoalEdit=0;
+const appOwnGoalPending=new Map(),appOwnGoalFields=["title","goal","known","assumptions","unresolved","constraints","acceptance_checks","applicability"];
+const appOwnGoalKey=v=>JSON.stringify([v.token,v.project,v.app]);
+const appOwnGoalCurrent=v=>!!v&&v===appOwnGoalView&&v.token===token&&v.project===$("project-select").value&&engineeringCurrent(v.engineering)&&v.generation===appOwnGoalGeneration;
+function appOwnGoalFence(v){const edit=appOwnGoalEdit,workspace=workspaceSelectionGeneration;return ()=>appOwnGoalCurrent(v)&&edit===appOwnGoalEdit&&workspace===workspaceSelectionGeneration;}
+function clearAppOwnGoal(){appOwnGoalGeneration++;appOwnGoalEdit++;appOwnGoalView=null;$("app-own-goal-panel").hidden=true;$("app-own-goal-proof").textContent="";$("app-own-goal-status").textContent="";$("app-own-goal-ack").checked=false;$("app-own-goal-key").value="";for(const f of appOwnGoalFields)$("app-own-goal-"+f).value="";}
+function appOwnGoalButtons(v){if(!appOwnGoalCurrent(v))return;const pending=appOwnGoalPending.has(appOwnGoalKey(v));$("app-own-goal-save").disabled=v.busy||pending||!v.state||!$("app-own-goal-ack").checked;$("app-own-goal-read").disabled=v.busy;$("app-own-goal-recover").disabled=v.busy||!$("app-own-goal-key").value.trim();}
+async function appOwnGoalValidate(v,value,key,current){
+  const bad=()=>{throw Error("自有目标读取身份、版本或回执不一致");},hash=/^[a-f0-9]{64}$/;
+  if(value.namespace!=="app-owned-text-goal.v1"||value.anchor?.app_id!==v.app||value.anchor.project_id!==v.project||value.anchor.candidate_fingerprint!==v.engineering.draft.fingerprint||value.anchor.runtime_id!==v.engineering.draft.runtime_id||value.anchor.resource_id!==v.engineering.draft.candidate.manifest.data_bindings[0].resource_ref||value.formal_publication_enabled!==false||value.technical_semantic_status!=="UNKNOWN"||!Number.isSafeInteger(value.sequence)||value.sequence<0||value.sequence>64||!Array.isArray(value.history)||value.sequence!==value.history.length)bad();
+  if(v.engineering.instance&&value.anchor.owner_id!==v.engineering.instance.principal_id)bad();
+  const keys=new Set();let cid=null;
+  for(const [n,row] of value.history.entries()){
+    if(row.sequence!==n+1||!row.request_key||keys.has(row.request_key)||!row.card_id||(cid&&cid!==row.card_id)||!Number.isSafeInteger(row.goal_version)||row.goal_version<1||!hash.test(row.goal_fingerprint)||!hash.test(row.binding_fingerprint))bad();keys.add(row.request_key);cid=row.card_id;
+  }
+  if(v.state&&(value.sequence<v.state.sequence||!ownerSame(value.history.slice(0,v.state.sequence),v.state.history)))bad();
+  const last=value.history.at(-1);
+  if(last ? value.binding_fingerprint!==last.binding_fingerprint||value.head?.card_id!==last.card_id||!Number.isSafeInteger(value.head.version)||value.head.version<last.goal_version||!hash.test(value.head.fingerprint) : value.binding_fingerprint!==null||value.head!==null)bad();
+  if(!["MISSING","CURRENT","STALE"].includes(value.status)||((value.status==="CURRENT")!==!!value.current)||(value.status==="MISSING")!==(value.sequence===0))bad();
+  for(const [receipt,row] of [[value.current,value.current?last:null],[value.recovered,key?value.history.find(r=>r.request_key===key):null]]){
+    if(!receipt&&!row)continue;if(!receipt||!row||!ownerSame(receipt.anchor,value.anchor)||receipt.namespace!==value.namespace||!hash.test(receipt.request_fingerprint)||!ownerSame(Object.fromEntries(Object.keys(row).map(k=>[k,receipt[k]])),row)||!Array.isArray(receipt.applicability)||!receipt.applicability.length||!ownerSame(receipt.snapshot?.content?.resource_refs,[value.anchor.resource_id]))bad();
+    const {binding_fingerprint,...unsigned}=receipt;
+    if(await ownerHash(unsigned)!==binding_fingerprint||await ownerHash(receipt.snapshot)!==receipt.goal_fingerprint)bad();if(!current())return false;
+    if(receipt===value.current&&(receipt.goal_version!==value.head.version||receipt.goal_fingerprint!==value.head.fingerprint||receipt.snapshot.content.title!==value.head.title))bad();
+  }
+  return current();
+}
+async function appOwnGoalRead(v,key=null){
+  const fence=appOwnGoalFence(v),reading=++v.readGeneration,current=()=>fence()&&reading===v.readGeneration;
+  const value=await api(`/api/internal/apps/${v.app}/owner-goals${key?"?request_key="+encodeURIComponent(key):""}`);
+  if(!current()||!await appOwnGoalValidate(v,value,key,current)||!current())return false;
+  if(key){const pending=appOwnGoalPending.get(appOwnGoalKey(v));if(pending?.request_key===key){if(value.recovered.request_fingerprint!==await ownerHash(pending))throw Error("原key目标回执不一致");if(!current())return false;appOwnGoalPending.delete(appOwnGoalKey(v));}}
+  v.state=value;$("app-own-goal-proof").textContent=JSON.stringify(value,null,2);$("app-own-goal-status").textContent=`自有目标 ${value.status} · 版本 ${value.head?.version||0} · 签收须新版本下的正常Worker证据；人工声明，语义 UNKNOWN、发布关闭。`;$("app-own-goal-ack").checked=false;appOwnGoalButtons(v);return true;
+}
+async function openAppOwnGoal(engineeringView){clearAppOwnGoal();if(engineeringView.draft.candidate.task_proof?.proof?.kind!=="authorized_data_free_text_logic.v1")return;const v={engineering:engineeringView,token,project:engineeringView.project,app:engineeringView.app,generation:appOwnGoalGeneration,busy:false,state:null,readGeneration:0};appOwnGoalView=v;$("app-own-goal-panel").hidden=false;const pending=appOwnGoalPending.get(appOwnGoalKey(v));if(pending)$("app-own-goal-key").value=pending.request_key;try{await appOwnGoalRead(v);}catch(e){if(appOwnGoalCurrent(v))$("app-own-goal-status").textContent=e.message;}appOwnGoalButtons(v);}
+function appOwnGoalBody(v){const fields=Object.fromEntries(appOwnGoalFields.map(f=>[f,["title","goal"].includes(f)?$("app-own-goal-"+f).value:$("app-own-goal-"+f).value.split(/\r?\n/).filter(s=>s.trim())]));const {applicability,...goal}=fields;goal.resource_refs=[v.engineering.draft.candidate.manifest.data_bindings[0].resource_ref];return {expected_candidate_fingerprint:v.engineering.draft.fingerprint,expected_goal_version:v.state.head?.version||0,expected_goal_fingerprint:v.state.head?.fingerprint||null,expected_binding_fingerprint:v.state.binding_fingerprint,goal,applicability,consent:"AUTHOR_THIS_APPLICATION_OWN_GOAL_AND_SCOPE",request_key:crypto.randomUUID().replaceAll("-","")};}
+$("app-own-goal-form").onsubmit=event=>{event.preventDefault();return safe(async()=>{const v=appOwnGoalView;if(!appOwnGoalCurrent(v)||v.busy||appOwnGoalPending.has(appOwnGoalKey(v))||!v.state||!$("app-own-goal-ack").checked)return;const body=appOwnGoalBody(v),current=appOwnGoalFence(v);appOwnGoalPending.set(appOwnGoalKey(v),body);$("app-own-goal-key").value=body.request_key;v.readGeneration++;v.busy=true;appOwnGoalButtons(v);try{await api(`/api/internal/apps/${v.app}/owner-goals`,"POST",body);if(!current())return;await appOwnGoalRead(v,body.request_key);if(current()&&v.engineering.instance)await openOwnerReview(v.engineering);}catch(e){if(e.httpStatus>=400&&e.httpStatus<500&&appOwnGoalPending.get(appOwnGoalKey(v))===body){appOwnGoalPending.delete(appOwnGoalKey(v));v.state=null;}if(current())$("app-own-goal-status").textContent=`操作未确认 ${e.message}；只读原key，不自动重发。`;}finally{v.busy=false;if(appOwnGoalCurrent(v))appOwnGoalButtons(v);}})();};
+for(const f of appOwnGoalFields)for(const event of ["input","change"])$("app-own-goal-"+f).addEventListener(event,()=>{appOwnGoalEdit++;ownerEdited();$("app-own-goal-ack").checked=false;$("owner-ack").checked=false;appOwnGoalButtons(appOwnGoalView);});
+for(const id of ["app-own-goal-ack","app-own-goal-key"])$(id).onchange=$(id).oninput=()=>appOwnGoalButtons(appOwnGoalView);
+for(const [id,recover] of [["app-own-goal-read",false],["app-own-goal-recover",true]])$(id).onclick=safe(async()=>{const v=appOwnGoalView;if(!appOwnGoalCurrent(v)||v.busy)return;v.busy=true;appOwnGoalButtons(v);const current=appOwnGoalFence(v);try{await appOwnGoalRead(v,recover?$("app-own-goal-key").value.trim():null);}catch(e){if(current())$("app-own-goal-status").textContent=e.message;}finally{v.busy=false;if(appOwnGoalCurrent(v))appOwnGoalButtons(v);}});

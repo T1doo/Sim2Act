@@ -53,6 +53,7 @@ class AppRunInput(InstanceInput):
     expected_revision: int = Field(ge=1)
     input: dict
     offline_replay: list[dict] | None = Field(default=None, min_length=2, max_length=2)
+    expected_owner_goal_binding_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class SwitchInput(Strict):
@@ -332,6 +333,7 @@ def mount(app, store, limits, identity):
                 limits,
                 offline_replay=body.offline_replay,
                 require_offline_replay=True,
+                owner_goal_fp=body.expected_owner_goal_binding_fingerprint,
             )
         )
 

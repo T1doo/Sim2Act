@@ -368,6 +368,7 @@ setInterval(async () => {
 },2500);
 
 function clearApp() {
+  if(typeof clearAppOwnGoal === "function")clearAppOwnGoal();
   if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();
   if(typeof clearDeliveryGraph === "function")clearDeliveryGraph();
   if(typeof clearReportManifest === "function")clearReportManifest();

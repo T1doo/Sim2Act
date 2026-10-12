@@ -23,7 +23,7 @@
 - [api.py](../../src/sim2act/api.py)、[conditional_apps.py](../../src/sim2act/conditional_apps.py)：冷页面目录使用metadata_only路径，普通任务摘要固定占位/mode UNKNOWN；资源目录先授权再投影hash。原默认API继续兼容；打开对象仍完整核验。
 - [text-logic.js](../../src/sim2act/web/text-logic.js)：明确来源预览/授权、项目冷索引、目标与新身份确认、不可逆撤销、原key只读恢复和正常新应用执行入口。
 
-候选8作者32 PASS/0 FAIL/0 SKIP；同产品源码的候选7有限相关回归84 PASS/0 FAIL/1 PostgreSQL SKIP。独审候选8 41 PASS/0 FAIL/0 SKIP，另2纯目录回归PASS。它们是分别执行的范围，不能累计成一次全套测试。候选7→8只有两个新UI harness测试文件变化，产品src逐文件相同；378个源码/测试文件前后hash无差异。四个作者/独审普通可见页面场景均为 valid、authorization-lost、binding-lost、revoked-retained；每场两次冷boot，真实HTTP HTML/CSS/JS共40资产；保护旧私有单元的全段SQLite屏障包括实际Worker，求值0。旧source删除和保留撤权两条路径均通过。真实第64写允许、第65拒绝、原key读取，单边JSON类型污染、撤销、过期、预算收紧、最终append过期回滚及index故障完整回滚均实际验证。
+候选8作者32 PASS/0 FAIL/0 SKIP；同产品源码的候选7有限相关回归84 PASS/0 FAIL/1 PostgreSQL SKIP。独审候选8 41 PASS/0 FAIL/0 SKIP，另2纯目录回归PASS。它们是分别执行的范围，不能累计成一次全套测试。候选7→8只有两个新UI harness测试文件变化，产品src逐文件相同；本地378项前后hash无差异，其中373项为Git跟踪src/tests、另5项是未提交的egg-info生成元数据；父复核远端373/373与候选8一致，不能称378全远端。作者32项包含在独审41项内，独审另2项和相关84PASS1PGSKIP分列。四个作者/独审普通可见页面场景均为 valid、authorization-lost、binding-lost、revoked-retained；每场两次冷boot，真实HTTP HTML/CSS/JS共40资产；保护旧私有单元的全段SQLite屏障包括实际Worker，求值0。旧source删除和保留撤权两条路径均通过。真实第64写允许、第65拒绝、原key读取，单边JSON类型污染、撤销、过期、预算收紧、最终append过期回滚及index故障完整回滚均实际验证。
 
 changed文件ruff与Node语法检查通过；全局ruff10/mypy5既有错误原日志保留，未修外围。所有失败、被中断范围及独审原记录保留在[证据目录](../evidence/pb-text-logic-reuse-20261012/)。候选4作者误选10个socket旧UI及独审误选2个socket旧UI是实际OUT_OF_SCOPE_EXECUTED，不计本轮验收、没有重试；不能改称未运行。候选7独审两个BrokenPipe未捕获当时Node stderr，原因仍UNKNOWN；候选8修harness关闭前drain并完整记录stderr/exit/SQL后实际重新通过，不覆盖旧失败。
 

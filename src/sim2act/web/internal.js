@@ -62,6 +62,7 @@ async function openInternal(app,appGeneration) {
   $("internal-prepare-hint").textContent=view.agent ? "使用上方样例字面检索词与已加载的离线响应核查当前材料。先查看精确快照，再手动确认保存内部版本；语义仍为 UNKNOWN。" : "使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。";
   if(view.literal)$("internal-prepare-hint").textContent="用上方检索词独立核查完整匹配行；精确确认后保存内部版本。新实例直接输入新词，无需 Replay。语义 UNKNOWN。";
   engineeringButtons(view);engineeringStatus(view,"正在读取内部版本与实例…","loading");
+  if(typeof openAppOwnGoal === "function")await openAppOwnGoal(view);
   try {await refreshInternal(view);}
   catch(error){if(engineeringCurrent(view)){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");$("internal-releases").replaceChildren();$("internal-instances").replaceChildren();}}
 }
@@ -158,7 +159,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
 async function submitInternal(view,retry=false) {
   const instance=view.instance;if(!instance)return;
   let pending=engineeringPending.get(instance.id);
-  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:(view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
+  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:(view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
   const generation=view.instanceGeneration;
   $("internal-run-status").textContent="正在提交持久任务…";

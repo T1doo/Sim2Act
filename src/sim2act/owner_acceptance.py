@@ -58,7 +58,7 @@ class Decide(Intent):
     command: Literal["DECIDE"]
     review_id: str
     review_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
-    choices: list[Choice] = Field(min_length=1, max_length=81)
+    choices: list[Choice] = Field(min_length=1, max_length=100)
 
 
 class Stop(Intent):
@@ -138,6 +138,36 @@ def base(store, c, user, iid, limits):
     i, release = lifecycle.instance(store, c, user, iid, limits, lock=True)
     frozen = release["snapshot"]["draft"]
     candidate = frozen["candidate"]
+    from . import app_owner_goals, text_logic_reuse
+
+    if text_logic_reuse.independent(frozen):
+        current, _, _, _ = load_draft(store, c, user, frozen["id"], limits, lock=True)
+        if current["fingerprint"] != frozen["fingerprint"]:
+            raise DomainError("VERSION_CONFLICT", "Current app differs from exact release")
+        own = app_owner_goals.current(store, c, user, current, limits)
+        goal = GoalCardInput.model_validate(own["snapshot"]["content"]).model_dump()
+        items = [{"id": "title", "kind": "title", "text": goal["title"]},
+                 {"id": "goal", "kind": "goal", "text": goal["goal"]}]
+        for field in ("known", "assumptions", "unresolved", "constraints", "acceptance_checks"):
+            items.extend({"id": f"{field}:{n}", "kind": field, "text": text} for n, text in enumerate(goal[field]))
+        items.extend({"id": f"applicability:{n}", "kind": "applicability", "text": text}
+                     for n, text in enumerate(own["applicability"]))
+        items.append({"id": "resource_scope", "kind": "resource_scope",
+                      "text": str(own["anchor"]["resource_id"]) + " @ " + own["anchor"]["source_hash"]})
+        items.append({"id": "technical_scope", "kind": "technical_scope",
+                      "text": "Only case-sensitive literal full-line retrieval: TXT/MD <=4096 bytes/64 lines; trimmed term <=80 characters, <=16 citations. Semantic verification UNKNOWN; formal publication disabled."})
+        return dict(version=VERSION, principal_id=user, project_id=i["project_id"], instance_id=iid,
+            instance_revision=i["revision"], data_version=i["data_version"],
+            instance_history_fingerprint=fingerprint(i["history"]), app_id=frozen["id"],
+            draft_fingerprint=frozen["fingerprint"], release_id=release["id"], release_fingerprint=release["fingerprint"],
+            source_goal=dict(card_id=own["card_id"], version=own["goal_version"], fingerprint=own["goal_fingerprint"],
+                             snapshot=own["snapshot"], origin="THIS_APPLICATION_OWNER_AUTHORED"),
+            own_goal_binding_fingerprint=own["binding_fingerprint"], applicability=own["applicability"],
+            independent_logic=own["anchor"], current_limits=limits.model_dump(), goal=goal, items=items,
+            grant_version=lifecycle.grant_version(c, i["project_id"], user),
+            sample_input_fingerprint=release["snapshot"]["check_evidence"]["input_fingerprint"],
+            technical_semantic_status="UNKNOWN", formal_publication_enabled=False,
+            declaration_scope="EXACT_OWN_GOAL_RELEASE_INSTANCE_WORKER_EVIDENCE")
     if (
         "execution_source" in release["snapshot"]
         or not candidate.get("goal_application")
@@ -234,6 +264,11 @@ def context(store, c, user, iid, limits, run_ids):
         if not job:
             raise DomainError("PERMISSION_DENIED")
         s, a = app_jobs.load_binding(store, c, user, job, limits)
+        if "own_goal_binding_fingerprint" in value:
+            from .app_owner_goals import check_run
+
+            review_draft, _, _, _ = load_draft(store, c, user, value["app_id"], limits)
+            check_run(store, c, user, review_draft, limits, s)
         if (
             job["status"] != "SUCCEEDED"
             or a["status"] != "SUCCEEDED"
@@ -301,6 +336,10 @@ def public_state(store, c, user, iid, limits, rows):
         for row in rows:
             payload(c, row)
         out.update(content_access=True, current=current)
+        if "own_goal_binding_fingerprint" in current:
+            # A stale historical declaration cannot hide the separately authorized
+            # current own goal. This preview enables a fresh PREPARE, never DECIDE.
+            out["prepare_current"] = copy.deepcopy(current)
         if rows:
             last = rows[-1]
             p = payload(c, last)
@@ -308,7 +347,7 @@ def public_state(store, c, user, iid, limits, rows):
                 out["owner_acceptance"] = last["status"]
             else:
                 fresh = context(store, c, user, iid, limits, p["run_ids"])
-                if fresh != p["contract"]:
+                if fingerprint(fresh) != fingerprint(p["contract"]):
                     raise DomainError("VERSION_CONFLICT", "Exact owner evidence changed")
                 out["owner_acceptance"] = last["status"]
                 if last["kind"] == "PREPARE" and time.time() >= p["expires_at"]:
@@ -351,7 +390,7 @@ def read(store, user, iid, limits, key=None):
                 try:
                     if (
                         row["kind"] in {"CANCEL", "REVOKE"}
-                        or context(store, c, user, iid, limits, p["run_ids"]) == p["contract"]
+                        or fingerprint(context(store, c, user, iid, limits, p["run_ids"])) == fingerprint(p["contract"])
                     ):
                         recovered["payload"] = p
                 except DomainError:
@@ -455,7 +494,7 @@ def submit(store, user, iid, limits, body):
             payload(c, row)
         p = payload(c, last)
         fresh = context(store, c, user, iid, limits, p["run_ids"])
-        if fresh != p["contract"] or time.time() >= p["expires_at"]:
+        if fingerprint(fresh) != fingerprint(p["contract"]) or time.time() >= p["expires_at"]:
             raise DomainError("VERSION_CONFLICT", "Owner preview is stale or expired")
         choices = body["choices"]
         if [x["item_id"] for x in choices] != [x["id"] for x in fresh["items"]] or any(

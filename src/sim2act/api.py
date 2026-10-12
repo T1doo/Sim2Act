@@ -758,6 +758,9 @@ def create_app(store=None, settings=None):
     from .owner_acceptance import mount as mount_owner_acceptance
 
     mount_owner_acceptance(app, db, platform_limits, identity)
+    from .app_owner_goals import mount as mount_app_owner_goals
+
+    mount_app_owner_goals(app, db, platform_limits, identity)
     mount_protocol_api(app, db, platform_limits, identity, s)
     mount_protocol_recovery(app, db, identity)
     mount_protocol_reviews(app, db, identity)

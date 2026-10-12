@@ -68,3 +68,6 @@
 
 
 2026-10-12 F2-T03 有限文本无旧内容逻辑复用：独立授权→原材料撤权/删除→新只读身份/单Grant绑定→冷普通Worker与严格新Release索引纵向子项已实际验证。作者32PASS，独审41PASS+2目录PASS，同产品有限相关84PASS1PGSKIP，分开记录；见[合同与证据](PBTextLogicReuse20261012.md)。语义/任务owner PENDING、LIVE0、发布false；完整P-A/P-B/AT-10与各NotRun条件仍未闭合。旧取消精确竞态对照永久NOT_VERIFIED不受此子项影响。
+
+
+2026-10-12 原F2-T01/T08的[独立文本应用自有GoalCard与精确版本签收](TextLogicOwner20261012.md)完成有限纵向工程验证：显式完整新卡/适用范围及双seal原子版本绑定，实际新Goal版本下正常Worker输入证据、全部最多100条原项ACCEPT/REJECT，旧签收失效后仅独立当前目标新PREPARE、旧原key仅读历史。作者新34PASS；独审同选34+独立9共43PASS；原家族152 selected为147PASS/5PG前提SKIP，分别记不加总为完整工程。377 Git src/tests前后同指纹，5 ignored egg-info不计远端；全部红轮、SQL屏障、HTTP资产与独立报告保留在[本轮证据](../evidence/text-logic-owner-20261012/README.md)。人工选择SIMULATED、语义UNKNOWN、LIVE0、发布false；旧233 authority因软件all-py指纹变化失败关闭，未重签/迁移、旧实库升级NOT_RUN。真实owner/语义/完整P-A/P-B/PG/Windows/native/正式发布/真实模型/部署各门不提升；CI Forbidden未再查，取消精确竞态永久NOT_VERIFIED。

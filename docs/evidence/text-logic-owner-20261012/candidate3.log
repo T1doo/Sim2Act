@@ -1,0 +1,781 @@
+FF......................FFFFFFFFF                                        [100%]
+=================================== FAILURES ===================================
+__ test_new_own_goal_source_gone_cold_actual_evidence_and_exact_items[False] ___
+
+env = (<sim2act.db.Store object at 0x7f67e5309730>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_new...a1e5a6dd00464785c1bfac6839baba', 'user_549e44237e774cfcb4859a4575ddcaae', 'proj_360ab0443ec2404596505e99b846d0a6', ...)
+reject = False
+
+    @pytest.mark.parametrize("reject", [False, True])
+    def test_new_own_goal_source_gone_cold_actual_evidence_and_exact_items(env, reject):
+        data, made, release, instance, job, old, rid = setup_owner(env)
+        assert state(data, instance)["content_access"] is False
+        before = snapshot(data[0])
+        saved, body = save_goal(data, made, rid)
+        job = own_run(data, made, release, instance)
+        before = snapshot(data[0])
+        assert saved["card_id"] != data[6]["id"]
+        assert data[2].get("/api/goal-cards/" + saved["card_id"]).json()["content"] == own_goal(rid)
+        assert data[2].post(goal_path(made), json=body).json()["card_id"] == saved["card_id"]
+        assert data[2].post(goal_path(made), json={**body, "applicability": ["different"]}).status_code == 409
+        revoke_source(data)
+        cold = Store(data[1].database_url, test_only=True)
+        barrier = own_source_barrier(data, old)
+        barrier.attach(cold)
+        try:
+>           with barrier, TestClient(create_app(cold, data[1])) as client:
+                 ^^^^^^^
+
+tests/test_text_logic_owner.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sql_private_barrier.PrivateReadBarrier object at 0x7f67df50a0f0>
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-46/test_new_own_goal_source_gone_0/fixture.db)
+raw = <sqlite3.Connection object at 0x7f67e503a7a0>, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+>               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError
+___ test_new_own_goal_source_gone_cold_actual_evidence_and_exact_items[True] ___
+
+env = (<sim2act.db.Store object at 0x7f67e424b5c0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_new...19dd6bc8544b7ab8470124d3b71125', 'user_e949b02de52c471fb81984a8c76c1e53', 'proj_7da6d8510e9d438fadb4af6cb1b0b4df', ...)
+reject = True
+
+    @pytest.mark.parametrize("reject", [False, True])
+    def test_new_own_goal_source_gone_cold_actual_evidence_and_exact_items(env, reject):
+        data, made, release, instance, job, old, rid = setup_owner(env)
+        assert state(data, instance)["content_access"] is False
+        before = snapshot(data[0])
+        saved, body = save_goal(data, made, rid)
+        job = own_run(data, made, release, instance)
+        before = snapshot(data[0])
+        assert saved["card_id"] != data[6]["id"]
+        assert data[2].get("/api/goal-cards/" + saved["card_id"]).json()["content"] == own_goal(rid)
+        assert data[2].post(goal_path(made), json=body).json()["card_id"] == saved["card_id"]
+        assert data[2].post(goal_path(made), json={**body, "applicability": ["different"]}).status_code == 409
+        revoke_source(data)
+        cold = Store(data[1].database_url, test_only=True)
+        barrier = own_source_barrier(data, old)
+        barrier.attach(cold)
+        try:
+>           with barrier, TestClient(create_app(cold, data[1])) as client:
+                 ^^^^^^^
+
+tests/test_text_logic_owner.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sql_private_barrier.PrivateReadBarrier object at 0x7f67e42a9be0>
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-46/test_new_own_goal_source_gone_1/fixture.db)
+raw = <sqlite3.Connection object at 0x7f67e4d296c0>, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+>               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError
+_ test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[missing_fp] _
+
+env = (<sim2act.db.Store object at 0x7f67e4f44470>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_mal...3f185226ee40679d66263f16c3b06c', 'user_ebb251a377554de7baa1b80effdb7c8f', 'proj_2b7b65107eca43438b8771cb8378a21f', ...)
+tamper = 'missing_fp'
+
+    @pytest.mark.parametrize("tamper", ["missing_fp", "missing_ref", "null", "extra", "bool_version"])
+    def test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed(env, tamper):
+        from sim2act.contracts import Limits
+        from sim2act.worker import Worker
+    
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        saved, _ = save_goal(data, made, rid)
+        reply = data[2].post(f"/api/internal/instances/{instance['id']}/runs", json=dict(
+            expected_revision=instance["revision"], expected_release_fingerprint=release["fingerprint"],
+            expected_owner_goal_binding_fingerprint=saved["binding_fingerprint"], input={"term": "Gamma"}, request_key="polluted-goal-ref"))
+        assert reply.status_code == 202, reply.text
+        jid = reply.json()["run_id"]
+        with data[0].tx() as c:
+            s = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == jid)).scalar_one()
+            if tamper == "missing_fp":
+                s.pop("owner_goal_binding_fingerprint")
+            elif tamper == "missing_ref":
+                s.pop("owner_goal")
+            elif tamper == "null":
+                s["owner_goal"] = None
+            elif tamper == "extra":
+                s["owner_goal"]["extra"] = True
+            else:
+                s["owner_goal"]["goal_version"] = True
+            limits = Limits(**{k: getattr(data[1], k) for k in Limits.model_fields})
+            draft = c.execute(select(app_drafts).where(
+                app_drafts.c.id == made["id"])).mappings().one()
+            with pytest.raises(DomainError):
+                own.verify_frozen_run(data[0], c, data[3], draft, limits, s)
+            # Reseal only the deliberately corrupt raw queue, exercising actual Worker rejection.
+            c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == jid).values(snapshot=s, fingerprint=fingerprint(s)))
+            c.execute(update(runs).where(runs.c.id == jid).values(fingerprint=fingerprint(s)))
+        assert Worker(data[0], data[1], NoModel()).once()
+        current = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{jid}").json()
+>       assert current["status"] == "FAILED" and current["result_version"] is None, current
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_logic_owner.py:383: KeyError
+_ test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[missing_ref] _
+
+env = (<sim2act.db.Store object at 0x7f67de718440>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_mal...f9f4fb2e4a46c89b93f6a79efe2cc8', 'user_7373bdccd7c34a349f7384a14939a98b', 'proj_4f49874818a44a32949184f4e4b5e195', ...)
+tamper = 'missing_ref'
+
+    @pytest.mark.parametrize("tamper", ["missing_fp", "missing_ref", "null", "extra", "bool_version"])
+    def test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed(env, tamper):
+        from sim2act.contracts import Limits
+        from sim2act.worker import Worker
+    
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        saved, _ = save_goal(data, made, rid)
+        reply = data[2].post(f"/api/internal/instances/{instance['id']}/runs", json=dict(
+            expected_revision=instance["revision"], expected_release_fingerprint=release["fingerprint"],
+            expected_owner_goal_binding_fingerprint=saved["binding_fingerprint"], input={"term": "Gamma"}, request_key="polluted-goal-ref"))
+        assert reply.status_code == 202, reply.text
+        jid = reply.json()["run_id"]
+        with data[0].tx() as c:
+            s = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == jid)).scalar_one()
+            if tamper == "missing_fp":
+                s.pop("owner_goal_binding_fingerprint")
+            elif tamper == "missing_ref":
+                s.pop("owner_goal")
+            elif tamper == "null":
+                s["owner_goal"] = None
+            elif tamper == "extra":
+                s["owner_goal"]["extra"] = True
+            else:
+                s["owner_goal"]["goal_version"] = True
+            limits = Limits(**{k: getattr(data[1], k) for k in Limits.model_fields})
+            draft = c.execute(select(app_drafts).where(
+                app_drafts.c.id == made["id"])).mappings().one()
+            with pytest.raises(DomainError):
+                own.verify_frozen_run(data[0], c, data[3], draft, limits, s)
+            # Reseal only the deliberately corrupt raw queue, exercising actual Worker rejection.
+            c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == jid).values(snapshot=s, fingerprint=fingerprint(s)))
+            c.execute(update(runs).where(runs.c.id == jid).values(fingerprint=fingerprint(s)))
+        assert Worker(data[0], data[1], NoModel()).once()
+        current = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{jid}").json()
+>       assert current["status"] == "FAILED" and current["result_version"] is None, current
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_logic_owner.py:383: KeyError
+___ test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[null] ___
+
+env = (<sim2act.db.Store object at 0x7f67e43abbf0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_mal...87ca52728f43639e4959df0e93c065', 'user_e856b33f5427473f86c711af395f5008', 'proj_5ee7c0713b1049269ad62b138e55d67f', ...)
+tamper = 'null'
+
+    @pytest.mark.parametrize("tamper", ["missing_fp", "missing_ref", "null", "extra", "bool_version"])
+    def test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed(env, tamper):
+        from sim2act.contracts import Limits
+        from sim2act.worker import Worker
+    
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        saved, _ = save_goal(data, made, rid)
+        reply = data[2].post(f"/api/internal/instances/{instance['id']}/runs", json=dict(
+            expected_revision=instance["revision"], expected_release_fingerprint=release["fingerprint"],
+            expected_owner_goal_binding_fingerprint=saved["binding_fingerprint"], input={"term": "Gamma"}, request_key="polluted-goal-ref"))
+        assert reply.status_code == 202, reply.text
+        jid = reply.json()["run_id"]
+        with data[0].tx() as c:
+            s = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == jid)).scalar_one()
+            if tamper == "missing_fp":
+                s.pop("owner_goal_binding_fingerprint")
+            elif tamper == "missing_ref":
+                s.pop("owner_goal")
+            elif tamper == "null":
+                s["owner_goal"] = None
+            elif tamper == "extra":
+                s["owner_goal"]["extra"] = True
+            else:
+                s["owner_goal"]["goal_version"] = True
+            limits = Limits(**{k: getattr(data[1], k) for k in Limits.model_fields})
+            draft = c.execute(select(app_drafts).where(
+                app_drafts.c.id == made["id"])).mappings().one()
+            with pytest.raises(DomainError):
+                own.verify_frozen_run(data[0], c, data[3], draft, limits, s)
+            # Reseal only the deliberately corrupt raw queue, exercising actual Worker rejection.
+            c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == jid).values(snapshot=s, fingerprint=fingerprint(s)))
+            c.execute(update(runs).where(runs.c.id == jid).values(fingerprint=fingerprint(s)))
+        assert Worker(data[0], data[1], NoModel()).once()
+        current = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{jid}").json()
+>       assert current["status"] == "FAILED" and current["result_version"] is None, current
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_logic_owner.py:383: KeyError
+__ test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[extra] ___
+
+env = (<sim2act.db.Store object at 0x7f67e41f1310>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_mal...f614b911544e79a305b5c13722306e', 'user_a097d29df95f4392bdeb6503b2959e3c', 'proj_a176f2a96e54480baa2a143d77e258a4', ...)
+tamper = 'extra'
+
+    @pytest.mark.parametrize("tamper", ["missing_fp", "missing_ref", "null", "extra", "bool_version"])
+    def test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed(env, tamper):
+        from sim2act.contracts import Limits
+        from sim2act.worker import Worker
+    
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        saved, _ = save_goal(data, made, rid)
+        reply = data[2].post(f"/api/internal/instances/{instance['id']}/runs", json=dict(
+            expected_revision=instance["revision"], expected_release_fingerprint=release["fingerprint"],
+            expected_owner_goal_binding_fingerprint=saved["binding_fingerprint"], input={"term": "Gamma"}, request_key="polluted-goal-ref"))
+        assert reply.status_code == 202, reply.text
+        jid = reply.json()["run_id"]
+        with data[0].tx() as c:
+            s = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == jid)).scalar_one()
+            if tamper == "missing_fp":
+                s.pop("owner_goal_binding_fingerprint")
+            elif tamper == "missing_ref":
+                s.pop("owner_goal")
+            elif tamper == "null":
+                s["owner_goal"] = None
+            elif tamper == "extra":
+                s["owner_goal"]["extra"] = True
+            else:
+                s["owner_goal"]["goal_version"] = True
+            limits = Limits(**{k: getattr(data[1], k) for k in Limits.model_fields})
+            draft = c.execute(select(app_drafts).where(
+                app_drafts.c.id == made["id"])).mappings().one()
+            with pytest.raises(DomainError):
+                own.verify_frozen_run(data[0], c, data[3], draft, limits, s)
+            # Reseal only the deliberately corrupt raw queue, exercising actual Worker rejection.
+            c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == jid).values(snapshot=s, fingerprint=fingerprint(s)))
+            c.execute(update(runs).where(runs.c.id == jid).values(fingerprint=fingerprint(s)))
+        assert Worker(data[0], data[1], NoModel()).once()
+        current = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{jid}").json()
+>       assert current["status"] == "FAILED" and current["result_version"] is None, current
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_logic_owner.py:383: KeyError
+_ test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[bool_version] _
+
+env = (<sim2act.db.Store object at 0x7f67e52b3710>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_mal...33ae4504f64ddca41be84253b83469', 'user_da399f96134e409d964e171db4585912', 'proj_995cd25662b344038c5a9017e7e40dab', ...)
+tamper = 'bool_version'
+
+    @pytest.mark.parametrize("tamper", ["missing_fp", "missing_ref", "null", "extra", "bool_version"])
+    def test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed(env, tamper):
+        from sim2act.contracts import Limits
+        from sim2act.worker import Worker
+    
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        saved, _ = save_goal(data, made, rid)
+        reply = data[2].post(f"/api/internal/instances/{instance['id']}/runs", json=dict(
+            expected_revision=instance["revision"], expected_release_fingerprint=release["fingerprint"],
+            expected_owner_goal_binding_fingerprint=saved["binding_fingerprint"], input={"term": "Gamma"}, request_key="polluted-goal-ref"))
+        assert reply.status_code == 202, reply.text
+        jid = reply.json()["run_id"]
+        with data[0].tx() as c:
+            s = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == jid)).scalar_one()
+            if tamper == "missing_fp":
+                s.pop("owner_goal_binding_fingerprint")
+            elif tamper == "missing_ref":
+                s.pop("owner_goal")
+            elif tamper == "null":
+                s["owner_goal"] = None
+            elif tamper == "extra":
+                s["owner_goal"]["extra"] = True
+            else:
+                s["owner_goal"]["goal_version"] = True
+            limits = Limits(**{k: getattr(data[1], k) for k in Limits.model_fields})
+            draft = c.execute(select(app_drafts).where(
+                app_drafts.c.id == made["id"])).mappings().one()
+            with pytest.raises(DomainError):
+                own.verify_frozen_run(data[0], c, data[3], draft, limits, s)
+            # Reseal only the deliberately corrupt raw queue, exercising actual Worker rejection.
+            c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == jid).values(snapshot=s, fingerprint=fingerprint(s)))
+            c.execute(update(runs).where(runs.c.id == jid).values(fingerprint=fingerprint(s)))
+        assert Worker(data[0], data[1], NoModel()).once()
+        current = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{jid}").json()
+>       assert current["status"] == "FAILED" and current["result_version"] is None, current
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_logic_owner.py:383: KeyError
+_____________ test_own_goal_visible_cold_worker_and_owner[accept] ______________
+
+env = (<sim2act.db.Store object at 0x7f67df3e8da0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_own...34cd3ef21d454c8eb036fc8983f888', 'user_e1d7dfc88f10431b9c6e97d460b3b2da', 'proj_5e278080180941899dae644dedd6c2d8', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor0')
+scenario = 'accept'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = own_source_barrier(data, old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+            assert code == 0, error
+            proof = json.loads((tmp_path / "result.json").read_text())
+            assert proof["status"] == "PASS" and worked == 2
+            assert barrier is not None and not barrier.blocked
+            if output:
+                (Path(output) / (scenario + "-sql.json")).write_text(json.dumps({
+                    "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                    "statements": barrier.statements}, indent=2))
+            assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
+            web = Path(__file__).parents[1] / "src/sim2act/web"
+            for row in proof["static_resource_loads"]:
+                asset = web / (row["path"].lstrip("/") or "index.html")
+                assert hashlib.sha256(asset.read_bytes()).hexdigest() == row["sha256"]
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            stderr_file.close()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + "-node-stderr.log")).write_bytes(stderr_path.read_bytes())
+                (folder / (scenario + "-exit.json")).write_text(json.dumps({"exit_code": process.returncode,
+                    "worked": worked, "result_exists": (tmp_path / "result.json").exists(),
+                    "protected_private_evaluations": barrier.blocked if barrier else None}, indent=2))
+                if barrier is not None:
+                    (folder / (scenario + "-sql.json")).write_text(json.dumps({
+                        "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                        "statements": barrier.statements}, indent=2))
+            if barrier is not None:
+>               barrier.__exit__(None, None, None)
+
+tests/test_text_logic_owner_ui.py:106: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sql_private_barrier.PrivateReadBarrier object at 0x7f67e4cb3e60>
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor0/fixture.db)
+raw = <sqlite3.Connection object at 0x7f67e4d80c70>, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+>               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError
+_____________ test_own_goal_visible_cold_worker_and_owner[reject] ______________
+
+env = (<sim2act.db.Store object at 0x7f67e44294f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_own...77d3b9c2704a59891617d83c1cbabf', 'user_21c4d9798b764f14a9924f29fbd664f4', 'proj_197cf41a419d4946b25f4f52dd1edcba', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor1')
+scenario = 'reject'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = own_source_barrier(data, old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+            assert code == 0, error
+            proof = json.loads((tmp_path / "result.json").read_text())
+            assert proof["status"] == "PASS" and worked == 2
+            assert barrier is not None and not barrier.blocked
+            if output:
+                (Path(output) / (scenario + "-sql.json")).write_text(json.dumps({
+                    "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                    "statements": barrier.statements}, indent=2))
+            assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
+            web = Path(__file__).parents[1] / "src/sim2act/web"
+            for row in proof["static_resource_loads"]:
+                asset = web / (row["path"].lstrip("/") or "index.html")
+                assert hashlib.sha256(asset.read_bytes()).hexdigest() == row["sha256"]
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            stderr_file.close()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + "-node-stderr.log")).write_bytes(stderr_path.read_bytes())
+                (folder / (scenario + "-exit.json")).write_text(json.dumps({"exit_code": process.returncode,
+                    "worked": worked, "result_exists": (tmp_path / "result.json").exists(),
+                    "protected_private_evaluations": barrier.blocked if barrier else None}, indent=2))
+                if barrier is not None:
+                    (folder / (scenario + "-sql.json")).write_text(json.dumps({
+                        "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                        "statements": barrier.statements}, indent=2))
+            if barrier is not None:
+>               barrier.__exit__(None, None, None)
+
+tests/test_text_logic_owner_ui.py:106: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sql_private_barrier.PrivateReadBarrier object at 0x7f67df1080b0>
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor1/fixture.db)
+raw = <sqlite3.Connection object at 0x7f67df07f100>, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+>               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError
+____________ test_own_goal_visible_cold_worker_and_owner[goal-lost] ____________
+
+env = (<sim2act.db.Store object at 0x7f67de7319d0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_own...f92d20bff44563a18bde4736b98be9', 'user_7909323b86a045ac8a278f3a42361a8d', 'proj_a40741021b094b259fc22cc8059867a8', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor2')
+scenario = 'goal-lost'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = own_source_barrier(data, old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+            assert code == 0, error
+            proof = json.loads((tmp_path / "result.json").read_text())
+            assert proof["status"] == "PASS" and worked == 2
+            assert barrier is not None and not barrier.blocked
+            if output:
+                (Path(output) / (scenario + "-sql.json")).write_text(json.dumps({
+                    "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                    "statements": barrier.statements}, indent=2))
+            assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
+            web = Path(__file__).parents[1] / "src/sim2act/web"
+            for row in proof["static_resource_loads"]:
+                asset = web / (row["path"].lstrip("/") or "index.html")
+                assert hashlib.sha256(asset.read_bytes()).hexdigest() == row["sha256"]
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            stderr_file.close()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + "-node-stderr.log")).write_bytes(stderr_path.read_bytes())
+                (folder / (scenario + "-exit.json")).write_text(json.dumps({"exit_code": process.returncode,
+                    "worked": worked, "result_exists": (tmp_path / "result.json").exists(),
+                    "protected_private_evaluations": barrier.blocked if barrier else None}, indent=2))
+                if barrier is not None:
+                    (folder / (scenario + "-sql.json")).write_text(json.dumps({
+                        "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                        "statements": barrier.statements}, indent=2))
+            if barrier is not None:
+>               barrier.__exit__(None, None, None)
+
+tests/test_text_logic_owner_ui.py:106: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sql_private_barrier.PrivateReadBarrier object at 0x7f67e43b63c0>
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor2/fixture.db)
+raw = <sqlite3.Connection object at 0x7f67dd7e1030>, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+>               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError
+__________ test_own_goal_visible_cold_worker_and_owner[decision-lost] __________
+
+env = (<sim2act.db.Store object at 0x7f67dc0d21e0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-46/test_own...21f74b498243e7999a4d104094c22f', 'user_8a29cc0f2db049a7841f2b069eb347a5', 'proj_24f2a8ee492246b08b31ebf48a003dda', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor3')
+scenario = 'decision-lost'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = own_source_barrier(data, old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+            assert code == 0, error
+            proof = json.loads((tmp_path / "result.json").read_text())
+            assert proof["status"] == "PASS" and worked == 2
+            assert barrier is not None and not barrier.blocked
+            if output:
+                (Path(output) / (scenario + "-sql.json")).write_text(json.dumps({
+                    "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                    "statements": barrier.statements}, indent=2))
+            assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
+            web = Path(__file__).parents[1] / "src/sim2act/web"
+            for row in proof["static_resource_loads"]:
+                asset = web / (row["path"].lstrip("/") or "index.html")
+                assert hashlib.sha256(asset.read_bytes()).hexdigest() == row["sha256"]
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            stderr_file.close()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + "-node-stderr.log")).write_bytes(stderr_path.read_bytes())
+                (folder / (scenario + "-exit.json")).write_text(json.dumps({"exit_code": process.returncode,
+                    "worked": worked, "result_exists": (tmp_path / "result.json").exists(),
+                    "protected_private_evaluations": barrier.blocked if barrier else None}, indent=2))
+                if barrier is not None:
+                    (folder / (scenario + "-sql.json")).write_text(json.dumps({
+                        "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                        "statements": barrier.statements}, indent=2))
+            if barrier is not None:
+>               barrier.__exit__(None, None, None)
+
+tests/test_text_logic_owner_ui.py:106: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sql_private_barrier.PrivateReadBarrier object at 0x7f67d6e9f230>
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-46/test_own_goal_visible_cold_wor3/fixture.db)
+raw = <sqlite3.Connection object at 0x7f67d7bbd990>, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+>               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_logic_owner.py::test_new_own_goal_source_gone_cold_actual_evidence_and_exact_items[False]
+FAILED tests/test_text_logic_owner.py::test_new_own_goal_source_gone_cold_actual_evidence_and_exact_items[True]
+FAILED tests/test_text_logic_owner.py::test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[missing_fp]
+FAILED tests/test_text_logic_owner.py::test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[missing_ref]
+FAILED tests/test_text_logic_owner.py::test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[null]
+FAILED tests/test_text_logic_owner.py::test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[extra]
+FAILED tests/test_text_logic_owner.py::test_malformed_owned_run_ref_is_controlled_and_worker_fails_closed[bool_version]
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[accept]
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[reject]
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[goal-lost]
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[decision-lost]
+11 failed, 22 passed, 1 warning in 175.93s (0:02:55)

@@ -52,7 +52,7 @@ def is_app_job(store, rid):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
@@ -84,6 +84,8 @@ def enqueue(
         }
         if offline_replay is not None:
             request["offline_replay"] = offline_replay
+        if owner_goal_fp is not None:
+            request["owner_goal_binding_fingerprint"] = owner_goal_fp
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -123,6 +125,13 @@ def enqueue(
         # Strict input validation happens in the worker so accepted bad inputs keep FAILED history.
         jid, aid = new_id("run"), new_id("iapprun")
         draft = release["snapshot"]["draft"]
+        from . import app_owner_goals, text_logic_reuse
+
+        own_goal = app_owner_goals.run_ref(store, c, user, draft, limits) if text_logic_reuse.independent(draft) else None
+        if (own_goal is not None and owner_goal_fp != own_goal["binding_fingerprint"]) or (
+            own_goal is None and owner_goal_fp is not None
+        ):
+            raise DomainError("VERSION_CONFLICT", "Confirm the current own GoalCard binding for this Run")
         resource_ref = draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
         source = c.execute(select(resources).where(resources.c.id == resource_ref)).mappings().one()
         snapshot = {
@@ -138,6 +147,8 @@ def enqueue(
             "namespace": KIND,
             "model_requests": 0,
         }
+        if own_goal is not None:
+            snapshot["owner_goal"] = own_goal
         goal = "Internal fixed Release result run"
         contract = FrozenRunContract(
             run_id=jid,
@@ -259,6 +270,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True):
     }
     if "offline_replay" in s:
         request["offline_replay"] = s["offline_replay"]
+    if "owner_goal_binding_fingerprint" in s:
+        request["owner_goal_binding_fingerprint"] = s["owner_goal_binding_fingerprint"]
     if (
         s["namespace"] != KIND
         or job["context"].get("kind") != KIND
@@ -282,6 +295,9 @@ def load_binding(store, c, user, job, limits, *, authorize=True):
         if contract.limits.model_dump() != s["limits"]:
             raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
         r = read_release(store, c, user, s["release_id"], limits)
+        from .app_owner_goals import verify_frozen_run
+
+        verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s)
         if "offline_replay" in s:
             from .agent_apps import is_agent, offline_replay_model
 
@@ -488,6 +504,10 @@ def prepare_dispatch(worker, run):
             release["snapshot"]["draft"],
             Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields}),
         )
+        from .app_owner_goals import check_run
+
+        check_run(store, c, run["principal_id"], draft,
+                  Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields}), s)
         validate_value(manifest.input_schema, s["input"])
         args = {"resource_id": manifest.data_bindings[0].resource_ref, **s["input"]}
         validate_action_input(action, args)
@@ -621,6 +641,9 @@ def commit_result(worker, run, plan, output):
         draft, manifest, action, _ = validate_frozen_candidate(
             store, c, run["principal_id"], release["snapshot"]["draft"], limits
         )
+        from .app_owner_goals import check_run
+
+        check_run(store, c, run["principal_id"], draft, limits, s)
         args = {"resource_id": manifest.data_bindings[0].resource_ref, **s["input"]}
         source = authorized_read(
             store,
@@ -784,6 +807,7 @@ def commit_result(worker, run, plan, output):
         # Recheck before transaction commit so the entire append rolls back.
         if draft["candidate"].get("task_proof", {}).get("proof", {}).get("kind") == "authorized_data_free_text_logic.v1":
             validate_frozen_candidate(store, c, run["principal_id"], draft, limits)
+            check_run(store, c, run["principal_id"], draft, limits, s)
 
 
 def fail_job(worker, run, error):

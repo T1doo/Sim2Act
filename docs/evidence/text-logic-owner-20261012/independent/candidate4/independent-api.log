@@ -1,0 +1,76 @@
+.F......F                                                                [100%]
+=================================== FAILURES ===================================
+_____ test_prepared_decision_budget_change_above_cap_rejects_without_write _____
+
+env = (<sim2act.db.Store object at 0x7fb1facdfb60>, Settings(database_url='sqlite:////tmp/pb-text-owner-review-20261012/cand...75d594537d4d19a2e4ca00b9d1b1ce', 'user_6958bf1be8664a9ca11e3ce1e16d374f', 'proj_4e4b9300c8094ca6859a9c0a3c3460f2', ...)
+
+    def test_prepared_decision_budget_change_above_cap_rejects_without_write(env):
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        save_goal(data, made, rid)
+        job = own_run(data, made, release, instance)
+        review, _ = prepare(data, release, instance, job)
+        body = choice_body(review)
+        before = snapshot(data[0])
+        settings = replace(data[1], max_total_tokens=63000)
+        with TestClient(create_app(data[0], settings)) as client:
+            client.headers['Authorization'] = 'Bearer synthetic-test-A'
+            response = client.post(path(instance) + '-requests', json=body)
+>           assert response.status_code == 409 and response.json()['error']['code'] == 'VERSION_CONFLICT', response.text
+E           AssertionError: {"error":{"code":"BUDGET_EXHAUSTED","message":"Draft exceeds configured platform budget","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E           assert (400 == 409)
+E            +  where 400 = <Response [400 Bad Request]>.status_code
+
+/tmp/pb-text-owner-review-20261012/candidate4/test_independent_owner.py:64: AssertionError
+_ test_single_goal_row_boolean_substitution_cannot_match_unchanged_other_seal __
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fb1fc900ef0>
+key = 'id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+>           return self._index[key][1]
+                   ^^^^^^^^^^^^^^^^
+E           KeyError: 'id'
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1725: KeyError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7fb1fc4485c0>, Settings(database_url='sqlite:////tmp/pb-text-owner-review-20261012/cand...36171554a84991ab8c1c20496b3dd8', 'user_05ee2c23f03f4ed398a7bea668235dfa', 'proj_c6434690c8e245a2ae910cb72fea3381', ...)
+
+    def test_single_goal_row_boolean_substitution_cannot_match_unchanged_other_seal(env):
+        data, made, _, _, _, _, rid = setup_owner(env)
+        saved, _ = save_goal(data, made, rid)
+        with data[0].tx() as c:
+            row = c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id == made['id'],
+                delivery_graph_requests.c.kind == own.KIND)).mappings().one()
+            changed = copy.deepcopy(row['snapshot'])
+            changed['response']['sequence'] = True
+>           c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.id == row['id'])
+                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                .values(snapshot=changed, fingerprint=fingerprint(changed)))
+
+/tmp/pb-text-owner-review-20261012/candidate4/test_independent_owner.py:190: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x7fb1fc900ef0>
+key = 'id'
+
+    def __getattr__(self, key: str) -> _COL_co:
+        try:
+            return self._index[key][1]
+        except KeyError as err:
+>           raise AttributeError(key) from err
+E           AttributeError: id
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/base.py:1727: AttributeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/pb-text-owner-review-20261012/candidate4/test_independent_owner.py::test_prepared_decision_budget_change_above_cap_rejects_without_write
+FAILED ../../tmp/pb-text-owner-review-20261012/candidate4/test_independent_owner.py::test_single_goal_row_boolean_substitution_cannot_match_unchanged_other_seal
+2 failed, 7 passed, 1 warning in 65.62s (0:01:05)

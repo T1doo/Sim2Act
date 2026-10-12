@@ -1,0 +1,384 @@
+...................F...FFFFF                                             [100%]
+=================================== FAILURES ===================================
+__ test_goal_before_run_requires_explicit_exact_binding_and_preserves_history __
+
+env = (<sim2act.db.Store object at 0x7fa615f98f80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-45/test_goa...618e8e9b344cb3bed4747d9999aa87', 'user_760beb5a3ebc4b748e3d4ed3460a31a3', 'proj_0e00af5d7a00488391edc858f163564a', ...)
+
+    def test_goal_before_run_requires_explicit_exact_binding_and_preserves_history(env):
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        unbound = run_input(data, release, instance, {"term": "Gamma"}, "before-own-goal")
+        saved, _ = save_goal(data, made, rid)
+        before = snapshot(data[0])
+        path = f"/api/internal/instances/{instance['id']}/runs"
+        base = dict(expected_revision=instance["revision"], expected_release_fingerprint=release["fingerprint"],
+                    input={"term": "Gamma"}, request_key="missing-current-own-goal")
+        for fp in (None, "0" * 64):
+            request = {**base, **({"expected_owner_goal_binding_fingerprint": fp} if fp else {})}
+            reply = data[2].post(path, json=request)
+            assert reply.status_code == 409, reply.text
+            assert snapshot(data[0]) == before
+        assert data[2].get(path + "/" + unbound["id"]).json()["status"] == "SUCCEEDED"
+        assert data[2].post(f"/api/internal/instances/{instance['id']}/owner-review-requests",
+                          json=review_body(data, release, instance, unbound)).status_code == 409
+        new = own_run(data, made, release, instance, key="after-own-goal")
+        prepare(data, release, instance, new)
+        save_goal(data, made, rid, "own-revision-2", {**own_goal(rid), "goal": "Revision 2 criteria"})
+        history = data[2].get(path + "/" + new["id"])
+        assert history.status_code == 200 and history.json()["status"] == "SUCCEEDED", history.text
+        assert data[2].post(f"/api/internal/instances/{instance['id']}/owner-review-requests",
+                          json=review_body(data, release, instance, new, "reject-old-goal-run")).status_code == 409
+        fresh = own_run(data, made, release, instance, "Alpha", "revision-2-worker")
+>       review, _ = prepare(data, release, instance, fresh, "revision-2-prepare")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_logic_owner.py:255: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7fa615f98f80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-45/test_goa...5618e8e9b344cb3bed4747d9999aa87', 'proj_0e00af5d7a00488391edc858f163564a', 'res_fb975bd26d8c4212af207d61e2eee139', ...)
+release = {'approval_id': 'iapproval_a6b2e7032e9142a4bf19acf8f81dc8ac', 'fingerprint': 'c5ca3e931d69d952755c0653720591ad9369f306876ad6e3e005e9dd7696582b', 'formal_publication_enabled': False, 'id': 'irelease_c452bf5ba8084f01927237dbc04a70ce', ...}
+instance = {'data_version': 0, 'formal_publication_enabled': False, 'history': [{'kind': 'created', 'release_id': 'irelease_c452bf5ba8084f01927237dbc04a70ce', 'revision': 1}], 'id': 'iinstance_35074077a9d385cfbe81defe68ef1bc1', ...}
+job = {'app_run_id': 'iapprun_b2a80701dbe542cbb52a2368f9a9b2b0', 'cancel_intent': False, 'error': None, 'events': [{'created...10690ea', 'result_version': 3}, 'id': 'event_5584d6b114c04281bd122bffa1376062', 'kind': 'RESULT_COMMITTED', ...}], ...}
+key = 'revision-2-prepare', sequence = None
+
+    def prepare(data, release, instance, job, key="prepare", sequence=None):
+        body = {
+            "command": "PREPARE",
+            "request_key": key,
+            "expected_sequence": state(data, instance)["sequence"] if sequence is None else sequence,
+            "expected_revision": instance["revision"],
+            "expected_release_fingerprint": release["fingerprint"],
+            "run_ids": [job["id"]],
+        }
+        response = data[2].post(path(instance) + "-requests", json=body)
+>       assert response.status_code == 201, response.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"A current successful new-input Worker run is required","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_owner_acceptance.py:63: AssertionError
+_______ test_all100_original_own_goal_items_are_required_in_exact_order ________
+
+env = (<sim2act.db.Store object at 0x7fa617ce38f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-45/test_all...135a78f6844f6bba241ed7be903e62', 'user_d33ab130eb9f4c5c916878516e37c2ce', 'proj_f64ff0e09a394e4490523a6bc9692b7a', ...)
+
+    def test_all100_original_own_goal_items_are_required_in_exact_order(env):
+        data, made, release, instance, _, _, rid = setup_owner(env)
+        goal = own_goal(rid)
+        for field in ("known", "assumptions", "unresolved", "constraints", "acceptance_checks"):
+            goal[field] = [f"{field} original criterion {n}" for n in range(16)]
+        save_goal(data, made, rid, goal=goal, applicability=[f"scope {n}" for n in range(16)])
+        job = own_run(data, made, release, instance)
+        review, _ = prepare(data, release, instance, job)
+        body = choice_body(review)
+        assert len(body["choices"]) == len(review["payload"]["contract"]["items"]) == 100
+        path = f"/api/internal/instances/{instance['id']}/owner-review-requests"
+        before = snapshot(data[0])
+        for choices in (body["choices"][:-1], list(reversed(body["choices"]))):
+            reply = data[2].post(path, json={**body, "choices": choices})
+>           assert reply.status_code == 409, reply.text
+E           AssertionError: {"error":{"code":"INVALID_INPUT","message":"Explicit ordered decision and reason for every frozen item required","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E           assert 400 == 409
+E            +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_logic_owner.py:320: AssertionError
+_____________ test_own_goal_visible_cold_worker_and_owner[accept] ______________
+
+env = (<sim2act.db.Store object at 0x7fa617c8de50>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-45/test_own...b328776226487a93c03137332f915f', 'user_f2e930c74c2045038e1f0434a4bf8eeb', 'proj_b4a38b6b2900448081b37f53818665df', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-45/test_own_goal_visible_cold_wor0')
+scenario = 'accept'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = source_barrier(data, *old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+>           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: enabled owner-prepare
+E                 at gesture (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:11:102)
+E                 at click (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:12:76)
+E                 at runAndPrepare (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:28:145)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act/tests/text_logic_owner_ui.cjs:49:14
+E             
+E           assert 1 == 0
+
+tests/test_text_logic_owner_ui.py:75: AssertionError
+_____________ test_own_goal_visible_cold_worker_and_owner[reject] ______________
+
+env = (<sim2act.db.Store object at 0x7fa615c2bf80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-45/test_own...8c05799c364d1ea67a8e4875847300', 'user_1d4a16d3a2f14dd1ba385605fd1c1b37', 'proj_6982154e30d14cd581465c6789af49ff', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-45/test_own_goal_visible_cold_wor1')
+scenario = 'reject'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = source_barrier(data, *old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+>           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: enabled owner-prepare
+E                 at gesture (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:11:102)
+E                 at click (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:12:76)
+E                 at runAndPrepare (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:28:145)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act/tests/text_logic_owner_ui.cjs:49:14
+E             
+E           assert 1 == 0
+
+tests/test_text_logic_owner_ui.py:75: AssertionError
+____________ test_own_goal_visible_cold_worker_and_owner[goal-lost] ____________
+
+env = (<sim2act.db.Store object at 0x7fa615728e60>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-45/test_own...284194dcda4bf5abf9b42c3f830c61', 'user_c61c631f4d834262b52095cbc954e748', 'proj_0675c38f4a5d48488c8eb28194c58704', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-45/test_own_goal_visible_cold_wor2')
+scenario = 'goal-lost'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = source_barrier(data, *old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+>           assert code == 0, error
+E           AssertionError: TypeError: Cannot read properties of null (reading 'status')
+E                 at eval (eval at <anonymous> (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:48:127), <anonymous>:1:17)
+E                 at eval (<anonymous>)
+E                 at runAndPrepare (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:28:10)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act/tests/text_logic_owner_ui.cjs:49:14
+E             
+E           assert 1 == 0
+
+tests/test_text_logic_owner_ui.py:75: AssertionError
+__________ test_own_goal_visible_cold_worker_and_owner[decision-lost] __________
+
+env = (<sim2act.db.Store object at 0x7fa6165e8380>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-45/test_own...73391c03a14f6c887884b3aa9315d8', 'user_3ef25f5e02e745a1bb5372517d91fd82', 'proj_2b9b57215f5042ffa23301916fbdc00a', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-45/test_own_goal_visible_cold_wor3')
+scenario = 'decision-lost'
+
+    @pytest.mark.parametrize("scenario", ["accept", "reject", "goal-lost", "decision-lost"])
+    def test_own_goal_visible_cold_worker_and_owner(env, tmp_path, scenario):
+        data, made, release, instance, _, old, resource = setup_owner(env)
+        aid, oldrel, oldinst, run = old
+        store, settings, _, *_ = data
+        app = data[2].get("/api/apps/" + made["id"]).json()
+        revoke_source(data)
+        barrier = source_barrier(data, *old)
+        cold_api = Store(settings.database_url, test_only=True)
+        barrier.attach(cold_api)
+        client = TestClient(create_app(cold_api, settings))
+        barrier.__enter__()
+        info = dict(project=data[4], source=aid, app=made["id"], name=app["name"], instance=instance["id"],
+                    old_run=run, old_resource=data[5], resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        stderr_file = stderr_path.open("w")
+        process = subprocess.Popen(["node", "tests/text_logic_owner_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr_file, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = 0
+        cold_stores = [cold_api]
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            code = process.wait(timeout=20)
+            stderr_file.flush()
+            error = stderr_path.read_text()
+            output = os.environ.get("SIM2ACT_TEXT_OWNER_UI_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+>           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: enabled owner-prepare
+E                 at gesture (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:11:102)
+E                 at click (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:12:76)
+E                 at runAndPrepare (/workspace/Sim2Act/tests/text_logic_owner_ui.cjs:28:145)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act/tests/text_logic_owner_ui.cjs:49:14
+E             
+E           assert 1 == 0
+
+tests/test_text_logic_owner_ui.py:75: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_logic_owner.py::test_goal_before_run_requires_explicit_exact_binding_and_preserves_history
+FAILED tests/test_text_logic_owner.py::test_all100_original_own_goal_items_are_required_in_exact_order
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[accept]
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[reject]
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[goal-lost]
+FAILED tests/test_text_logic_owner_ui.py::test_own_goal_visible_cold_worker_and_owner[decision-lost]
+6 failed, 22 passed, 1 warning in 153.89s (0:02:33)
