@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="5.390" timestamp="2026-10-12T17:34:00.065483+00:00" hostname="9809f76d2248"><testcase classname="test_other_key_ui_corrected" name="test_other_real_app_cannot_be_original_creation_key_result" time="3.983"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: valid-hash other real app cannot become this original-key result&#10;      at check (/tmp/pb-text-multistep-r8-ui-counterexample-20261012/other-key.cjs:8:26)&#10;      at /tmp/pb-text-multistep-r8-ui-counterexample-20261012/other-key.cjs:26:2&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert (1 == 0)">env = (&lt;sim2act.db.Store object at 0x7f876a60a870&gt;, Settings(database_url='sqlite:////tmp/pb-text-multistep-r8-ui-counterexa...89402379954d3baf0f2b888ef03630', 'user_d0cefda6b7184fad8d21507167f16f07', 'proj_60f5d07305be4aa9904928cefd5a8e04', ...)
+tmp_path = PosixPath('/tmp/pb-text-multistep-r8-ui-counterexample-20261012/corrected-fixtures/test_other_real_app_cannot_be_0')
+
+    def test_other_real_app_cannot_be_original_creation_key_result(env,tmp_path):
+        assert str(OUT/'r8-source/src') in sim2act.__file__,sim2act.__file__
+        source,_=draft(env);release,inst=instance(env,source['id']);rid=enqueue(env,release,inst);once(env)
+        target,card=material(env,'Cedar new owner\nQuartz tomorrow\nCedar reserved\n','md')
+        title='Independent alternate-key target Goal'
+        native=env[2].get('/api/goal-cards/'+card['id']).json()
+        content=native['content'];content['title']=title
+        saved=env[2].put('/api/goal-cards/'+card['id'],json={**content,'expected_version':native['version']})
+        assert saved.status_code==200,saved.text
+        info={'project':env[5],'source_run':rid,'resource':target,'goal_title':title,'scenario':'creation-lost',
+              'alternate_receipt':{**source,'cached':True},'output':str(OUT/'page.json')}
+        path=tmp_path/'info.json';path.write_text(json.dumps(info))
+        with (OUT/'node-stderr.log').open('w') as err:
+            p=subprocess.Popen(['node',str(OUT/'other-key.cjs'),str(path)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=err,text=True)
+            try:
+                for line in p.stdout:
+                    request=json.loads(line)
+                    if request.get('done'):break
+                    r=env[2].request(request['method'],request['path'],json=request.get('body'),headers=request.get('headers'))
+                    p.stdin.write(json.dumps({'id':request['id'],'status':r.status_code,'text':r.text,'content_type':r.headers.get('content-type')})+'\n');p.stdin.flush()
+                p.stdin.close();code=p.wait(timeout=20)
+            finally:
+                if p.poll() is None:p.kill();p.wait(timeout=5)
+        proof=json.loads((OUT/'page.json').read_text());assert len(proof['static_resource_loads'])==20
+        for item in proof['static_resource_loads']:
+            file=OUT/'r8-source/src/sim2act/web'/(item['path'].lstrip('/') or 'index.html')
+            assert hashlib.sha256(file.read_bytes()).hexdigest()==item['sha256']
+        (OUT/'node-exit.json').write_text(json.dumps({'exit_code':code,'source_import':sim2act.__file__,'assets':20,'alternate_id':source['id'],'source_candidate_fingerprint':source['candidate_fingerprint'],'same_project':env[5]},indent=2)+'\n')
+&gt;       assert code==0 and proof['status']=='PASS',(OUT/'node-stderr.log').read_text()
+E       AssertionError: AssertionError [ERR_ASSERTION]: valid-hash other real app cannot become this original-key result
+E             at check (/tmp/pb-text-multistep-r8-ui-counterexample-20261012/other-key.cjs:8:26)
+E             at /tmp/pb-text-multistep-r8-ui-counterexample-20261012/other-key.cjs:26:2
+E             at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E         
+E       assert (1 == 0)
+
+../test_other_key_ui_corrected.py:38: AssertionError</failure></testcase></testsuite></testsuites>

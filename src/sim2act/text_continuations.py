@@ -41,7 +41,8 @@ CANCEL, REVOKE = "text_software_cancel", "text_software_revoke"
 MAX = 64
 ANCHOR_HASH = "24f26f3621b8fc49a24fa3566484b568148d9317f2d279d79f264416b994193a"
 CHANGED = {"api.py", "app_jobs.py", "internal_api.py", "owner_acceptance.py", "app_owner_goals.py",
-           "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py"}
+           "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py",
+           "text_workflows.py"}  # Closed new family; old literal compiler/kernel stays byte-identical.
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
@@ -405,6 +406,9 @@ def target_gate(store, c, user, i):
 
 def draft_gate(store, c, user, aid):
     from .db import task_extractions
+    from .text_workflows import scope_gate
+
+    scope_gate(store, c, user, aid)
 
     # Indexed origin metadata identifies this family before protected app bodies.
     exists = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid,
@@ -430,6 +434,9 @@ def release_gate(store, c, user, rid):
 
 
 def job_gate(store, c, user, rid):
+    from .text_workflows import job_scope_gate
+
+    job_scope_gate(store, c, user, rid)
     aid = c.execute(select(internal_instances.c.source_app_id)
         .join(internal_app_runs, internal_app_runs.c.instance_id == internal_instances.c.id)
         .join(internal_run_bindings, internal_run_bindings.c.app_run_id == internal_app_runs.c.id)

@@ -105,6 +105,7 @@ async function ownerRead(view,key=null){
 }
 async function openOwnerReview(engineeringView){
   clearOwnerReview();
+  if(engineeringView.workflow){$("owner-panel").hidden=false;$("owner-status").textContent="本应用人工签收 PENDING；四步技术核查不替代语义判断。本切片暂不提交此家族的人工声明。";return;}
   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
   const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,state:null,busy:false,readGeneration:0};
   ownerView=view;$("owner-panel").hidden=false;

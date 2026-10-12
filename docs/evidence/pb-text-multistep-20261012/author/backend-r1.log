@@ -1,0 +1,534 @@
+FFFFFFFFFFFFFF                                                           [100%]
+=================================== FAILURES ===================================
+_____________ test_actual_four_nodes_and_partial_branch[True-txt] ______________
+
+env = (<sim2act.db.Store object at 0x7f7ea3200200>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...cf3b953515410ab9fb7b427e9e6e27', 'user_c39f25ab04444f00b6e0fcc1321e0c42', 'proj_34f1321774c849b296c84125e71f4a56', ...)
+fmt = 'txt', emit = True
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+>       made, _ = draft(env, rid, card)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_workflows.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea3200200>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...cf3b953515410ab9fb7b427e9e6e27', 'user_c39f25ab04444f00b6e0fcc1321e0c42', 'proj_34f1321774c849b296c84125e71f4a56', ...)
+rid = 'res_ef8b3f4d8e494cc0aeb9db8ee9371e74'
+card = {'executable': False, 'fingerprint': '2e24e98302a7fa8cec2c169439e581426bef11c2bcc8590fca4eb1d146c47f79', 'id': 'goal_a89fe0b03d19419c8ab60b9d9733d60e', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+______________ test_actual_four_nodes_and_partial_branch[True-md] ______________
+
+env = (<sim2act.db.Store object at 0x7f7ea3258410>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...349c115f1a4090a77b9c4f5697c3c7', 'user_4fe60a9dc7b343e18a4bcb5f9168092d', 'proj_5001707f42e348078f557ef0758f84dd', ...)
+fmt = 'md', emit = True
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+>       made, _ = draft(env, rid, card)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_workflows.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea3258410>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...349c115f1a4090a77b9c4f5697c3c7', 'user_4fe60a9dc7b343e18a4bcb5f9168092d', 'proj_5001707f42e348078f557ef0758f84dd', ...)
+rid = 'res_8b8891dbc44741919707e767727b133d'
+card = {'executable': False, 'fingerprint': '55d14ea584a196bc91f25ce28e2d14bb177cafb2fb749666567e79746bdf0435', 'id': 'goal_1d58015bbfee4cbe8fd14ea1a78272c6', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+_____________ test_actual_four_nodes_and_partial_branch[False-txt] _____________
+
+env = (<sim2act.db.Store object at 0x7f7ea17f7710>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...a626508c7348399e390a3a1031eb95', 'user_6a97e8706af4454d8699729434eeae4d', 'proj_e83976e57df2488484016c20ac83c3b7', ...)
+fmt = 'txt', emit = False
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+>       made, _ = draft(env, rid, card)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_workflows.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea17f7710>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...a626508c7348399e390a3a1031eb95', 'user_6a97e8706af4454d8699729434eeae4d', 'proj_e83976e57df2488484016c20ac83c3b7', ...)
+rid = 'res_f73f6d42eac948178ad55f7f13db7f97'
+card = {'executable': False, 'fingerprint': 'f6027b612a3c8ca867c450676da587111976483ea397ae72fffabcfb1990bfa7', 'id': 'goal_9064a351b4464a308a878f97c4581ec1', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+_____________ test_actual_four_nodes_and_partial_branch[False-md] ______________
+
+env = (<sim2act.db.Store object at 0x7f7ea182e840>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...404cc2ee4345ecac587872de1ada39', 'user_94274e0bd7844509b4f224d0ccef475a', 'proj_90feeda1ea134c7abb1befbd9bbf79f3', ...)
+fmt = 'md', emit = False
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+>       made, _ = draft(env, rid, card)
+                  ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_workflows.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea182e840>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...404cc2ee4345ecac587872de1ada39', 'user_94274e0bd7844509b4f224d0ccef475a', 'proj_90feeda1ea134c7abb1befbd9bbf79f3', ...)
+rid = 'res_f2512d01cad249b5a6bd70c27eabccff'
+card = {'executable': False, 'fingerprint': 'feda6bcc8f45c7c428002494d3795e38b2884409554d711a19bd2dd653dcb3ac', 'id': 'goal_ad176230be0547ecae18a25f07216f55', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+_________ test_actual_task_extracted_to_unseen_material_cold_no_model __________
+
+env = (<sim2act.db.Store object at 0x7f7ea1556b10>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...ca78d44c034638846aedfb43754f06', 'user_7027c667d585435ab0236d365082755e', 'proj_76eeb18bca5444c3a381e821b6705c16', ...)
+
+    def test_actual_task_extracted_to_unseen_material_cold_no_model(env):
+>       made, body = draft(env)
+                     ^^^^^^^^^^
+
+tests/test_text_workflows.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea1556b10>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...ca78d44c034638846aedfb43754f06', 'user_7027c667d585435ab0236d365082755e', 'proj_76eeb18bca5444c3a381e821b6705c16', ...)
+rid = 'res_24a9a635461e44fcb1f0cdfbabcf2ee0'
+card = {'executable': False, 'fingerprint': 'e229fcb4631289a335fe995cb94b48de473c192506ae8601a594cc2c067c3f51', 'id': 'goal_90f0148108b64863b70dfcf8fe2bff81', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+________ test_no_hits_and_equal_terms_still_two_actual_searches[terms0] ________
+
+env = (<sim2act.db.Store object at 0x7f7ea2cf4590>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_no_...c01c6e79c340ecafac6f936c78bc8a', 'user_2197468608154cf09fc2ea6e97c07b8e', 'proj_2d3a591153ed4a24927ffb32de94ec24', ...)
+terms = ('missing-a', 'missing-b')
+
+    @pytest.mark.parametrize("terms", [("missing-a", "missing-b"), ("Amber", "Amber")])
+    def test_no_hits_and_equal_terms_still_two_actual_searches(env, terms):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:148: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea2cf4590>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_no_...c01c6e79c340ecafac6f936c78bc8a', 'user_2197468608154cf09fc2ea6e97c07b8e', 'proj_2d3a591153ed4a24927ffb32de94ec24', ...)
+rid = 'res_f9b3fe21eccc4fbca8e0aeaa8e2988f1'
+card = {'executable': False, 'fingerprint': 'a663f73610af811caa4e40bd64aa2cf02ef2f356c40bd8d0173cc9d4e2a420d0', 'id': 'goal_f9cc068f15564087874b0f7299687c39', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+________ test_no_hits_and_equal_terms_still_two_actual_searches[terms1] ________
+
+env = (<sim2act.db.Store object at 0x7f7ea125b440>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_no_...5a36617c414a3b9109ad0443a01242', 'user_d82a59af68ac4690835b4b72058bbce0', 'proj_e5d321e51050429ab773b2c6282ea8d1', ...)
+terms = ('Amber', 'Amber')
+
+    @pytest.mark.parametrize("terms", [("missing-a", "missing-b"), ("Amber", "Amber")])
+    def test_no_hits_and_equal_terms_still_two_actual_searches(env, terms):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:148: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea125b440>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_no_...5a36617c414a3b9109ad0443a01242', 'user_d82a59af68ac4690835b4b72058bbce0', 'proj_e5d321e51050429ab773b2c6282ea8d1', ...)
+rid = 'res_540b06e5ffa34d9fbada5a540371bcac'
+card = {'executable': False, 'fingerprint': 'd1ec7b6e243337407c67c1649638f95f3cf8f527745cebf960711950c4e35430', 'id': 'goal_74b505e758084761b216ca5b55c87398', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+______________ test_invalid_boolean_failed_history_no_success[1] _______________
+
+env = (<sim2act.db.Store object at 0x7f7ea10a9430>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_inv...73ec1252b844249a4f6c67e612b42c', 'user_b7839aaed8b34d26a995ddb1d0734afb', 'proj_370454195a03421e85664634823b2bef', ...)
+bad = 1
+
+    @pytest.mark.parametrize("bad", [1, "true", None])
+    def test_invalid_boolean_failed_history_no_success(env, bad):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea10a9430>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_inv...73ec1252b844249a4f6c67e612b42c', 'user_b7839aaed8b34d26a995ddb1d0734afb', 'proj_370454195a03421e85664634823b2bef', ...)
+rid = 'res_3a922303b2c448f9a5963ed49dab0a20'
+card = {'executable': False, 'fingerprint': 'ee5102396c82f26cbbdd7a1449580e03b9d19ec4ea66b5206e2ffd67fe3fdce6', 'id': 'goal_305ba0f515354626bd6477f63dc71cd8', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+_____________ test_invalid_boolean_failed_history_no_success[true] _____________
+
+env = (<sim2act.db.Store object at 0x7f7ea1a759a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_inv...716c40afbf41d8a14085bb2cd0e49f', 'user_6250c2294256425ca7aeb4733a092da3', 'proj_d51754021fbb4f389a85120af9fc98bf', ...)
+bad = 'true'
+
+    @pytest.mark.parametrize("bad", [1, "true", None])
+    def test_invalid_boolean_failed_history_no_success(env, bad):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea1a759a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_inv...716c40afbf41d8a14085bb2cd0e49f', 'user_6250c2294256425ca7aeb4733a092da3', 'proj_d51754021fbb4f389a85120af9fc98bf', ...)
+rid = 'res_a2bf198657774db7a2d2aaf31e705132'
+card = {'executable': False, 'fingerprint': '41d86ed05a0d4b70cd1175633f659ba61e2652e554086048cda3d5fb284a7d5d', 'id': 'goal_f7a74ba68397419a9a7a3f145be6f941', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+_____________ test_invalid_boolean_failed_history_no_success[None] _____________
+
+env = (<sim2act.db.Store object at 0x7f7ea1518e60>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_inv...357636180f4ab881dcca01d160de57', 'user_1f72ad8b9a8c4b10a83c03803e5f2230', 'proj_0187fb11a81d4a6aabe647c4dd54e107', ...)
+bad = None
+
+    @pytest.mark.parametrize("bad", [1, "true", None])
+    def test_invalid_boolean_failed_history_no_success(env, bad):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea1518e60>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_inv...357636180f4ab881dcca01d160de57', 'user_1f72ad8b9a8c4b10a83c03803e5f2230', 'proj_0187fb11a81d4a6aabe647c4dd54e107', ...)
+rid = 'res_e8df8d2b798a45729b34dc6184c302e3'
+card = {'executable': False, 'fingerprint': 'f53d94a09e76ca30ba5feac3a3523ac2773acb96f08da3490b4d83523dac524d', 'id': 'goal_a88b95ae665d4da68b38c94a08849d0c', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+_____ test_actual_success_cannot_survive_history_corruption[delete_typed] ______
+
+env = (<sim2act.db.Store object at 0x7f7ea16cc980>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...67501832fa432b939d51ae1b136d34', 'user_05f8b17aae6d423ba1d9af24f1c940f5', 'proj_bd3c994a7fd24fd290b824dba4e00058', ...)
+mutation = 'delete_typed'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea16cc980>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...67501832fa432b939d51ae1b136d34', 'user_05f8b17aae6d423ba1d9af24f1c940f5', 'proj_bd3c994a7fd24fd290b824dba4e00058', ...)
+rid = 'res_a1c3a53f7a4e4f13a93c5be8954c199f'
+card = {'executable': False, 'fingerprint': '51bef7be3558dc43e0144fd229cfee255d632084717e2f8b940ac4c9ba5ecae3', 'id': 'goal_d5956349893645fd922a404a05d67070', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+______ test_actual_success_cannot_survive_history_corruption[delete_node] ______
+
+env = (<sim2act.db.Store object at 0x7f7ea14577a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...f8014795c44653b89b2200106fd629', 'user_45a1b74ee3714afdb555625bee832a5f', 'proj_d2f5888a342244e581966a5431915813', ...)
+mutation = 'delete_node'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea14577a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...f8014795c44653b89b2200106fd629', 'user_45a1b74ee3714afdb555625bee832a5f', 'proj_d2f5888a342244e581966a5431915813', ...)
+rid = 'res_db71da952e8545659179e207a346794d'
+card = {'executable': False, 'fingerprint': '3fc441c21d27228b021dc6618c37a4bd2a612c9890f0e77a2ff06a5605f49f8b', 'id': 'goal_4b7f8454dc144bdda8733442da8b034f', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+______ test_actual_success_cannot_survive_history_corruption[wrong_quote] ______
+
+env = (<sim2act.db.Store object at 0x7f7ea2c9dd90>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...81ba7c357e4ad79353ae87338ffb16', 'user_a936369579804e53892200de237e0b95', 'proj_7862dc4cb06a4bfbae5a16f238ed864b', ...)
+mutation = 'wrong_quote'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea2c9dd90>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...81ba7c357e4ad79353ae87338ffb16', 'user_a936369579804e53892200de237e0b95', 'proj_7862dc4cb06a4bfbae5a16f238ed864b', ...)
+rid = 'res_7fe34272b9694fb2a3037d34d447efdf'
+card = {'executable': False, 'fingerprint': '601f20af4132488a9434620f2f2a920e10ef735a744129bc4d6ac9d13d0129fa', 'id': 'goal_e0bf6d37422743f7a03e43ac52dd92dc', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+_____ test_actual_success_cannot_survive_history_corruption[wrong_intent] ______
+
+env = (<sim2act.db.Store object at 0x7f7ea12e5d90>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...292f688665454899b5c629f716b1be', 'user_2035cbe403c442d582ed9773d138cdee', 'proj_c4dc6fca56b647958a53c8469c79214c', ...)
+mutation = 'wrong_intent'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+>       made, _ = draft(env)
+                  ^^^^^^^^^^
+
+tests/test_text_workflows.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f7ea12e5d90>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-70/test_act...292f688665454899b5c629f716b1be', 'user_2035cbe403c442d582ed9773d138cdee', 'proj_c4dc6fca56b647958a53c8469c79214c', ...)
+rid = 'res_0373b052b78b405fa5b089d4d02c81e9'
+card = {'executable': False, 'fingerprint': '0041322b605a544f7b114920b967ee5634b60d9f07cdc328269add3fe946a974', 'id': 'goal_2838675766cf432ea32222b74f2d6793', 'state': 'DRAFT', ...}
+source_run = None, key = 'create-four'
+
+    def draft(env, rid=None, card=None, source_run=None, key="create-four"):
+        if rid is None:
+            rid, card = material(env)
+        client, pid = env[2], env[5]
+        reply = client.get(f"/api/projects/{pid}/text-workflow-options", params=dict(card_id=card["id"], **(dict(source_run_id=source_run) if source_run else {})))
+        assert reply.status_code == 200, reply.text
+        p = reply.json()
+        body = dict(card_id=card["id"], expected_goal_version=p["goal_version"], expected_goal_fingerprint=p["goal_fingerprint"],
+            resource_id=rid, expected_source_hash=p["source_hash"], source_run_id=source_run,
+            expected_proof_fingerprint=p["source_proof_fingerprint"], name="Actual two-search task",
+            consent="CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL", request_key=key)
+        result = client.post(f"/api/projects/{pid}/text-workflows", json=body)
+>       assert result.status_code == 201, result.text
+E       AssertionError: {"error":{"code":"INVALID_MANIFEST","message":"Unsupported schema keyword or type","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 201
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_workflows.py:51: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[True-txt]
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[True-md]
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[False-txt]
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[False-md]
+FAILED tests/test_text_workflows.py::test_actual_task_extracted_to_unseen_material_cold_no_model
+FAILED tests/test_text_workflows.py::test_no_hits_and_equal_terms_still_two_actual_searches[terms0]
+FAILED tests/test_text_workflows.py::test_no_hits_and_equal_terms_still_two_actual_searches[terms1]
+FAILED tests/test_text_workflows.py::test_invalid_boolean_failed_history_no_success[1]
+FAILED tests/test_text_workflows.py::test_invalid_boolean_failed_history_no_success[true]
+FAILED tests/test_text_workflows.py::test_invalid_boolean_failed_history_no_success[None]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[delete_typed]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[delete_node]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[wrong_quote]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[wrong_intent]
+14 failed, 1 warning in 4.81s

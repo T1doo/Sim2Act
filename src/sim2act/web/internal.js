@@ -55,12 +55,13 @@ async function engineeringAction(view,fn) {
   finally {view.busy=false;engineeringButtons(view);}
 }
 async function openInternal(app,appGeneration) {
-  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",offlineReplay:null,inputGeneration:0};
+  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",offlineReplay:null,inputGeneration:0,workflow:app.input_guidance.mode === "CLOSED_TEXT_WORKFLOW"};
   engineering=view;$("apps").append($("internal-panel"));$("internal-panel").hidden=false;
   $("internal-agent").hidden=!view.agent;
   $("internal-replay-status").textContent=view.agent ? "尚未加载离线响应；审批与新运行暂不可提交。" : "";
   $("internal-prepare-hint").textContent=view.agent ? "使用上方样例字面检索词与已加载的离线响应核查当前材料。先查看精确快照，再手动确认保存内部版本；语义仍为 UNKNOWN。" : "使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。";
   if(view.literal)$("internal-prepare-hint").textContent="用上方检索词独立核查完整匹配行；精确确认后保存内部版本。新实例直接输入新词，无需 Replay。语义 UNKNOWN。";
+  if(view.workflow){$("internal-prepare-hint").textContent="用两次独立检索和报告分支核查完整引用，再确认精确内部快照。后台每步独立留存回执；owner PENDING、语义 UNKNOWN。";}
   engineeringButtons(view);engineeringStatus(view,"正在读取内部版本与实例…","loading");
   if(typeof openAppOwnGoal === "function")await openAppOwnGoal(view);
   try {await refreshInternal(view);}
@@ -104,12 +105,14 @@ async function showInternalInstance(id,view=engineering) {
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
     view.instance=instance;renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
-    $("internal-column-label").hidden=view.agent||view.literal;$("internal-column").required=!(view.agent||view.literal);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
+    $("internal-column-label").hidden=view.agent||view.literal||view.workflow;$("internal-column").required=!(view.agent||view.literal||view.workflow);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
+    if(typeof showTextWorkflowInputs === "function")showTextWorkflowInputs("internal",!!view.workflow);
     $("internal-run-form").hidden=false;
     $("internal-data").replaceChildren(...instance.data.map(record=>internalResult(record,view)));
     $("internal-runs").replaceChildren(...instance.runs.map(run=>row(`${run.status} · ${run.id} · 结果版本 ${run.result_version ?? "无"}`,()=>showInternalRun(run.id,view,instance),"读取后台任务")));
     $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : (view.agent ? "加载对应离线响应并填写本次检索词；后台核查真实授权材料，不调用provider。关闭页面不会取消任务。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。");
+    if(view.workflow)$("internal-run-status").textContent="填写两次独立检索词，明确选择报告分支。报告未选时保留 PARTIAL 与三步回执；只用原请求 key 读取未知结果。";
     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
     if(typeof openOwnerReview==="function")await openOwnerReview(view);
   } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
@@ -150,7 +153,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
         try {await showInternalRun(id,view,instance);}catch(error){engineeringStatus(view,error.message,"error");}
       });return button;
     }));
-    if(run.content_access!==false && previousStatus && previousStatus!==run.status && ["SUCCEEDED","FAILED","CANCELLED"].includes(run.status)){
+    if(run.content_access!==false && previousStatus && previousStatus!==run.status && ["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(run.status)){
       await showInternalInstance(instance.id,view);
       if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(id,view,view.instance);
     }
@@ -159,11 +162,12 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
 async function submitInternal(view,retry=false) {
   const instance=view.instance;if(!instance)return;
   let pending=engineeringPending.get(instance.id);
-  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:(view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
+  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
   const generation=view.instanceGeneration;
   $("internal-run-status").textContent="正在提交持久任务…";
-  const accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
+  const accepted=view.workflow && retry ? await api(`/api/internal/instances/${instance.id}/text-workflow-run-requests/${encodeURIComponent(pending.request_key)}`) : await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
+  if(view.workflow && retry){accepted.run_id=accepted.id;}
   engineeringPending.delete(instance.id);
   if(!engineeringCurrent(view) || generation!==view.instanceGeneration)return;
   $("internal-run-status").textContent=`已接受 ${accepted.run_id}，关闭页面不取消。`;
@@ -174,7 +178,7 @@ $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
   const inputGeneration=view.inputGeneration;
   const current=()=>engineeringCurrent(view) && inputGeneration===view.inputGeneration;
-  const sample=(view.agent||view.literal) ? {term:$("app-agent-term").value} : {column:$("app-column").value};
+  const sample=view.workflow ? {...textWorkflowInput("app"),emit_report:true} : (view.agent||view.literal) ? {term:$("app-agent-term").value} : {column:$("app-column").value};
   const prepared=await api(`/api/internal/apps/${view.app}/release-approvals`,"POST",{expected_draft_fingerprint:view.draft.fingerprint,sample_input:sample,...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {})});
   if(!current())return;
   const detail=await api(`/api/internal/approvals/${prepared.id}`);
@@ -201,7 +205,7 @@ $("internal-new-intent").onclick=()=>{const view=engineering,id=view?.instance?.
 $("internal-retry").onclick=()=>{const view=engineering;return engineeringAction(view,()=>submitInternal(view,true));};
 setInterval(async()=>{
  const view=engineering;if(!view || !engineeringCurrent(view))return;engineeringButtons(view);if(view.busy || !view.run || !view.instance)return;
- if(!["SUCCEEDED","FAILED","CANCELLED"].includes(view.run.status))await showInternalRun(view.run.id,view,view.instance);
+ if(!["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(view.run.status))await showInternalRun(view.run.id,view,view.instance);
 },2500);
 
 function clearSwitch(view) {
@@ -322,7 +326,7 @@ function registeredCurrent(state) {
   return registeredExtraction===state && engineeringCurrent(state.view) && state.token===token && state.project===$("project-select").value && state.view.instance?.id===state.iid && state.view.run?.id===state.rid && state.view.run.version===state.version;
 }
 function renderRegisteredExtraction(view,instance,run) {
-  if(view.agent || run.status!=="SUCCEEDED" || run.content_access===false || run.cancel_intent){clearRegisteredExtraction();return;}
+  if(view.workflow || view.agent || run.status!=="SUCCEEDED" || run.content_access===false || run.cancel_intent){clearRegisteredExtraction();return;}
   if(registeredExtraction?.view===view && registeredExtraction.iid===instance.id && registeredExtraction.rid===run.id && registeredExtraction.version===run.version)return;
   clearRegisteredExtraction();registeredExtraction={view,token,project:view.project,iid:instance.id,rid:run.id,version:run.version,generation:registeredExtractionGeneration,options:null,busy:false};
   $("registered-extraction").hidden=false;$("registered-extraction-open").disabled=false;

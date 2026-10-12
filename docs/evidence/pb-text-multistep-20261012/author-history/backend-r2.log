@@ -1,0 +1,284 @@
+FFFFFFFFFFFFFF                                                           [100%]
+=================================== FAILURES ===================================
+_____________ test_actual_four_nodes_and_partial_branch[True-txt] ______________
+
+env = (<sim2act.db.Store object at 0x7fafa38248c0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...835978f5274edaa65def11533823d5', 'user_d02b6c4ab7e44bcbad549e591614f7ce', 'proj_727d82f687bd4c46a426c70920dd732a', ...)
+fmt = 'txt', emit = True
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+        made, _ = draft(env, rid, card)
+        release, inst = instance(env, made["id"])
+        job_id = enqueue(env, release, inst, dict(term_a="Amber", term_b="Violet", emit_report=emit))
+        once(env)
+        reply = inspect(env, inst, job_id)
+>       assert reply.status_code == 200, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Goal source differs from original acceptance","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 200
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_workflows.py:99: AssertionError
+______________ test_actual_four_nodes_and_partial_branch[True-md] ______________
+
+env = (<sim2act.db.Store object at 0x7fafa21e1190>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...ec88dd6304402587828043bac5fb49', 'user_56203bab304947e9a67a99995675b869', 'proj_401fce11e2864ef3b004860d9c230537', ...)
+fmt = 'md', emit = True
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+        made, _ = draft(env, rid, card)
+        release, inst = instance(env, made["id"])
+        job_id = enqueue(env, release, inst, dict(term_a="Amber", term_b="Violet", emit_report=emit))
+        once(env)
+        reply = inspect(env, inst, job_id)
+>       assert reply.status_code == 200, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Goal source differs from original acceptance","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 200
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_workflows.py:99: AssertionError
+_____________ test_actual_four_nodes_and_partial_branch[False-txt] _____________
+
+env = (<sim2act.db.Store object at 0x7fafa1b21d00>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...4a55fc206f4af2bde5ce9667487285', 'user_9c386a3dd76a45288fa8dd8a6eb90e11', 'proj_47f05496755c4a5db111812690d14649', ...)
+fmt = 'txt', emit = False
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+        made, _ = draft(env, rid, card)
+        release, inst = instance(env, made["id"])
+        job_id = enqueue(env, release, inst, dict(term_a="Amber", term_b="Violet", emit_report=emit))
+        once(env)
+        reply = inspect(env, inst, job_id)
+>       assert reply.status_code == 200, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Goal source differs from original acceptance","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 200
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_workflows.py:99: AssertionError
+_____________ test_actual_four_nodes_and_partial_branch[False-md] ______________
+
+env = (<sim2act.db.Store object at 0x7fafa21e14f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...b380d09e084a61936f97fd975a91d0', 'user_097de150159a4f5ebecdc11ae9026d00', 'proj_8972bd689c1d43bf87fb5e90a0e60cb8', ...)
+fmt = 'md', emit = False
+
+    @pytest.mark.parametrize("fmt", ["txt", "md"])
+    @pytest.mark.parametrize("emit", [True, False])
+    def test_actual_four_nodes_and_partial_branch(env, fmt, emit):
+        rid, card = material(env, fmt=fmt)
+        made, _ = draft(env, rid, card)
+        release, inst = instance(env, made["id"])
+        job_id = enqueue(env, release, inst, dict(term_a="Amber", term_b="Violet", emit_report=emit))
+        once(env)
+        reply = inspect(env, inst, job_id)
+>       assert reply.status_code == 200, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Goal source differs from original acceptance","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 200
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_workflows.py:99: AssertionError
+_________ test_actual_task_extracted_to_unseen_material_cold_no_model __________
+
+env = (<sim2act.db.Store object at 0x7fafa17d9130>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...b66a00e7b44e2c897fb73ccb3814a8', 'user_5146698a073542bf864c5be15bd10307', 'proj_09ebcb0f285a4818bde06cb4e121d979', ...)
+
+    def test_actual_task_extracted_to_unseen_material_cold_no_model(env):
+        made, body = draft(env)
+        release, inst = instance(env, made["id"])
+        source_run = enqueue(env, release, inst)
+        once(env)
+>       assert inspect(env, inst, source_run).json()["status"] == "SUCCEEDED"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_workflows.py:125: KeyError
+________ test_no_hits_and_equal_terms_still_two_actual_searches[terms0] ________
+
+env = (<sim2act.db.Store object at 0x7fafa1a7cec0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_no_...0e711a381f4bf1bd13f54db99fbebb', 'user_27480dab80644a1980073ffa1cf62d96', 'proj_193a573fb52743c8b7e591239fa3bcbe', ...)
+terms = ('missing-a', 'missing-b')
+
+    @pytest.mark.parametrize("terms", [("missing-a", "missing-b"), ("Amber", "Amber")])
+    def test_no_hits_and_equal_terms_still_two_actual_searches(env, terms):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst, dict(term_a=terms[0], term_b=terms[1], emit_report=True))
+        once(env)
+        reply = inspect(env, inst, rid)
+>       assert reply.status_code == 200 and reply.json()["status"] == "SUCCEEDED", reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Goal source differs from original acceptance","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (409 == 200)
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_workflows.py:153: AssertionError
+________ test_no_hits_and_equal_terms_still_two_actual_searches[terms1] ________
+
+env = (<sim2act.db.Store object at 0x7fafa1fd7800>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_no_...285507c80d4a9cb7549078b1c3a5a0', 'user_4721379d2b494a398e5896be796eef9e', 'proj_4ff3b48b96894ceebfe9fd51259f0803', ...)
+terms = ('Amber', 'Amber')
+
+    @pytest.mark.parametrize("terms", [("missing-a", "missing-b"), ("Amber", "Amber")])
+    def test_no_hits_and_equal_terms_still_two_actual_searches(env, terms):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst, dict(term_a=terms[0], term_b=terms[1], emit_report=True))
+        once(env)
+        reply = inspect(env, inst, rid)
+>       assert reply.status_code == 200 and reply.json()["status"] == "SUCCEEDED", reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Goal source differs from original acceptance","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (409 == 200)
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_workflows.py:153: AssertionError
+______________ test_invalid_boolean_failed_history_no_success[1] _______________
+
+env = (<sim2act.db.Store object at 0x7fafa1f015b0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_inv...ef5199e8554075a0ff644caafddaea', 'user_0f46a4bc3ba342b39581c274504067a9', 'proj_1846659bb25b4a9ab7b807d3116fee69', ...)
+bad = 1
+
+    @pytest.mark.parametrize("bad", [1, "true", None])
+    def test_invalid_boolean_failed_history_no_success(env, bad):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst, dict(term_a="Amber", term_b="Violet", emit_report=bad))
+        once(env)
+        with env[0].tx() as c:
+            job = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+>           assert job["status"] == "FAILED" and job["error"]["code"] == "INVALID_INPUT"
+E           AssertionError: assert ('FAILED' == 'FAILED'
+E             
+E               FAILED and 'VERSION_CONFLICT' == 'INVALID_INPUT'
+E             
+E             - INVALID_INPUT
+E             + VERSION_CONFLICT)
+
+tests/test_text_workflows.py:171: AssertionError
+_____________ test_invalid_boolean_failed_history_no_success[true] _____________
+
+env = (<sim2act.db.Store object at 0x7fafa192c3b0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_inv...748b37ea8849d7a894b2400384f3d9', 'user_df912db5152b4a02a69c63d4e0182483', 'proj_b80468a326cd44998d1c04b0bc65716e', ...)
+bad = 'true'
+
+    @pytest.mark.parametrize("bad", [1, "true", None])
+    def test_invalid_boolean_failed_history_no_success(env, bad):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst, dict(term_a="Amber", term_b="Violet", emit_report=bad))
+        once(env)
+        with env[0].tx() as c:
+            job = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+>           assert job["status"] == "FAILED" and job["error"]["code"] == "INVALID_INPUT"
+E           AssertionError: assert ('FAILED' == 'FAILED'
+E             
+E               FAILED and 'VERSION_CONFLICT' == 'INVALID_INPUT'
+E             
+E             - INVALID_INPUT
+E             + VERSION_CONFLICT)
+
+tests/test_text_workflows.py:171: AssertionError
+_____________ test_invalid_boolean_failed_history_no_success[None] _____________
+
+env = (<sim2act.db.Store object at 0x7fafa3518fe0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_inv...b7c49e884a4c97971299a639a63bdd', 'user_8f7b467982934d5d840db6cb4e70c768', 'proj_8a8f90be51374994abd7f8dc1a97cd71', ...)
+bad = None
+
+    @pytest.mark.parametrize("bad", [1, "true", None])
+    def test_invalid_boolean_failed_history_no_success(env, bad):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst, dict(term_a="Amber", term_b="Violet", emit_report=bad))
+        once(env)
+        with env[0].tx() as c:
+            job = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+>           assert job["status"] == "FAILED" and job["error"]["code"] == "INVALID_INPUT"
+E           AssertionError: assert ('FAILED' == 'FAILED'
+E             
+E               FAILED and 'VERSION_CONFLICT' == 'INVALID_INPUT'
+E             
+E             - INVALID_INPUT
+E             + VERSION_CONFLICT)
+
+tests/test_text_workflows.py:171: AssertionError
+_____ test_actual_success_cannot_survive_history_corruption[delete_typed] ______
+
+env = (<sim2act.db.Store object at 0x7fafa3348b30>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...04fda8563a433f88fd09827cc62a8c', 'user_4ced58fc77f74e36802c93166b479d97', 'proj_26e198127f1a4f7b8fcca633caef261b', ...)
+mutation = 'delete_typed'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+>       assert inspect(env, inst, rid).json()["status"] == "SUCCEEDED"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_workflows.py:182: KeyError
+______ test_actual_success_cannot_survive_history_corruption[delete_node] ______
+
+env = (<sim2act.db.Store object at 0x7fafa1be5ca0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...bf540c42f84a6bb914282bcefe0752', 'user_2979fc13c9ab4aa09dbc3d6e3d54d344', 'proj_ac586db105f440429edb68cfc0fab5a1', ...)
+mutation = 'delete_node'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+>       assert inspect(env, inst, rid).json()["status"] == "SUCCEEDED"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_workflows.py:182: KeyError
+______ test_actual_success_cannot_survive_history_corruption[wrong_quote] ______
+
+env = (<sim2act.db.Store object at 0x7fafa1a7eff0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...0c45538dfa46c6a016b1d484c0ffeb', 'user_cf43994997c4402092dc5d5f27d6aed7', 'proj_8936b440554d4f069c8709250f94e245', ...)
+mutation = 'wrong_quote'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+>       assert inspect(env, inst, rid).json()["status"] == "SUCCEEDED"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_workflows.py:182: KeyError
+_____ test_actual_success_cannot_survive_history_corruption[wrong_intent] ______
+
+env = (<sim2act.db.Store object at 0x7fafa15677d0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-71/test_act...1e4f629070463a8cbaf2bc4a05bec7', 'user_ed548a0e1a934070a772df1f76b7f27f', 'proj_9aa21bd77f9946b69c8878904a96c963', ...)
+mutation = 'wrong_intent'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+>       assert inspect(env, inst, rid).json()["status"] == "SUCCEEDED"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_workflows.py:182: KeyError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[True-txt]
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[True-md]
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[False-txt]
+FAILED tests/test_text_workflows.py::test_actual_four_nodes_and_partial_branch[False-md]
+FAILED tests/test_text_workflows.py::test_actual_task_extracted_to_unseen_material_cold_no_model
+FAILED tests/test_text_workflows.py::test_no_hits_and_equal_terms_still_two_actual_searches[terms0]
+FAILED tests/test_text_workflows.py::test_no_hits_and_equal_terms_still_two_actual_searches[terms1]
+FAILED tests/test_text_workflows.py::test_invalid_boolean_failed_history_no_success[1]
+FAILED tests/test_text_workflows.py::test_invalid_boolean_failed_history_no_success[true]
+FAILED tests/test_text_workflows.py::test_invalid_boolean_failed_history_no_success[None]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[delete_typed]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[delete_node]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[wrong_quote]
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[wrong_intent]
+14 failed, 1 warning in 8.77s

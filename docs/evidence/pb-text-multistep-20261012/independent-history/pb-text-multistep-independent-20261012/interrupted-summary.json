@@ -1,0 +1,70 @@
+{
+  "backend": {
+    "exit": {
+      "command": [
+        "/workspace/Sim2Act/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_text_workflows.py",
+        "--basetemp=/tmp/pb-text-multistep-independent-20261012/backend-fixtures",
+        "--junitxml=/tmp/pb-text-multistep-independent-20261012/backend.xml",
+        "-o",
+        "cache_dir=/tmp/pb-text-multistep-independent-20261012/backend-cache"
+      ],
+      "exit_code": 2,
+      "wall_seconds": 63.719673200001125,
+      "environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "/workspace/Sim2Act/tests:/workspace/Sim2Act/src",
+        "NODE_PATH": "/workspace/node-tools/node_modules",
+        "SIM2ACT_TEXT_WORKFLOW_EVIDENCE_DIR": "/tmp/pb-text-multistep-independent-20261012/ui",
+        "INDEPENDENT_TEXT_WORKFLOW_DIR": "/tmp/pb-text-multistep-independent-20261012/independent-proofs"
+      }
+    },
+    "partial_junit_nodes": 30,
+    "counts": {
+      "failure": 0,
+      "error": 0,
+      "skipped": 0
+    },
+    "status": "INTERRUPTED_NOT_FINAL"
+  },
+  "ui": {
+    "exit": {
+      "command": [
+        "/workspace/Sim2Act/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_text_workflows_ui.py",
+        "--basetemp=/tmp/pb-text-multistep-independent-20261012/ui-fixtures",
+        "--junitxml=/tmp/pb-text-multistep-independent-20261012/ui.xml",
+        "-o",
+        "cache_dir=/tmp/pb-text-multistep-independent-20261012/ui-cache"
+      ],
+      "exit_code": 2,
+      "wall_seconds": 63.680992183988565,
+      "environment": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "/workspace/Sim2Act/tests:/workspace/Sim2Act/src",
+        "NODE_PATH": "/workspace/node-tools/node_modules",
+        "SIM2ACT_TEXT_WORKFLOW_EVIDENCE_DIR": "/tmp/pb-text-multistep-independent-20261012/ui",
+        "INDEPENDENT_TEXT_WORKFLOW_DIR": "/tmp/pb-text-multistep-independent-20261012/independent-proofs"
+      }
+    },
+    "partial_junit_nodes": 4,
+    "counts": {
+      "failure": 0,
+      "error": 0,
+      "skipped": 0
+    },
+    "status": "INTERRUPTED_NOT_FINAL"
+  },
+  "known_active": [
+    " 629086     520 /run/codex-environment/codex-home/tmp/arg0/codex-arg0eTkbFf/codex-linux-sandbox --inherit-pid-namespace --sandbox-policy-cwd /workspace --command-cwd /workspace/Sim2Act --permission-profile {\"type\":\"managed\",\"file_system\":{\"type\":\"restricted\",\"entries\":[{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"root\"}},\"access\":\"read\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace\"},\"access\":\"write\"},{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"slash_tmp\"}},\"access\":\"write\"},{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"tmpdir\"}},\"access\":\"write\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.git\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.agents\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.codex\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.aws\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"}]},\"network\":\"enabled\"} -- /bin/bash -lc .venv/bin/python - <<'PY' import json,subprocess,xml.etree.ElementTree as ET from pathlib import Path out=Path('/tmp/pb-text-multistep-independent-20261012') r={} for n in ['backend','ui']:  p=out/(n+'.xml');t=ET.parse(p).findall('.//testcase') if p.exists() else []  r[n]={'exit':json.loads((out/(n+'-exit.json')).read_text()),'partial_junit_nodes':len(t),'counts':{k:sum(x.find(k) is not None for x in t) for k in ['failure','error','skipped']},'status':'INTERRUPTED_NOT_FINAL'} ps=subprocess.check_output(['ps','-eo','pid,ppid,args'],text=True) active=[s for s in ps.splitlines() if '/tmp/pb-text-multistep-independent-20261012/' in s and ('run_suite.py ' in s or ' -m pytest ' in s or 'node tests/text_workflows_ui.cjs ' in s)] r['known_active']=active (out/'interrupted-summary.json').write_text(json.dumps(r,indent=2)+'\\n');print({k:v for k,v in r.items() if k=='known_active' or k in ['backend','ui']}) assert not active PY",
+    " 629088  629086 bwrap --new-session --die-with-parent --ro-bind / / --dev /dev --perms 000 --tmpfs /tmp/codex-daemon-1000 --remount-ro /tmp/codex-daemon-1000 --bind /workspace /workspace --perms 555 --tmpfs /workspace/.git --remount-ro /workspace/.git --perms 555 --tmpfs /workspace/.agents --remount-ro /workspace/.agents --perms 555 --tmpfs /workspace/.codex --remount-ro /workspace/.codex --perms 555 --tmpfs /workspace/.aws --remount-ro /workspace/.aws --bind /tmp /tmp --perms 000 --tmpfs /tmp/codex-daemon-1000 --remount-ro /tmp/codex-daemon-1000 --perms 555 --tmpfs /tmp/.git --remount-ro /tmp/.git --perms 555 --tmpfs /tmp/.agents --remount-ro /tmp/.agents --perms 555 --tmpfs /tmp/.codex --remount-ro /tmp/.codex --perms 555 --tmpfs /tmp/.aws --remount-ro /tmp/.aws --ro-bind /tmp/codex-bwrap-synthetic-mount-targets-1000 /tmp/codex-bwrap-synthetic-mount-targets-1000 --unshare-user --unshare-ipc --cap-drop ALL --argv0 codex-linux-sandbox -- /opt/codex/bin/codex --sandbox-policy-cwd /workspace --command-cwd /workspace/Sim2Act --permission-profile {\"type\":\"managed\",\"file_system\":{\"type\":\"restricted\",\"entries\":[{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"root\"}},\"access\":\"read\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace\"},\"access\":\"write\"},{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"slash_tmp\"}},\"access\":\"write\"},{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"tmpdir\"}},\"access\":\"write\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.git\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.agents\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.codex\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.aws\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"}]},\"network\":\"enabled\"} --apply-seccomp-then-exec -- /bin/bash -lc .venv/bin/python - <<'PY' import json,subprocess,xml.etree.ElementTree as ET from pathlib import Path out=Path('/tmp/pb-text-multistep-independent-20261012') r={} for n in ['backend','ui']:  p=out/(n+'.xml');t=ET.parse(p).findall('.//testcase') if p.exists() else []  r[n]={'exit':json.loads((out/(n+'-exit.json')).read_text()),'partial_junit_nodes':len(t),'counts':{k:sum(x.find(k) is not None for x in t) for k in ['failure','error','skipped']},'status':'INTERRUPTED_NOT_FINAL'} ps=subprocess.check_output(['ps','-eo','pid,ppid,args'],text=True) active=[s for s in ps.splitlines() if '/tmp/pb-text-multistep-independent-20261012/' in s and ('run_suite.py ' in s or ' -m pytest ' in s or 'node tests/text_workflows_ui.cjs ' in s)] r['known_active']=active (out/'interrupted-summary.json').write_text(json.dumps(r,indent=2)+'\\n');print({k:v for k,v in r.items() if k=='known_active' or k in ['backend','ui']}) assert not active PY",
+    " 629089  629088 codex-linux-sandbox --sandbox-policy-cwd /workspace --command-cwd /workspace/Sim2Act --permission-profile {\"type\":\"managed\",\"file_system\":{\"type\":\"restricted\",\"entries\":[{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"root\"}},\"access\":\"read\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace\"},\"access\":\"write\"},{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"slash_tmp\"}},\"access\":\"write\"},{\"path\":{\"type\":\"special\",\"value\":{\"kind\":\"tmpdir\"}},\"access\":\"write\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.git\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.agents\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.codex\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"},{\"path\":{\"type\":\"path\",\"path\":\"/workspace/.aws\"},\"access\":\"read\",\"missing_path_behavior\":\"skip\"}]},\"network\":\"enabled\"} --apply-seccomp-then-exec -- /bin/bash -lc .venv/bin/python - <<'PY' import json,subprocess,xml.etree.ElementTree as ET from pathlib import Path out=Path('/tmp/pb-text-multistep-independent-20261012') r={} for n in ['backend','ui']:  p=out/(n+'.xml');t=ET.parse(p).findall('.//testcase') if p.exists() else []  r[n]={'exit':json.loads((out/(n+'-exit.json')).read_text()),'partial_junit_nodes':len(t),'counts':{k:sum(x.find(k) is not None for x in t) for k in ['failure','error','skipped']},'status':'INTERRUPTED_NOT_FINAL'} ps=subprocess.check_output(['ps','-eo','pid,ppid,args'],text=True) active=[s for s in ps.splitlines() if '/tmp/pb-text-multistep-independent-20261012/' in s and ('run_suite.py ' in s or ' -m pytest ' in s or 'node tests/text_workflows_ui.cjs ' in s)] r['known_active']=active (out/'interrupted-summary.json').write_text(json.dumps(r,indent=2)+'\\n');print({k:v for k,v in r.items() if k=='known_active' or k in ['backend','ui']}) assert not active PY",
+    " 629090  629089 /bin/bash -lc .venv/bin/python - <<'PY' import json,subprocess,xml.etree.ElementTree as ET from pathlib import Path out=Path('/tmp/pb-text-multistep-independent-20261012') r={} for n in ['backend','ui']:  p=out/(n+'.xml');t=ET.parse(p).findall('.//testcase') if p.exists() else []  r[n]={'exit':json.loads((out/(n+'-exit.json')).read_text()),'partial_junit_nodes':len(t),'counts':{k:sum(x.find(k) is not None for x in t) for k in ['failure','error','skipped']},'status':'INTERRUPTED_NOT_FINAL'} ps=subprocess.check_output(['ps','-eo','pid,ppid,args'],text=True) active=[s for s in ps.splitlines() if '/tmp/pb-text-multistep-independent-20261012/' in s and ('run_suite.py ' in s or ' -m pytest ' in s or 'node tests/text_workflows_ui.cjs ' in s)] r['known_active']=active (out/'interrupted-summary.json').write_text(json.dumps(r,indent=2)+'\\n');print({k:v for k,v in r.items() if k=='known_active' or k in ['backend','ui']}) assert not active PY"
+  ]
+}

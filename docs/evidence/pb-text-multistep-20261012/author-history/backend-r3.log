@@ -1,0 +1,45 @@
+............F.                                                           [100%]
+=================================== FAILURES ===================================
+______ test_actual_success_cannot_survive_history_corruption[wrong_quote] ______
+
+env = (<sim2act.db.Store object at 0x7fa1603ede20>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-72/test_act...7b90ab2dfd4a17be33ed4b844ba97c', 'user_75bd81999e6a413a9092812daa0cb5cf', 'proj_a16bfe8051df43528df6a083c1a8e280', ...)
+mutation = 'wrong_quote'
+
+    @pytest.mark.parametrize("mutation", ["delete_typed", "delete_node", "wrong_quote", "wrong_intent"])
+    def test_actual_success_cannot_survive_history_corruption(env, mutation):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+        assert inspect(env, inst, rid).json()["status"] == "SUCCEEDED"
+        with env[0].tx() as c:
+            op = c.execute(select(operations).where(operations.c.run_id == rid, operations.c.call_id == "lookup_b")).mappings().one()
+            if mutation == "delete_typed":
+                c.execute(delete(internal_instance_data).where(internal_instance_data.c.instance_id == inst["id"]))
+            elif mutation == "delete_node":
+                c.execute(delete(operations).where(operations.c.id == op["id"]))
+            elif mutation == "wrong_quote":
+                value = copy.deepcopy(op["receipt"])
+                value["data"]["citations"][0]["quote"] = "forged"
+                value["output_fingerprint"] = fingerprint(value["data"])
+                c.execute(update(operations).where(operations.c.id == op["id"]).values(receipt=value))
+            else:
+                value = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar()
+                value["args"]["term"] = "Amber"
+                c.execute(update(operation_intents).where(operation_intents.c.operation_id == op["id"]).values(request=value))
+                c.execute(update(operations).where(operations.c.id == op["id"]).values(fingerprint=fingerprint(value)))
+>       assert inspect(env, inst, rid).status_code == 409
+E       AssertionError: assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+E        +    where <Response [400 Bad Request]> = inspect((<sim2act.db.Store object at 0x7fa1603ede20>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-72/test_act...7b90ab2dfd4a17be33ed4b844ba97c', 'user_75bd81999e6a413a9092812daa0cb5cf', 'proj_a16bfe8051df43528df6a083c1a8e280', ...), {'data_version': 0, 'formal_publication_enabled': False, 'history': [{'kind': 'created', 'release_id': 'irelease_37cbacbab4c14f26a67c26002b19f1b6', 'revision': 1}], 'id': 'iinstance_f4e2439e054932370bcfb04211a6e185', ...}, 'run_21b38c4985c545c28b2937fbb98b4c87')
+
+tests/test_text_workflows.py:199: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflows.py::test_actual_success_cannot_survive_history_corruption[wrong_quote]
+1 failed, 13 passed, 1 warning in 30.28s

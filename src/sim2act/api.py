@@ -764,6 +764,9 @@ def create_app(store=None, settings=None):
     from .text_continuations import mount as mount_text_continuations
 
     mount_text_continuations(app, db, platform_limits, identity)
+    from .text_workflows import mount as mount_text_workflows
+
+    mount_text_workflows(app, db, platform_limits, identity)
     mount_protocol_api(app, db, platform_limits, identity, s)
     mount_protocol_recovery(app, db, identity)
     mount_protocol_reviews(app, db, identity)

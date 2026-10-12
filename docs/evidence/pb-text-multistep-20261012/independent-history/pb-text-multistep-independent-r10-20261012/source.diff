@@ -1,0 +1,425 @@
+diff --git a/src/sim2act/api.py b/src/sim2act/api.py
+index c1e6d16..597a261 100644
+--- a/src/sim2act/api.py
++++ b/src/sim2act/api.py
+@@ -764,6 +764,9 @@ def create_app(store=None, settings=None):
+     from .text_continuations import mount as mount_text_continuations
+ 
+     mount_text_continuations(app, db, platform_limits, identity)
++    from .text_workflows import mount as mount_text_workflows
++
++    mount_text_workflows(app, db, platform_limits, identity)
+     mount_protocol_api(app, db, platform_limits, identity, s)
+     mount_protocol_recovery(app, db, identity)
+     mount_protocol_reviews(app, db, identity)
+diff --git a/src/sim2act/app_jobs.py b/src/sim2act/app_jobs.py
+index d3944ba..889a9b0 100644
+--- a/src/sim2act/app_jobs.py
++++ b/src/sim2act/app_jobs.py
+@@ -179,6 +179,16 @@ def enqueue(
+             mode="mock",
+             request_model="intern-s2",
+         ).model_dump()
++        from . import text_workflows
++
++        if text_workflows.is_candidate(draft["candidate"]):
++            _, _, _, source_goal = text_workflows.verify_origin(store, c, user, draft, limits)
++            snapshot["text_goal"] = source_goal
++            content = source_goal["snapshot"]["content"]
++            contract["goal"].update(goal_id=source_goal["card_id"], goal=content["goal"],
++                constraints=content["constraints"], unresolved=text_workflows.goal_unresolved(source_goal))
++            FrozenRunContract.model_validate(contract)
++            goal = content["goal"]
+         c.execute(
+             insert(run_contracts).values(
+                 run_id=jid, snapshot=contract, fingerprint=fingerprint(contract)
+@@ -205,6 +215,7 @@ def enqueue(
+                     "tools": 0,
+                     "repairs": 0,
+                     "reserved_tokens": 0,
++                    **({"text_workflow": text_workflows.VERSION} if text_workflows.is_candidate(draft["candidate"]) else {}),
+                 },
+                 version=1,
+                 cancel_intent=False,
+@@ -230,6 +241,8 @@ def enqueue(
+                 run_id=jid, app_run_id=aid, snapshot=snapshot, fingerprint=fingerprint(snapshot)
+             )
+         )
++        if text_workflows.is_candidate(draft["candidate"]):
++            text_workflows.seal_job_scope(c, user, draft, snapshot)
+         store.event(
+             c,
+             jid,
+@@ -265,8 +278,14 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
+     if not b or job["principal_id"] != user:
+         raise DomainError("PERMISSION_DENIED")
+     s = b["snapshot"]
++    if (fingerprint(s) != b["fingerprint"] or job["fingerprint"] != b["fingerprint"]
++            or s.get("principal_id") != user or s.get("project_id") != job["project_id"]
++            or s.get("runtime_id") != job["runtime_id"] or s.get("run_id") != job["id"]):
++        raise DomainError("VERSION_CONFLICT", "Accepted queue identity changed before private AppRun read")
+     a = (
+-        c.execute(select(internal_app_runs).where(internal_app_runs.c.id == b["app_run_id"]))
++        c.execute(select(internal_app_runs).where(internal_app_runs.c.id == b["app_run_id"],
++            internal_app_runs.c.principal_id == user, internal_app_runs.c.instance_id == s.get("instance_id"),
++            internal_app_runs.c.release_id == s.get("release_id")))
+         .mappings()
+         .first()
+     )
+@@ -291,7 +310,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
+         or a["instance_id"] != s["instance_id"]
+         or a["release_id"] != s["release_id"]
+         or a["principal_id"] != user
+-        or a["input"] != s["input"]
++        or fingerprint(a["input"]) != fingerprint(s["input"])
+         or a["fingerprint"] != s["request_fingerprint"]
+         or fingerprint(request) != s["request_fingerprint"]
+     ):
+@@ -333,6 +352,12 @@ def inspect_job(store, user, rid):
+         limits = store.frozen_contract(c, job).limits
+         s, a = load_binding(store, c, user, job, limits)
+         release = read_release(store, c, user, s["release_id"], limits)
++        from . import text_workflows
++
++        workflow = text_workflows.is_candidate(release["snapshot"]["draft"]["candidate"])
++        proof_steps: list[dict] = []
++        if workflow:
++            _, _, proof_steps = text_workflows.verify_job(store, c, user, job, limits)
+         if job["status"] == "SUCCEEDED":
+             from .agent_apps import is_agent, verified_source
+ 
+@@ -367,6 +392,9 @@ def inspect_job(store, user, rid):
+                 ).mappings()
+             ],
+             "namespace": KIND,
++            **({"steps": [dict(step_id=p["step_id"], status=p["status"], fingerprint=fingerprint(p)) for p in proof_steps],
++                "semantic_status": "UNKNOWN", "owner_acceptance": "PENDING", "formal_publication_enabled": False}
++               if workflow else {}),
+         }
+ 
+ 
+@@ -897,6 +925,10 @@ def fail_job(worker, run, error):
+ 
+ 
+ def process_job(worker, run):
++    from . import text_workflows
++
++    if text_workflows.is_job(worker.store, run):
++        return text_workflows.process_job(worker, run)
+     stopped = threading.Event()
+ 
+     def beat():
+diff --git a/src/sim2act/apps.py b/src/sim2act/apps.py
+index 3170c96..b00c494 100644
+--- a/src/sim2act/apps.py
++++ b/src/sim2act/apps.py
+@@ -188,6 +188,10 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
+ 
+ 
+ def compile_preview(candidate, platform_limits):
++    from . import text_workflows
++
++    if text_workflows.is_candidate(candidate):
++        return text_workflows.compile_candidate(candidate, platform_limits)
+     if isinstance(candidate, dict) and candidate.get("namespace") == "bounded-report-manifest.v1":
+         from .report_manifest_apps import compile_report
+ 
+@@ -269,7 +273,13 @@ def validate_source_family(c, user, draft):
+             if table is task_extractions:
+                 snapshot = row["snapshot"]
+                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
+-                if isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
++                if isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
++                    from .text_workflows import is_candidate
++
++                    if not is_candidate(candidate):
++                        raise DomainError("VERSION_CONFLICT", "Independent four-step family cannot be downgraded")
++                    expected_field, expected_kind = "task_proof", "registered_tool"
++                elif isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
+                     expected_field, expected_kind = "agent_provenance", "bounded_agent"
+                 elif isinstance(snapshot, dict) and snapshot.get("kind") in {"registered_csv_source.v1", "registered_text_source.v1", "natural_csv_receipt_candidate.v1", "text_data_free_binding.v1"}:
+                     expected_field, expected_kind = "task_proof", "registered_tool"
+@@ -352,6 +362,11 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
+         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
+     validate_source_family(c, user, draft)
+     manifest, action, report = compile_preview(candidate, platform_limits)
++    from . import text_workflows
++
++    if text_workflows.is_candidate(candidate):
++        text_workflows.verify_origin(store, c, user, draft, platform_limits)
++        return draft, manifest, action, report
+     if action.executor.ref == "text.literal_evidence":
+         from .text_apps import verify_origin
+ 
+@@ -485,6 +500,15 @@ def preview(store, user, aid, input_value, key, platform_limits):
+             return public_preview(old)
+         output, error = None, None
+         try:
++            if draft["candidate"].get("namespace") == "closed-text-four-step.v1":
++                from .lifecycle import execute
++
++                output = execute(store, c, user, draft, platform_limits, input_value)
++                row = dict(id=new_id("preview"), app_id=aid, principal_id=user, request_key=key,
++                    fingerprint=fp, input=input_value, status="SUCCEEDED", output=output,
++                    error=None, created_at=time.time())
++                c.execute(insert(app_previews).values(**row))
++                return public_preview(row)
+             validate_value(manifest.input_schema, input_value)
+             step = manifest.workflow[0]
+             data = {d.binding_id: {"resource_id": d.resource_ref} for d in manifest.data_bindings}
+@@ -541,6 +565,8 @@ def public_preview(row):
+ 
+ 
+ def inspect_draft(store, user, aid, platform_limits):
++    from .text_workflows import public_origin as text_workflow_origin
++
+     with store.tx() as c:
+         from .text_continuations import draft_gate
+ 
+@@ -581,7 +607,12 @@ def inspect_draft(store, user, aid, platform_limits):
+                 for k in ("state", "execution_performed", "publishable", "topological_order")
+             },
+             "history": [public_preview(r) for r in history],
++            **({"text_workflow_origin": text_workflow_origin(c, user, draft)}
++               if draft["candidate"].get("namespace") == "closed-text-four-step.v1" else {}),
+             "input_guidance": (
++                {"mode": "CLOSED_TEXT_WORKFLOW", "semantic_status": "UNKNOWN"}
++                if draft["candidate"].get("namespace") == "closed-text-four-step.v1"
++                else
+                 csv_column_options(source["content"])
+                 if manifest.validation_suite_ref == "receipt.readback.v1"
+                 else {"mode": ("REGISTERED_LITERAL" if draft["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence" else "OFFLINE_REPLAY_ONLY"), "semantic_status": "UNKNOWN"}
+diff --git a/src/sim2act/lifecycle.py b/src/sim2act/lifecycle.py
+index 1dc16d8..0dc1718 100644
+--- a/src/sim2act/lifecycle.py
++++ b/src/sim2act/lifecycle.py
+@@ -46,6 +46,11 @@ def execute(store, c, user, draft, limits, input_value, replay=None):
+ 
+     no_context(store, c, user, draft)
+     _, manifest, action, _ = validate_frozen_candidate(store, c, user, draft, limits)
++    from . import text_workflows
++
++    if text_workflows.is_candidate(draft["candidate"]):
++        _, _, source, _ = text_workflows.verify_origin(store, c, user, draft, limits)
++        return text_workflows.preview(source, draft["candidate"], input_value)
+     validate_value(manifest.input_schema, input_value)
+     rid = manifest.data_bindings[0].resource_ref
+     args = {"resource_id": rid, **input_value}
+@@ -223,6 +228,9 @@ def prepare_release(
+             "data_schema_version": data_schema_version,
+             "check_evidence": {
+                 "ref": (
++                    "text.four_step_readback.v1"
++                    if draft["candidate"].get("namespace") == "closed-text-four-step.v1"
++                    else
+                     "source.literal_evidence.v1"
+                     if action.executor.kind == "bounded_agent" or action.executor.ref == "text.literal_evidence"
+                     else "csv.exact_integer_sum.v1"
+@@ -489,7 +497,11 @@ def inspect_instance(store, user, iid, limits):
+     with store.tx() as c:
+         i, release = instance(store, c, user, iid, limits)
+         records = data_rows(c, iid)
+-        if "execution_source" in release["snapshot"]:
++        from . import text_workflows
++
++        if text_workflows.is_candidate(release["snapshot"]["draft"]["candidate"]):
++            text_workflows.verify_instance_records(store, c, user, i, records, limits)
++        elif "execution_source" in release["snapshot"]:
+             from .csv_dag_instances import check_instance_records
+             check_instance_records(store, c, user, i, records, limits)
+         elif release["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence":
+@@ -510,6 +522,8 @@ def run_instance(
+         ).scalar()
+         store.lock_project(c, user, pid)
+         i, r = instance(store, c, user, iid, limits, lock=True)
++        if r["snapshot"]["draft"]["candidate"].get("namespace") == "closed-text-four-step.v1":
++            raise DomainError("UNSUPPORTED_CAPABILITY", "Four-step text requires the durable AppRun worker")
+         if "execution_source" in r["snapshot"]:
+             raise DomainError("UNSUPPORTED_CAPABILITY", "DAG instances require the durable DAG worker")
+         if r["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence":
+diff --git a/src/sim2act/text_continuations.py b/src/sim2act/text_continuations.py
+index 6b62680..d931ff9 100644
+--- a/src/sim2act/text_continuations.py
++++ b/src/sim2act/text_continuations.py
+@@ -41,7 +41,8 @@ CANCEL, REVOKE = "text_software_cancel", "text_software_revoke"
+ MAX = 64
+ ANCHOR_HASH = "24f26f3621b8fc49a24fa3566484b568148d9317f2d279d79f264416b994193a"
+ CHANGED = {"api.py", "app_jobs.py", "internal_api.py", "owner_acceptance.py", "app_owner_goals.py",
+-           "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py"}
++           "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py",
++           "text_workflows.py"}  # Closed new family; old literal compiler/kernel stays byte-identical.
+ TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
+ 
+ 
+@@ -405,6 +406,9 @@ def target_gate(store, c, user, i):
+ 
+ def draft_gate(store, c, user, aid):
+     from .db import task_extractions
++    from .text_workflows import scope_gate
++
++    scope_gate(store, c, user, aid)
+ 
+     # Indexed origin metadata identifies this family before protected app bodies.
+     exists = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid,
+@@ -430,6 +434,9 @@ def release_gate(store, c, user, rid):
+ 
+ 
+ def job_gate(store, c, user, rid):
++    from .text_workflows import job_scope_gate
++
++    job_scope_gate(store, c, user, rid)
+     aid = c.execute(select(internal_instances.c.source_app_id)
+         .join(internal_app_runs, internal_app_runs.c.instance_id == internal_instances.c.id)
+         .join(internal_run_bindings, internal_run_bindings.c.app_run_id == internal_app_runs.c.id)
+diff --git a/src/sim2act/web/app.js b/src/sim2act/web/app.js
+index be6696b..b6d3edf 100644
+--- a/src/sim2act/web/app.js
++++ b/src/sim2act/web/app.js
+@@ -413,6 +413,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
+   if(validateSelected)await validateSelected(a);
+   if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
+   activeApp=id;activeAppProject=pid;
++  if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation);
+   if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);
+   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
+   const origin=a.candidate.generation;
+diff --git a/src/sim2act/web/internal.js b/src/sim2act/web/internal.js
+index f2233cf..680b6a8 100644
+--- a/src/sim2act/web/internal.js
++++ b/src/sim2act/web/internal.js
+@@ -55,12 +55,13 @@ async function engineeringAction(view,fn) {
+   finally {view.busy=false;engineeringButtons(view);}
+ }
+ async function openInternal(app,appGeneration) {
+-  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",offlineReplay:null,inputGeneration:0};
++  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",offlineReplay:null,inputGeneration:0,workflow:app.input_guidance.mode === "CLOSED_TEXT_WORKFLOW"};
+   engineering=view;$("apps").append($("internal-panel"));$("internal-panel").hidden=false;
+   $("internal-agent").hidden=!view.agent;
+   $("internal-replay-status").textContent=view.agent ? "尚未加载离线响应；审批与新运行暂不可提交。" : "";
+   $("internal-prepare-hint").textContent=view.agent ? "使用上方样例字面检索词与已加载的离线响应核查当前材料。先查看精确快照，再手动确认保存内部版本；语义仍为 UNKNOWN。" : "使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。";
+   if(view.literal)$("internal-prepare-hint").textContent="用上方检索词独立核查完整匹配行；精确确认后保存内部版本。新实例直接输入新词，无需 Replay。语义 UNKNOWN。";
++  if(view.workflow){$("internal-prepare-hint").textContent="用两次独立检索和报告分支核查完整引用，再确认精确内部快照。后台每步独立留存回执；owner PENDING、语义 UNKNOWN。";}
+   engineeringButtons(view);engineeringStatus(view,"正在读取内部版本与实例…","loading");
+   if(typeof openAppOwnGoal === "function")await openAppOwnGoal(view);
+   try {await refreshInternal(view);}
+@@ -104,12 +105,14 @@ async function showInternalInstance(id,view=engineering) {
+     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
+     view.instance=instance;renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
+     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
+-    $("internal-column-label").hidden=view.agent||view.literal;$("internal-column").required=!(view.agent||view.literal);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
++    $("internal-column-label").hidden=view.agent||view.literal||view.workflow;$("internal-column").required=!(view.agent||view.literal||view.workflow);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
+     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
++    if(typeof showTextWorkflowInputs === "function")showTextWorkflowInputs("internal",!!view.workflow);
+     $("internal-run-form").hidden=false;
+     $("internal-data").replaceChildren(...instance.data.map(record=>internalResult(record,view)));
+     $("internal-runs").replaceChildren(...instance.runs.map(run=>row(`${run.status} · ${run.id} · 结果版本 ${run.result_version ?? "无"}`,()=>showInternalRun(run.id,view,instance),"读取后台任务")));
+     $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : (view.agent ? "加载对应离线响应并填写本次检索词；后台核查真实授权材料，不调用provider。关闭页面不会取消任务。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。");
++    if(view.workflow)$("internal-run-status").textContent="填写两次独立检索词，明确选择报告分支。报告未选时保留 PARTIAL 与三步回执；只用原请求 key 读取未知结果。";
+     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
+     if(typeof openOwnerReview==="function")await openOwnerReview(view);
+   } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
+@@ -150,7 +153,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
+         try {await showInternalRun(id,view,instance);}catch(error){engineeringStatus(view,error.message,"error");}
+       });return button;
+     }));
+-    if(run.content_access!==false && previousStatus && previousStatus!==run.status && ["SUCCEEDED","FAILED","CANCELLED"].includes(run.status)){
++    if(run.content_access!==false && previousStatus && previousStatus!==run.status && ["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(run.status)){
+       await showInternalInstance(instance.id,view);
+       if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(id,view,view.instance);
+     }
+@@ -159,11 +162,12 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
+ async function submitInternal(view,retry=false) {
+   const instance=view.instance;if(!instance)return;
+   let pending=engineeringPending.get(instance.id);
+-  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:(view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
++  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
+   if(!pending)return;
+   const generation=view.instanceGeneration;
+   $("internal-run-status").textContent="正在提交持久任务…";
+-  const accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
++  const accepted=view.workflow && retry ? await api(`/api/internal/instances/${instance.id}/text-workflow-run-requests/${encodeURIComponent(pending.request_key)}`) : await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
++  if(view.workflow && retry){accepted.run_id=accepted.id;}
+   engineeringPending.delete(instance.id);
+   if(!engineeringCurrent(view) || generation!==view.instanceGeneration)return;
+   $("internal-run-status").textContent=`已接受 ${accepted.run_id}，关闭页面不取消。`;
+@@ -174,7 +178,7 @@ $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
+   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
+   const inputGeneration=view.inputGeneration;
+   const current=()=>engineeringCurrent(view) && inputGeneration===view.inputGeneration;
+-  const sample=(view.agent||view.literal) ? {term:$("app-agent-term").value} : {column:$("app-column").value};
++  const sample=view.workflow ? {...textWorkflowInput("app"),emit_report:true} : (view.agent||view.literal) ? {term:$("app-agent-term").value} : {column:$("app-column").value};
+   const prepared=await api(`/api/internal/apps/${view.app}/release-approvals`,"POST",{expected_draft_fingerprint:view.draft.fingerprint,sample_input:sample,...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {})});
+   if(!current())return;
+   const detail=await api(`/api/internal/approvals/${prepared.id}`);
+@@ -201,7 +205,7 @@ $("internal-new-intent").onclick=()=>{const view=engineering,id=view?.instance?.
+ $("internal-retry").onclick=()=>{const view=engineering;return engineeringAction(view,()=>submitInternal(view,true));};
+ setInterval(async()=>{
+  const view=engineering;if(!view || !engineeringCurrent(view))return;engineeringButtons(view);if(view.busy || !view.run || !view.instance)return;
+- if(!["SUCCEEDED","FAILED","CANCELLED"].includes(view.run.status))await showInternalRun(view.run.id,view,view.instance);
++ if(!["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(view.run.status))await showInternalRun(view.run.id,view,view.instance);
+ },2500);
+ 
+ function clearSwitch(view) {
+@@ -322,7 +326,7 @@ function registeredCurrent(state) {
+   return registeredExtraction===state && engineeringCurrent(state.view) && state.token===token && state.project===$("project-select").value && state.view.instance?.id===state.iid && state.view.run?.id===state.rid && state.view.run.version===state.version;
+ }
+ function renderRegisteredExtraction(view,instance,run) {
+-  if(view.agent || run.status!=="SUCCEEDED" || run.content_access===false || run.cancel_intent){clearRegisteredExtraction();return;}
++  if(view.workflow || view.agent || run.status!=="SUCCEEDED" || run.content_access===false || run.cancel_intent){clearRegisteredExtraction();return;}
+   if(registeredExtraction?.view===view && registeredExtraction.iid===instance.id && registeredExtraction.rid===run.id && registeredExtraction.version===run.version)return;
+   clearRegisteredExtraction();registeredExtraction={view,token,project:view.project,iid:instance.id,rid:run.id,version:run.version,generation:registeredExtractionGeneration,options:null,busy:false};
+   $("registered-extraction").hidden=false;$("registered-extraction-open").disabled=false;
+diff --git a/src/sim2act/web/owner-review.js b/src/sim2act/web/owner-review.js
+index 896c8af..d8f70f4 100644
+--- a/src/sim2act/web/owner-review.js
++++ b/src/sim2act/web/owner-review.js
+@@ -105,6 +105,7 @@ async function ownerRead(view,key=null){
+ }
+ async function openOwnerReview(engineeringView){
+   clearOwnerReview();
++  if(engineeringView.workflow){$("owner-panel").hidden=false;$("owner-status").textContent="本应用人工签收 PENDING；四步技术核查不替代语义判断。本切片暂不提交此家族的人工声明。";return;}
+   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
+   const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,state:null,busy:false,readGeneration:0};
+   ownerView=view;$("owner-panel").hidden=false;
+diff --git a/src/sim2act/web/text-logic.js b/src/sim2act/web/text-logic.js
+index 61a8392..d7f60e2 100644
+--- a/src/sim2act/web/text-logic.js
++++ b/src/sim2act/web/text-logic.js
+@@ -3,7 +3,7 @@
+ const textLogicVersion="internal.text-data-free-logic.v1",textLogicIntents=new Map();
+ let textLogicEpoch=0,textLogicEdit=0,textLogicContext=null,textLogicSource=null;
+ const textLogicScope=()=>JSON.stringify([token,$("project-select").value]);
+-function clearTextLogic(){clearTextContinuation();textLogicEpoch++;textLogicContext=null;textLogicSource=null;$("text-logic-source").hidden=true;for(const id of ["source-confirm","bind-confirm","revoke-confirm"])$("text-logic-"+id).checked=false;for(const id of ["proof","status","source-proof","source-status"])$("text-logic-"+id).textContent="";for(const id of ["selected","target"])$("text-logic-"+id).replaceChildren();textLogicButtons();}
++function clearTextLogic(){clearTextWorkflow();clearTextContinuation();textLogicEpoch++;textLogicContext=null;textLogicSource=null;$("text-logic-source").hidden=true;for(const id of ["source-confirm","bind-confirm","revoke-confirm"])$("text-logic-"+id).checked=false;for(const id of ["proof","status","source-proof","source-status"])$("text-logic-"+id).textContent="";for(const id of ["selected","target"])$("text-logic-"+id).replaceChildren();textLogicButtons();}
+ function textLogicCurrent(c){return c&&c===textLogicContext&&c.epoch===textLogicEpoch&&c.identity===token&&c.connection===identityConnectionGeneration&&c.project===$("project-select").value&&c.workspace===workspaceSelectionGeneration&&c.app===appSelectionGeneration&&c.goal===goalSelectionGeneration&&c.edit===textLogicEdit;}
+ function textLogicNow(){if(!textLogicCurrent(textLogicContext)){textLogicContext={identity:token,connection:identityConnectionGeneration,project:$("project-select").value,workspace:workspaceSelectionGeneration,app:appSelectionGeneration,goal:goalSelectionGeneration,edit:textLogicEdit,epoch:textLogicEpoch,busy:false,logic:null,items:[],targets:[],receipt:null};}return textLogicContext;}
+ function textLogicButtons(){const c=textLogicContext,current=textLogicCurrent(c),locked=!!textLogicIntents.get(textLogicScope())||!!c?.busy;$("text-logic-authorize").disabled=locked||!textLogicSource?.preview||!$("text-logic-source-confirm").checked;$("text-logic-bind").disabled=locked||!current||c.logic?.status!=="ACTIVE"||!$("text-logic-target").value||!$("text-logic-name").value.trim()||!$("text-logic-bind-confirm").checked;$("text-logic-revoke").disabled=locked||!current||!c.logic||c.logic.status!=="ACTIVE"||!$("text-logic-revoke-confirm").checked;$("text-logic-open").disabled=!current||!c.receipt||locked;$("text-logic-recover").disabled=!!c?.busy;for(const id of ["selected","target","name","source-confirm","bind-confirm","revoke-confirm","history","read","materials","source-preview"])$("text-logic-"+id).disabled=!!c?.busy;}
+@@ -77,3 +77,28 @@ for(const id of ["ack","stop-ack","reason"])tc(id).onchange=tc(id).oninput=tcBut
+ tc("preview").onclick=()=>tcSubmit("preview");tc("commit").onclick=()=>tcSubmit("commit");tc("recover").onclick=()=>tcSubmit(null,true);tc("stop").onclick=()=>tcSubmit("stop");
+ tc("open").onclick=()=>tcRead(async c=>{const r=c.receipt;if(!r)return;const guard={identity:token,connection:identityConnectionGeneration,project:c.project,workspace:workspaceSelectionGeneration,edit:textContinuationEdit};const current=()=>guard.identity===token&&guard.connection===identityConnectionGeneration&&guard.project===$("project-select").value&&guard.workspace===workspaceSelectionGeneration&&guard.edit===textContinuationEdit;const ok=await showApp(r.app_id,c.project,null,current,app=>{if(app.fingerprint!==r.candidate_fingerprint||app.runtime_id!==r.runtime_id)throw Error("VERSION_CONFLICT");});if(ok&&current()){await showInternalInstance(r.instance_id);if(current()&&engineering?.instance?.id===r.instance_id)selectWorkspace("apps");}});
+ tcButtons();
++
++// Closed text task creation and one exact-source extraction hop. No custom DAG input.
++const textWorkflowIntents=new Map();let textWorkflowState=null,textWorkflowEdit=0;
++function textWorkflowScope(){return JSON.stringify([token,$("project-select").value]);}
++function clearTextWorkflow(){textWorkflowEdit++;textWorkflowState=null;if($("text-workflow-proof")){$("text-workflow-proof").textContent="";$("text-workflow-status").textContent="";$("text-workflow-confirm").checked=false;textWorkflowButtons();}showTextWorkflowInputs("app",false);showTextWorkflowInputs("internal",false);}
++function textWorkflowCurrent(c){return c&&c===textWorkflowState&&c.identity===token&&c.connection===identityConnectionGeneration&&c.project===$("project-select").value&&c.workspace===workspaceSelectionGeneration&&c.app===appSelectionGeneration&&c.goal===goalSelectionGeneration&&c.edit===textWorkflowEdit;}
++function textWorkflowContext(){return {identity:token,connection:identityConnectionGeneration,project:$("project-select").value,workspace:workspaceSelectionGeneration,app:appSelectionGeneration,goal:goalSelectionGeneration,edit:textWorkflowEdit,busy:false,preview:null,receipt:null};}
++function textWorkflowButtons(){const c=textWorkflowState,valid=textWorkflowCurrent(c),pending=textWorkflowIntents.get(textWorkflowScope()),busy=!!c?.busy;$("text-workflow-preview").disabled=busy||!!pending;$("text-workflow-create").disabled=busy||!!pending||!valid||!c.preview||!$("text-workflow-confirm").checked||!$("text-workflow-name").value.trim();$("text-workflow-recover").disabled=busy||!$("text-workflow-key").value;$("text-workflow-open").disabled=busy||!valid||!c.receipt;for(const id of ["source","name","confirm"])$("text-workflow-"+id).disabled=busy||!!pending;}
++function textWorkflowInput(prefix){return {term_a:$(prefix+"-workflow-a").value,term_b:$(prefix+"-workflow-b").value,emit_report:$(prefix+"-workflow-report").checked};}
++function showTextWorkflowInputs(prefix,on){const el=$(prefix+"-workflow-inputs");if(!el)return;el.hidden=!on;$(prefix+"-workflow-a").required=on;$(prefix+"-workflow-b").required=on;}
++async function openTextWorkflowApp(app,generation){$("app-title").textContent=`${app.name} · 未发布`;$("app-preview-form").hidden=false;$("app-column-label").hidden=true;$("app-column").required=false;$("app-agent-term-label").hidden=true;$("app-agent-term").required=false;$("app-preview-submit").hidden=true;$("csv-extraction-panel").hidden=true;$("app-origin").textContent=app.candidate.manifest.source_run_ref?`来源：四步真实成功任务 ${app.candidate.manifest.source_run_ref}；新材料和自己的当前目标，不继承人工签收。` : "当前目标的受限四步任务：读取 → 两次独立检索 → 条件引用报告。";$("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify({goal:app.candidate.goal,proof:app.candidate.task_proof},null,2);$("app-manifest").textContent=JSON.stringify(app.candidate,null,2);$("app-input-hint").textContent="TXT/MD ≤1536字节/32行，每次检索≤8完整引用。样例核查始终包含报告；新运行可明确跳过报告，保留 PARTIAL，不作成功提取源。";showTextWorkflowInputs("app",true);$("app-history").textContent="实际步骤回执和结果在下方实例历史中读取。owner PENDING，语义 UNKNOWN；正式发布关闭。";await openInternal(app,generation);return engineering?.app===app.id;}
++function textWorkflowSetup(){
++ const panel=document.createElement("section");panel.id="text-workflow-panel";
++ panel.innerHTML='<h3>两次检索与条件引用报告</h3><p>先打开已保存的 TXT/MD 目标卡，再预览材料、完整目标和四步接线。可填写已有四步成功任务，提取至当前目标的新材料。建立独立只读应用身份，仅授权所选材料；0 模型请求，owner PENDING、语义 UNKNOWN，未发布。</p><label>成功四步来源任务（首次创建留空）<input id="text-workflow-source" autocomplete="off"></label><label>新应用名称<input id="text-workflow-name" maxlength="200" value="双检索引用报告"></label><button id="text-workflow-preview" type="button">预览当前目标与四步范围</button><pre id="text-workflow-proof"></pre><label><input id="text-workflow-confirm" type="checkbox">已核对当前目标版本、材料和来源证明，明确建立此只读应用</label><button id="text-workflow-create" type="button" disabled>确认保存四步应用</button><label>原请求 key<input id="text-workflow-key" maxlength="100" autocomplete="off"></label><button id="text-workflow-recover" type="button">仅 GET 读取原请求</button><button id="text-workflow-open" type="button" disabled>打开已核应用</button><p id="text-workflow-status" role="status" aria-live="polite"></p>';
++ $("goal-card-form").parentElement.append(panel);
++ for(const prefix of ["app","internal"]){const group=document.createElement("fieldset");group.id=prefix+"-workflow-inputs";group.hidden=true;group.innerHTML=`<legend>两次独立字面检索</legend><label>检索 A<input id="${prefix}-workflow-a" maxlength="80" autocomplete="off"></label><label>检索 B<input id="${prefix}-workflow-b" maxlength="80" autocomplete="off"></label><label><input id="${prefix}-workflow-report" type="checkbox" checked>生成引用报告</label>`;$(prefix==="app"?"app-preview-form":"internal-run-form").prepend(group);for(const side of ["a","b","report"]){$(prefix+"-workflow-"+side).addEventListener("input",()=>{if(engineering?.workflow){engineering.inputGeneration++;clearReleaseApproval(engineering);engineeringButtons(engineering);}});}}
++ for(const id of ["source","name"]){$("text-workflow-"+id).oninput=()=>{textWorkflowEdit++;textWorkflowState=null;$("text-workflow-proof").textContent="";$("text-workflow-confirm").checked=false;textWorkflowButtons();};}
++ $("text-workflow-confirm").onchange=textWorkflowButtons;$("text-workflow-key").oninput=textWorkflowButtons;
++ $("text-workflow-preview").onclick=async()=>{const c=textWorkflowContext();textWorkflowState=c;c.busy=true;textWorkflowButtons();try{if(!activeGoalCard||activeGoalCard.project_id!==c.project)throw Error("请先打开当前项目已保存目标卡");const source=$("text-workflow-source").value.trim();const p=await api(`/api/projects/${c.project}/text-workflow-options?card_id=${activeGoalCard.id}${source?"&source_run_id="+encodeURIComponent(source):""}`);if(!textWorkflowCurrent(c))return;if(p.namespace!=="closed-text-four-step.v1"||p.project_id!==c.project||p.card_id!==activeGoalCard.id||p.goal_version!==activeGoalCard.version||p.goal_fingerprint!==activeGoalCard.fingerprint||!deliverySame(p.steps,["read","lookup_a","lookup_b","report"])||p.model_requests!==0||p.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");c.preview=p;$("text-workflow-proof").textContent=JSON.stringify(p,null,2);$("text-workflow-status").textContent="已预览完整当前目标和四步范围；请明确核对后确认。";}catch(e){if(textWorkflowCurrent(c))$("text-workflow-status").textContent=e.message;}finally{c.busy=false;if(textWorkflowCurrent(c))textWorkflowButtons();}};
++ async function save(recover){let c=textWorkflowState;if(!textWorkflowCurrent(c)){c=textWorkflowContext();textWorkflowState=c;}if(c.busy)return;const scope=textWorkflowScope();let pending=textWorkflowIntents.get(scope);if(!recover){if(!c.preview||!$("text-workflow-confirm").checked||pending)return;const p=c.preview;pending={key:crypto.randomUUID(),body:{card_id:p.card_id,expected_goal_version:p.goal_version,expected_goal_fingerprint:p.goal_fingerprint,resource_id:p.resource_id,expected_source_hash:p.source_hash,source_run_id:p.source_run_id,expected_proof_fingerprint:p.source_proof_fingerprint,name:$("text-workflow-name").value,consent:"CREATE_THIS_EXACT_FOUR_STEP_TEXT_APP_WITH_THIS_CURRENT_GOAL"}};pending.body.request_key=pending.key;textWorkflowIntents.set(scope,pending);$("text-workflow-key").value=pending.key;}const key=recover?$("text-workflow-key").value:pending.key;if(pending&&key!==pending.key)return;c.busy=true;textWorkflowButtons();try{const value=await api(recover?`/api/projects/${c.project}/text-workflow-requests/${encodeURIComponent(key)}`:`/api/projects/${c.project}/text-workflows`,recover?"GET":"POST",recover?undefined:pending.body);if(!textWorkflowCurrent(c))return;if(value.namespace!=="closed-text-four-step.v1"||!deliveryHash(value.candidate_fingerprint)||value.owner_acceptance!=="PENDING"||value.semantic_status!=="UNKNOWN"||value.model_requests!==0||value.formal_publication_enabled!==false||value.request_key!==key||value.request?.request_key!==key||await registeredHash(value.request)!==value.request_fingerprint||(pending&&!deliverySame(value.request,pending.body)))throw Error("VERIFICATION_FAILED");const app=await api(`/api/apps/${value.id}`);if(!textWorkflowCurrent(c))return;const origin=app.text_workflow_origin,request=value.request,proof=app.candidate?.task_proof?.proof;if(app.project_id!==c.project||app.fingerprint!==value.candidate_fingerprint||app.input_guidance.mode!=="CLOSED_TEXT_WORKFLOW"||app.runtime_id!==value.runtime_id||app.name!==request.name||origin?.app_id!==value.id||origin.project_id!==c.project||origin.runtime_id!==value.runtime_id||origin.request_key!==key||origin.request_fingerprint!==value.request_fingerprint||!deliverySame(origin.request,request)||app.candidate.source_hash!==request.expected_source_hash||app.candidate.manifest.data_bindings[0].resource_ref!==request.resource_id||proof.card_id!==request.card_id||proof.goal_version!==request.expected_goal_version||proof.goal_fingerprint!==request.expected_goal_fingerprint||proof.source_run_id!==request.source_run_id||proof.source_proof_fingerprint!==request.expected_proof_fingerprint)throw Error("VERSION_CONFLICT");c.receipt=value;textWorkflowIntents.delete(scope);$("text-workflow-proof").textContent=JSON.stringify(value,null,2);$("text-workflow-status").textContent="已读回精确草案；打开后核查内部快照并新建实例。人工签收 PENDING，正式发布关闭。";}catch(e){if(textWorkflowCurrent(c))$("text-workflow-status").textContent=`回执或草案未确认：${e.message}。只用原 key 读取恢复；不会自动重发。`;}finally{c.busy=false;if(textWorkflowCurrent(c))textWorkflowButtons();}}
++ $("text-workflow-create").onclick=()=>save(false);$("text-workflow-recover").onclick=()=>save(true);
++ $("text-workflow-open").onclick=async()=>{const c=textWorkflowState;if(!textWorkflowCurrent(c)||!c.receipt)return;const receipt=c.receipt,project=c.project,identity=token,connection=identityConnectionGeneration,goal=goalSelectionGeneration;const current=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&goal===goalSelectionGeneration;try{const ok=await showApp(receipt.id,project,null,current,a=>{if(a.fingerprint!==receipt.candidate_fingerprint||a.candidate.namespace!=="closed-text-four-step.v1")throw Error("VERSION_CONFLICT");});if(ok&&current())selectWorkspace("apps");}catch(e){if(current())$("app-create-status").textContent=e.message;}};
++ textWorkflowButtons();
++}
++textWorkflowSetup();

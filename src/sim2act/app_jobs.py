@@ -179,6 +179,16 @@ def enqueue(
             mode="mock",
             request_model="intern-s2",
         ).model_dump()
+        from . import text_workflows
+
+        if text_workflows.is_candidate(draft["candidate"]):
+            _, _, _, source_goal = text_workflows.verify_origin(store, c, user, draft, limits)
+            snapshot["text_goal"] = source_goal
+            content = source_goal["snapshot"]["content"]
+            contract["goal"].update(goal_id=source_goal["card_id"], goal=content["goal"],
+                constraints=content["constraints"], unresolved=text_workflows.goal_unresolved(source_goal))
+            FrozenRunContract.model_validate(contract)
+            goal = content["goal"]
         c.execute(
             insert(run_contracts).values(
                 run_id=jid, snapshot=contract, fingerprint=fingerprint(contract)
@@ -205,6 +215,7 @@ def enqueue(
                     "tools": 0,
                     "repairs": 0,
                     "reserved_tokens": 0,
+                    **({"text_workflow": text_workflows.VERSION} if text_workflows.is_candidate(draft["candidate"]) else {}),
                 },
                 version=1,
                 cancel_intent=False,
@@ -230,6 +241,8 @@ def enqueue(
                 run_id=jid, app_run_id=aid, snapshot=snapshot, fingerprint=fingerprint(snapshot)
             )
         )
+        if text_workflows.is_candidate(draft["candidate"]):
+            text_workflows.seal_job_scope(c, user, draft, snapshot)
         store.event(
             c,
             jid,
@@ -265,8 +278,14 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
     if not b or job["principal_id"] != user:
         raise DomainError("PERMISSION_DENIED")
     s = b["snapshot"]
+    if (fingerprint(s) != b["fingerprint"] or job["fingerprint"] != b["fingerprint"]
+            or s.get("principal_id") != user or s.get("project_id") != job["project_id"]
+            or s.get("runtime_id") != job["runtime_id"] or s.get("run_id") != job["id"]):
+        raise DomainError("VERSION_CONFLICT", "Accepted queue identity changed before private AppRun read")
     a = (
-        c.execute(select(internal_app_runs).where(internal_app_runs.c.id == b["app_run_id"]))
+        c.execute(select(internal_app_runs).where(internal_app_runs.c.id == b["app_run_id"],
+            internal_app_runs.c.principal_id == user, internal_app_runs.c.instance_id == s.get("instance_id"),
+            internal_app_runs.c.release_id == s.get("release_id")))
         .mappings()
         .first()
     )
@@ -291,7 +310,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         or a["instance_id"] != s["instance_id"]
         or a["release_id"] != s["release_id"]
         or a["principal_id"] != user
-        or a["input"] != s["input"]
+        or fingerprint(a["input"]) != fingerprint(s["input"])
         or a["fingerprint"] != s["request_fingerprint"]
         or fingerprint(request) != s["request_fingerprint"]
     ):
@@ -333,6 +352,12 @@ def inspect_job(store, user, rid):
         limits = store.frozen_contract(c, job).limits
         s, a = load_binding(store, c, user, job, limits)
         release = read_release(store, c, user, s["release_id"], limits)
+        from . import text_workflows
+
+        workflow = text_workflows.is_candidate(release["snapshot"]["draft"]["candidate"])
+        proof_steps: list[dict] = []
+        if workflow:
+            _, _, proof_steps = text_workflows.verify_job(store, c, user, job, limits)
         if job["status"] == "SUCCEEDED":
             from .agent_apps import is_agent, verified_source
 
@@ -367,6 +392,9 @@ def inspect_job(store, user, rid):
                 ).mappings()
             ],
             "namespace": KIND,
+            **({"steps": [dict(step_id=p["step_id"], status=p["status"], fingerprint=fingerprint(p)) for p in proof_steps],
+                "semantic_status": "UNKNOWN", "owner_acceptance": "PENDING", "formal_publication_enabled": False}
+               if workflow else {}),
         }
 
 
@@ -897,6 +925,10 @@ def fail_job(worker, run, error):
 
 
 def process_job(worker, run):
+    from . import text_workflows
+
+    if text_workflows.is_job(worker.store, run):
+        return text_workflows.process_job(worker, run)
     stopped = threading.Event()
 
     def beat():

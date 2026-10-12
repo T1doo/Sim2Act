@@ -1,0 +1,35 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_app_run_boolean_input_cannot_be_integer_width_equal ___________
+
+env = (<sim2act.db.Store object at 0x7f47ab3811c0>, Settings(database_url='sqlite:////tmp/pb-text-multistep-independent-r8-2...e4d273a22a42ee9753b0e868828ae0', 'user_14257288b9284b9caa9fb8dda8adabdd', 'proj_197afae6a08f48d3ab8000c324e425eb', ...)
+
+    def test_app_run_boolean_input_cannot_be_integer_width_equal(env):
+        made,_=draft(env);release,inst=instance(env,made['id']);rid=enqueue(env,release,inst);once(env)
+        with env[0].tx() as c:
+            aid=c.execute(select(internal_run_bindings.c.app_run_id).where(internal_run_bindings.c.run_id==rid)).scalar_one()
+            value=copy.deepcopy(c.execute(select(internal_app_runs.c.input).where(internal_app_runs.c.id==aid)).scalar_one())
+            assert value['emit_report'] is True
+            value['emit_report']=1
+            c.execute(update(internal_app_runs).where(internal_app_runs.c.id==aid).values(input=value))
+        before=rows(env[0]);reply=inspect(env,inst,rid)
+        source=env[2].get(f'/api/internal/app-run-jobs/{rid}/text-workflow-proof');after=rows(env[0])
+        proof={'classification':'SYNTHETIC_PERSISTED_INPUT_WIDTH_FAULT_NOT_REAL_ATTACK','status':reply.status_code,
+               'response':reply.json(),'source_status':source.status_code,'source_response':source.json(),
+               'database_unchanged':after==before,'original_binding_and_fingerprints_untouched':True}
+        Path('/tmp/pb-text-multistep-independent-r8-20261012/input-width.json').write_text(json.dumps(proof,indent=2)+'\n')
+>       assert reply.status_code in {400,409} and source.status_code in {400,409} and after==before,proof
+E       AssertionError: {'classification': 'SYNTHETIC_PERSISTED_INPUT_WIDTH_FAULT_NOT_REAL_ATTACK', 'database_unchanged': True, 'original_bind...report'}, 'id': 'event_1df3a16e0dd244ba91f1e5f8a64aa5ee', 'kind': 'TEXT_WORKFLOW_STEP_VERIFIED', ...}, ...], ...}, ...}
+E       assert (200 in {400, 409})
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pb-text-multistep-independent-r8-20261012/test_app_input_boundary.py:24: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/pb-text-multistep-independent-r8-20261012/test_app_input_boundary.py::test_app_run_boolean_input_cannot_be_integer_width_equal
+1 failed, 1 warning in 3.41s

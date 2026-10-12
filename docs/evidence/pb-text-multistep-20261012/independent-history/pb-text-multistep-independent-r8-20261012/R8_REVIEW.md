@@ -1,0 +1,11 @@
+# R8独审真实红例与夹具失败记录
+
+本候选不得签最终通过。47个唯一节点：43PASS / 4FAIL / 0ERROR / 0SKIP，其中3个产品合同实际反例、1个独审expiry错误码夹具失败。414源码/测试和pyproject前后精确不变；map c35164dc31a6692f805c98528d3cda3ef2bd64c4708c4f2543457bb081eb1d08，implementation7c4a00473b218d984cc14203f01ac2e9b4b03d7cea367249e914de6803472467。父root获明确停止ACK后将最小修复，再另freeze和fresh验证。
+
+指定36后端和4HTTP/JSDOM全部PASS，不覆盖下列额外负例。额外6+1中，Attempt实表污染仍proof200/model_requests0；双Run_SCOPE seal与ACCEPTED删除、binding错链、当前材料撤权后最终403，但SQLite观察器先求值Run五个私有字段；AppRun.input.emit_report原true改为整数1（原binding与全部fp保留）后inspect200/proof200，暴露Python宽等。它们只是在授权本地fixture中的持久错误注入，不是已证明真实攻击、真实模型调用或HTTP响应内容泄露。
+
+expiry另例在4真实VERIFIED节点之后typed插入hook把时钟移到created+10000，实际VERSION_CONFLICT并且完整数据库零写、全部4节点id保留；我的断言要求BUDGET_EXHAUSTED过窄而FAIL。这是独审错误码夹具失败，保留原log/XML/JSON，不算产品部分提交。下轮收窄到effective deadline+小偏移避免同时越过其它已接纳凭证期限，重新实际验证。
+
+r7两个集合按父指令SIGINT，exit2：backend部分30P、UI部分4P均INTERRUPTED而非最终PASS；停止核查首次ps substring误匹配本身shell导致AssertionError，原interrupted-summary和后续精确PID空校准保持。作者review-blockers-red.log中原4NameError亦为作者夹具失败，不能称4个真实red复现。
+
+全原证据、脚本、源快照、cmd/exit/JUnit保留。没有源码/仓库写入、安装、模型、CI、socket或原生浏览器；没有触碰原取消精确安装窗口。之后的r9不得累加本轮旧成功数或洗掉以上失败。

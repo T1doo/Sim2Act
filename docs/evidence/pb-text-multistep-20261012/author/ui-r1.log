@@ -1,0 +1,70 @@
+...F                                                                     [100%]
+=================================== FAILURES ===================================
+________ test_actual_four_step_text_page_cold_extraction[false-branch] _________
+
+env = (<sim2act.db.Store object at 0x7fa7717fade0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-77/test_act...074956d7334a178fc33f5ad3699aa9', 'user_a473efe5dc3a41edb2914f725947d672', 'proj_c4a0964915e24991ae63842a6508e2ac', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-77/test_actual_four_step_text_pag3')
+scenario = 'false-branch'
+
+    @pytest.mark.parametrize("scenario", ["valid", "creation-lost", "run-lost", "false-branch"])
+    def test_actual_four_step_text_page_cold_extraction(env, tmp_path, scenario):
+        source, _ = draft(env)
+        release, inst = instance(env, source["id"])
+        source_run = enqueue(env, release, inst)
+        once(env)
+        rid, card = material(env, "Cedar new owner\nQuartz tomorrow\nCedar reserved\n", "md")
+        # Synthetic fixture title only; real page loads the full native saved version.
+        with env[0].tx() as c:
+            saved = c.execute(select(goal_card_versions.c.snapshot).where(goal_card_versions.c.card_id == card["id"])).scalar()
+            saved["content"]["title"] = "Unseen own target four-step goal"
+            c.execute(update(goal_card_versions).where(goal_card_versions.c.card_id == card["id"]).values(snapshot=saved, fingerprint=digest(saved)))
+            c.execute(update(goal_cards).where(goal_cards.c.id == card["id"]).values(title=saved["content"]["title"], fingerprint=digest(saved)))
+        info = dict(project=env[5], source_run=source_run, resource=rid, scenario=scenario,
+            goal_title=saved["content"]["title"], output=str(tmp_path / "page-result.json"))
+        info_path = tmp_path / "info.json"
+        info_path.write_text(json.dumps(info))
+        stderr_path = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr_path.open("w") as errors:
+            process = subprocess.Popen(["node", "tests/text_workflows_ui.cjs", str(info_path)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(env[1].database_url, test_only=True)
+                        cold_stores.append(cold)
+                        assert Worker(cold, env[1], NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = env[2].request(request["method"], request["path"],
+                            json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                            content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+>               assert code == 0, stderr_path.read_text()
+E               AssertionError: Error: page wait elapsed
+E                     at wait (/workspace/Sim2Act/tests/text_workflows_ui.cjs:9:154)
+E                     at async /workspace/Sim2Act/tests/text_workflows_ui.cjs:26:358
+E                 
+E               assert 1 == 0
+
+tests/test_text_workflows_ui.py:63: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflows_ui.py::test_actual_four_step_text_page_cold_extraction[false-branch]
+1 failed, 3 passed, 1 warning in 92.38s (0:01:32)

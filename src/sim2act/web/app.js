@@ -413,6 +413,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   if(validateSelected)await validateSelected(a);
   if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
   activeApp=id;activeAppProject=pid;
+  if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation);
   if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);
   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
   const origin=a.candidate.generation;

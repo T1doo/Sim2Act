@@ -1,0 +1,274 @@
+................................FFF.....                                 [100%]
+=================================== FAILURES ===================================
+______ test_rejected_scope_never_evaluates_original_private_cells[scope] _______
+
+env = (<sim2act.db.Store object at 0x7efff29c8380>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-78/test_rej...c4c03d4f3a47f0b01dc29cebdd9a95', 'user_55ab10a58bfb44fc92f03c1b41695898', 'proj_62f4f7265b39425a85d035c9acf08515', ...)
+site = 'scope'
+
+    @pytest.mark.parametrize("site", ["scope", "job_binding", "cross_project"])
+    def test_rejected_scope_never_evaluates_original_private_cells(env, site):
+        from sql_private_barrier import PrivateReadBarrier
+    
+    
+        made, body = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+        other, other_card = None, None
+        if site == "cross_project":
+            other = env[2].post("/api/projects", json=dict(name="Same owner, other project")).json()["id"]
+            other_resource = env[2].post(f"/api/projects/{other}/resources",
+                json=dict(name="target.txt", format="txt", content="Jade independent\n")).json()["id"]
+            other_card = env[2].post(f"/api/projects/{other}/goal-cards", json=dict(title="Other valid own target",
+                goal="Independent literals", known=[], assumptions=[], unresolved=[], constraints=["No inference"],
+                acceptance_checks=["Exact citations"], resource_refs=[other_resource])).json()["id"]
+        with env[0].tx() as c:
+            if site == "scope":
+                c.execute(update(grants).where(grants.c.resource_id == body["resource_id"],
+                    grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read").values(revoked=True))
+                row = c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id == made["id"],
+                    delivery_graph_requests.c.kind == flow.META)).mappings().one()
+                value = copy.deepcopy(row["snapshot"])
+                value["request"]["resource_id"] = env[6]
+                value["response"]["resource_id"] = env[6]
+                c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.app_id == made["id"],
+                    delivery_graph_requests.c.kind.in_([flow.META, flow.META + "_seal"])).values(snapshot=value, fingerprint=fingerprint(value),
+                        request_fingerprint=fingerprint(value["request"])))
+                c.execute(insert(grants).values(id=new_id("grant"), principal_id=inst["runtime_id"],
+                    project_id=env[5], resource_id=env[6], tool_ref="resource.read", expires_at=time.time() + 1000,
+                    revision=1, revoked=False))
+            elif site == "job_binding":
+                c.execute(update(grants).where(grants.c.resource_id == body["resource_id"],
+                    grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read").values(revoked=True))
+                c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == rid).values(app_run_id="foreign-id"))
+        protected = PrivateReadBarrier(env[0], {rid}, {body["resource_id"]})
+        protected.rules.update({
+            "app_drafts": (app_drafts, "id", {made["id"]}, {"candidate"}),
+            "internal_app_runs": (internal_app_runs, "instance_id", {inst["id"]}, {"input", "output", "error"}),
+            "internal_run_bindings": (internal_run_bindings, "run_id", {rid}, {"snapshot"}),
+            "internal_instance_data": (internal_instance_data, "instance_id", {inst["id"]}, {"data"}),
+        })
+        # JSON projections are metadata but SQLite evaluates the underlying JSON cell;
+        # omit candidate and binding from this barrier, retain all full text/result cells.
+        protected.rules.pop("app_drafts")
+        protected.rules.pop("internal_run_bindings")
+        try:
+            with protected:
+                if site == "scope":
+                    reply = env[2].get(f"/api/apps/{made['id']}")
+                elif site == "job_binding":
+                    reply = inspect(env, inst, rid)
+                else:
+                    reply = env[2].get(f"/api/projects/{other}/text-workflow-options",
+                        params=dict(card_id=other_card, source_run_id=rid))
+                assert reply.status_code in {403, 409}, reply.text
+                assert protected.blocked == []
+        finally:
+>           protected.__exit__(None, None, None)
+
+tests/test_text_workflows.py:451: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/sql_private_barrier.py:106: in __exit__
+    event.remove(engine, "checkout", self._checkout)
+.venv/lib/python3.12/site-packages/sqlalchemy/event/api.py:214: in remove
+    _event_key(target, identifier, fn).remove()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.event.registry._EventKey object at 0x7efff2929030>
+
+    def remove(self) -> None:
+        key = self._key
+    
+        if key not in _key_to_collection:
+>           raise exc.InvalidRequestError(
+                "No listeners found for event %s / %r / %s "
+                % (self.target, self.identifier, self.fn)
+            )
+E           sqlalchemy.exc.InvalidRequestError: No listeners found for event Engine(sqlite:////tmp/pytest-of-agent/pytest-78/test_rejected_scope_never_eval0/fixture.db) / 'checkout' / <bound method PrivateReadBarrier._checkout of <sql_private_barrier.PrivateReadBarrier object at 0x7efff2a370e0>>
+
+.venv/lib/python3.12/site-packages/sqlalchemy/event/registry.py:320: InvalidRequestError
+___ test_rejected_scope_never_evaluates_original_private_cells[job_binding] ____
+
+env = (<sim2act.db.Store object at 0x7efff1bbee40>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-78/test_rej...f6ee7780f74317a4658ea2a183b467', 'user_502caeeec40d46be8bdd1b7bf0f6066f', 'proj_dba1adab99744314880fde0362ba59e2', ...)
+site = 'job_binding'
+
+    @pytest.mark.parametrize("site", ["scope", "job_binding", "cross_project"])
+    def test_rejected_scope_never_evaluates_original_private_cells(env, site):
+        from sql_private_barrier import PrivateReadBarrier
+    
+    
+        made, body = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+        other, other_card = None, None
+        if site == "cross_project":
+            other = env[2].post("/api/projects", json=dict(name="Same owner, other project")).json()["id"]
+            other_resource = env[2].post(f"/api/projects/{other}/resources",
+                json=dict(name="target.txt", format="txt", content="Jade independent\n")).json()["id"]
+            other_card = env[2].post(f"/api/projects/{other}/goal-cards", json=dict(title="Other valid own target",
+                goal="Independent literals", known=[], assumptions=[], unresolved=[], constraints=["No inference"],
+                acceptance_checks=["Exact citations"], resource_refs=[other_resource])).json()["id"]
+        with env[0].tx() as c:
+            if site == "scope":
+                c.execute(update(grants).where(grants.c.resource_id == body["resource_id"],
+                    grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read").values(revoked=True))
+                row = c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id == made["id"],
+                    delivery_graph_requests.c.kind == flow.META)).mappings().one()
+                value = copy.deepcopy(row["snapshot"])
+                value["request"]["resource_id"] = env[6]
+                value["response"]["resource_id"] = env[6]
+                c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.app_id == made["id"],
+                    delivery_graph_requests.c.kind.in_([flow.META, flow.META + "_seal"])).values(snapshot=value, fingerprint=fingerprint(value),
+                        request_fingerprint=fingerprint(value["request"])))
+                c.execute(insert(grants).values(id=new_id("grant"), principal_id=inst["runtime_id"],
+                    project_id=env[5], resource_id=env[6], tool_ref="resource.read", expires_at=time.time() + 1000,
+                    revision=1, revoked=False))
+            elif site == "job_binding":
+                c.execute(update(grants).where(grants.c.resource_id == body["resource_id"],
+                    grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read").values(revoked=True))
+                c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == rid).values(app_run_id="foreign-id"))
+        protected = PrivateReadBarrier(env[0], {rid}, {body["resource_id"]})
+        protected.rules.update({
+            "app_drafts": (app_drafts, "id", {made["id"]}, {"candidate"}),
+            "internal_app_runs": (internal_app_runs, "instance_id", {inst["id"]}, {"input", "output", "error"}),
+            "internal_run_bindings": (internal_run_bindings, "run_id", {rid}, {"snapshot"}),
+            "internal_instance_data": (internal_instance_data, "instance_id", {inst["id"]}, {"data"}),
+        })
+        # JSON projections are metadata but SQLite evaluates the underlying JSON cell;
+        # omit candidate and binding from this barrier, retain all full text/result cells.
+        protected.rules.pop("app_drafts")
+        protected.rules.pop("internal_run_bindings")
+        try:
+            with protected:
+                if site == "scope":
+                    reply = env[2].get(f"/api/apps/{made['id']}")
+                elif site == "job_binding":
+                    reply = inspect(env, inst, rid)
+                else:
+                    reply = env[2].get(f"/api/projects/{other}/text-workflow-options",
+                        params=dict(card_id=other_card, source_run_id=rid))
+                assert reply.status_code in {403, 409}, reply.text
+                assert protected.blocked == []
+        finally:
+>           protected.__exit__(None, None, None)
+
+tests/test_text_workflows.py:451: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/sql_private_barrier.py:106: in __exit__
+    event.remove(engine, "checkout", self._checkout)
+.venv/lib/python3.12/site-packages/sqlalchemy/event/api.py:214: in remove
+    _event_key(target, identifier, fn).remove()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.event.registry._EventKey object at 0x7efff3e3aa70>
+
+    def remove(self) -> None:
+        key = self._key
+    
+        if key not in _key_to_collection:
+>           raise exc.InvalidRequestError(
+                "No listeners found for event %s / %r / %s "
+                % (self.target, self.identifier, self.fn)
+            )
+E           sqlalchemy.exc.InvalidRequestError: No listeners found for event Engine(sqlite:////tmp/pytest-of-agent/pytest-78/test_rejected_scope_never_eval1/fixture.db) / 'checkout' / <bound method PrivateReadBarrier._checkout of <sql_private_barrier.PrivateReadBarrier object at 0x7efff3c77e00>>
+
+.venv/lib/python3.12/site-packages/sqlalchemy/event/registry.py:320: InvalidRequestError
+__ test_rejected_scope_never_evaluates_original_private_cells[cross_project] ___
+
+env = (<sim2act.db.Store object at 0x7efff3c77980>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-78/test_rej...15bdc472df4006991982d3ebaec83b', 'user_58524003ce7a44c6b6a755b151e2094f', 'proj_20599555c5ec490184713a95f38902c1', ...)
+site = 'cross_project'
+
+    @pytest.mark.parametrize("site", ["scope", "job_binding", "cross_project"])
+    def test_rejected_scope_never_evaluates_original_private_cells(env, site):
+        from sql_private_barrier import PrivateReadBarrier
+    
+    
+        made, body = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+        other, other_card = None, None
+        if site == "cross_project":
+            other = env[2].post("/api/projects", json=dict(name="Same owner, other project")).json()["id"]
+            other_resource = env[2].post(f"/api/projects/{other}/resources",
+                json=dict(name="target.txt", format="txt", content="Jade independent\n")).json()["id"]
+            other_card = env[2].post(f"/api/projects/{other}/goal-cards", json=dict(title="Other valid own target",
+                goal="Independent literals", known=[], assumptions=[], unresolved=[], constraints=["No inference"],
+                acceptance_checks=["Exact citations"], resource_refs=[other_resource])).json()["id"]
+        with env[0].tx() as c:
+            if site == "scope":
+                c.execute(update(grants).where(grants.c.resource_id == body["resource_id"],
+                    grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read").values(revoked=True))
+                row = c.execute(select(delivery_graph_requests).where(delivery_graph_requests.c.app_id == made["id"],
+                    delivery_graph_requests.c.kind == flow.META)).mappings().one()
+                value = copy.deepcopy(row["snapshot"])
+                value["request"]["resource_id"] = env[6]
+                value["response"]["resource_id"] = env[6]
+                c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.app_id == made["id"],
+                    delivery_graph_requests.c.kind.in_([flow.META, flow.META + "_seal"])).values(snapshot=value, fingerprint=fingerprint(value),
+                        request_fingerprint=fingerprint(value["request"])))
+                c.execute(insert(grants).values(id=new_id("grant"), principal_id=inst["runtime_id"],
+                    project_id=env[5], resource_id=env[6], tool_ref="resource.read", expires_at=time.time() + 1000,
+                    revision=1, revoked=False))
+            elif site == "job_binding":
+                c.execute(update(grants).where(grants.c.resource_id == body["resource_id"],
+                    grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read").values(revoked=True))
+                c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == rid).values(app_run_id="foreign-id"))
+        protected = PrivateReadBarrier(env[0], {rid}, {body["resource_id"]})
+        protected.rules.update({
+            "app_drafts": (app_drafts, "id", {made["id"]}, {"candidate"}),
+            "internal_app_runs": (internal_app_runs, "instance_id", {inst["id"]}, {"input", "output", "error"}),
+            "internal_run_bindings": (internal_run_bindings, "run_id", {rid}, {"snapshot"}),
+            "internal_instance_data": (internal_instance_data, "instance_id", {inst["id"]}, {"data"}),
+        })
+        # JSON projections are metadata but SQLite evaluates the underlying JSON cell;
+        # omit candidate and binding from this barrier, retain all full text/result cells.
+        protected.rules.pop("app_drafts")
+        protected.rules.pop("internal_run_bindings")
+        try:
+            with protected:
+                if site == "scope":
+                    reply = env[2].get(f"/api/apps/{made['id']}")
+                elif site == "job_binding":
+                    reply = inspect(env, inst, rid)
+                else:
+                    reply = env[2].get(f"/api/projects/{other}/text-workflow-options",
+                        params=dict(card_id=other_card, source_run_id=rid))
+                assert reply.status_code in {403, 409}, reply.text
+                assert protected.blocked == []
+        finally:
+>           protected.__exit__(None, None, None)
+
+tests/test_text_workflows.py:451: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/sql_private_barrier.py:106: in __exit__
+    event.remove(engine, "checkout", self._checkout)
+.venv/lib/python3.12/site-packages/sqlalchemy/event/api.py:214: in remove
+    _event_key(target, identifier, fn).remove()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.event.registry._EventKey object at 0x7efff2a7c720>
+
+    def remove(self) -> None:
+        key = self._key
+    
+        if key not in _key_to_collection:
+>           raise exc.InvalidRequestError(
+                "No listeners found for event %s / %r / %s "
+                % (self.target, self.identifier, self.fn)
+            )
+E           sqlalchemy.exc.InvalidRequestError: No listeners found for event Engine(sqlite:////tmp/pytest-of-agent/pytest-78/test_rejected_scope_never_eval2/fixture.db) / 'checkout' / <bound method PrivateReadBarrier._checkout of <sql_private_barrier.PrivateReadBarrier object at 0x7efff29884a0>>
+
+.venv/lib/python3.12/site-packages/sqlalchemy/event/registry.py:320: InvalidRequestError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflows.py::test_rejected_scope_never_evaluates_original_private_cells[scope]
+FAILED tests/test_text_workflows.py::test_rejected_scope_never_evaluates_original_private_cells[job_binding]
+FAILED tests/test_text_workflows.py::test_rejected_scope_never_evaluates_original_private_cells[cross_project]
+3 failed, 37 passed, 1 warning in 127.92s (0:02:07)

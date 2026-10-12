@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="6" time="24.684" timestamp="2026-10-12T17:26:58.118259+00:00" hostname="9809f76d2248"><testcase classname="test_independent_workflows" name="test_model_attempt_pollution_cannot_claim_zero_requests" time="2.807"><failure message="AssertionError: {&quot;kind&quot;:&quot;completed_text_four_step.v1&quot;,&quot;run_id&quot;:&quot;run_54bdab0720184940a12d8dc1b16b2176&quot;,&quot;project_id&quot;:&quot;proj_4da380e8d1e14a61a8bb081de9760334&quot;,&quot;principal_id&quot;:&quot;user_a4326124cb2f4617bc764c8ae0ab0f18&quot;,&quot;runtime_id&quot;:&quot;appruntime_ac98491e9ba24dbf8aa5da76b234ce44&quot;,&quot;extraction_depth&quot;:0,&quot;resource_id&quot;:&quot;res_f1dda2fd72984c16a4f44075cc10f4ff&quot;,&quot;source_hash&quot;:&quot;0ae7805e645f0cb27cc7d238d90265a906b65811c616622d7c920905156e467e&quot;,&quot;goal_fingerprint&quot;:&quot;e306be21e65452532da5c37a277ed356e43eaba0ed8610334548e223c4a27fb8&quot;,&quot;contract_fingerprint&quot;:&quot;4f0503d35ae5ed1588ac7fff178f1025ee5f8090081056ca82cba7d32523611a&quot;,&quot;binding_fingerprint&quot;:&quot;e780a22ea532176648d275a0abf4c7f60e834d111d3c6d549f555dc7f84fa212&quot;,&quot;release_id&quot;:&quot;irelease_1a7643b48e8f41a88514202e19e55c4b&quot;,&quot;release_fingerprint&quot;:&quot;b6958edafb7b75663d03cfa87303b7ceca1091f3cc76d923d1450e4a8be622d6&quot;,&quot;plan_fingerprint&quot;:&quot;d5e5d5cfc4d232146ada62dcc7ca17b3c5295a7f6937b699aa88bf9964313fc4&quot;,&quot;input_fingerprint&quot;:&quot;4e5e0afc8ff536f2c8f4f460a94cec0e8068181ad7dd8173735b2b464ce67474&quot;,&quot;steps&quot;:[{&quot;step_id&quot;:&quot;read&quot;,&quot;operation_id&quot;:&quot;op_761426f236a04bd3ad10f3b50461f38d&quot;,&quot;receipt_fingerprint&quot;:&quot;8289d06323879f28b7729471af129be14a6f0e4b4e3ed0848bc384095995f174&quot;},{&quot;step_id&quot;:&quot;lookup_a&quot;,&quot;operation_id&quot;:&quot;op_46c78bda299e479cb6fae4e5205c9cf5&quot;,&quot;receipt_fingerprint&quot;:&quot;917e3bff48d46bc4e2b7069186d8650c0dda8e76a3a005e8c4e4590cdbf78752&quot;},{&quot;step_id&quot;:&quot;lookup_b&quot;,&quot;operation_id&quot;:&quot;op_1aef738ba900450ca43e607b24a67a99&quot;,&quot;receipt_fingerprint&quot;:&quot;86ece7e99315e74bf2081c507751ed725df301c1f8ee4097d38cbc6ba9eb2066&quot;},{&quot;step_id&quot;:&quot;report&quot;,&quot;operation_id&quot;:&quot;op_0a101b26b5b8407095196f9abaaea2da&quot;,&quot;receipt_fingerprint&quot;:&quot;94ac119474dd98f9482c35854ace8fc1ff1114de24ce58bac155d8e95eb97166&quot;}],&quot;output_fingerprint&quot;:&quot;8210120eb000fa3f5ca3e6e968417d2966f64671a980eb3f3f56795fdc17de43&quot;,&quot;result_record_fingerprint&quot;:&quot;37008b4508353f5e5d7afd7e0a837e5588954219e4aae2b6913743a50751a903&quot;,&quot;model_requests&quot;:0,&quot;semantic_status&quot;:&quot;UNKNOWN&quot;,&quot;owner_acceptance&quot;:&quot;PENDING&quot;,&quot;formal_publication_enabled&quot;:false}&#10;assert (200 in {400, 409})&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f3bccec4170&gt;, Settings(database_url='sqlite:////tmp/pb-text-multistep-independent-r8-2...326124cb2f4617bc764c8ae0ab0f18', 'user_b4bc3596a551478c9bfcb5dab7516887', 'proj_4da380e8d1e14a61a8bb081de9760334', ...)
+
+    def test_model_attempt_pollution_cannot_claim_zero_requests(env):
+        made,body,release,inst,rid=completed(env)
+        with env[0].tx() as c:
+            assert c.execute(select(attempts.c.id).where(attempts.c.run_id==rid)).first() is None
+            c.execute(insert(attempts).values(id=new_id('attempt'),run_id=rid,created_at=time.time(),mode='mock',
+                request_model='synthetic-model-not-called',response_model='synthetic-model-not-called',status='SUCCEEDED',
+                usage={'total_tokens':1},reserved_tokens=1,parameters={'synthetic':'persisted corruption only'},
+                response={'synthetic':'No API/provider was called'},error=None,elapsed=0))
+        before=rows(env[0]);reply=proof(env,rid);after=rows(env[0])
+        record('attempt-pollution',status=reply.status_code,response=reply.json(),database_unchanged=after==before,
+               actual_injected_attempts=1,no_model_called=True)
+&gt;       assert reply.status_code in {400,409} and after==before,reply.text
+E       AssertionError: {"kind":"completed_text_four_step.v1","run_id":"run_54bdab0720184940a12d8dc1b16b2176","project_id":"proj_4da380e8d1e14a61a8bb081de9760334","principal_id":"user_a4326124cb2f4617bc764c8ae0ab0f18","runtime_id":"appruntime_ac98491e9ba24dbf8aa5da76b234ce44","extraction_depth":0,"resource_id":"res_f1dda2fd72984c16a4f44075cc10f4ff","source_hash":"0ae7805e645f0cb27cc7d238d90265a906b65811c616622d7c920905156e467e","goal_fingerprint":"e306be21e65452532da5c37a277ed356e43eaba0ed8610334548e223c4a27fb8","contract_fingerprint":"4f0503d35ae5ed1588ac7fff178f1025ee5f8090081056ca82cba7d32523611a","binding_fingerprint":"e780a22ea532176648d275a0abf4c7f60e834d111d3c6d549f555dc7f84fa212","release_id":"irelease_1a7643b48e8f41a88514202e19e55c4b","release_fingerprint":"b6958edafb7b75663d03cfa87303b7ceca1091f3cc76d923d1450e4a8be622d6","plan_fingerprint":"d5e5d5cfc4d232146ada62dcc7ca17b3c5295a7f6937b699aa88bf9964313fc4","input_fingerprint":"4e5e0afc8ff536f2c8f4f460a94cec0e8068181ad7dd8173735b2b464ce67474","steps":[{"step_id":"read","operation_id":"op_761426f236a04bd3ad10f3b50461f38d","receipt_fingerprint":"8289d06323879f28b7729471af129be14a6f0e4b4e3ed0848bc384095995f174"},{"step_id":"lookup_a","operation_id":"op_46c78bda299e479cb6fae4e5205c9cf5","receipt_fingerprint":"917e3bff48d46bc4e2b7069186d8650c0dda8e76a3a005e8c4e4590cdbf78752"},{"step_id":"lookup_b","operation_id":"op_1aef738ba900450ca43e607b24a67a99","receipt_fingerprint":"86ece7e99315e74bf2081c507751ed725df301c1f8ee4097d38cbc6ba9eb2066"},{"step_id":"report","operation_id":"op_0a101b26b5b8407095196f9abaaea2da","receipt_fingerprint":"94ac119474dd98f9482c35854ace8fc1ff1114de24ce58bac155d8e95eb97166"}],"output_fingerprint":"8210120eb000fa3f5ca3e6e968417d2966f64671a980eb3f3f56795fdc17de43","result_record_fingerprint":"37008b4508353f5e5d7afd7e0a837e5588954219e4aae2b6913743a50751a903","model_requests":0,"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","formal_publication_enabled":false}
+E       assert (200 in {400, 409})
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+
+/tmp/pb-text-multistep-independent-r8-20261012/test_independent_workflows.py:44: AssertionError</failure></testcase><testcase classname="test_independent_workflows" name="test_lost_independent_markers_and_broken_binding_do_not_read_revoked_run" time="3.294"><failure message="AssertionError: [{'column': 'goal', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}, {'column': 'resource_refs', 'r...0dd29f76d', 'table': 'runs'}, {'column': 'context', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}]&#10;assert (not [{'column': 'goal', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}, {'column': 'resource_refs', 'r...0dd29f76d', 'table': 'runs'}, {'column': 'context', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}])">env = (&lt;sim2act.db.Store object at 0x7f3bcae094f0&gt;, Settings(database_url='sqlite:////tmp/pb-text-multistep-independent-r8-2...404d252e974685a4302ed45b5dca6c', 'user_a74afb3b4f924019a8e5ef23f81734a9', 'proj_99595c233d2f4f588f2aa31fb2ae12d9', ...)
+
+    def test_lost_independent_markers_and_broken_binding_do_not_read_revoked_run(env):
+        made,body,release,inst,rid=completed(env)
+        with env[0].tx() as c:
+            c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.app_id==rid,
+                      delivery_graph_requests.c.kind.in_([flow.RUN_META,flow.RUN_META+'_seal'])))
+            c.execute(delete(events).where(events.c.run_id==rid,events.c.kind=='ACCEPTED'))
+            c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id==rid).values(app_run_id='synthetic-missing-AppRun'))
+            c.execute(update(grants).where(grants.c.principal_id==env[3],grants.c.resource_id==body['resource_id'],
+                      grants.c.tool_ref=='resource.read').values(revoked=True))
+        before=rows(env[0]);observer=RunCellObserver(env[0],rid)
+        with observer:
+            reply=inspect(env,inst,rid);cells=list(observer.blocked);sql=list(observer.statements)
+        after=rows(env[0]);record('stripped-run-scope',status=reply.status_code,response=reply.json(),
+                                protected_cell_evaluations=cells,sql=sql,database_unchanged=after==before)
+        assert reply.status_code in {400,403,409},reply.text
+&gt;       assert not cells and after==before,cells
+E       AssertionError: [{'column': 'goal', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}, {'column': 'resource_refs', 'r...0dd29f76d', 'table': 'runs'}, {'column': 'context', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}]
+E       assert (not [{'column': 'goal', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}, {'column': 'resource_refs', 'r...0dd29f76d', 'table': 'runs'}, {'column': 'context', 'row_id': 'run_69c5f6ad472c4ed3b4745e60dd29f76d', 'table': 'runs'}])
+
+/tmp/pb-text-multistep-independent-r8-20261012/test_independent_workflows.py:62: AssertionError</failure></testcase><testcase classname="test_independent_workflows" name="test_original_create_key_recovery_revoked_target_reads_no_source_bytes" time="2.334" /><testcase classname="test_independent_workflows" name="test_expiry_after_typed_insert_rolls_back_complete_terminal_append" time="2.202"><failure message="AssertionError: assert ('VERSION_CONFLICT' == 'BUDGET_EXHAUSTED'&#10;  &#10;  - BUDGET_EXHAUSTED&#10;  + VERSION_CONFLICT)">env = (&lt;sim2act.db.Store object at 0x7f3bcab83b90&gt;, Settings(database_url='sqlite:////tmp/pb-text-multistep-independent-r8-2...d910462ff444a99f3ebfd7d4e28c8a', 'user_c2728aca39624aaf925b472f625a5918', 'proj_d6749563f9b241e9a1da2da7bab2c573', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f3bcac35e80&gt;
+
+    def test_expiry_after_typed_insert_rolls_back_complete_terminal_append(env,monkeypatch):
+        made,body=draft(env);release,inst=instance(env,made['id']);rid=enqueue(env,release,inst)
+        worker,run=claimed(env,rid)
+        for _ in range(4):assert flow.advance(worker,run)
+        before=rows(env[0]);assert len([o for o in before['operations'] if o['run_id']==rid])==4
+        state={'expired':False,'hits':0};original=time.time
+        def clock():return run['created_at']+10000 if state['expired'] else original()
+        def expire_after_insert(conn,cursor,statement,parameters,context,many):
+            if statement.lstrip().startswith('INSERT INTO internal_instance_data'):
+                state['hits']+=1;state['expired']=True
+        monkeypatch.setattr(time,'time',clock)
+        event.listen(env[0].engine,'after_cursor_execute',expire_after_insert)
+        try:
+            with pytest.raises(DomainError) as caught:flow.advance(worker,run)
+        finally:event.remove(env[0].engine,'after_cursor_execute',expire_after_insert)
+        after=rows(env[0]);record('terminal-expiry',code=caught.value.code,typed_insert_hook_hits=state['hits'],
+                                database_unchanged=after==before,kept_operation_ids=[o['id'] for o in after['operations'] if o['run_id']==rid])
+&gt;       assert caught.value.code=='BUDGET_EXHAUSTED' and state['hits']==1 and after==before
+E       AssertionError: assert ('VERSION_CONFLICT' == 'BUDGET_EXHAUSTED'
+E         
+E         - BUDGET_EXHAUSTED
+E         + VERSION_CONFLICT)
+
+/tmp/pb-text-multistep-independent-r8-20261012/test_independent_workflows.py:96: AssertionError</failure></testcase><testcase classname="test_independent_workflows" name="test_second_extraction_hop_rejected_after_real_four_receipts" time="11.915" /><testcase classname="test_independent_workflows" name="test_resigned_frozen_goal_constraints_cannot_replace_accepted_native_goal" time="1.285" /></testsuite></testsuites>

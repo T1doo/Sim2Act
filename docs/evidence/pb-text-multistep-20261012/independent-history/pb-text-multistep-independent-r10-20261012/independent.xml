@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="50.148" timestamp="2026-10-12T17:36:02.150765+00:00" hostname="9809f76d2248"><testcase classname="test_independent_workflows" name="test_model_attempt_pollution_cannot_claim_zero_requests" time="11.015" /><testcase classname="test_independent_workflows" name="test_lost_independent_markers_and_broken_binding_do_not_read_revoked_run" time="3.771" /><testcase classname="test_independent_workflows" name="test_original_create_key_recovery_revoked_target_reads_no_source_bytes" time="4.471" /><testcase classname="test_independent_workflows" name="test_expiry_after_typed_insert_rolls_back_complete_terminal_append" time="4.247"><failure message="AssertionError: assert ('VERSION_CONFLICT' == 'BUDGET_EXHAUSTED'&#10;  &#10;  - BUDGET_EXHAUSTED&#10;  + VERSION_CONFLICT)">env = (&lt;sim2act.db.Store object at 0x7f345c6de5a0&gt;, Settings(database_url='sqlite:////tmp/pb-text-multistep-independent-r10-...a346e4bc0a4ed995e11ff656db524e', 'user_b98dc17275ab4f3e9beed02093f79736', 'proj_59c4ca27a4024f7a9ea010cb55888844', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f345d2bae70&gt;
+
+    def test_expiry_after_typed_insert_rolls_back_complete_terminal_append(env,monkeypatch):
+        made,body=draft(env);release,inst=instance(env,made['id']);rid=enqueue(env,release,inst)
+        worker,run=claimed(env,rid)
+        for _ in range(4):assert flow.advance(worker,run)
+        before=rows(env[0]);assert len([o for o in before['operations'] if o['run_id']==rid])==4
+        state={'expired':False,'hits':0};original=time.time
+        def clock():return run['created_at']+60.001 if state['expired'] else original()
+        def expire_after_insert(conn,cursor,statement,parameters,context,many):
+            if statement.lstrip().startswith('INSERT INTO internal_instance_data'):
+                state['hits']+=1;state['expired']=True
+        monkeypatch.setattr(time,'time',clock)
+        event.listen(env[0].engine,'after_cursor_execute',expire_after_insert)
+        try:
+            with pytest.raises(DomainError) as caught:flow.advance(worker,run)
+        finally:event.remove(env[0].engine,'after_cursor_execute',expire_after_insert)
+        after=rows(env[0]);record('terminal-expiry',code=caught.value.code,typed_insert_hook_hits=state['hits'],
+                                database_unchanged=after==before,kept_operation_ids=[o['id'] for o in after['operations'] if o['run_id']==rid])
+&gt;       assert caught.value.code=='BUDGET_EXHAUSTED' and state['hits']==1 and after==before
+E       AssertionError: assert ('VERSION_CONFLICT' == 'BUDGET_EXHAUSTED'
+E         
+E         - BUDGET_EXHAUSTED
+E         + VERSION_CONFLICT)
+
+/tmp/pb-text-multistep-independent-r10-20261012/test_independent_workflows.py:96: AssertionError</failure></testcase><testcase classname="test_independent_workflows" name="test_second_extraction_hop_rejected_after_real_four_receipts" time="18.970" /><testcase classname="test_independent_workflows" name="test_resigned_frozen_goal_constraints_cannot_replace_accepted_native_goal" time="1.240" /><testcase classname="test_independent_workflows" name="test_app_run_boolean_input_cannot_be_integer_width_equal" time="3.970" /></testsuite></testsuites>

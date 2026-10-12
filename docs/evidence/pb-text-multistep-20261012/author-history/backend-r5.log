@@ -1,0 +1,82 @@
+............................FFFF                                         [100%]
+=================================== FAILURES ===================================
+________ test_app_run_output_strict_numbers_reject_width_equality[True] ________
+
+env = (<sim2act.db.Store object at 0x7f145503ad20>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-75/test_app...fdb71e803f4bf39a9587f6c3391b26', 'user_5dc6956545e34459952a1a3baab26129', 'proj_66a8beb5522f4dfcae2e65b4e44b26dc', ...)
+number = True
+
+    @pytest.mark.parametrize("number", [True, 1.0])
+    def test_app_run_output_strict_numbers_reject_width_equality(env, number):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+        with env[0].tx() as c:
+>           aid = c.execute(select(internal_run_bindings.c.app_run_id).where(internal_run_bindings.c.run_id == rid)).scalar()
+                                   ^^^^^^^^^^^^^^^^^^^^^
+E           NameError: name 'internal_run_bindings' is not defined
+
+tests/test_text_workflows.py:361: NameError
+________ test_app_run_output_strict_numbers_reject_width_equality[1.0] _________
+
+env = (<sim2act.db.Store object at 0x7f14545f2300>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-75/test_app...f28a051f1c4990a22fd1b142210759', 'user_4c9429d2746646419bd8ea772b1a5600', 'proj_c0c98dd00a1e44b48aeab19b8605e972', ...)
+number = 1.0
+
+    @pytest.mark.parametrize("number", [True, 1.0])
+    def test_app_run_output_strict_numbers_reject_width_equality(env, number):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst)
+        once(env)
+        with env[0].tx() as c:
+>           aid = c.execute(select(internal_run_bindings.c.app_run_id).where(internal_run_bindings.c.run_id == rid)).scalar()
+                                   ^^^^^^^^^^^^^^^^^^^^^
+E           NameError: name 'internal_run_bindings' is not defined
+
+tests/test_text_workflows.py:361: NameError
+_______ test_failed_history_missing_independent_anchor_rejected[binding] _______
+
+env = (<sim2act.db.Store object at 0x7f1455396420>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-75/test_fai...6835c2100c4d4a8cab11c51fd1da3f', 'user_38ce4e46e01b44faaf416ba0765a5527', 'proj_e3fe8a2c16504899bac62fe432629c11', ...)
+deleted = 'binding'
+
+    @pytest.mark.parametrize("deleted", ["binding", "app_run"])
+    def test_failed_history_missing_independent_anchor_rejected(env, deleted):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst, dict(term_a="", term_b="Violet", emit_report=True))
+        once(env)
+        with env[0].tx() as c:
+>           binding = c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == rid)).mappings().one()
+                                       ^^^^^^^^^^^^^^^^^^^^^
+E           NameError: name 'internal_run_bindings' is not defined
+
+tests/test_text_workflows.py:376: NameError
+_______ test_failed_history_missing_independent_anchor_rejected[app_run] _______
+
+env = (<sim2act.db.Store object at 0x7f14554f5a90>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-75/test_fai...6f688953b249d486991091cc3f2602', 'user_30aea1de15af4cd78c484c7a223e5ded', 'proj_2d702434f44e4b119b84ff8f06e53013', ...)
+deleted = 'app_run'
+
+    @pytest.mark.parametrize("deleted", ["binding", "app_run"])
+    def test_failed_history_missing_independent_anchor_rejected(env, deleted):
+        made, _ = draft(env)
+        release, inst = instance(env, made["id"])
+        rid = enqueue(env, release, inst, dict(term_a="", term_b="Violet", emit_report=True))
+        once(env)
+        with env[0].tx() as c:
+>           binding = c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == rid)).mappings().one()
+                                       ^^^^^^^^^^^^^^^^^^^^^
+E           NameError: name 'internal_run_bindings' is not defined
+
+tests/test_text_workflows.py:376: NameError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflows.py::test_app_run_output_strict_numbers_reject_width_equality[True]
+FAILED tests/test_text_workflows.py::test_app_run_output_strict_numbers_reject_width_equality[1.0]
+FAILED tests/test_text_workflows.py::test_failed_history_missing_independent_anchor_rejected[binding]
+FAILED tests/test_text_workflows.py::test_failed_history_missing_independent_anchor_rejected[app_run]
+4 failed, 28 passed, 1 warning in 43.30s

@@ -188,6 +188,10 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
 
 
 def compile_preview(candidate, platform_limits):
+    from . import text_workflows
+
+    if text_workflows.is_candidate(candidate):
+        return text_workflows.compile_candidate(candidate, platform_limits)
     if isinstance(candidate, dict) and candidate.get("namespace") == "bounded-report-manifest.v1":
         from .report_manifest_apps import compile_report
 
@@ -269,7 +273,13 @@ def validate_source_family(c, user, draft):
             if table is task_extractions:
                 snapshot = row["snapshot"]
                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
-                if isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
+                if isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
+                    from .text_workflows import is_candidate
+
+                    if not is_candidate(candidate):
+                        raise DomainError("VERSION_CONFLICT", "Independent four-step family cannot be downgraded")
+                    expected_field, expected_kind = "task_proof", "registered_tool"
+                elif isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
                     expected_field, expected_kind = "agent_provenance", "bounded_agent"
                 elif isinstance(snapshot, dict) and snapshot.get("kind") in {"registered_csv_source.v1", "registered_text_source.v1", "natural_csv_receipt_candidate.v1", "text_data_free_binding.v1"}:
                     expected_field, expected_kind = "task_proof", "registered_tool"
@@ -352,6 +362,11 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     validate_source_family(c, user, draft)
     manifest, action, report = compile_preview(candidate, platform_limits)
+    from . import text_workflows
+
+    if text_workflows.is_candidate(candidate):
+        text_workflows.verify_origin(store, c, user, draft, platform_limits)
+        return draft, manifest, action, report
     if action.executor.ref == "text.literal_evidence":
         from .text_apps import verify_origin
 
@@ -485,6 +500,15 @@ def preview(store, user, aid, input_value, key, platform_limits):
             return public_preview(old)
         output, error = None, None
         try:
+            if draft["candidate"].get("namespace") == "closed-text-four-step.v1":
+                from .lifecycle import execute
+
+                output = execute(store, c, user, draft, platform_limits, input_value)
+                row = dict(id=new_id("preview"), app_id=aid, principal_id=user, request_key=key,
+                    fingerprint=fp, input=input_value, status="SUCCEEDED", output=output,
+                    error=None, created_at=time.time())
+                c.execute(insert(app_previews).values(**row))
+                return public_preview(row)
             validate_value(manifest.input_schema, input_value)
             step = manifest.workflow[0]
             data = {d.binding_id: {"resource_id": d.resource_ref} for d in manifest.data_bindings}
@@ -541,6 +565,8 @@ def public_preview(row):
 
 
 def inspect_draft(store, user, aid, platform_limits):
+    from .text_workflows import public_origin as text_workflow_origin
+
     with store.tx() as c:
         from .text_continuations import draft_gate
 
@@ -581,7 +607,12 @@ def inspect_draft(store, user, aid, platform_limits):
                 for k in ("state", "execution_performed", "publishable", "topological_order")
             },
             "history": [public_preview(r) for r in history],
+            **({"text_workflow_origin": text_workflow_origin(c, user, draft)}
+               if draft["candidate"].get("namespace") == "closed-text-four-step.v1" else {}),
             "input_guidance": (
+                {"mode": "CLOSED_TEXT_WORKFLOW", "semantic_status": "UNKNOWN"}
+                if draft["candidate"].get("namespace") == "closed-text-four-step.v1"
+                else
                 csv_column_options(source["content"])
                 if manifest.validation_suite_ref == "receipt.readback.v1"
                 else {"mode": ("REGISTERED_LITERAL" if draft["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence" else "OFFLINE_REPLAY_ONLY"), "semantic_status": "UNKNOWN"}

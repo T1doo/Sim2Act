@@ -1,0 +1,143 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/text_workflows.py:8:1
+   |
+ 6 |   """
+ 7 |
+ 8 | / import copy
+ 9 | | import json
+10 | | import threading
+11 | | import time
+12 | | from typing import Literal
+13 | |
+14 | | from pydantic import Field
+15 | | from sqlalchemy import insert, select, update
+16 | |
+17 | | from . import delivery_graph_apps as graph
+18 | | from . import text_logic_reuse as seals
+19 | | from .apps import object_schema
+20 | | from .contracts import ActionSpec, AppManifest, Limits, Strict, schema_check, validate_value
+21 | | from .csv_dag import decision, resolve, skip_receipt
+22 | | from .db import (
+23 | |     app_drafts, delivery_graph_requests, events, fingerprint, goal_card_versions,
+24 | |     goal_cards, grants, internal_app_runs, internal_instance_data, internal_instances,
+25 | |     internal_run_bindings, new_id, operation_intents, operations, principals,
+26 | |     run_contracts, runs, task_extractions,
+27 | | )
+28 | | from .errors import DomainError
+29 | | from .goals import GoalCardInput
+30 | | from .tools import authorized_read
+   | |__________________________________^
+31 |
+32 |   VERSION = "closed-text-four-step.v1"
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_text_workflows.py:3:1
+   |
+ 1 |   """Actual closed non-CSV task, persisted four receipts and cold exact extraction."""
+ 2 |
+ 3 | / import copy
+ 4 | | from dataclasses import replace
+ 5 | |
+ 6 | | import pytest
+ 7 | | from fastapi.testclient import TestClient
+ 8 | | from sqlalchemy import delete, select, update
+ 9 | |
+10 | | from sim2act import text_workflows as flow
+11 | | from sim2act.api import create_app
+12 | | from sim2act.contracts import Limits
+13 | | from sim2act.db import (
+14 | |     Store, app_drafts, fingerprint, grants, internal_app_runs, internal_instance_data,
+15 | |     internal_instances, internal_run_bindings, operation_intents, operations, runs,
+16 | | )
+17 | | from sim2act.worker import Worker
+   | |_________________________________^
+   |
+help: Organize imports
+
+F401 [*] `dataclasses.replace` imported but unused
+ --> tests/test_text_workflows.py:4:25
+  |
+3 | import copy
+4 | from dataclasses import replace
+  |                         ^^^^^^^
+5 |
+6 | import pytest
+  |
+help: Remove unused import: `dataclasses.replace`
+
+F401 [*] `sim2act.contracts.Limits` imported but unused
+  --> tests/test_text_workflows.py:12:31
+   |
+10 | from sim2act import text_workflows as flow
+11 | from sim2act.api import create_app
+12 | from sim2act.contracts import Limits
+   |                               ^^^^^^
+13 | from sim2act.db import (
+14 |     Store, app_drafts, fingerprint, grants, internal_app_runs, internal_instance_data,
+   |
+help: Remove unused import: `sim2act.contracts.Limits`
+
+F401 [*] `sim2act.db.app_drafts` imported but unused
+  --> tests/test_text_workflows.py:14:12
+   |
+12 | from sim2act.contracts import Limits
+13 | from sim2act.db import (
+14 |     Store, app_drafts, fingerprint, grants, internal_app_runs, internal_instance_data,
+   |            ^^^^^^^^^^
+15 |     internal_instances, internal_run_bindings, operation_intents, operations, runs,
+16 | )
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.db.grants` imported but unused
+  --> tests/test_text_workflows.py:14:37
+   |
+12 | from sim2act.contracts import Limits
+13 | from sim2act.db import (
+14 |     Store, app_drafts, fingerprint, grants, internal_app_runs, internal_instance_data,
+   |                                     ^^^^^^
+15 |     internal_instances, internal_run_bindings, operation_intents, operations, runs,
+16 | )
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.db.internal_app_runs` imported but unused
+  --> tests/test_text_workflows.py:14:45
+   |
+12 | from sim2act.contracts import Limits
+13 | from sim2act.db import (
+14 |     Store, app_drafts, fingerprint, grants, internal_app_runs, internal_instance_data,
+   |                                             ^^^^^^^^^^^^^^^^^
+15 |     internal_instances, internal_run_bindings, operation_intents, operations, runs,
+16 | )
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.db.internal_instances` imported but unused
+  --> tests/test_text_workflows.py:15:5
+   |
+13 | from sim2act.db import (
+14 |     Store, app_drafts, fingerprint, grants, internal_app_runs, internal_instance_data,
+15 |     internal_instances, internal_run_bindings, operation_intents, operations, runs,
+   |     ^^^^^^^^^^^^^^^^^^
+16 | )
+17 | from sim2act.worker import Worker
+   |
+help: Remove unused import
+
+F401 [*] `sim2act.db.internal_run_bindings` imported but unused
+  --> tests/test_text_workflows.py:15:25
+   |
+13 | from sim2act.db import (
+14 |     Store, app_drafts, fingerprint, grants, internal_app_runs, internal_instance_data,
+15 |     internal_instances, internal_run_bindings, operation_intents, operations, runs,
+   |                         ^^^^^^^^^^^^^^^^^^^^^
+16 | )
+17 | from sim2act.worker import Worker
+   |
+help: Remove unused import
+
+Found 9 errors.
+[*] 9 fixable with the `--fix` option.

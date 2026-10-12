@@ -46,6 +46,11 @@ def execute(store, c, user, draft, limits, input_value, replay=None):
 
     no_context(store, c, user, draft)
     _, manifest, action, _ = validate_frozen_candidate(store, c, user, draft, limits)
+    from . import text_workflows
+
+    if text_workflows.is_candidate(draft["candidate"]):
+        _, _, source, _ = text_workflows.verify_origin(store, c, user, draft, limits)
+        return text_workflows.preview(source, draft["candidate"], input_value)
     validate_value(manifest.input_schema, input_value)
     rid = manifest.data_bindings[0].resource_ref
     args = {"resource_id": rid, **input_value}
@@ -223,6 +228,9 @@ def prepare_release(
             "data_schema_version": data_schema_version,
             "check_evidence": {
                 "ref": (
+                    "text.four_step_readback.v1"
+                    if draft["candidate"].get("namespace") == "closed-text-four-step.v1"
+                    else
                     "source.literal_evidence.v1"
                     if action.executor.kind == "bounded_agent" or action.executor.ref == "text.literal_evidence"
                     else "csv.exact_integer_sum.v1"
@@ -489,7 +497,11 @@ def inspect_instance(store, user, iid, limits):
     with store.tx() as c:
         i, release = instance(store, c, user, iid, limits)
         records = data_rows(c, iid)
-        if "execution_source" in release["snapshot"]:
+        from . import text_workflows
+
+        if text_workflows.is_candidate(release["snapshot"]["draft"]["candidate"]):
+            text_workflows.verify_instance_records(store, c, user, i, records, limits)
+        elif "execution_source" in release["snapshot"]:
             from .csv_dag_instances import check_instance_records
             check_instance_records(store, c, user, i, records, limits)
         elif release["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence":
@@ -510,6 +522,8 @@ def run_instance(
         ).scalar()
         store.lock_project(c, user, pid)
         i, r = instance(store, c, user, iid, limits, lock=True)
+        if r["snapshot"]["draft"]["candidate"].get("namespace") == "closed-text-four-step.v1":
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Four-step text requires the durable AppRun worker")
         if "execution_source" in r["snapshot"]:
             raise DomainError("UNSUPPORTED_CAPABILITY", "DAG instances require the durable DAG worker")
         if r["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence":
