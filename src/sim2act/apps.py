@@ -244,6 +244,9 @@ def compile_preview(candidate, platform_limits):
 
 
 def load_draft(store, c, user, aid, platform_limits, *, lock=False):
+    from .text_continuations import draft_gate
+
+    draft_gate(store, c, user, aid)
     query = select(app_drafts).where(app_drafts.c.id == aid)
     draft = c.execute(query.with_for_update() if lock else query).mappings().first()
     if not draft:
@@ -340,6 +343,9 @@ def validate_source_family(c, user, draft):
 def validate_frozen_candidate(store, c, user, draft, platform_limits):
     """Revalidate exact frozen specs and current grants without reading mutable draft content."""
     aid = draft["id"]
+    from .text_continuations import draft_gate
+
+    draft_gate(store, c, user, aid)
     project = store.own_project(c, user, draft["project_id"])
     candidate = draft["candidate"]
     if fingerprint(candidate) != draft["fingerprint"]:
@@ -456,6 +462,9 @@ def preview(store, user, aid, input_value, key, platform_limits):
         draft, manifest, action, report = load_draft(
             store, c, user, aid, platform_limits, lock=True
         )
+        from .text_continuations import no_context
+
+        no_context(store, c, user, draft)
         if action.executor.kind == "bounded_agent":
             raise DomainError("UNSUPPORTED_CAPABILITY", "Use internal offline AppRun service")
         fp = fingerprint({"candidate": draft["fingerprint"], "input": input_value})
@@ -533,6 +542,9 @@ def public_preview(row):
 
 def inspect_draft(store, user, aid, platform_limits):
     with store.tx() as c:
+        from .text_continuations import draft_gate
+
+        draft_gate(store, c, user, aid)
         candidate = c.execute(select(app_drafts.c.candidate).where(app_drafts.c.id == aid)).scalar()
     if isinstance(candidate, dict) and candidate.get("namespace") == "bounded-report-manifest.v1":
         from .report_manifest_apps import inspect

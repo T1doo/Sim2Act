@@ -75,6 +75,9 @@ def mount(app, store, limits, identity):
     user_dependency = Depends(identity)
 
     def supported_app(c, user, aid):
+        from .text_continuations import draft_gate
+
+        draft_gate(store, c, user, aid)
         row = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().first()
         pid = row["project_id"] if row else None
         store.own_project(c, user, pid)
@@ -100,6 +103,10 @@ def mount(app, store, limits, identity):
             if pid is None:
                 raise DomainError("PERMISSION_DENIED")
             store.own_project(c, user, pid)
+            if historical:
+                from .text_continuations import job_gate
+
+                job_gate(store, c, user, rid)
             job = c.execute(select(runs).where(
                 runs.c.id == rid, runs.c.principal_id == user, runs.c.project_id == pid,
             )).mappings().first()
@@ -131,8 +138,17 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/approvals/{aid}")
     def inspect_approval(aid: str, user=user_dependency):
         with store.tx() as c:
+            from .text_continuations import draft_gate
+
+            app_id = c.execute(select(internal_approvals.c.payload["snapshot"]["draft"]["id"].as_string())
+                .where(internal_approvals.c.id == aid, internal_approvals.c.principal_id == user,
+                       internal_approvals.c.kind == "release")).scalar_one_or_none()
+            if app_id is None:
+                raise DomainError("PERMISSION_DENIED")
+            draft_gate(store, c, user, app_id)
             row = (
-                c.execute(select(internal_approvals).where(internal_approvals.c.id == aid))
+                c.execute(select(internal_approvals).where(internal_approvals.c.id == aid,
+                    internal_approvals.c.principal_id == user, internal_approvals.c.kind == "release"))
                 .mappings()
                 .first()
             )

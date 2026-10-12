@@ -1,0 +1,807 @@
+.FFF......F..FFFFFFFFF...FF...FF.F.FFF.F.F                               [100%]
+=================================== FAILURES ===================================
+__ test_exact_old_db_cold_current_continuation_preserves_and_new_worker[a747] __
+
+legacy = (<sim2act.db.Store object at 0x7f45f342bda0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def test_exact_old_db_cold_current_continuation_preserves_and_new_worker(legacy):
+        store, settings, client, info = legacy
+        before = rows(store)
+        assert client.get("/api/apps/" + info["app"]["id"]).status_code == 409
+        assert rows(store) == before
+>       _, _, body, receipt = continued(legacy)
+                              ^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_text_continuations.py:86: in continued
+    approval, body, commit = prepared(data)
+                             ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f342bda0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+_____ test_other_instance_generic_execution_never_inherits_permission[233] _____
+
+legacy = (<sim2act.db.Store object at 0x7f45f1df1f10>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_oth...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def test_other_instance_generic_execution_never_inherits_permission(legacy):
+        store, _, client, info = legacy
+        *_, receipt = continued(legacy)
+        before = rows(store)
+        other = info["other_instance"]["id"]
+        reply = client.post("/api/internal/instances/" + other + "/runs", json=dict(expected_revision=1,
+            expected_release_fingerprint=info["release"]["fingerprint"], input={"term": "Gamma"}, request_key="not-approved"))
+        assert reply.status_code == 409
+>       assert client.post("/api/internal/releases/" + receipt["release_id"] + "/instances", json=dict(
+            expected_release_fingerprint=receipt["release_fingerprint"], request_key="never-new")).status_code == 409
+E       AssertionError: assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+E        +    where <Response [400 Bad Request]> = post((('/api/internal/releases/' + 'irelease_0f288abc32124e00857cc7669013a7e9') + '/instances'), json={'expected_release_fingerprint': 'aeba68860a5015e9416a347be09f6227ab5f956680743b46618579ec932cd083', 'request_key': 'never-new'})
+E        +      where post = <starlette.testclient.TestClient object at 0x7f45f1a479b0>.post
+E        +      and   {'expected_release_fingerprint': 'aeba68860a5015e9416a347be09f6227ab5f956680743b46618579ec932cd083', 'request_key': 'never-new'} = dict(expected_release_fingerprint='aeba68860a5015e9416a347be09f6227ab5f956680743b46618579ec932cd083', request_key='never-new')
+
+tests/test_text_continuations.py:163: AssertionError
+____ test_other_instance_generic_execution_never_inherits_permission[a747] _____
+
+legacy = (<sim2act.db.Store object at 0x7f45f1e03dd0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_oth...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def test_other_instance_generic_execution_never_inherits_permission(legacy):
+        store, _, client, info = legacy
+>       *_, receipt = continued(legacy)
+                      ^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_text_continuations.py:86: in continued
+    approval, body, commit = prepared(data)
+                             ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f1e03dd0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_oth...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+________ test_exact_commit_cas_denies_without_partial_rows[233-limits] _________
+
+legacy = (<sim2act.db.Store object at 0x7f45f34b1640>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f4b70f20>
+mutation = 'limits'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+        approval, _, body = prepared(legacy)
+        iid = info["instance"]["id"]
+        with store.tx() as c:
+            if mutation == "revision":
+                c.execute(update(internal_instances).where(internal_instances.c.id == iid).values(revision=3))
+            elif mutation == "data":
+                c.execute(update(internal_instances).where(internal_instances.c.id == iid).values(data_version=2))
+            elif mutation == "history":
+                row = c.execute(select(internal_instances).where(internal_instances.c.id == iid)).mappings().one()
+                c.execute(update(internal_instances).where(internal_instances.c.id == iid).values(history=[{**row["history"][0], "unexpected": True}]))
+            elif mutation == "grant":
+                c.execute(update(grants).where(grants.c.principal_id == info["owner"], grants.c.resource_id == info["resource"]).values(revoked=True))
+            elif mutation == "goal":
+                if info.get("goal"):
+                    c.execute(update(goal_cards).where(goal_cards.c.id == info["goal"]["card_id"]).values(title="competing editor"))
+                else:
+                    # Target application criteria are not the independent app's goals.
+                    monkeypatch.setattr(cont, "preconditions", lambda *args: {**approval["preflight"], "goal_fingerprint": "0"*64})
+            elif mutation == "expiry":
+                monkeypatch.setattr(time, "time", lambda: approval["expires_at"] + 1)
+            elif mutation == "software":
+                monkeypatch.setattr(cont, "implementation", lambda: "0"*64)
+            elif mutation == "consent":
+                body["consent"] = "AUTO_ACCEPT"
+        before = rows(store)
+        if mutation == "limits":
+            limits = Limits(**{k: getattr(settings, k) for k in Limits.model_fields})
+>           limits = limits.model_copy(update={"steps": limits.steps-1})
+                                                        ^^^^^^^^^^^^
+
+tests/test_text_continuations.py:200: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Limits(max_requests=4, max_tools=4, max_repairs=1, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)
+item = 'steps'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'Limits' object has no attribute 'steps'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1026: AttributeError
+_______ test_exact_commit_cas_denies_without_partial_rows[a747-revision] _______
+
+legacy = (<sim2act.db.Store object at 0x7f45f4b84a40>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f4893ec0>
+mutation = 'revision'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f4b84a40>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+_________ test_exact_commit_cas_denies_without_partial_rows[a747-data] _________
+
+legacy = (<sim2act.db.Store object at 0x7f45f4f732f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f3487f80>
+mutation = 'data'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f4f732f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+_______ test_exact_commit_cas_denies_without_partial_rows[a747-history] ________
+
+legacy = (<sim2act.db.Store object at 0x7f45f2014680>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f2950230>
+mutation = 'history'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f2014680>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+________ test_exact_commit_cas_denies_without_partial_rows[a747-grant] _________
+
+legacy = (<sim2act.db.Store object at 0x7f45f1df3800>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f1d64680>
+mutation = 'grant'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f1df3800>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+_________ test_exact_commit_cas_denies_without_partial_rows[a747-goal] _________
+
+legacy = (<sim2act.db.Store object at 0x7f45f1bf17c0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f1a5e750>
+mutation = 'goal'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f1bf17c0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+________ test_exact_commit_cas_denies_without_partial_rows[a747-expiry] ________
+
+legacy = (<sim2act.db.Store object at 0x7f45f34dd9a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f4e0a150>
+mutation = 'expiry'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f34dd9a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+________ test_exact_commit_cas_denies_without_partial_rows[a747-limits] ________
+
+legacy = (<sim2act.db.Store object at 0x7f45f4b73d40>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f2950530>
+mutation = 'limits'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f4b73d40>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+_______ test_exact_commit_cas_denies_without_partial_rows[a747-software] _______
+
+legacy = (<sim2act.db.Store object at 0x7f45f4ae6f00>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f337eba0>
+mutation = 'software'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f4ae6f00>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+_______ test_exact_commit_cas_denies_without_partial_rows[a747-consent] ________
+
+legacy = (<sim2act.db.Store object at 0x7f45f48591f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f29785f0>
+mutation = 'consent'
+
+    @pytest.mark.parametrize("mutation", ["revision", "data", "history", "grant", "goal", "expiry", "limits", "software", "consent"])
+    def test_exact_commit_cas_denies_without_partial_rows(legacy, monkeypatch, mutation):
+        store, settings, client, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f48591f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_exa...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+__ test_full_preserved_worker_proof_is_required_before_preflight[233-queued] ___
+
+legacy = (<sim2act.db.Store object at 0x7f45f1942d20>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_ful...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f4d24b30>
+mutation = 'queued'
+
+    @pytest.mark.parametrize("mutation", ["run-status", "no-binding", "receipt", "queued", "unknown"])
+    def test_full_preserved_worker_proof_is_required_before_preflight(legacy, monkeypatch, mutation):
+        store, _, client, info = legacy
+        with store.tx() as c:
+            rid = info["successful_old_run_id"]
+            if mutation == "run-status":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="FAILED"))
+            elif mutation == "no-binding":
+                c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id == rid))
+            elif mutation == "receipt":
+                c.execute(update(operations).where(operations.c.run_id == rid).values(receipt={}))
+            elif mutation == "queued":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="QUEUED"))
+            else:
+                monkeypatch.setattr(store, "has_unknown", lambda *_: True)
+        before = rows(store)
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options").json()
+        item = next(x for x in options["items"] if x["id"] == info["instance"]["id"])
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=dict(
+            expected_revision=item["revision"], expected_release_fingerprint=item["release_fingerprint"],
+            expected_candidate_fingerprint=item["fingerprint"], expected_source_implementation=item["source_implementation"],
+            input={"term": "Alpha"}, request_key="bad-old-history"))
+>       assert reply.status_code == 409, reply.text
+E       AssertionError: {"error":{"code":"OUTCOME_UNKNOWN","message":"Stop or reconcile outstanding instance jobs before software preflight","safe_retry":false,"effect_known":false,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_continuations.py:230: AssertionError
+__ test_full_preserved_worker_proof_is_required_before_preflight[233-unknown] __
+
+legacy = (<sim2act.db.Store object at 0x7f45f4f96690>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_ful...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f2865220>
+mutation = 'unknown'
+
+    @pytest.mark.parametrize("mutation", ["run-status", "no-binding", "receipt", "queued", "unknown"])
+    def test_full_preserved_worker_proof_is_required_before_preflight(legacy, monkeypatch, mutation):
+        store, _, client, info = legacy
+        with store.tx() as c:
+            rid = info["successful_old_run_id"]
+            if mutation == "run-status":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="FAILED"))
+            elif mutation == "no-binding":
+                c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id == rid))
+            elif mutation == "receipt":
+                c.execute(update(operations).where(operations.c.run_id == rid).values(receipt={}))
+            elif mutation == "queued":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="QUEUED"))
+            else:
+                monkeypatch.setattr(store, "has_unknown", lambda *_: True)
+        before = rows(store)
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options").json()
+        item = next(x for x in options["items"] if x["id"] == info["instance"]["id"])
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=dict(
+            expected_revision=item["revision"], expected_release_fingerprint=item["release_fingerprint"],
+            expected_candidate_fingerprint=item["fingerprint"], expected_source_implementation=item["source_implementation"],
+            input={"term": "Alpha"}, request_key="bad-old-history"))
+>       assert reply.status_code == 409, reply.text
+E       AssertionError: {"error":{"code":"OUTCOME_UNKNOWN","message":"Stop or reconcile outstanding instance jobs before software preflight","safe_retry":false,"effect_known":false,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_continuations.py:230: AssertionError
+__ test_full_preserved_worker_proof_is_required_before_preflight[a747-queued] __
+
+legacy = (<sim2act.db.Store object at 0x7f45f2a4f890>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_ful...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f3583ec0>
+mutation = 'queued'
+
+    @pytest.mark.parametrize("mutation", ["run-status", "no-binding", "receipt", "queued", "unknown"])
+    def test_full_preserved_worker_proof_is_required_before_preflight(legacy, monkeypatch, mutation):
+        store, _, client, info = legacy
+        with store.tx() as c:
+            rid = info["successful_old_run_id"]
+            if mutation == "run-status":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="FAILED"))
+            elif mutation == "no-binding":
+                c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id == rid))
+            elif mutation == "receipt":
+                c.execute(update(operations).where(operations.c.run_id == rid).values(receipt={}))
+            elif mutation == "queued":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="QUEUED"))
+            else:
+                monkeypatch.setattr(store, "has_unknown", lambda *_: True)
+        before = rows(store)
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options").json()
+        item = next(x for x in options["items"] if x["id"] == info["instance"]["id"])
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=dict(
+            expected_revision=item["revision"], expected_release_fingerprint=item["release_fingerprint"],
+            expected_candidate_fingerprint=item["fingerprint"], expected_source_implementation=item["source_implementation"],
+            input={"term": "Alpha"}, request_key="bad-old-history"))
+>       assert reply.status_code == 409, reply.text
+E       AssertionError: {"error":{"code":"OUTCOME_UNKNOWN","message":"Stop or reconcile outstanding instance jobs before software preflight","safe_retry":false,"effect_known":false,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_continuations.py:230: AssertionError
+_ test_full_preserved_worker_proof_is_required_before_preflight[a747-unknown] __
+
+legacy = (<sim2act.db.Store object at 0x7f45f1fe6510>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_ful...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f1f38a40>
+mutation = 'unknown'
+
+    @pytest.mark.parametrize("mutation", ["run-status", "no-binding", "receipt", "queued", "unknown"])
+    def test_full_preserved_worker_proof_is_required_before_preflight(legacy, monkeypatch, mutation):
+        store, _, client, info = legacy
+        with store.tx() as c:
+            rid = info["successful_old_run_id"]
+            if mutation == "run-status":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="FAILED"))
+            elif mutation == "no-binding":
+                c.execute(delete(internal_run_bindings).where(internal_run_bindings.c.run_id == rid))
+            elif mutation == "receipt":
+                c.execute(update(operations).where(operations.c.run_id == rid).values(receipt={}))
+            elif mutation == "queued":
+                c.execute(update(runs).where(runs.c.id == rid).values(status="QUEUED"))
+            else:
+                monkeypatch.setattr(store, "has_unknown", lambda *_: True)
+        before = rows(store)
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options").json()
+        item = next(x for x in options["items"] if x["id"] == info["instance"]["id"])
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=dict(
+            expected_revision=item["revision"], expected_release_fingerprint=item["release_fingerprint"],
+            expected_candidate_fingerprint=item["fingerprint"], expected_source_implementation=item["source_implementation"],
+            input={"term": "Alpha"}, request_key="bad-old-history"))
+>       assert reply.status_code == 409, reply.text
+E       AssertionError: {"error":{"code":"OUTCOME_UNKNOWN","message":"Stop or reconcile outstanding instance jobs before software preflight","safe_retry":false,"effect_known":false,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_text_continuations.py:230: AssertionError
+_____ test_atomic_insertion_failure_and_expiry_after_write_roll_back[a747] _____
+
+legacy = (<sim2act.db.Store object at 0x7f45f1999070>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_ato...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f4a327b0>
+
+    def test_atomic_insertion_failure_and_expiry_after_write_roll_back(legacy, monkeypatch):
+        store, _, _, info = legacy
+>       approval, _, body = prepared(legacy)
+                            ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f1999070>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_ato...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+____ test_cancel_preflight_revoke_permission_and_original_key_history[a747] ____
+
+legacy = (<sim2act.db.Store object at 0x7f45f2a84080>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_can...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def test_cancel_preflight_revoke_permission_and_original_key_history(legacy):
+        store, _, client, info = legacy
+>       _, request, body = prepared(legacy)
+                           ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:257: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f2a84080>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_can...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+___ test_private_preflight_receipt_is_not_read_after_target_revocation[233] ____
+
+legacy = (<sim2act.db.Store object at 0x7f45f342af90>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_pri...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def test_private_preflight_receipt_is_not_read_after_target_revocation(legacy):
+        store, _, client, info = legacy
+        _, request, body = prepared(legacy)
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.principal_id == info["owner"], grants.c.resource_id == info["resource"]).values(revoked=True))
+        statements = []
+        def record(_c, _cursor, sql, _parameters, _context, _many):
+            statements.append(sql)
+        event.listen(store.engine, "before_cursor_execute", record)
+        before = rows(store)
+        try:
+            for method, url, payload in [("POST", path(info).replace("software-continuations", "software-continuation-preflights"), request),
+                ("POST", path(info), body), ("GET", path(info)+"?request_key=explicit-preflight", None)]:
+                statements.clear()
+                reply = client.request(method, url, json=payload)
+                assert reply.status_code == 403, reply.text
+>               assert not any("internal_approvals.payload" in x or "delivery_graph_requests.snapshot" in x for x in statements), statements
+E               AssertionError: ['SELECT principals.id 
+E                 FROM principals 
+E                 WHERE principals.token_hash = ?', 'BEGIN IMMEDIATE', 'SELECT internal_insta...graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?', ...]
+E               assert not True
+E                +  where True = any(<generator object test_private_preflight_receipt_is_not_read_after_target_revocation.<locals>.<genexpr> at 0x7f45f1d43920>)
+
+tests/test_text_continuations.py:300: AssertionError
+___ test_private_preflight_receipt_is_not_read_after_target_revocation[a747] ___
+
+legacy = (<sim2act.db.Store object at 0x7f45f3f524b0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_pri...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def test_private_preflight_receipt_is_not_read_after_target_revocation(legacy):
+        store, _, client, info = legacy
+>       _, request, body = prepared(legacy)
+                           ^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:286: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f3f524b0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_pri...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+___ test_no_marker_or_forged_software_receipt_cannot_revive_execution[a747] ____
+
+legacy = (<sim2act.db.Store object at 0x7f45f4a9dd60>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_no_...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def test_no_marker_or_forged_software_receipt_cannot_revive_execution(legacy):
+        store, _, client, info = legacy
+>       *_, receipt = continued(legacy)
+                      ^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_text_continuations.py:86: in continued
+    approval, body, commit = prepared(data)
+                             ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f4a9dd60>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_no_...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+___ test_revocation_after_actual_calculation_never_appends_late_result[a747] ___
+
+legacy = (<sim2act.db.Store object at 0x7f45f4a548f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_rev...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f45f1b496a0>
+
+    def test_revocation_after_actual_calculation_never_appends_late_result(legacy, monkeypatch):
+        from sim2act import app_jobs
+        store, settings, client, info = legacy
+>       *_, receipt = continued(legacy)
+                      ^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuations.py:327: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_text_continuations.py:86: in continued
+    approval, body, commit = prepared(data)
+                             ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f45f4a548f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-53/test_rev...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def prepared(data):
+        _, _, client, info = data
+        options = client.get("/api/projects/" + info["project"] + "/software-continuation-options")
+        assert options.status_code == 200, options.text
+        chosen = next(x for x in options.json()["items"] if x["id"] == info["instance"]["id"])
+        body = dict(expected_revision=chosen["revision"], expected_release_fingerprint=chosen["release_fingerprint"],
+            expected_candidate_fingerprint=chosen["fingerprint"], expected_source_implementation=chosen["source_implementation"],
+            input={"term": "Alpha"}, request_key="explicit-preflight")
+        reply = client.post(path(info).replace("software-continuations", "software-continuation-preflights"), json=body)
+>       assert reply.status_code == 201, reply.text
+E       AssertionError: {"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 409 == 201
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_text_continuations.py:77: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_continuations.py::test_exact_old_db_cold_current_continuation_preserves_and_new_worker[a747]
+FAILED tests/test_text_continuations.py::test_other_instance_generic_execution_never_inherits_permission[233]
+FAILED tests/test_text_continuations.py::test_other_instance_generic_execution_never_inherits_permission[a747]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[233-limits]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-revision]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-data]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-history]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-grant]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-goal]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-expiry]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-limits]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-software]
+FAILED tests/test_text_continuations.py::test_exact_commit_cas_denies_without_partial_rows[a747-consent]
+FAILED tests/test_text_continuations.py::test_full_preserved_worker_proof_is_required_before_preflight[233-queued]
+FAILED tests/test_text_continuations.py::test_full_preserved_worker_proof_is_required_before_preflight[233-unknown]
+FAILED tests/test_text_continuations.py::test_full_preserved_worker_proof_is_required_before_preflight[a747-queued]
+FAILED tests/test_text_continuations.py::test_full_preserved_worker_proof_is_required_before_preflight[a747-unknown]
+FAILED tests/test_text_continuations.py::test_atomic_insertion_failure_and_expiry_after_write_roll_back[a747]
+FAILED tests/test_text_continuations.py::test_cancel_preflight_revoke_permission_and_original_key_history[a747]
+FAILED tests/test_text_continuations.py::test_private_preflight_receipt_is_not_read_after_target_revocation[233]
+FAILED tests/test_text_continuations.py::test_private_preflight_receipt_is_not_read_after_target_revocation[a747]
+FAILED tests/test_text_continuations.py::test_no_marker_or_forged_software_receipt_cannot_revive_execution[a747]
+FAILED tests/test_text_continuations.py::test_revocation_after_actual_calculation_never_appends_late_result[a747]
+23 failed, 19 passed, 1 warning in 27.68s

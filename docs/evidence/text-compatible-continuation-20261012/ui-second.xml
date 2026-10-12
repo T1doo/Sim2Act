@@ -1,0 +1,953 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="14.895" timestamp="2026-10-12T14:02:38.334903+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[233-valid]" time="5.474"><failure message="sqlite3.OperationalError: no such view: private_read_goal_card_versions">legacy = (&lt;sim2act.db.Store object at 0x7f92c01e8cb0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr.open("w") as errors, barrier:
+            process = subprocess.Popen(["node", "tests/text_continuation_ui.cjs", str(tmp_path / "info.json")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        cold_stores.append(cold)
+                        barrier.attach(cold)
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = client.request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(id=request["id"], status=response.status_code, text=response.text, content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+&gt;               assert code == 0, stderr.read_text()
+E               AssertionError: TypeError: Cannot read properties of null (reading 'instance')
+E                     at eval (eval at &lt;anonymous&gt; (/workspace/Sim2Act/tests/text_continuation_ui.cjs:22:337), &lt;anonymous&gt;:1:13)
+E                     at eval (&lt;anonymous&gt;)
+E                     at /workspace/Sim2Act/tests/text_continuation_ui.cjs:22:337
+E                     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 
+E               assert 1 == 0
+
+tests/test_text_continuation_ui.py:65: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f92c01e8cb0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f92bfdd07a0&gt;
+exc = (&lt;class 'AssertionError'&gt;, AssertionError("TypeError: Cannot read properties of null (reading 'instance')\n      at ev...icksAndRejections (node:internal/process/task_queues:104:5)\n  \nassert 1 == 0"), &lt;traceback object at 0x7f92bfbb3600&gt;)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-56/test_existing_software_continu0/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f92bfc796c0&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+&gt;               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError</failure></testcase><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[233-commit-lost]" time="4.829"><failure message="sqlite3.OperationalError: no such view: private_read_goal_card_versions">legacy = (&lt;sim2act.db.Store object at 0x7f92be839370&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu1')
+scenario = 'commit-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr.open("w") as errors, barrier:
+            process = subprocess.Popen(["node", "tests/text_continuation_ui.cjs", str(tmp_path / "info.json")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        cold_stores.append(cold)
+                        barrier.attach(cold)
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = client.request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(id=request["id"], status=response.status_code, text=response.text, content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+&gt;               assert code == 0, stderr.read_text()
+E               AssertionError: TypeError: Cannot read properties of null (reading 'instance')
+E                     at eval (eval at &lt;anonymous&gt; (/workspace/Sim2Act/tests/text_continuation_ui.cjs:22:337), &lt;anonymous&gt;:1:13)
+E                     at eval (&lt;anonymous&gt;)
+E                     at /workspace/Sim2Act/tests/text_continuation_ui.cjs:22:337
+E                     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 
+E               assert 1 == 0
+
+tests/test_text_continuation_ui.py:65: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f92be839370&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu1')
+scenario = 'commit-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f92be7dd490&gt;
+exc = (&lt;class 'AssertionError'&gt;, AssertionError("TypeError: Cannot read properties of null (reading 'instance')\n      at ev...icksAndRejections (node:internal/process/task_queues:104:5)\n  \nassert 1 == 0"), &lt;traceback object at 0x7f92be241080&gt;)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-56/test_existing_software_continu1/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f92c00d1f30&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+&gt;               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError</failure></testcase><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[a747-valid]" time="1.581"><failure message="sqlite3.OperationalError: no such view: private_read_goal_card_versions">self = &lt;sqlalchemy.engine.base.Connection object at 0x7f92bfb073b0&gt;
+dialect = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f92c006ea20&gt;
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f92bfe338c0&gt;
+statement = &lt;sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f92bfe321e0&gt;
+parameters = [('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f92c006ea20&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7f92be9c0e40&gt;
+statement = 'SELECT "private_read_goal_card_versions".card_id, "private_read_goal_card_versions".version, "private_read_goal_card_...card_versions" \nWHERE "private_read_goal_card_versions".card_id = ? AND "private_read_goal_card_versions".version = ?'
+parameters = ('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f92bfe338c0&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: no such table: private_read_goal_card_versions
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f92c006de80&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu2')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr.open("w") as errors, barrier:
+            process = subprocess.Popen(["node", "tests/text_continuation_ui.cjs", str(tmp_path / "info.json")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        cold_stores.append(cold)
+                        barrier.attach(cold)
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+&gt;                       response = client.request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuation_ui.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_continuations.py:617: in preview
+    return prepare(store, user, iid, body, limits)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_continuations.py:428: in prepare
+    value = preconditions(store, c, user, iid, body, limits)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_continuations.py:322: in preconditions
+    verify(store, c, user, job, limits, archival_software=old_fp)
+src/sim2act/text_run_checks.py:23: in verify
+    snapshot, actual = load_binding(store, c, user, job, limits, archival_software=archival_software)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/app_jobs.py:303: in load_binding
+    verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
+src/sim2act/app_owner_goals.py:189: in verify_frozen_run
+    values = records(c, user, draft["id"], anchor)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/app_owner_goals.py:82: in records
+    native = c.execute(select(goal_card_versions).where(goal_card_versions.c.card_id == value["card_id"],
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f92c006ea20&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7f92be9c0e40&gt;
+statement = 'SELECT "private_read_goal_card_versions".card_id, "private_read_goal_card_versions".version, "private_read_goal_card_...card_versions" \nWHERE "private_read_goal_card_versions".card_id = ? AND "private_read_goal_card_versions".version = ?'
+parameters = ('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f92bfe338c0&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: private_read_goal_card_versions
+E       [SQL: SELECT "private_read_goal_card_versions".card_id, "private_read_goal_card_versions".version, "private_read_goal_card_versions".snapshot, "private_read_goal_card_versions".fingerprint, "private_read_goal_card_versions".created_at 
+E       FROM "private_read_goal_card_versions" 
+E       WHERE "private_read_goal_card_versions".card_id = ? AND "private_read_goal_card_versions".version = ?]
+E       [parameters: ('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+
+During handling of the above exception, another exception occurred:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f92c006de80&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu2')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f92c036fb60&gt;
+exc = (&lt;class 'sqlalchemy.exc.OperationalError'&gt;, OperationalError('(sqlite3.OperationalError) no such table: private_read_goal_card_versions'), &lt;traceback object at 0x7f92be2f3b00&gt;)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-56/test_existing_software_continu2/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f92bfc79d50&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+&gt;               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError</failure></testcase><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[a747-commit-lost]" time="1.821"><failure message="sqlite3.OperationalError: no such view: private_read_goal_card_versions">self = &lt;sqlalchemy.engine.base.Connection object at 0x7f92bd98a9c0&gt;
+dialect = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f92c0272d80&gt;
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f92bfe52600&gt;
+statement = &lt;sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f92bfe52c30&gt;
+parameters = [('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f92c0272d80&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7f92bfeb95c0&gt;
+statement = 'SELECT "private_read_goal_card_versions".card_id, "private_read_goal_card_versions".version, "private_read_goal_card_...card_versions" \nWHERE "private_read_goal_card_versions".card_id = ? AND "private_read_goal_card_versions".version = ?'
+parameters = ('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f92bfe52600&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: no such table: private_read_goal_card_versions
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f92c0272b70&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu3')
+scenario = 'commit-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr.open("w") as errors, barrier:
+            process = subprocess.Popen(["node", "tests/text_continuation_ui.cjs", str(tmp_path / "info.json")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        cold_stores.append(cold)
+                        barrier.attach(cold)
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+&gt;                       response = client.request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_continuation_ui.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_continuations.py:617: in preview
+    return prepare(store, user, iid, body, limits)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_continuations.py:428: in prepare
+    value = preconditions(store, c, user, iid, body, limits)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_continuations.py:322: in preconditions
+    verify(store, c, user, job, limits, archival_software=old_fp)
+src/sim2act/text_run_checks.py:23: in verify
+    snapshot, actual = load_binding(store, c, user, job, limits, archival_software=archival_software)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/app_jobs.py:303: in load_binding
+    verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
+src/sim2act/app_owner_goals.py:189: in verify_frozen_run
+    values = records(c, user, draft["id"], anchor)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/app_owner_goals.py:82: in records
+    native = c.execute(select(goal_card_versions).where(goal_card_versions.c.card_id == value["card_id"],
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f92c0272d80&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7f92bfeb95c0&gt;
+statement = 'SELECT "private_read_goal_card_versions".card_id, "private_read_goal_card_versions".version, "private_read_goal_card_...card_versions" \nWHERE "private_read_goal_card_versions".card_id = ? AND "private_read_goal_card_versions".version = ?'
+parameters = ('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f92bfe52600&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: private_read_goal_card_versions
+E       [SQL: SELECT "private_read_goal_card_versions".card_id, "private_read_goal_card_versions".version, "private_read_goal_card_versions".snapshot, "private_read_goal_card_versions".fingerprint, "private_read_goal_card_versions".created_at 
+E       FROM "private_read_goal_card_versions" 
+E       WHERE "private_read_goal_card_versions".card_id = ? AND "private_read_goal_card_versions".version = ?]
+E       [parameters: ('goal_f5ba4b56d3584bafb6181adcfd4bdb9d', 1)]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+
+During handling of the above exception, another exception occurred:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f92c0272b70&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-56/test_exi...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-56/test_existing_software_continu3')
+scenario = 'commit-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f92c02a7e90&gt;
+exc = (&lt;class 'sqlalchemy.exc.OperationalError'&gt;, OperationalError('(sqlite3.OperationalError) no such table: private_read_goal_card_versions'), &lt;traceback object at 0x7f92bfd36940&gt;)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-56/test_existing_software_continu3/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f92be6fa980&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+            raw.set_authorizer(None)
+            for name in self.rules:
+&gt;               raw.execute(f'DROP VIEW "private_read_{name}"')
+E               sqlite3.OperationalError: no such view: private_read_goal_card_versions
+
+tests/sql_private_barrier.py:111: OperationalError</failure></testcase></testsuite></testsuites>

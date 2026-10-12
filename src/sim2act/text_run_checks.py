@@ -16,12 +16,12 @@ from .errors import DomainError
 from .tools import authorized_read
 
 
-def verify(store, c, user, job, limits):
+def verify(store, c, user, job, limits, *, archival_software=None):
     from .app_jobs import load_binding
     from .lifecycle import read_release
 
-    snapshot, actual = load_binding(store, c, user, job, limits)
-    release = read_release(store, c, user, snapshot["release_id"], limits)
+    snapshot, actual = load_binding(store, c, user, job, limits, archival_software=archival_software)
+    release = read_release(store, c, user, snapshot["release_id"], limits, archival_software=archival_software)
     draft = release["snapshot"]["draft"]
     candidate = draft["candidate"]
     manifest, action = candidate["manifest"], candidate["actions"][0]

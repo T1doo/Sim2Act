@@ -1,0 +1,367 @@
+{
+  "calls": [
+    {
+      "path": "/api/apps/app_c5a64fb46eb2478583cee403310de875",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "GRANT_REVOKED",
+          "message": "GRANT_REVOKED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "path": "/api/internal/releases/irelease_51f99790daf1492bb2920af382c9a907",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "GRANT_REVOKED",
+          "message": "GRANT_REVOKED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "path": "/api/internal/approvals/iapproval_dc451243cb14468a9867d25fa0cbe4da",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "GRANT_REVOKED",
+          "message": "GRANT_REVOKED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "path": "/api/internal/instances/iinstance_dbfb8c0fa74a78d382d2189e3c4fe5db/software-continuations?request_key=exact-commit",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "GRANT_REVOKED",
+          "message": "GRANT_REVOKED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "path": "/api/internal/apps/app_c5a64fb46eb2478583cee403310de875/releases",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "GRANT_REVOKED",
+          "message": "GRANT_REVOKED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    }
+  ],
+  "full_private_projections": [
+    {
+      "path": "/api/apps/app_c5a64fb46eb2478583cee403310de875",
+      "columns": [
+        "app_drafts.candidate"
+      ],
+      "sql": "SELECT app_drafts.candidate \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "params": "('app_c5a64fb46eb2478583cee403310de875',)"
+    },
+    {
+      "path": "/api/internal/apps/app_c5a64fb46eb2478583cee403310de875/releases",
+      "columns": [
+        "app_drafts.candidate"
+      ],
+      "sql": "SELECT app_drafts.id, app_drafts.project_id, app_drafts.runtime_id, app_drafts.name, app_drafts.candidate, app_drafts.fingerprint, app_drafts.created_at \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "params": "('app_c5a64fb46eb2478583cee403310de875',)"
+    }
+  ],
+  "barrier": [],
+  "evaluated_cells": [
+    {
+      "table": "internal_approvals",
+      "row_id": "iapproval_dc451243cb14468a9867d25fa0cbe4da",
+      "column": "payload"
+    }
+  ],
+  "sql": [
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT app_drafts.candidate \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT app_drafts.candidate \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('app_c5a64fb46eb2478583cee403310de875',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "executed_sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "parameters": "('app_c5a64fb46eb2478583cee403310de875', '$.\"kind\"', 'text_data_free_binding.v1')"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"task_proof\"', '$.\"proof\"', '$.\"kind\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"manifest\"', '$.\"data_bindings\"', '$[0]', '$.\"resource_ref\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT resources.id \nFROM resources \nWHERE resources.id = ? AND resources.project_id = ?",
+      "executed_sql": "SELECT \"private_read_resources\".id \nFROM \"private_read_resources\" \nWHERE \"private_read_resources\".id = ? AND \"private_read_resources\".project_id = ?",
+      "parameters": "('res_1b4d5fd094254623a1580c26fa8139b1', 'proj_d2800619010b4678b8ff7589fa495c2f')"
+    },
+    {
+      "sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "executed_sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "parameters": "('user_81432eb232354b14adb1e56bf244bf91', 'proj_d2800619010b4678b8ff7589fa495c2f', 'res_1b4d5fd094254623a1580c26fa8139b1', 'resource.read')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?) AS anon_1 \nFROM internal_releases \nWHERE internal_releases.id = ? AND internal_releases.principal_id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?) AS anon_1 \nFROM internal_releases \nWHERE internal_releases.id = ? AND internal_releases.principal_id = ?",
+      "parameters": "('$.\"draft\"', '$.\"id\"', 'irelease_51f99790daf1492bb2920af382c9a907', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "executed_sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "parameters": "('app_c5a64fb46eb2478583cee403310de875', '$.\"kind\"', 'text_data_free_binding.v1')"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"task_proof\"', '$.\"proof\"', '$.\"kind\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"manifest\"', '$.\"data_bindings\"', '$[0]', '$.\"resource_ref\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT resources.id \nFROM resources \nWHERE resources.id = ? AND resources.project_id = ?",
+      "executed_sql": "SELECT \"private_read_resources\".id \nFROM \"private_read_resources\" \nWHERE \"private_read_resources\".id = ? AND \"private_read_resources\".project_id = ?",
+      "parameters": "('res_1b4d5fd094254623a1580c26fa8139b1', 'proj_d2800619010b4678b8ff7589fa495c2f')"
+    },
+    {
+      "sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "executed_sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "parameters": "('user_81432eb232354b14adb1e56bf244bf91', 'proj_d2800619010b4678b8ff7589fa495c2f', 'res_1b4d5fd094254623a1580c26fa8139b1', 'resource.read')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_approvals.payload, ?)), ?)), ?) AS anon_1 \nFROM internal_approvals \nWHERE internal_approvals.id = ? AND internal_approvals.principal_id = ? AND internal_approvals.kind = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(\"private_read_internal_approvals\".payload, ?)), ?)), ?) AS anon_1 \nFROM \"private_read_internal_approvals\" \nWHERE \"private_read_internal_approvals\".id = ? AND \"private_read_internal_approvals\".principal_id = ? AND \"private_read_internal_approvals\".kind = ?",
+      "parameters": "('$.\"snapshot\"', '$.\"draft\"', '$.\"id\"', 'iapproval_dc451243cb14468a9867d25fa0cbe4da', 'user_81432eb232354b14adb1e56bf244bf91', 'release')"
+    },
+    {
+      "sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "executed_sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "parameters": "('app_c5a64fb46eb2478583cee403310de875', '$.\"kind\"', 'text_data_free_binding.v1')"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"task_proof\"', '$.\"proof\"', '$.\"kind\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"manifest\"', '$.\"data_bindings\"', '$[0]', '$.\"resource_ref\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT resources.id \nFROM resources \nWHERE resources.id = ? AND resources.project_id = ?",
+      "executed_sql": "SELECT \"private_read_resources\".id \nFROM \"private_read_resources\" \nWHERE \"private_read_resources\".id = ? AND \"private_read_resources\".project_id = ?",
+      "parameters": "('res_1b4d5fd094254623a1580c26fa8139b1', 'proj_d2800619010b4678b8ff7589fa495c2f')"
+    },
+    {
+      "sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "executed_sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "parameters": "('user_81432eb232354b14adb1e56bf244bf91', 'proj_d2800619010b4678b8ff7589fa495c2f', 'res_1b4d5fd094254623a1580c26fa8139b1', 'resource.read')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.id, internal_instances.project_id, internal_instances.principal_id, internal_instances.source_app_id, internal_instances.runtime_id, internal_instances.release_id, internal_instances.revision, internal_instances.data_version, internal_instances.history \nFROM internal_instances \nWHERE internal_instances.id = ? AND internal_instances.principal_id = ?",
+      "executed_sql": "SELECT internal_instances.id, internal_instances.project_id, internal_instances.principal_id, internal_instances.source_app_id, internal_instances.runtime_id, internal_instances.release_id, internal_instances.revision, internal_instances.data_version, internal_instances.history \nFROM internal_instances \nWHERE internal_instances.id = ? AND internal_instances.principal_id = ?",
+      "parameters": "('iinstance_dbfb8c0fa74a78d382d2189e3c4fe5db', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "executed_sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "parameters": "('iinstance_dbfb8c0fa74a78d382d2189e3c4fe5db', 'user_81432eb232354b14adb1e56bf244bf91', 'text_software_cancel', 'exact-commit')"
+    },
+    {
+      "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "executed_sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "parameters": "('iinstance_dbfb8c0fa74a78d382d2189e3c4fe5db', 'user_81432eb232354b14adb1e56bf244bf91', 'text_software_cancel_seal', 'exact-commit')"
+    },
+    {
+      "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "executed_sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "parameters": "('iinstance_dbfb8c0fa74a78d382d2189e3c4fe5db', 'user_81432eb232354b14adb1e56bf244bf91', 'text_software_revoke', 'exact-commit')"
+    },
+    {
+      "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "executed_sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "parameters": "('iinstance_dbfb8c0fa74a78d382d2189e3c4fe5db', 'user_81432eb232354b14adb1e56bf244bf91', 'text_software_revoke_seal', 'exact-commit')"
+    },
+    {
+      "sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"manifest\"', '$.\"data_bindings\"', '$[0]', '$.\"resource_ref\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT resources.id \nFROM resources \nWHERE resources.id = ? AND resources.project_id = ?",
+      "executed_sql": "SELECT \"private_read_resources\".id \nFROM \"private_read_resources\" \nWHERE \"private_read_resources\".id = ? AND \"private_read_resources\".project_id = ?",
+      "parameters": "('res_1b4d5fd094254623a1580c26fa8139b1', 'proj_d2800619010b4678b8ff7589fa495c2f')"
+    },
+    {
+      "sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "executed_sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "parameters": "('user_81432eb232354b14adb1e56bf244bf91', 'proj_d2800619010b4678b8ff7589fa495c2f', 'res_1b4d5fd094254623a1580c26fa8139b1', 'resource.read')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT app_drafts.id, app_drafts.project_id, app_drafts.runtime_id, app_drafts.name, app_drafts.candidate, app_drafts.fingerprint, app_drafts.created_at \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT app_drafts.id, app_drafts.project_id, app_drafts.runtime_id, app_drafts.name, app_drafts.candidate, app_drafts.fingerprint, app_drafts.created_at \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('app_c5a64fb46eb2478583cee403310de875',)"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "executed_sql": "SELECT task_extractions.app_id \nFROM task_extractions \nWHERE task_extractions.app_id = ? AND JSON_EXTRACT(task_extractions.snapshot, ?) = ?",
+      "parameters": "('app_c5a64fb46eb2478583cee403310de875', '$.\"kind\"', 'text_data_free_binding.v1')"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?) AS anon_1 \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"task_proof\"', '$.\"proof\"', '$.\"kind\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "executed_sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS rid \nFROM app_drafts \nWHERE app_drafts.id = ?",
+      "parameters": "('$.\"manifest\"', '$.\"data_bindings\"', '$[0]', '$.\"resource_ref\"', 'app_c5a64fb46eb2478583cee403310de875')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91')"
+    },
+    {
+      "sql": "SELECT resources.id \nFROM resources \nWHERE resources.id = ? AND resources.project_id = ?",
+      "executed_sql": "SELECT \"private_read_resources\".id \nFROM \"private_read_resources\" \nWHERE \"private_read_resources\".id = ? AND \"private_read_resources\".project_id = ?",
+      "parameters": "('res_1b4d5fd094254623a1580c26fa8139b1', 'proj_d2800619010b4678b8ff7589fa495c2f')"
+    },
+    {
+      "sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "executed_sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id",
+      "parameters": "('user_81432eb232354b14adb1e56bf244bf91', 'proj_d2800619010b4678b8ff7589fa495c2f', 'res_1b4d5fd094254623a1580c26fa8139b1', 'resource.read')"
+    }
+  ]
+}

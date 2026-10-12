@@ -42,6 +42,9 @@ def grant_version(c, project, user):
 
 
 def execute(store, c, user, draft, limits, input_value, replay=None):
+    from .text_continuations import no_context
+
+    no_context(store, c, user, draft)
     _, manifest, action, _ = validate_frozen_candidate(store, c, user, draft, limits)
     validate_value(manifest.input_schema, input_value)
     rid = manifest.data_bindings[0].resource_ref
@@ -324,11 +327,19 @@ def validate_source_bytes(store, c, user, draft):
     )
 
 
-def read_release(store, c, user, rid, limits):
-    r = c.execute(select(internal_releases).where(internal_releases.c.id == rid)).mappings().first()
+def read_release(store, c, user, rid, limits, *, archival_software=None):
+    from .text_continuations import release_gate
+
+    release_gate(store, c, user, rid)
+    r = c.execute(select(internal_releases).where(internal_releases.c.id == rid, internal_releases.c.principal_id == user)).mappings().first()
     if not r or r["principal_id"] != user:
         raise DomainError("PERMISSION_DENIED")
     store.own_project(c, user, r["project_id"])
+    if archival_software is not None:
+        from .text_continuations import legacy_release
+
+        legacy_release(store, c, user, r, limits, archival_software)
+        return r
     a = (
         c.execute(select(internal_approvals).where(internal_approvals.c.id == r["approval_id"]))
         .mappings()
@@ -393,6 +404,9 @@ def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, requ
     if r["fingerprint"] != expected_release_fp:
         raise DomainError("VERSION_CONFLICT")
     draft = r["snapshot"]["draft"]
+    from .text_continuations import no_context
+
+    no_context(store, c, user, draft)
     # Existing PK plus project lock gives durable per-intent idempotency without new DDL.
     iid = (
         "iinstance_" + fingerprint({"user": user, "release": rid, "key": request_key})[:32]
@@ -589,6 +603,10 @@ def compatible(old, new):
 
 
 def switch_target(store, c, user, i, old, target, limits):
+    from .text_continuations import no_context
+
+    no_context(store, c, user, old["snapshot"]["draft"])
+    no_context(store, c, user, target["snapshot"]["draft"])
     if (
         target["project_id"] != i["project_id"]
         or target["snapshot"]["draft"]["id"] != i["source_app_id"]

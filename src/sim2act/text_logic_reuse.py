@@ -168,6 +168,10 @@ def public(p):
 
 @graph.controlled
 def load(store, c, user, lid, limits, *, active=True):
+    return _load(store, c, user, lid, limits, implementation(), active=active)
+
+
+def _load(store, c, user, lid, limits, software_fingerprint, *, active=True):
     # Scope metadata before reading even the independent authority payload.
     meta = c.execute(select(internal_approvals.c.project_id).where(
         internal_approvals.c.id == lid, internal_approvals.c.principal_id == user,
@@ -191,7 +195,7 @@ def load(store, c, user, lid, limits, *, active=True):
     expected = dict(namespace=VERSION, id=lid, owner_id=user, project_id=meta,
                     created_at=p["created_at"], expires_at=p["expires_at"], scope=SCOPE,
                     recipe=recipe(), limits=cap.model_dump(),
-                    implementation_fingerprint=implementation(), audit_ref=lid,
+                    implementation_fingerprint=software_fingerprint, audit_ref=lid,
                     model_requests=0, semantic_status="UNKNOWN", owner_acceptance="PENDING",
                     formal_publication_enabled=False)
     require(fingerprint(public(p)) == fingerprint(expected), "Canonical text logic/software changed")
@@ -388,12 +392,24 @@ def candidate(obj, body, aid, action_id):
 
 
 @graph.controlled
-def verify_candidate(store, c, user, draft, limits):
+def verify_candidate(store, c, user, draft, limits, *, archival_software=None):
+    from .text_continuations import draft_gate
+
+    draft_gate(store, c, user, draft["id"])
     row = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"],
         task_extractions.c.principal_id == user)).mappings().first()
     require(row is not None and row["snapshot"]["kind"] == KIND)
     lid = row["task_id"]
-    obj, _ = load(store, c, user, lid, limits)
+    from . import text_continuations
+
+    old_fp = text_continuations.software(c, user, draft)
+    if archival_software is not None:
+        require(old_fp == archival_software)
+    if old_fp is None:
+        obj, _ = load(store, c, user, lid, limits)
+    else:
+        text_continuations.known(old_fp)
+        obj, _ = _load(store, c, user, lid, limits, old_fp)
     body, frozen = pair(c, user, lid, BIND, row["request_key"], BindInput)
     require(set(frozen) == {"kind", "logic_id", "project_id", "owner_id", "app_id", "action_id",
                            "runtime_id", "grant_id", "grant_expires_at", "candidate_fingerprint"})
@@ -415,6 +431,8 @@ def verify_candidate(store, c, user, draft, limits):
             and g["resource_id"] == body.expected_resource_id and g["tool_ref"] == "resource.read"
             and g["expires_at"] == frozen["grant_expires_at"] and g["revision"] == 1)
     store.authorize(c, user, draft["runtime_id"], obj["project_id"], body.expected_resource_id, "resource.read")
+    if old_fp is not None and archival_software is None:
+        text_continuations.archival_app(store, c, user, draft, old_fp)
     return obj, body, frozen
 
 

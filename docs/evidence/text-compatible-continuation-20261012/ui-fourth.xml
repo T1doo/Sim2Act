@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="61.113" timestamp="2026-10-12T14:06:12.599699+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[233-valid]" time="13.125"><failure message="sqlite3.ProgrammingError: Cannot operate on a closed database.">legacy = (&lt;sim2act.db.Store object at 0x7f57d9390a40&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-58/test_exi...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-58/test_existing_software_continu0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr.open("w") as errors, barrier:
+            process = subprocess.Popen(["node", "tests/text_continuation_ui.cjs", str(tmp_path / "info.json")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        cold_stores.append(cold)
+                        barrier.attach(cold)
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = client.request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(id=request["id"], status=response.status_code, text=response.text, content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+&gt;               assert code == 0, stderr.read_text()
+E               AssertionError: TypeError: Cannot read properties of null (reading 'status')
+E                     at /workspace/Sim2Act/tests/text_continuation_ui.cjs:22:1049
+E                     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 
+E               assert 1 == 0
+
+tests/test_text_continuation_ui.py:65: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f57d9390a40&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-58/test_exi...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-58/test_existing_software_continu0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f57d933f7a0&gt;
+exc = (&lt;class 'AssertionError'&gt;, AssertionError("TypeError: Cannot read properties of null (reading 'status')\n      at /wor...icksAndRejections (node:internal/process/task_queues:104:5)\n  \nassert 1 == 0"), &lt;traceback object at 0x7f57d2cd45c0&gt;)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-58/test_existing_software_continu0/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f57d36f2c50&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+&gt;           raw.set_authorizer(None)
+E           sqlite3.ProgrammingError: Cannot operate on a closed database.
+
+tests/sql_private_barrier.py:109: ProgrammingError</failure></testcase><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[233-commit-lost]" time="12.134"><failure message="sqlite3.ProgrammingError: Cannot operate on a closed database.">legacy = (&lt;sim2act.db.Store object at 0x7f57d82903e0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-58/test_exi...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-58/test_existing_software_continu1')
+scenario = 'commit-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f57d358ae70&gt;
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-58/test_existing_software_continu1/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f57d8288310&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+&gt;           raw.set_authorizer(None)
+E           sqlite3.ProgrammingError: Cannot operate on a closed database.
+
+tests/sql_private_barrier.py:109: ProgrammingError</failure></testcase><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[a747-valid]" time="15.407"><failure message="sqlite3.ProgrammingError: Cannot operate on a closed database.">legacy = (&lt;sim2act.db.Store object at 0x7f57d82924e0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-58/test_exi...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-58/test_existing_software_continu2')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+        with stderr.open("w") as errors, barrier:
+            process = subprocess.Popen(["node", "tests/text_continuation_ui.cjs", str(tmp_path / "info.json")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        cold_stores.append(cold)
+                        barrier.attach(cold)
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = client.request(request["method"], request["path"], json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(id=request["id"], status=response.status_code, text=response.text, content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+&gt;               assert code == 0, stderr.read_text()
+E               AssertionError: TypeError: Cannot read properties of null (reading 'status')
+E                     at /workspace/Sim2Act/tests/text_continuation_ui.cjs:22:1049
+E                     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 
+E               assert 1 == 0
+
+tests/test_text_continuation_ui.py:65: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+legacy = (&lt;sim2act.db.Store object at 0x7f57d82924e0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-58/test_exi...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-58/test_existing_software_continu2')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f57d9253a10&gt;
+exc = (&lt;class 'AssertionError'&gt;, AssertionError("TypeError: Cannot read properties of null (reading 'status')\n      at /wor...icksAndRejections (node:internal/process/task_queues:104:5)\n  \nassert 1 == 0"), &lt;traceback object at 0x7f57d36e45c0&gt;)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-58/test_existing_software_continu2/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f57d21c2c50&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+&gt;           raw.set_authorizer(None)
+E           sqlite3.ProgrammingError: Cannot operate on a closed database.
+
+tests/sql_private_barrier.py:109: ProgrammingError</failure></testcase><testcase classname="tests.test_text_continuation_ui" name="test_existing_software_continuation_visible_cold_page[a747-commit-lost]" time="20.095"><failure message="sqlite3.ProgrammingError: Cannot operate on a closed database.">legacy = (&lt;sim2act.db.Store object at 0x7f57d83b46b0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-58/test_exi...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-58/test_existing_software_continu3')
+scenario = 'commit-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "commit-lost"])
+    def test_existing_software_continuation_visible_cold_page(legacy, tmp_path, scenario):  # noqa: F811
+        store, settings, client, old = legacy
+        data = (store, settings, client, old["owner"], old["project"], old["old_private"]["resource"], None)
+        private = old["old_private"]
+        with store.tx() as c:
+            ids = set(c.execute(select(goal_cards.c.id).where(goal_cards.c.project_id == old["project"])).scalars())
+        if old.get("goal"):
+            ids.remove(old["goal"]["card_id"])
+        barrier = source_barrier(data, private["app"], private["release"], private["instance"], private["run"])
+        barrier.rules["goal_card_versions"] = (goal_card_versions, "card_id", ids, {"snapshot"})
+        info = dict(project=old["project"], instance=old["instance"]["id"], old_source=private["app"],
+            old_run=private["run"]["id"], old_resource=private["resource"], source_implementation=old["software_fp"],
+            scenario=scenario, fixture_time=old["fixture_time"], output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        stderr = tmp_path / "node-stderr.log"
+        cold_stores = []
+        worked = 0
+&gt;       with stderr.open("w") as errors, barrier:
+                                         ^^^^^^^
+
+tests/test_text_continuation_ui.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sql_private_barrier.PrivateReadBarrier object at 0x7f57d83b6210&gt;
+exc = (None, None, None)
+engine = Engine(sqlite:////tmp/pytest-of-agent/pytest-58/test_existing_software_continu3/old.db)
+raw = &lt;sqlite3.Connection object at 0x7f57d1b76c50&gt;, name = 'goal_card_versions'
+
+    def __exit__(self, *exc):
+        for engine in self.engines:
+            event.remove(engine, "checkout", self._checkout)
+            event.remove(engine, "before_cursor_execute", self._trace)
+        for raw in self.connections:
+&gt;           raw.set_authorizer(None)
+E           sqlite3.ProgrammingError: Cannot operate on a closed database.
+
+tests/sql_private_barrier.py:109: ProgrammingError</failure></testcase></testsuite></testsuites>

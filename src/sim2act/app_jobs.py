@@ -62,6 +62,9 @@ def enqueue(
         ).scalar()
         store.lock_project(c, user, pid)
         i, release = instance(store, c, user, iid, limits, lock=True)
+        from .text_continuations import execution
+
+        execution(store, c, user, i, release, limits)
         if "execution_source" in release["snapshot"]:
             from .csv_dag_instances import enqueue_tx
             if offline_replay is not None:
@@ -249,7 +252,11 @@ def enqueue(
         }
 
 
-def load_binding(store, c, user, job, limits, *, authorize=True):
+def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None):
+    if authorize:
+        from .text_continuations import job_gate
+
+        job_gate(store, c, user, job["id"])
     b = (
         c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == job["id"]))
         .mappings()
@@ -294,10 +301,10 @@ def load_binding(store, c, user, job, limits, *, authorize=True):
         contract = store.frozen_contract(c, job)
         if contract.limits.model_dump() != s["limits"]:
             raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
-        r = read_release(store, c, user, s["release_id"], limits)
+        r = read_release(store, c, user, s["release_id"], limits, archival_software=archival_software)
         from .app_owner_goals import verify_frozen_run
 
-        verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s)
+        verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
         if "offline_replay" in s:
             from .agent_apps import is_agent, offline_replay_model
 
@@ -317,7 +324,10 @@ def load_binding(store, c, user, job, limits, *, authorize=True):
 
 def inspect_job(store, user, rid):
     with store.tx() as c:
-        job = c.execute(select(runs).where(runs.c.id == rid)).mappings().first()
+        from .text_continuations import job_gate
+
+        job_gate(store, c, user, rid)
+        job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().first()
         if not job or job["principal_id"] != user:
             raise DomainError("PERMISSION_DENIED")
         limits = store.frozen_contract(c, job).limits
@@ -398,6 +408,12 @@ def command_job(store, user, rid, command, version):
             if unknown:
                 raise DomainError("OUTCOME_UNKNOWN")
             load_binding(store, c, user, job, store.frozen_contract(c, job).limits)
+            from .text_continuations import execution
+
+            limits = store.frozen_contract(c, job).limits
+            instance_row = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"])).mappings().one()
+            release = read_release(store, c, user, s["release_id"], limits)
+            execution(store, c, user, instance_row, release, limits)
             state = "QUEUED"
         else:
             raise DomainError("VERSION_CONFLICT")
@@ -497,6 +513,10 @@ def prepare_dispatch(worker, run):
         )
         if i["source_app_id"] != release["snapshot"]["draft"]["id"]:
             raise DomainError("VERSION_CONFLICT")
+        from .text_continuations import execution
+
+        execution(store, c, run["principal_id"], i, release,
+                  Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields}))
         draft, manifest, action, _ = validate_frozen_candidate(
             store,
             c,
@@ -638,6 +658,9 @@ def commit_result(worker, run, plan, output):
         release = read_release(store, c, run["principal_id"], s["release_id"], limits)
         if i["source_app_id"] != release["snapshot"]["draft"]["id"]:
             raise DomainError("VERSION_CONFLICT")
+        from .text_continuations import execution
+
+        execution(store, c, run["principal_id"], i, release, limits)
         draft, manifest, action, _ = validate_frozen_candidate(
             store, c, run["principal_id"], release["snapshot"]["draft"], limits
         )
@@ -808,6 +831,7 @@ def commit_result(worker, run, plan, output):
         if draft["candidate"].get("task_proof", {}).get("proof", {}).get("kind") == "authorized_data_free_text_logic.v1":
             validate_frozen_candidate(store, c, run["principal_id"], draft, limits)
             check_run(store, c, run["principal_id"], draft, limits, s)
+            execution(store, c, run["principal_id"], i, release, limits)
 
 
 def fail_job(worker, run, error):

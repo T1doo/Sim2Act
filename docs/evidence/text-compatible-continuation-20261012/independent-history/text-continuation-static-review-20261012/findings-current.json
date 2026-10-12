@@ -1,0 +1,105 @@
+[
+  {
+    "id": "R1",
+    "severity": "high",
+    "status": "STATIC_FIX_OBSERVED",
+    "first_snapshot": "snapshot-1",
+    "verified_snapshot": "snapshot-2",
+    "title": "新 controller 缓存和恢复必须先核当前 target 授权",
+    "first_locations": [
+      "text_continuations.py prepare/commit/recover/before_private_preflight"
+    ],
+    "verified_locations": [
+      "text_continuations.py:374",
+      "text_continuations.py:388",
+      "text_continuations.py:420",
+      "text_continuations.py:495"
+    ],
+    "description": "snapshot-1 PREPARE cached直接返回带output/old_snapshot的私有preflight；COMMIT/GET先取完整parent approval和双seal。snapshot-2显式先scope和scalar target门，再AUTH/BIND/receipt；STOP metadata另行保留。没有动态SQL屏障结果。"
+  },
+  {
+    "id": "R2",
+    "severity": "high",
+    "status": "STATIC_FIX_OBSERVED",
+    "first_snapshot": "snapshot-1",
+    "verified_snapshot": "snapshot-2",
+    "title": "保留 typed 行不能仅复算输出，须验证原实际 Worker 证明",
+    "verified_locations": [
+      "text_continuations.py:298",
+      "text_continuations.py:317",
+      "text_run_checks.py:19",
+      "app_jobs.py:255",
+      "app_owner_goals.py:173"
+    ],
+    "description": "初版缺实际Run终态一致性、binding、frozen contract、operation/intent/receipt。修后核实际Run/user/project/terminal/equal statuses/UNKNOWN，对每保留typed row复用既有text_run_checks.verify与archival codec；没有放宽oracle/check body，没有原source私有表读取新增依赖。失败历史与无typed terminal job完整性需动态负例验证。"
+  },
+  {
+    "id": "R3",
+    "severity": "high",
+    "status": "STATIC_FIX_OBSERVED",
+    "first_snapshot": "snapshot-2",
+    "verified_snapshot": "snapshot-6",
+    "title": "普通冷 GET 的 auth-before-private 需覆盖通用 approval 读取入口",
+    "verified_locations": [
+      "internal_api.py:134",
+      "internal_api.py:136",
+      "internal_api.py:141",
+      "internal_api.py:143",
+      "app_jobs.py:255",
+      "app_jobs.py:327"
+    ],
+    "description": "snapshot-6普通approval GET新增owner+release-kind scalar draft ID scope，draft_gate后才完整payload；normal Run GET和authorize=True load_binding也新增job_gate。原snapshot-5开放结论已由该快照修正，静态闭合，不是动态SQL通过。"
+  },
+  {
+    "id": "R4",
+    "severity": "high",
+    "status": "STATIC_FIX_OBSERVED",
+    "first_snapshot": "snapshot-2",
+    "verified_snapshot": "snapshot-4",
+    "title": "新提交末尾不得吞掉 live permission 错误",
+    "verified_locations": [
+      "text_continuations.py:493",
+      "text_continuations.py:495",
+      "text_continuations.py:497",
+      "text_continuations.py:500"
+    ],
+    "description": "初版commit最后调用public_commit；该函数将DomainError吞为current_permission=false，可能在末尾authority/Grant过期后仍提交新对象。修后先构造历史response，再独立fail-closed execution、prepare expiry、allGrant CAS，并要求response.current_permission；事务异常回滚既有Store.tx所有写。未运行任何精确竞态探针。"
+  },
+  {
+    "id": "R5",
+    "severity": "medium",
+    "status": "STATIC_FIX_OBSERVED_WITH_NEGATIVE_TESTS_REQUIRED",
+    "first_snapshot": "snapshot-3",
+    "verified_snapshot": "snapshot-4",
+    "title": "origin marker 缺失不得静默掉授权门",
+    "verified_locations": [
+      "text_continuations.py:385",
+      "text_continuations.py:389",
+      "apps.py:247",
+      "apps.py:347"
+    ],
+    "description": "draft_gate初版仅依赖task_extraction.kind，修后有canonical proof.kind scalar回退；单边stripping仍进当前target授权，validate_source_family+canonical candidate后续拒绝执行。联合剥除两标记或修改claimed release draft id后的隐私顺序仍需要动态SQL屏障负例，不能由静态证明完全覆盖。"
+  },
+  {
+    "id": "R6",
+    "severity": "medium",
+    "status": "STATIC_OPEN",
+    "snapshot": "snapshot-6",
+    "title": "await POST 后必须在下一 GET 前检查旧上下文",
+    "location": "src/sim2act/web/text-logic.js:69",
+    "description": "tcSubmit直接await POST后api(intent.read)，tcCurrent只在该GET之后。用户更换token/connection/project时，全局api可用新token发旧iid/key GET；backend仍scope拒绝，但前端违反late-request fence。修复应POST后先tcCurrent(c)，再GET。未动态执行。"
+  },
+  {
+    "id": "R7",
+    "severity": "medium",
+    "status": "STATIC_OPEN",
+    "snapshot": "snapshot-6",
+    "title": "cold 原键恢复应绑定明确 key 和旧 Release fingerprint",
+    "locations": [
+      "src/sim2act/web/text-logic.js:66",
+      "src/sim2act/web/text-logic.js:44",
+      "src/sim2act/web/text-logic.js:50"
+    ],
+    "description": "cold无本地intent只有iid+read URL，未存原key；tcAccept不统一核value.request_key等于该原key。PREPARED冷分支未核source_release_fingerprint==selected.release_fingerprint；重建批准payload hash只证明内部字段一致。建议intent.key统一响应绑定、精确selected旧ReleaseFP与finite expiry/hash shape/owner/runtime metadata比对。服务器commit门仍精确，未静态声称可绕过提交，更未动态FAIL。"
+  }
+]

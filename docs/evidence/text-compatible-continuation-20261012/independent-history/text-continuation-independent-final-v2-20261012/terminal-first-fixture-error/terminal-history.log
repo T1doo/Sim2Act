@@ -1,0 +1,414 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+________ test_corrupted_failed_history_denied_before_continuation[233] _________
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f07ed63dbe0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f07ed68caa0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f07ed344bc0>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f07ed1408f0>
+parameters = [('run_9d9c2df8b01849489bd4b9fd4dbe0602', 'proj_86b6d5e97b924a238c553cd3a076473c', 'user_fa902c5b08bf4fffb29e9ebea843b...3488f11f0548128d36f48baffe2830', 'Internal fixed Release result run', '["res_98e8cb829c454f80869a786daeb384ff"]', ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f07ed68caa0>
+cursor = <sqlite3.Cursor object at 0x7f07ed135340>
+statement = 'INSERT INTO runs (id, project_id, principal_id, runtime_id, goal, resource_refs, status, request_key, fingerprint, cr...rker_id, context, result, error, cancel_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = ('run_9d9c2df8b01849489bd4b9fd4dbe0602', 'proj_86b6d5e97b924a238c553cd3a076473c', 'user_fa902c5b08bf4fffb29e9ebea843ba...c3488f11f0548128d36f48baffe2830', 'Internal fixed Release result run', '["res_98e8cb829c454f80869a786daeb384ff"]', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f07ed344bc0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: UNIQUE constraint failed: runs.principal_id, runs.project_id, runs.request_key
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+legacy = (<sim2act.db.Store object at 0x7f07ed63d8b0>, Settings(database_url='sqlite:////tmp/text-continuation-independent-fina...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def test_corrupted_failed_history_denied_before_continuation(legacy):
+        store, _, client, info = legacy
+        # Preserve the genuine old SUCCEEDED run, typed v1, all data and history.
+        # Append a synthetic terminal FAILED job with a deliberately broken binding.
+        with store.tx() as c:
+            original = dict(c.execute(select(runs).where(runs.c.id == info['successful_old_run_id'])).mappings().one())
+            binding = dict(c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == original['id'])).mappings().one())
+            app_run = dict(c.execute(select(internal_app_runs).where(internal_app_runs.c.id == binding['app_run_id'])).mappings().one())
+            rid, aid = new_id('run'), new_id('iapprun')
+            snapshot = copy.deepcopy(binding['snapshot'])
+            snapshot.update(run_id=rid, app_run_id=aid, request_key='independent-corrupted-failed-history')
+            original.update(id=rid, status='FAILED', result=None,
+                            error={'code':'FI_CORRUPTED_FAILED_HISTORY','message':'Synthetic damaged history; never a valid Worker result'},
+                            fingerprint=fingerprint(snapshot), worker_id=None, lease_until=0)
+            original['context'] = copy.deepcopy(original['context'])
+            original['context'].update(app_run_id=aid, request_key='independent-corrupted-failed-history')
+            app_run.update(id=aid, status='FAILED', output=None, result_version=None,
+                           request_key='independent-corrupted-failed-history', error=original['error'])
+            binding.update(run_id=rid, app_run_id=aid, snapshot=snapshot, fingerprint='0'*64)
+>           c.execute(insert(runs).values(**original))
+
+/tmp/text-continuation-independent-final-v2-20261012/test_terminal_history.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f07ed68caa0>
+cursor = <sqlite3.Cursor object at 0x7f07ed135340>
+statement = 'INSERT INTO runs (id, project_id, principal_id, runtime_id, goal, resource_refs, status, request_key, fingerprint, cr...rker_id, context, result, error, cancel_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = ('run_9d9c2df8b01849489bd4b9fd4dbe0602', 'proj_86b6d5e97b924a238c553cd3a076473c', 'user_fa902c5b08bf4fffb29e9ebea843ba...c3488f11f0548128d36f48baffe2830', 'Internal fixed Release result run', '["res_98e8cb829c454f80869a786daeb384ff"]', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f07ed344bc0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: runs.principal_id, runs.project_id, runs.request_key
+E       [SQL: INSERT INTO runs (id, project_id, principal_id, runtime_id, goal, resource_refs, status, request_key, fingerprint, created_at, lease_until, fence, worker_id, context, result, error, cancel_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
+E       [parameters: ('run_9d9c2df8b01849489bd4b9fd4dbe0602', 'proj_86b6d5e97b924a238c553cd3a076473c', 'user_fa902c5b08bf4fffb29e9ebea843bacd', 'appruntime_ac3488f11f0548128d36f48baffe2830', 'Internal fixed Release result run', '["res_98e8cb829c454f80869a786daeb384ff"]', 'FAILED', 'internal:iapprun_80eeb5bdb6574d668c38147907a80e2c', '71b80d3cc6d86807533b24555b096a0e590a26935bb7ec7990ad3f8c7b44fae5', 1791810687.203947, 0.0, 1, None, '{"kind": "INTERNAL_APPRUN", "messages": [], "requests": 0, "tools": 0, "repairs": 0, "reserved_tokens": 0, "app_run_id": "iapprun_3355453faf564bccb733981ae21bad15", "request_key": "independent-corrupted-failed-history"}', 'null', '{"code": "FI_CORRUPTED_FAILED_HISTORY", "message": "Synthetic damaged history; never a valid Worker result"}', 0, 2)]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError
+________ test_corrupted_failed_history_denied_before_continuation[a747] ________
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f07ec867fe0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f07ed0df200>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f07ec4acef0>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f07ec3fb680>
+parameters = [('run_b1afee453d09421f8a351b61979115fe', 'proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244b...b2b9b01e5a4d53b950e0d1d85e9b8a', 'Internal fixed Release result run', '["res_1b4d5fd094254623a1580c26fa8139b1"]', ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f07ed0df200>
+cursor = <sqlite3.Cursor object at 0x7f07ec3e9dc0>
+statement = 'INSERT INTO runs (id, project_id, principal_id, runtime_id, goal, resource_refs, status, request_key, fingerprint, cr...rker_id, context, result, error, cancel_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = ('run_b1afee453d09421f8a351b61979115fe', 'proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf...eb2b9b01e5a4d53b950e0d1d85e9b8a', 'Internal fixed Release result run', '["res_1b4d5fd094254623a1580c26fa8139b1"]', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f07ec4acef0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: UNIQUE constraint failed: runs.principal_id, runs.project_id, runs.request_key
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+legacy = (<sim2act.db.Store object at 0x7f07ed17e5d0>, Settings(database_url='sqlite:////tmp/text-continuation-independent-fina...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def test_corrupted_failed_history_denied_before_continuation(legacy):
+        store, _, client, info = legacy
+        # Preserve the genuine old SUCCEEDED run, typed v1, all data and history.
+        # Append a synthetic terminal FAILED job with a deliberately broken binding.
+        with store.tx() as c:
+            original = dict(c.execute(select(runs).where(runs.c.id == info['successful_old_run_id'])).mappings().one())
+            binding = dict(c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == original['id'])).mappings().one())
+            app_run = dict(c.execute(select(internal_app_runs).where(internal_app_runs.c.id == binding['app_run_id'])).mappings().one())
+            rid, aid = new_id('run'), new_id('iapprun')
+            snapshot = copy.deepcopy(binding['snapshot'])
+            snapshot.update(run_id=rid, app_run_id=aid, request_key='independent-corrupted-failed-history')
+            original.update(id=rid, status='FAILED', result=None,
+                            error={'code':'FI_CORRUPTED_FAILED_HISTORY','message':'Synthetic damaged history; never a valid Worker result'},
+                            fingerprint=fingerprint(snapshot), worker_id=None, lease_until=0)
+            original['context'] = copy.deepcopy(original['context'])
+            original['context'].update(app_run_id=aid, request_key='independent-corrupted-failed-history')
+            app_run.update(id=aid, status='FAILED', output=None, result_version=None,
+                           request_key='independent-corrupted-failed-history', error=original['error'])
+            binding.update(run_id=rid, app_run_id=aid, snapshot=snapshot, fingerprint='0'*64)
+>           c.execute(insert(runs).values(**original))
+
+/tmp/text-continuation-independent-final-v2-20261012/test_terminal_history.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f07ed0df200>
+cursor = <sqlite3.Cursor object at 0x7f07ec3e9dc0>
+statement = 'INSERT INTO runs (id, project_id, principal_id, runtime_id, goal, resource_refs, status, request_key, fingerprint, cr...rker_id, context, result, error, cancel_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+parameters = ('run_b1afee453d09421f8a351b61979115fe', 'proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf...eb2b9b01e5a4d53b950e0d1d85e9b8a', 'Internal fixed Release result run', '["res_1b4d5fd094254623a1580c26fa8139b1"]', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f07ec4acef0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: runs.principal_id, runs.project_id, runs.request_key
+E       [SQL: INSERT INTO runs (id, project_id, principal_id, runtime_id, goal, resource_refs, status, request_key, fingerprint, created_at, lease_until, fence, worker_id, context, result, error, cancel_intent, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
+E       [parameters: ('run_b1afee453d09421f8a351b61979115fe', 'proj_d2800619010b4678b8ff7589fa495c2f', 'user_81432eb232354b14adb1e56bf244bf91', 'appruntime_feb2b9b01e5a4d53b950e0d1d85e9b8a', 'Internal fixed Release result run', '["res_1b4d5fd094254623a1580c26fa8139b1"]', 'FAILED', 'internal:iapprun_870750e1b1d84885939df6611ca85846', 'd40c7c23216ba6f35cbd3d28ecd9e6af4bfe4124bde6563a44bfd371c81de808', 1791812944.635389, 0.0, 1, None, '{"kind": "INTERNAL_APPRUN", "messages": [], "requests": 0, "tools": 0, "repairs": 0, "reserved_tokens": 0, "app_run_id": "iapprun_9ac45a6c9910456ab66b2babe73704fb", "request_key": "independent-corrupted-failed-history"}', 'null', '{"code": "FI_CORRUPTED_FAILED_HISTORY", "message": "Synthetic damaged history; never a valid Worker result"}', 0, 2)]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/text-continuation-independent-final-v2-20261012/test_terminal_history.py::test_corrupted_failed_history_denied_before_continuation[233]
+FAILED ../../tmp/text-continuation-independent-final-v2-20261012/test_terminal_history.py::test_corrupted_failed_history_denied_before_continuation[a747]
+2 failed, 1 warning in 2.58s

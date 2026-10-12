@@ -71,3 +71,5 @@
 
 
 2026-10-12 原F2-T01/T08的[独立文本应用自有GoalCard与精确版本签收](TextLogicOwner20261012.md)完成有限纵向工程验证：显式完整新卡/适用范围及双seal原子版本绑定，实际新Goal版本下正常Worker输入证据、全部最多100条原项ACCEPT/REJECT，旧签收失效后仅独立当前目标新PREPARE、旧原key仅读历史。作者新34PASS；独审同选34+独立9共43PASS；原家族152 selected为147PASS/5PG前提SKIP，分别记不加总为完整工程。377 Git src/tests前后同指纹，5 ignored egg-info不计远端；全部红轮、SQL屏障、HTTP资产与独立报告保留在[本轮证据](../evidence/text-logic-owner-20261012/README.md)。人工选择SIMULATED、语义UNKNOWN、LIVE0、发布false；旧233 authority因软件all-py指纹变化失败关闭，未重签/迁移、旧实库升级NOT_RUN。真实owner/语义/完整P-A/P-B/PG/Windows/native/正式发布/真实模型/部署各门不提升；CI Forbidden未再查，取消精确竞态永久NOT_VERIFIED。
+
+同日先完成自有Goal读取迟到错误的P2修复并推送`df5f422174c4eeea96e5dd16c141dc0a4b36b3e6`，随后接续F2-T08的[有限显式软件续用](TextCompatibleContinuation20261012.md)：在两个已接纳精确旧Git实际生成的四份SQLite库上核原完整Worker成功/失败合同，原数据/Release/Goal/人工历史保持，新精确软件许可、Release及所选实例revision同事务；未获许可其它实例不能借归档读取执行。最终作者249=243PASS/6PG_SKIP/0FAIL/ERROR，401冻结零差异；独审80唯一节点及受控UI12另计。旧235PASS/2FAIL/6SKIP、R8损坏FAILED历史红轮、夹具错误及断线日志全部保留于[证据](../evidence/text-compatible-continuation-20261012/README.md)。这是合成旧SQLite有限cold续用，不是实际用户旧库升级，也不支持软件接续链/未知schema或语义迁移；PG/Windows/native/真实owner/模型/完整P-A/P-B/正式发布/CI等剩余条件保持，原取消精确竞态永久NOT_VERIFIED、Forbidden CI保持停止。

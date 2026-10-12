@@ -1,0 +1,82 @@
+[
+  {
+    "id": "R1",
+    "severity": "high",
+    "status": "STATIC_FIX_OBSERVED",
+    "first_snapshot": "snapshot-1",
+    "verified_snapshot": "snapshot-2",
+    "title": "新 controller 缓存和恢复必须先核当前 target 授权",
+    "first_locations": [
+      "text_continuations.py prepare/commit/recover/before_private_preflight"
+    ],
+    "verified_locations": [
+      "text_continuations.py:374",
+      "text_continuations.py:388",
+      "text_continuations.py:420",
+      "text_continuations.py:495"
+    ],
+    "description": "snapshot-1 PREPARE cached直接返回带output/old_snapshot的私有preflight；COMMIT/GET先取完整parent approval和双seal。snapshot-2显式先scope和scalar target门，再AUTH/BIND/receipt；STOP metadata另行保留。没有动态SQL屏障结果。"
+  },
+  {
+    "id": "R2",
+    "severity": "high",
+    "status": "STATIC_FIX_OBSERVED",
+    "first_snapshot": "snapshot-1",
+    "verified_snapshot": "snapshot-2",
+    "title": "保留 typed 行不能仅复算输出，须验证原实际 Worker 证明",
+    "verified_locations": [
+      "text_continuations.py:298",
+      "text_continuations.py:317",
+      "text_run_checks.py:19",
+      "app_jobs.py:255",
+      "app_owner_goals.py:173"
+    ],
+    "description": "初版缺实际Run终态一致性、binding、frozen contract、operation/intent/receipt。修后核实际Run/user/project/terminal/equal statuses/UNKNOWN，对每保留typed row复用既有text_run_checks.verify与archival codec；没有放宽oracle/check body，没有原source私有表读取新增依赖。失败历史与无typed terminal job完整性需动态负例验证。"
+  },
+  {
+    "id": "R3",
+    "severity": "high",
+    "status": "PARTIALLY_FIXED_STATIC_OPEN",
+    "first_snapshot": "snapshot-2",
+    "verified_snapshot": "snapshot-5",
+    "title": "普通冷 GET 的 auth-before-private 需覆盖通用 approval 读取入口",
+    "verified_locations": [
+      "apps.py:247",
+      "apps.py:346",
+      "text_logic_reuse.py:398",
+      "lifecycle.py:331",
+      "internal_api.py:134"
+    ],
+    "description": "snapshot-3/4已给load_draft/validate_frozen_candidate/verify_candidate/read_release加入target前置门；read_release完整查询新增owner filter，避免foreign snapshot先读后403。仍有internal_api.inspect_approval在134–145先SELECT完整internal_approvals.payload，owner/kind检查后才通过validate_frozen_candidate走draft_gate；新compat release approval正常由此路由读，foreign或PREPARE kind也先私读再拒。建议元数据+owner/kind+literal draft target gate后取完整payload。此结论是静态路径，非实际SQL FAIL。"
+  },
+  {
+    "id": "R4",
+    "severity": "high",
+    "status": "STATIC_FIX_OBSERVED",
+    "first_snapshot": "snapshot-2",
+    "verified_snapshot": "snapshot-4",
+    "title": "新提交末尾不得吞掉 live permission 错误",
+    "verified_locations": [
+      "text_continuations.py:493",
+      "text_continuations.py:495",
+      "text_continuations.py:497",
+      "text_continuations.py:500"
+    ],
+    "description": "初版commit最后调用public_commit；该函数将DomainError吞为current_permission=false，可能在末尾authority/Grant过期后仍提交新对象。修后先构造历史response，再独立fail-closed execution、prepare expiry、allGrant CAS，并要求response.current_permission；事务异常回滚既有Store.tx所有写。未运行任何精确竞态探针。"
+  },
+  {
+    "id": "R5",
+    "severity": "medium",
+    "status": "STATIC_FIX_OBSERVED_WITH_NEGATIVE_TESTS_REQUIRED",
+    "first_snapshot": "snapshot-3",
+    "verified_snapshot": "snapshot-4",
+    "title": "origin marker 缺失不得静默掉授权门",
+    "verified_locations": [
+      "text_continuations.py:385",
+      "text_continuations.py:389",
+      "apps.py:247",
+      "apps.py:347"
+    ],
+    "description": "draft_gate初版仅依赖task_extraction.kind，修后有canonical proof.kind scalar回退；单边stripping仍进当前target授权，validate_source_family+canonical candidate后续拒绝执行。联合剥除两标记或修改claimed release draft id后的隐私顺序仍需要动态SQL屏障负例，不能由静态证明完全覆盖。"
+  }
+]

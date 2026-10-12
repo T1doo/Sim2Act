@@ -170,7 +170,7 @@ def check_run(store, c, user, draft, limits, snapshot):
         logic.require(expected["binding_fingerprint"] == snapshot.get("owner_goal_binding_fingerprint"))
 
 
-def verify_frozen_run(store, c, user, draft, limits, snapshot):
+def verify_frozen_run(store, c, user, draft, limits, snapshot, *, archival_software=None):
     """Historical technical results retain their own sealed goal version."""
     if "owner_goal" not in snapshot and "owner_goal_binding_fingerprint" not in snapshot:
         return
@@ -180,7 +180,12 @@ def verify_frozen_run(store, c, user, draft, limits, snapshot):
                   and set(snapshot["owner_goal"]) == {"card_id", "goal_version", "goal_fingerprint", "binding_fingerprint", "sequence"}
                   and type(snapshot["owner_goal"]["goal_version"]) is int
                   and type(snapshot["owner_goal"]["sequence"]) is int)
-    _, _, anchor = scope(store, c, user, draft["id"], limits)
+    if archival_software is None:
+        _, _, anchor = scope(store, c, user, draft["id"], limits)
+    else:
+        from .text_continuations import goal_anchor
+
+        anchor = goal_anchor(store, c, user, draft, limits, archival_software)
     values = records(c, user, draft["id"], anchor)
     frozen = snapshot["owner_goal"]
     match = next((v for _, v in values if fingerprint(v) == snapshot["owner_goal_binding_fingerprint"]), None)

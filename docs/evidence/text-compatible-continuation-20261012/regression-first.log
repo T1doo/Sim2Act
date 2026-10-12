@@ -1,0 +1,80 @@
+............................................FF.......................... [ 29%]
+............................................
+=================================== FAILURES ===================================
+___ test_current_cold_private_bodies_denied_before_revoked_target_read[233] ____
+
+legacy = (<sim2act.db.Store object at 0x7f87d85bcaa0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-61/test_cur...ase_cb7fc44762494bd68b017a2cd4e4a6e7', 'revision': 1}], 'id': 'iinstance_9f45348ec2dbeebb4de3f12205e6a2c1', ...}, ...})
+
+    def test_current_cold_private_bodies_denied_before_revoked_target_read(legacy):
+        store, _, client, info = legacy
+        *_, receipt = continued(legacy)
+        with store.tx() as c:
+            approval_id = c.execute(select(internal_releases.c.approval_id).where(internal_releases.c.id == receipt["release_id"])).scalar_one()
+            c.execute(update(grants).where(grants.c.principal_id == info["app"]["runtime_id"]).values(revoked=True))
+        before = rows(store)
+        captured = []
+        def record(_c, _cursor, sql, parameters, _context, _many):
+            captured.append((sql, parameters))
+        event.listen(store.engine, "before_cursor_execute", record)
+        try:
+            for url in ["/api/apps/"+info["app"]["id"], "/api/internal/releases/"+receipt["release_id"],
+                "/api/internal/approvals/"+approval_id, "/api/internal/instances/"+info["instance"]["id"],
+                "/api/internal/instances/"+info["instance"]["id"]+"/runs/"+info["successful_old_run_id"]]:
+                captured.clear()
+                reply = client.get(url)
+                assert reply.status_code == 403, (url, reply.text)
+>               assert not any(sql.startswith("SELECT internal_approvals.id,") or sql.startswith("SELECT internal_releases.id,")
+                    or sql.startswith("SELECT app_drafts.id,") or sql.startswith("SELECT runs.id,")
+                    or sql.startswith("SELECT internal_run_bindings.run_id,") for sql, _ in captured), (url, captured)
+E                   AssertionError: ('/api/internal/instances/iinstance_9f45348ec2dbeebb4de3f12205e6a2c1/runs/run_f3d37f3ff8b7489182c6b60c718280a6', [('SE...3a076473c')), ('SELECT runs.context 
+E                     FROM runs 
+E                     WHERE runs.id = ?', ('run_f3d37f3ff8b7489182c6b60c718280a6',)), ...])
+E                   assert not True
+E                    +  where True = any(<generator object test_current_cold_private_bodies_denied_before_revoked_target_read.<locals>.<genexpr> at 0x7f87d8797d80>)
+
+tests/test_text_continuations.py:379: AssertionError
+___ test_current_cold_private_bodies_denied_before_revoked_target_read[a747] ___
+
+legacy = (<sim2act.db.Store object at 0x7f87d9532690>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-61/test_cur...'binding_fingerprint': '06297a75dc37994b3912894214abf25661b0cae0116b7cff3917909a570cec1c', 'cached': False, ...}, ...})
+
+    def test_current_cold_private_bodies_denied_before_revoked_target_read(legacy):
+        store, _, client, info = legacy
+        *_, receipt = continued(legacy)
+        with store.tx() as c:
+            approval_id = c.execute(select(internal_releases.c.approval_id).where(internal_releases.c.id == receipt["release_id"])).scalar_one()
+            c.execute(update(grants).where(grants.c.principal_id == info["app"]["runtime_id"]).values(revoked=True))
+        before = rows(store)
+        captured = []
+        def record(_c, _cursor, sql, parameters, _context, _many):
+            captured.append((sql, parameters))
+        event.listen(store.engine, "before_cursor_execute", record)
+        try:
+            for url in ["/api/apps/"+info["app"]["id"], "/api/internal/releases/"+receipt["release_id"],
+                "/api/internal/approvals/"+approval_id, "/api/internal/instances/"+info["instance"]["id"],
+                "/api/internal/instances/"+info["instance"]["id"]+"/runs/"+info["successful_old_run_id"]]:
+                captured.clear()
+                reply = client.get(url)
+                assert reply.status_code == 403, (url, reply.text)
+>               assert not any(sql.startswith("SELECT internal_approvals.id,") or sql.startswith("SELECT internal_releases.id,")
+                    or sql.startswith("SELECT app_drafts.id,") or sql.startswith("SELECT runs.id,")
+                    or sql.startswith("SELECT internal_run_bindings.run_id,") for sql, _ in captured), (url, captured)
+E                   AssertionError: ('/api/internal/instances/iinstance_dbfb8c0fa74a78d382d2189e3c4fe5db/runs/run_976319bc11f2437c94d88a34ada401e3', [('SE...9fa495c2f')), ('SELECT runs.context 
+E                     FROM runs 
+E                     WHERE runs.id = ?', ('run_976319bc11f2437c94d88a34ada401e3',)), ...])
+E                   assert not True
+E                    +  where True = any(<generator object test_current_cold_private_bodies_denied_before_revoked_target_read.<locals>.<genexpr> at 0x7f87d9350f20>)
+
+tests/test_text_continuations.py:379: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_continuations.py::test_current_cold_private_bodies_denied_before_revoked_target_read[233]
+FAILED tests/test_text_continuations.py::test_current_cold_private_bodies_denied_before_revoked_target_read[a747]
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/threading.py:355: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+2 failed, 114 passed, 1 warning in 517.83s (0:08:37)

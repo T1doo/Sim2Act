@@ -141,6 +141,9 @@ def base(store, c, user, iid, limits):
     from . import app_owner_goals, text_logic_reuse
 
     if text_logic_reuse.independent(frozen):
+        from .text_continuations import execution
+
+        execution(store, c, user, i, release, limits)
         current, _, _, _ = load_draft(store, c, user, frozen["id"], limits, lock=True)
         if current["fingerprint"] != frozen["fingerprint"]:
             raise DomainError("VERSION_CONFLICT", "Current app differs from exact release")
