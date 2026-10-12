@@ -114,6 +114,14 @@ def compute(source, args):
 
 def verify_origin(store, c, user, draft, limits):
     if "task_proof" in draft["candidate"]:
+        marker = draft["candidate"]["task_proof"]
+        if not isinstance(marker, dict) or not isinstance(marker.get("proof"), dict):
+            raise DomainError("VERSION_CONFLICT", "Malformed independent text marker")
+        if marker["proof"].get("kind") == "authorized_data_free_text_logic.v1":
+            from .text_logic_reuse import verify_candidate
+
+            verify_candidate(store, c, user, draft, limits)
+            return
         from .registered_run_extraction import validate_registered_candidate
 
         validate_registered_candidate(store, c, user, draft, limits)

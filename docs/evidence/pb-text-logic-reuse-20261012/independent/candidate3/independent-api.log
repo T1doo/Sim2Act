@@ -1,0 +1,100 @@
+FFF......                                                                [100%]
+=================================== FAILURES ===================================
+_ test_single_resigned_authority_payload_does_not_match_original_double_seals[model_requests-False] _
+
+env = (<sim2act.db.Store object at 0x7fcb742b0e30>, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...25a8d1c4cd445399421802496792fc', 'user_3cac10328e3d4baa95adc0125f7354eb', 'proj_7aef7063c7734e72b525cbb3763088f7', ...)
+field = 'model_requests', value = False
+
+    @pytest.mark.parametrize('field,value', [
+        ('model_requests', False),
+        ('formal_publication_enabled', 0),
+        ('max_lines', 64.0),
+    ])
+    def test_single_resigned_authority_payload_does_not_match_original_double_seals(env, field, value):
+        data, _, _, _, _, _, _, url = prepared(env)
+        obj, _ = mint(data, url)
+        with data[0].tx() as c:
+            row = c.execute(select(internal_approvals).where(internal_approvals.c.id == obj['id'])).mappings().one()
+            changed = copy.deepcopy(row['payload'])
+            if field == 'max_lines':
+                changed['recipe'][field] = value
+            else:
+                changed[field] = value
+            c.execute(update(internal_approvals).where(internal_approvals.c.id == obj['id']).values(
+                payload=changed, fingerprint=fingerprint(changed)))
+        response = data[2].get(f"/api/internal/text-logics/{obj['id']}")
+>       assert response.status_code == 409, response.text
+E       AssertionError: {"namespace":"internal.text-data-free-logic.v1","formal_publication_enabled":false,"id":"textlogic_fbb204438aa3f341ce0d72304513738b","owner_id":"user_7425a8d1c4cd445399421802496792fc","project_id":"proj_7aef7063c7734e72b525cbb3763088f7","created_at":1791801853.6258206,"expires_at":1791888253.6258206,"scope":"EXISTING_AUTHORIZED_TXT_MD_SAME_OWNER_PROJECT","recipe":{"tool_ref":"text.literal_evidence","tool_version":"1","check_ref":"source.literal_evidence.v1","runtime_parameters":["term"],"formats":["txt","md"],"max_bytes":4096,"max_lines":64,"max_term_length":80,"max_citations":16,"action_input_schema":{"type":"object","properties":{"resource_id":{"type":"string"},"term":{"type":"string","maxLength":80}},"required":["resource_id","term"],"additionalProperties":false},"output_schema":{"type":"object","properties":{"resource_id":{"type":"string"},"revision":{"type":"integer","enum":[1]},"source_hash":{"type":"string"},"term":{"type":"string","maxLength":80},"citations":{"type":"array","items":{"type":"object","properties":{"start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},"quote":{"type":"string","maxLength":4096}},"required":["start_line","end_line","quote"],"additionalProperties":false},"maxItems":16},"semantic_status":{"type":"string","enum":["UNKNOWN"]}},"required":["resource_id","revision","source_hash","term","citations","semantic_status"],"additionalProperties":false}},"limits":{"max_requests":3,"max_tools":1,"max_repairs":1,"max_total_tokens":64000,"max_output_tokens":1024,"run_seconds":300},"implementation_fingerprint":"1886b61dc3a134ffb5a44adc2646430ed89a1f990c6da682a4d66e557d503b7c","audit_ref":"textlogic_fbb204438aa3f341ce0d72304513738b","model_requests":0,"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","fingerprint":"ae25caa4f8c6ad4d072083e66056c574f2131b0dab958aecb1feadf49e4ae4f0","status":"ACTIVE"}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pb-text-logic-review-20261012/candidate3/test_independent_api.py:34: AssertionError
+_ test_single_resigned_authority_payload_does_not_match_original_double_seals[formal_publication_enabled-0] _
+
+env = (<sim2act.db.Store object at 0x7fcb72937920>, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...5d02a9e5e0472f96ec1ac38fce4365', 'user_07ca44f1000543d1a64f9d53e6edb8c0', 'proj_459cf22fcbe44748906b29bd3fd58009', ...)
+field = 'formal_publication_enabled', value = 0
+
+    @pytest.mark.parametrize('field,value', [
+        ('model_requests', False),
+        ('formal_publication_enabled', 0),
+        ('max_lines', 64.0),
+    ])
+    def test_single_resigned_authority_payload_does_not_match_original_double_seals(env, field, value):
+        data, _, _, _, _, _, _, url = prepared(env)
+        obj, _ = mint(data, url)
+        with data[0].tx() as c:
+            row = c.execute(select(internal_approvals).where(internal_approvals.c.id == obj['id'])).mappings().one()
+            changed = copy.deepcopy(row['payload'])
+            if field == 'max_lines':
+                changed['recipe'][field] = value
+            else:
+                changed[field] = value
+            c.execute(update(internal_approvals).where(internal_approvals.c.id == obj['id']).values(
+                payload=changed, fingerprint=fingerprint(changed)))
+        response = data[2].get(f"/api/internal/text-logics/{obj['id']}")
+>       assert response.status_code == 409, response.text
+E       AssertionError: {"namespace":"internal.text-data-free-logic.v1","formal_publication_enabled":false,"id":"textlogic_7d30eed9ca6f62bd8470d314fb4a0890","owner_id":"user_275d02a9e5e0472f96ec1ac38fce4365","project_id":"proj_459cf22fcbe44748906b29bd3fd58009","created_at":1791801856.833554,"expires_at":1791888256.833554,"scope":"EXISTING_AUTHORIZED_TXT_MD_SAME_OWNER_PROJECT","recipe":{"tool_ref":"text.literal_evidence","tool_version":"1","check_ref":"source.literal_evidence.v1","runtime_parameters":["term"],"formats":["txt","md"],"max_bytes":4096,"max_lines":64,"max_term_length":80,"max_citations":16,"action_input_schema":{"type":"object","properties":{"resource_id":{"type":"string"},"term":{"type":"string","maxLength":80}},"required":["resource_id","term"],"additionalProperties":false},"output_schema":{"type":"object","properties":{"resource_id":{"type":"string"},"revision":{"type":"integer","enum":[1]},"source_hash":{"type":"string"},"term":{"type":"string","maxLength":80},"citations":{"type":"array","items":{"type":"object","properties":{"start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},"quote":{"type":"string","maxLength":4096}},"required":["start_line","end_line","quote"],"additionalProperties":false},"maxItems":16},"semantic_status":{"type":"string","enum":["UNKNOWN"]}},"required":["resource_id","revision","source_hash","term","citations","semantic_status"],"additionalProperties":false}},"limits":{"max_requests":3,"max_tools":1,"max_repairs":1,"max_total_tokens":64000,"max_output_tokens":1024,"run_seconds":300},"implementation_fingerprint":"1886b61dc3a134ffb5a44adc2646430ed89a1f990c6da682a4d66e557d503b7c","audit_ref":"textlogic_7d30eed9ca6f62bd8470d314fb4a0890","model_requests":0,"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","fingerprint":"ad4abf754bd0968ca29170f2564f2eb4a1ba00733f5c02b60b380574bf70b51d","status":"ACTIVE"}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pb-text-logic-review-20261012/candidate3/test_independent_api.py:34: AssertionError
+_ test_single_resigned_authority_payload_does_not_match_original_double_seals[max_lines-64.0] _
+
+env = (<sim2act.db.Store object at 0x7fcb71f241a0>, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...3f382a17a74ef59f46a46d29432057', 'user_0e71f835e47b4a9395200fad89f5dc0c', 'proj_69525769cd504f1d86217c4a6bad59e2', ...)
+field = 'max_lines', value = 64.0
+
+    @pytest.mark.parametrize('field,value', [
+        ('model_requests', False),
+        ('formal_publication_enabled', 0),
+        ('max_lines', 64.0),
+    ])
+    def test_single_resigned_authority_payload_does_not_match_original_double_seals(env, field, value):
+        data, _, _, _, _, _, _, url = prepared(env)
+        obj, _ = mint(data, url)
+        with data[0].tx() as c:
+            row = c.execute(select(internal_approvals).where(internal_approvals.c.id == obj['id'])).mappings().one()
+            changed = copy.deepcopy(row['payload'])
+            if field == 'max_lines':
+                changed['recipe'][field] = value
+            else:
+                changed[field] = value
+            c.execute(update(internal_approvals).where(internal_approvals.c.id == obj['id']).values(
+                payload=changed, fingerprint=fingerprint(changed)))
+        response = data[2].get(f"/api/internal/text-logics/{obj['id']}")
+>       assert response.status_code == 409, response.text
+E       AssertionError: {"namespace":"internal.text-data-free-logic.v1","formal_publication_enabled":false,"id":"textlogic_8c3b8acd7c1c67f689a9fb6846de6b48","owner_id":"user_473f382a17a74ef59f46a46d29432057","project_id":"proj_69525769cd504f1d86217c4a6bad59e2","created_at":1791801859.6928234,"expires_at":1791888259.6928234,"scope":"EXISTING_AUTHORIZED_TXT_MD_SAME_OWNER_PROJECT","recipe":{"tool_ref":"text.literal_evidence","tool_version":"1","check_ref":"source.literal_evidence.v1","runtime_parameters":["term"],"formats":["txt","md"],"max_bytes":4096,"max_lines":64,"max_term_length":80,"max_citations":16,"action_input_schema":{"type":"object","properties":{"resource_id":{"type":"string"},"term":{"type":"string","maxLength":80}},"required":["resource_id","term"],"additionalProperties":false},"output_schema":{"type":"object","properties":{"resource_id":{"type":"string"},"revision":{"type":"integer","enum":[1]},"source_hash":{"type":"string"},"term":{"type":"string","maxLength":80},"citations":{"type":"array","items":{"type":"object","properties":{"start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},"quote":{"type":"string","maxLength":4096}},"required":["start_line","end_line","quote"],"additionalProperties":false},"maxItems":16},"semantic_status":{"type":"string","enum":["UNKNOWN"]}},"required":["resource_id","revision","source_hash","term","citations","semantic_status"],"additionalProperties":false}},"limits":{"max_requests":3,"max_tools":1,"max_repairs":1,"max_total_tokens":64000,"max_output_tokens":1024,"run_seconds":300},"implementation_fingerprint":"1886b61dc3a134ffb5a44adc2646430ed89a1f990c6da682a4d66e557d503b7c","audit_ref":"textlogic_8c3b8acd7c1c67f689a9fb6846de6b48","model_requests":0,"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","fingerprint":"879e85723a8641a5bf463780b8eb3a2e2e7759258964f5f53f8f5276c187861c","status":"ACTIVE"}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+/tmp/pb-text-logic-review-20261012/candidate3/test_independent_api.py:34: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../tmp/pb-text-logic-review-20261012/candidate3/test_independent_api.py::test_single_resigned_authority_payload_does_not_match_original_double_seals[model_requests-False]
+FAILED ../../tmp/pb-text-logic-review-20261012/candidate3/test_independent_api.py::test_single_resigned_authority_payload_does_not_match_original_double_seals[formal_publication_enabled-0]
+FAILED ../../tmp/pb-text-logic-review-20261012/candidate3/test_independent_api.py::test_single_resigned_authority_payload_does_not_match_original_double_seals[max_lines-64.0]
+3 failed, 6 passed, 1 warning in 25.25s

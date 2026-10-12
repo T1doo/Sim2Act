@@ -1,0 +1,37 @@
+F
+=================================== FAILURES ===================================
+___ test_authorize_retire_source_cold_bind_and_worker_no_private_reads[txt] ____
+
+env = (<sim2act.db.Store object at 0x7fcbf7fd3a10>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-33/test_aut...04c7702c0244f3b4ce3fa19fd19bbd', 'user_006f3e9a991b4a8d91ed35e82a45ff17', 'proj_916580a2fbc94ffda85e47236e48de0a', ...)
+format = 'txt'
+
+    @pytest.mark.parametrize("format", ["txt", "md"])
+    def test_authorize_retire_source_cold_bind_and_worker_no_private_reads(env, format):
+        from sql_private_barrier import PrivateReadBarrier
+    
+        data, aid, oldrel, oldinst, oldrun, target, rid, url = prepared(env, format)
+        obj, auth = mint(data, url)
+        body = binding(data, obj, target)
+        with data[0].tx() as c:
+            generation = c.execute(select(goal_application_candidates.c.run_id).where(
+                goal_application_candidates.c.app_id == aid)).scalar_one()
+            approval_id = c.execute(select(internal_releases.c.approval_id).where(
+                internal_releases.c.id == oldrel["id"])).scalar_one()
+        revoke_source(data)
+>       assert data[2].get("/api/apps/" + aid).status_code == 403
+E       AssertionError: assert 409 == 403
+E        +  where 409 = <Response [409 Conflict]>.status_code
+E        +    where <Response [409 Conflict]> = get(('/api/apps/' + 'app_5be56f5f17c2df0ce28715ce9fa18ff4'))
+E        +      where get = <starlette.testclient.TestClient object at 0x7fcbf696e7e0>.get
+
+tests/test_text_logic_reuse.py:93: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_logic_reuse.py::test_authorize_retire_source_cold_bind_and_worker_no_private_reads[txt]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 2.53s

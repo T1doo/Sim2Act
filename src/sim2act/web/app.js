@@ -131,7 +131,7 @@ async function refresh() {
   if (!current()) return;
   $("run-history-status").textContent="正在读取持久任务历史…";
   let runs;
-  try {runs=await api(`/api/projects/${pid}/runs`);}
+  try {runs=await api(`/api/projects/${pid}/runs?metadata_only=true`);}
   catch(error){if(!current())return;$("runs").replaceChildren();$("run-history-status").textContent="历史读取失败。请重新刷新；不会提交任务。";throw error;}
   if (!current()) return;
   $("runs").replaceChildren(...runs.map(x => {
@@ -259,7 +259,7 @@ async function loadProjects() {
 }
 function clearIdentityView() {
   invalidateResourcePreview();
-  if(typeof clearCsvLogic === "function")clearCsvLogic();
+  if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();
   if(typeof clearResourceMaterial === "function")clearResourceMaterial();
   if(typeof clearReportManifest === "function")clearReportManifest();
   if(typeof clearReportApps === "function")clearReportApps();
@@ -291,7 +291,7 @@ $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").va
 $("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("run-history-refresh").onclick=safe(async()=>refresh());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
+$("project-select").onchange = safe(async () => {if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
 document.querySelectorAll("#workspace-nav [data-tab]").forEach(b => b.onclick = () => selectWorkspace(b.dataset.tab));
 selectWorkspace("projects");
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
@@ -368,7 +368,7 @@ setInterval(async () => {
 },2500);
 
 function clearApp() {
-  if(typeof clearCsvLogic === "function")clearCsvLogic();
+  if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();
   if(typeof clearDeliveryGraph === "function")clearDeliveryGraph();
   if(typeof clearReportManifest === "function")clearReportManifest();
   if(typeof clearReportApps === "function")clearReportApps();
@@ -384,7 +384,7 @@ function clearApp() {
 }
 async function refreshApps() {
   const pid=$("project-select").value,identity=token,generation=appSelectionGeneration;
-  const list=await api("/api/apps");
+  const list=await api("/api/apps?metadata_only=true");
   if(pid!==$("project-select").value || identity!==token || generation!==appSelectionGeneration)return;
   const items=list.items.filter(x=>x.project_id === $("project-select").value);
   $("app-list").replaceChildren(...items.map(x=>row(`${x.name} · 未发布草案`,()=>showApp(x.id),"打开预览")));
@@ -455,8 +455,10 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   $("app-preview-submit").hidden=agent;$("csv-extraction-panel").hidden=agent||literal;
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
   if(literal){
+    const independent=taskProof?.proof?.kind==="authorized_data_free_text_logic.v1";
     $("app-origin").textContent=taskProof ? `来源：已成功内部文本 AppRun ${taskProof.proof.source_run_id} · 独立回执与完整字面证据核查 · 新 TXT/MD 绑定 + term 参数 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收` : `来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof ? {source_goal:a.candidate.goal,source:taskProof,new_material:a.candidate.manifest.data_bindings} : a.candidate.goal,null,2);
+    if(independent){$("app-origin").textContent=`来源：项目独立文本逻辑 ${taskProof.proof.logic_id} · 新材料与新只读身份 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收`;$("app-frozen-goal-text").textContent=JSON.stringify({logic:taskProof,new_material:a.candidate.manifest.data_bindings},null,2);}
     $("app-input-hint").textContent="TXT/MD 逐字匹配；输入非空无首尾空白、至多80字符的检索词。每次从授权材料重新计算全部匹配行，无需上传答案。";
     $("app-preview-submit").disabled=appPreviewRequests.has(id);
     $("app-history").replaceChildren(...a.history.map(r=>row(`${r.input.term || "无效输入"} · ${r.status}`,()=>showPreviewResult(r,true),"回读历史")));

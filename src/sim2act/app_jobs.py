@@ -780,6 +780,10 @@ def commit_result(worker, run, plan, output):
         store.event(
             c, job["id"], "RESULT_COMMITTED", {"operation_id": op["id"], "result_version": version}
         )
+        # This independent authority may expire while the local append is made.
+        # Recheck before transaction commit so the entire append rolls back.
+        if draft["candidate"].get("task_proof", {}).get("proof", {}).get("kind") == "authorized_data_free_text_logic.v1":
+            validate_frozen_candidate(store, c, run["principal_id"], draft, limits)
 
 
 def fail_job(worker, run, error):

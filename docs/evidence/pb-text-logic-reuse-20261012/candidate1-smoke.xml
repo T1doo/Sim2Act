@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.525" timestamp="2026-10-12T10:31:03.896975+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_logic_reuse" name="test_authorize_retire_source_cold_bind_and_worker_no_private_reads[txt]" time="2.401"><failure message="AssertionError: assert 409 == 403&#10; +  where 409 = &lt;Response [409 Conflict]&gt;.status_code&#10; +    where &lt;Response [409 Conflict]&gt; = get(('/api/apps/' + 'app_5be56f5f17c2df0ce28715ce9fa18ff4'))&#10; +      where get = &lt;starlette.testclient.TestClient object at 0x7fcbf696e7e0&gt;.get">env = (&lt;sim2act.db.Store object at 0x7fcbf7fd3a10&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-33/test_aut...04c7702c0244f3b4ce3fa19fd19bbd', 'user_006f3e9a991b4a8d91ed35e82a45ff17', 'proj_916580a2fbc94ffda85e47236e48de0a', ...)
+format = 'txt'
+
+    @pytest.mark.parametrize("format", ["txt", "md"])
+    def test_authorize_retire_source_cold_bind_and_worker_no_private_reads(env, format):
+        from sql_private_barrier import PrivateReadBarrier
+    
+        data, aid, oldrel, oldinst, oldrun, target, rid, url = prepared(env, format)
+        obj, auth = mint(data, url)
+        body = binding(data, obj, target)
+        with data[0].tx() as c:
+            generation = c.execute(select(goal_application_candidates.c.run_id).where(
+                goal_application_candidates.c.app_id == aid)).scalar_one()
+            approval_id = c.execute(select(internal_releases.c.approval_id).where(
+                internal_releases.c.id == oldrel["id"])).scalar_one()
+        revoke_source(data)
+&gt;       assert data[2].get("/api/apps/" + aid).status_code == 403
+E       AssertionError: assert 409 == 403
+E        +  where 409 = &lt;Response [409 Conflict]&gt;.status_code
+E        +    where &lt;Response [409 Conflict]&gt; = get(('/api/apps/' + 'app_5be56f5f17c2df0ce28715ce9fa18ff4'))
+E        +      where get = &lt;starlette.testclient.TestClient object at 0x7fcbf696e7e0&gt;.get
+
+tests/test_text_logic_reuse.py:93: AssertionError</failure></testcase></testsuite></testsuites>

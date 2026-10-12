@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="23" time="69.475" timestamp="2026-10-12T10:40:16.421367+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_logic_reuse" name="test_authorize_retire_source_cold_bind_and_worker_no_private_reads[txt]" time="3.226" /><testcase classname="tests.test_text_logic_reuse" name="test_authorize_retire_source_cold_bind_and_worker_no_private_reads[md]" time="3.239" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_logic_fingerprint-0000000000000000000000000000000000000000000000000000000000000000]" time="2.304" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_target_draft_fingerprint-0000000000000000000000000000000000000000000000000000000000000000]" time="2.194" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_resource_id-res_00000000000000000000000000000000]" time="2.549" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_source_hash-0000000000000000000000000000000000000000000000000000000000000000]" time="2.847" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[missing_auth_seal]" time="3.545" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[changed_marker]" time="2.550" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[missing_marker]" time="2.620" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[expanded_runtime]" time="2.508" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[token_runtime]" time="2.401" /><testcase classname="tests.test_text_logic_reuse" name="test_revoke_independent_source_gone_irreversible_and_history" time="2.286" /><testcase classname="tests.test_text_logic_reuse" name="test_revocation_after_enqueue_cannot_append[logic]" time="2.505" /><testcase classname="tests.test_text_logic_reuse" name="test_revocation_after_enqueue_cannot_append[target]" time="2.709" /><testcase classname="tests.test_text_logic_reuse" name="test_revocation_after_enqueue_cannot_append[runtime]" time="2.477" /><testcase classname="tests.test_text_logic_reuse" name="test_binding_transaction_rolls_back_and_key_conflicts" time="2.306" /><testcase classname="tests.test_text_logic_reuse" name="test_cross_identity_budget_and_expiry" time="2.573"><failure message="AssertionError: assert 400 == 409&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code&#10; +    where &lt;Response [400 Bad Request]&gt; = post('/api/internal/text-logics/textlogic_03a44880f1dcc2be92d14213a20eca40/bindings', json={'consent': 'CREATE_NEW_READ_ONLY_RUNTIME_FOR_THIS_TEXT_RESOURCE', 'expected_logic_fingerprint': '252d755da72bdaacd660...4a319428551845ee28f1', 'expected_source_hash': '1a7ff6ecd150cdaaf229aa9d92f79e0d1745d95685482122552e8ae15b2172e3', ...})&#10; +      where post = &lt;starlette.testclient.TestClient object at 0x7f542452d430&gt;.post">env = (&lt;sim2act.db.Store object at 0x7f54244e2cf0&gt;, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...9ed21579fa4a96acfc4038c54d4f87', 'user_6ae15ad6870c44379ced2f7fa94ee560', 'proj_927d6d497cc24241949c9591ddfa5817', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5426174b00&gt;
+
+    def test_cross_identity_budget_and_expiry(env, monkeypatch):
+        data, _, _, _, _, target, _, url = prepared(env)
+        obj, _ = mint(data, url)
+        body = binding(data, obj, target)
+        before = snapshot(data[0])
+        data[2].headers["Authorization"] = "Bearer synthetic-test-B"
+        for path in (f"/api/internal/text-logics/{obj['id']}", f"/api/internal/text-logics/{obj['id']}/materials",
+                     f"/api/projects/{data[4]}/text-logics", url + "/text-logic-options"):
+            assert data[2].get(path).status_code == 403
+        data[2].headers["Authorization"] = "Bearer synthetic-test-A"
+        with TestClient(create_app(data[0], replace(data[1], run_seconds=1))) as tight:
+            tight.headers["Authorization"] = "Bearer synthetic-test-A"
+&gt;           assert tight.post(f"/api/internal/text-logics/{obj['id']}/bindings", json=body).status_code == 409
+E           AssertionError: assert 400 == 409
+E            +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+E            +    where &lt;Response [400 Bad Request]&gt; = post('/api/internal/text-logics/textlogic_03a44880f1dcc2be92d14213a20eca40/bindings', json={'consent': 'CREATE_NEW_READ_ONLY_RUNTIME_FOR_THIS_TEXT_RESOURCE', 'expected_logic_fingerprint': '252d755da72bdaacd660...4a319428551845ee28f1', 'expected_source_hash': '1a7ff6ecd150cdaaf229aa9d92f79e0d1745d95685482122552e8ae15b2172e3', ...})
+E            +      where post = &lt;starlette.testclient.TestClient object at 0x7f542452d430&gt;.post
+
+tests/test_text_logic_reuse.py:281: AssertionError</failure></testcase><testcase classname="tests.test_text_logic_reuse" name="test_expiry_during_typed_append_rolls_back_entire_result" time="2.657" /><testcase classname="tests.test_text_logic_reuse" name="test_capacity_counts_retained_authorities_and_bindings[logic]" time="2.667"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;BUDGET_EXHAUSTED&quot;,&quot;message&quot;:&quot;Project text logic capacity reached&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert (400 == 409)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f5424c78c80&gt;, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...e082d5de264560b9e17cea7706e9f0', 'user_d37e9e9ff9074039825c3bbc00d1769f', 'proj_92e62de26d8b46f3a9c61be567b5e0ac', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f54242fc650&gt;
+limit = 'logic'
+
+    @pytest.mark.parametrize("limit", ["logic", "binding"])
+    def test_capacity_counts_retained_authorities_and_bindings(env, monkeypatch, limit):
+        data, _, _, _, _, target, _, url = prepared(env)
+        obj, _ = mint(data, url)
+        if limit == "logic":
+            revoke_logic(data, obj)
+            monkeypatch.setattr(logic, "MAX_LOGICS", 1)
+            preview = data[2].get(url + "/text-logic-options").json()
+            body = dict(expected_proof_fingerprint=preview["source_proof_fingerprint"],
+                        expected_release_fingerprint=preview["release_fingerprint"],
+                        consent="AUTHORIZE_DATA_FREE_TEXT_LOGIC_IN_THIS_PROJECT", request_key="second-authority")
+            path = url + "/text-logic-authorizations"
+        else:
+            body = binding(data, obj, target)
+            bind(data, obj, body)
+            monkeypatch.setattr(logic, "MAX_BINDINGS", 1)
+            body = {**body, "request_key": "second-binding"}
+            path = f"/api/internal/text-logics/{obj['id']}/bindings"
+        before = snapshot(data[0])
+        response = data[2].post(path, json=body)
+&gt;       assert response.status_code == 409 and response.json()["error"]["code"] == "BUDGET_EXHAUSTED", response.text
+E       AssertionError: {"error":{"code":"BUDGET_EXHAUSTED","message":"Project text logic capacity reached","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (400 == 409)
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_text_logic_reuse.py:338: AssertionError</failure></testcase><testcase classname="tests.test_text_logic_reuse" name="test_capacity_counts_retained_authorities_and_bindings[binding]" time="2.344"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;BUDGET_EXHAUSTED&quot;,&quot;message&quot;:&quot;Independent text binding capacity reached&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert (400 == 409)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f5424253920&gt;, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...3f0d62efb2404088ea57359c198fd4', 'user_7a9c260d584549e0a8697d55cb94fd4b', 'proj_6f45fd7861424929a6697820509a683e', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5424205f40&gt;
+limit = 'binding'
+
+    @pytest.mark.parametrize("limit", ["logic", "binding"])
+    def test_capacity_counts_retained_authorities_and_bindings(env, monkeypatch, limit):
+        data, _, _, _, _, target, _, url = prepared(env)
+        obj, _ = mint(data, url)
+        if limit == "logic":
+            revoke_logic(data, obj)
+            monkeypatch.setattr(logic, "MAX_LOGICS", 1)
+            preview = data[2].get(url + "/text-logic-options").json()
+            body = dict(expected_proof_fingerprint=preview["source_proof_fingerprint"],
+                        expected_release_fingerprint=preview["release_fingerprint"],
+                        consent="AUTHORIZE_DATA_FREE_TEXT_LOGIC_IN_THIS_PROJECT", request_key="second-authority")
+            path = url + "/text-logic-authorizations"
+        else:
+            body = binding(data, obj, target)
+            bind(data, obj, body)
+            monkeypatch.setattr(logic, "MAX_BINDINGS", 1)
+            body = {**body, "request_key": "second-binding"}
+            path = f"/api/internal/text-logics/{obj['id']}/bindings"
+        before = snapshot(data[0])
+        response = data[2].post(path, json=body)
+&gt;       assert response.status_code == 409 and response.json()["error"]["code"] == "BUDGET_EXHAUSTED", response.text
+E       AssertionError: {"error":{"code":"BUDGET_EXHAUSTED","message":"Independent text binding capacity reached","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert (400 == 409)
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_text_logic_reuse.py:338: AssertionError</failure></testcase><testcase classname="tests.test_text_logic_ui" name="test_independent_text_logic_visible_cold_page[valid]" time="5.657"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: cold project logic and target preview do not open retired source lineage&#10;      at check (/workspace/Sim2Act/tests/text_logic_ui.cjs:8:26)&#10;      at /workspace/Sim2Act/tests/text_logic_ui.cjs:23:198&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f54244e0710&gt;, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...6da9e3c5f24fc9aaf0813033f94ff7', 'user_d188c655a6364e7cb5411fa20ac71328', 'proj_b5758cc2c7fc49369bff9a6ed478c2d3', ...)
+tmp_path = PosixPath('/tmp/pb-text-logic-review-20261012/candidate3/new-tests-tmp/test_independent_text_logic_vi0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "authorization-lost", "binding-lost"])
+    def test_independent_text_logic_visible_cold_page(env, tmp_path, scenario):
+        data, aid, _, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = dict(project=data[4], source=aid, instance=instance["id"], run=run["id"],
+                    old_resource=data[5], target=target, resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(["node", "tests/text_logic_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = retired = 0
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "retire-source":
+                    revoke_source(data)
+                    retired += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                elif request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                    finally:
+                        cold.engine.dispose()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_TEXT_LOGIC_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+&gt;           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: cold project logic and target preview do not open retired source lineage
+E                 at check (/workspace/Sim2Act/tests/text_logic_ui.cjs:8:26)
+E                 at /workspace/Sim2Act/tests/text_logic_ui.cjs:23:198
+E             
+E           assert 1 == 0
+
+tests/test_text_logic_ui.py:65: AssertionError</failure></testcase><testcase classname="tests.test_text_logic_ui" name="test_independent_text_logic_visible_cold_page[authorization-lost]" time="6.449"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: cold project logic and target preview do not open retired source lineage&#10;      at check (/workspace/Sim2Act/tests/text_logic_ui.cjs:8:26)&#10;      at /workspace/Sim2Act/tests/text_logic_ui.cjs:23:198&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f5424f26540&gt;, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...ccd308ca3e46a8ad536b437eff1b62', 'user_a255616881f04227828a9070d9c84d53', 'proj_1eb70813cf93497fb01cd58ce123b0ba', ...)
+tmp_path = PosixPath('/tmp/pb-text-logic-review-20261012/candidate3/new-tests-tmp/test_independent_text_logic_vi1')
+scenario = 'authorization-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "authorization-lost", "binding-lost"])
+    def test_independent_text_logic_visible_cold_page(env, tmp_path, scenario):
+        data, aid, _, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = dict(project=data[4], source=aid, instance=instance["id"], run=run["id"],
+                    old_resource=data[5], target=target, resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(["node", "tests/text_logic_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = retired = 0
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "retire-source":
+                    revoke_source(data)
+                    retired += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                elif request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                    finally:
+                        cold.engine.dispose()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_TEXT_LOGIC_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+&gt;           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: cold project logic and target preview do not open retired source lineage
+E                 at check (/workspace/Sim2Act/tests/text_logic_ui.cjs:8:26)
+E                 at /workspace/Sim2Act/tests/text_logic_ui.cjs:23:198
+E             
+E           assert 1 == 0
+
+tests/test_text_logic_ui.py:65: AssertionError</failure></testcase><testcase classname="tests.test_text_logic_ui" name="test_independent_text_logic_visible_cold_page[binding-lost]" time="4.681"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: cold project logic and target preview do not open retired source lineage&#10;      at check (/workspace/Sim2Act/tests/text_logic_ui.cjs:8:26)&#10;      at /workspace/Sim2Act/tests/text_logic_ui.cjs:23:198&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f5424248aa0&gt;, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...afcdb752d345cbb548502dac0ee8c9', 'user_072ff19226cd41f4807ff999987a796f', 'proj_412ee4d32dde4939ab10fc8ebc8f26bf', ...)
+tmp_path = PosixPath('/tmp/pb-text-logic-review-20261012/candidate3/new-tests-tmp/test_independent_text_logic_vi2')
+scenario = 'binding-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "authorization-lost", "binding-lost"])
+    def test_independent_text_logic_visible_cold_page(env, tmp_path, scenario):
+        data, aid, _, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = dict(project=data[4], source=aid, instance=instance["id"], run=run["id"],
+                    old_resource=data[5], target=target, resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(["node", "tests/text_logic_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = retired = 0
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "retire-source":
+                    revoke_source(data)
+                    retired += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                elif request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    try:
+                        assert Worker(cold, settings, NoModel()).once()
+                        worked += 1
+                    finally:
+                        cold.engine.dispose()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_TEXT_LOGIC_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+&gt;           assert code == 0, error
+E           AssertionError: AssertionError [ERR_ASSERTION]: cold project logic and target preview do not open retired source lineage
+E                 at check (/workspace/Sim2Act/tests/text_logic_ui.cjs:8:26)
+E                 at /workspace/Sim2Act/tests/text_logic_ui.cjs:23:198
+E             
+E           assert 1 == 0
+
+tests/test_text_logic_ui.py:65: AssertionError</failure></testcase></testsuite></testsuites>

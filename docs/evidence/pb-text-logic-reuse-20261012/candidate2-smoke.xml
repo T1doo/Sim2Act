@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="13" time="32.986" timestamp="2026-10-12T10:31:52.870685+00:00" hostname="9809f76d2248"><testcase classname="tests.test_text_logic_reuse" name="test_authorize_retire_source_cold_bind_and_worker_no_private_reads[txt]" time="3.315" /><testcase classname="tests.test_text_logic_reuse" name="test_authorize_retire_source_cold_bind_and_worker_no_private_reads[md]" time="3.268" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_logic_fingerprint-0000000000000000000000000000000000000000000000000000000000000000]" time="2.450" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_target_draft_fingerprint-0000000000000000000000000000000000000000000000000000000000000000]" time="2.349" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_resource_id-res_00000000000000000000000000000000]" time="2.350" /><testcase classname="tests.test_text_logic_reuse" name="test_exact_target_request_conflict_has_no_partial_rows[expected_source_hash-0000000000000000000000000000000000000000000000000000000000000000]" time="2.299" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[missing_auth_seal]" time="2.367" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[changed_marker]" time="2.410" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[missing_marker]" time="2.511" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[expanded_runtime]" time="2.334" /><testcase classname="tests.test_text_logic_reuse" name="test_independent_markers_seals_and_fresh_identity_fail_closed[token_runtime]" time="2.351" /><testcase classname="tests.test_text_logic_reuse" name="test_revoke_independent_source_gone_irreversible_and_history" time="2.377" /><testcase classname="tests.test_text_logic_reuse" name="test_revocation_after_enqueue_cannot_append[logic]" time="2.477"><failure message="KeyError: 'status'">env = (&lt;sim2act.db.Store object at 0x7f856cbf0500&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-34/test_rev...1d530b097348f68062499b52592b25', 'user_b458c77e50734f48bd8b6ef41fc4a502', 'proj_687fcb55b3f3433f9165aee1fb300b62', ...)
+revoked = 'logic'
+
+    @pytest.mark.parametrize("revoked", ["logic", "target", "runtime"])
+    def test_revocation_after_enqueue_cannot_append(env, revoked):
+        data, _, _, _, _, target, rid, url = prepared(env)
+        obj, _ = mint(data, url)
+        made = bind(data, obj, binding(data, obj, target))
+        release, instance = release_instance(data, made["id"])
+        queued = data[2].post(f"/api/internal/instances/{instance['id']}/runs", json=dict(
+            expected_revision=instance["revision"], expected_release_fingerprint=release["fingerprint"],
+            input={"term": "Gamma"}, request_key="enqueue-before-revocation"))
+        assert queued.status_code == 202, queued.text
+        if revoked == "logic":
+            revoke_logic(data, obj)
+        else:
+            with data[0].tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == rid,
+                    grants.c.principal_id == (data[3] if revoked == "target" else made["runtime_id"])).values(revoked=True))
+        assert Worker(data[0], data[1]).once()
+        result = data[2].get("/api/runs/" + queued.json()["run_id"])
+&gt;       assert result.json()["status"] == "WAITING_RESOURCE", result.text
+               ^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_text_logic_reuse.py:240: KeyError</failure></testcase></testsuite></testsuites>

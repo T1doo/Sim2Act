@@ -19,3 +19,8 @@ PREPARED 没有提交回执不等于安全失败。继续阻止重复安装及�
 候选与请求hash必须在最后require_latest GET之前完成；最后回执返回后同步核对，不再await自身WebCrypto hash。维护实际并发probe以另一个同owner会话prepare新key201，再由原key final GET409阻止旧应用安装。网络GET与浏览器安装不组成跨设备原子事务，不将瞬时查询签为此类保证。
 
 预算为每项目最多64个持久来源Run、每来源最多64个请求历史。新来源的首prepare在同项目事务锁内检查项目发现预算，拒绝任何使来源数超过64的写入，确保所有已受理身份仍可由metadata索引发现。已有来源在单来源预算内可明确CLOSE/新请求，CLOSED历史不删除以腾空预算；超额拒绝不修改任何对象。
+
+
+2026-10-12 证据边界纠正：e2b856最终作者与独审late-latest-digest原trace均latest_reads=0，只有一次require_latest409，未证明已到候选安装阶段。撤回其对原安装异步窗口已精准动态复验的具体推论；当前JS的先hash、最后GET、同步校验顺序可见，不直接认定产品漏洞仍在。原492分母及其他授权路径仍在父级独审，不由本跟进改签；旧红绿/原trace全部保留。必须取得首require_latest200→精确安装候选GET/真实hash→并发prepare201→最后require_latest409、前端零POST且不安装，并用同一probe对照旧源失败/当前通过，才恢复该具体资格。当前精确委派遇平台风险筛查拒绝，已停止且未换名/代理/工具/环境重试，独审与动态probe尚未运行；可审纠正和完整错误见[新目录](../evidence/pb-exact-install-window-20261012/README.md)。
+
+2026-10-12 用户后续明确取消被拒的精确旧/新候选安装竞态对照：该具体资格永久NOT_VERIFIED，不再等待解除或改换代理/工具/框架重做。原拒绝、trace与未提交纠正保留，取消回执见[记录](../evidence/pb-exact-install-window-20261012/cancellation-20261012.json)。主线转入独立F2-T03文本无旧内容逻辑复用，不以新功能测试替代此项。

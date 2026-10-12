@@ -15,7 +15,7 @@ async function refreshReportApps(){
  const scope=reportScope();if(!scope.project)return;
  if(reportAppContext&&!reportScopeCurrent(reportAppContext))clearReportApps();
  const generation=++reportListGeneration,current=()=>reportScopeCurrent(scope)&&generation===reportListGeneration;
- let items;try{items=await api(`/api/projects/${scope.project}/conditional-apps`);}catch(e){if(current())clearReportApps();throw e;}if(!current())return;
+ let items;try{items=await api(`/api/projects/${scope.project}/conditional-apps?metadata_only=true`);}catch(e){if(current())clearReportApps();throw e;}if(!current())return;
  $("report-app-list").replaceChildren(...items.items.map(a=>row(`${a.name} · PREVIEW_ONLY · 用户确认 PENDING`,()=>openReportApp(a.id),"打开条件报告草案")));
  if(!items.items.length)$("report-app-list").textContent="暂无保存的条件报告草案；先完成来源绑定检查和有限候选提取。";
 }

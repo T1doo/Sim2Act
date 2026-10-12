@@ -237,7 +237,7 @@ def create_app(store=None, settings=None):
             rows = (
                 c.execute(
                     select(
-                        resources.c.id, resources.c.name, resources.c.format, resources.c.hash
+                        resources.c.id, resources.c.name, resources.c.format
                     ).where(resources.c.project_id == pid)
                 )
                 .mappings()
@@ -247,7 +247,8 @@ def create_app(store=None, settings=None):
             for r in rows:
                 try:
                     db.authorize(c, user, p["runtime_id"], pid, r["id"], "resource.read")
-                    output.append(dict(r))
+                    source_hash = c.execute(select(resources.c.hash).where(resources.c.id == r["id"])).scalar_one()
+                    output.append({**dict(r), "hash": source_hash})
                 except DomainError:
                     pass
             return output
@@ -270,9 +271,14 @@ def create_app(store=None, settings=None):
             return dict(r)
 
     @app.get("/api/projects/{pid}/runs")
-    def list_runs(pid: str, user=user_dependency):
+    def list_runs(pid: str, metadata_only: bool = False, user=user_dependency):
         with db.tx() as c:
             db.own_project(c, user, pid)
+            if metadata_only:
+                rows = c.execute(select(runs.c.id, runs.c.status, runs.c.created_at)
+                    .where(runs.c.project_id == pid, runs.c.principal_id == user)
+                    .order_by(runs.c.created_at.desc(), runs.c.id.desc())).mappings().all()
+                return [{**dict(r), "goal_summary": "打开任务后核查当前授权内容", "mode": "UNKNOWN"} for r in rows]
             items = []
             for r in c.execute(
                 select(runs.c.id, runs.c.status, runs.c.created_at, runs.c.goal,
@@ -634,8 +640,29 @@ def create_app(store=None, settings=None):
         return generate_candidate(db, user, cid, body.model_dump(), platform_limits)
 
     @app.get("/api/apps")
-    def apps(user=user_dependency):
+    def apps(metadata_only: bool = False, user=user_dependency):
         with db.tx() as c:
+            if metadata_only:
+                # Cold discovery never evaluates historical candidate/goal bytes.
+                # This Grant hint routes discovery only; open/execute still inspect.
+                from .db import goal_application_candidates, task_extractions
+
+                literal_ids = set(c.execute(select(goal_application_candidates.c.app_id).where(
+                    goal_application_candidates.c.principal_id == user)).scalars())
+                conditional_ids = select(task_extractions.c.app_id).where(
+                    task_extractions.c.principal_id == user,
+                    task_extractions.c.snapshot["kind"].as_string() == CONDITIONAL_APP_NAMESPACE)
+                rows = c.execute(select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id,
+                    app_drafts.c.runtime_id).join(projects, projects.c.id == app_drafts.c.project_id)
+                    .where(projects.c.owner_id == user, app_drafts.c.id.not_in(conditional_ids))
+                    .order_by(app_drafts.c.created_at.desc())).mappings().all()
+                items = []
+                for r in rows:
+                    hint = r["id"] not in literal_ids and bool(c.execute(select(grants.c.id).where(
+                        grants.c.principal_id == r["runtime_id"], grants.c.project_id == r["project_id"],
+                        grants.c.tool_ref == "data.aggregate_csv")).first())
+                    items.append({k: r[k] for k in ("id", "name", "project_id")} | {"csv_instance_candidate": hint})
+                return {"items": items, "state": "PREVIEW_ONLY", "publishable": False, "discovery_only": True}
             rows = (
                 c.execute(
                     select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id, app_drafts.c.candidate)
@@ -806,6 +833,10 @@ def create_app(store=None, settings=None):
     @app.get("/csv-logic.js")
     def csv_logic_js():
         return FileResponse(web / "csv-logic.js", media_type="text/javascript")
+
+    @app.get("/text-logic.js")
+    def text_logic_js():
+        return FileResponse(web / "text-logic.js", media_type="text/javascript")
 
     @app.get("/project-revalidation.js")
     def project_revalidation_js():

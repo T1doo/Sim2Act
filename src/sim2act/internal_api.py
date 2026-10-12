@@ -5,7 +5,15 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy import select
 
-from . import app_jobs, csv_dag, csv_dag_instances, csv_logic_reuse, csv_material_reuse, lifecycle
+from . import (
+    app_jobs,
+    csv_dag,
+    csv_dag_instances,
+    csv_logic_reuse,
+    csv_material_reuse,
+    lifecycle,
+    text_logic_reuse,
+)
 from .contracts import Strict
 from .db import (
     app_drafts,
@@ -149,6 +157,14 @@ def mount(app, store, limits, identity):
         dag_only = request.url.path.endswith("/dag-releases")
         with store.tx() as c:
             pid = supported_app(c, user, aid)
+            # Validate the independent family before choosing a discovery path;
+            # damaged markers cannot downgrade into the legacy project scan.
+            draft, _, _, _ = lifecycle.load_draft(store, c, user, aid, limits)
+            if text_logic_reuse.independent(draft):
+                if dag_only:
+                    raise DomainError("UNSUPPORTED_CAPABILITY", "Literal releases only")
+                ids = text_logic_reuse.release_ids(store, c, user, draft, limits)
+                return envelope(items=[dict(lifecycle.read_release(store, c, user, rid, limits)) for rid in ids])
             ids = (
                 c.execute(
                     select(internal_releases.c.id, internal_releases.c.snapshot)
@@ -323,6 +339,45 @@ def mount(app, store, limits, identity):
     def inspect_run(iid: str, rid: str, user=user_dependency):
         scope_run(user, iid, rid, historical=True)
         return envelope(**inspect_job(user, rid))
+
+    def text_logic_response(value):
+        return JSONResponse(envelope(**value), headers={"Cache-Control": "no-store", "Vary": "Authorization"})
+
+    @app.get("/api/internal/instances/{iid}/runs/{rid}/text-logic-options")
+    def text_logic_options(iid: str, rid: str, user=user_dependency):
+        return text_logic_response(text_logic_reuse.source_options(store, user, iid, rid, limits))
+
+    @app.post("/api/internal/instances/{iid}/runs/{rid}/text-logic-authorizations", status_code=201)
+    def text_logic_authorize(iid: str, rid: str, body: text_logic_reuse.AuthorizeInput, user=user_dependency):
+        return envelope(**text_logic_reuse.authorize(store, user, iid, rid, body, limits))
+
+    @app.get("/api/internal/instances/{iid}/runs/{rid}/text-logic-receipts")
+    def text_logic_authorization_receipt(iid: str, rid: str, request_key: str, user=user_dependency):
+        return text_logic_response(text_logic_reuse.recover_authorization(store, user, iid, rid, request_key, limits))
+
+    @app.get("/api/projects/{pid}/text-logics")
+    def text_logic_history(pid: str, user=user_dependency):
+        return text_logic_response(text_logic_reuse.history(store, user, pid, limits))
+
+    @app.get("/api/internal/text-logics/{lid}")
+    def text_logic_inspect(lid: str, user=user_dependency):
+        return text_logic_response(text_logic_reuse.inspect(store, user, lid, limits))
+
+    @app.post("/api/internal/text-logics/{lid}/revoke")
+    def text_logic_revoke(lid: str, body: text_logic_reuse.RevokeInput, user=user_dependency):
+        return envelope(**text_logic_reuse.revoke(store, user, lid, body, limits))
+
+    @app.get("/api/internal/text-logics/{lid}/materials")
+    def text_logic_materials(lid: str, user=user_dependency):
+        return text_logic_response(text_logic_reuse.options(store, user, lid, limits))
+
+    @app.post("/api/internal/text-logics/{lid}/bindings", status_code=201)
+    def text_logic_bind(lid: str, body: text_logic_reuse.BindInput, user=user_dependency):
+        return envelope(**text_logic_reuse.bind(store, user, lid, body, limits))
+
+    @app.get("/api/internal/text-logics/{lid}/bindings")
+    def text_logic_receipt(lid: str, request_key: str, user=user_dependency):
+        return text_logic_response(text_logic_reuse.recover_binding(store, user, lid, request_key, limits))
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/extraction-options")
     def extraction_options(iid: str, rid: str, user=user_dependency):

@@ -60,3 +60,11 @@
 
 
 2026-10-11启动、实际延续至2026-10-12的F2-T09 / AT-05/18 [有限原请求身份冷恢复](PBColdRecovery20261011.md)完成：受保护服务端journal先保存精确key/主体/项目/来源/目标/请求指纹及单调历史；未知仅原key GET复核当前授权/真实候选后安装，不自动重发。候选/回执/COMMITTED同事务，metadata-only CLOSE不把已有提交伪签为关闭；CLOSED与latest CAS拒绝迟到/重复意图，浏览器不新增正文或秘密持久存储。独审真实发现错误source绑定、最后GET后异步hash竞争，以及第65来源写入后项目冷索引失效，均修复，三撤回候选和输出路径夹具事故全留原证。最终同项目事务冻结64来源/每来源64历史预算，第65首prepare拒绝全DB0变，原64冷索引与既有来源明确新请求可用。作者一轮503 collected/502 selected/1 deselected，492PASS/10PG前提SKIP/0FAIL/ERROR；独审39、43、6、1分别PASS，有限LIMITED_PASS，不加总为语义或一次完整AT覆盖。369源码前后一致，精确HTTP/JSDOM/SQLite/普通Worker及失败档见[本轮证据](../evidence/pb-cold-recovery-20261011/README.md)。原GoalCard/source授权仍参与审计，新owner PENDING、语义UNKNOWN、LIVE0、发布false；PG/Windows/native/设备崩溃/旧源码升级/真实模型/真实owner语义/完整P-A/P-B/AT05/18/source退休/长期容量性能/远端CI/部署等原验收条件不提升。
+
+
+2026-10-12 父级精确复审纠正：e2b856冷恢复中原late-latest-digest最终trace仅一次latest409、latest_reads=0，未覆盖安装窗口；撤回该具体动态推论，保持原492及独审历史执行数字和原证据字节，不把缺口称为当前产品漏洞。当前代码顺序可见，仍待同一精准probe的旧源失败/当前通过及完整200→候选GET/hash→并发201→最后409时序。该精确独审委派被当前平台风险筛查拒绝，已停止受拒动作，未换名/工具/代理/环境重试；本跟进仅准备[声明纠正与完整阻塞证据](../evidence/pb-exact-install-window-20261012/README.md)，动态测试和独审尚未运行、未提交推送。其他原始分母/授权路径仍由父级独审，原NOT_RUN门不提升。
+
+2026-10-12 用户后续明确取消被拒的精确旧/新候选安装竞态对照：该具体资格永久NOT_VERIFIED，不再等待解除或改换代理/工具/框架重做。原拒绝、trace与未提交纠正保留，取消回执见[记录](../evidence/pb-exact-install-window-20261012/cancellation-20261012.json)。主线转入独立F2-T03文本无旧内容逻辑复用，不以新功能测试替代此项。
+
+
+2026-10-12 F2-T03 有限文本无旧内容逻辑复用：独立授权→原材料撤权/删除→新只读身份/单Grant绑定→冷普通Worker与严格新Release索引纵向子项已实际验证。作者32PASS，独审41PASS+2目录PASS，同产品有限相关84PASS1PGSKIP，分开记录；见[合同与证据](PBTextLogicReuse20261012.md)。语义/任务owner PENDING、LIVE0、发布false；完整P-A/P-B/AT-10与各NotRun条件仍未闭合。旧取消精确竞态对照永久NOT_VERIFIED不受此子项影响。

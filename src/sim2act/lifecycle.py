@@ -303,6 +303,10 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
         .where(internal_approvals.c.id == approval_id)
         .values(consumed=True)
     )
+    from . import text_logic_reuse
+
+    if text_logic_reuse.independent(draft):
+        text_logic_reuse.record_release_index(c, user, row)
     return row
 
 
@@ -364,6 +368,10 @@ def read_release(store, c, user, rid, limits):
     record_schema(draft["candidate"], s["data_schema"])
     validate_frozen_candidate(store, c, user, draft, limits)
     validate_source_bytes(store, c, user, draft)
+    from . import text_logic_reuse
+
+    if text_logic_reuse.independent(draft):
+        text_logic_reuse.verify_release_index(c, user, r)
     return r
 
 

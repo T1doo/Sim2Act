@@ -137,7 +137,7 @@ def page(client, store, settings, info, tmp_path):
         proof = json.loads(Path(info["output"]).read_text())
         assert proof["status"] == "PASS"
         assert all(row["visible"] and row["enabled"] for row in proof["actions"])
-        assert len(proof["static_resource_loads"]) == 19
+        assert len(proof["static_resource_loads"]) == 20
         web = Path(__file__).parents[1] / "src/sim2act/web"
         for name, digest in proof["loaded_source_sha256"].items():
             assert hashlib.sha256((web / name).read_bytes()).hexdigest() == digest

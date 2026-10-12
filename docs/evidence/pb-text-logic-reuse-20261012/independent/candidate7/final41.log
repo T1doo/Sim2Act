@@ -1,0 +1,252 @@
+............................FFFF.........                                [100%]
+=================================== FAILURES ===================================
+_____________ test_independent_text_logic_visible_cold_page[valid] _____________
+
+env = (<sim2act.db.Store object at 0x7fa8461b83b0>, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...82f0208a6b4a4b8eab07c89aff1604', 'user_5de4cc67dadb4fbb969603599b60dac8', 'proj_03e3bf0099964cbdb227913a62787b80', ...)
+tmp_path = PosixPath('/tmp/pb-text-logic-review-20261012/candidate7/final41-tmp/test_independent_text_logic_vi0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize("scenario", ["valid", "authorization-lost", "binding-lost", "revoked-retained"])
+    def test_independent_text_logic_visible_cold_page(env, tmp_path, scenario):
+        data, aid, release, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = dict(project=data[4], source=aid, instance=instance["id"], run=run["id"],
+                    old_resource=data[5], target=target, resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(["node", "tests/text_logic_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = retired = 0
+        barrier = None
+        cold_stores = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "retire-source":
+                    revoke_source(data, delete_content=scenario != "revoked-retained")
+                    barrier = source_barrier(data, aid, release, instance, run)
+                    barrier.__enter__()
+                    retired += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                elif request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_TEXT_LOGIC_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+            assert code == 0, error
+            proof = json.loads((tmp_path / "result.json").read_text())
+            assert proof["status"] == "PASS" and worked == retired == 1
+            assert barrier is not None and not barrier.blocked
+            if output:
+                (Path(output) / (scenario + "-sql.json")).write_text(json.dumps({
+                    "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                    "statements": barrier.statements}, indent=2))
+>           assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
+E           AssertionError: assert 38 == (20 * 2)
+E            +  where 38 = len([{'boot': 1, 'path': '/', 'sha256': '1a0c7664148b03148f791836f52999cd1d72d6a2eab1a27be60c01b1d91ca40e', 'status': 200}... '/owner-review.js', 'sha256': '7d1e6bb3b56217a1081a308505b0a1c6cfb7b8f87d0bd4d5092af4e3047b7494', 'status': 200}, ...])
+
+tests/test_text_logic_ui.py:77: AssertionError
+______ test_independent_text_logic_visible_cold_page[authorization-lost] _______
+
+env = (<sim2act.db.Store object at 0x7fa8465eb860>, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...4a941a16164185a41704bf11381a60', 'user_9d00aeaedbc44e49b1e1e1889162466a', 'proj_35713534d669473a81c0dcdf8d2037ca', ...)
+tmp_path = PosixPath('/tmp/pb-text-logic-review-20261012/candidate7/final41-tmp/test_independent_text_logic_vi1')
+scenario = 'authorization-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "authorization-lost", "binding-lost", "revoked-retained"])
+    def test_independent_text_logic_visible_cold_page(env, tmp_path, scenario):
+        data, aid, release, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = dict(project=data[4], source=aid, instance=instance["id"], run=run["id"],
+                    old_resource=data[5], target=target, resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(["node", "tests/text_logic_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = retired = 0
+        barrier = None
+        cold_stores = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "retire-source":
+                    revoke_source(data, delete_content=scenario != "revoked-retained")
+                    barrier = source_barrier(data, aid, release, instance, run)
+                    barrier.__enter__()
+                    retired += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                elif request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            process.stdin.close()
+            error = process.stderr.read()
+            code = process.wait(timeout=20)
+            output = os.environ.get("SIM2ACT_TEXT_LOGIC_EVIDENCE_DIR")
+            if output:
+                folder = Path(output)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / (scenario + ".log")).write_text(error)
+                if (tmp_path / "result.json").exists():
+                    (folder / (scenario + ".json")).write_bytes((tmp_path / "result.json").read_bytes())
+            assert code == 0, error
+            proof = json.loads((tmp_path / "result.json").read_text())
+            assert proof["status"] == "PASS" and worked == retired == 1
+            assert barrier is not None and not barrier.blocked
+            if output:
+                (Path(output) / (scenario + "-sql.json")).write_text(json.dumps({
+                    "protected_private_evaluations": barrier.blocked, "evaluated_cells": barrier.evaluated,
+                    "statements": barrier.statements}, indent=2))
+>           assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
+E           AssertionError: assert 38 == (20 * 2)
+E            +  where 38 = len([{'boot': 1, 'path': '/', 'sha256': '1a0c7664148b03148f791836f52999cd1d72d6a2eab1a27be60c01b1d91ca40e', 'status': 200}... '/owner-review.js', 'sha256': '7d1e6bb3b56217a1081a308505b0a1c6cfb7b8f87d0bd4d5092af4e3047b7494', 'status': 200}, ...])
+
+tests/test_text_logic_ui.py:77: AssertionError
+_________ test_independent_text_logic_visible_cold_page[binding-lost] __________
+
+env = (<sim2act.db.Store object at 0x7fa8465eadb0>, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...808f56d3ae40c5880eca54a8c5f7d3', 'user_0b8c904a892b43488b58b41b3da37b19', 'proj_3d48e17b63a7411e90040a9f5b2b6b36', ...)
+tmp_path = PosixPath('/tmp/pb-text-logic-review-20261012/candidate7/final41-tmp/test_independent_text_logic_vi2')
+scenario = 'binding-lost'
+
+    @pytest.mark.parametrize("scenario", ["valid", "authorization-lost", "binding-lost", "revoked-retained"])
+    def test_independent_text_logic_visible_cold_page(env, tmp_path, scenario):
+        data, aid, release, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = dict(project=data[4], source=aid, instance=instance["id"], run=run["id"],
+                    old_resource=data[5], target=target, resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(["node", "tests/text_logic_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = retired = 0
+        barrier = None
+        cold_stores = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "retire-source":
+                    revoke_source(data, delete_content=scenario != "revoked-retained")
+                    barrier = source_barrier(data, aid, release, instance, run)
+                    barrier.__enter__()
+                    retired += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                elif request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+>               process.stdin.write(json.dumps(answer) + "\n")
+E               BrokenPipeError: [Errno 32] Broken pipe
+
+tests/test_text_logic_ui.py:57: BrokenPipeError
+_______ test_independent_text_logic_visible_cold_page[revoked-retained] ________
+
+env = (<sim2act.db.Store object at 0x7fa84671b320>, Settings(database_url='sqlite:////tmp/pb-text-logic-review-20261012/cand...d2dd4fd380491787864a776bfdfdb4', 'user_0af7e3eb37f5484db78a21e403c35c5d', 'proj_fbfc213bcf7141069b9132ed7bd9e599', ...)
+tmp_path = PosixPath('/tmp/pb-text-logic-review-20261012/candidate7/final41-tmp/test_independent_text_logic_vi3')
+scenario = 'revoked-retained'
+
+    @pytest.mark.parametrize("scenario", ["valid", "authorization-lost", "binding-lost", "revoked-retained"])
+    def test_independent_text_logic_visible_cold_page(env, tmp_path, scenario):
+        data, aid, release, instance, run, target, resource, _ = prepared(env)
+        store, settings, client, *_ = data
+        info = dict(project=data[4], source=aid, instance=instance["id"], run=run["id"],
+                    old_resource=data[5], target=target, resource=resource, scenario=scenario,
+                    output=str(tmp_path / "result.json"))
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        process = subprocess.Popen(["node", "tests/text_logic_ui.cjs", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"})
+        worked = retired = 0
+        barrier = None
+        cold_stores = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "retire-source":
+                    revoke_source(data, delete_content=scenario != "revoked-retained")
+                    barrier = source_barrier(data, aid, release, instance, run)
+                    barrier.__enter__()
+                    retired += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                elif request.get("command") == "worker":
+                    cold = Store(settings.database_url, test_only=True)
+                    cold_stores.append(cold)
+                    assert barrier is not None
+                    barrier.attach(cold)
+                    assert Worker(cold, settings, NoModel()).once()
+                    worked += 1
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+                    response = client.request(request["method"], request["path"],
+                        json=request.get("body"), headers=request.get("headers"))
+                    answer = dict(id=request["id"], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get("content-type"))
+>               process.stdin.write(json.dumps(answer) + "\n")
+E               BrokenPipeError: [Errno 32] Broken pipe
+
+tests/test_text_logic_ui.py:57: BrokenPipeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_logic_ui.py::test_independent_text_logic_visible_cold_page[valid]
+FAILED tests/test_text_logic_ui.py::test_independent_text_logic_visible_cold_page[authorization-lost]
+FAILED tests/test_text_logic_ui.py::test_independent_text_logic_visible_cold_page[binding-lost]
+FAILED tests/test_text_logic_ui.py::test_independent_text_logic_visible_cold_page[revoked-retained]
+4 failed, 37 passed, 1 warning in 154.95s (0:02:34)

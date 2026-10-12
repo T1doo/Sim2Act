@@ -387,9 +387,18 @@ def mount(app, store, identity, limits, settings):
         return save(store, user, pid, body)
 
     @app.get("/api/projects/{pid}/conditional-apps")
-    def listing(pid: str, user=dependency):
+    def listing(pid: str, metadata_only: bool = False, user=dependency):
         with store.tx() as c:
             store.lock_project(c, user, pid)
+            if metadata_only:
+                # The independent family marker selects metadata; only explicit
+                # opening reads and verifies its private wrapper/source lineage.
+                rows = c.execute(select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id)
+                    .join(task_extractions, task_extractions.c.app_id == app_drafts.c.id)
+                    .where(app_drafts.c.project_id == pid, task_extractions.c.principal_id == user,
+                           task_extractions.c.snapshot["kind"].as_string() == NAMESPACE)
+                    .order_by(app_drafts.c.created_at.desc())).mappings().all()
+                return {"namespace": NAMESPACE, "items": [dict(r) for r in rows], "discovery_only": True}
             rows = (
                 c.execute(
                     select(app_drafts)

@@ -307,6 +307,7 @@ $("internal-replay-file").onchange=async()=>{
 
 
 function clearRegisteredExtraction() {
+  if(typeof clearTextLogic === "function")clearTextLogic();
   registeredExtractionGeneration++;registeredExtraction=null;
   $("registered-extraction").hidden=true;$("registered-extraction-form").hidden=true;
   $("registered-extraction-proof").textContent="";$("registered-extraction-target-info").textContent="";
@@ -324,6 +325,7 @@ function renderRegisteredExtraction(view,instance,run) {
   if(registeredExtraction?.view===view && registeredExtraction.iid===instance.id && registeredExtraction.rid===run.id && registeredExtraction.version===run.version)return;
   clearRegisteredExtraction();registeredExtraction={view,token,project:view.project,iid:instance.id,rid:run.id,version:run.version,generation:registeredExtractionGeneration,options:null,busy:false};
   $("registered-extraction").hidden=false;$("registered-extraction-open").disabled=false;
+  if(typeof renderTextLogicSource === "function")renderTextLogicSource(registeredExtraction);
 }
 function registeredBody(state) {
   const target=state.options?.targets.find(t=>t.id===$("registered-extraction-target").value);

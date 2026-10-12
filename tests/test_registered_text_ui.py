@@ -121,7 +121,7 @@ def test_registered_text_actual_http_page(env, tmp_path, scenario):
         for name, digest in proof["loaded_source_sha256"].items():
             assert hashlib.sha256((web / name).read_bytes()).hexdigest() == digest
         assert all(row["visible"] and row["enabled"] for row in proof["actions"])
-        assert len(proof["static_resource_loads"]) == 19 * proof["boots"]
+        assert len(proof["static_resource_loads"]) == 20 * proof["boots"]
     finally:
         if process.poll() is None:
             process.kill()
