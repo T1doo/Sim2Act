@@ -1,0 +1,1789 @@
+diff --git a/src/sim2act/api.py b/src/sim2act/api.py
+index 597a261..f45c71a 100644
+--- a/src/sim2act/api.py
++++ b/src/sim2act/api.py
+@@ -460,21 +460,66 @@ def create_app(store=None, settings=None):
+         )
+ 
+     from .goal_applications import ConfirmInput as ConfirmApplicationInput
++    from .goal_applications import GenerationRunInput
+     from .goal_runs import GoalRunInput, acceptance
+ 
+     @app.post("/api/projects/{pid}/goal-cards/{cid}/application-runs", status_code=202)
+-    def generate_goal_application(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
++    def generate_goal_application(pid: str, cid: str, body: GenerationRunInput, user=user_dependency):
+         from .goal_applications import policy
+ 
+-        selected = policy(s.goal_planner_provider, user, pid, {"card_id": cid, **body.model_dump()})
++        scope = None
++        if body.activation is not None:
++            from .generation_approvals import submission
++
++            scope = submission(db, user, pid, cid, body, s)
++        selected = policy(s.goal_planner_provider, user, pid,
++            {"card_id": cid, **body.model_dump(exclude_none=True)},
++            **({"activation": body.activation} if body.activation is not None else {}))
++        limits = scope.limits if scope else platform_limits
+         rid = db.submit(user, pid, "", [], body.request_key, policy={
+-            "limits": {**platform_limits.model_dump(), "max_requests": min(3, s.max_requests),
+-                       "max_tools": 1, "max_repairs": min(1, s.max_repairs)},
+-            "mode": "mock", "request_model": "intern-s2", "application_generation": selected,
++            "limits": {**limits.model_dump(), "max_requests": min(3, s.max_requests, limits.max_requests),
++                       "max_tools": min(1, limits.max_tools), "max_repairs": min(1, s.max_repairs, limits.max_repairs)},
++            "mode": "live" if scope and scope.mode == "LIVE" else "mock", "request_model": "intern-s2", "application_generation": selected,
+         }, goal_source={"card_id": cid, "version": body.expected_version,
+                         "fingerprint": body.expected_fingerprint})
+         return {**acceptance(db, user, rid), "generation_policy": selected}
+ 
++    from . import generation_approvals as generation_provider
++
++    @app.get("/api/projects/{pid}/goal-cards/{cid}/application-provider-scopes")
++    def generation_provider_options(pid: str, cid: str, user=user_dependency):
++        return generation_provider.approved_options(db, user, pid, cid, s)
++
++    @app.post("/api/projects/{pid}/application-provider-scopes", status_code=201)
++    def prepare_generation_provider(pid: str, body: generation_provider.PrepareInput, user=user_dependency):
++        return generation_provider.prepare(db, user, pid, body, s)
++
++    @app.post("/api/application-provider-scopes/{aid}/approve")
++    def approve_generation_provider(aid: str, body: generation_provider.ApproveInput, user=user_dependency):
++        return generation_provider.approve(db, user, aid, body, s)
++
++    @app.post("/api/application-provider-scopes/{aid}/revoke")
++    def revoke_generation_provider(aid: str, body: generation_provider.RevokeInput, user=user_dependency):
++        return generation_provider.revoke(db, user, aid, body)
++
++    from . import pa_material_bindings as pa_binding
++
++    @app.get("/api/projects/{pid}/pa-model-candidates")
++    def pa_model_candidates(pid: str, user=user_dependency):
++        return pa_binding.source_index(db, user, pid, platform_limits)
++
++    @app.get("/api/projects/{pid}/pa-model-candidates/{rid}/material-binding-options")
++    def pa_binding_options(pid: str, rid: str, card_id: str, user=user_dependency):
++        return pa_binding.options(db, user, pid, rid, card_id, platform_limits)
++
++    @app.post("/api/projects/{pid}/pa-model-candidates/{rid}/material-bindings", status_code=201)
++    def bind_pa_material(pid: str, rid: str, body: pa_binding.BindInput, user=user_dependency):
++        return pa_binding.bind(db, user, pid, rid, body, platform_limits)
++
++    @app.get("/api/projects/{pid}/pa-model-candidates/{rid}/material-binding-requests/{key}")
++    def recover_pa_binding(pid: str, rid: str, key: str, user=user_dependency):
++        return pa_binding.recover(db, user, pid, rid, key, platform_limits)
++
+     @app.post("/api/runs/{rid}/confirm-application-candidate")
+     def confirm_goal_application(rid: str, body: ConfirmApplicationInput, user=user_dependency):
+         from .goal_applications import confirm
+@@ -489,10 +534,14 @@ def create_app(store=None, settings=None):
+             raise DomainError("INVALID_INPUT")
+         with db.tx() as c:
+             db.own_project(c, user, pid)
+-            run = c.execute(select(runs).where(runs.c.project_id == pid,
+-                runs.c.principal_id == user, runs.c.request_key == request_key)).mappings().first()
+-            if not run:
++            rid = c.execute(select(runs.c.id).where(runs.c.project_id == pid,
++                runs.c.principal_id == user, runs.c.request_key == request_key)).scalar()
++            if not rid:
+                 raise DomainError("RESOURCE_UNAVAILABLE", "No accepted generation with this original key")
++            from .goal_applications import source_scope_gate
++
++            source_scope_gate(db, c, rid)
++            run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+             contract = db.frozen_contract(c, run)
+             if contract.application_generation is None or contract.source_goal_card.card_id != cid:
+                 raise DomainError("VERSION_CONFLICT", "Original key belongs to another request")
+diff --git a/src/sim2act/apps.py b/src/sim2act/apps.py
+index b00c494..85c886f 100644
+--- a/src/sim2act/apps.py
++++ b/src/sim2act/apps.py
+@@ -188,6 +188,10 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
+ 
+ 
+ def compile_preview(candidate, platform_limits):
++    from . import pa_material_bindings
++
++    if isinstance(candidate, dict) and candidate.get("namespace") == pa_material_bindings.VERSION:
++        return pa_material_bindings.compile_candidate(candidate, platform_limits)
+     from . import text_workflows
+ 
+     if text_workflows.is_candidate(candidate):
+@@ -273,7 +277,13 @@ def validate_source_family(c, user, draft):
+             if table is task_extractions:
+                 snapshot = row["snapshot"]
+                 proof = snapshot.get("proof") if isinstance(snapshot, dict) else None
+-                if isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
++                if isinstance(snapshot, dict) and snapshot.get("kind") == "pa_model_literal_material_binding.v1":
++                    from .pa_material_bindings import VERSION
++
++                    if candidate.get("namespace") != VERSION:
++                        raise DomainError("VERSION_CONFLICT", "P-A model binding cannot be downgraded")
++                    expected_field, expected_kind = "pa_binding", "registered_tool"
++                elif isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
+                     from .text_workflows import is_candidate
+ 
+                     if not is_candidate(candidate):
+@@ -321,7 +331,7 @@ def validate_source_family(c, user, draft):
+     if len(markers) > 1:
+         raise DomainError("VERSION_CONFLICT", "Independent source markers conflict")
+     claimed = {
+-        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application") if k in candidate
++        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application", "pa_binding") if k in candidate
+     }
+     expected = {markers[0][0]} if markers else set()
+     if claimed != expected:
+diff --git a/src/sim2act/config.py b/src/sim2act/config.py
+index dcec626..45700c4 100644
+--- a/src/sim2act/config.py
++++ b/src/sim2act/config.py
+@@ -24,6 +24,8 @@ class Settings:
+     goal_planner_provider: str = "disabled"
+     natural_activation_enabled: bool = False
+     natural_activation_live_id: str = ""
++    application_generation_activation_enabled: bool = False
++    application_generation_live_id: str = ""
+ 
+     @classmethod
+     def from_env(cls):
+@@ -45,6 +47,8 @@ class Settings:
+             goal_planner_provider=os.environ.get("SIM2ACT_GOAL_PLANNER_PROVIDER", "disabled"),
+             natural_activation_enabled=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_ENABLED", "false").lower() == "true",
+             natural_activation_live_id=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_LIVE_ID", ""),
++            application_generation_activation_enabled=os.environ.get("SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED", "false").lower() == "true",
++            application_generation_live_id=os.environ.get("SIM2ACT_APPLICATION_GENERATION_LIVE_ID", ""),
+             **{
+                 k: int(os.environ.get("SIM2ACT_" + k.upper(), str(v)))
+                 for k, v in {
+@@ -65,6 +69,10 @@ class Settings:
+             r"nlactivation_[a-f0-9]{32}", s.natural_activation_live_id
+         ):
+             raise ValueError("A specific natural activation ID is required")
++        if s.application_generation_live_id and not re.fullmatch(
++            r"gaapproval_[a-f0-9]{32}", s.application_generation_live_id
++        ):
++            raise ValueError("A specific application generation approval ID is required")
+         if not 1 <= s.rpm <= 30 or not s.quota_subject:
+             raise ValueError("Unverified quota must be between 1 and 30 RPM")
+         bounds = [
+diff --git a/src/sim2act/contracts.py b/src/sim2act/contracts.py
+index b070d51..203818e 100644
+--- a/src/sim2act/contracts.py
++++ b/src/sim2act/contracts.py
+@@ -231,6 +231,12 @@ class NaturalPlanningPolicy(Strict):
+         return value
+ 
+ 
++class ApplicationGenerationActivation(Strict):
++    approval_id: str = Field(pattern=r"^gaapproval_[a-f0-9]{32}$")
++    scope_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    approval_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++
++
+ class ApplicationGenerationPolicy(Strict):
+     version: Literal["goal-text-application.v1"]
+     provider: Literal["disabled", "intern-s2"]
+@@ -240,6 +246,7 @@ class ApplicationGenerationPolicy(Strict):
+     repair_limit: Literal[1]
+     live_request_allowance: Literal[0]
+     response_archive_policy: Literal["protected-json32768.v1"] | None = None
++    activation: ApplicationGenerationActivation | None = None
+ 
+ 
+ class FrozenRunContract(Strict):
+diff --git a/src/sim2act/db.py b/src/sim2act/db.py
+index f52f86a..486882a 100644
+--- a/src/sim2act/db.py
++++ b/src/sim2act/db.py
+@@ -905,6 +905,9 @@ class Store:
+             return self.submit(principal, project_id, goal, refs, key, policy=policy, goal_source=goal_source)
+ 
+     def guard(self, c, run_id, fence):
++        from .goal_applications import source_scope_gate
++
++        source_scope_gate(self, c, run_id)
+         r = c.execute(select(runs).where(runs.c.id == run_id).with_for_update()).mappings().one()
+         if (
+             r["fence"] != fence
+@@ -916,6 +919,9 @@ class Store:
+         return dict(r)
+ 
+     def frozen_contract(self, c, run):
++        from .goal_applications import source_scope_gate
++
++        source_scope_gate(self, c, run["id"])
+         if not isinstance(run["context"], dict):
+             raise DomainError("VERSION_CONFLICT", "Invalid persisted Run context")
+         saved = (
+@@ -1045,6 +1051,15 @@ class Store:
+             )
+             if row is None:
+                 return None
++            from .goal_applications import source_scope_gate
++
++            try:
++                source_scope_gate(self, c, row)
++            except DomainError as exc:
++                c.execute(update(runs).where(runs.c.id == row).values(
++                    status="FAILED", error=exc.public(), lease_until=0))
++                self.event(c, row, "CONTRACT_REJECTED", exc.public())
++                return None
+             # The queue's metadata lock selected this exact Run. Load only its
+             # payload, never the private fields of other queued/history rows.
+             row = c.execute(select(runs).where(runs.c.id == row)).mappings().one()
+@@ -1097,6 +1112,10 @@ class Store:
+ 
+     def inspect(self, principal, run_id):
+         self.require_run_owner(principal, run_id)
++        from .goal_applications import source_scope_gate
++
++        with self.tx() as c:
++            source_scope_gate(self, c, run_id)
+         from .csv_dag import inspect_job as inspect_csv_dag
+         from .csv_dag import is_job as is_csv_dag
+ 
+@@ -1112,6 +1131,9 @@ class Store:
+         if is_app_job(self, run_id):
+             return inspect_job(self, principal, run_id)
+         with self.tx() as c:
++            from .goal_applications import source_scope_gate
++
++            source_scope_gate(self, c, run_id)
+             r = (
+                 c.execute(select(runs).where(runs.c.id == run_id, runs.c.principal_id == principal))
+                 .mappings()
+diff --git a/src/sim2act/generation_approvals.py b/src/sim2act/generation_approvals.py
+new file mode 100644
+index 0000000..d899f12
+--- /dev/null
++++ b/src/sim2act/generation_approvals.py
+@@ -0,0 +1,511 @@
++"""Exact P-A send permission; immutable scoped seals and nonrefundable attempts.
++
++This namespace neither borrows the fixed CSV activation nor supplies a candidate.
++Defaults grant zero requests. An explicitly approved one-goal/key scope can use
++the existing Intern byte sender. Historical proof never needs live settings.
++"""
++
++import copy
++import math
++import time
++from typing import Literal
++
++from pydantic import Field
++from sqlalchemy import select, update
++
++from .contracts import ApplicationGenerationActivation, GoalCardRunSource, Limits, Strict
++from .csv_logic_reuse import implementation
++from .db import (
++    attempts,
++    delivery_graph_requests,
++    events,
++    fingerprint,
++    grants,
++    quotas,
++    reservations,
++)
++from .delivery_graph_apps import controlled, lookup, remember
++from .errors import DomainError
++from .goals import validate_card_version
++from .model import InternModel
++from .text_logic_reuse import pair
++from .tools import authorized_read
++
++VERSION: Literal["pa-intern-generation-approval.v1"] = "pa-intern-generation-approval.v1"
++META, SCOPE, APPROVE, REVOKE, CHARGE, SEND, SETTLE = ("ga_provider_" + n for n in
++    ("metadata", "scope", "approve", "revoke", "charge", "send", "settle"))
++CONSENT = "APPROVE_ONLY_THIS_EXACT_P_A_GOAL_MATERIAL_AND_REQUEST_BUDGET"
++WIRE_CAP: Literal[32768] = 32768
++CAPS = dict(max_requests=3, max_tools=1, max_repairs=1, max_total_tokens=64000,
++            max_output_tokens=1024, run_seconds=300)
++
++
++def now():
++    return time.time()
++
++
++def require(ok, message="Exact P-A provider approval changed"):
++    if not ok:
++        raise DomainError("VERSION_CONFLICT", message)
++
++
++class PrepareInput(Strict):
++    card_id: str = Field(pattern=r"^goal_[a-f0-9]{32}$")
++    expected_version: int = Field(strict=True, ge=1)
++    expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    generation_request_key: str = Field(min_length=1, max_length=100)
++    request_key: str = Field(min_length=1, max_length=100)
++
++
++class Metadata(Strict):
++    approval_id: str
++    principal_id: str
++    project_id: str
++    runtime_id: str
++    resource_id: str
++
++
++class Scope(Strict):
++    version: Literal["pa-intern-generation-approval.v1"]
++    metadata: Metadata
++    request: PrepareInput
++    source: GoalCardRunSource
++    mode: Literal["OFFLINE_TEST", "LIVE"]
++    model: Literal["intern-s2"]
++    endpoint: Literal["https://chat.intern-ai.org.cn/api/v1/chat/completions"]
++    quota_subject: str = Field(min_length=1, max_length=200)
++    limits: Limits
++    wire_bytes: Literal[32768]
++    rpm: Literal[1]
++    grant_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    software_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++
++
++class ApproveInput(Strict):
++    expected_scope_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    consent: Literal["APPROVE_ONLY_THIS_EXACT_P_A_GOAL_MATERIAL_AND_REQUEST_BUDGET"]
++    budget_note: str = Field(min_length=1, max_length=500)
++    request_key: str = Field(min_length=1, max_length=100)
++
++
++class Approval(Strict):
++    approval_id: str
++    scope_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    approved_at: float = Field(strict=True)
++    deadline: float = Field(strict=True)
++    request: ApproveInput
++
++
++class RevokeInput(Strict):
++    expected_scope_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    request_key: str = Field(min_length=1, max_length=100)
++    reason: str = Field(min_length=1, max_length=500)
++
++
++class Charge(Strict):
++    approval_id: str
++    run_id: str
++    attempt_id: str
++    index: int = Field(strict=True, ge=0, le=2)
++    fence: int = Field(strict=True, ge=1)
++    envelope: int = Field(strict=True, ge=1, le=33792)
++    wire_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    request_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    mode: Literal["MOCK", "LIVE"]
++    max_tokens: int = Field(strict=True, ge=1, le=1024)
++
++
++class Sending(Strict):
++    charge_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    sent_at: float = Field(strict=True)
++
++
++class Settlement(Strict):
++    charge_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    status: Literal["RECEIVED", "FAILED"]
++    usage: dict
++    error: str | None
++
++
++def _save(c, user, aid, kind, key, body):
++    for name in (kind, kind + "_seal"):
++        remember(c, user, aid, name, key, body, body.model_dump())
++
++
++def _get(c, user, aid, kind, key, model):
++    body, result = pair(c, user, aid, kind, key, model)
++    require(fingerprint(body.model_dump()) == fingerprint(result))
++    return body
++
++
++def _keys(c, user, aid, kind):
++    rows = c.execute(select(delivery_graph_requests.c.kind, delivery_graph_requests.c.request_key)
++        .where(delivery_graph_requests.c.app_id == aid, delivery_graph_requests.c.principal_id == user,
++            delivery_graph_requests.c.kind.in_([kind, kind + "_seal"]))).mappings().all()
++    left = {r["request_key"] for r in rows if r["kind"] == kind}
++    right = {r["request_key"] for r in rows if r["kind"] == kind + "_seal"}
++    require(left == right, "Missing P-A approval/charge seal")
++    return left
++
++
++def _meta(store, c, user, aid, *, content=False):
++    meta = _get(c, user, aid, META, "scope", Metadata)
++    require(meta.approval_id == aid and meta.principal_id == user)
++    store.own_project(c, user, meta.project_id)
++    if content:
++        store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, "resource.read")
++    return meta
++
++
++def _grant(c, meta):
++    return fingerprint([dict(r) for r in c.execute(select(grants).where(
++        grants.c.project_id == meta.project_id, grants.c.principal_id.in_([meta.principal_id, meta.runtime_id]))
++        .order_by(grants.c.id)).mappings()])
++
++
++def _current_source(store, c, user, scope):
++    meta = scope.metadata
++    material = authorized_read(store, c, user, meta.runtime_id, meta.project_id,
++        "resource.read", {"resource_id": meta.resource_id})
++    require(material["format"] in {"txt", "md"} and len(material["content"].encode()) <= 4096
++        and len(material["content"].splitlines()) <= 64, "Only finite TXT/MD literal reports are supported")
++    saved = validate_card_version(store, c, user, scope.source.card_id, scope.source.version)
++    from .db import goal_cards
++    head = c.execute(select(goal_cards).where(goal_cards.c.id == scope.source.card_id)).mappings().first()
++    require(head is not None and head["project_id"] == meta.project_id
++        and head["version"] == scope.source.version and head["fingerprint"] == scope.source.fingerprint
++        and fingerprint(saved["snapshot"]) == fingerprint(scope.source.snapshot) == scope.source.fingerprint
++        and saved["snapshot"]["content"]["resource_refs"] == [meta.resource_id]
++        and saved["snapshot"]["resource_snapshots"] == [{"resource_id": meta.resource_id,
++            "hash": material["hash"], "format": material["format"]}]
++        and _grant(c, meta) == scope.grant_fingerprint,
++        "Current Goal, material or authorization differs from exact approval")
++
++
++def _enabled(settings):
++    if settings.application_generation_activation_enabled is not True:
++        raise DomainError("RESOURCE_UNAVAILABLE", "P-A generation approval mechanism is disabled")
++
++
++@controlled
++def prepare(store, user, pid, body, settings):
++    _enabled(settings)
++    with store.tx() as c:
++        project = store.lock_project(c, user, pid)
++        from .db import goal_card_versions, goal_cards
++
++        location = c.execute(select(goal_cards.c.project_id).where(goal_cards.c.id == body.card_id)).scalar()
++        if location != pid:
++            raise DomainError("PERMISSION_DENIED")
++        refs = c.execute(select(goal_card_versions.c.snapshot["content"]["resource_refs"])
++            .where(goal_card_versions.c.card_id == body.card_id,
++                goal_card_versions.c.version == body.expected_version)).scalar()
++        require(isinstance(refs, list) and len(refs) == 1,
++            "Exactly one authorized TXT/MD material is required")
++        store.authorize(c, user, project["runtime_id"], pid, refs[0], "resource.read")
++        saved = validate_card_version(store, c, user, body.card_id, body.expected_version)
++        require(saved["fingerprint"] == body.expected_fingerprint)
++        refs = saved["snapshot"]["content"]["resource_refs"]
++        require(len(refs) == 1, "Exactly one authorized TXT/MD material is required")
++        aid = "gaapproval_" + fingerprint({"user": user, "project": pid, "key": body.request_key})[:32]
++        meta = Metadata(approval_id=aid, principal_id=user, project_id=pid,
++            runtime_id=project["runtime_id"], resource_id=refs[0])
++        limits = Limits(**{k: min(getattr(settings, k), cap) for k, cap in CAPS.items()})
++        require(limits.max_requests >= 2 and settings.model == "intern-s2"
++            and settings.goal_planner_provider == "intern-s2")
++        scope = Scope(version=VERSION, metadata=meta, request=body,
++            source=GoalCardRunSource(card_id=body.card_id, version=body.expected_version,
++                fingerprint=body.expected_fingerprint, snapshot=saved["snapshot"]),
++            mode="OFFLINE_TEST" if store.test_only else "LIVE", model="intern-s2",
++            endpoint="https://chat.intern-ai.org.cn/api/v1/chat/completions", quota_subject=settings.quota_subject,
++            limits=limits, wire_bytes=WIRE_CAP, rpm=1, grant_fingerprint=_grant(c, meta),
++            software_fingerprint=implementation())
++        require(scope.endpoint == InternModel.ENDPOINT)
++        _current_source(store, c, user, scope)
++        if any(lookup(c, user, aid, k, "scope") for k in (META, META + "_seal", SCOPE, SCOPE + "_seal")):
++            _meta(store, c, user, aid, content=True)
++            old = _get(c, user, aid, SCOPE, "scope", Scope)
++            require(fingerprint(old.model_dump()) == fingerprint(scope.model_dump()))
++        else:
++            _save(c, user, aid, META, "scope", meta)
++            _save(c, user, aid, SCOPE, "scope", scope)
++        return {"approval_id": aid, "scope_fingerprint": fingerprint(scope.model_dump()),
++            "scope": scope.model_dump(), "status": "PREPARED", "actual_model_requests": 0,
++            "formal_publication_enabled": False, "monetary_spending_cap": "NOT_ESTABLISHED"}
++
++
++@controlled
++def approve(store, user, aid, body, settings):
++    _enabled(settings)
++    with store.tx() as c:
++        meta = _meta(store, c, user, aid)
++        store.lock_project(c, user, meta.project_id)
++        store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, "resource.read")
++        scope = _get(c, user, aid, SCOPE, "scope", Scope)
++        require(body.expected_scope_fingerprint == fingerprint(scope.model_dump()) and body.budget_note.strip())
++        _current_source(store, c, user, scope)
++        require(scope.software_fingerprint == implementation())
++        require(not _keys(c, user, aid, REVOKE), "Approval has been irreversibly revoked")
++        if _keys(c, user, aid, APPROVE):
++            require(_keys(c, user, aid, APPROVE) == {"approve"})
++            accepted = _get(c, user, aid, APPROVE, "approve", Approval)
++            require(fingerprint(accepted.request.model_dump()) == fingerprint(body.model_dump()))
++        else:
++            at = now()
++            require(math.isfinite(at))
++            accepted = Approval(approval_id=aid, scope_fingerprint=fingerprint(scope.model_dump()),
++                approved_at=at, deadline=at + scope.limits.run_seconds, request=body)
++            _save(c, user, aid, APPROVE, "approve", accepted)
++        return {"activation": ApplicationGenerationActivation(approval_id=aid,
++            scope_fingerprint=accepted.scope_fingerprint,
++            approval_fingerprint=fingerprint(accepted.model_dump())).model_dump(),
++            "deadline": accepted.deadline, "scope": scope.model_dump(),
++            "formal_publication_enabled": False, "actual_model_requests": 0}
++
++
++@controlled
++def revoke(store, user, aid, body):
++    with store.tx() as c:
++        meta = _meta(store, c, user, aid)
++        store.lock_project(c, user, meta.project_id)
++        # Metadata/hash projections only: stop does not recover protected Goal/material content.
++        projections = c.execute(select(delivery_graph_requests.c.kind,
++            delivery_graph_requests.c.fingerprint, delivery_graph_requests.c.request_fingerprint)
++            .where(delivery_graph_requests.c.app_id == aid, delivery_graph_requests.c.principal_id == user,
++                delivery_graph_requests.c.kind.in_([SCOPE, SCOPE + "_seal"]),
++                delivery_graph_requests.c.request_key == "scope")).mappings().all()
++        require(len(projections) == 2 and projections[0]["fingerprint"] == projections[1]["fingerprint"])
++        require(body.reason.strip())
++        approved = _get(c, user, aid, APPROVE, "approve", Approval)
++        require(body.expected_scope_fingerprint == approved.scope_fingerprint
++            and all(r["request_fingerprint"] == approved.scope_fingerprint for r in projections))
++        if _keys(c, user, aid, REVOKE):
++            old = _get(c, user, aid, REVOKE, "revoke", RevokeInput)
++            require(fingerprint(old.model_dump()) == fingerprint(body.model_dump()))
++        else:
++            _save(c, user, aid, REVOKE, "revoke", body)
++        return {"approval_id": aid, "status": "REVOKED", "actual_model_requests": 0}
++
++
++def _attempt(c, aid):
++    return c.execute(select(attempts.c.id, attempts.c.run_id, attempts.c.status,
++        attempts.c.mode, attempts.c.request_model, attempts.c.reserved_tokens, attempts.c.usage,
++        attempts.c.error,
++        *[attempts.c.parameters[k].label(k) for k in
++          ("generation_activation", "generation_wire", "generation_fence", "generation_index",
++           "request_fingerprint", "max_tokens")]).where(attempts.c.id == aid)).mappings().first()
++
++
++@controlled
++def audit(store, c, user, aid, transition=None):
++    _meta(store, c, user, aid)
++    keys = _keys(c, user, aid, CHARGE)
++    sent, settled = _keys(c, user, aid, SEND), _keys(c, user, aid, SETTLE)
++    require(sent <= keys and settled <= keys and len(keys) <= 3)
++    charges = sorted([_get(c, user, aid, CHARGE, key, Charge) for key in keys], key=lambda v: v.index)
++    require([r.index for r in charges] == list(range(len(charges)))
++        and len({r.run_id for r in charges}) <= 1)
++    anchored = c.execute(select(events.c.data).where(events.c.run_id == aid,
++        events.c.kind == "GA_PROVIDER_RESERVED")).scalars().all()
++    require(fingerprint(sorted(anchored, key=lambda r: r["index"]))
++        == fingerprint([r.model_dump() for r in charges]), "Independent provider charge history differs")
++    marked = set(c.execute(select(attempts.c.id).where(
++        attempts.c.parameters["generation_activation"]["approval_id"].as_string() == aid)).scalars())
++    require(marked == keys, "Actual Attempt and provider charge sets differ")
++    for charge in charges:
++        actual = _attempt(c, charge.attempt_id)
++        wanted = dict(run_id=charge.run_id, mode=charge.mode, request_model="intern-s2",
++            reserved_tokens=charge.envelope, generation_activation={"approval_id": aid,
++                "charge_fingerprint": fingerprint(charge.model_dump())},
++            generation_wire=charge.wire_fingerprint, request_fingerprint=charge.request_fingerprint,
++            generation_fence=charge.fence, generation_index=charge.index, max_tokens=charge.max_tokens)
++        require(actual is not None and fingerprint({k: actual[k] for k in wanted}) == fingerprint(wanted))
++        if charge.attempt_id in sent:
++            marker = _get(c, user, aid, SEND, charge.attempt_id, Sending)
++            require(marker.charge_fingerprint == fingerprint(charge.model_dump()) and math.isfinite(marker.sent_at))
++        if charge.attempt_id in settled:
++            result = _get(c, user, aid, SETTLE, charge.attempt_id, Settlement)
++            require(result.charge_fingerprint == fingerprint(charge.model_dump())
++                and result.status == actual["status"] and fingerprint(result.usage) == fingerprint(actual["usage"])
++                and result.error == actual["error"])
++        elif charge.attempt_id != transition:
++            require(actual["status"] == "STARTED", "Missing provider settlement proof")
++    return charges, sent, settled
++
++
++@controlled
++def validate_run(store, c, run, settings=None, *, active=False, transition=None):
++    contract = store.frozen_contract(c, run)
++    selected = contract.application_generation
++    require(selected is not None and selected.activation is not None)
++    b = selected.activation
++    meta = _meta(store, c, run["principal_id"], b.approval_id, content=True)
++    scope = _get(c, run["principal_id"], b.approval_id, SCOPE, "scope", Scope)
++    approval = _get(c, run["principal_id"], b.approval_id, APPROVE, "approve", Approval)
++    require(fingerprint(scope.model_dump()) == b.scope_fingerprint == approval.scope_fingerprint
++        and fingerprint(approval.model_dump()) == b.approval_fingerprint
++        and scope.metadata == meta and scope.software_fingerprint == implementation()
++        and meta.project_id == run["project_id"] and meta.runtime_id == run["runtime_id"]
++        and run["request_key"] == scope.request.generation_request_key
++        and fingerprint(contract.source_goal_card.model_dump()) == fingerprint(scope.source.model_dump())
++        and contract.mode == ("mock" if scope.mode == "OFFLINE_TEST" else "live")
++        and contract.request_model == scope.model and selected.provider == scope.model
++        and selected.response_archive_policy == "protected-json32768.v1"
++        and selected.live_request_allowance == 0
++        and all(v <= scope.limits.model_dump()[k] for k, v in contract.limits.model_dump().items())
++        and math.isfinite(approval.approved_at) and math.isfinite(approval.deadline)
++        and approval.deadline == approval.approved_at + scope.limits.run_seconds)
++    require(_keys(c, run["principal_id"], b.approval_id, META) == {"scope"}
++        and _keys(c, run["principal_id"], b.approval_id, SCOPE) == {"scope"}
++        and _keys(c, run["principal_id"], b.approval_id, APPROVE) == {"approve"}
++        and _keys(c, run["principal_id"], b.approval_id, REVOKE) <= {"revoke"})
++    charges, sent, settled = audit(store, c, run["principal_id"], b.approval_id, transition)
++    require(all(r.run_id == run["id"] for r in charges))
++    require(sum(r.envelope for r in charges) <= scope.limits.max_total_tokens)
++    for key in sent:
++        marker = _get(c, run["principal_id"], b.approval_id, SEND, key, Sending)
++        require(approval.approved_at <= marker.sent_at < approval.deadline,
++            "Provider send lies outside original finite approval time")
++    if active:
++        _enabled(settings)
++        require(not _keys(c, run["principal_id"], b.approval_id, REVOKE), "P-A generation approval revoked")
++        at = now()
++        require(math.isfinite(at) and approval.approved_at <= at < min(approval.deadline,
++            approval.approved_at + settings.run_seconds), "P-A generation approval expired")
++        require(settings.goal_planner_provider == scope.model and settings.model == scope.model
++            and settings.quota_subject == scope.quota_subject)
++        _current_source(store, c, run["principal_id"], scope)
++    return scope, approval, charges, sent, settled
++
++
++@controlled
++def submission(store, user, pid, cid, body, settings):
++    _enabled(settings)
++    with store.tx() as c:
++        b = body.activation
++        meta = _meta(store, c, user, b.approval_id)
++        if meta.project_id != pid:
++            raise DomainError("PERMISSION_DENIED")
++        store.lock_project(c, user, pid)
++        store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, "resource.read")
++        scope = _get(c, user, b.approval_id, SCOPE, "scope", Scope)
++        approval = _get(c, user, b.approval_id, APPROVE, "approve", Approval)
++        require(meta.project_id == pid and scope.request.card_id == cid
++            and body.expected_version == scope.source.version and body.expected_fingerprint == scope.source.fingerprint
++            and body.request_key == scope.request.generation_request_key
++            and fingerprint(scope.model_dump()) == b.scope_fingerprint == approval.scope_fingerprint
++            and fingerprint(approval.model_dump()) == b.approval_fingerprint
++            and scope.software_fingerprint == implementation()
++            and not _keys(c, user, b.approval_id, REVOKE)
++            and approval.approved_at <= now() < approval.deadline)
++        _current_source(store, c, user, scope)
++        return scope
++
++
++@controlled
++def approved_options(store, user, pid, cid, settings):
++    """Read existing approvals only; selection is never an implicit authorization."""
++    with store.tx() as c:
++        store.own_project(c, user, pid)
++        if not settings.application_generation_activation_enabled:
++            return dict(project_id=pid, card_id=cid, enabled=False, options=[], default_request_budget=0)
++        ids = c.execute(select(delivery_graph_requests.c.app_id).where(
++            delivery_graph_requests.c.principal_id == user, delivery_graph_requests.c.kind == META,
++            delivery_graph_requests.c.snapshot["request"]["project_id"].as_string() == pid)
++            .order_by(delivery_graph_requests.c.app_id).limit(64)).scalars().all()
++        result = []
++        for aid in ids:
++            try:
++                meta = _meta(store, c, user, aid, content=True)
++                require(meta.project_id == pid)
++                scope = _get(c, user, aid, SCOPE, "scope", Scope)
++                if scope.source.card_id != cid or _keys(c, user, aid, REVOKE):
++                    continue
++                accepted = _get(c, user, aid, APPROVE, "approve", Approval)
++                b = ApplicationGenerationActivation(approval_id=aid,
++                    scope_fingerprint=fingerprint(scope.model_dump()), approval_fingerprint=fingerprint(accepted.model_dump()))
++                from .goal_applications import GenerationRunInput
++
++                body = GenerationRunInput(
++                    expected_version=scope.source.version, expected_fingerprint=scope.source.fingerprint,
++                    request_key=scope.request.generation_request_key, activation=b)
++                require(scope.metadata == meta and accepted.approval_id == aid
++                    and accepted.scope_fingerprint == b.scope_fingerprint
++                    and scope.software_fingerprint == implementation()
++                    and accepted.approved_at <= now() < min(accepted.deadline, accepted.approved_at + settings.run_seconds)
++                    and _keys(c, user, aid, META) == {"scope"} and _keys(c, user, aid, SCOPE) == {"scope"}
++                    and _keys(c, user, aid, APPROVE) == {"approve"})
++                _current_source(store, c, user, scope)
++                result.append(dict(activation=b.model_dump(), request_key=body.request_key,
++                    scope=scope.model_dump(), deadline=accepted.deadline,
++                    scope_fingerprint=b.scope_fingerprint, approval_fingerprint=b.approval_fingerprint))
++            except DomainError:
++                continue
++        return dict(project_id=pid, card_id=cid, enabled=True, options=result, default_request_budget=0)
++
++
++@controlled
++def reserve_slot(worker, c, run, aid, envelope, wire_fp):
++    scope, _, prior, _, settled = validate_run(worker.store, c, run, worker.s, active=True)
++    require(len(prior) == run["context"]["requests"] and len(prior) < scope.limits.max_requests)
++    if len(settled) != len(prior):
++        raise DomainError("OUTCOME_UNKNOWN", "Original provider send is not settled; never resend")
++    for r in prior:
++        result = _get(c, run["principal_id"], scope.metadata.approval_id, SETTLE, r.attempt_id, Settlement)
++        repair = r.index == 1 and result.error in {"INVALID_MANIFEST", "INVALID_INPUT"}
++        if result.status != "RECEIVED" or (result.error and not repair) or result.usage.get("status") != "known":
++            raise DomainError("OUTCOME_UNKNOWN", "Failed or unknown provider evidence halts further sends")
++    actual = _attempt(c, aid)
++    require(actual is not None and actual["status"] == "STARTED")
++    if envelope > WIRE_CAP + actual["max_tokens"] or sum(r.envelope for r in prior) + envelope > scope.limits.max_total_tokens:
++        raise DomainError("BUDGET_EXHAUSTED")
++    charge = Charge(approval_id=scope.metadata.approval_id, run_id=run["id"], attempt_id=aid,
++        index=len(prior), fence=run["fence"], envelope=envelope, wire_fingerprint=wire_fp,
++        request_fingerprint=actual["request_fingerprint"], mode=actual["mode"], max_tokens=actual["max_tokens"])
++    _save(c, run["principal_id"], charge.approval_id, CHARGE, aid, charge)
++    params = c.execute(select(attempts.c.parameters).where(attempts.c.id == aid)).scalar_one()
++    c.execute(update(attempts).where(attempts.c.id == aid).values(parameters={**params,
++        "generation_activation": {"approval_id": charge.approval_id, "charge_fingerprint": fingerprint(charge.model_dump())}}))
++    worker.store.event(c, charge.approval_id, "GA_PROVIDER_RESERVED", charge.model_dump())
++
++
++@controlled
++def mark_sending(worker, c, run, aid):
++    scope, approval, charges, sent, settled = validate_run(worker.store, c, run, worker.s, active=True)
++    require(charges and charges[-1].attempt_id == aid and aid not in sent and aid not in settled)
++    require(all(r.attempt_id in settled for r in charges[:-1]))
++    subject, at = scope.quota_subject, now()
++    quota = c.execute(select(quotas).where(quotas.c.subject == subject).with_for_update()).mappings().first()
++    own = c.execute(select(reservations).where(reservations.c.id == aid,
++        reservations.c.subject == subject, reservations.c.run_id == run["id"])).mappings().first()
++    other = c.execute(select(reservations.c.id).where(reservations.c.subject == subject,
++        reservations.c.id != aid, reservations.c.created_at > at - 60)).first()
++    pending = c.execute(select(attempts.c.id).join(reservations, attempts.c.id == reservations.c.id)
++        .where(reservations.c.subject == subject, attempts.c.id != aid, attempts.c.status == "STARTED")).first()
++    require(quota is not None and own is not None)
++    if quota["blocked_until"] > at or other or pending:
++        raise DomainError("RATE_LIMITED", "P-A approval uses the existing account at most once per minute")
++    c.execute(update(reservations).where(reservations.c.id == aid).values(created_at=at))
++    c.execute(update(quotas).where(quotas.c.subject == subject).values(blocked_until=at + 60))
++    _save(c, run["principal_id"], scope.metadata.approval_id, SEND, aid,
++        Sending(charge_fingerprint=fingerprint(charges[-1].model_dump()), sent_at=at))
++    return min(approval.deadline, approval.approved_at + worker.s.run_seconds)
++
++
++@controlled
++def settle(store, c, user, activation, aid):
++    # Evidence settlement is metadata-only and independent of current Goal/Grant/lease/expiry.
++    approval_id = activation.approval_id
++    charges, _, _ = audit(store, c, user, approval_id, transition=aid)
++    charge = next((r for r in charges if r.attempt_id == aid), None)
++    if charge is None:
++        raise DomainError("VERSION_CONFLICT", "Missing provider charge")
++    actual = _attempt(c, aid)
++    require(actual["status"] in {"RECEIVED", "FAILED"})
++    result = Settlement(charge_fingerprint=fingerprint(charge.model_dump()),
++        status=actual["status"], usage=copy.deepcopy(actual["usage"]), error=actual["error"])
++    if aid in _keys(c, user, approval_id, SETTLE):
++        old = _get(c, user, approval_id, SETTLE, aid, Settlement)
++        require(fingerprint(old.model_dump()) == fingerprint(result.model_dump()))
++    else:
++        _save(c, user, approval_id, SETTLE, aid, result)
+diff --git a/src/sim2act/goal_applications.py b/src/sim2act/goal_applications.py
+index 4a1895e..a1b1db2 100644
+--- a/src/sim2act/goal_applications.py
++++ b/src/sim2act/goal_applications.py
+@@ -15,6 +15,7 @@ from sqlalchemy import insert, select, update
+ 
+ from .contracts import (
+     ActionSpec,
++    ApplicationGenerationActivation,
+     ApplicationGenerationPolicy,
+     AppManifest,
+     Strict,
+@@ -32,6 +33,7 @@ from .db import (
+     operation_intents,
+     operations,
+     principals,
++    run_contracts,
+     runs,
+ )
+ from .errors import DomainError
+@@ -82,7 +84,14 @@ class ConfirmInput(Strict):
+     name: str = Field(min_length=1, max_length=100)
+ 
+ 
+-def policy(provider, user, pid, body):
++class GenerationRunInput(Strict):
++    expected_version: int = Field(strict=True, ge=1)
++    expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    request_key: str = Field(min_length=1, max_length=100)
++    activation: ApplicationGenerationActivation | None = None
++
++
++def policy(provider, user, pid, body, activation=None):
+     intent = fingerprint({"user": user, "project": pid, "input": body})
+     return ApplicationGenerationPolicy(
+         version="goal-text-application.v1",
+@@ -93,10 +102,59 @@ def policy(provider, user, pid, body):
+         repair_limit=1,
+         live_request_allowance=0,
+         response_archive_policy="protected-json32768.v1",
++        activation=activation,
+     ).model_dump(exclude_none=True)
+ 
+ 
++def source_scope_gate(store, c, rid):
++    """Only identifier projections before authorization; never fetch protected bodies."""
++    metadata = c.execute(select(runs.c.principal_id, runs.c.project_id,
++        runs.c.runtime_id, runs.c.resource_refs).where(runs.c.id == rid)).mappings().first()
++    hints = c.execute(select(
++        run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
++        run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),
++        run_contracts.c.snapshot["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
++        run_contracts.c.snapshot["runtime_id"].as_string().label("runtime"),
++        run_contracts.c.snapshot["goal"]["owner_id"].as_string().label("owner"),
++        run_contracts.c.snapshot["goal"]["project_id"].as_string().label("project"),
++        run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
++        run_contracts.c.snapshot["resources"][0]["resource_id"].as_string().label("resource"),
++        run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"]["resource_refs"].label("goal_refs"))
++        .where(run_contracts.c.run_id == rid)).mappings().first()
++    anchored = c.execute(select(
++        events.c.data["application_generation"]["version"].as_string().label("kind"),
++        events.c.data["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
++        events.c.data["application_generation"]["app_id"].as_string().label("app_id"))
++        .where(events.c.run_id == rid, events.c.kind == "ACCEPTED")).mappings().all()
++    marked = any(r["kind"] is not None or r["aid"] is not None or r["app_id"] is not None for r in anchored)
++    if not marked and (not hints or all(hints[k] is None for k in ("kind", "aid", "app_id"))):
++        return False
++    if metadata is None or len(metadata["resource_refs"]) != 1:
++        raise DomainError("VERSION_CONFLICT")
++    store.own_project(c, metadata["principal_id"], metadata["project_id"])
++    store.authorize(c, metadata["principal_id"], metadata["runtime_id"],
++        metadata["project_id"], metadata["resource_refs"][0], "resource.read")
++    if len(anchored) != 1 or hints is None:
++        raise DomainError("VERSION_CONFLICT")
++    aid = anchored[0]["aid"] or hints["aid"]
++    if aid is not None:
++        from .generation_approvals import _meta
++
++        meta = _meta(store, c, metadata["principal_id"], aid, content=True)
++        if (meta.project_id, meta.runtime_id, [meta.resource_id]) != (
++                metadata["project_id"], metadata["runtime_id"], metadata["resource_refs"]):
++            raise DomainError("VERSION_CONFLICT")
++    if (any(hints[k] != anchored[0][k] for k in ("kind", "aid", "app_id"))
++        or hints["kind"] != "goal-text-application.v1" or hints["runtime"] != metadata["runtime_id"]
++        or hints["owner"] != metadata["principal_id"] or hints["project"] != metadata["project_id"]
++        or hints["refs"] != metadata["resource_refs"] or hints["goal_refs"] != metadata["resource_refs"]
++        or hints["resource"] != metadata["resource_refs"][0]):
++        raise DomainError("VERSION_CONFLICT")
++    return True
++
++
+ def source(store, c, run):
++    source_scope_gate(store, c, run["id"])
+     contract = store.frozen_contract(c, run)
+     if (
+         contract.application_generation is None
+@@ -188,6 +246,11 @@ def body(messages, tools, max_output):
+ def history(store, c, run):
+     """Reconstruct every request from frozen input and separately anchored received responses."""
+     messages = initial_messages(store, c, run)
++    selected = store.frozen_contract(c, run).application_generation
++    if selected.activation is not None:
++        from .generation_approvals import validate_run
++
++        validate_run(store, c, run)
+     rows = (
+         c.execute(
+             select(attempts)
+@@ -284,11 +347,17 @@ def history(store, c, run):
+             or parameters.get("generation_wire") != hashlib.sha256(wire).hexdigest()
+             or parameters.get("request_fingerprint")
+             != fingerprint({"messages": messages, "tools": tools, "model": "intern-s2"})
+-            or attempt["response_model"] != "intern-s2"
+-            or attempt["mode"] != "MOCK"
++            or attempt["request_model"] != "intern-s2"
++            or attempt["mode"] != ("LIVE" if store.frozen_contract(c, run).mode == "live" else "MOCK")
+             or attempt["usage"]["status"] != "known"
+         ):
+             raise DomainError("VERSION_CONFLICT", "Generation differs from actual provider wire")
++        identity = returned_model_identity("intern-s2", attempt["response_model"], enforced=attempt["mode"] == "LIVE")
++        require_returned_model(identity)
++        if selected.activation is not None and identity["normalized_returned_model"] != "intern-s2":
++            raise DomainError("VERSION_CONFLICT", "Scoped provider response identity changed")
++        if fingerprint(parameters.get("model_identity")) != fingerprint(identity):
++            raise DomainError("VERSION_CONFLICT", "Actual provider identity evidence changed")
+         checked_usage(
+             {"usage": attempt["usage"]["tokens"]},
+             store.frozen_contract(c, run).limits,
+@@ -443,6 +512,31 @@ def verified_candidate(store, c, run, limits):
+     return value
+ 
+ 
++def check_provider(worker, c, run, contract, attempt_id=None):
++    """Reusable at the actual wire guard without replaying a STARTED Attempt."""
++    if (contract.application_generation.provider != "intern-s2"
++        or worker.s.goal_planner_provider != "intern-s2"):
++        raise DomainError("RESOURCE_UNAVAILABLE", "Explicit Intern generation provider required")
++    activation = contract.application_generation.activation
++    if activation is not None:
++        from .generation_approvals import validate_run
++
++        scope, _, _, _, _ = validate_run(worker.store, c, run, worker.s, active=True, transition=attempt_id)
++        if worker.goal_planner_transport is None:
++            if (worker.store.test_only or scope.mode != "LIVE" or worker.s.mode != "live"
++                or not worker.s.live_enabled or not worker.s.token
++                or worker.s.application_generation_live_id != activation.approval_id):
++                raise DomainError("RESOURCE_UNAVAILABLE", "No exact P-A LIVE approval selected")
++        elif (scope.mode != "OFFLINE_TEST" or not worker.store.test_only or worker.s.mode != "mock"
++              or worker.s.live_enabled or not isinstance(worker.goal_planner_transport, httpx.MockTransport)):
++            raise DomainError("PERMISSION_DENIED", "Isolated P-A approval adapter required")
++    elif worker.goal_planner_transport is None:
++        raise DomainError("RESOURCE_UNAVAILABLE", "Generation LIVE allowance is zero; exact approval required")
++    elif (not worker.store.test_only or worker.s.mode != "mock" or worker.s.live_enabled
++          or not isinstance(worker.goal_planner_transport, httpx.MockTransport)):
++        raise DomainError("PERMISSION_DENIED", "Offline test-only generation adapter required")
++
++
+ def check_sender(worker, c, run, messages, tools):
+     contract, _ = source(worker.store, c, run)
+     card = (
+@@ -460,21 +554,7 @@ def check_sender(worker, c, run, messages, tools):
+         raise DomainError("VERSION_CONFLICT", "Goal changed or generation stopped")
+     if time.time() >= run["created_at"] + min(worker.s.run_seconds, contract.limits.run_seconds):
+         raise DomainError("BUDGET_EXHAUSTED")
+-    if (
+-        contract.application_generation.provider != "intern-s2"
+-        or worker.s.goal_planner_provider != "intern-s2"
+-        or worker.goal_planner_transport is None
+-    ):
+-        raise DomainError(
+-            "RESOURCE_UNAVAILABLE", "Generation LIVE allowance is zero; offline adapter required"
+-        )
+-    if (
+-        not worker.store.test_only
+-        or worker.s.mode != "mock"
+-        or worker.s.live_enabled
+-        or not isinstance(worker.goal_planner_transport, httpx.MockTransport)
+-    ):
+-        raise DomainError("PERMISSION_DENIED", "Offline test-only generation adapter required")
++    check_provider(worker, c, run, contract)
+     expected, rows = history(worker.store, c, run)
+     if (
+         messages != expected
+@@ -518,14 +598,24 @@ def process(worker, run, contract):
+             wire = body(messages, tools, worker.s.max_output_tokens)
+             if len(wire) > 32768:
+                 raise DomainError("BUDGET_EXHAUSTED", "Complete generation wire exceeds geometry")
+-            aid = worker.reserve(
+-                rid,
+-                fence,
+-                ctx,
+-                request_tools=tools,
+-                verify_goal_source=True,
+-                generation_request=True,
+-            )
++            try:
++                aid = worker.reserve(
++                    rid,
++                    fence,
++                    ctx,
++                    request_tools=tools,
++                    verify_goal_source=True,
++                    generation_request=True,
++                )
++            except DomainError as limited:
++                if limited.code != "RATE_LIMITED" or contract.application_generation.activation is None:
++                    raise
++                # Only an unreserved next stage waits; a received/unknown send is
++                # never retried. The ordinary heartbeat and all live gates remain
++                # active, and the approval's absolute deadline cannot be renewed.
++                if worker.stop.wait(1):
++                    raise DomainError("VERSION_CONFLICT", "Generation stopped before reservation") from limited
++                continue
+ 
+             def guard(request, *, sent_wire=wire, attempt_id=aid):
+                 if (
+@@ -537,7 +627,11 @@ def process(worker, run, contract):
+                 with worker.store.tx() as c:
+                     current = locked(worker, c, rid, fence)
+                     # The current STARTED row is excluded solely for this one send guard.
+-                    check_active(worker, c, current)
++                    check_active(worker, c, current, attempt_id)
++                    if (contract.application_generation.activation is not None
++                        and worker.goal_planner_transport is None
++                        and request.headers.get("Authorization") != "Bearer " + worker.s.token):
++                        raise DomainError("PERMISSION_DENIED", "Provider credential selection changed before send")
+                     attempt = (
+                         c.execute(select(attempts).where(attempts.c.id == attempt_id))
+                         .mappings()
+@@ -549,6 +643,10 @@ def process(worker, run, contract):
+                         != hashlib.sha256(sent_wire).hexdigest()
+                     ):
+                         raise DomainError("VERSION_CONFLICT")
++                    if contract.application_generation.activation is not None:
++                        from .generation_approvals import mark_sending
++
++                        return {"deadline": mark_sending(worker, c, current, attempt_id)}
+                 return {
+                     "deadline": run["created_at"]
+                     + min(worker.s.run_seconds, contract.limits.run_seconds)
+@@ -579,7 +677,7 @@ def process(worker, run, contract):
+                     )
+                 with worker.store.tx() as c:
+                     current = locked(worker, c, rid, fence)
+-                    check_active(worker, c, current)
++                    check_active(worker, c, current, aid)
+                     params = worker.attempt_parameters(c, aid, raw)
+                     params["generation_received_raw"] = original
+                     params["generation_raw_evidence"] = raw_metadata
+@@ -618,12 +716,13 @@ def process(worker, run, contract):
+                         )
+                     call = {**calls[0], "id": "ga_read"}
+                     dispatch(worker.store, rid, fence, call)
++                    settle_generation(worker, contract, rid, aid)
+                     continue
+                 if calls:
+                     raise DomainError("PERMISSION_DENIED", "Candidate and repair cannot call tools")
+                 with worker.store.tx() as c:
+                     current = locked(worker, c, rid, fence)
+-                    check_active(worker, c, current)
++                    check_active(worker, c, current, aid)
+                     try:
+                         candidate = parse_candidate(worker.store, c, current, msg, contract.limits)
+                     except DomainError as exc:
+@@ -648,6 +747,10 @@ def process(worker, run, contract):
+                         c.execute(
+                             update(runs).where(runs.c.id == rid).values(context=repair_context)
+                         )
++                        if contract.application_generation.activation is not None:
++                            from .generation_approvals import settle
++
++                            settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
+                         continue
+                     worker.store.event(
+                         c,
+@@ -655,6 +758,10 @@ def process(worker, run, contract):
+                         "GA_CANDIDATE_VALIDATED",
+                         {"attempt_id": aid, "candidate_fingerprint": fingerprint(candidate)},
+                     )
++                    if contract.application_generation.activation is not None:
++                        from .generation_approvals import settle
++
++                        settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
+                 worker.finish(
+                     rid,
+                     fence,
+@@ -684,34 +791,19 @@ def process(worker, run, contract):
+                             if isinstance(error, DomainError)
+                             else DomainError("OUTCOME_UNKNOWN")
+                         )
+-                        rejected_parameters = dict(attempt["parameters"])
+-                        original, raw_metadata = response_archive(raw)
+-                        if raw_metadata is not None:
+-                            rejected_parameters["generation_raw_evidence"] = raw_metadata
+-                        if original is not None:
+-                            rejected_parameters["generation_rejected_raw"] = original
+-                        values: dict[str, object] = {
+-                            "parameters": rejected_parameters,
+-                            "error": failure.code,
+-                        }
+-                        if attempt["status"] == "STARTED":
+-                            values.update(
+-                                status="FAILED",
+-                                response=safe_received_message(raw),
+-                                usage=normalize_usage(raw),
+-                                elapsed=time.monotonic() - started,
+-                            )
+-                        c.execute(update(attempts).where(attempts.c.id == aid).values(**values))
+-                        worker.store.event(
+-                            c,
+-                            rid,
+-                            "GA_REJECTED_RESPONSE",
+-                            {
+-                                "attempt_id": aid,
+-                                "error": failure.code,
+-                                "response_fingerprint": fingerprint(safe_received_message(raw)),
+-                            },
+-                        )
++                        already_settled = False
++                        if contract.application_generation.activation is not None:
++                            from .generation_approvals import SETTLE, _keys
++
++                            already_settled = aid in _keys(c, run["principal_id"],
++                                contract.application_generation.activation.approval_id, SETTLE)
++                        if already_settled:
++                            worker.store.event(c, rid, "GA_POST_SETTLEMENT_REJECTION",
++                                {"attempt_id": aid, "error": failure.code, "fence": fence})
++                            # Received response stays immutable; the finalization
++                            # failure is a separate event, never another settlement.
++                        else:
++                            reject_unsettled(worker, c, run, contract, attempt, raw, failure, started)
+                 raise
+     except DomainError as exc:
+         worker.finish(
+@@ -735,7 +827,50 @@ def process(worker, run, contract):
+         thread.join(2)
+ 
+ 
+-def check_active(worker, c, run):
++def reject_unsettled(worker, c, run, contract, attempt, raw, failure, started):
++    aid, rid = attempt["id"], run["id"]
++    rejected_parameters = dict(attempt["parameters"])
++    original, raw_metadata = response_archive(raw)
++    if raw_metadata is not None:
++        rejected_parameters["generation_raw_evidence"] = raw_metadata
++    if original is not None:
++        rejected_parameters["generation_rejected_raw"] = original
++    values: dict[str, object] = {
++        "parameters": rejected_parameters,
++        "error": failure.code,
++    }
++    if attempt["status"] == "STARTED":
++        values.update(
++            status="FAILED",
++            response=safe_received_message(raw),
++            usage=normalize_usage(raw),
++            elapsed=time.monotonic() - started,
++        )
++    c.execute(update(attempts).where(attempts.c.id == aid).values(**values))
++    worker.store.event(
++        c,
++        rid,
++        "GA_REJECTED_RESPONSE",
++        {
++            "attempt_id": aid,
++            "error": failure.code,
++            "response_fingerprint": fingerprint(safe_received_message(raw)),
++        },
++    )
++    if contract.application_generation.activation is not None:
++        from .generation_approvals import settle
++
++        settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
++
++def settle_generation(worker, contract, rid, aid):
++    if contract.application_generation.activation is not None:
++        from .generation_approvals import settle
++
++        with worker.store.tx() as c:
++            settle(worker.store, c, contract.goal.owner_id, contract.application_generation.activation, aid)
++
++
++def check_active(worker, c, run, attempt_id=None):
+     contract, _ = source(worker.store, c, run)
+     rows = c.execute(select(attempts).where(attempts.c.run_id == run["id"])).mappings().all()
+     check_counters(worker.store, c, run, rows)
+@@ -754,6 +889,8 @@ def check_active(worker, c, run):
+         raise DomainError("VERSION_CONFLICT", "Generation stopped or goal version changed")
+     if time.time() >= run["created_at"] + min(worker.s.run_seconds, contract.limits.run_seconds):
+         raise DomainError("BUDGET_EXHAUSTED")
++    if contract.application_generation.activation is not None:
++        check_provider(worker, c, run, contract, attempt_id)
+ 
+ 
+ def check_counters(store, c, run, rows):
+@@ -797,6 +934,7 @@ def confirm(store, user, rid, request, limits):
+             select(runs.c.project_id).where(runs.c.id == rid, runs.c.principal_id == user)
+         ).scalar()
+         project = store.lock_project(c, user, location)
++        source_scope_gate(store, c, rid)
+         run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+         candidate = verified_candidate(store, c, run, limits)
+         fp = fingerprint(candidate)
+@@ -840,6 +978,20 @@ def confirm(store, user, rid, request, limits):
+             load_draft(store, c, user, aid, limits, lock=True)
+             return {"id": aid, "state": "PREVIEW_ONLY", "cached": True}
+         contract, material = source(store, c, run)
++        def confirmation_gate():
++            source(store, c, run)
++            current = c.execute(select(goal_cards.c.version, goal_cards.c.fingerprint)
++                .where(goal_cards.c.id == contract.source_goal_card.card_id)).mappings().one()
++            if current["version"] != contract.source_goal_card.version or current["fingerprint"] != contract.source_goal_card.fingerprint:
++                raise DomainError("VERSION_CONFLICT", "Saved goal changed before confirmation")
++            if contract.application_generation.activation is not None:
++                from .generation_approvals import REVOKE, _keys, validate_run
++
++                validate_run(store, c, run)
++                if _keys(c, user, contract.application_generation.activation.approval_id, REVOKE):
++                    raise DomainError("VERSION_CONFLICT", "P-A generation approval revoked")
++
++        confirmation_gate()
+         card = (
+             c.execute(
+                 select(goal_cards).where(goal_cards.c.id == contract.source_goal_card.card_id)
+@@ -901,4 +1053,5 @@ def confirm(store, user, rid, request, limits):
+                 "confirmation": accepted,
+             },
+         )
++        confirmation_gate()
+         return {"id": aid, "state": "PREVIEW_ONLY", "publishable": False, "cached": False}
+diff --git a/src/sim2act/pa_material_bindings.py b/src/sim2act/pa_material_bindings.py
+new file mode 100644
+index 0000000..f9bf2ea
+--- /dev/null
++++ b/src/sim2act/pa_material_bindings.py
+@@ -0,0 +1,304 @@
++"""P-A model graph reused with explicit typed material/Goal slots.
++
++This is not completed-task P-B extraction. The original received model candidate
++and confirmation remain provenance; only named identity/material/Goal slots vary.
++No canonical graph factory, old report output or new provider request is used.
++"""
++
++import copy
++import time
++from typing import Literal
++
++from pydantic import Field
++from sqlalchemy import insert, select
++
++from .contracts import GoalCardRunSource, Strict
++from .db import (
++    app_drafts,
++    fingerprint,
++    goal_application_candidates,
++    goal_cards,
++    grants,
++    new_id,
++    principals,
++    runs,
++    task_extractions,
++)
++from .delivery_graph_apps import controlled
++from .errors import DomainError
++from .goals import validate_card_version
++from .text_logic_reuse import pair, remember, require
++from .tools import authorized_read
++
++VERSION = "pa-model-literal-material-binding.v1"
++KIND = "pa_model_literal_material_binding.v1"
++META, BIND = "pa_model_binding_metadata", "pa_model_binding_request"
++CONSENT = "REUSE_ONLY_THIS_MODEL_GRAPH_WITH_THIS_EXPLICIT_TARGET_GOAL_AND_NEW_MATERIAL"
++
++
++class BindInput(Strict):
++    card_id: str = Field(pattern=r"^goal_[a-f0-9]{32}$")
++    expected_goal_version: int = Field(strict=True, ge=1)
++    expected_goal_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    expected_source_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
++    expected_model_candidate_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    expected_graph_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
++    name: str = Field(min_length=1, max_length=100)
++    consent: Literal["REUSE_ONLY_THIS_MODEL_GRAPH_WITH_THIS_EXPLICIT_TARGET_GOAL_AND_NEW_MATERIAL"]
++    request_key: str = Field(min_length=1, max_length=100)
++
++
++class Metadata(Strict):
++    app_id: str
++    principal_id: str
++    project_id: str
++    runtime_id: str
++    resource_id: str
++    source_run_id: str
++
++
++def executable(candidate):
++    require(set(candidate) == {"namespace", "pa_binding", "manifest", "actions", "source_hash", "goal"}
++        and candidate["namespace"] == VERSION)
++    return {k: copy.deepcopy(candidate[k]) for k in ("manifest", "actions", "source_hash", "goal")}
++
++
++@controlled
++def compile_candidate(candidate, limits):
++    from .apps import compile_preview
++
++    return compile_preview(executable(candidate), limits)
++
++
++def slots(raw, *, aid="APP_SLOT", action_id="ACTION_SLOT", resource="RESOURCE_SLOT", source_hash="HASH_SLOT", goal="GOAL_SLOT", card_id="CARD_SLOT"):
++    """Closed typed paths only. Every other byte/value is preserved from the model."""
++    value = copy.deepcopy(raw)
++    manifest, action = value["manifest"], value["actions"][0]
++    manifest["app_id"], action["action_id"] = aid, action_id
++    manifest["action_bindings"][0]["action_id"] = action_id
++    manifest["goal_ref"] = card_id
++    manifest["data_bindings"][0]["resource_ref"] = resource
++    for permission in manifest["permission_requirements"] + action["permission_requirements"]:
++        permission["resource_ref"] = resource
++    action["dependencies"][0]["ref"] = resource
++    for dependency in manifest["dependency_lock"]:
++        if dependency["kind"] == "resource":
++            dependency["ref"] = resource
++    value["source_hash"], value["goal"] = source_hash, copy.deepcopy(goal)
++    return value
++
++
++@controlled
++def scope_gate(store, c, user, aid):
++    location = c.execute(select(app_drafts.c.project_id, app_drafts.c.runtime_id,
++        app_drafts.c.candidate["namespace"].as_string().label("namespace"),
++        app_drafts.c.candidate["pa_binding"]["kind"].as_string().label("binding"))
++        .where(app_drafts.c.id == aid)).mappings().first()
++    marker = c.execute(select(task_extractions.c.snapshot["kind"].as_string()).where(task_extractions.c.app_id == aid)).scalar()
++    # Unrelated families must retain their own authorization-before-ledger gate.
++    # Three projected family identifiers survive individual marker removal; do
++    # not probe a full P-A ledger merely to classify an unrelated CSV draft.
++    hinted = (location and (location["namespace"] == VERSION or location["binding"] == KIND)) or marker == KIND
++    if not hinted:
++        return False
++    require(location is not None)
++    store.own_project(c, user, location["project_id"])
++    meta, result = pair(c, user, aid, META, "scope", Metadata)
++    require(fingerprint(meta.model_dump()) == fingerprint(result) and marker == KIND
++        and meta.app_id == aid and meta.principal_id == user
++        and meta.project_id == location["project_id"] and meta.runtime_id == location["runtime_id"])
++    store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, "resource.read")
++    return True
++
++
++@controlled
++def model_source(store, c, user, rid, limits, expected_pid=None):
++    from .goal_applications import verified_candidate
++
++    metadata = c.execute(select(runs.c.project_id, runs.c.principal_id, runs.c.runtime_id, runs.c.resource_refs)
++        .where(runs.c.id == rid)).mappings().first()
++    if (metadata is None or metadata["principal_id"] != user
++        or (expected_pid is not None and metadata["project_id"] != expected_pid)):
++        raise DomainError("PERMISSION_DENIED")
++    store.own_project(c, user, metadata["project_id"])
++    require(len(metadata["resource_refs"]) == 1)
++    store.authorize(c, user, metadata["runtime_id"], metadata["project_id"], metadata["resource_refs"][0], "resource.read")
++    confirmed = c.execute(select(goal_application_candidates).where(
++        goal_application_candidates.c.run_id == rid, goal_application_candidates.c.principal_id == user)).mappings().first()
++    require(confirmed is not None, "Only an explicitly confirmed P-A model candidate can be rebound")
++    run = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
++    raw = verified_candidate(store, c, run, limits)
++    from .apps import load_draft
++
++    original, _, _, _ = load_draft(store, c, user, confirmed["app_id"], limits)
++    require(run["status"] == "PARTIAL" and run["error"] is None and not run["cancel_intent"]
++        and original["candidate"].get("goal_application") == {"run_id": rid, "candidate_fingerprint": fingerprint(raw)}
++        and confirmed["candidate_fingerprint"] == fingerprint(raw))
++    return raw, metadata
++
++
++@controlled
++def target(store, c, user, pid, cid, version=None, goal_fp=None, runtime=None):
++    head = c.execute(select(goal_cards).where(goal_cards.c.id == cid, goal_cards.c.project_id == pid)).mappings().first()
++    if head is None:
++        raise DomainError("PERMISSION_DENIED")
++    require(version is None or version == head["version"])
++    require(goal_fp is None or goal_fp == head["fingerprint"])
++    # The references are identifiers only; authorize before full Goal history.
++    from .db import goal_card_versions
++    refs = c.execute(select(goal_card_versions.c.snapshot["content"]["resource_refs"])
++        .where(goal_card_versions.c.card_id == cid, goal_card_versions.c.version == head["version"])).scalar()
++    require(isinstance(refs, list) and len(refs) == 1)
++    project = store.own_project(c, user, pid)
++    material = authorized_read(store, c, user, runtime or project["runtime_id"], pid,
++        "resource.read", {"resource_id": refs[0]})
++    require(material["format"] in {"txt", "md"} and len(material["content"].encode()) <= 4096
++        and len(material["content"].splitlines()) <= 64, "Finite TXT/MD literal report only")
++    saved = validate_card_version(store, c, user, cid, head["version"])
++    require(saved["snapshot"]["resource_snapshots"] == [{"resource_id": refs[0],
++        "hash": material["hash"], "format": material["format"]}]
++        and saved["fingerprint"] == head["fingerprint"] == fingerprint(saved["snapshot"]))
++    return material, GoalCardRunSource(card_id=cid, version=head["version"], fingerprint=head["fingerprint"], snapshot=saved["snapshot"])
++
++
++@controlled
++def options(store, user, pid, rid, cid, limits):
++    with store.tx() as c:
++        store.lock_project(c, user, pid)
++        raw, metadata = model_source(store, c, user, rid, limits, pid)
++        material, goal = target(store, c, user, pid, cid)
++        require(material["resource_id"] != metadata["resource_refs"][0]
++            and material["hash"] != raw["source_hash"], "Explicit different material is required")
++        return dict(namespace=VERSION, project_id=pid, source_run_id=rid, model_candidate_fingerprint=fingerprint(raw),
++            graph_fingerprint=fingerprint(slots(raw)), model_graph=slots(raw), target_goal=goal.model_dump(),
++            resource_id=material["resource_id"], source_hash=material["hash"], model_requests=0,
++            semantic_status="UNKNOWN", owner_acceptance="PENDING", formal_publication_enabled=False,
++            boundary="Reuse the received model graph; target Goal is explicitly human-bound, semantic understanding unverified; source remains an authorized audit dependency.")
++
++
++def candidate(raw, body, goal, resource_id, aid, action_id):
++    value = slots(raw, aid=aid, action_id=action_id, resource=resource_id,
++        source_hash=body.expected_source_hash, goal=goal.snapshot["content"], card_id=goal.card_id)
++    require(fingerprint(slots(value)) == fingerprint(slots(raw)) == body.expected_graph_fingerprint)
++    return dict(namespace=VERSION, **value, pa_binding=dict(kind=KIND,
++        model_candidate_fingerprint=body.expected_model_candidate_fingerprint,
++        graph_fingerprint=body.expected_graph_fingerprint, target_goal_fingerprint=goal.fingerprint))
++
++
++@controlled
++def verify(store, c, user, draft, limits):
++    scope_gate(store, c, user, draft["id"])
++    marker = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"],
++        task_extractions.c.principal_id == user)).mappings().first()
++    require(marker is not None)
++    body, frozen = pair(c, user, draft["id"], BIND, marker["request_key"], BindInput)
++    meta, metadata_result = pair(c, user, draft["id"], META, "scope", Metadata)
++    require(set(frozen) == {"kind", "app_id", "project_id", "runtime_id", "action_id", "resource_id",
++        "candidate_fingerprint", "source_run_id", "request_fingerprint", "request_key"}
++        and fingerprint(meta.model_dump()) == fingerprint(metadata_result)
++        and meta.source_run_id == frozen["source_run_id"] == marker["task_id"]
++        and meta.resource_id == frozen["resource_id"] and body.request_key == frozen["request_key"] == marker["request_key"]
++        and frozen["request_fingerprint"] == fingerprint(body.model_dump()))
++    require(fingerprint(frozen) == fingerprint(marker["snapshot"])
++        and marker["request_fingerprint"] == fingerprint(body.model_dump())
++        and frozen["kind"] == KIND and frozen["app_id"] == draft["id"]
++        and frozen["project_id"] == draft["project_id"] and frozen["runtime_id"] == draft["runtime_id"])
++    raw, metadata = model_source(store, c, user, marker["task_id"], limits, draft["project_id"])
++    material, goal = target(store, c, user, draft["project_id"], body.card_id,
++        body.expected_goal_version, body.expected_goal_fingerprint, draft["runtime_id"])
++    require(material["resource_id"] != metadata["resource_refs"][0] and material["hash"] != raw["source_hash"]
++        and material["hash"] == body.expected_source_hash
++        and fingerprint(raw) == body.expected_model_candidate_fingerprint)
++    wanted = candidate(raw, body, goal, material["resource_id"], draft["id"], frozen["action_id"])
++    require(fingerprint(wanted) == fingerprint(draft["candidate"]) == draft["fingerprint"] == frozen["candidate_fingerprint"])
++    compile_candidate(wanted, limits)
++    return frozen
++
++
++@controlled
++def bind(store, user, pid, rid, body, limits):
++    with store.tx() as c:
++        store.lock_project(c, user, pid)
++        raw, metadata = model_source(store, c, user, rid, limits, pid)
++        material, goal = target(store, c, user, pid, body.card_id, body.expected_goal_version, body.expected_goal_fingerprint)
++        require(material["resource_id"] != metadata["resource_refs"][0] and material["hash"] != raw["source_hash"]
++            and material["hash"] == body.expected_source_hash and fingerprint(raw) == body.expected_model_candidate_fingerprint
++            and fingerprint(slots(raw)) == body.expected_graph_fingerprint and body.name.strip())
++        old = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
++            task_extractions.c.principal_id == user, task_extractions.c.request_key == body.request_key)).scalar()
++        if old:
++            from .apps import load_draft
++            draft, _, _, _ = load_draft(store, c, user, old, limits)
++            prior, _ = pair(c, user, old, BIND, body.request_key, BindInput)
++            require(fingerprint(prior.model_dump()) == fingerprint(body.model_dump()))
++            return receipt(verify(store, c, user, draft, limits), body, cached=True)
++        if len(c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
++            task_extractions.c.principal_id == user)).all()) >= 64:
++            raise DomainError("BUDGET_EXHAUSTED", "Finite P-A model bindings exhausted")
++        aid, action_id, runtime, gid = new_id("app"), new_id("action"), new_id("appruntime"), new_id("grant")
++        value = candidate(raw, body, goal, material["resource_id"], aid, action_id)
++        compile_candidate(value, limits)
++        frozen = dict(kind=KIND, app_id=aid, project_id=pid, runtime_id=runtime,
++            action_id=action_id, resource_id=material["resource_id"], candidate_fingerprint=fingerprint(value),
++            source_run_id=rid, request_fingerprint=fingerprint(body.model_dump()), request_key=body.request_key)
++        c.execute(insert(principals).values(id=runtime, name="P-A model graph target reader", token_hash=None))
++        c.execute(insert(grants).values(id=gid, principal_id=runtime, project_id=pid,
++            resource_id=material["resource_id"], tool_ref="resource.read", expires_at=time.time() + 86400,
++            revision=1, revoked=False))
++        c.execute(insert(app_drafts).values(id=aid, project_id=pid, runtime_id=runtime,
++            name=body.name, candidate=value, fingerprint=fingerprint(value), created_at=time.time()))
++        c.execute(insert(task_extractions).values(task_id=rid, principal_id=user, request_key=body.request_key,
++            request_fingerprint=fingerprint(body.model_dump()), app_id=aid, snapshot=frozen))
++        meta = Metadata(app_id=aid, principal_id=user, project_id=pid, runtime_id=runtime,
++            resource_id=material["resource_id"], source_run_id=rid)
++        remember(c, user, aid, META, "scope", meta, meta.model_dump())
++        remember(c, user, aid, BIND, body.request_key, body, frozen)
++        draft = dict(id=aid, project_id=pid, runtime_id=runtime, candidate=value, fingerprint=fingerprint(value))
++        verify(store, c, user, draft, limits)
++        return receipt(frozen, body, cached=False)
++
++
++def receipt(frozen, body, *, cached):
++    return dict(namespace=VERSION, id=frozen["app_id"], project_id=frozen["project_id"],
++        runtime_id=frozen["runtime_id"], candidate_fingerprint=frozen["candidate_fingerprint"],
++        source_run_id=frozen["source_run_id"], request_key=body.request_key,
++        request_fingerprint=fingerprint(body.model_dump()), model_requests=0,
++        semantic_status="UNKNOWN", owner_acceptance="PENDING", formal_publication_enabled=False, cached=cached)
++
++
++@controlled
++def recover(store, user, pid, rid, key, limits):
++    with store.tx() as c:
++        store.own_project(c, user, pid)
++        aid = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
++            task_extractions.c.principal_id == user, task_extractions.c.request_key == key)).scalar()
++        if aid is None:
++            raise DomainError("OUTCOME_UNKNOWN", "No P-A binding for this original request key")
++        from .apps import load_draft
++        location = c.execute(select(app_drafts.c.project_id).where(app_drafts.c.id == aid)).scalar()
++        if location != pid:
++            raise DomainError("PERMISSION_DENIED")
++        draft, _, _, _ = load_draft(store, c, user, aid, limits)
++        require(draft["project_id"] == pid)
++        body, _ = pair(c, user, aid, BIND, key, BindInput)
++        return receipt(verify(store, c, user, draft, limits), body, cached=True)
++
++
++@controlled
++def source_index(store, user, pid, limits):
++    with store.tx() as c:
++        store.own_project(c, user, pid)
++        ids = c.execute(select(goal_application_candidates.c.run_id).join(runs,
++            runs.c.id == goal_application_candidates.c.run_id).where(runs.c.project_id == pid,
++            runs.c.principal_id == user, goal_application_candidates.c.principal_id == user)
++            .order_by(runs.c.created_at.desc()).limit(64)).scalars().all()
++        result = []
++        for rid in ids:
++            try:
++                raw, _ = model_source(store, c, user, rid, limits, pid)
++                result.append(dict(run_id=rid, model_candidate_fingerprint=fingerprint(raw),
++                    graph_fingerprint=fingerprint(slots(raw)), model="intern-s2",
++                    step_ids=[s["step_id"] for s in raw["manifest"]["workflow"]]))
++            except DomainError:
++                continue
++        return dict(project_id=pid, namespace=VERSION, options=result, new_model_requests=0)
+diff --git a/src/sim2act/text_apps.py b/src/sim2act/text_apps.py
+index e05d346..85bf6af 100644
+--- a/src/sim2act/text_apps.py
++++ b/src/sim2act/text_apps.py
+@@ -113,6 +113,11 @@ def compute(source, args):
+ 
+ 
+ def verify_origin(store, c, user, draft, limits):
++    from . import pa_material_bindings
++
++    if draft["candidate"].get("namespace") == pa_material_bindings.VERSION:
++        pa_material_bindings.verify(store, c, user, draft, limits)
++        return
+     if "task_proof" in draft["candidate"]:
+         marker = draft["candidate"]["task_proof"]
+         if not isinstance(marker, dict) or not isinstance(marker.get("proof"), dict):
+diff --git a/src/sim2act/text_continuations.py b/src/sim2act/text_continuations.py
+index d931ff9..84e688d 100644
+--- a/src/sim2act/text_continuations.py
++++ b/src/sim2act/text_continuations.py
+@@ -409,6 +409,9 @@ def draft_gate(store, c, user, aid):
+     from .text_workflows import scope_gate
+ 
+     scope_gate(store, c, user, aid)
++    from .pa_material_bindings import scope_gate as pa_binding_scope_gate
++
++    pa_binding_scope_gate(store, c, user, aid)
+ 
+     # Indexed origin metadata identifies this family before protected app bodies.
+     exists = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.app_id == aid,
+diff --git a/src/sim2act/web/app.js b/src/sim2act/web/app.js
+index b6d3edf..93e9502 100644
+--- a/src/sim2act/web/app.js
++++ b/src/sim2act/web/app.js
+@@ -458,7 +458,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
+   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
+   if(literal){
+     const independent=taskProof?.proof?.kind==="authorized_data_free_text_logic.v1";
+-    $("app-origin").textContent=taskProof ? `来源：已成功内部文本 AppRun ${taskProof.proof.source_run_id} · 独立回执与完整字面证据核查 · 新 TXT/MD 绑定 + term 参数 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收` : `来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
++    $("app-origin").textContent=taskProof ? `来源：已成功内部文本 AppRun ${taskProof.proof.source_run_id} · 独立回执与完整字面证据核查 · 新 TXT/MD 绑定 + term 参数 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收` : a.candidate.namespace==="pa-model-literal-material-binding.v1" ? `来源：实际模型图 ${a.candidate.pa_binding.model_candidate_fingerprint} · 明确绑定自己的新目标与新 TXT/MD · 原源仍需审计权限 · owner PENDING · 语义 UNKNOWN · 未发布` : `来源：已冻结目标与实际读取反馈 ${a.candidate.goal_application.run_id} · 字面检索 · 语义 UNKNOWN · 未发布`;
+     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof ? {source_goal:a.candidate.goal,source:taskProof,new_material:a.candidate.manifest.data_bindings} : a.candidate.goal,null,2);
+     if(independent){$("app-origin").textContent=`来源：项目独立文本逻辑 ${taskProof.proof.logic_id} · 新材料与新只读身份 · owner PENDING · 语义 UNKNOWN · 未发布，完整 P-B 未验收`;$("app-frozen-goal-text").textContent=JSON.stringify({logic:taskProof,new_material:a.candidate.manifest.data_bindings},null,2);}
+     $("app-input-hint").textContent="TXT/MD 逐字匹配；输入非空无首尾空白、至多80字符的检索词。每次从授权材料重新计算全部匹配行，无需上传答案。";
+diff --git a/src/sim2act/web/goal-application.js b/src/sim2act/web/goal-application.js
+index 1cdceef..c282023 100644
+--- a/src/sim2act/web/goal-application.js
++++ b/src/sim2act/web/goal-application.js
+@@ -3,15 +3,18 @@
+ const goalApplications=new Map();
+ let goalApplicationDisplayed=null;
+ let goalApplicationDraftGeneration=0;
++const goalProviderChoices=new Map();
++let paBindingState=null;
++let goalProviderReadGeneration=0,paBindingSourceReadGeneration=0;
+ for(const id of [...goalCardFields.map(field=>"goal-card-"+field),"goal-card-resources"]){
+-  const edited=()=>{goalApplicationDraftGeneration++;};
++  const edited=()=>{goalApplicationDraftGeneration++;renderPaBinding();};
+   $(id).addEventListener("input",edited);$(id).addEventListener("change",edited);
+ }
+ const goalApplicationKey=()=>activeGoalCard ? JSON.stringify([token,$("project-select").value,activeGoalCard.id,activeGoalCard.fingerprint]) : null;
+ function renderGoalApplicationControls(){
+   const key=goalApplicationKey(),entry=goalApplications.get(key);
+   const selection=JSON.stringify([identityConnectionGeneration,goalSelectionGeneration,key]);
+-  if(selection!==goalApplicationDisplayed){goalApplicationDisplayed=selection;$("goal-application-ack").checked=false;if(entry)entry.result=null;}
++  if(selection!==goalApplicationDisplayed){goalApplicationDisplayed=selection;$("goal-provider-select").replaceChildren(new Option("未选择；默认真实请求预算0",""));$("goal-provider-proof").textContent="";$("goal-provider-status").textContent="未选择模型批准。";paBindingState=null;$("pa-binding-source").replaceChildren();$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;$("goal-application-ack").checked=false;if(entry)entry.result=null;}
+   $("goal-application-panel").hidden=!activeGoalCard;
+   $("goal-application-start").disabled=!key||goalCardLoading||goalCardSaving||!!entry;
+   $("goal-application-read").disabled=!entry||!!entry.busy;
+@@ -19,6 +22,9 @@ function renderGoalApplicationControls(){
+   $("goal-application-name").disabled=!!entry?.confirmBody;
+   $("goal-application-confirm-read").hidden=!entry?.confirmBody;
+   $("goal-application-confirm-read").disabled=!!entry?.busy;
++  $("goal-provider-refresh").disabled=!key||!!entry;
++  $("goal-provider-select").disabled=!!entry;
++  renderPaBinding();
+   $("goal-application-proof").textContent=entry?.result ? JSON.stringify({run_id:entry.runId,version:entry.version,...entry.result},null,2) : "";
+   $("goal-application-status").textContent=entry?.message||"使用已保存目标；未保存编辑不纳入生成。真实模型调用关闭，语义接受 NOT_RUN。";
+ }
+@@ -30,6 +36,7 @@ async function readGoalApplication(entry,acceptedRunId=null){
+   const source=run.contract?.snapshot?.source_goal_card;
+   const selected=run.contract?.snapshot?.application_generation;
+   if(!/^run_[a-f0-9]{32}$/.test(run.id)||!Number.isSafeInteger(run.version)||run.version<1||!source||source.card_id!==entry.card||source.version!==entry.body.expected_version||source.fingerprint!==entry.body.expected_fingerprint||goalRunCanonical(source.snapshot)!==goalRunCanonical(entry.snapshot)||selected?.version!=="goal-text-application.v1"||selected.live_request_allowance!==0)throw Error("VERSION_CONFLICT");
++  if(goalRunCanonical(selected.activation||null)!==goalRunCanonical(entry.body.activation||null))throw Error("VERSION_CONFLICT");
+   if(run.status==="PARTIAL"){
+     const result=run.result,candidate=result?.candidate;
+     if(result?.goal_acceptance!=="NOT_RUN"||result.semantic_status!=="UNKNOWN"||result.app_created!==false||run.cancel_intent||run.error||!candidate||candidate.manifest?.app_id!==selected.app_id||candidate.actions?.length!==1||candidate.actions[0].action_id!==selected.action_id||candidate.actions[0].executor?.ref!=="text.literal_evidence"||goalRunCanonical(candidate.goal)!==goalRunCanonical(entry.snapshot.content))throw Error("VERSION_CONFLICT");
+@@ -66,12 +73,15 @@ async function goalApplicationAction(entry,operation){
+ $("goal-application-start").onclick=()=>{
+   const card=activeGoalCard,key=goalApplicationKey();if(!card||goalApplications.has(key)||goalCardLoading||goalCardSaving)return;
+   const entry={key,project:$("project-select").value,card:card.id,snapshot:structuredClone(card.snapshot),connection:identityConnectionGeneration,selection:goalSelectionGeneration,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},busy:false,result:null,confirmBody:null,message:"正在接受冻结目标…"};
++  const choice=goalProviderChoices.get(key)?.find(value=>value.activation.approval_id===$("goal-provider-select").value);
++  if($("goal-provider-select").value&&!choice)return;
++  if(choice){entry.body.activation=structuredClone(choice.activation);entry.body.request_key=choice.request_key;}
+   goalApplications.set(key,entry);$("goal-application-ack").checked=false;
+   return goalApplicationAction(entry,async()=>{
+     const accepted=await api(`/api/projects/${entry.project}/goal-cards/${entry.card}/application-runs`,"POST",entry.body);
+     if(!goalApplicationCurrent(entry))return;
+     const fields=["run_id","status","goal_card_id","goal_version","goal_fingerprint","goal_acceptance","candidate_generated","generation_policy"];
+-    if(!accepted||Object.keys(accepted).sort().join()!==fields.sort().join()||accepted.goal_card_id!==entry.card||accepted.goal_fingerprint!==entry.body.expected_fingerprint||accepted.goal_version!==entry.body.expected_version||accepted.status!=="ACCEPTED"||accepted.goal_acceptance!=="NOT_RUN"||accepted.candidate_generated!==false||!/^run_[a-f0-9]{32}$/.test(accepted.run_id)||accepted.generation_policy?.version!=="goal-text-application.v1"||accepted.generation_policy.live_request_allowance!==0)throw Error("VERSION_CONFLICT");
++    if(!accepted||Object.keys(accepted).sort().join()!==fields.sort().join()||accepted.goal_card_id!==entry.card||accepted.goal_fingerprint!==entry.body.expected_fingerprint||accepted.goal_version!==entry.body.expected_version||accepted.status!=="ACCEPTED"||accepted.goal_acceptance!=="NOT_RUN"||accepted.candidate_generated!==false||!/^run_[a-f0-9]{32}$/.test(accepted.run_id)||accepted.generation_policy?.version!=="goal-text-application.v1"||accepted.generation_policy.live_request_allowance!==0||goalRunCanonical(accepted.generation_policy.activation||null)!==goalRunCanonical(entry.body.activation||null))throw Error("VERSION_CONFLICT");
+     // A POST id is only a hint. The original-key GET proves the accepted request
+     // before readGoalApplication promotes its verified id to future Run reads.
+     await readGoalApplication(entry,accepted.run_id);
+@@ -104,4 +114,78 @@ $("goal-application-confirm-read").onclick=()=>{
+     await openGoalApplication(entry,saved,handoff);
+   });
+ };
++const paBindingNamespace="pa-model-literal-material-binding.v1";
++const paBindingConsent="REUSE_ONLY_THIS_MODEL_GRAPH_WITH_THIS_EXPLICIT_TARGET_GOAL_AND_NEW_MATERIAL";
++const paHash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");
++function paContext(){
++ const entry={key:goalApplicationKey(),connection:identityConnectionGeneration,selection:goalSelectionGeneration};
++ const handoff=goalApplicationHandoff(entry);return {entry,handoff,current:handoff.current};
++}
++$("goal-provider-refresh").onclick=async()=>{
++ const context=paContext(),card=activeGoalCard,pid=$("project-select").value,generation=++goalProviderReadGeneration;if(!card)return;
++ const current=()=>context.current()&&generation===goalProviderReadGeneration;
++ $("goal-provider-select").replaceChildren(new Option("未选择；默认真实请求预算0",""));$("goal-provider-proof").textContent="";
++ try{
++  const value=await api(`/api/projects/${pid}/goal-cards/${card.id}/application-provider-scopes`);if(!current())return;
++  if(value.project_id!==pid||value.card_id!==card.id||value.default_request_budget!==0||!Array.isArray(value.options)||value.options.length>64)throw Error("VERSION_CONFLICT");
++  for(const choice of value.options){
++   if(!/^gaapproval_[a-f0-9]{32}$/.test(choice.activation?.approval_id)||choice.scope?.metadata?.project_id!==pid||choice.scope.source.card_id!==card.id||choice.scope.source.version!==card.version||choice.scope.source.fingerprint!==card.fingerprint||goalRunCanonical(choice.scope.source.snapshot)!==goalRunCanonical(card.snapshot)||choice.scope.model!=="intern-s2"||!["OFFLINE_TEST","LIVE"].includes(choice.scope.mode)||choice.request_key!==choice.scope.request.generation_request_key||await paHash(choice.scope)!==choice.activation.scope_fingerprint||choice.scope_fingerprint!==choice.activation.scope_fingerprint||choice.approval_fingerprint!==choice.activation.approval_fingerprint)throw Error("VERSION_CONFLICT");
++  }
++  if(!current())return;goalProviderChoices.set(context.entry.key,value.options);
++  for(const choice of value.options)$("goal-provider-select").add(new Option(`${choice.scope.mode} · intern-s2 · ≤${choice.scope.limits.max_requests}请求 · ${choice.activation.approval_id}`,choice.activation.approval_id));
++  $("goal-provider-status").textContent=value.enabled ? "只读取得已有批准；须手动选择，未选预算0。费用封顶未建立。" : "模型适配默认关闭，真实请求预算0。";
++ }catch(error){if(current()){$("goal-provider-select").replaceChildren(new Option("未选择；默认真实请求预算0",""));goalProviderChoices.delete(context.entry.key);$("goal-provider-status").textContent=error.message;}}
++};
++$("goal-provider-select").onchange=()=>{
++ const choice=goalProviderChoices.get(goalApplicationKey())?.find(value=>value.activation.approval_id===$("goal-provider-select").value);
++ $("goal-provider-proof").textContent=choice ? JSON.stringify(choice,null,2) : "";
++};
++function renderPaBinding(){
++ const state=paBindingState,current=state?.context.current(),busy=state?.busy;
++ $("pa-binding-save").disabled=!current||busy||!state?.options||!!state?.body||!$("pa-binding-ack").checked;
++ $("pa-binding-recover").disabled=!state?.body||busy||!goalApplicationCurrent(state.context.entry);
++ $("pa-binding-open").disabled=!current||busy||!state?.saved;
++ $("pa-binding-preview").disabled=!activeGoalCard||busy||!$("pa-binding-source").value;
++ $("pa-binding-name").disabled=!!state?.body;
++}
++$("pa-binding-ack").onchange=renderPaBinding;
++$("pa-binding-source").onchange=()=>{paBindingState=null;$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;renderPaBinding();};
++$("pa-binding-sources").onclick=async()=>{
++ const context=paContext(),pid=$("project-select").value,generation=++paBindingSourceReadGeneration;
++ const current=()=>context.current()&&generation===paBindingSourceReadGeneration;paBindingState=null;$("pa-binding-source").replaceChildren();$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;renderPaBinding();
++ try{const value=await api(`/api/projects/${pid}/pa-model-candidates`);if(!current())return;
++  if(value.project_id!==pid||value.namespace!==paBindingNamespace||value.new_model_requests!==0||!Array.isArray(value.options)||value.options.length>64)throw Error("VERSION_CONFLICT");
++  $("pa-binding-source").add(new Option("明确选择已确认的模型来源",""));
++  for(const source of value.options){if(!/^run_[a-f0-9]{32}$/.test(source.run_id)||source.model!=="intern-s2"||!/^[a-f0-9]{64}$/.test(source.graph_fingerprint))throw Error("VERSION_CONFLICT");const option=new Option(source.run_id+" · "+source.step_ids.join(","),source.run_id);option.dataset.graph=source.graph_fingerprint;option.dataset.candidate=source.model_candidate_fingerprint;$("pa-binding-source").add(option);}
++  $("pa-binding-status").textContent="来源仍需当前审计权限；选择后先预览新材料。";
++ }catch(error){if(current()){$("pa-binding-source").replaceChildren();$("pa-binding-status").textContent=error.message;}}finally{if(current())renderPaBinding();}
++};
++$("pa-binding-preview").onclick=async()=>{
++ const card=activeGoalCard,source=$("pa-binding-source").selectedOptions[0],context=paContext(),pid=$("project-select").value;if(!card||!source?.value)return;
++ const state={context,pid,rid:source.value,card:structuredClone(card),busy:true,options:null,body:null,saved:null};paBindingState=state;$("pa-binding-ack").checked=false;renderPaBinding();
++ try{const value=await api(`/api/projects/${pid}/pa-model-candidates/${state.rid}/material-binding-options?card_id=${card.id}`);
++  if(!context.current()||paBindingState!==state)return;
++  if(value.namespace!==paBindingNamespace||value.project_id!==pid||value.source_run_id!==state.rid||value.model_requests!==0||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"||value.formal_publication_enabled!==false||value.target_goal.card_id!==card.id||value.target_goal.version!==card.version||value.target_goal.fingerprint!==card.fingerprint||goalRunCanonical(value.target_goal.snapshot)!==goalRunCanonical(card.snapshot)||value.model_candidate_fingerprint!==source.dataset.candidate||value.graph_fingerprint!==source.dataset.graph||await paHash(value.model_graph)!==value.graph_fingerprint||await paHash(value.target_goal.snapshot)!==card.fingerprint||value.resource_id!==card.snapshot.content.resource_refs[0]||value.source_hash!==card.snapshot.resource_snapshots[0].hash)throw Error("VERSION_CONFLICT");
++  if(!context.current()||paBindingState!==state)return;state.options=value;$("pa-binding-proof").textContent=JSON.stringify(value,null,2);$("pa-binding-status").textContent="已预览实际模型图和完整新目标；明确确认后保存，只读新材料。";
++ }catch(error){if(context.current()&&paBindingState===state){state.options=null;$("pa-binding-proof").textContent="";$("pa-binding-status").textContent=error.message;}}finally{state.busy=false;if(goalApplicationCurrent(context.entry)&&paBindingState===state)renderPaBinding();}
++};
++async function paBindingAction(state,operation){
++ if(!state||state.busy||paBindingState!==state||!state.context.current())return;state.busy=true;renderPaBinding();
++ try{const saved=await operation();if(paBindingState!==state||!state.context.current())return;
++  const fields=["namespace","id","project_id","runtime_id","candidate_fingerprint","source_run_id","request_key","request_fingerprint","model_requests","semantic_status","owner_acceptance","formal_publication_enabled","cached"];
++  if(!saved||Object.keys(saved).sort().join()!==fields.sort().join()||saved.namespace!==paBindingNamespace||saved.project_id!==state.pid||saved.source_run_id!==state.rid||saved.request_key!==state.body.request_key||saved.request_fingerprint!==await paHash(state.body)||!/^app_[a-f0-9]{32}$/.test(saved.id)||saved.model_requests!==0||saved.semantic_status!=="UNKNOWN"||saved.owner_acceptance!=="PENDING"||saved.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
++  if(paBindingState!==state||!state.context.current())return;state.saved=saved;$("pa-binding-status").textContent=`已保存 ${saved.id}；另行打开核查新材料执行。`;
++ }catch(error){if(paBindingState===state&&state.context.current()){state.saved=null;$("pa-binding-status").textContent=error.message+"；仅用原key GET恢复，不自动重发。";}}finally{state.busy=false;if(paBindingState===state&&goalApplicationCurrent(state.context.entry))renderPaBinding();}
++}
++$("pa-binding-save").onclick=()=>{
++ const state=paBindingState;if(!state?.options||state.body||!$("pa-binding-ack").checked||!state.context.current())return;
++ const value=state.options;state.body={card_id:state.card.id,expected_goal_version:state.card.version,expected_goal_fingerprint:state.card.fingerprint,expected_source_hash:value.source_hash,expected_model_candidate_fingerprint:value.model_candidate_fingerprint,expected_graph_fingerprint:value.graph_fingerprint,name:$("pa-binding-name").value,consent:paBindingConsent,request_key:crypto.randomUUID()};
++ return paBindingAction(state,()=>api(`/api/projects/${state.pid}/pa-model-candidates/${state.rid}/material-bindings`,"POST",state.body));
++};
++$("pa-binding-recover").onclick=()=>{const state=paBindingState;if(!state?.body||state.busy||!goalApplicationCurrent(state.context.entry))return;state.context=paContext();return paBindingAction(state,()=>api(`/api/projects/${state.pid}/pa-model-candidates/${state.rid}/material-binding-requests/${encodeURIComponent(state.body.request_key)}`));};
++$("pa-binding-open").onclick=async()=>{
++ const state=paBindingState;if(!state?.saved||state.busy||!state.context.current())return;
++ const saved=state.saved,entry=state.context.entry;entry.project=state.pid;entry.message=`已保存 ${saved.id}；请核查本目标新材料的逐字引用。`;
++ await openGoalApplication(entry,saved,state.context.handoff);
++};
+ renderGoalApplicationControls();
+diff --git a/src/sim2act/web/index.html b/src/sim2act/web/index.html
+index 6710726..9c899cd 100644
+--- a/src/sim2act/web/index.html
++++ b/src/sim2act/web/index.html
+@@ -4,7 +4,7 @@
+ <section id="login"><label>本机访问令牌 <input id="token" type="password" autocomplete="off"></label><button id="connect">连接</button><p>令牌仅保存在本页内存。当前为 F1 工程版本，MOCK 不能作为真实模型验收。</p></section>
+ <nav id="workspace-nav" aria-label="工作区"><button type="button" data-tab="projects" aria-controls="projects" aria-current="true">项目</button><button type="button" data-tab="apps" aria-controls="apps">应用</button><button type="button" data-tab="resources" aria-controls="resources">资源</button></nav>
+ <main><p id="error" role="alert"></p><section id="project-context" aria-label="当前项目范围"><p id="project-context-status" role="status" aria-live="polite" aria-atomic="true">请先连接本机 API，再选择项目。材料仅在所选项目内保存和授权。</p><button id="project-context-open" type="button" aria-describedby="project-context-status">填写连接令牌</button></section>
+-<section id="projects"><h1>项目</h1><form id="project-form"><label>项目名称 <input id="project-name" required maxlength="200"></label><button>创建项目</button></form><label>当前项目 <select id="project-select"></select></label><fieldset id="text-logic-panel"><legend>当前项目的独立文本逻辑</legend><p>冷页面从独立授权读取固定字面逻辑，不打开旧来源。选择另一份已有授权 TXT/MD，明确建立一个无令牌、仅该材料 resource.read 权限的新身份。目标用户权限或新身份权限撤销后拒绝；旧目标应用自身身份不被复制。owner PENDING，语义 UNKNOWN，未发布。</p><button id="text-logic-history" type="button">读取项目文本逻辑</button><select id="text-logic-selected" aria-label="独立文本逻辑"></select><button id="text-logic-read" type="button">读取当前逻辑状态</button><button id="text-logic-materials" type="button">预览当前授权新材料</button><label>已有文本应用<select id="text-logic-target"></select></label><label>新应用名称<input id="text-logic-name" maxlength="200" value="独立文本检索应用"></label><label><input id="text-logic-bind-confirm" type="checkbox">核对逻辑、新材料版本和期限，明确创建只读新身份并保存新应用</label><button id="text-logic-bind" type="button">绑定新材料并保存应用</button><button id="text-logic-open" type="button">打开新应用，另行核查执行</button><label>原请求key<input id="text-logic-key" maxlength="100" autocomplete="off"></label><button id="text-logic-recover" type="button">仅GET读取原请求回执</button><label><input id="text-logic-revoke-confirm" type="checkbox">明确不可逆撤销所选独立文本逻辑</label><button id="text-logic-revoke" type="button">撤销独立文本逻辑</button><pre id="text-logic-proof"></pre><p id="text-logic-status" role="status" aria-live="polite"></p></fieldset><fieldset id="text-continuation-panel"><legend>已有文本实例的软件兼容接续</legend><p>仅支持可证明兼容的固定字面检索软件。选择一个已有实例，冻结精确新旧版本、权限、预算和保留数据，先预检再手动确认。原数据与历史保留；旧人工签收失效，语义 UNKNOWN，未发布。</p><button id="text-continuation-list" type="button">读取待接续实例（元数据）</button><label>已有实例<select id="text-continuation-selected"></select></label><label>预检样例词<input id="text-continuation-term" value="Alpha" maxlength="80"></label><button id="text-continuation-preview" type="button">预检所选实例与精确软件</button><pre id="text-continuation-proof"></pre><label><input id="text-continuation-ack" type="checkbox">我已核对精确版本、保留范围、样例结果和有效期，确认只接续此实例</label><button id="text-continuation-commit" type="button" disabled>确认此精确软件接续</button><button id="text-continuation-open" type="button" disabled>打开所选实例，另行提交新输入</button><label>原请求 key<input id="text-continuation-key" maxlength="100" autocomplete="off"></label><button id="text-continuation-recover" type="button">仅用原 key GET 读取恢复</button><label>停止依据<input id="text-continuation-reason" maxlength="500"></label><label><input id="text-continuation-stop-ack" type="checkbox">明确取消待批准预检，或撤回所选已提交的软件执行许可</label><button id="text-continuation-stop" type="button" disabled>停止所选预检 / 兼容执行许可</button><p id="text-continuation-status" role="status" aria-live="polite"></p></fieldset><fieldset id="csv-logic-panel"><legend>当前项目的独立 CSV 逻辑授权</legend><p>仅已实际成功的读取 → 求和（→ 报告）结构；无原材料内容、列名或结果。须在来源仍可完整核查时另行确认24小时授权，再注册新CSV；不能从失效来源补发。原材料撤权不撤销这份结构授权，目标仍需当前权限。语义 UNKNOWN，用户 PENDING，发布关闭。</p><button id="csv-logic-history" type="button">读取项目逻辑授权（只读）</button><select id="csv-logic-selected"></select><button id="csv-logic-read" type="button">读取当前授权状态</button><button id="csv-logic-options" type="button">读取当前授权目标</button><label>已有CSV草案<select id="csv-logic-target"></select></label><label>本次新材料列<select id="csv-logic-column"></select></label><label><input id="csv-logic-confirm" type="checkbox">核对逻辑授权、新材料版本、列及冻结预算，确认保存目标计划</label><button id="csv-logic-plan" type="button">保存独立目标计划</button><button id="csv-logic-open" type="button">打开目标计划，另行确认执行</button><label><input id="csv-logic-revoke-confirm" type="checkbox">永久撤销所选逻辑授权；此授权的所有目标和实例将停止复用</label><button id="csv-logic-revoke" type="button">撤销独立逻辑授权</button><button id="csv-logic-recover" type="button" hidden>恢复本次原键回执</button><p id="csv-logic-status" role="status"></p><pre id="csv-logic-proof"></pre></fieldset><div class="grid"><section><h2>指令区</h2><form id="run-form"><label>目标 <textarea id="goal" required maxlength="4000"></textarea></label><p>本增量读取当前项目已授权材料；未完成应用生成和目标语义验收。</p><button id="run-submit">提交持久任务</button><p id="run-submit-status" role="status" aria-live="polite"></p><button id="run-submit-recover" type="button" hidden>恢复同一提交的回执</button><button id="run-submit-read" type="button" hidden>重新读取已接受任务</button><p>任务在后台持久执行。刷新页面后请先查任务历史，避免另建重复任务。</p></form><h2>任务历史</h2><p>按目标摘要与接受时间定位原任务。提交模式不代表已调用模型或目标验收。</p><button id="run-history-refresh" type="button">刷新任务历史（只读）</button><p id="run-history-status" role="status" aria-live="polite"></p><div id="runs"></div></section><section><h2>成果画布</h2><div id="result">选择任务查看持久状态与成果。</div><div id="commands"></div><details><summary>事件、来源与完整回执</summary><pre id="events"></pre><pre id="raw-result"></pre></details></section></div><section id="protocol-panel"><h2>注册任务与可复用协议成果</h2><p>有限只读工程入口。独立注册核查与 owner 语义签收分开；不会自动核查或发布。默认协议 provider 未配置时等待资源。</p><form id="protocol-source-form"><label>已注册任务 <select id="protocol-contract" required></select></label><p id="protocol-source-goal"></p><div id="protocol-source-materials"></div><div id="protocol-inputs"></div><button id="protocol-source-submit" disabled>提交来源任务</button><p id="protocol-source-status" role="status"></p></form><section id="protocol-detail" hidden><h3>当前协议成果 <span id="protocol-run-id"></span></h3><p id="protocol-state" role="status" aria-live="polite"></p><button id="protocol-read" type="button">重新读取成果与核查状态</button><button id="protocol-extract" type="button" hidden>从已核查来源提取可复用协议草案</button><form id="protocol-cold-form" hidden><p>协议草案尚未发布，也不是既有应用清单。请选择与来源目标匹配的冷契约；服务端逐项复核，不匹配将拒绝。冷运行读取新材料，创建新任务；owner 语义签收仍为 PENDING。</p><label>冷输入注册契约 <select id="protocol-cold-contract" required></select></label><div id="protocol-cold-materials"></div><div id="protocol-cold-inputs"></div><button id="protocol-cold-submit">提交新材料冷运行</button></form><button id="protocol-recover" type="button">核对持久状态（不继续执行）</button><button id="protocol-recover-retry" type="button" hidden>用原核对键重读回执</button><details><summary>结果、来源、结构与已记录证据</summary><pre id="protocol-result"></pre></details></section></section><section id="goal-cards-panel"><h2>目标卡与验收草案</h2><p>人工草案，尚未验收。保存不执行；显式执行已保存版本将提交普通持久任务。每次保存保留旧版本；旧窗口冲突时请重新打开目标卡。</p><button id="goal-card-new" type="button">新建目标卡</button><div class="grid"><section><form id="goal-card-form"><label>名称 <input id="goal-card-title" required maxlength="200"></label><label>目标 <textarea id="goal-card-goal" required maxlength="4000"></textarea></label><label>已知（每行一项）<textarea id="goal-card-known"></textarea></label><label>假设（每行一项）<textarea id="goal-card-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="goal-card-unresolved"></textarea></label><label>硬条件（每行一项）<textarea id="goal-card-constraints"></textarea></label><label>验收检查（每行一项）<textarea id="goal-card-acceptance_checks"></textarea></label><label>同项目授权材料（可多选，最多8份）<select id="goal-card-resources" multiple></select></label><p>每类最多16项，每项1000字。绑定材料版本；撤权或材料变更会阻止回读旧快照。</p><button id="goal-card-save">保存新版本</button><p id="goal-card-status" role="status">新建草案</p><section aria-label="自然语言规划"><h3>目标 → 计划 → 确认 → 回执</h3><p>使用已保存目标及其材料。生成计划后先查看校验与未决项，再显式确认只读执行。</p><p id="natural-goal-config" role="status">先保存并打开目标，再读取规划配置。</p><section aria-label="已批准的有限合成会话"><h4>已批准会话（不新增授权）</h4><p>这里只支持会话冻结的合成 CSV 预览和 quantity_z 求和。会话授权与下方计划执行确认分开；不会创建候选或发布应用。</p><button id="natural-activation-refresh" type="button">读取当前项目会话（只读）</button><label>选择已有会话 <select id="natural-activation-select"><option value="">未选择；沿用默认关闭的普通规划</option></select></label><p id="natural-activation-status" role="status">尚未读取会话。</p><div id="natural-activation-goals"></div></section><label><input id="natural-fixed-acceptance" type="checkbox">为本次新任务冻结固定合成目标整体验收（不是人工签收或发布）</label><button id="natural-goal-generate" type="button" disabled>生成已保存目标的计划</button><button id="natural-goal-recover" type="button" hidden>恢复同一规划请求回执</button><button id="natural-goal-read" type="button" hidden>重新读取规划与回执</button><button id="natural-goal-new" type="button" hidden>显式新建另一规划请求</button><button id="natural-goal-back" type="button">返回编辑（不取消后台任务）</button><p id="natural-goal-status" role="status" aria-live="polite"></p><p>刷新后从任务历史打开原任务；历史读取不提交或确认。</p></section><button id="goal-card-run" type="button" disabled>按已保存版本执行任务</button><fieldset id="goal-application-panel"><legend>已保存目标 → 字面引用应用</legend><p>限一份 TXT/MD，逐字匹配并返回所有完整行；不接受语义推断。生成需独立规划器，当前真实模型调用关闭。工程验证才使用本地合成响应。冻结完整目标和材料，先查看候选，再明确授权该应用只读这一份材料。</p><label>应用名称<input id="goal-application-name" maxlength="100" value="字面引用应用"></label><button id="goal-application-start" type="button">按已保存目标生成候选</button><button id="goal-application-read" type="button">只读恢复原请求与状态</button><pre id="goal-application-proof"></pre><label><input id="goal-application-ack" type="checkbox">已核对完整目标、来源、预算和候选指纹，授权此应用只读所选材料</label><button id="goal-application-confirm" type="button">确认精确候选并创建预览</button><button id="goal-application-confirm-read" type="button" hidden>只读恢复原确认回执</button><p id="goal-application-status" role="status"></p></fieldset><button id="goal-card-run-recover" type="button" hidden>恢复同一执行的回执</button><p id="goal-card-run-status" role="status"></p></form></section><section><h3>从已保存目标创建候选</h3><p>仅固定 CSV 数值列求和 · MOCK · 0 模型请求。使用已保存版本，未保存编辑不纳入候选；目标条件保留但尚未验收。</p><form id="goal-candidate-form" hidden><label>目标卡已绑定的 CSV <select id="goal-candidate-resource" required></select></label><label>可信能力 <select id="goal-candidate-capability" required></select></label><p>创建将授权候选应用读取和汇总所选材料24小时，不授权写入。</p><button id="goal-candidate-create">创建候选并授权预览</button><button id="goal-candidate-cancel" type="button">返回编辑 / 取消选择</button></form><p id="goal-candidate-status" role="status">先打开已保存目标卡。</p><div id="goal-candidate-list"></div><h3>目标卡</h3><div id="goal-card-list"></div><h3>版本历史（最近50版）</h3><div id="goal-card-history"></div><pre id="goal-card-history-detail"></pre></section></div></section></section>
++<section id="projects"><h1>项目</h1><form id="project-form"><label>项目名称 <input id="project-name" required maxlength="200"></label><button>创建项目</button></form><label>当前项目 <select id="project-select"></select></label><fieldset id="text-logic-panel"><legend>当前项目的独立文本逻辑</legend><p>冷页面从独立授权读取固定字面逻辑，不打开旧来源。选择另一份已有授权 TXT/MD，明确建立一个无令牌、仅该材料 resource.read 权限的新身份。目标用户权限或新身份权限撤销后拒绝；旧目标应用自身身份不被复制。owner PENDING，语义 UNKNOWN，未发布。</p><button id="text-logic-history" type="button">读取项目文本逻辑</button><select id="text-logic-selected" aria-label="独立文本逻辑"></select><button id="text-logic-read" type="button">读取当前逻辑状态</button><button id="text-logic-materials" type="button">预览当前授权新材料</button><label>已有文本应用<select id="text-logic-target"></select></label><label>新应用名称<input id="text-logic-name" maxlength="200" value="独立文本检索应用"></label><label><input id="text-logic-bind-confirm" type="checkbox">核对逻辑、新材料版本和期限，明确创建只读新身份并保存新应用</label><button id="text-logic-bind" type="button">绑定新材料并保存应用</button><button id="text-logic-open" type="button">打开新应用，另行核查执行</button><label>原请求key<input id="text-logic-key" maxlength="100" autocomplete="off"></label><button id="text-logic-recover" type="button">仅GET读取原请求回执</button><label><input id="text-logic-revoke-confirm" type="checkbox">明确不可逆撤销所选独立文本逻辑</label><button id="text-logic-revoke" type="button">撤销独立文本逻辑</button><pre id="text-logic-proof"></pre><p id="text-logic-status" role="status" aria-live="polite"></p></fieldset><fieldset id="text-continuation-panel"><legend>已有文本实例的软件兼容接续</legend><p>仅支持可证明兼容的固定字面检索软件。选择一个已有实例，冻结精确新旧版本、权限、预算和保留数据，先预检再手动确认。原数据与历史保留；旧人工签收失效，语义 UNKNOWN，未发布。</p><button id="text-continuation-list" type="button">读取待接续实例（元数据）</button><label>已有实例<select id="text-continuation-selected"></select></label><label>预检样例词<input id="text-continuation-term" value="Alpha" maxlength="80"></label><button id="text-continuation-preview" type="button">预检所选实例与精确软件</button><pre id="text-continuation-proof"></pre><label><input id="text-continuation-ack" type="checkbox">我已核对精确版本、保留范围、样例结果和有效期，确认只接续此实例</label><button id="text-continuation-commit" type="button" disabled>确认此精确软件接续</button><button id="text-continuation-open" type="button" disabled>打开所选实例，另行提交新输入</button><label>原请求 key<input id="text-continuation-key" maxlength="100" autocomplete="off"></label><button id="text-continuation-recover" type="button">仅用原 key GET 读取恢复</button><label>停止依据<input id="text-continuation-reason" maxlength="500"></label><label><input id="text-continuation-stop-ack" type="checkbox">明确取消待批准预检，或撤回所选已提交的软件执行许可</label><button id="text-continuation-stop" type="button" disabled>停止所选预检 / 兼容执行许可</button><p id="text-continuation-status" role="status" aria-live="polite"></p></fieldset><fieldset id="csv-logic-panel"><legend>当前项目的独立 CSV 逻辑授权</legend><p>仅已实际成功的读取 → 求和（→ 报告）结构；无原材料内容、列名或结果。须在来源仍可完整核查时另行确认24小时授权，再注册新CSV；不能从失效来源补发。原材料撤权不撤销这份结构授权，目标仍需当前权限。语义 UNKNOWN，用户 PENDING，发布关闭。</p><button id="csv-logic-history" type="button">读取项目逻辑授权（只读）</button><select id="csv-logic-selected"></select><button id="csv-logic-read" type="button">读取当前授权状态</button><button id="csv-logic-options" type="button">读取当前授权目标</button><label>已有CSV草案<select id="csv-logic-target"></select></label><label>本次新材料列<select id="csv-logic-column"></select></label><label><input id="csv-logic-confirm" type="checkbox">核对逻辑授权、新材料版本、列及冻结预算，确认保存目标计划</label><button id="csv-logic-plan" type="button">保存独立目标计划</button><button id="csv-logic-open" type="button">打开目标计划，另行确认执行</button><label><input id="csv-logic-revoke-confirm" type="checkbox">永久撤销所选逻辑授权；此授权的所有目标和实例将停止复用</label><button id="csv-logic-revoke" type="button">撤销独立逻辑授权</button><button id="csv-logic-recover" type="button" hidden>恢复本次原键回执</button><p id="csv-logic-status" role="status"></p><pre id="csv-logic-proof"></pre></fieldset><div class="grid"><section><h2>指令区</h2><form id="run-form"><label>目标 <textarea id="goal" required maxlength="4000"></textarea></label><p>本增量读取当前项目已授权材料；未完成应用生成和目标语义验收。</p><button id="run-submit">提交持久任务</button><p id="run-submit-status" role="status" aria-live="polite"></p><button id="run-submit-recover" type="button" hidden>恢复同一提交的回执</button><button id="run-submit-read" type="button" hidden>重新读取已接受任务</button><p>任务在后台持久执行。刷新页面后请先查任务历史，避免另建重复任务。</p></form><h2>任务历史</h2><p>按目标摘要与接受时间定位原任务。提交模式不代表已调用模型或目标验收。</p><button id="run-history-refresh" type="button">刷新任务历史（只读）</button><p id="run-history-status" role="status" aria-live="polite"></p><div id="runs"></div></section><section><h2>成果画布</h2><div id="result">选择任务查看持久状态与成果。</div><div id="commands"></div><details><summary>事件、来源与完整回执</summary><pre id="events"></pre><pre id="raw-result"></pre></details></section></div><section id="protocol-panel"><h2>注册任务与可复用协议成果</h2><p>有限只读工程入口。独立注册核查与 owner 语义签收分开；不会自动核查或发布。默认协议 provider 未配置时等待资源。</p><form id="protocol-source-form"><label>已注册任务 <select id="protocol-contract" required></select></label><p id="protocol-source-goal"></p><div id="protocol-source-materials"></div><div id="protocol-inputs"></div><button id="protocol-source-submit" disabled>提交来源任务</button><p id="protocol-source-status" role="status"></p></form><section id="protocol-detail" hidden><h3>当前协议成果 <span id="protocol-run-id"></span></h3><p id="protocol-state" role="status" aria-live="polite"></p><button id="protocol-read" type="button">重新读取成果与核查状态</button><button id="protocol-extract" type="button" hidden>从已核查来源提取可复用协议草案</button><form id="protocol-cold-form" hidden><p>协议草案尚未发布，也不是既有应用清单。请选择与来源目标匹配的冷契约；服务端逐项复核，不匹配将拒绝。冷运行读取新材料，创建新任务；owner 语义签收仍为 PENDING。</p><label>冷输入注册契约 <select id="protocol-cold-contract" required></select></label><div id="protocol-cold-materials"></div><div id="protocol-cold-inputs"></div><button id="protocol-cold-submit">提交新材料冷运行</button></form><button id="protocol-recover" type="button">核对持久状态（不继续执行）</button><button id="protocol-recover-retry" type="button" hidden>用原核对键重读回执</button><details><summary>结果、来源、结构与已记录证据</summary><pre id="protocol-result"></pre></details></section></section><section id="goal-cards-panel"><h2>目标卡与验收草案</h2><p>人工草案，尚未验收。保存不执行；显式执行已保存版本将提交普通持久任务。每次保存保留旧版本；旧窗口冲突时请重新打开目标卡。</p><button id="goal-card-new" type="button">新建目标卡</button><div class="grid"><section><form id="goal-card-form"><label>名称 <input id="goal-card-title" required maxlength="200"></label><label>目标 <textarea id="goal-card-goal" required maxlength="4000"></textarea></label><label>已知（每行一项）<textarea id="goal-card-known"></textarea></label><label>假设（每行一项）<textarea id="goal-card-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="goal-card-unresolved"></textarea></label><label>硬条件（每行一项）<textarea id="goal-card-constraints"></textarea></label><label>验收检查（每行一项）<textarea id="goal-card-acceptance_checks"></textarea></label><label>同项目授权材料（可多选，最多8份）<select id="goal-card-resources" multiple></select></label><p>每类最多16项，每项1000字。绑定材料版本；撤权或材料变更会阻止回读旧快照。</p><button id="goal-card-save">保存新版本</button><p id="goal-card-status" role="status">新建草案</p><section aria-label="自然语言规划"><h3>目标 → 计划 → 确认 → 回执</h3><p>使用已保存目标及其材料。生成计划后先查看校验与未决项，再显式确认只读执行。</p><p id="natural-goal-config" role="status">先保存并打开目标，再读取规划配置。</p><section aria-label="已批准的有限合成会话"><h4>已批准会话（不新增授权）</h4><p>这里只支持会话冻结的合成 CSV 预览和 quantity_z 求和。会话授权与下方计划执行确认分开；不会创建候选或发布应用。</p><button id="natural-activation-refresh" type="button">读取当前项目会话（只读）</button><label>选择已有会话 <select id="natural-activation-select"><option value="">未选择；沿用默认关闭的普通规划</option></select></label><p id="natural-activation-status" role="status">尚未读取会话。</p><div id="natural-activation-goals"></div></section><label><input id="natural-fixed-acceptance" type="checkbox">为本次新任务冻结固定合成目标整体验收（不是人工签收或发布）</label><button id="natural-goal-generate" type="button" disabled>生成已保存目标的计划</button><button id="natural-goal-recover" type="button" hidden>恢复同一规划请求回执</button><button id="natural-goal-read" type="button" hidden>重新读取规划与回执</button><button id="natural-goal-new" type="button" hidden>显式新建另一规划请求</button><button id="natural-goal-back" type="button">返回编辑（不取消后台任务）</button><p id="natural-goal-status" role="status" aria-live="polite"></p><p>刷新后从任务历史打开原任务；历史读取不提交或确认。</p></section><button id="goal-card-run" type="button" disabled>按已保存版本执行任务</button><fieldset id="goal-application-panel"><legend>已保存目标 → 字面引用应用</legend><p>限一份 TXT/MD，逐字匹配并返回所有完整行；不接受语义推断。模型先选择读取工具，再根据实际反馈生成候选。默认真实请求预算为0；这里只能手动选择已有精确批准，读取与选择不会新增授权。合成响应仅为工程证据。冻结完整目标和材料，先查看候选，再明确授权该应用只读这一份材料。</p><button id="goal-provider-refresh" type="button">读取已有精确模型批准</button><label>本次已有批准<select id="goal-provider-select"><option value="">未选择；默认真实请求预算0</option></select></label><pre id="goal-provider-proof"></pre><p id="goal-provider-status" role="status">未选择模型批准。</p><label>应用名称<input id="goal-application-name" maxlength="100" value="字面引用应用"></label><button id="goal-application-start" type="button">按已保存目标生成候选</button><button id="goal-application-read" type="button">只读恢复原请求与状态</button><pre id="goal-application-proof"></pre><label><input id="goal-application-ack" type="checkbox">已核对完整目标、来源、预算和候选指纹，授权此应用只读所选材料</label><button id="goal-application-confirm" type="button">确认精确候选并创建预览</button><button id="goal-application-confirm-read" type="button" hidden>只读恢复原确认回执</button><p id="goal-application-status" role="status"></p><section aria-label="复用已确认的模型图到新材料"><h4>已有模型图 → 明确新目标与新材料</h4><p>先打开绑定另一份TXT/MD的已保存目标，再读取已确认的模型来源。只替换明示身份、目标和材料槽；模型步骤与接口保留，源材料仍需审计读取权限。复用不请求模型，语义 UNKNOWN，人工签收 PENDING，未发布。</p><button id="pa-binding-sources" type="button">读取项目已确认模型来源</button><label>模型来源<select id="pa-binding-source"></select></label><button id="pa-binding-preview" type="button">预览实际模型图与本目标新材料</button><pre id="pa-binding-proof"></pre><label>新应用名称<input id="pa-binding-name" maxlength="100" value="模型图新材料引用应用"></label><label><input id="pa-binding-ack" type="checkbox">核对完整新目标、材料指纹和模型图，只授权此新应用读取此新材料</label><button id="pa-binding-save" type="button" disabled>确认并保存精确复用</button><button id="pa-binding-recover" type="button" disabled>原请求key只读恢复</button><button id="pa-binding-open" type="button" disabled>打开已保存新材料应用</button><p id="pa-binding-status" role="status"></p></section></fieldset><button id="goal-card-run-recover" type="button" hidden>恢复同一执行的回执</button><p id="goal-card-run-status" role="status"></p></form></section><section><h3>从已保存目标创建候选</h3><p>仅固定 CSV 数值列求和 · MOCK · 0 模型请求。使用已保存版本，未保存编辑不纳入候选；目标条件保留但尚未验收。</p><form id="goal-candidate-form" hidden><label>目标卡已绑定的 CSV <select id="goal-candidate-resource" required></select></label><label>可信能力 <select id="goal-candidate-capability" required></select></label><p>创建将授权候选应用读取和汇总所选材料24小时，不授权写入。</p><button id="goal-candidate-create">创建候选并授权预览</button><button id="goal-candidate-cancel" type="button">返回编辑 / 取消选择</button></form><p id="goal-candidate-status" role="status">先打开已保存目标卡。</p><div id="goal-candidate-list"></div><h3>目标卡</h3><div id="goal-card-list"></div><h3>版本历史（最近50版）</h3><div id="goal-card-history"></div><pre id="goal-card-history-detail"></pre></section></div></section></section>
+ <section id="apps" hidden><section id="registered-recovery-panel"><h2>关闭页面后的原请求恢复</h2><p>只读发现本项目的原请求身份。正文不存入浏览器；当前权限允许时按原 key 核对，未知结果不自动重发。</p><button id="registered-recovery-refresh" type="button">读取本项目原请求索引</button><p id="registered-recovery-status" role="status" aria-live="polite"></p><div id="registered-recovery-list"></div></section><section id="report-apps"><h2>保存的条件报告草案</h2><p>仅虚构 A-S 有限规则的命名 PREVIEW_ONLY 草案；共享已有项目运行授权，不新增应用身份或授权，不是 AppManifest 发布。规则资料固定；本次只填写新假设。整体 NOT_ACCEPTED、语义 UNKNOWN、用户确认 PENDING。默认无 provider 会停在 WAITING_RESOURCE。</p><button id="report-app-list-refresh" type="button">刷新保存的条件报告草案（只读）</button><div id="report-app-list"></div><h3 id="report-app-name">选择保存的条件报告草案</h3><form id="report-app-form" hidden><fieldset><legend>新的显式假设事实</legend><label>行程已结束<select id="report-app-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="report-app-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="report-app-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="report-app-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="report-app-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="report-app-submit">创建新的条件报告运行</button></form><button id="report-app-retry" type="button" hidden>用原键恢复本次接受回执</button><button id="report-manifest-promote" type="button" hidden>保存为 canonical Report Manifest 预览草案</button><button id="report-manifest-promote-retry" type="button" hidden>原键恢复 Manifest 保存回执</button><p id="report-manifest-status" role="status"></p><button id="report-app-refresh" type="button">刷新实际运行历史（只读）</button><p id="report-app-output" role="status" aria-live="polite"></p><div id="report-app-history"></div><details><summary>固定资料、来源与共享授权范围</summary><pre id="report-app-origin"></pre></details></section><section id="application-use"><h2>使用已保存的本地应用</h2><p>仅已核查CSV实例；未发布内部版本，不新增授权。选择数值列会创建新的后台运行。材料固定，历史成功不代表本次结果。</p><div class="grid"><section><div id="use-list"></div></section><section><p id="use-info" role="status"></p><form id="use-form" hidden><label>本次数值列 <select id="use-column" required></select></label><button id="use-submit">运行此本地应用</button></form><button id="use-recover" type="button" hidden>恢复接受回执</button><button id="use-refresh" type="button" hidden>刷新本次状态与历史（只读）</button><div id="use-output" role="status" aria-live="polite"></div><h3>只读验收核对</h3><div id="use-acceptance" role="status" aria-live="polite"></div><h3>运行与结果历史</h3><div id="use-history"></div><details><summary>版本、材料与来源范围</summary><pre id="use-provenance"></pre></details></section></div></section><section id="conditional-panel"><h2>核对条件报告与规则资料</h2><p>仅人工注册的虚构差旅规则 A-S v1；不支持任意语言规则抽取。与上方 CSV 技术验收独立，不为所选应用自动签收。当前真实模型请求0；语义 UNKNOWN、用户确认 PENDING、发布关闭。</p><button id="condition-list" type="button">刷新当前授权规则资料（清除旧证据）</button><label>选择已有资料<select id="condition-resource"><option value="">请选择</option></select></label><button id="condition-open" type="button">打开并核查此资料版本</button><p id="condition-status" role="status" aria-live="polite">先选择并打开授权资料；不会自动读取内容。</p><div id="condition-source"></div><section id="condition-run-panel"><h3>从真实任务回执绑定条件检查与有限候选</h3><p>此入口不使用下方人工报告。先显式打开上方已授权 A-S 资料，再提交假设事实。后台读取与模型结果必须有完整可信回执；有限检查 PASS 不代表真实事实、整体任务成功或用户签收。语义 UNKNOWN、整体 NOT_ACCEPTED、发布关闭。默认无已批准 provider 会停在 WAITING_RESOURCE；页面不会启用模型或准备器。</p><form id="condition-run-source-form" hidden><fieldset><legend>本次源任务的显式假设（不从人工报告复制）</legend><label>行程已结束<select id="condition-run-source-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-source-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-source-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-source-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-source-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-start">创建来源绑定任务</button></form><button id="condition-run-refresh" type="button" hidden>重新核查当前任务与来源（只读）</button><button id="condition-run-retry" type="button" hidden>恢复同一提交回执（同键，不另建任务）</button><p id="condition-run-status" role="status" aria-live="polite">先显式打开已授权规则资料。</p><div id="condition-run-output" role="status" aria-live="polite"></div><button id="condition-run-check" type="button" hidden>独立核对此 Run 的实际报告</button><div id="condition-run-check-output" role="status" aria-live="polite"></div><button id="condition-run-extract" type="button" hidden>提取当前检查绑定的有限候选</button><div id="condition-run-extract-output" role="status" aria-live="polite"></div><details id="condition-run-plan" hidden><summary>受限 DAG、候选回执与来源绑定</summary><pre id="condition-run-plan-text"></pre></details><form id="report-save-form" hidden><h4>保存为可重开的命名条件报告草案</h4><p>服务端只保存受封闭回执绑定的固定规则包装；不运行，不新增授权，不签收。</p><label>固定已有授权规则资料<select id="report-save-resource" required></select></label><label>草案名称<input id="report-save-name" maxlength="200" required value="假设差旅条件报告"></label><button id="report-save-submit">保存条件报告草案</button><button id="report-save-retry" type="button" hidden>原键恢复保存回执</button><p id="report-save-status" role="status"></p></form><form id="condition-run-cold-form" hidden><label>冷运行的当前授权规则资料<select id="condition-run-cold-resource" required></select></label><fieldset><legend>新 Scenario：不会复制旧结果</legend><label>行程已结束<select id="condition-run-cold-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-cold-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-cold-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-cold-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-cold-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-cold-start">用有限候选创建新假设冷运行</button></form><div id="condition-run-cold-output" role="status" aria-live="polite"></div><button id="condition-run-cold-check" type="button" hidden>独立核对此冷 Run 的新报告</button><div id="condition-run-cold-check-output" role="status" aria-live="polite"></div></section><h3>人工条件报告核对（不绑定任务来源）</h3><form id="condition-form" hidden><fieldset><legend>显式假设事实（不从材料案例自动填入）</legend><label>行程已结束<select id="condition-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-amount" type="number" min="0" max="1000000" step="1"></label><label>收据齐全<select id="condition-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>已取得主管批准<select id="condition-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>行程结束后的自然日数（空为未知）<input id="condition-days" type="number" min="0" max="3650" step="1"></label></fieldset><fieldset><legend>人工待核对报告（不会自动生成正确答案）</legend><label>R1 是否适用<select id="condition-R1"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R2 是否适用<select id="condition-R2"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R3 是否适用<select id="condition-R3"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><p>每条引用使用上方已授权原文行；引用位置匹配不代表开放语言理解。</p><label>报告决策<select id="condition-decision"><option>UNKNOWN</option><option>BLOCK</option><option>ALLOW</option></select></label><label>报告下一步（可多选）<select id="condition-actions" multiple required><option value="wait_trip_end">等待行程结束</option><option value="obtain_receipt">补齐收据</option><option value="obtain_prior_approval">先取得批准</option><option value="clarify_facts">澄清未知事实</option><option value="clarify_late_policy">澄清逾期规则</option><option value="submit_claim_and_receipt">提交报销单与收据</option></select></label><label>报告原始期限（自然日）<input id="condition-deadline" type="number" min="1" max="3650" required></label><label>报告绝对日期（资料未给出时填写 UNKNOWN）<input id="condition-date" maxlength="40" required></label><label>报告是否认为补齐收据重启期限<select id="condition-restart"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>报告说明（自由文字不评分）<textarea id="condition-explanation" maxlength="1000" required></textarea></label></fieldset><button id="condition-submit">核对此报告（不启动应用任务）</button></form><button id="condition-recheck" type="button" hidden>重新授权读取并核对此报告</button><div id="condition-results" role="status" aria-live="polite"></div></section><h1>应用草案预览</h1><p>内部工程草案 · CSV 可信汇总与 TXT/MD 字面证据 agent（仅离线 Replay），未发布。成功 CSV 任务可保存为可信模板草案；目标语义和真实模型自主生成尚未验收。</p><div class="grid"><section><h2>直接创建 CSV 固定模板草案</h2><form id="app-form"><label>应用名称 <input id="app-name" required maxlength="200" value="CSV 数值汇总"></label><label>目标说明 <textarea id="app-goal" required maxlength="4000">每次选择一个数值列，查看这份 CSV 的合计和记录数。</textarea></label><label>当前项目的 CSV 材料 <select id="app-resource" required></select></label><p>此入口不绑定目标卡版本。仅授权这个应用读取和汇总所选材料（24 小时），不授权写入。材料版本改变后需重新创建草案。</p><button id="app-create-submit">创建草案并授权读取</button><p id="app-create-status" role="status" aria-live="polite"></p></form><h2>当前项目草案</h2><div id="app-list"></div></section><section><h2 id="app-title">选择草案</h2><p id="app-origin" role="status"></p><details id="app-frozen-goal" hidden><summary>冻结目标条件与验收草案</summary><pre id="app-frozen-goal-text"></pre></details><button id="app-back-goal" type="button" hidden>返回来源目标卡</button><form id="app-preview-form" hidden><label id="app-column-label">数值列 <select id="app-column" required></select></label><label id="app-agent-term-label" hidden>样例字面检索词 <input id="app-agent-term" maxlength="80" autocomplete="off"></label><p id="app-input-hint" role="status"></p><button id="app-preview-submit">运行新预览</button></form><form id="manifest-report-form" hidden><fieldset><legend>新 Scenario：显式假设，不复制来源事实或报告</legend><label>行程已结束<select id="manifest-report-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="manifest-report-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="manifest-report-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="manifest-report-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="manifest-report-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="manifest-report-submit">创建新的 Report 预览运行</button></form><button id="manifest-report-retry" type="button" hidden>原键恢复本次接受回执</button><button id="manifest-report-refresh" type="button" hidden>刷新实际 Report 历史（只读）</button><div id="app-output" role="status" aria-live="polite"></div><button id="app-read-retry" type="button" hidden>重新读取已保存记录</button><h2>预览历史</h2><div id="app-history"></div><section id="csv-extraction-panel"><h2>从已完成预览任务提取候选（P-B工程子集）</h2><p>来源限定本地合成PREVIEW成功回执，不代表F1 Run或目标语义成功；仅可信求和逻辑，不是通用应用验收。新CSV在创建时绑定，数值列为运行参数。源材料仍需可授权核查；未发布。</p><form id="extraction-form" hidden><label>成功源回执 <select id="extraction-preview" required></select></label><label>同项目的新CSV <select id="extraction-resource" required></select></label><label>候选名称 <input id="extraction-name" required maxlength="200" value="从已完成预览提取的汇总"></label><p>创建授权应用只读新材料24小时；已接受创建不能由页面导航撤销。</p><button id="extraction-create">提取并授权新材料预览</button></form><p id="extraction-status" role="status"></p></section><section id="delivery-panel" hidden><h2>派生图与影响规划</h2><p>保存来源绑定图锚，只规划现有节点的影响。原影响规划仍不执行；下方 CSV 列绑定入口可保存新草案并独立确认只读检查；语义 UNKNOWN，用户确认 PENDING，发布关闭。</p><button id="delivery-read" type="button">读取当前图与规划历史</button><button id="delivery-derive" type="button">保存派生图锚</button><button id="delivery-plan" type="button">规划所选原节点影响</button><button id="delivery-retry" type="button" hidden>原键恢复未知回执</button><p id="delivery-status" role="status"></p><section id="manual-lock-panel" hidden><h3>单节点编辑保护</h3><p>仅保护本项目内编辑；不改变访问权限，锁或解锁后须重新派生图。</p><select id="manual-lock-node"></select><select id="manual-lock-target"><option value="true">锁定</option><option value="false">解锁</option></select><label><input id="manual-lock-confirm" type="checkbox">我已核对当前图、节点及锁修订，明确确认此编辑保护变更（不是权限授权或验收）</label><button id="manual-lock-submit" type="button">确认精确节点锁状态</button><button id="manual-lock-retry" type="button" hidden>原键恢复未知锁回执</button><button id="manual-lock-read" type="button">读取锁状态与历史</button><p id="manual-lock-status" role="status"></p><pre id="manual-lock-history"></pre></section><div id="delivery-nodes"></div><div id="delivery-plans"></div><section id="column-patch-panel" hidden><h3>CSV 列绑定局部修改（离线工程病例）</h3><p>保存同一求和节点的新列绑定草案；保留原清单、输入 schema、材料、布局与历史。另行确认精确草案版本后才执行只读检查。候选未验收，语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><label>原绑定列<select id="column-patch-from"></select></label><label>新定义绑定列<select id="column-patch-to"></select></label><button id="column-patch-save" type="button">提交新定义并保存草案补丁</button><label>已读回的精确草案<select id="column-patch-selected"></select></label><label><input id="column-patch-confirm" type="checkbox">我已核对下方新定义、来源和精确版本；运行有限只读检查（不是人工签收）</label><button id="column-patch-check" type="button">确认版本并执行受影响检查</button><div id="column-patch-history"></div></section><section id="csv-dag-panel" hidden><label>计划方式<select id="csv-dag-mode"><option value="legacy">原三节点流程</option><option value="composition">有限只读节点组合（最多四个）</option></select></label><fieldset id="csv-dag-composition" hidden><legend>在当前授权 CSV 上连接读取、求和和报告</legend><p>每个求和节点选择自己的列；报告连接一个求和节点。额外前驱用于顺序或条件；跳过只传递到后继。全部末端节点的新输出均保留。</p><div id="csv-dag-nodes"></div><button id="csv-dag-node-add" type="button">添加节点</button></fieldset><h3>CSV 只读 DAG 计划</h3><p>离线工程候选：同一授权来源。原模式为预览 → 求和 → 报告；组合模式可编辑一至四个节点，保留各末端的新输出。模型调用 0，业务写入 0；语义 UNKNOWN，用户验收 PENDING，正式发布关闭。</p><label>原三节点模式的求和列<select id="csv-dag-column"></select></label><button id="csv-dag-wiring-read" type="button">读取服务端允许接线</button><fieldset id="csv-dag-wiring" hidden><legend>仅已有三节点端口；preview → aggregate 屏障固定</legend><div id="csv-dag-wiring-ports"></div><pre id="csv-dag-wiring-proof"></pre></fieldset><fieldset id="csv-dag-branch"><legend>原三节点模式的可选条件（组合条件在各节点内选择）</legend><label>条件节点<select id="csv-dag-branch-target"><option value="">不使用条件（保留原流程）</option><option value="aggregate">aggregate</option><option value="report">report</option></select></label><label>操作符<select id="csv-dag-branch-op"><option>eq</option><option>in</option><option>exists</option></select></label><label>引用<select id="csv-dag-branch-source"><option value="input:include_report">本次输入 include_report（boolean，可缺失）</option><option value="input:column">输入 column（string）</option><option value="aggregate:count">已验证 aggregate.count（integer，仅 report）</option><option value="aggregate:sum">已验证 aggregate.sum（string，仅 report）</option></select></label><label>比较值（JSON；in 使用数组，exists 不填）<input id="csv-dag-branch-value" value="true" maxlength="1000"></label></fieldset><label>本次条件输入 include_report<select id="csv-dag-branch-input"><option value="">缺失（不自动补值）</option><option value="true">true</option><option value="false">false</option></select></label><button id="csv-dag-plan" type="button">保存所选计划草案</button><label><input id="csv-dag-confirm" type="checkbox">我已核对下方计划、来源、列及精确指纹；确认本次离线运行（不是人工签收）</label><button id="csv-dag-run" type="button">确认精确计划并排队运行</button><button id="csv-dag-retry" type="button" hidden>原键恢复未知接受回执</button><button id="csv-dag-refresh" type="button">读回本次运行</button><button id="csv-dag-pause" type="button">暂停</button><button id="csv-dag-resume" type="button">继续</button><button id="csv-dag-cancel" type="button">取消</button><button id="csv-dag-history-read" type="button">读取已有计划与运行</button><div id="csv-dag-history"></div><p id="csv-dag-status" role="status"></p><pre id="csv-dag-definition"></pre><pre id="csv-dag-result"></pre><fieldset id="dag-reuse-panel"><legend>将已完成的读取 → 求和（→ 报告）或双求和保存为内部版本</legend><p>复用无条件的读取、求和及可选报告，或一次读取与两个求和节点。保留每步已核来源与预算；实例每次为各求和节点选择已冻结的数值列，重新执行完整流程，按节点保存完整结果。报告保留在运行回执中。语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><button id="dag-reuse-prepare" type="button">从本次成功流程准备版本</button><label><input id="dag-reuse-confirm" type="checkbox">已核对下方来源、全部步骤回执、允许列与内部版本</label><button id="dag-reuse-commit" type="button">确认并保存内部版本</button><button id="dag-reuse-history" type="button">读取已有版本与实例</button><label>已核内部版本<select id="dag-reuse-release"></select></label><button id="dag-reuse-create" type="button">创建独立实例</button><label>已有实例<select id="dag-reuse-instance"></select></label><button id="dag-reuse-read" type="button">只读恢复实例与结果</button><label><span id="dag-reuse-column-label">本次数值列</span><select id="dag-reuse-column"></select></label><label id="dag-reuse-second-label" hidden><span id="dag-reuse-column-second-label">第二节点数值列</span><select id="dag-reuse-column-second"></select></label><label><input id="dag-reuse-run-confirm" type="checkbox">按下方精确版本和各节点所选列执行完整流程，保存本次完整结果</label><button id="dag-reuse-run" type="button">确认新列并排队</button><button id="dag-reuse-recover" type="button" hidden>恢复原请求回执</button><button id="dag-reuse-pause" type="button">暂停实例运行</button><button id="dag-reuse-resume" type="button">继续实例运行</button><button id="dag-reuse-cancel" type="button">取消实例运行</button><p id="dag-reuse-status" role="status"></p><div id="dag-reuse-results" role="status"></div><pre id="dag-reuse-proof"></pre><fieldset><legend>升级或回退此实例的内部版本</legend><p>先完成或取消尚未结束的运行。仅切换兼容流程，原结果和结果版本保留；切换后新输入须另行确认。</p><label>目标内部版本<select id="dag-reuse-switch-target"></select></label><button id="dag-reuse-switch-prepare" type="button">核查目标版本与保留结果</button><pre id="dag-reuse-switch-proof"></pre><label><input id="dag-reuse-switch-confirm" type="checkbox">我已核对来源、目标和实例修订，确认此版本切换</label><button id="dag-reuse-switch-commit" type="button">确认升级或回退</button></fieldset><fieldset><legend>先另行授权无原内容的逻辑</legend><label><input id="csv-logic-authorize-confirm" type="checkbox">允许所选成功版本的规范化结构在本项目复用24小时，即使原材料以后撤权或不可读；不授权读材料，可单独永久撤销</label><button id="csv-logic-authorize" type="button">授权独立CSV逻辑（不执行）</button></fieldset><fieldset id="dag-material-panel"><legend>在另一份已有授权 CSV 上复用流程</legend><p>仅当前已注册 CSV 草案与读取 → 求和（→ 报告）结构。旧来源仍须可核查；新增材料可能改变授权基线，需要重新核查并保存来源版本。先选择新材料及数值列，保存独立计划；再确认实际运行，成功后另存版本与实例。旧结果保留。语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><button id="dag-material-options" type="button">读取当前可用新材料</button><label>已有 CSV 草案<select id="dag-material-target"></select></label><label>本次数值列<select id="dag-material-column"></select></label><label><input id="dag-material-confirm" type="checkbox">已核对新材料、列、权限与冻结预算；仅保存新计划</label><button id="dag-material-plan" type="button">确认并保存新材料计划</button><button id="dag-material-open" type="button">打开已核新材料计划</button><p id="dag-material-status" role="status"></p><pre id="dag-material-proof"></pre></fieldset></fieldset></section><details><summary>实际图、来源版本与当前授权绑定</summary><pre id="delivery-proof"></pre></details></section><details><summary>声明式清单、来源与权限</summary><pre id="app-manifest"></pre></details></section></div></section>
+ <section id="internal-panel" hidden aria-labelledby="internal-title"><h2 id="internal-title">内部工程入口 · 只读运行</h2><section id="app-own-goal-panel" hidden><h3>本应用自己的目标与适用范围</h3><p>填写新材料的完整目标卡，逐项签收将依据自己的当前已保存版本。新卡不继承原任务或原材料应用的目标和签收。固定字面能力、语义 UNKNOWN、正式发布关闭。</p><button id="app-own-goal-read" type="button">读取自己的目标版本</button><form id="app-own-goal-form"><label>标题<input id="app-own-goal-title" maxlength="200" required></label><label>目标<textarea id="app-own-goal-goal" maxlength="4000" required></textarea></label><label>已知（每行一项）<textarea id="app-own-goal-known"></textarea></label><label>假设（每行一项）<textarea id="app-own-goal-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="app-own-goal-unresolved"></textarea></label><label>约束（每行一项，至少一项）<textarea id="app-own-goal-constraints" required></textarea></label><label>验收条目（每行一项，至少一项）<textarea id="app-own-goal-acceptance_checks" required></textarea></label><label>适用范围（每行一项，至少一项）<textarea id="app-own-goal-applicability" required></textarea></label><label><input id="app-own-goal-ack" type="checkbox">核对本应用、新材料及完整目标和范围，明确保存自己的新版本</label><button id="app-own-goal-save" type="submit">保存自己的目标版本</button></form><label>原请求key<input id="app-own-goal-key" maxlength="100" autocomplete="off"></label><button id="app-own-goal-recover" type="button">仅GET读取原目标请求</button><pre id="app-own-goal-proof"></pre><p id="app-own-goal-status" role="status" aria-live="polite"></p></section><p>仅已认证的本机工程验证：冻结只读清单、独立实例结果和持久后台任务。正式发布与部署仍关闭，不新增授权，0 网络模型请求。agent 仅接受明确提供的离线 Replay。</p><p id="internal-status" role="status" aria-live="polite"></p><section id="internal-agent" hidden><h3>有界 agent · 离线 Replay</h3><p>候选与响应由离线调用者提供，尚无真实模型自主生成。仅核查字面命中和引用定位；语义 UNKNOWN。绑定 TXT/MD 及当前授权不变，仅 resource.read。</p><label>离线 Replay JSON 文件（恰好两条 wire 响应，UTF-8 不超过 32000 字节）<input id="internal-replay-file" type="file" accept=".json,application/json"></label><p id="internal-replay-status" role="status" aria-live="polite"></p></section><div class="grid"><section><h3>冻结内部 Release</h3><p id="internal-prepare-hint">使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。</p><button id="internal-prepare" type="button">核查并准备内部快照</button><button id="internal-back" type="button">取消选择 / 返回预览</button><section id="internal-approval" hidden><p id="internal-approval-label"></p><details open><summary>待确认的冻结快照与检查证据</summary><pre id="internal-approval-detail"></pre></details><label><input id="internal-approval-ack" type="checkbox">我已检查上述精确快照；仅保存内部版本，不开通发布或授权。</label><button id="internal-commit" type="button" disabled>确认保存此内部 Release</button></section><h3>内部 Release 历史</h3><div id="internal-releases"></div><h3>独立实例</h3><div id="internal-instances"></div><button id="internal-refresh" type="button">重新读取内部历史</button></section><section><h3 id="internal-instance-title">选择内部实例</h3><p id="internal-instance-info"></p><section id="internal-switch" hidden><h3>切换内部版本 / 兼容回退</h3><p>保留实例结果与历史。回退版本不撤销数据或外部动作；已接受任务不会自动取消。不新增授权。</p><label>目标 Release <select id="internal-switch-target"><option value="">请手动选择目标版本</option></select></label><button id="internal-switch-prepare" type="button">核查兼容性与精确切换快照</button><button id="internal-switch-cancel" type="button">取消本页切换选择</button><p id="internal-switch-status" role="status" aria-live="polite"></p><section id="internal-switch-approval" hidden><p id="internal-switch-summary"></p><details><summary>精确切换指纹、版本与权限快照</summary><pre id="internal-switch-detail"></pre></details><label><input id="internal-switch-ack" type="checkbox">我已核对目标版本及保留数据范围，确认仅切换此内部实例。</label><button id="internal-switch-commit" type="button" disabled>确认切换到此精确版本</button></section><h4>实例版本切换历史</h4><div id="internal-switch-history"></div></section><form id="internal-run-form" hidden><label id="internal-column-label">冻结材料的数值列 <select id="internal-column" required></select></label><label id="internal-term-label" hidden>本次字面检索词 <input id="internal-term" maxlength="80" autocomplete="off"></label><button id="internal-run-submit">提交新持久 AppRun</button></form><button id="internal-retry" type="button" hidden>用原请求键恢复提交</button><button id="internal-new-intent" type="button" hidden>读回历史后结束本页旧请求重试</button><p id="internal-run-status" role="status" aria-live="polite"></p><div id="internal-controls"></div><section id="registered-extraction" hidden><section id="text-logic-source" hidden><h3>授权无旧内容的文本逻辑</h3><p>只保留固定字面检索结构、变量和限额。旧材料撤销后仍可复用；新材料必须另行明确绑定。24小时，owner PENDING、语义 UNKNOWN，未发布。</p><button id="text-logic-source-preview" type="button">预览独立文本逻辑</button><pre id="text-logic-source-proof"></pre><label><input id="text-logic-source-confirm" type="checkbox">核对来源证明、Release指纹与固定限额，明确授权本项目的无旧内容逻辑</label><button id="text-logic-authorize" type="button">建立独立逻辑授权</button><p id="text-logic-source-status" role="status"></p></section><button id="registered-extraction-open" type="button">将这次任务保存为可复用草案</button><form id="registered-extraction-form" hidden><p>服务端核查成功任务，提取已登记的 CSV 求和或 TXT/MD 字面检索逻辑形成独立草案。仅沿用所选应用已有授权；撤权同时影响共享此授权域的草案。不创建授权，0 模型请求，目标语义条件未验收。</p><label>已有授权的新材料应用 <select id="registered-extraction-target" required></select></label><label>草案名称 <input id="registered-extraction-name" required maxlength="200" value="从成功任务保存的汇总"></label><pre id="registered-extraction-proof"></pre><p id="registered-extraction-target-info"></p><button id="registered-extraction-submit">保存可复用草案</button><button id="registered-extraction-retry" type="button" hidden>用原请求键恢复生成回执</button><button id="registered-extraction-new" type="button" hidden>核对原请求后开始另一次明确提取</button><p id="registered-extraction-request-info"></p></form><p id="registered-extraction-status" role="status" aria-live="polite"></p></section><section id="owner-panel" hidden aria-labelledby="owner-title"><h3 id="owner-title">精确版本 owner 逐项签收</h3><p>人工核对冻结目标、约束、未解决问题和实际新输入结果。技术 PASS 不替代语义验收；逐项明确接受或拒绝并填写依据。此声明仅属于下列版本，正式发布关闭。</p><p id="owner-status" role="status" aria-live="polite"></p><label>新输入成功任务 <select id="owner-run"><option value="">请手动选择</option></select></label><button id="owner-prepare" type="button" disabled>冻结此版本与新输入证据</button><button id="owner-refresh" type="button">读取当前签收状态</button><details open><summary>精确冻结目标、来源、版本、证据与有效期</summary><pre id="owner-proof"></pre></details><form id="owner-form" hidden><div id="owner-criteria"></div><label><input id="owner-ack" type="checkbox">我已逐项核对上述精确版本，以下为我的人工判断。</label><button id="owner-submit" disabled>提交此精确版本的逐项人工决定</button></form><label>取消 / 撤销依据 <input id="owner-stop-reason" maxlength="500"></label><button id="owner-cancel" type="button" disabled>取消当前待签收预览</button><button id="owner-revoke" type="button" disabled>撤销最新人工声明</button><label>原请求 key <input id="owner-key" maxlength="100" autocomplete="off"></label><button id="owner-recover" type="button" disabled>仅用原 key 读取回执</button><details><summary>不可变人工记录历史；历史回执不等于当前签收</summary><pre id="owner-history"></pre></details></section><h3>后台运行历史</h3><div id="internal-runs"></div><h3>实例结果版本（只读）</h3><div id="internal-data"></div><details><summary>状态、取消意图与事件</summary><pre id="internal-run-detail"></pre></details></section></div></section>
+ <section id="resources" hidden><h1>资源</h1><nav id="resource-filters" aria-label="资源类别"><button type="button" data-resource-category="materials" aria-controls="resource-materials" aria-current="true">材料</button><button type="button" data-resource-category="capabilities" aria-controls="resource-capabilities">可信能力</button><button type="button" data-resource-category="connections" aria-controls="resource-connections">连接</button></nav><section id="resource-materials"><h2>材料</h2><form id="resource-form"><label>本地文本文件（可选）<input id="resource-file" type="file" accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json"></label><p>支持 UTF-8 TXT、MD、CSV、JSON，文件为1–32768字节。CSV/JSON 不支持 BOM；TXT/MD 保留 BOM。选择只在本页读取和预览，不会自动上传或保存；核对后点击原保存按钮才授权当前项目。也可直接填写文本。</p><button id="resource-file-clear" type="button">清除选择和待保存内容</button><label>名称 <input id="resource-name" required maxlength="200"></label><label>类型 <select id="format"><option>txt</option><option>md</option><option>csv</option><option>json</option></select></label><label>授权给当前项目的文本 <textarea id="content" required maxlength="32768"></textarea></label><button id="resource-save">保存并授权项目内使用（24小时）</button><p id="resource-file-status" role="status" aria-live="polite"></p><pre id="resource-file-preview" hidden aria-label="本地文件预览（尚未保存）"></pre><button id="resource-save-read" type="button" hidden>刷新材料列表核对（只读）</button><button id="resource-save-reset" type="button" hidden>我已核对列表，重新填写材料</button></form><div id="materials"></div><pre id="resource-preview" hidden></pre><h2>授权</h2><div id="grants"></div></section><section id="resource-capabilities" hidden><h2>可信能力</h2><p>连接本机 API 后显示当前注册目录。目录不代表材料已获授权；实际使用仍须通过原授权检查。</p><pre id="capabilities"></pre></section><section id="resource-connections" hidden><h2>连接</h2><p>连接本机 API 后显示当前模型、模式与验收状态。MOCK 工程模拟不代表真实模型接入；LIVE_NOT_ACCEPTED 表示真实模型尚未验收。</p><pre id="connections"></pre></section></section>
+diff --git a/src/sim2act/worker.py b/src/sim2act/worker.py
+index 8f4abbd..37dfd9c 100644
+--- a/src/sim2act/worker.py
++++ b/src/sim2act/worker.py
+@@ -137,9 +137,14 @@ class Worker:
+                 )
+             activation_request = (planner_request and
+                 self.store.frozen_contract(c, run).natural_planning.activation is not None)
++            generation_activation = (generation_request and
++                self.store.frozen_contract(c, run).application_generation.activation is not None)
+             if activation_request:
+                 from .natural_activations import now as activation_now
+                 now = activation_now()
++            elif generation_activation:
++                from .generation_approvals import now as generation_now
++                now = generation_now()
+             else:
+                 now = time.time()
+             count = len(
+@@ -150,7 +155,7 @@ class Worker:
+                     )
+                 ).all()
+             )
+-            if q["blocked_until"] > now or count >= (min(s.rpm, 1) if activation_request else s.rpm):
++            if q["blocked_until"] > now or count >= (min(s.rpm, 1) if activation_request or generation_activation else s.rpm):
+                 raise DomainError("RATE_LIMITED", "Account-wide quota waiting", retryable=True)
+             aid = new_id("attempt")
+             if protocol_request:
+@@ -220,6 +225,12 @@ class Worker:
+             if generation_request:
+                 self.store.event(c, run_id, "GA_WIRE_RESERVED", {
+                     "attempt_id": aid, "index": context["requests"], "fence": fence, "wire": wire_seal})
++                if generation_activation:
++                    from .generation_approvals import reserve_slot as reserve_generation_slot
++
++                    if wire_seal is None:
++                        raise DomainError("VERSION_CONFLICT", "Missing generation wire proof")
++                    reserve_generation_slot(self, c, run, aid, envelope, wire_seal["sha256"])
+             context["requests"] += 1
+             context["reserved_tokens"] += envelope
+             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
+@@ -248,6 +259,9 @@ class Worker:
+     def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False):
+         with self.store.tx() as c:
+             from .db import run_contracts
++            from .goal_applications import source_scope_gate
++
++            source_scope_gate(self.store, c, run_id)
+             saved = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == run_id)).scalar_one_or_none()
+             if saved is not None and not isinstance(saved, dict):
+                 raise DomainError("VERSION_CONFLICT", "Invalid frozen finalization contract")
+@@ -261,8 +275,10 @@ class Worker:
+             if verify_goal_source:
+                 frozen = self.store.frozen_contract(c, run)
+                 if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
+-                    from .goal_applications import verified_candidate
++                    from .goal_applications import check_active, verified_candidate
+ 
++                    if frozen.application_generation.activation is not None:
++                        check_active(self, c, run)
+                     candidate = verified_candidate(self.store, c, run, frozen.limits)
+                     if state != "PARTIAL" or result != {
+                         "candidate": candidate, "candidate_fingerprint": fingerprint(candidate),
+@@ -312,6 +328,10 @@ class Worker:
+                 )
+             )
+             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
++            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and frozen.application_generation.activation is not None:
++                check_active(self, c, run)
++                if run["lease_until"] <= time.time():
++                    raise DomainError("VERSION_CONFLICT", "Original worker lease expired before final commit")
+ 
+     def process(self, run):
+         from .csv_dag import is_job as is_csv_dag
+@@ -609,8 +629,8 @@ class Worker:
+                     fail_job(self, run, e)
+                     return True
+                 with self.store.tx() as c:
+-                    current = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
+-                    if current["fence"] == run["fence"]:
++                    current_fence = c.execute(select(runs.c.fence).where(runs.c.id == run["id"])).scalar_one()
++                    if current_fence == run["fence"]:
+                         c.execute(
+                             update(runs)
+                             .where(runs.c.id == run["id"])

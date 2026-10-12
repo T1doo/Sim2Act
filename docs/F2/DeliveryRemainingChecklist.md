@@ -83,3 +83,5 @@
 
 
 2026-10-12 主线按明确指示转到 [P-A受控书生适配与模型图新材料复用](PAInternProvider20261012.md)：默认关闭/真实请求0；独立精确Goal/材料/身份/软件/原key批准与不可退还请求槽，实际sender前重验，实际读取反馈→原模型候选→明确确认→模型图指定槽绑定自己的新材料/Goal→冷NoModel Worker。这里只计合成协议与确定性引用工程，不称真实书生或业务/语义/完整P-A完成。原owner草案保全未扩展。实际专项/独审/原失败及唯一源map见 [本轮证据](../evidence/pa-intern-provider-20261012/README.md)。相邻675回归原587P84F4PGskip保留；82旧软件兼容门FAIL继续保守关闭（白名单不放宽），另外2个接口/授权前ledger问题已修。真实provider/费用硬预算、旧软件接续资格、PG/Windows/native、完整验收/正式发布/CI仍未关闭。
+
+同日后续 [两个旧锚到精确新软件的有限兼容合同](PATextSoftwareCompatibility20261012.md)：上段6088阶段的82阻断已按70预检拒绝/12深层未进入分类，并在原锚/CHANGED集合不变、完整70文件精确新资格及原逐实例明确批准边界下修复。原a4fd源码两文件100PASS；当前相同两文件100PASS且82逐名通过，主线56PASS、资格篡改22PASS、共享129=122PASS/7隔离PG前提SKIP，作者307唯一=300PASS/0FAIL/ERROR/7SKIP。独审190唯一PASS/0FAIL/ERROR/SKIP，其中178与作者重叠；其自身82映射/36deep-UDF原JSON已封存，补证重复36不加分母。425冻结条目前后零差异。原失败/旧seal/6088证据/owner草案不改签；其它软件及6088时期模型对象不自动迁移授权。原生浏览器/Windows/PG/真实模型费用/完整P-A/P-B业务语义/部署/CI仍NOT_RUN；wheel构建因缺setuptools失败并保留原错误，未安装依赖。详细原始证据见[本轮证据](../evidence/pa-text-compatibility-20261012/README.md)。

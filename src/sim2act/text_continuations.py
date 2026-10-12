@@ -4,6 +4,7 @@ Old seals stay immutable. Archival reads never grant execution; a new sealed
 software permission and Release authorize exactly one existing instance revision.
 """
 
+import ast
 import copy
 import hashlib
 import json
@@ -40,6 +41,7 @@ PREPARE, META, COMMIT, INDEX = ("text_software_" + s for s in ("prepare", "metad
 CANCEL, REVOKE = "text_software_cancel", "text_software_revoke"
 MAX = 64
 ANCHOR_HASH = "24f26f3621b8fc49a24fa3566484b568148d9317f2d279d79f264416b994193a"
+QUALIFICATION_HASH = "f247ef81b9ed40725cab07b89e0fe1f2b22caee88454bae663c13a9978f186c2"
 CHANGED = {"api.py", "app_jobs.py", "internal_api.py", "owner_acceptance.py", "app_owner_goals.py",
            "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py",
            "text_workflows.py"}  # Closed new family; old literal compiler/kernel stays byte-identical.
@@ -99,10 +101,57 @@ def known(fp):
     files = anchors[fp]["files"]
     logic.require(fingerprint(files) == fp)
     current = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in Path(__file__).parent.glob("*.py") if p.name != "config.py"}
-    logic.require(not (set(current) - set(files) - CHANGED))
-    logic.require(all(current.get(name) == sha for name, sha in files.items() if name not in CHANGED),
-                  "Literal kernel or unknown software dependency changed")
+    original_bridge = (not (set(current) - set(files) - CHANGED)
+        and all(current.get(name) == sha for name, sha in files.items() if name not in CHANGED))
+    if not original_bridge:
+        qualified_target(current, anchors)
     return anchors[fp]
+
+
+def qualified_target(current, anchors):
+    """One reviewed complete target, never another name-based compatibility list.
+
+    Only the manifest pin's single literal is normalized to avoid a digest cycle.
+    Actual implementation fingerprints and instance approvals remain byte-exact.
+    """
+    try:
+        raw = Path(__file__).with_name("text_software_qualification.json").read_bytes()
+        logic.require(hashlib.sha256(raw).hexdigest() == QUALIFICATION_HASH,
+                      "Literal software qualification changed")
+        def unique(pairs):
+            value = {}
+            for key, item in pairs:
+                logic.require(key not in value, "Duplicate software qualification field")
+                value[key] = item
+            return value
+
+        proof = json.loads(raw, object_pairs_hook=unique)
+        logic.require(set(proof) == {"version", "anchor_hash", "sources", "review_baseline",
+            "review_candidate", "normalization", "files"}
+            and proof["version"] == "literal-software-qualification.v1"
+            and proof["anchor_hash"] == ANCHOR_HASH and proof["sources"] == sorted(anchors)
+            and proof["review_baseline"] == "a4fd476127a477006dbdb29a9a1f6c2f09e6a001"
+            and proof["review_candidate"] == "6088dcfc93ecf9de48f10ab6a72b89ec4759fd91"
+            and proof["normalization"] == "sole-qualification-hash-literal-zero64.v1")
+        source = Path(__file__).read_bytes()
+        literal = ('QUALIFICATION_HASH = "' + QUALIFICATION_HASH + '"').encode()
+        logic.require(source.count(literal) == 1, "Qualification pin is not the exact sole literal")
+        tree = ast.parse(source)
+        writes = [node for node in ast.walk(tree) if isinstance(node, ast.Name)
+                  and isinstance(node.ctx, ast.Store) and node.id == "QUALIFICATION_HASH"]
+        pins = [node for node in tree.body if isinstance(node, ast.Assign)
+                and len(node.targets) == 1 and node.targets[0] in writes]
+        logic.require(len(writes) == len(pins) == 1 and pins[0].targets[0] is writes[0]
+            and isinstance(pins[0].value, ast.Constant) and pins[0].value.value == QUALIFICATION_HASH
+            and ast.get_source_segment(source.decode(), pins[0]) == literal.decode(),
+            "Qualification pin must be one exact module-level simple literal assignment")
+        normalized = dict(current)
+        normalized["text_continuations.py"] = hashlib.sha256(source.replace(
+            literal, ('QUALIFICATION_HASH = "' + '0' * 64 + '"').encode())).hexdigest()
+        logic.require(proof["files"] == normalized,
+                      "Current software differs from the exact reviewed literal target")
+    except (OSError, ValueError, TypeError, KeyError, SyntaxError) as exc:
+        raise DomainError("VERSION_CONFLICT", "Unavailable exact literal software qualification") from exc
 
 
 def software(c, user, draft):
