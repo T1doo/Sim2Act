@@ -421,6 +421,35 @@ internal_owner_seals = Table(
     UniqueConstraint("instance_id", "sequence"),
 )
 
+# Natural owner declarations are partitioned by exact Run; no cross-material payload reads.
+natural_owner_records = Table(
+    "natural_owner_records", meta,
+    Column("id", String, primary_key=True),
+    Column("run_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("instance_id", String, nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("status", String, nullable=False),
+    Column("previous_fingerprint", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    UniqueConstraint("run_id", "sequence"),
+    UniqueConstraint("run_id", "principal_id", "request_key"),
+)
+natural_owner_seals = Table(
+    "natural_owner_seals", meta,
+    Column("record_id", String, primary_key=True),
+    Column("run_id", String, nullable=False),
+    Column("metadata_fingerprint", String, nullable=False),
+    Column("payload_fingerprint", String, nullable=False),
+    UniqueConstraint("run_id", "record_id"),
+)
+
 internal_run_bindings = Table(
     "internal_run_bindings",
     meta,

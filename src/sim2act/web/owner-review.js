@@ -3,15 +3,16 @@
 let ownerView=null, ownerGeneration=0, ownerEditGeneration=0;
 const ownerPending=new Map();
 async function ownerHash(value){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");}
-function ownerKey(view){return JSON.stringify([view.token,view.project,view.iid]);}
-function ownerCurrent(view){return ownerView===view && engineeringCurrent(view.engineering) && view.engineering.instanceGeneration===view.instanceGeneration && view.engineering.instance?.id===view.iid;}
+function ownerKey(view){return JSON.stringify([view.token,view.project,view.iid,...(view.spec ? [view.connection,view.rid] : [])]);}
+function ownerEndpoint(view){return `/api/internal/instances/${view.iid}/${view.spec ? "runs/"+encodeURIComponent(view.rid)+"/spec-owner-review" : "owner-review"}`;}
+function ownerCurrent(view){return ownerView===view && (!view.spec || view.connection===identityConnectionGeneration) && engineeringCurrent(view.engineering) && view.engineering.instanceGeneration===view.instanceGeneration && view.engineering.instance?.id===view.iid;}
 function ownerFence(view){
   const generation=ownerGeneration,edit=ownerEditGeneration,workspace=workspaceSelectionGeneration;
   return ()=>ownerCurrent(view) && generation===ownerGeneration && edit===ownerEditGeneration && workspace===workspaceSelectionGeneration;
 }
 function clearOwnerReview(){
   ownerGeneration++;ownerEditGeneration++;ownerView=null;
-  $("owner-panel").hidden=true;$("owner-criteria").replaceChildren();$("owner-proof").textContent="";
+  $("owner-panel").hidden=true;$("owner-criteria").replaceChildren();$("owner-proof").textContent="";$("owner-natural-evidence").replaceChildren();
   $("owner-status").textContent="";$("owner-history").textContent="";$("owner-form").hidden=true;
   $("owner-ack").checked=false;$("owner-stop-reason").value="";$("owner-key").value="";
 }
@@ -22,7 +23,7 @@ function ownerButtons(view){
   $("owner-submit").disabled=view.busy || !!pending || !$("owner-ack").checked || view.state?.owner_acceptance!=="PENDING" || !view.state?.record;
   $("owner-cancel").disabled=view.busy || !!pending || latest?.kind!=="PREPARE" || !$("owner-stop-reason").value.trim();
   $("owner-revoke").disabled=view.busy || !!pending || latest?.kind!=="DECIDE" || !$("owner-stop-reason").value.trim();
-  $("owner-refresh").disabled=view.busy;$("owner-recover").disabled=view.busy || !$("owner-key").value.trim();
+  $("owner-refresh").disabled=view.busy || (view.spec && !view.rid);$("owner-recover").disabled=view.busy || (view.spec && !view.rid) || !$("owner-key").value.trim();
 }
 function ownerEdited(){ownerEditGeneration++;if(ownerView)ownerButtons(ownerView);}
 function ownerRender(view,state){
@@ -32,6 +33,8 @@ function ownerRender(view,state){
   $("owner-history").textContent=JSON.stringify({latest:state.latest,history:state.history,recovered_receipt:state.recovered ? {id:state.recovered.id,status:state.recovered.status,request_key:state.recovered.request_key,fingerprint:state.recovered.fingerprint} : null},null,2);
   const record=state.record,contract=record?.payload?.contract || state.current || state.prepare_current;
   $("owner-proof").textContent=(state.content_access || state.prepare_current) && contract ? JSON.stringify({record_id:record?.id,record_fingerprint:record?.fingerprint,expires_at:record?.payload?.expires_at,contract,choices:record?.payload?.choices},null,2) : "当前仅可读取本人停止控制元数据；历史回执不代表当前版本仍获签收。";
+  $("owner-natural-evidence").replaceChildren();
+  if(view.spec && state.content_access && contract?.output?.checklist)renderSpecChecklist($("owner-natural-evidence"),contract.output.checklist);
   const canDecide=state.content_access && state.owner_acceptance==="PENDING" && record?.kind==="PREPARE";
   $("owner-form").hidden=!canDecide;
   if(!canDecide || record.id!==previous){
@@ -39,7 +42,7 @@ function ownerRender(view,state){
     if(canDecide)for(const item of contract.items){
       const group=document.createElement("fieldset"),legend=document.createElement("legend");legend.textContent=`${item.id}：${item.text}`;group.append(legend);
       const select=document.createElement("select");select.id="owner-choice-"+item.id;select.dataset.itemId=item.id;select.required=true;
-      select.append(new Option("请逐项手动判定",""),new Option("接受此项","ACCEPT"),new Option("拒绝此项","REJECT"));
+      select.append(new Option("请逐项手动判定",""),new Option("接受此项","ACCEPT"),new Option(view.spec ? "要求修正此项" : "拒绝此项","REJECT"));
       const reason=document.createElement("textarea");reason.id="owner-reason-"+item.id;reason.required=true;reason.maxLength=500;reason.setAttribute("aria-label",item.id+" 判定依据");
       select.oninput=ownerEdited;select.onchange=ownerEdited;reason.oninput=ownerEdited;reason.onchange=ownerEdited;group.append(select,reason);$("owner-criteria").append(group);
     }
@@ -51,7 +54,7 @@ function ownerScope(view,value){
   return value?.principal_id===view.principal && value.project_id===view.project && value.instance_id===view.iid;
 }
 function ownerContract(view,value){
-  return ownerScope(view,value) && value.app_id===view.app && value.version==="owner.generated-text.v1" && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
+  return ownerScope(view,value) && value.app_id===view.app && value.version===(view.spec ? "owner.natural-spec.v1" : "owner.generated-text.v1") && (!view.spec || value.run_id===view.rid) && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
 }
 async function ownerValidate(view,state,key,current){
   const invalid=()=>{throw Error("签收读取身份、序列或回执绑定不一致");};
@@ -59,7 +62,7 @@ async function ownerValidate(view,state,key,current){
   const ids=new Set(),keys=new Set(),hash=/^[a-f0-9]{64}$/;
   let previous="";
   for(const [index,row] of state.history.entries()){
-    if(!ownerScope(view,row) || row.sequence!==index+1 || !row.id || ids.has(row.id) || !row.request_key || keys.has(row.request_key) || !hash.test(row.fingerprint) || !hash.test(row.request_fingerprint) || row.previous_fingerprint!==previous || !({PREPARE:["PENDING"],DECIDE:["ACCEPTED","REJECTED"],CANCEL:["CANCELLED"],REVOKE:["REVOKED"]}[row.kind]||[]).includes(row.status))invalid();
+    if(!ownerScope(view,row) || (view.spec && row.run_id!==view.rid) || row.sequence!==index+1 || !row.id || ids.has(row.id) || !row.request_key || keys.has(row.request_key) || !hash.test(row.fingerprint) || !hash.test(row.request_fingerprint) || row.previous_fingerprint!==previous || !({PREPARE:["PENDING"],DECIDE:["ACCEPTED","REJECTED"],CANCEL:["CANCELLED"],REVOKE:["REVOKED"]}[row.kind]||[]).includes(row.status))invalid();
     ids.add(row.id);keys.add(row.request_key);previous=row.fingerprint;
   }
   if(!ownerSame(state.latest,state.history.at(-1)||null))invalid();
@@ -83,6 +86,8 @@ async function ownerValidate(view,state,key,current){
       const requestHash=await ownerHash(payload.request);
       if(!current())return false;
       if(requestHash!==row.request_fingerprint)invalid();
+      if(view.spec){const payloadHash=await ownerHash(payload);if(!current())return false;
+        if(payloadHash!==row.fingerprint || (record===state.record && !ownerSame(payload.contract,state.current)))invalid();}
     }else if(record===state.record)invalid();
   }
   return current();
@@ -91,7 +96,7 @@ async function ownerRead(view,key=null){
   const fence=ownerFence(view),generation=++view.readGeneration;
   const current=()=>fence() && generation===view.readGeneration;
   try{
-    const state=await api(`/api/internal/instances/${view.iid}/owner-review${key ? "?request_key="+encodeURIComponent(key) : ""}`);
+    const state=await api(`${ownerEndpoint(view)}${key ? "?request_key="+encodeURIComponent(key) : ""}`);
     if(!current() || !await ownerValidate(view,state,key,current) || !current())return false;
     const pending=ownerPending.get(ownerKey(view));
     if(key && pending?.request_key===key){
@@ -105,41 +110,51 @@ async function ownerRead(view,key=null){
 }
 async function openOwnerReview(engineeringView){
   clearOwnerReview();
-  if(engineeringView.spec){$("owner-panel").hidden=false;$("owner-status").textContent="规范清单人工验收 PENDING，语义 UNKNOWN。请阅读成果中的原文、条件、例外和未决项；当前尚不支持提交此家族的人工签收。";for(const id of ["owner-prepare","owner-submit","owner-cancel","owner-revoke","owner-refresh","owner-recover"])$(id).disabled=true;return;}
   if(engineeringView.workflow){$("owner-panel").hidden=false;$("owner-status").textContent="本应用人工签收 PENDING；四步技术核查不替代语义判断。本切片暂不提交此家族的人工声明。";return;}
   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
-  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,state:null,busy:false,readGeneration:0};
+  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,connection:identityConnectionGeneration,spec:!!engineeringView.spec,rid:null,state:null,busy:false,readGeneration:0};
   ownerView=view;$("owner-panel").hidden=false;
   $("owner-run").replaceChildren(new Option("手动选择已完成的新输入任务",""),...instance.runs.filter(run=>run.status==="SUCCEEDED").map(run=>new Option(`${run.id} · 结果 v${run.result_version}`,run.id)));
   const pending=ownerPending.get(ownerKey(view));if(pending)$("owner-key").value=pending.request_key;
   ownerButtons(view);
+  if(view.spec){$("owner-status").textContent="请选择具体成功结果，阅读原文、条件、例外和未决项后，明确接受或要求修正。新结果不继承历史声明。";return;}
   const current=ownerFence(view),reading=ownerRead(view),readGeneration=view.readGeneration;
   try{await reading;}catch(error){if(current() && readGeneration===view.readGeneration)$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
   ownerButtons(view);
 }
 async function ownerAction(body){
   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy || ownerPending.has(ownerKey(view)))return;
-  const request={...body,request_key:crypto.randomUUID(),expected_sequence:view.state.sequence},current=ownerFence(view);
+  if(!view.state || (view.spec && !view.rid))return;
+  if(view.spec && body.command==="DECIDE" && body.choices.some(x=>!["ACCEPT","REJECT"].includes(x.decision)||!x.reason.trim()))throw Error("请逐项明确判定并填写依据");
+  const request={...body,request_key:crypto.randomUUID(),expected_sequence:view.state.sequence},current=ownerFence(view),scopeKey=ownerKey(view),scope={principal:view.principal,project:view.project,iid:view.iid,rid:view.rid},endpoint=ownerEndpoint(view);
   view.readGeneration++; // A new write intent invalidates every earlier read before POST.
-  ownerPending.set(ownerKey(view),request);$("owner-key").value=request.request_key;
+  ownerPending.set(scopeKey,request);$("owner-key").value=request.request_key;
   view.busy=true;ownerButtons(view);$("owner-status").textContent="正在保存精确人工操作；回执未知时仅以原 key 读取恢复。";
   let readGeneration=null;
   try{
-    const saved=await api(`/api/internal/instances/${view.iid}/owner-review-requests`,"POST",request);
+    const saved=await api(endpoint+"-requests","POST",request);
     if(!current())return;
     if(saved.formal_publication_enabled!==false || saved.record?.request_key!==request.request_key || saved.record.request_fingerprint!==await ownerHash(request))throw Error("人工回执绑定不一致");
     if(!current())return;
     const reading=ownerRead(view,request.request_key);readGeneration=view.readGeneration;
     await reading;
   }catch(error){
-    if(error.httpStatus>=400 && error.httpStatus<500 && ownerPending.get(ownerKey(view))===request)ownerPending.delete(ownerKey(view));
+    if(view.spec && readGeneration===null && error.httpStatus>=400 && error.httpStatus<500){
+      const proof=error.submissionRejection;
+      const hash=await ownerHash(request);
+      if(proof?.namespace==="natural-owner-submission-rejection.v1" && proof.principal_id===scope.principal && proof.project_id===scope.project && proof.instance_id===scope.iid && proof.run_id===scope.rid && proof.request_key===request.request_key && proof.request_fingerprint===hash && proof.acceptance==="NOT_ACCEPTED" && proof.previous_request==="ABSENT" && proof.phase==="TRANSACTION_ROLLED_BACK" && ownerPending.get(scopeKey)===request)ownerPending.delete(scopeKey);
+    }
+    if(!view.spec && error.httpStatus>=400 && error.httpStatus<500 && ownerPending.get(ownerKey(view))===request)ownerPending.delete(ownerKey(view));
     if(current() && (readGeneration===null || readGeneration===view.readGeneration)){
       $("owner-status").textContent=`操作未确认：${error.detail || error.message}。请手动读取原 key；不会自动重发。`;
     }
-  }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);}
+  }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);else if(ownerView?.spec && ownerCurrent(ownerView) && ownerKey(ownerView)===scopeKey)ownerButtons(ownerView);}
 }
-$("owner-prepare").onclick=safe(()=>{
+$("owner-prepare").onclick=safe(async()=>{
   const view=ownerView;if(!(view?.state?.content_access||view?.state?.prepare_current))return;
+  if(view.spec){const fence=ownerFence(view),snapshot=view.state.current,rid=view.rid;
+    const hash=await ownerHash(snapshot);if(!fence()||view.rid!==rid||view.state.current!==snapshot)return;
+    return ownerAction({command:"PREPARE",expected_contract_fingerprint:hash});}
   return ownerAction({command:"PREPARE",expected_revision:(view.state.current||view.state.prepare_current).instance_revision,expected_release_fingerprint:(view.state.current||view.state.prepare_current).release_fingerprint,run_ids:[$("owner-run").value]});
 });
 $("owner-form").onsubmit=event=>{event.preventDefault();return safe(()=>{
@@ -152,6 +167,16 @@ for(const [id,command] of [["owner-cancel","CANCEL"],["owner-revoke","REVOKE"]])
   return ownerAction({command,target_id:last.id,target_fingerprint:last.fingerprint,reason:$("owner-stop-reason").value});
 });
 for(const id of ["owner-run","owner-ack","owner-stop-reason","owner-key"]){$(id).oninput=ownerEdited;$(id).onchange=ownerEdited;}
+$("owner-run").onchange=safe(async()=>{
+  ownerEdited();const view=ownerView;if(!view?.spec || !ownerCurrent(view))return;
+  ownerGeneration++;view.readGeneration++;view.rid=$("owner-run").value;view.state=null;
+  $("owner-form").hidden=true;$("owner-criteria").replaceChildren();$("owner-proof").textContent="";
+  $("owner-history").textContent="";$("owner-natural-evidence").replaceChildren();$("owner-ack").checked=false;
+  $("owner-key").value=ownerPending.get(ownerKey(view))?.request_key||"";
+  ownerButtons(view);if(!view.rid)return;
+  const current=ownerFence(view),reading=ownerRead(view),generation=view.readGeneration;
+  try{await reading;}catch(error){if(current()&&generation===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail||error.message}`;}
+});
 for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id).onclick=safe(async()=>{
   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy)return;
   const current=ownerFence(view);view.busy=true;ownerButtons(view);
