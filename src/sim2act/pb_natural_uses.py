@@ -405,7 +405,6 @@ def audit(store, c, user, draft, *, family=PB):
 
 def mount(app, store, limits, identity, *, family=PB):
     user_dep = Depends(identity)
-    body_type = family.body_type
 
     @app.post("/api/internal/instances/{iid}/" + family.route + "-reviews")
     def preview(iid: str, body: ReviewInput, user=user_dep):
@@ -415,12 +414,16 @@ def mount(app, store, limits, identity, *, family=PB):
             checked, _, _ = review(store, c, user, i, release, body, limits, family=family)
             return checked
 
-    @app.post("/api/internal/instances/{iid}/" + family.route + "-runs", status_code=202)
-    def run(iid: str, body: body_type, user=user_dep):
+    def run(iid: str, body: CommitInput | PACommitInput, user=user_dep):
         from .app_jobs import enqueue
         return enqueue(store, user, iid, body.review.expected_revision,
             body.review.expected_release_fingerprint, {}, body.review.request_key, limits, **{family.field: body},
             submission=dict(endpoint=family.route + "-runs", body=body.model_dump(exclude_unset=True)))
+
+    # FastAPI receives the exact immutable family schema; the implementation has
+    # an explicit static union rather than a variable used as a type annotation.
+    run.__annotations__["body"] = family.body_type
+    app.post("/api/internal/instances/{iid}/" + family.route + "-runs", status_code=202)(run)
 
     @app.get("/api/internal/instances/{iid}/" + family.route + "-requests/{key}")
     @controlled
