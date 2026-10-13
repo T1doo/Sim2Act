@@ -33,7 +33,7 @@ NOT RUN：原生浏览器、Windows、PostgreSQL、真实模型/付费服务、�
 
 资格、24 集成、10 核心、原页面和独审均保存完整 445 文件前后映射。修正后的夹具仅变化 3 个 tests 文件：自然到期反例先断言初态有效，按原 expires_at 自然等到期且数据库字节不变再确认；页面从禁止控件编辑改为真实资源页签导航和重选实例。生产全部源码、资格 75 文件和 20 页面资产未变；晚故障函数 AST 未变，桥接证据独立复核。作者及独审最后各 2 项均完整 445 文件前后不变。不称所有历史矩阵使用相同的测试夹具字节。
 
-实际晚故障：目标撤权 `GRANT_REVOKED`、取消/Goal/实例 revision/fence 竞争 `VERSION_CONFLICT`、污染引用 `VERIFICATION_FAILED`；收到的原始响应保留，全部 `REJECTED_KNOWN`，无 SAVE/typed 提交。独立 API queued cancel 只取消第一个 Run，第二个不同 key/材料/Goal 的 Run 在同 app/Release/实例中冷执行成功。PrivateReadBarrier 实际观察覆盖其 Run/contract/resource/operation receipt/intent 列，未声称观察所有账本私有列。
+实际晚故障：目标撤权 `GRANT_REVOKED`、取消/Goal/实例 revision 竞争 `VERSION_CONFLICT`、污染引用 `VERIFICATION_FAILED`；收到的原始响应保留，全部 `REJECTED_KNOWN`，无 SAVE/typed 提交。fence 竞争保留收到的原响应并拒绝旧归属结果，Run 保持新 fence 的 RUNNING，不声称其 Run.error 存在具体错误码。独立 API queued cancel 只取消第一个 Run，第二个不同 key/材料/Goal 的 Run 在同 app/Release/实例中冷执行成功。PrivateReadBarrier 实际观察覆盖其 Run/contract/resource/operation receipt/intent 列，未声称观察所有账本私有列。
 
 新增历史夹具失败仍保留：页面误设最少 11 检查而正常实际只有 10；重负载下 2 秒授权在预览时已经过期，不能当作预览后竞争；尝试对 busy 禁用 select 做原生编辑；独审错误测试文件名导致 collection exit4/0 selected。均保留原始日志并在修正后实际复验。
 
