@@ -20,3 +20,19 @@
 来源仍是当前授权的显式审计依赖；本切片不发放删除/撤权旧源后的独立无内容逻辑许可，不声称 source 退休或完整通用 P-B 完成。数据绑定为注册资源 ID/hash 与明确 Goal，无原聊天或一次性本机文件路径。默认真实模型关闭，请求/费用 0；实际工程测试只注入合成 transport，不能据此接受真实模型或业务语义。用户手动模型设置不修改。
 
 原失败及最终实际测试另存本轮证据：首两项夹具误读 Goal API 快照，下一两项 Release 快照无 name 的真实集成拒绝均保留，修复后实际重跑。最终分母和源码资格以完整冻结终态及独审为准，不把运行中、历史或中断轮次合并计 PASS。PG、Windows、原生浏览器、真实模型/资料/人工语义、完整旧库升级、完整 P-A/P-B、正式发布、CI/部署未跑即 NOT_RUN；旧取消窗口永久 NOT_VERIFIED、不重做。
+
+## 最终工程验证与实际交付
+
+产品核心 `e3b4fd84937c05e803f3017e8168130df1395cf8`；精确软件资格 `62aa9fd076b3714925f2301028c101d0141d5106`；修正实际 Worker 终态与真实页签夹具 `507b322e73758f4ad2ae2794382f5dee69760630`。资格保持原 anchor、CHANGED、两项旧来源与 config 排除；仅钉住完整 74 文件的特定新目标，不扩大版本白名单。后续夹具修复完全没有修改产品源码或资格。
+
+最终唯一测试为 **155 PASS / 0 FAIL / 0 SKIP**：作者 120 回归 + 27 P-B 负向 + 5 页面 = 152；独审 5 项中，3 项冷正向补足分母，2 项门禁与作者重叠。独审 5 项另列，不重复累计。作者新版负向、页面及独审均完整 440 文件前后同字节；120 回归所验产品源码与最终源码完全相同，只有 3 个未用于该回归的 P-B 测试夹具文件不同，源码桥完整保留。
+
+页面 5 场景 **89 检查 PASS**：正常、实际 201 回执丢失、编辑再撤销的迟到审阅、真实资源页签导航后的迟到提交、原 key 回执污染。每例仅 1 次提取 POST，恢复只 GET；20 个实际页面资源 SHA 相符，冷页面从新 Store/实际 Worker 的新 typed 成果读取新材料，保留 UNKNOWN/PENDING。JSDOM 与进程内 HTTP 均明确区分原生浏览器。三个冷正向分别是单模型、用户编辑后的双模型图、成功 P-A 新材料 binding → P-B → 再绑定另一材料；原来源 Run/typed 历史保持。
+
+晚故障的实际拒绝记录：原来源撤权 `GRANT_REVOKED`、来源 Attempt 变化 `VERSION_CONFLICT`、新 Run 取消 `VERSION_CONFLICT`、引用输出污染 `VERIFICATION_FAILED`；均保留收到的原响应、无 SAVE 与 typed 提交，不能以租约拒绝代替这些断言。三个读前/审计静态缺口修复与动态行级观察证据保留；观察器只证明其覆盖的 Run/contract/resource/operation receipt/intent 列，未宣称覆盖所有历史私有列。
+
+原失败轮不删除、不计入最终 PASS：Goal API 夹具快照误读 2 FAIL；Release snapshot 缺 name 的真实产品集成 2 FAIL；两次双模型目标最终事务失租各 1 FAIL；首页面夹具错按 ID 查仅显示 name 的列表 1 FAIL；页面错用不存在 commands 页签 1 FAIL；独审原轮 4 PASS/1 FAIL 在原 source 准备阶段、尚未进入 P-B。性能修复复用同一已授权调用内的 Release，保留 verify_origin 与全部 commit guards，不引入缓存、不调大 lease/预算。新的有限夹具最多 3 次真实 once，仅在 RUNNING/未取消/lease 已过/原 deadline 内/无未知效果时正常重取，并严格核同 Run/身份/项目、新 fence/CLAIMED event、原 clock 恒等、实际 SUCCEEDED；本轮独审所有 8 个 Run 各 1 claim，恢复分支 **NOT_EXERCISED**。另存 cProfile 诊断，不能作验收。
+
+`ruff check src + 新增 Python tests` PASS；JS 三项语法检查 PASS；`mypy src/sim2act` **5 个既有 FAIL**（status_report.py 3、tools.py 2，两文件未改），不称全仓类型检查绿。真实模型/API/付费请求 **0**，未配置凭据或修改模型设置；PG、Windows、原生浏览器、完整旧源码升级、完整通用 P-A/P-B、真实业务语义/人工验收、CI/部署 **NOT_RUN**。旧取消窗口维持 NOT_VERIFIED。未知提取回执的本地 pending 仅在本页会话保留，原 key GET 服务端恢复保留；不宣称整页刷新后的自动请求发现或来源退休已完成。
+
+完整命令、stdout/stderr、JUnit、440 源码快照/映射、实际 SQLite/Worker/HTTP/JSDOM 原始材料、所有失败历史及封存独审报告见 [交付证据](../evidence/pb-natural-spec-extraction-20261013/README.md)。本切片不改 main、core dev、历史分支或 owner WIP；正常独立分支推送后的精确 SHA 与远端/工作区核对单独记录。
