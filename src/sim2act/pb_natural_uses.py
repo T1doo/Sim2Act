@@ -412,7 +412,7 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_o
 
 
 @controlled
-def audit(store, c, user, draft, *, family=PB):
+def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None):
     rid = draft[family.field + "_run_id"]
     header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id).where(runs.c.id == rid)).mappings().one()
     require(scope_gate(store, c, user, rid, header))
@@ -428,7 +428,19 @@ def audit(store, c, user, draft, *, family=PB):
     if "saved_logic_source" in frozen["reviewed"]:
         from .lifecycle import read_release
         current: dict[str, Any] = {}
-        release = read_release(store,c,user,meta.release_id,Limits(**snapshot["limits"]),_logic_out=current)
+        # Entry binding has just validated this exact Release in the same read-only
+        # call. Commit guards omit these private values and validate it afresh.
+        if (_logic_out is not None and _release is not None
+                and _logic_out.get("_call_connection") is c
+                and _logic_out.get("_call_transaction") is c.get_transaction()
+                and c.get_transaction() is not None and _logic_out.get("principal_id") == user
+                and _logic_out.get("platform_limits") == Limits(**snapshot["limits"]).model_dump()
+                and _logic_out.get("release_id") == meta.release_id == _release["id"]
+                and _logic_out.get("release_fingerprint") == _release["fingerprint"]
+                and fingerprint(_release["snapshot"]) == _release["fingerprint"]):
+            release, current = _release, _logic_out
+        else:
+            release = read_release(store,c,user,meta.release_id,Limits(**snapshot["limits"]),_logic_out=current)
         require(release["fingerprint"] == frozen["reviewed"]["release_fingerprint"]
             == snapshot["expected_release_fp"])
         saved = current["value"]["effective_candidate"]

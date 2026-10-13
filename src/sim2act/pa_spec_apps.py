@@ -774,13 +774,13 @@ def bound(store, c, user, job, limits, *, validate_input=True):
         plan_fingerprint=fingerprint(draft["candidate"]), source_hash=source["hash"])
     value = dict(snapshot=snapshot, app_run=app_run, release=release, draft=draft,
         source=source, goal=goal, plan=plan, report=report,
-        audit_fingerprint=audit_fingerprint(store, c, user, draft))
+        audit_fingerprint=audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release))
     if "human_correction" in snapshot:
         value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot)
     return value
 
 
-def audit_fingerprint(store, c, user, draft):
+def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None):
     """Exact transaction-local evidence digest after live audit scope authorization.
 
     No cross-transaction cache. Full model history is verified at step entry and
@@ -800,7 +800,8 @@ def audit_fingerprint(store, c, user, draft):
             c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"])).mappings().one())))
     if "pb_use_run_id" in draft or "pa_use_run_id" in draft:
         from .pb_natural_uses import PA, PB, audit
-        return audit(store, c, user, draft, family=PA if "pa_use_run_id" in draft else PB)
+        return audit(store, c, user, draft, family=PA if "pa_use_run_id" in draft else PB,
+            _logic_out=_logic_out, _release=_release)
     if "spec_task" in draft["candidate"]:
         from .pb_natural_specs import audit_fingerprint as pb_audit
         return pb_audit(store, c, user, draft)
