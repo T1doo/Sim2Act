@@ -737,7 +737,7 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     elif "pb_use" in snapshot or "pa_use" in snapshot:
         from . import pb_natural_uses
         draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits,
-            family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB)
+            family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB,_logic_out=logic_out)
     else:
         manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
     contract = store.frozen_contract(c, job)

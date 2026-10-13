@@ -5,6 +5,7 @@ Existing principals/grants only; typed result-ledger data, no arbitrary business
 
 import copy
 import time
+from typing import Any
 
 from sqlalchemy import insert, select, update
 
@@ -353,7 +354,7 @@ def validate_source_bytes(store, c, user, draft):
     )
 
 
-def read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None):
+def read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
     from .text_continuations import release_gate
 
     release_gate(store, c, user, rid)
@@ -405,13 +406,16 @@ def read_release(store, c, user, rid, limits, *, archival_software=None, _origin
             validate_snapshot(store, c, user, s, limits)
         return r
     record_schema(draft["candidate"], s["data_schema"])
-    validate_frozen_candidate(store, c, user, draft, limits, _origin_out=_origin_out)
+    origin: dict[str, Any] = _origin_out if _origin_out is not None else {}
+    validate_frozen_candidate(store, c, user, draft, limits, _origin_out=origin,_reuse_origin=_reuse_origin)
     validate_source_bytes(store, c, user, draft)
     if "natural_logic_source" in s:
         from .natural_logic_patches import validate_snapshot as validate_logic
-        logic_value = validate_logic(store,c,user,s,limits)
+        logic_value = validate_logic(store,c,user,s,limits,_verified_origin=origin)
         if _logic_out is not None:
-            _logic_out["value"] = logic_value
+            _logic_out.update(value=logic_value,principal_id=user,platform_limits=limits.model_dump(),
+                release_id=rid,release_fingerprint=r["fingerprint"],
+                _call_connection=c,_call_transaction=c.get_transaction())
     from . import text_logic_reuse
 
     if text_logic_reuse.independent(draft):
@@ -474,12 +478,12 @@ def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, requ
     return row
 
 
-def instance(store, c, user, iid, limits, *, lock=False, _origin_out=None):
+def instance(store, c, user, iid, limits, *, lock=False, _origin_out=None, _verified_origin=None):
     q = select(internal_instances).where(internal_instances.c.id == iid)
     i = c.execute(q.with_for_update() if lock else q).mappings().first()
     if not i or i["principal_id"] != user:
         raise DomainError("PERMISSION_DENIED")
-    r = read_release(store, c, user, i["release_id"], limits, _origin_out=_origin_out)
+    r = read_release(store, c, user, i["release_id"], limits, _origin_out=_origin_out,_reuse_origin=_verified_origin)
     if (
         r["project_id"] != i["project_id"]
         or r["snapshot"]["draft"]["id"] != i["source_app_id"]

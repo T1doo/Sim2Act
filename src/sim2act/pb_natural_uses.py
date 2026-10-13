@@ -277,13 +277,21 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
 
 
 @controlled
-def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB):
+def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB, _logic_out=None):
     base = release["snapshot"]["draft"]
     saved = base["candidate"]
     logic_origin = release["snapshot"].get("natural_logic_source")
     if logic_origin is not None:
         from .natural_logic_patches import release_bound
-        saved = release_bound(store,c,user,release,limits)[0]["candidate"]
+        if (_logic_out is not None and _logic_out.get("_call_connection") is c
+                and _logic_out.get("_call_transaction") is c.get_transaction()
+                and c.get_transaction() is not None and _logic_out.get("principal_id") == user
+                and _logic_out.get("platform_limits") == limits.model_dump()
+                and _logic_out.get("release_id") == release["id"]
+                and _logic_out.get("release_fingerprint") == release["fingerprint"]):
+            saved = _logic_out["value"]["effective_candidate"]
+        else:
+            saved = release_bound(store,c,user,release,limits)[0]["candidate"]
     require(saved_family(base["candidate"]) == family
         and instance["source_app_id"] == base["id"] and instance["runtime_id"] == base["runtime_id"]
         and instance["revision"] == body.expected_revision
@@ -380,7 +388,7 @@ def seal(c, user, base, snapshot, body, checked, *, family=PB):
 
 
 @controlled
-def bound(store, c, user, job, snapshot, release, limits, *, family=PB):
+def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_out=None):
     from .db import internal_instances
     body, frozen = pair(c, user, snapshot["instance_id"], family.use, snapshot[family.field]["review"]["request_key"], family.body_type)
     require(body.model_dump() == snapshot[family.field] and frozen["run_id"] == job["id"]
@@ -393,7 +401,7 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB):
                          "runtime_id": snapshot["runtime_id"], "source_app_id": release["snapshot"]["draft"]["id"]}
     if family == PA:
         accepted_instance["data_version"] = snapshot["pa_base_data_version"]
-    checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"], family=family)
+    checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"], family=family,_logic_out=_logic_out)
     require(body.expected_review_fingerprint == checked["review_fingerprint"]
         and frozen["reviewed"] == checked and frozen["request_fingerprint"] == fingerprint(body.model_dump())
         and snapshot["pb_effective_fingerprint" if family == PB else "pa_effective_fingerprint"] == checked["effective_fingerprint"])

@@ -1,5 +1,6 @@
 """Bounded read-only declarative previews. No release, model or generated code executor."""
 
+import copy
 import json
 import time
 
@@ -385,7 +386,7 @@ def validate_source_family(c, user, draft):
             )
 
 
-def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin_out=None):
+def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin_out=None, _reuse_origin=None):
     """Revalidate exact frozen specs and current grants without reading mutable draft content."""
     aid = draft["id"]
     from .text_continuations import draft_gate
@@ -399,9 +400,18 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin
     manifest, action, report = compile_preview(candidate, platform_limits)
     from . import pa_spec_apps
     if pa_spec_apps.is_candidate(candidate):
-        origin = pa_spec_apps.verify_origin(store, c, user, draft, platform_limits)
+        if (_reuse_origin is not None and _reuse_origin.get("_call_connection") is c
+                and _reuse_origin.get("_call_transaction") is c.get_transaction()
+                and c.get_transaction() is not None and _reuse_origin.get("principal_id") == user
+                and _reuse_origin.get("platform_limits") == platform_limits.model_dump()
+                and _reuse_origin.get("draft") == draft):
+            origin = _reuse_origin["origin"]
+        else:
+            origin = pa_spec_apps.verify_origin(store, c, user, draft, platform_limits)
         if _origin_out is not None:
-            _origin_out.update(draft=dict(draft),manifest=manifest,action=action,report=report,origin=origin)
+            _origin_out.update(draft=copy.deepcopy(dict(draft)),manifest=manifest,action=action,report=report,origin=origin,
+                principal_id=user,platform_limits=platform_limits.model_dump(),
+                _call_connection=c,_call_transaction=c.get_transaction())
         return draft, manifest, action, report
     from . import text_workflows
 

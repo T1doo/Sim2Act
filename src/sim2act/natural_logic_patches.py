@@ -122,9 +122,9 @@ def effective(base, consume, limits):
     return candidate, changed["step_id"]
 
 
-def context(store, c, user, iid, limits, *, original=True):
+def context(store, c, user, iid, limits, *, original=True, _verified_origin=None):
     origin: dict[str, Any] = {}
-    instance, release = lifecycle.instance(store, c, user, iid, limits, lock=True,_origin_out=origin)
+    instance, release = lifecycle.instance(store, c, user, iid, limits, lock=True,_origin_out=origin,_verified_origin=_verified_origin)
     if "natural_logic_source" in release["snapshot"]:
         raise DomainError("UNSUPPORTED_CAPABILITY", "Logic patches of patched versions are outside this finite slice")
     base = release["snapshot"]["draft"]
@@ -188,8 +188,8 @@ def preview(store,user,iid,limits,body):
 
 
 @graph.controlled
-def load_preview(store,c,user,iid,key,limits,*,original=True):
-    current = context(store,c,user,iid,limits,original=original)
+def load_preview(store,c,user,iid,key,limits,*,original=True,_verified_origin=None):
+    current = context(store,c,user,iid,limits,original=original,_verified_origin=_verified_origin)
     ctx,_,release,_ = current
     body,value = pair(c,user,iid,PREVIEW,key,Preview)
     frozen = copy.deepcopy(value["context"])
@@ -318,7 +318,7 @@ def execution_digest(store,c,user,value,started):
 
 
 @graph.controlled
-def validate_snapshot(store,c,user,snapshot,limits,*,commit=False):
+def validate_snapshot(store,c,user,snapshot,limits,*,commit=False,_verified_origin=None):
     origin = snapshot["natural_logic_source"]
     spec.require(set(origin) == {"namespace","instance_id","preview_key","preview_fingerprint","check_fingerprint","execution_digest"}
         and origin["namespace"] == VERSION)
@@ -326,7 +326,7 @@ def validate_snapshot(store,c,user,snapshot,limits,*,commit=False):
         value,proof = checked(store,c,user,origin["instance_id"],origin["preview_key"],limits)
         spec.require(proof["check_fingerprint"] == origin["check_fingerprint"])
     else:
-        _,value=load_preview(store,c,user,origin["instance_id"],origin["preview_key"],limits,original=False)
+        _,value=load_preview(store,c,user,origin["instance_id"],origin["preview_key"],limits,original=False,_verified_origin=_verified_origin)
     _,started=pair(c,user,origin["instance_id"],CHECK,origin["preview_key"],Check)
     _,sealed=pair(c,user,origin["instance_id"],CHECKED,origin["preview_key"],Check)
     spec.require(sealed["check_fingerprint"] == origin["check_fingerprint"])

@@ -8,6 +8,7 @@ import copy
 import threading
 import time
 from contextlib import contextmanager
+from typing import Any
 
 from sqlalchemy import insert, select, update
 
@@ -464,7 +465,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         contract = store.frozen_contract(c, job)
         if contract.limits.model_dump() != s["limits"]:
             raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
-        r = read_release(store, c, user, s["release_id"], limits, archival_software=archival_software,_logic_out=_logic_out)
+        logic_source: dict[str, Any] = _logic_out if _logic_out is not None else {}
+        r = read_release(store, c, user, s["release_id"], limits, archival_software=archival_software,_logic_out=logic_source)
         from .app_owner_goals import verify_frozen_run
 
         verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
@@ -482,7 +484,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         elif "pb_use" in s or "pa_use" in s:
             from . import pb_natural_uses
             use_family = pb_natural_uses.PA if "pa_use" in s else pb_natural_uses.PB
-            _, _, _, use_source, _ = pb_natural_uses.bound(store, c, user, job, s, r, limits, family=use_family)
+            _, _, _, use_source, _ = pb_natural_uses.bound(store, c, user, job, s, r, limits, family=use_family,_logic_out=logic_source)
             expected_resource = use_source["resource_id"]
         if (
             r["fingerprint"] != s["expected_release_fp"]
