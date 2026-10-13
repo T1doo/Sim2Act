@@ -291,6 +291,11 @@ def validate_source_family(c, user, draft):
                     if not is_candidate(candidate):
                         raise DomainError("VERSION_CONFLICT", "Spec model binding cannot be downgraded")
                     expected_field, expected_kind = "spec_binding", "registered_tool"
+                elif isinstance(snapshot, dict) and snapshot.get("kind") == "pb_natural_spec_task.v1":
+                    from .natural_specs import is_candidate
+                    if not is_candidate(candidate):
+                        raise DomainError("VERSION_CONFLICT", "Independent natural P-B cannot be downgraded")
+                    expected_field, expected_kind = "spec_task", "registered_tool"
                 elif isinstance(snapshot, dict) and snapshot.get("kind") == "text_four_step_source.v1":
                     from .text_workflows import is_candidate
 
@@ -347,7 +352,7 @@ def validate_source_family(c, user, draft):
     if len(markers) > 1:
         raise DomainError("VERSION_CONFLICT", "Independent source markers conflict")
     claimed = {
-        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application", "pa_binding", "spec_binding") if k in candidate
+        k for k in ("generation", "extraction", "task_proof", "agent_provenance", "goal_application", "pa_binding", "spec_binding", "spec_task") if k in candidate
     }
     expected = {markers[0][0]} if markers else set()
     if claimed != expected:

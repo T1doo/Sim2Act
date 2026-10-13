@@ -420,22 +420,30 @@ class BindInput(Strict):
 
 @controlled
 def scope_gate(store, c, user, aid):
+    from . import pb_natural_specs as pb
     location = c.execute(select(app_drafts.c.project_id, app_drafts.c.runtime_id,
         app_drafts.c.candidate["namespace"].as_string().label("family"),
         app_drafts.c.candidate["spec_binding"]["kind"].as_string().label("binding"),
+        app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task"),
         app_drafts.c.candidate["manifest"]["data_bindings"][0]["resource_ref"].as_string().label("resource"))
         .where(app_drafts.c.id == aid)).mappings().first()
     kind = c.execute(select(task_extractions.c.snapshot["kind"].as_string())
         .where(task_extractions.c.app_id == aid)).scalar()
     from .db import delivery_graph_requests
     ledger = c.execute(select(delivery_graph_requests.c.app_id).where(delivery_graph_requests.c.app_id == aid,
-        delivery_graph_requests.c.kind.in_([META, META + "_seal", BIND, BIND + "_seal"]))).first()
+        delivery_graph_requests.c.kind.in_([META, META + "_seal", BIND, BIND + "_seal",
+            pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"]))).first()
+    pb_ledger = c.execute(select(delivery_graph_requests.c.app_id).where(delivery_graph_requests.c.app_id == aid,
+        delivery_graph_requests.c.kind.in_([pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"]))).first()
     confirmed = c.execute(select(goal_application_candidates.c.app_id).where(goal_application_candidates.c.app_id == aid)).first()
-    hinted = bool((location and (location["family"] in FAMILIES or location["binding"] == KIND)) or kind == KIND or ledger is not None or confirmed is not None)
+    hinted = bool((location and (location["family"] in FAMILIES or location["binding"] == KIND or location["task"] == pb.KIND)) or kind in {KIND, pb.KIND} or ledger is not None or confirmed is not None)
     if hinted:
         require(location is not None)
         store.own_project(c, user, location["project_id"])
         store.authorize(c, user, location["runtime_id"], location["project_id"], location["resource"], "resource.read")
+    if kind == pb.KIND or (location and location["task"] == pb.KIND) or pb_ledger is not None:
+        require(location is not None)
+        return pb.scope_gate(store, c, user, aid, location)
     gen = c.execute(select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
         .join(goal_application_candidates, goal_application_candidates.c.run_id == run_contracts.c.run_id)
         .where(goal_application_candidates.c.app_id == aid)).scalar()
@@ -539,6 +547,9 @@ def binding_candidate(raw, body, goal, material, aid, pid):
 @controlled
 def verify_origin(store, c, user, draft, limits):
     scope_gate(store, c, user, draft["id"])
+    if "spec_task" in draft["candidate"]:
+        from .pb_natural_specs import verify
+        return verify(store, c, user, draft, limits)
     manifest, _, report = compile_candidate(draft["candidate"], limits)
     marker = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"])).mappings().first()
     if marker:
@@ -698,13 +709,14 @@ def goal_unresolved(goal):
 
 @controlled
 def bound(store, c, user, job, limits, *, validate_input=True):
-    from . import app_jobs, lifecycle
+    from . import app_jobs
     from .db import attempts
-    snapshot, app_run = app_jobs.load_binding(store, c, user, job, limits)
+    snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits, return_release=True)
     accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "ACCEPTED")).scalars().all()
     require(fingerprint(accepted) == fingerprint([dict(namespace=app_jobs.KIND, app_run_id=snapshot["app_run_id"],
         instance_id=snapshot["instance_id"], release_id=snapshot["release_id"], input_fingerprint=snapshot["request_fingerprint"])]))
-    release = lifecycle.read_release(store, c, user, snapshot["release_id"], limits)
+    # Same authorized call, no intervening writes: reuse the exact Release just
+    # fully validated by load_binding rather than recursively replaying it twice.
     draft = release["snapshot"]["draft"]
     require(is_candidate(draft["candidate"]))
     manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
@@ -751,6 +763,9 @@ def audit_fingerprint(store, c, user, draft):
     No cross-transaction cache. Full model history is verified at step entry and
     final readback; repeated commit guards compare every stored audit byte.
     """
+    if "spec_task" in draft["candidate"]:
+        from .pb_natural_specs import audit_fingerprint as pb_audit
+        return pb_audit(store, c, user, draft)
     from .db import attempts, goal_card_versions, goal_cards
     from .goal_applications import source_scope_gate
     marker = c.execute(select(goal_application_candidates).where(goal_application_candidates.c.app_id == draft["id"],

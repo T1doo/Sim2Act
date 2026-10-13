@@ -580,7 +580,7 @@ def compile_candidate(candidate, limits):
         "goal",
         "model_sample_check",
     }
-    if set(candidate) not in [keys, keys | {"goal_application"}, keys | {"spec_binding"}]:
+    if set(candidate) not in [keys, keys | {"goal_application"}, keys | {"spec_binding"}, keys | {"spec_task"}]:
         raise DomainError("INVALID_MANIFEST", "Closed natural-spec application required")
     manifest = AppManifest.model_validate(candidate["manifest"])
     declared = manifest.runtime_limits
@@ -599,6 +599,21 @@ def compile_candidate(candidate, limits):
         declared,
         candidate["model_sample_check"]["sample_fingerprint"],
     )
+    if "spec_task" in candidate:
+        from .pb_natural_specs import KIND
+
+        task = candidate["spec_task"]
+        require(isinstance(task, dict) and set(task) == {"kind", "source_run_id",
+            "source_proof_fingerprint", "source_recipe_fingerprint", "edited_recipe_fingerprint",
+            "target_goal_fingerprint"} and task["kind"] == KIND
+            and isinstance(task["source_run_id"], str)
+            and re.fullmatch(r"run_[a-f0-9]{32}", task["source_run_id"]) is not None
+            and all(isinstance(task[k], str) and re.fullmatch(r"[a-f0-9]{64}", task[k])
+                for k in set(task) - {"kind", "source_run_id"})
+            and task["edited_recipe_fingerprint"] == fingerprint(candidate["spec_recipe"]),
+            "Exact independent P-B task recipe marker required")
+        rebuilt["manifest"]["origin"] = "task_run"
+        rebuilt["manifest"]["source_run_ref"] = task["source_run_id"]
     require(
         fingerprint(rebuilt) == fingerprint({k: candidate[k] for k in keys}),
         "Natural recipe expansion changed",

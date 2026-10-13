@@ -4,6 +4,8 @@ let engineering = null, engineeringGeneration = 0;
 const engineeringPending = new Map();
 const engineeringInstanceKeys = new Map();
 const registeredExtractionRequests = new Map();
+const naturalTaskRequests = new Map();
+let naturalTaskExtraction = null;
 let registeredExtraction = null, registeredExtractionGeneration = 0;
 let registeredExtractionEditGeneration = 0;
 for(const id of ["registered-extraction-target","registered-extraction-name"]){
@@ -18,6 +20,7 @@ function engineeringStatus(view,text,state="") {
   $("internal-status").textContent=text;$("internal-status").dataset.state=state;
 }
 function clearInternal() {
+  clearNaturalTaskExtraction();
   if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
   if(engineering)clearSwitch(engineering);
@@ -95,6 +98,7 @@ async function refreshInternal(view=engineering) {
   engineeringStatus(view,"内部历史已读回；正式发布与部署仍关闭。");
 }
 async function showInternalInstance(id,view=engineering) {
+  clearNaturalTaskExtraction();
   if(!view || !engineeringCurrent(view))return;
   if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
@@ -289,6 +293,7 @@ function clearReleaseApproval(view) {
   $("internal-approval-detail").textContent="";$("internal-approval-label").textContent="";
 }
 function invalidateInternalContent(view) {
+  clearNaturalTaskExtraction();
   if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
   clearReleaseApproval(view);clearSwitch(view);
@@ -343,7 +348,115 @@ function specResult(record,view){
       finally{if(node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection&&generation===reading)buttons.forEach(b=>b.disabled=false);}
     };
   }
+  if(run&&view.draft.candidate.namespace==="pa-natural-spec-app.v1"&&view.draft.candidate.manifest.origin==="goal"&&!view.draft.candidate.spec_task){
+    const extract=document.createElement("button");extract.type="button";extract.textContent="从此成功任务提取应用（P-B）";extract.dataset.specAction="extract";
+    extract.onclick=()=>openNaturalTaskExtraction(view,run.id,node);node.append(extract);
+  }
   node.append(body);return node;
+}
+
+function clearNaturalTaskExtraction(){if(naturalTaskExtraction)naturalTaskExtraction.panel.remove();naturalTaskExtraction=null;}
+function naturalTaskCurrent(s){return naturalTaskExtraction===s&&s.panel.isConnected&&engineeringCurrent(s.view)&&s.instance===s.view.instance&&s.selection===s.view.instanceGeneration&&s.connection===identityConnectionGeneration&&s.workspace===workspaceSelectionGeneration;}
+function naturalTaskButtons(s){
+  if(!naturalTaskCurrent(s))return;
+  const pending=naturalTaskRequests.get(s.scope);
+  s.preview.disabled=s.busy||!!pending||!s.source||!s.target.value;
+  s.commit.disabled=s.busy||!!pending||!s.review||!s.ack.checked;
+  s.recover.hidden=!pending;s.recover.disabled=s.busy||!pending;s.open.disabled=s.busy||!s.saved;
+  for(const input of s.inputs)input.disabled=!!pending;
+}
+function naturalTaskEdited(s){if(!naturalTaskCurrent(s))return;s.edit++;s.review=null;s.saved=null;s.ack.checked=false;s.proof.textContent="逻辑或绑定已编辑，请重新审阅；不会沿用旧确认。";naturalTaskButtons(s);}
+function naturalTaskRecipe(s){
+  const recipe=structuredClone(s.source.recipe),names=new Map();
+  s.rows.forEach((row,index)=>names.set(recipe.steps[index].step_id,row.id.value));
+  recipe.steps.forEach((step,index)=>{step.step_id=s.rows[index].id.value;step.operator=s.rows[index].operator.value;step.depends_on=step.depends_on.map(id=>names.get(id));for(const input of Object.values(step.inputs))if(input.source==="step")input.ref=names.get(input.ref);});
+  const models=recipe.steps.filter(step=>step.operator.startsWith("model."));
+  if(models.length===2){const second=models[1],first=models[0];delete second.inputs.prior_items;delete second.inputs.prior_feedback;second.depends_on=[recipe.steps[0].step_id];if(s.prior.checked){second.inputs.prior_items={source:"step",ref:first.step_id,field:"items"};second.inputs.prior_feedback={source:"step",ref:first.step_id,field:"feedback"};second.depends_on.push(first.step_id);}}
+  return recipe;
+}
+async function openNaturalTaskExtraction(view,rid,parent){
+  clearNaturalTaskExtraction();
+  const panel=document.createElement("section"),s={view,rid,panel,instance:view.instance,selection:view.instanceGeneration,connection:identityConnectionGeneration,workspace:workspaceSelectionGeneration,busy:true,source:null,review:null,saved:null,edit:0,rows:[],inputs:[]};
+  s.scope=goalRunCanonical({token,project:view.project,run:rid});naturalTaskExtraction=s;parent.append(panel);
+  const element=(tag,id,text)=>{const node=document.createElement(tag);if(id)node.id=id;if(text)node.textContent=text;panel.append(node);return node;};
+  element("h4",null,"成功任务 → 可审阅的 P-B 应用候选");
+  element("p",null,"从此运行实际步骤图开始。可编辑稳定节点名称、模型关注范围及是否读取前一节点反馈；所有输入端口由当前图重新绑定。只允许既有有限图与来源预算。新材料仍需模型执行，默认关闭；出处 PASS 不代表通用语义通过。");
+  s.status=element("p","pb-spec-status","正在核对完整成功任务来源…");s.status.setAttribute("role","status");
+  s.editor=element("div","pb-spec-steps");
+  const targetLabel=element("label",null,"自己的新目标与材料 ");s.target=document.createElement("select");s.target.id="pb-spec-target";targetLabel.append(s.target);s.inputs.push(s.target);
+  const nameLabel=element("label",null,"新应用名称 ");s.name=document.createElement("input");s.name.id="pb-spec-name";s.name.maxLength=100;s.name.value="成功规范任务复用应用";nameLabel.append(s.name);s.inputs.push(s.name);
+  const priorLabel=element("label",null," ");s.prior=document.createElement("input");s.prior.type="checkbox";s.prior.id="pb-spec-prior";priorLabel.prepend(s.prior);priorLabel.append(document.createTextNode("第二模型节点读取第一节点的实际结果和反馈"));s.inputs.push(s.prior);
+  s.preview=element("button","pb-spec-preview","审阅编辑图与精确新绑定");s.preview.type="button";
+  s.proof=element("pre","pb-spec-proof");
+  const ackLabel=element("label",null," ");s.ack=document.createElement("input");s.ack.type="checkbox";s.ack.id="pb-spec-ack";ackLabel.prepend(s.ack);ackLabel.append(document.createTextNode("核对来源、编辑图、新目标与材料、原预算；只授权这个新应用读取此材料并保存本项目 JSON 清单。语义 UNKNOWN，人工 PENDING。"));
+  s.commit=element("button","pb-spec-commit","确认此精确审阅并提取应用");s.commit.type="button";
+  s.recover=element("button","pb-spec-recover","仅按原 key GET 恢复提取回执");s.recover.type="button";
+  s.open=element("button","pb-spec-open","打开已核对应用，另行确认内部版本");s.open.type="button";
+  const close=element("button","pb-spec-close","关闭审阅（不取消已发送请求）");close.type="button";close.onclick=()=>{if(naturalTaskCurrent(s))clearNaturalTaskExtraction();};
+  s.target.onchange=()=>naturalTaskEdited(s);s.name.oninput=()=>naturalTaskEdited(s);s.prior.onchange=()=>naturalTaskEdited(s);s.ack.onchange=()=>naturalTaskButtons(s);
+  naturalTaskButtons(s);
+  const path=`/api/projects/${view.project}/natural-spec-task-runs/${rid}`,expectedRun=s.instance.runs.find(run=>run.id===rid);
+  try{
+    const source=await api(path+"/extraction-options");if(!naturalTaskCurrent(s))return;
+    const proofHash=await paHash(source.source_proof);if(!naturalTaskCurrent(s))return;
+    const recipeHash=await paHash(source.recipe);if(!naturalTaskCurrent(s))return;
+    if(source.namespace!=="pb-natural-spec-extraction.v1"||source.project_id!==view.project||source.principal_id!==s.instance.principal_id||source.source_run_id!==rid||source.source_proof?.source_run_id!==rid||source.source_proof.principal_id!==source.principal_id||source.source_proof.project_id!==view.project||source.source_proof_fingerprint!==proofHash||source.recipe_fingerprint!==recipeHash||source.new_model_requests!==0||source.project_writes!==0||source.semantic_status!=="UNKNOWN"||source.owner_acceptance!=="PENDING"||source.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
+    if(!expectedRun||expectedRun.status!=="SUCCEEDED"||source.source_proof.source_app_id!==view.app||source.source_proof.instance_id!==s.instance.id||source.source_proof.app_run_id!==expectedRun.app_run_id||source.source_proof.release_id!==expectedRun.release_id||source.source_proof.result_version!==expectedRun.result_version)throw Error("VERSION_CONFLICT");
+    s.source=source;
+    for(const [index,step] of source.recipe.steps.entries()){
+      const line=document.createElement("label");line.textContent=`步骤 ${index+1} · 稳定 ID `;
+      const id=document.createElement("input");id.value=step.step_id;id.dataset.pbStep=String(index);id.maxLength=40;id.setAttribute("aria-label",`步骤 ${index+1} 稳定 ID`);id.oninput=()=>naturalTaskEdited(s);line.append(id);
+      const operator=document.createElement("select");operator.setAttribute("aria-label",`步骤 ${index+1} 算子`);
+      const options=step.operator.startsWith("model.")?["model.spec.all","model.spec.requirements","model.spec.qualifiers"]:[step.operator];for(const ref of options)operator.add(new Option(ref,ref));operator.value=step.operator;operator.onchange=()=>naturalTaskEdited(s);line.append(operator);
+      const ports=document.createElement("span");ports.textContent=` · 输入：${Object.entries(step.inputs).map(([name,port])=>`${name} ← ${port.source}:${port.ref||""}.${port.field}`).join("；")}`;line.append(ports);s.editor.append(line);s.rows.push({id,operator});s.inputs.push(id,operator);
+    }
+    const models=source.recipe.steps.filter(step=>step.operator.startsWith("model."));priorLabel.hidden=models.length!==2;s.prior.checked=models.length===2&&!!models[1].inputs.prior_items;
+    const goals=await api(`/api/projects/${view.project}/goal-cards`);if(!naturalTaskCurrent(s))return;
+    s.target.add(new Option("请选择明确不同的已保存目标和材料",""));for(const goal of goals.items)if(goal.id!==view.draft.candidate.manifest.goal_ref)s.target.add(new Option(`${goal.title} · v${goal.version} · ${goal.id}`,goal.id));
+    s.status.textContent="已核对成功来源；默认图来自实际回执。编辑图和新材料尚未运行。";
+  }catch(error){if(naturalTaskCurrent(s)){s.source=null;s.status.textContent=`来源未通过：${error.detail||error.message}`;}}
+  finally{s.busy=false;naturalTaskButtons(s);}
+  s.preview.onclick=async()=>{
+    if(!naturalTaskCurrent(s)||s.busy||naturalTaskRequests.has(s.scope))return;
+    const edit=s.edit;s.busy=true;s.review=null;s.ack.checked=false;naturalTaskButtons(s);
+    const current=()=>naturalTaskCurrent(s)&&edit===s.edit;
+    try{
+      const goal=await api(`/api/goal-cards/${s.target.value}`);if(!current())return;
+      const saved=goal.history?.[0];if(goal.project_id!==view.project||goal.id!==s.target.value||!saved||saved.version!==goal.version||saved.fingerprint!==goal.fingerprint||saved.snapshot?.resource_snapshots?.length!==1)throw Error("VERSION_CONFLICT");
+      const goalHash=await paHash(saved.snapshot);if(!current())return;if(goalHash!==goal.fingerprint)throw Error("VERSION_CONFLICT");
+      const request={source_run_id:rid,expected_source_proof_fingerprint:s.source.source_proof_fingerprint,expected_source_recipe_fingerprint:s.source.recipe_fingerprint,card_id:goal.id,expected_goal_version:goal.version,expected_goal_fingerprint:goal.fingerprint,expected_source_hash:saved.snapshot.resource_snapshots[0].hash,recipe:naturalTaskRecipe(s),name:s.name.value,request_key:crypto.randomUUID()};
+      const result=await api(path+"/extraction-reviews","POST",request);if(!current())return;
+      const {review_fingerprint,...review}=result,hash=await paHash(review);if(!current())return;
+      if(result.namespace!=="pb-natural-spec-extraction.v1"||result.principal_id!==s.instance.principal_id||result.project_id!==view.project||result.source_run_id!==rid||hash!==review_fingerprint||goalRunCanonical(result.request)!==goalRunCanonical(request)||result.request_fingerprint!==await paHash(request)||result.source_proof_fingerprint!==request.expected_source_proof_fingerprint||result.original_recipe_fingerprint!==request.expected_source_recipe_fingerprint||goalRunCanonical(result.edited_recipe)!==goalRunCanonical(request.recipe)||goalRunCanonical(result.target_goal.snapshot)!==goalRunCanonical(saved.snapshot)||result.target_goal.card_id!==goal.id||result.target_goal.version!==goal.version||result.target_goal.fingerprint!==goal.fingerprint||result.candidate.manifest.origin!=="task_run"||result.candidate.manifest.source_run_ref!==rid||result.candidate.manifest.data_bindings[0].resource_ref!==saved.snapshot.resource_snapshots[0].resource_id||result.candidate_fingerprint!==await paHash(result.candidate)||result.new_model_requests!==0||result.project_writes!==0||result.semantic_status!=="UNKNOWN"||result.owner_acceptance!=="PENDING"||result.edited_recipe_execution!=="NOT_RUN"||result.sample_scope!=="SUCCESSFUL_SOURCE_ONLY"||result.preview.status!=="MODEL_EXECUTION_REQUIRED")throw Error("VERSION_CONFLICT");
+      if(!current())return;s.review=result;s.proof.textContent=JSON.stringify({source:result.source_proof,original_recipe:result.original_recipe,edited_recipe:result.edited_recipe,variable_bindings:result.variable_bindings,target_goal:result.target_goal,limits:result.candidate.manifest.runtime_limits,human_unresolved:result.preview.human_unresolved,edited_recipe_execution:result.edited_recipe_execution,sample_scope:result.sample_scope,review_fingerprint},null,2);s.status.textContent="精确审阅已读回。编辑图未运行，来源的一次成功不证明通用语义；请明确确认这份绑定。";
+    }catch(error){if(current())s.status.textContent=`审阅未通过：${error.detail||error.message}`;}
+    finally{s.busy=false;naturalTaskButtons(s);}
+  };
+  const recover=async pending=>{
+    const current=()=>naturalTaskCurrent(s)&&naturalTaskRequests.get(s.scope)===pending;
+    const value=await api(path+"/extractions/by-key/"+encodeURIComponent(pending.body.review.request_key));if(!current())return;
+    const requestHash=await paHash(pending.body);if(!current())return;
+    const {review_fingerprint,...review}=value.reviewed||{},reviewHash=await paHash(review);if(!current())return;
+    if(value.namespace!=="pb-natural-spec-extraction.v1"||value.kind!=="pb_natural_spec_task.v1"||value.principal_id!==s.instance.principal_id||value.project_id!==view.project||value.source_run_id!==rid||value.request_key!==pending.body.review.request_key||value.request_fingerprint!==requestHash||goalRunCanonical(value.request)!==goalRunCanonical(pending.body)||review_fingerprint!==pending.body.expected_review_fingerprint||reviewHash!==review_fingerprint||goalRunCanonical(value.reviewed)!==goalRunCanonical(pending.review)||value.id!==pending.review.app_id||value.app_id!==value.id||value.runtime_id!==pending.review.runtime_id||value.candidate_fingerprint!==pending.review.candidate_fingerprint||value.new_model_requests!==0||value.project_writes!==0||value.owner_acceptance!=="PENDING"||value.semantic_status!=="UNKNOWN"||value.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
+    const app=await api(`/api/apps/${value.id}`);if(!current())return;
+    if(app.project_id!==view.project||app.runtime_id!==value.runtime_id||app.fingerprint!==value.candidate_fingerprint||goalRunCanonical(app.candidate)!==goalRunCanonical(pending.review.candidate)||app.name!==pending.body.review.name||app.candidate.spec_task?.kind!=="pb_natural_spec_task.v1")throw Error("VERSION_CONFLICT");
+    s.saved=value;naturalTaskRequests.delete(s.scope);s.status.textContent="已核对独立 P-B 草案和原 key 回执；打开后另行核查内部版本。新材料结果尚未运行。";
+  };
+  const action=async submit=>{
+    if(!naturalTaskCurrent(s)||s.busy)return;
+    let pending=naturalTaskRequests.get(s.scope);
+    if(submit){if(pending||!s.review||!s.ack.checked)return;pending={body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent,artifact_write_consent:s.review.artifact_write_consent},review:structuredClone(s.review)};naturalTaskRequests.set(s.scope,pending);}
+    if(!pending)return;s.busy=true;naturalTaskButtons(s);
+    try{if(submit){await api(path+"/extractions","POST",pending.body);if(!naturalTaskCurrent(s)||naturalTaskRequests.get(s.scope)!==pending)return;}await recover(pending);}
+    catch(error){if(naturalTaskCurrent(s))s.status.textContent=`回执未确认：${error.detail||error.message}。保留原意图，仅用原 key GET 恢复；不会重发。`;}
+    finally{s.busy=false;naturalTaskButtons(s);}
+  };
+  s.commit.onclick=()=>action(true);s.recover.onclick=()=>action(false);
+  s.open.onclick=async()=>{
+    if(!naturalTaskCurrent(s)||s.busy||!s.saved)return;
+    const saved=s.saved,identity=token,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+    await showApp(saved.id,view.project,null,()=>token===identity&&identityConnectionGeneration===connection&&workspaceSelectionGeneration===workspace,app=>{if(app.fingerprint!==saved.candidate_fingerprint||goalRunCanonical(app.candidate)!==goalRunCanonical(saved.reviewed.candidate))throw Error("VERSION_CONFLICT");});
+  };
 }
 function renderSpecChecklist(node,value){
   const paragraph=(parent,tag,text)=>{const element=document.createElement(tag);element.textContent=text;parent.append(element);return element;};

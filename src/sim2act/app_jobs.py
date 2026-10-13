@@ -281,7 +281,9 @@ def enqueue(
         }
 
 
-def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None):
+def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False):
+    if return_release and not authorize:
+        raise DomainError("PERMISSION_DENIED", "Verified release requires authorization")
     if authorize:
         from .text_continuations import job_gate
 
@@ -354,7 +356,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
             != [r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]]
         ):
             raise DomainError("VERSION_CONFLICT")
-    return s, a
+    return (s, a, r) if return_release else (s, a)
 
 
 def inspect_job(store, user, rid):

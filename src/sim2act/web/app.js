@@ -416,7 +416,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   activeApp=id;activeAppProject=pid;
   if(a.input_guidance.mode === "MODEL_SPEC_CHECKLIST"){
     $("app-title").textContent=a.name+(a.candidate.namespace==="pa-natural-spec-app.v1"?" · 未标注规范待验清单 · 未发布":" · 合成标记规范清单 · 未发布");
-    $("app-origin").textContent="模型选择的有限步骤图；出处核查与语义完整性分开。真实模型关闭，语义 NOT_RUN。";
+    $("app-origin").textContent=a.candidate.spec_task?`P-B 成功任务 ${a.candidate.spec_task.source_run_id} 的独立提取；来源图与人工编辑图分别冻结。新材料运行需模型、默认关闭；语义 UNKNOWN，人工 PENDING，未发布。`:"模型选择的有限步骤图；出处核查与语义完整性分开。真实模型关闭，语义 NOT_RUN。";
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(a.candidate.goal,null,2);
     $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,recipe:a.candidate.spec_recipe,fingerprint:a.fingerprint},null,2);
     $("app-preview-form").hidden=false;$("app-preview-submit").hidden=false;$("app-preview-submit").disabled=appPreviewRequests.has(id);$("app-input-hint").textContent=a.candidate.namespace==="pa-natural-spec-app.v1"?"新材料抽取需模型执行，默认关闭；预览保留原文和完整目标，不生成答案，不保存制品。":"预览不保存业务制品；实际内部实例运行保存一个 JSON 清单。";$("app-column-label").hidden=true;$("app-column").required=false;
