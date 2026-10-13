@@ -725,15 +725,15 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     # fully validated by load_binding rather than recursively replaying it twice.
     draft = release["snapshot"]["draft"]
     require(is_candidate(draft["candidate"]))
-    if "logic_check" in snapshot or ("natural_logic_source" in release["snapshot"] and not ("pb_use" in snapshot or "pa_use" in snapshot)):
+    if "human_correction" in snapshot:
+        from . import natural_spec_corrections
+        draft, manifest, report, source, goal = natural_spec_corrections.bound(store,c,user,job,snapshot,release,limits)
+    elif "logic_check" in snapshot or ("natural_logic_source" in release["snapshot"] and not ("pb_use" in snapshot or "pa_use" in snapshot)):
         from . import natural_logic_patches as logic
         if "logic_check" in snapshot:
             draft,manifest,report,source,goal = logic.check_job(store,c,user,job,snapshot,release,limits)
         else:
             draft,manifest,report,source,goal = logic.effective_bound(release,logic_out["value"],limits,original=False)
-    elif "human_correction" in snapshot:
-        from . import natural_spec_corrections
-        draft, manifest, report, source, goal = natural_spec_corrections.bound(store,c,user,job,snapshot,release,limits)
     elif "pb_use" in snapshot or "pa_use" in snapshot:
         from . import pb_natural_uses
         draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits,
@@ -796,6 +796,11 @@ def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None):
     if "correction_run_id" in draft:
         from . import natural_spec_corrections
         ref = natural_spec_corrections.gate(store,c,user,draft["correction_run_id"])
+        _, review = natural_spec_corrections.load_review(store,c,user,ref.instance_id,ref.parent_run_id,ref.review_key)
+        if "logic_source" in review:
+            require(fingerprint(draft["candidate"]) == review["context"]["effective_plan_fingerprint"])
+            return fingerprint(dict(correction=ref.model_dump(), parent=ref.parent_proof_digest,
+                logic_source=review["logic_source"], effective=review["context"]["effective_plan_fingerprint"]))
         return fingerprint(dict(correction=ref.model_dump(),base=audit_fingerprint(store,c,user,
             c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"])).mappings().one())))
     if "pb_use_run_id" in draft or "pa_use_run_id" in draft:

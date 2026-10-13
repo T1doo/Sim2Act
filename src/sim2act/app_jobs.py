@@ -124,7 +124,7 @@ def enqueue(
             from . import natural_spec_corrections
             guard["proof"] = natural_spec_corrections.rejection_proof(c,user,iid,human_correction[1]["parent_run_id"],human_correction[0])
         i, release = instance(store, c, user, iid, limits, lock=True)
-        if "natural_logic_source" in release["snapshot"] and any(x is not None for x in (human_correction,logic_check)):
+        if "natural_logic_source" in release["snapshot"] and logic_check is not None:
             raise DomainError("UNSUPPORTED_CAPABILITY", "This finite logic version supports its original source only")
         from .text_continuations import execution
 
@@ -217,7 +217,7 @@ def enqueue(
             if logic.reference(logic_check.instance_id,logic_check.preview_key,logic_value) != logic_check:
                 raise DomainError("VERSION_CONFLICT")
             draft,_,_,_,logic_goal = logic.effective_bound(release,logic_value,limits)
-        elif "natural_logic_source" in release["snapshot"] and use_body is None:
+        elif "natural_logic_source" in release["snapshot"] and use_body is None and human_correction is None:
             from . import natural_logic_patches as logic
             draft,_,_,_,logic_goal = logic.release_bound(store,c,user,release,limits)
         if human_correction is not None:
@@ -278,7 +278,7 @@ def enqueue(
         ).model_dump()
         from . import pa_spec_apps, text_workflows
         if pa_spec_apps.is_candidate(draft["candidate"]):
-            source_goal = use_goal.model_dump() if use_goal is not None else logic_goal if logic_goal is not None else correction_value["context"]["source_goal"] if human_correction is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
+            source_goal = correction_value["context"]["source_goal"] if human_correction is not None else use_goal.model_dump() if use_goal is not None else logic_goal if logic_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
             snapshot["spec_goal"] = source_goal
             content = source_goal["snapshot"]["content"]
             contract["goal"].update(goal_id=source_goal["card_id"], goal=content["goal"],

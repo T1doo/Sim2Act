@@ -131,11 +131,6 @@ def rejected(c, user, iid, rid, declaration_id, declaration_fp, sequence):
 def preview(store, user, iid, rid, limits, body):
     with store.tx() as c:
         owner.natural_scope(store,c,user,iid,rid)
-        logic = c.execute(select(internal_releases.c.snapshot["natural_logic_source"]["namespace"].as_string())
-            .join(internal_instances,internal_instances.c.release_id == internal_releases.c.id)
-            .where(internal_instances.c.id == iid,internal_instances.c.principal_id == user)).scalar()
-        if logic is not None:
-            raise DomainError("UNSUPPORTED_CAPABILITY", "Corrections of this finite logic version are not supported")
         owner.natural_authority(store,c,user,iid,rid)
         old = c.execute(select(delivery_graph_requests.c.app_id).where(
             delivery_graph_requests.c.app_id == iid, delivery_graph_requests.c.principal_id == user,
@@ -146,12 +141,11 @@ def preview(store, user, iid, rid, limits, body):
             return value
         # Never recursively broaden the correction lineage or create a sibling.
         spec.require(not hint(c,rid), "Corrections-of-corrections are outside this finite slice")
-        spec.require(c.execute(select(delivery_graph_requests.c.app_id).where(
-            delivery_graph_requests.c.kind == ACCEPTED,
-            delivery_graph_requests.c.snapshot["response"]["reference"]["parent_run_id"].as_string() == rid)).first() is None,
+        spec.require(not accepted_child(c,user,iid,rid),
             "This rejection already has an accepted correction")
-        count = len(c.execute(select(delivery_graph_requests.c.app_id).where(
-            delivery_graph_requests.c.app_id == iid, delivery_graph_requests.c.kind == REVIEW)).all())
+        count = len(set(c.execute(select(delivery_graph_requests.c.request_key).where(
+            delivery_graph_requests.c.app_id == iid, delivery_graph_requests.c.principal_id == user,
+            delivery_graph_requests.c.kind.in_([REVIEW, REVIEW+"_seal"]))).scalars().all()))
         if count >= MAX_REVIEWS:
             raise DomainError("BUDGET_EXCEEDED", "Finite correction preview capacity exhausted")
         context = owner.natural_context(store,c,user,iid,rid,limits)
@@ -173,6 +167,9 @@ def preview(store, user, iid, rid, limits, body):
             proposed_artifact_writes_at_most=1,real_model_allowance=0,expires_at=time.time()+900,
             consent=CONSENT,new_model_requests=0,artifact_writes=0,
             semantic_status="UNKNOWN",owner_acceptance="PENDING",formal_publication_enabled=False)
+        release = binding["release"]  # Fully proven parent effective plan, never the editable draft.
+        if "natural_logic_source" in release["snapshot"]:
+            value["logic_source"] = logic_anchor(release)
         value["review_fingerprint"] = fingerprint(value)
         owner.natural_final_gate(store,c,user,iid,rid,context)
         remember(c,user,iid,REVIEW,body.request_key,body,value)
@@ -196,9 +193,7 @@ def approve(store,c,user,iid,rid,limits,body,value):
     spec.require(fresh == value and body.expected_review_fingerprint == fresh["review_fingerprint"]
         and time.time() < fresh["expires_at"], "Correction confirmation expired or changed")
     spec.require(not hint(c,rid))
-    spec.require(c.execute(select(delivery_graph_requests.c.app_id).where(
-        delivery_graph_requests.c.kind == ACCEPTED,
-        delivery_graph_requests.c.snapshot["response"]["reference"]["parent_run_id"].as_string() == rid)).first() is None)
+    spec.require(not accepted_child(c,user,iid,rid), "This rejection already has an accepted correction")
     current = owner.natural_context(store,c,user,iid,rid,limits)
     spec.require(current == fresh["context"], "Original Goal, criteria, material or result changed")
     row = rejected(c,user,iid,rid,original.declaration_id,original.declaration_fingerprint,original.expected_owner_sequence)
@@ -233,6 +228,49 @@ def hint(c,rid):
         or c.execute(select(internal_run_bindings.c.snapshot["human_correction"]["parent_run_id"].as_string())
             .where(internal_run_bindings.c.run_id == rid)).scalar()
         or c.execute(select(events.c.id).where(events.c.run_id == rid,events.c.kind == "HUMAN_CORRECTION_ACCEPTED")).first())
+
+
+def accepted_child(c,user,iid,parent):
+    """Independent owned identifiers keep the one-child slot after index loss."""
+    marker = delivery_graph_requests
+    project = c.execute(select(runs.c.project_id).where(runs.c.id == parent,
+        runs.c.principal_id == user)).scalar()
+    return bool(c.execute(select(marker.c.app_id).where(marker.c.principal_id == user,
+        marker.c.kind.in_([ACCEPTED,ACCEPTED+"_seal"]),
+        marker.c.snapshot["request"]["instance_id"].as_string() == iid,
+        marker.c.snapshot["request"]["parent_run_id"].as_string() == parent)).first()
+        or c.execute(select(internal_run_bindings.c.run_id).join(runs,
+            runs.c.id == internal_run_bindings.c.run_id).where(runs.c.principal_id == user,
+            internal_run_bindings.c.snapshot["instance_id"].as_string() == iid,
+            internal_run_bindings.c.snapshot["human_correction"]["parent_run_id"].as_string() == parent)).first()
+        or c.execute(select(events.c.id).join(runs,runs.c.id == events.c.run_id).where(
+            runs.c.principal_id == user,
+            runs.c.project_id == project,
+            events.c.kind == "HUMAN_CORRECTION_ACCEPTED",
+            events.c.data["parent_run_id"].as_string() == parent)).first())
+
+
+def logic_anchor(release):
+    return dict(release_id=release["id"], release_fingerprint=release["fingerprint"],
+        origin=copy.deepcopy(release["snapshot"]["natural_logic_source"]))
+
+
+def logic_gate(store,c,user,rid,ref):
+    """Fresh source/CHECK/Worker proof on every gate, including late callbacks."""
+    marker = c.execute(select(internal_releases.c.snapshot["natural_logic_source"])
+        .where(internal_releases.c.id == ref.release_id, internal_releases.c.principal_id == user,
+            internal_releases.c.project_id == ref.project_id)).scalar()
+    _,value = load_review(store,c,user,ref.instance_id,ref.parent_run_id,ref.review_key)
+    spec.require(reference(value) == ref)
+    if marker is not None or "logic_source" in value:
+        from .lifecycle import read_release
+        release = read_release(store,c,user,ref.release_id,store.frozen_contract(c,
+            c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()).limits)
+        spec.require("natural_logic_source" in release["snapshot"]
+            and value.get("logic_source") == logic_anchor(release)
+            and value["context"]["release_fingerprint"] == release["fingerprint"],
+            "Modified logic source proof changed")
+    return value
 
 
 def gate(store,c,user,rid):
@@ -271,6 +309,7 @@ def gate(store,c,user,rid):
         "Correction source was revoked or a competing result committed")
     owner.natural_payload(c,rejected(c,user,ref.instance_id,ref.parent_run_id,ref.declaration_id,ref.declaration_fingerprint,ref.declaration_sequence))
     spec.require(proof_digest(c,ref.parent_run_id,ref.parent_material_id,ref.parent_artifact_id,ref.goal_id,ref.goal_version,ref.project_id) == ref.parent_proof_digest, "Original actual Worker proof changed")
+    logic_gate(store,c,user,rid,ref)
     return ref
 
 
