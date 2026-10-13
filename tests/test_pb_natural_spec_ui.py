@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from test_natural_spec_apps import COLD, transport
-from test_pb_natural_specs import prepare
+from test_pb_natural_specs import drive_to_success, prepare
 
 from sim2act.api import create_app
-from sim2act.db import Store
-from sim2act.worker import Worker
+from sim2act.db import Store, internal_run_bindings, runs
 
 
 @pytest.mark.parametrize("scenario", ["valid", "lost", "review-late-edit", "commit-late-navigation", "receipt-poison"])
@@ -39,7 +39,15 @@ def test_successful_task_visible_extraction_and_cold_reuse(env, tmp_path, scenar
                 cold = Store(data[1].database_url, test_only=True)
                 cold_client = TestClient(create_app(cold, data[1]))
                 cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
-                assert Worker(cold, data[1], goal_planner_transport=transport(sent, COLD)).once()
+                with cold.tx() as c:
+                    own = c.execute(select(runs.c.principal_id, runs.c.project_id,
+                        internal_run_bindings.c.snapshot["instance_id"].as_string().label("instance"))
+                        .join(internal_run_bindings, internal_run_bindings.c.run_id == runs.c.id)
+                        .where(runs.c.id == request["run_id"])).mappings().one()
+                    assert own["principal_id"] == data[3] and own["project_id"] == data[4]
+                    assert own["instance"] == request["instance_id"]
+                current = (cold, data[1], cold_client, *data[3:])
+                drive_to_success(current, request["run_id"], transport(sent, COLD))
                 answer = dict(id=request["id"], status=200, text="{}")
             else:
                 reply = (cold_client or data[2]).request(request["method"], request["path"],

@@ -47,7 +47,7 @@ async function main(){
  check($("pb-spec-proof").textContent.includes("Human question 15")&&$("pb-spec-proof").textContent.includes("NOT_RUN"),"full human unresolved items and unexecuted edited graph retained");check($("pb-spec-commit").disabled,"separate exact confirmation is required");
  await click("pb-spec-ack");
  if(info.scenario==="commit-late-navigation"){
-  fault=info.scenario;const request=click("pb-spec-commit");await wait(()=>!!hold);const reads=requests.filter(r=>r.path.includes("/extractions/by-key/")).length;await nav("commands");hold();hold=null;await request;
+  fault=info.scenario;const request=click("pb-spec-commit");await wait(()=>!!hold);const reads=requests.filter(r=>r.path.includes("/extractions/by-key/")).length;await nav("resources");hold();hold=null;await request;
   check(requests.filter(r=>r.path.includes("/extractions/by-key/")).length===reads,"late commit cannot follow response into new workspace");check(w.eval("naturalTaskRequests.size")===1,"late navigation preserves exact pending intent");
   await nav("apps");await click(sourceButton());check($("pb-spec-preview").disabled,"reopened unknown intent cannot create a replacement request");await click("pb-spec-recover");
  }else{
@@ -59,7 +59,7 @@ async function main(){
  await click("pb-spec-open");check(w.eval("activeApp")===saved.id&&$("app-origin").textContent.includes("P-B"),"exact task-origin app opened through visible action");
  check($("app-manifest").textContent.includes("user_edited_inference"),"selected app keeps user-edited recipe rather than source output");
  await click("internal-prepare");await click("internal-approval-ack");await click("internal-commit");await click($("internal-releases").querySelector("button"));
- await click("internal-run-submit");const instanceId=w.eval("engineering.instance.id");await rpc({command:"cold-worker"});
+ await click("internal-run-submit");const instanceId=w.eval("engineering.instance.id");await rpc({command:"cold-worker",run_id:w.eval("engineering.run.id"),instance_id:instanceId});
  await boot();await click([...$("app-list").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes("User reviewed P-B checklist")));
  await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instanceId)));
  check($("internal-data").textContent.includes("规范成果 v1"),"cold page reads new actual typed result version");await click(w.document.querySelector('[data-spec-action="view"]'));

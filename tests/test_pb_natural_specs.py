@@ -27,12 +27,62 @@ from sim2act.db import (
 from sim2act.worker import Worker
 
 
+def drive_to_success(data, rid, backend):
+    """Finite real worker claims; once() is progress, never a success receipt."""
+    import time
+
+    from sim2act.db import events, internal_run_bindings
+
+    store, settings = data[:2]
+    worker = Worker(store, settings, goal_planner_transport=backend)
+    claims = []
+    with store.tx() as c:
+        header = dict(c.execute(select(runs.c.status, runs.c.fence, runs.c.lease_until,
+            runs.c.created_at, runs.c.cancel_intent, runs.c.principal_id, runs.c.project_id)
+            .where(runs.c.id == rid)).mappings().one())
+        clock = c.execute(select(internal_run_bindings.c.snapshot["natural_spec_clock"])
+            .where(internal_run_bindings.c.run_id == rid)).scalar_one()
+    original = header["created_at"]
+    assert header["principal_id"] == data[3] and header["project_id"] == data[4]
+    deadline = min(clock["deadline"], original + settings.run_seconds)
+    assert clock["created_at"] == original and header["status"] == "QUEUED"
+    assert not header["cancel_intent"]
+    try:
+        for index in range(3):
+            before = header
+            if index:
+                assert before["status"] == "RUNNING" and not before["cancel_intent"]
+                assert time.time() >= before["lease_until"] and time.time() < deadline
+                with store.tx() as c:
+                    assert not store.has_unknown(c, rid)
+            claimed = worker.once()
+            with store.tx() as c:
+                header = dict(c.execute(select(runs.c.status, runs.c.fence, runs.c.lease_until,
+                    runs.c.created_at, runs.c.cancel_intent, runs.c.principal_id, runs.c.project_id)
+                    .where(runs.c.id == rid)).mappings().one())
+                claimed_events = c.execute(select(events.c.id).where(events.c.run_id == rid,
+                    events.c.kind == "CLAIMED", events.c.data["fence"].as_integer() == header["fence"])).scalars().all()
+                current_clock = c.execute(select(internal_run_bindings.c.snapshot["natural_spec_clock"])
+                    .where(internal_run_bindings.c.run_id == rid)).scalar_one()
+            claims.append(dict(before=before, after=header, claimed=claimed))
+            assert claimed and header["created_at"] == original and current_clock == clock
+            assert header["fence"] > before["fence"] and len(claimed_events) == 1
+            assert header["principal_id"] == data[3] and header["project_id"] == data[4]
+            if header["status"] == "SUCCEEDED":
+                return claims
+        raise AssertionError("Bounded worker claims did not produce a successful actual Run")
+    finally:
+        (settings.data_dir / ("worker-claims-" + rid + ".json")).write_text(json.dumps(dict(
+            run_id=rid, accepted_clock=clock, settings_lease_seconds=settings.lease_seconds,
+            max_claims=3, claims=claims), ensure_ascii=False, indent=2))
+
+
 def prepare(env, style="single", edit=True):
     data = setup(env)
     _, aid, release, inst, _ = ready(data, style)
     rid = enqueue(data, release, inst)
     sent = []
-    assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
+    drive_to_success(data, rid, transport(sent))
     assert inspect(data, inst, rid).json()["status"] == "SUCCEEDED"
     target_rid, goal = material(data[2], data[4], COLD, "Independent P-B target")
     path = f"/api/projects/{data[4]}/natural-spec-task-runs/{rid}"
@@ -114,7 +164,7 @@ def test_success_to_editable_task_origin_and_cold_new_material(env, tmp_path, st
             current = (cold, data[1], client, *data[3:])
             job = enqueue(current, release, inst)
             sent = []
-            assert Worker(cold, data[1], goal_planner_transport=transport(sent, COLD)).once()
+            drive_to_success(current, job, transport(sent, COLD))
             saved = inspect(current, inst, job)
             assert saved.status_code == 200 and saved.json()["status"] == "SUCCEEDED", saved.text
             checklist = saved.json()["result"]["checklist"]
@@ -339,7 +389,7 @@ def test_successful_pa_bound_source_has_closed_origin_audit_and_pb_cold_reuse(en
     assert bound.status_code == 201, bound.text
     release, inst = instance(data, bound.json()["id"])
     rid = enqueue(data, release, inst)
-    assert Worker(data[0], data[1], goal_planner_transport=transport([], COLD)).once()
+    drive_to_success(data, rid, transport([], COLD))
     assert inspect(data, inst, rid).json()["status"] == "SUCCEEDED"
     target, target_goal = material(data[2], data[4], SOURCE, "Independent P-B reverse target")
     path = f"/api/projects/{data[4]}/natural-spec-task-runs/{rid}"
@@ -363,7 +413,7 @@ def test_successful_pa_bound_source_has_closed_origin_audit_and_pb_cold_reuse(en
             current = (cold, data[1], client, *data[3:])
             job = enqueue(current, release, inst)
             sent = []
-            assert Worker(cold, data[1], goal_planner_transport=transport(sent, SOURCE)).once()
+            drive_to_success(current, job, transport(sent, SOURCE))
             result = inspect(current, inst, job)
             assert result.json()["status"] == "SUCCEEDED", result.text
             assert result.json()["result"]["checklist"]["source_content"] == SOURCE
