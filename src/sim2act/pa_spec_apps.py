@@ -716,7 +716,8 @@ def goal_unresolved(goal):
 def bound(store, c, user, job, limits, *, validate_input=True):
     from . import app_jobs
     from .db import attempts
-    snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits, return_release=True)
+    logic_out = {}
+    snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits, return_release=True,_logic_out=logic_out)
     accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "ACCEPTED")).scalars().all()
     require(fingerprint(accepted) == fingerprint([dict(namespace=app_jobs.KIND, app_run_id=snapshot["app_run_id"],
         instance_id=snapshot["instance_id"], release_id=snapshot["release_id"], input_fingerprint=snapshot["request_fingerprint"])]))
@@ -724,7 +725,13 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     # fully validated by load_binding rather than recursively replaying it twice.
     draft = release["snapshot"]["draft"]
     require(is_candidate(draft["candidate"]))
-    if "human_correction" in snapshot:
+    if "logic_check" in snapshot or "natural_logic_source" in release["snapshot"]:
+        from . import natural_logic_patches as logic
+        if "logic_check" in snapshot:
+            draft,manifest,report,source,goal = logic.check_job(store,c,user,job,snapshot,release,limits)
+        else:
+            draft,manifest,report,source,goal = logic.effective_bound(release,logic_out["value"],limits,original=False)
+    elif "human_correction" in snapshot:
         from . import natural_spec_corrections
         draft, manifest, report, source, goal = natural_spec_corrections.bound(store,c,user,job,snapshot,release,limits)
     elif "pb_use" in snapshot or "pa_use" in snapshot:
@@ -779,6 +786,13 @@ def audit_fingerprint(store, c, user, draft):
     No cross-transaction cache. Full model history is verified at step entry and
     final readback; repeated commit guards compare every stored audit byte.
     """
+    if "natural_logic_origin" in draft:
+        from . import natural_logic_patches as logic
+        pointer = draft["natural_logic_origin"]
+        _, value = logic.load_preview(store,c,user,pointer["instance_id"],pointer["preview_key"],
+            Limits(**pointer["limits"]), original=pointer["original"])
+        require(value["preview_fingerprint"] == draft["natural_logic_preview"])
+        return fingerprint(dict(origin=value["context"]["audit_fingerprint"],preview=value["preview_fingerprint"]))
     if "correction_run_id" in draft:
         from . import natural_spec_corrections
         ref = natural_spec_corrections.gate(store,c,user,draft["correction_run_id"])

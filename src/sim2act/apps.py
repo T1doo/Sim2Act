@@ -385,7 +385,7 @@ def validate_source_family(c, user, draft):
             )
 
 
-def validate_frozen_candidate(store, c, user, draft, platform_limits):
+def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin_out=None):
     """Revalidate exact frozen specs and current grants without reading mutable draft content."""
     aid = draft["id"]
     from .text_continuations import draft_gate
@@ -399,7 +399,9 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits):
     manifest, action, report = compile_preview(candidate, platform_limits)
     from . import pa_spec_apps
     if pa_spec_apps.is_candidate(candidate):
-        pa_spec_apps.verify_origin(store, c, user, draft, platform_limits)
+        origin = pa_spec_apps.verify_origin(store, c, user, draft, platform_limits)
+        if _origin_out is not None:
+            _origin_out.update(draft=dict(draft),manifest=manifest,action=action,report=report,origin=origin)
         return draft, manifest, action, report
     from . import text_workflows
 

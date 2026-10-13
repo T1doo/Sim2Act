@@ -532,6 +532,8 @@ def submit(store, user, iid, limits, body):
 def mount(app, store, limits, identity):
     from . import natural_spec_corrections
     natural_spec_corrections.mount(app, store, limits, identity)
+    from . import natural_logic_patches
+    natural_logic_patches.mount(app,store,limits,identity)
     user_dependency = Depends(identity)
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/spec-owner-review")

@@ -98,7 +98,7 @@ def submission_tx(store, guard):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None, logic_check=None, logic_tx=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
@@ -109,7 +109,10 @@ def enqueue(
     use_body = pa_use if pa_use is not None else pb_use
     use_field = "pa_use" if pa_use is not None else "pb_use"
     guard: dict = {}
-    with submission_tx(store, guard) as c:
+    from contextlib import nullcontext
+    if logic_check is not None and any(x is not None for x in (pa_use,pb_use,human_correction,offline_replay,owner_goal_fp)):
+        raise DomainError("INVALID_INPUT", "Local logic checks cannot change another execution mode")
+    with (nullcontext(logic_tx) if logic_tx is not None else submission_tx(store, guard)) as c:
         pid = c.execute(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
         ).scalar()
@@ -120,6 +123,8 @@ def enqueue(
             from . import natural_spec_corrections
             guard["proof"] = natural_spec_corrections.rejection_proof(c,user,iid,human_correction[1]["parent_run_id"],human_correction[0])
         i, release = instance(store, c, user, iid, limits, lock=True)
+        if "natural_logic_source" in release["snapshot"] and any(x is not None for x in (pa_use,pb_use,human_correction,logic_check)):
+            raise DomainError("UNSUPPORTED_CAPABILITY", "This finite logic version supports its original source only")
         from .text_continuations import execution
 
         execution(store, c, user, i, release, limits)
@@ -155,6 +160,8 @@ def enqueue(
             correction_ref = correction.reference(correction_value)
             request["human_correction"] = correction_ref.model_dump()
             request["correction_request"] = correction_body.model_dump()
+        if logic_check is not None:
+            request["logic_check"] = logic_check.model_dump()
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -202,6 +209,16 @@ def enqueue(
         ):
             raise DomainError("VERSION_CONFLICT", "Confirm the current own GoalCard binding for this Run")
         use_checked = use_goal = None
+        logic_goal = None
+        if logic_check is not None:
+            from . import natural_logic_patches as logic
+            _, logic_value = logic.load_preview(store,c,user,logic_check.instance_id,logic_check.preview_key,limits)
+            if logic.reference(logic_check.instance_id,logic_check.preview_key,logic_value) != logic_check:
+                raise DomainError("VERSION_CONFLICT")
+            draft,_,_,_,logic_goal = logic.effective_bound(release,logic_value,limits)
+        elif "natural_logic_source" in release["snapshot"]:
+            from . import natural_logic_patches as logic
+            draft,_,_,_,logic_goal = logic.release_bound(store,c,user,release,limits)
         if human_correction is not None:
             correction.approve(store,c,user,iid,correction_ref.parent_run_id,limits,correction_body,correction_value)
             draft = {**copy.deepcopy(draft), "candidate": correction_value["effective_candidate"],
@@ -260,7 +277,7 @@ def enqueue(
         ).model_dump()
         from . import pa_spec_apps, text_workflows
         if pa_spec_apps.is_candidate(draft["candidate"]):
-            source_goal = correction_value["context"]["source_goal"] if human_correction is not None else use_goal.model_dump() if use_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
+            source_goal = logic_goal if logic_goal is not None else correction_value["context"]["source_goal"] if human_correction is not None else use_goal.model_dump() if use_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
             snapshot["spec_goal"] = source_goal
             content = source_goal["snapshot"]["content"]
             contract["goal"].update(goal_id=source_goal["card_id"], goal=content["goal"],
@@ -340,6 +357,8 @@ def enqueue(
             text_workflows.seal_job_scope(c, user, draft, snapshot)
         if pa_spec_apps.is_candidate(draft["candidate"]):
             pa_spec_apps.seal_job_scope(c, user, draft, snapshot)
+        if logic_check is not None:
+            logic.remember(c,user,jid,logic.JOB,"accepted",logic_check,logic_check.model_dump())
         if use_body is not None:
             pb_natural_uses.seal(c, user, release["snapshot"]["draft"], snapshot, use_body, use_checked, family=use_family)
         store.event(
@@ -376,7 +395,7 @@ def enqueue(
         }
 
 
-def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False):
+def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None):
     if return_release and not authorize:
         raise DomainError("PERMISSION_DENIED", "Verified release requires authorization")
     if authorize:
@@ -413,6 +432,12 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
     if "human_correction" in s:
         request["human_correction"] = s["human_correction"]
         request["correction_request"] = s["correction_request"]
+    from . import natural_logic_patches as logic
+    logic_marker = logic.graph.lookup(c,user,job["id"],logic.JOB,"accepted")
+    if bool(logic_marker) != ("logic_check" in s):
+        raise DomainError("VERSION_CONFLICT", "Local logic check marker cannot be removed")
+    if "logic_check" in s:
+        request["logic_check"] = s["logic_check"]
     if "offline_replay" in s:
         request["offline_replay"] = s["offline_replay"]
     if "owner_goal_binding_fingerprint" in s:
@@ -439,7 +464,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         contract = store.frozen_contract(c, job)
         if contract.limits.model_dump() != s["limits"]:
             raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
-        r = read_release(store, c, user, s["release_id"], limits, archival_software=archival_software)
+        r = read_release(store, c, user, s["release_id"], limits, archival_software=archival_software,_logic_out=_logic_out)
         from .app_owner_goals import verify_frozen_run
 
         verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)

@@ -20,6 +20,7 @@ function engineeringStatus(view,text,state="") {
   $("internal-status").textContent=text;$("internal-status").dataset.state=state;
 }
 function clearInternal() {
+  if(typeof clearNaturalLogic==="function")clearNaturalLogic();
   clearPBUse();
   clearNaturalTaskExtraction();
   if(typeof clearOwnerReview==="function")clearOwnerReview();
@@ -99,6 +100,7 @@ async function refreshInternal(view=engineering) {
   engineeringStatus(view,"内部历史已读回；正式发布与部署仍关闭。");
 }
 async function showInternalInstance(id,view=engineering) {
+  if(typeof clearNaturalLogic==="function")clearNaturalLogic();
   clearPBUse();
   clearNaturalTaskExtraction();
   if(!view || !engineeringCurrent(view))return;
@@ -124,6 +126,7 @@ async function showInternalInstance(id,view=engineering) {
     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
     if(view.spec)$("internal-run-status").textContent=engineeringPending.has(id) ? "本次提交结果尚未确认。仅用原请求键读取回执；不会重发或开始重复运行。" : "运行已保存材料与目标，完成后可读取此版本清单或下载成果。自然规范模型默认关闭；出处核验不代表语义验收。";
     await renderPBUse(view);
+    if(typeof openNaturalLogic==="function")await openNaturalLogic(view);
     if(typeof openOwnerReview==="function")await openOwnerReview(view);
   } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
   engineeringButtons(view);
@@ -780,12 +783,12 @@ $("registered-recovery-refresh").onclick=safe(async()=>{
 // Per-Run inputs use the same saved app, Release and instance; old default runs remain explicit.
 let pbUseView=null;
 const pbUsePending=new Map();
-function pbUseUnknown(iid){return [...pbUsePending.values()].some(p=>p.instance_id===iid);}
+function pbUseUnknown(iid){return (typeof naturalLogicUnknown==="function"&&naturalLogicUnknown(iid))||[...pbUsePending.values()].some(p=>p.instance_id===iid);}
 function clearPBUse(){if(pbUseView){pbUseView.edit++;pbUseView.panel.remove();pbUseView=null;}}
 async function renderPBUse(view){
   clearPBUse();if(!engineeringCurrent(view)||!view.instance)return;
   const candidate=view.draft.candidate,isPB=candidate.spec_task?.kind==="pb_natural_spec_task.v1",isPA=candidate.namespace==="pa-natural-spec-app.v1"&&!candidate.spec_task&&(candidate.goal_application||candidate.spec_binding?.kind==="pa_model_spec_material_binding.v1");
-  if(!isPB&&!isPA)return;
+  if((!isPB&&!isPA)||view.releases.find(r=>r.id===view.instance.release_id)?.snapshot?.natural_logic_source)return;
   const mode=isPB?{route:"pb-use",namespace:"pb-natural-per-run.v1",consent:"RUN_THIS_SAVED_PB_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"}:{route:"pa-use",namespace:"pa-natural-per-run.v1",consent:"RUN_THIS_SAVED_PA_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"};
   const instance=view.instance,scope=goalRunCanonical([token,view.project,view.app,instance.id,instance.release_id,mode.route]);
   const panel=document.createElement("section");panel.id="pb-use-panel";
@@ -831,3 +834,80 @@ async function renderPBUse(view){
     }if(!current()||pbUsePending.get(scope)!==pending)return;}await receipt(pending);}catch(error){if(current())status.textContent=`回执未确认：${error.detail||error.message}。仅原 key GET 恢复；不重发。`;}finally{s.busy=false;buttons();}};
   submit.onclick=()=>action(true);recover.onclick=()=>action(false);
 }
+
+"use strict";
+// The original selection and key stay frozen across unknown responses. No POST retry.
+let naturalLogicView=null;
+const naturalLogicPending=new Map();
+const naturalLogicKey=v=>JSON.stringify([v.token,v.project,v.app,v.instance.id]);
+const naturalLogicUnknown=iid=>[...naturalLogicPending.values()].some(p=>p.instance===iid&&p.token===token);
+const naturalLogicPath=v=>`/api/internal/instances/${v.instance.id}/logic-patches`;
+const naturalLogicCurrent=s=>naturalLogicView===s&&engineeringCurrent(s.view)&&s.view.instance===s.instance&&s.workspace===workspaceSelectionGeneration&&s.connection===identityConnectionGeneration;
+function clearNaturalLogic(){naturalLogicView=null;$("natural-logic-panel").hidden=true;$("natural-logic-proof").textContent="";for(const id of ["natural-logic-check-ack","natural-logic-version-ack"])$(id).checked=false;}
+function naturalLogicButtons(){const s=naturalLogicView;if(!s||!naturalLogicCurrent(s))return;const blocked=s.view.busy||naturalLogicPending.has(naturalLogicKey(s.view));$("natural-logic-key").readOnly=blocked||!!s.preview;$("natural-logic-preview").disabled=blocked;$("natural-logic-mode").disabled=blocked;$("natural-logic-check").disabled=blocked||!s.preview||!$("natural-logic-check-ack").checked;$("natural-logic-version").disabled=blocked||!s.proof||!!s.approval||!$("natural-logic-version-ack").checked;$("natural-logic-commit").disabled=blocked||!s.approval||s.approval.expires_at*1000<=Date.now()||!$("natural-logic-version-ack").checked;$("natural-logic-recover").disabled=s.view.busy;$("natural-logic-control-read").disabled=s.view.busy||!($("natural-logic-key").value.trim());$("natural-logic-cancel").disabled=s.view.busy||!s.control||["SUCCEEDED","FAILED","CANCELLED"].includes(s.control.status);engineeringButtons(s.view);}
+async function openNaturalLogic(view){clearNaturalLogic();if(!engineeringCurrent(view)||!view.instance||view.draft.candidate.namespace!=="pa-natural-spec-app.v1")return;const instance=view.instance;const release=await api(`/api/internal/releases/${instance.release_id}`);if(!engineeringCurrent(view)||view.instance!==instance)return;if(release.snapshot.natural_logic_source)return;const steps=view.draft.candidate.spec_recipe.steps;if(steps.length!==6||steps[1].operator!=="model.spec.requirements"||steps[2].operator!=="model.spec.qualifiers")return;const s={view,instance,release,workspace:workspaceSelectionGeneration,connection:identityConnectionGeneration};naturalLogicView=s;$("natural-logic-panel").hidden=false;$("natural-logic-mode").value=String(!("prior_items" in steps[2].inputs));$("natural-logic-status").textContent="只调整第二模型的前序结果/反馈依赖；节点ID、原目标、验收标准、来源和限额保留。重验隔离实例，语义仍UNKNOWN。";const pending=naturalLogicPending.get(naturalLogicKey(view));if(pending)$("natural-logic-key").value=pending.key;naturalLogicButtons();}
+async function naturalLogicValidatePreview(s,value,key){
+  const base=s.release.snapshot.draft.candidate,ctx=value?.context,candidate=value?.effective_candidate;
+  const copy=structuredClone(value),fp=copy.preview_fingerprint;delete copy.preview_fingerprint;
+  if(!ctx||value.namespace!=="natural-local-logic.v1"||value.request_key!==key||fp!==await deliveryDigest(copy)||value.semantic_status!=="UNKNOWN"||value.formal_publication_enabled!==false||value.owner_acceptance!=="PENDING"||ctx.principal_id!==s.instance.principal_id||ctx.instance_id!==s.instance.id||ctx.app_id!==s.view.app||ctx.project_id!==s.view.project||ctx.runtime_id!==s.view.draft.runtime_id||ctx.release_id!==s.release.id||ctx.release_fingerprint!==s.release.fingerprint||ctx.draft_fingerprint!==s.view.draft.fingerprint||ctx.instance_revision!==s.instance.revision||ctx.data_version!==s.instance.data_version||ctx.goal.card_id!==base.manifest.goal_ref||!deliverySame(ctx.goal.snapshot.content,base.goal)||ctx.source.resource_id!==base.manifest.data_bindings[0].resource_ref||ctx.source.hash!==base.source_hash||value.effective_fingerprint!==await deliveryDigest(candidate))throw Error("VERSION_CONFLICT");
+  const recipe=structuredClone(base.spec_recipe),q=recipe.steps[2],prior=recipe.steps[1],consume=!("prior_items" in q.inputs);
+  for(const [name,field] of [["prior_items","items"],["prior_feedback","feedback"]]){if(consume)q.inputs[name]={source:"step",ref:prior.step_id,field};else delete q.inputs[name];}
+  q.depends_on=[recipe.steps[0].step_id,...(consume?[prior.step_id]:[])];
+  if(!deliverySame(candidate.spec_recipe,recipe)||!deliverySame(candidate.goal,base.goal)||candidate.source_hash!==base.source_hash||!deliverySame(candidate.manifest.runtime_limits,base.manifest.runtime_limits)||!deliverySame(candidate.manifest.permission_requirements,base.manifest.permission_requirements)||candidate.manifest.revision!==2||candidate.actions.length!==6||candidate.actions[2].revision!==2||value.modified_step_id!==q.step_id||value.original_recipe_fingerprint!==await deliveryDigest(base.spec_recipe)||value.new_recipe_fingerprint!==await deliveryDigest(recipe)||value.impact.graph_fingerprint!==ctx.graph_fingerprint||value.impact.revalidation_scope!=="APP"||!deliverySame(value.impact.changed_nodes,[base.actions[2].action_id]))throw Error("VERSION_CONFLICT");
+  for(let i=0;i<6;i++){if(candidate.actions[i].action_id!==base.actions[i].action_id||candidate.manifest.workflow[i].step_id!==base.manifest.workflow[i].step_id||(i!==2&&!deliverySame(candidate.actions[i],base.actions[i])))throw Error("VERSION_CONFLICT");}
+  const preserved=await Promise.all(base.actions.map(async(a,i)=>i===2?null:{step_id:base.spec_recipe.steps[i].step_id,action_id:a.action_id,definition_fingerprint:await deliveryDigest(a)}));
+  if(!deliverySame(value.preserved_action_definitions,preserved.filter(Boolean)))throw Error("VERSION_CONFLICT");
+  if(!naturalLogicCurrent(s))return;s.preview=value;s.key=key;$("natural-logic-key").value=key;$("natural-logic-mode").value=String(consume);
+}
+async function naturalLogicRender(s,value,stage,key){
+  if(!naturalLogicCurrent(s))return;
+  if(stage==="previews")await naturalLogicValidatePreview(s,value,key);
+  if(stage==="checks"&&value.status==="PASS"){
+    const copy=structuredClone(value),fp=copy.check_fingerprint;delete copy.check_fingerprint;
+    if(fp!==await deliveryDigest(copy)||value.namespace!=="natural-local-logic.v1"||value.preview_fingerprint!==s.preview?.preview_fingerprint||value.effective_fingerprint!==s.preview.effective_fingerprint||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"||value.citation_status!=="PASS"||(s.run&&s.run!==value.run_id))throw Error("VERSION_CONFLICT");if(!naturalLogicCurrent(s))return;s.proof=value;s.run=value.run_id;s.checkInstance=value.check_instance_id;
+  }else if(stage==="checks"&&value.run_id){if(!/^run_[a-f0-9]{32}$/.test(value.run_id)||!/^iapprun_[a-f0-9]{32}$/.test(value.app_run_id)||!/^iinstance_[a-f0-9]{32}$/.test(value.check_instance_id)||value.check_instance_id===s.instance.id||(s.run&&s.run!==value.run_id))throw Error("VERSION_CONFLICT");s.run=value.run_id;s.checkInstance=value.check_instance_id;}
+  if(stage==="version-approvals"){
+    const origin=value.snapshot?.natural_logic_source;
+    if(value.namespace!=="INTERNAL_ENGINEERING_ONLY"||value.formal_publication_enabled!==false||value.snapshot_fingerprint!==await deliveryDigest(value.snapshot)||!deliverySame(value.snapshot.draft,s.release.snapshot.draft)||!deliverySame(value.snapshot.data_schema,s.release.snapshot.data_schema)||origin?.namespace!=="natural-local-logic.v1"||origin.instance_id!==s.instance.id||origin.preview_key!==key||origin.preview_fingerprint!==s.preview.preview_fingerprint||origin.check_fingerprint!==s.proof.check_fingerprint||!deliverySame(value.snapshot.check_evidence,{...s.proof,original_draft_fingerprint:s.view.draft.fingerprint})||!(value.expires_at*1000>Date.now()||s.readCommitted))throw Error("VERSION_CONFLICT");
+    const detail=await api(`/api/internal/approvals/${value.id}`);
+    if(!naturalLogicCurrent(s))return;
+    if(detail.id!==value.id||detail.fingerprint!==value.fingerprint||detail.principal_id!==s.preview.context.principal_id||detail.project_id!==s.view.project||!deliverySame(detail.payload.snapshot,value.snapshot)||await deliveryDigest(detail.payload)!==value.fingerprint)throw Error("VERSION_CONFLICT");s.approval=value;$("natural-logic-version-ack").checked=false;
+  }
+  if(stage==="commit"){
+    if(value.approval_id!==s.approval?.id||value.fingerprint!==s.approval.snapshot_fingerprint||!deliverySame(value.snapshot,s.approval.snapshot))throw Error("VERSION_CONFLICT");
+    $("natural-logic-status").textContent=`新内部版本 ${value.id} 已确认；原实例和旧版本保留。可从内部历史明确选择新版本。`;s.approval=null;$("natural-logic-version-ack").checked=false;
+  }
+  if(!naturalLogicCurrent(s))return;$("natural-logic-proof").textContent=JSON.stringify(stage==="version-approvals"?{...value,approved_logic_preview:s.preview,actual_check:s.proof}:value,null,2);naturalLogicButtons();
+}
+async function naturalLogicRecover(s,p){
+  if(p.stage!=="previews"&&!s.preview){const preview=await api(naturalLogicPath(s.view)+"/previews/"+encodeURIComponent(p.key));await naturalLogicValidatePreview(s,preview,p.key);}
+  if(["version-approvals","commit"].includes(p.stage)&&!s.proof){const proof=await api(naturalLogicPath(s.view)+"/checks/"+encodeURIComponent(p.key));await naturalLogicRender(s,proof,"checks",p.key);}
+  let value;
+  if(p.stage==="commit"){
+    const a=await api(naturalLogicPath(s.view)+"/version-approvals/"+encodeURIComponent(p.key));s.readCommitted=true;try{await naturalLogicRender(s,a,"version-approvals",p.key);}finally{s.readCommitted=false;}
+    const history=await api(`/api/internal/apps/${s.view.app}/releases`);value=history.items.find(r=>r.approval_id===a.id);if(!value)throw Error("OUTCOME_UNKNOWN");
+  }else value=await api(naturalLogicPath(s.view)+"/"+p.stage+"/"+encodeURIComponent(p.key));
+  if(!naturalLogicCurrent(s))return;await naturalLogicRender(s,value,p.stage,p.key);naturalLogicPending.delete(naturalLogicKey(s.view));naturalLogicButtons();
+}
+async function naturalLogicWrite(stage,body,url){const s=naturalLogicView;if(!s||!naturalLogicCurrent(s)||s.view.busy||naturalLogicPending.has(naturalLogicKey(s.view)))return;const p={token:s.view.token,instance:s.instance.id,key:body.request_key||s.key,stage,body:structuredClone(body),url:url||naturalLogicPath(s.view)+"/"+stage};naturalLogicPending.set(naturalLogicKey(s.view),p);s.view.busy=true;naturalLogicButtons();try{const value=await api(url||naturalLogicPath(s.view)+"/"+stage,"POST",body);if(!naturalLogicCurrent(s))return;await naturalLogicRender(s,value,stage,p.key);await naturalLogicRecover(s,p);}catch(e){const proof=e.submissionRejection;if(proof?.namespace==="natural-local-logic.v1.rejection"&&proof.instance_id===s.instance.id&&proof.principal_id===s.instance.principal_id&&proof.stage===stage&&proof.request_key===p.key&&proof.request_fingerprint===await deliveryDigest(p.body)&&proof.acceptance==="NOT_ACCEPTED"&&proof.previous_request==="ABSENT"&&proof.phase==="TX_ROLLED_BACK")naturalLogicPending.delete(naturalLogicKey(s.view));if(naturalLogicCurrent(s))$("natural-logic-status").textContent=`${e.detail||e.message}；保留原key，仅GET读取，不自动重发。`;}finally{s.view.busy=false;naturalLogicButtons();}}
+$("natural-logic-preview").onclick=safe(async()=>{const s=naturalLogicView;if(!s||s.view.busy||naturalLogicUnknown(s.instance.id))return;const key=crypto.randomUUID();$("natural-logic-key").value=key;s.preview=null;s.proof=null;s.approval=null;$("natural-logic-check-ack").checked=false;$("natural-logic-version-ack").checked=false;s.view.busy=true;naturalLogicButtons();try{const graph=await api(`/api/projects/${s.view.project}/apps/${s.view.app}/delivery-graph`);if(!naturalLogicCurrent(s))return;s.view.busy=false;await naturalLogicWrite("previews",{request_key:key,expected_revision:s.instance.revision,expected_release_fingerprint:s.release.fingerprint,expected_graph_fingerprint:graph.graph_fingerprint,consume_prior_feedback:$("natural-logic-mode").value==="true"});}finally{s.view.busy=false;naturalLogicButtons();}});
+$("natural-logic-check").onclick=safe(()=>{const s=naturalLogicView;if(s?.preview&&$("natural-logic-check-ack").checked)return naturalLogicWrite("checks",{request_key:s.key,expected_preview_fingerprint:s.preview.preview_fingerprint,consent:"RUN_EXACT_LOCAL_LOGIC_CHECK_KEEP_ORIGINAL"});});
+$("natural-logic-version").onclick=safe(()=>{const s=naturalLogicView;if(s?.proof&&$("natural-logic-version-ack").checked)return naturalLogicWrite("version-approvals",{request_key:s.key,expected_check_fingerprint:s.proof.check_fingerprint,consent:"CREATE_EXACT_CHECKED_INTERNAL_LOGIC_VERSION"});});
+$("natural-logic-commit").onclick=safe(()=>{const s=naturalLogicView;if(s?.approval&&$("natural-logic-version-ack").checked)return naturalLogicWrite("commit",{fingerprint:s.approval.fingerprint},`/api/internal/approvals/${s.approval.id}/commit`);});
+$("natural-logic-recover").onclick=safe(async()=>{const s=naturalLogicView;if(!s||s.view.busy)return;const p=naturalLogicPending.get(naturalLogicKey(s.view))||{key:$("natural-logic-key").value.trim(),stage:$("natural-logic-stage").value};s.view.busy=true;naturalLogicButtons();try{await naturalLogicRecover(s,p);}finally{s.view.busy=false;naturalLogicButtons();}});
+for(const id of ["natural-logic-check-ack","natural-logic-version-ack"])$(id).onchange=naturalLogicButtons;
+$("natural-logic-mode").onchange=()=>{const s=naturalLogicView;if(s){s.preview=null;s.proof=null;s.approval=null;}$("natural-logic-check-ack").checked=false;$("natural-logic-version-ack").checked=false;naturalLogicButtons();};
+
+$("natural-logic-control-read").onclick=safe(async()=>{
+ const s=naturalLogicView;if(!s||!naturalLogicCurrent(s)||s.view.busy)return;
+ const key=naturalLogicPending.get(naturalLogicKey(s.view))?.key||s.key||$("natural-logic-key").value.trim();s.view.busy=true;naturalLogicButtons();
+ try{const value=await api(naturalLogicPath(s.view)+"/check-controls/"+encodeURIComponent(key));if(!naturalLogicCurrent(s))return;
+ if(value.namespace!=="natural-local-logic.v1.control"||value.instance_id!==s.instance.id||value.principal_id!==s.instance.principal_id||value.request_key!==key||!/^run_[a-f0-9]{32}$/.test(value.run_id)||!/^iinstance_[a-f0-9]{32}$/.test(value.check_instance_id)||value.check_instance_id===s.instance.id||!Number.isInteger(value.version))throw Error("VERSION_CONFLICT");
+ s.control=value;s.run=value.run_id;s.checkInstance=value.check_instance_id;$("natural-logic-status").textContent=`重验 ${value.run_id} · ${value.status} · 仅本人停止控制元数据，未读取成果正文。`;
+ }finally{s.view.busy=false;naturalLogicButtons();}
+});
+$("natural-logic-cancel").onclick=safe(async()=>{
+ const s=naturalLogicView,c=s?.control;if(!s||!c||!naturalLogicCurrent(s)||s.view.busy)return;s.view.busy=true;naturalLogicButtons();
+ try{const value=await api(`/api/internal/instances/${c.check_instance_id}/runs/${c.run_id}/commands`,"POST",{command:"cancel",version:c.version});if(!naturalLogicCurrent(s))return;s.control=null;$("natural-logic-status").textContent=`取消请求已接受：${value.status}。请再次读取停止状态；不会提交新的版本。`;
+ }finally{s.view.busy=false;naturalLogicButtons();}
+});

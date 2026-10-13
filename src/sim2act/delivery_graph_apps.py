@@ -85,12 +85,17 @@ def checked(row):
     return copy.deepcopy(row["snapshot"])
 
 
-def load_family(store, c, user, pid, aid, limits):
+def load_family(store, c, user, pid, aid, limits, *, _natural_origin=None):
     project = store.lock_project(c, user, pid)
     draft = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().first()
     if not draft or draft["project_id"] != pid:
         raise DomainError("PERMISSION_DENIED")
-    if (
+    if _natural_origin is not None:
+        if (draft["candidate"].get("namespace") != "pa-natural-spec-app.v1"
+                or any(draft[k] != _natural_origin["draft"][k] for k in ("id","project_id","runtime_id","candidate","fingerprint"))):
+            conflict("Same-call authorized natural origin no longer matches current draft")
+        result=(draft,_natural_origin["manifest"],_natural_origin["action"],_natural_origin["report"])
+    elif (
         isinstance(draft["candidate"], dict)
         and draft["candidate"].get("namespace") == "bounded-report-manifest.v1"
     ):
@@ -132,6 +137,8 @@ def load_family(store, c, user, pid, aid, limits):
         for r in c.execute(
             select(grants)
             .where(grants.c.project_id == pid, grants.c.principal_id.in_(identities))
+            .where(grants.c.resource_id.in_(allowed + [pid])
+                if draft["candidate"].get("namespace") == "pa-natural-spec-app.v1" else True)
             .order_by(grants.c.id)
         ).mappings()
     ]
@@ -380,8 +387,8 @@ def write_lock(c, user, pid, aid, body, node):
 
 
 
-def build(store, c, user, pid, aid, limits, previous=None):
-    draft, manifest, action, _, rows, auth_fp = load_family(store, c, user, pid, aid, limits)
+def build(store, c, user, pid, aid, limits, previous=None, *, _family=None):
+    draft, manifest, action, _, rows, auth_fp = _family or load_family(store, c, user, pid, aid, limits)
     keys, external = logical(store, c, draft, manifest, rows)
     ids = copy.deepcopy(previous["stable_ids"]) if previous else {}
     source_versions = {}
@@ -445,6 +452,7 @@ def build(store, c, user, pid, aid, limits, previous=None):
         active_ids,
         ctx,
         limits,
+        natural_candidate=draft["candidate"] if draft["candidate"].get("namespace") == "pa-natural-spec-app.v1" else None,
     )
     ctx["graph_fingerprint"] = graph["graph_fingerprint"]
     snapshot = dict(
@@ -486,11 +494,11 @@ def metadata(saved):
     )
 
 
-def current(store, c, user, pid, aid, limits):
+def current(store, c, user, pid, aid, limits, *, _family=None):
     # Current source/identity authorization must precede protected ledger reads.
-    load_family(store, c, user, pid, aid, limits)
+    family = _family or load_family(store, c, user, pid, aid, limits)
     saved = state(store, c, user, pid, aid)
-    fresh, _ = build(store, c, user, pid, aid, limits, saved)
+    fresh, _ = build(store, c, user, pid, aid, limits, saved, _family=family)
     fresh["graph_revision"] = saved["graph_revision"]
     if fresh["authorization_fingerprint"] != saved["authorization_fingerprint"]:
         raise DomainError(

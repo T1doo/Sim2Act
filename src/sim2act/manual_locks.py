@@ -37,8 +37,8 @@ def binding(saved):
 
 def context(store, c, user, pid, aid, limits):
     # Authorization and supported family precede all protected graph/lock ledgers.
-    _, _, action, *_ = graph.load_family(store, c, user, pid, aid, limits)
-    if (action.executor.kind, action.executor.ref) not in {
+    draft, _, action, *_ = graph.load_family(store, c, user, pid, aid, limits)
+    if draft["candidate"].get("namespace") != "pa-natural-spec-app.v1" and (action.executor.kind, action.executor.ref) not in {
         ("registered_tool", "data.aggregate_csv"),
         ("bounded_report", "intern.conditional_report"),
     }:

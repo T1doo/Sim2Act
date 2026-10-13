@@ -302,6 +302,8 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
     draft = snap["draft"]
     from .csv_dag_instances import validate_family
     validate_family(c, user, approval_id, snap)
+    from .natural_logic_patches import validate_family as validate_logic_family
+    validate_logic_family(c,user,approval_id,snap)
     current, _, _, _ = load_draft(store, c, user, draft["id"], limits, lock=True)
     validate_source_bytes(store, c, user, current)
     if (
@@ -312,6 +314,9 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
     if "execution_source" in snap:
         from .csv_dag_instances import validate_snapshot
         validate_snapshot(store, c, user, snap, limits)
+    if "natural_logic_source" in snap:
+        from .natural_logic_patches import validate_snapshot as validate_logic
+        validate_logic(store,c,user,snap,limits,commit=True)
     rid = new_id("irelease")
     row = {
         "id": rid,
@@ -348,7 +353,7 @@ def validate_source_bytes(store, c, user, draft):
     )
 
 
-def read_release(store, c, user, rid, limits, *, archival_software=None):
+def read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None):
     from .text_continuations import release_gate
 
     release_gate(store, c, user, rid)
@@ -386,6 +391,8 @@ def read_release(store, c, user, rid, limits, *, archival_software=None):
         # provenance ledgers, including cold release/peer/instance reads.
         validate_snapshot(store, c, user, s, limits)
     validate_family(c, user, r["approval_id"], s)
+    from .natural_logic_patches import validate_family as validate_logic_family
+    validate_logic_family(c,user,r["approval_id"],s)
     if (
         s["namespace"] != NAMESPACE
         or s["formal_publication_enabled"] is not False
@@ -398,8 +405,13 @@ def read_release(store, c, user, rid, limits, *, archival_software=None):
             validate_snapshot(store, c, user, s, limits)
         return r
     record_schema(draft["candidate"], s["data_schema"])
-    validate_frozen_candidate(store, c, user, draft, limits)
+    validate_frozen_candidate(store, c, user, draft, limits, _origin_out=_origin_out)
     validate_source_bytes(store, c, user, draft)
+    if "natural_logic_source" in s:
+        from .natural_logic_patches import validate_snapshot as validate_logic
+        logic_value = validate_logic(store,c,user,s,limits)
+        if _logic_out is not None:
+            _logic_out["value"] = logic_value
     from . import text_logic_reuse
 
     if text_logic_reuse.independent(draft):
@@ -462,12 +474,12 @@ def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, requ
     return row
 
 
-def instance(store, c, user, iid, limits, *, lock=False):
+def instance(store, c, user, iid, limits, *, lock=False, _origin_out=None):
     q = select(internal_instances).where(internal_instances.c.id == iid)
     i = c.execute(q.with_for_update() if lock else q).mappings().first()
     if not i or i["principal_id"] != user:
         raise DomainError("PERMISSION_DENIED")
-    r = read_release(store, c, user, i["release_id"], limits)
+    r = read_release(store, c, user, i["release_id"], limits, _origin_out=_origin_out)
     if (
         r["project_id"] != i["project_id"]
         or r["snapshot"]["draft"]["id"] != i["source_app_id"]

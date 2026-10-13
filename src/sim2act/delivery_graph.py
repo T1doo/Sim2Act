@@ -222,7 +222,8 @@ def _validate_graph(value):
     return graph
 
 
-def derive_manifest_graph(manifest, actions, source_versions, stable_ids, context, platform_limits):
+def derive_manifest_graph(manifest, actions, source_versions, stable_ids, context, platform_limits,
+                          *, natural_candidate=None):
     """Derive an application graph from strict AppManifest/ActionSpec definitions.
 
     Logical keys: goal:<goal_ref>, source:<resource_id>, rule:<kind>:<ref>,
@@ -246,7 +247,14 @@ def derive_manifest_graph(manifest, actions, source_versions, stable_ids, contex
         Limits,
         platform_limits.model_dump() if isinstance(platform_limits, Limits) else platform_limits,
     )
-    m, report = preflight(json.dumps(manifest), actions, limits)
+    if natural_candidate is None:
+        m, report = preflight(json.dumps(manifest), actions, limits)
+    else:
+        from . import natural_specs
+        m, _, _ = natural_specs.compile_candidate(natural_candidate, limits)
+        if (m.model_dump() != manifest or natural_candidate["actions"] != actions):
+            raise DomainError("INVALID_MANIFEST", "Exact compiled natural graph required")
+        report = {"resource_refs": [b.resource_ref for b in m.data_bindings]}
     versions = _source_versions(source_versions)
     if versions != {k: v.model_dump() for k, v in ctx.source_versions.items()}:
         raise DomainError("VERSION_CONFLICT", "Source versions differ from trusted context")
@@ -376,7 +384,7 @@ def derive_manifest_graph(manifest, actions, source_versions, stable_ids, contex
         }
         if action["executor"]["kind"] == "registered_tool":
             rule_refs.add(("tool", action["executor"]["ref"]))
-        else:
+        elif natural_candidate is None:
             rule_refs.add(("prompt", "intern.system.v1"))
         rule_refs.update(("tool", t) for t in action["allowed_tool_refs"])
         for kind, ref in sorted(rule_refs):

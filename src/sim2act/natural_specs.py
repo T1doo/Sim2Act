@@ -580,7 +580,7 @@ def compile_candidate(candidate, limits):
         "goal",
         "model_sample_check",
     }
-    if set(candidate) not in [keys, keys | {"goal_application"}, keys | {"spec_binding"}, keys | {"spec_task"}]:
+    if set(candidate) not in [keys, keys | {"goal_application"}, keys | {"spec_binding"}, keys | {"spec_task"}, keys | {"logic_revision"}]:
         raise DomainError("INVALID_MANIFEST", "Closed natural-spec application required")
     manifest = AppManifest.model_validate(candidate["manifest"])
     declared = manifest.runtime_limits
@@ -614,6 +614,16 @@ def compile_candidate(candidate, limits):
             "Exact independent P-B task recipe marker required")
         rebuilt["manifest"]["origin"] = "task_run"
         rebuilt["manifest"]["source_run_ref"] = task["source_run_id"]
+    if "logic_revision" in candidate:
+        marker = candidate["logic_revision"]
+        require(isinstance(marker,dict) and set(marker) == {"version","step_id"}
+            and marker["version"] == "natural-local-logic.v1"
+            and marker["step_id"] in [s["step_id"] for s in rebuilt["spec_recipe"]["steps"]
+                if s["operator"] == "model.spec.qualifiers"], "Finite local logic revision required")
+        rebuilt["manifest"]["revision"] = 2
+        index = next(i for i,s in enumerate(rebuilt["spec_recipe"]["steps"]) if s["step_id"] == marker["step_id"])
+        rebuilt["actions"][index]["revision"] = 2
+        rebuilt["manifest"]["action_bindings"][index]["revision"] = 2
     require(
         fingerprint(rebuilt) == fingerprint({k: candidate[k] for k in keys}),
         "Natural recipe expansion changed",

@@ -279,7 +279,7 @@ function clearCorrectionView(){
 function correctionButtons(view){
   if(!ownerCurrent(view))return;
   const pending=correctionPending.get(ownerKey(view));
-  $("correction-panel").hidden=!view.spec;
+  $("correction-panel").hidden=!view.spec||!!view.engineering.releases.find(r=>r.id===view.engineering.instance?.release_id)?.snapshot?.natural_logic_source;
   $("correction-prepare").disabled=view.busy||!!pending||view.state?.owner_acceptance!=="REJECTED"||!view.state?.content_access||!!view.state?.current?.human_correction;
   $("correction-submit").disabled=view.busy||!!pending||!view.correctionReview||!$("correction-ack").checked;
   $("correction-recover").disabled=view.busy||!view.rid||!$("correction-key").value.trim();

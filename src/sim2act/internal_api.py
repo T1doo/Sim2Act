@@ -174,6 +174,10 @@ def mount(app, store, limits, identity):
             store.own_project(c, user, row["project_id"])
             lifecycle.validate_frozen_candidate(store, c, user, draft, limits)
             lifecycle.validate_source_bytes(store, c, user, draft)
+            from . import natural_logic_patches as natural_logic
+            natural_logic.validate_family(c,user,aid,row["payload"]["snapshot"])
+            if "natural_logic_source" in row["payload"]["snapshot"]:
+                natural_logic.validate_snapshot(store,c,user,row["payload"]["snapshot"],limits)
             if "execution_source" in row["payload"]["snapshot"]:
                 csv_dag_instances.validate_snapshot(store, c, user, row["payload"]["snapshot"], limits)
             return envelope(**dict(row))
