@@ -2,7 +2,7 @@
 import copy
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import Depends
 from pydantic import Field
@@ -278,23 +278,31 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
 
 @controlled
 def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB):
-    if "natural_logic_source" in release["snapshot"]:
-        raise DomainError("UNSUPPORTED_CAPABILITY", "This finite logic version supports its original source only")
     base = release["snapshot"]["draft"]
+    saved = base["candidate"]
+    logic_origin = release["snapshot"].get("natural_logic_source")
+    if logic_origin is not None:
+        from .natural_logic_patches import release_bound
+        saved = release_bound(store,c,user,release,limits)[0]["candidate"]
     require(saved_family(base["candidate"]) == family
         and instance["source_app_id"] == base["id"] and instance["runtime_id"] == base["runtime_id"]
         and instance["revision"] == body.expected_revision
         and release["fingerprint"] == body.expected_release_fingerprint
         and base["fingerprint"] == body.expected_app_fingerprint
-        and fingerprint(base["candidate"]["spec_recipe"]) == body.expected_recipe_fingerprint)
+        and fingerprint(saved["spec_recipe"]) == body.expected_recipe_fingerprint)
     material, goal = spec.target(store, c, user, instance["project_id"], body.card_id,
         body.expected_goal_version, body.expected_goal_fingerprint, runtime, family=natural.VERSION)
     require(material["hash"] == body.expected_source_hash and material["resource_id"] == body.resource_id)
-    declared = Limits(**base["candidate"]["manifest"]["runtime_limits"])
-    value = natural.expand(base["candidate"]["spec_recipe"], base["id"], goal.card_id,
+    declared = Limits(**saved["manifest"]["runtime_limits"])
+    value = natural.expand(saved["spec_recipe"], base["id"], goal.card_id,
         base["project_id"], material["hash"], material["resource_id"], goal.snapshot["content"],
         declared, base["candidate"]["model_sample_check"]["sample_fingerprint"])
-    if family == PB:
+    if logic_origin is not None:
+        value["logic_revision"] = copy.deepcopy(saved["logic_revision"])
+        value["manifest"]["revision"] = 2
+        value["actions"][2]["revision"] = 2
+        value["manifest"]["action_bindings"][2]["revision"] = 2
+    elif family == PB:
         value["manifest"]["origin"] = "task_run"
         value["manifest"]["source_run_ref"] = base["candidate"]["manifest"]["source_run_ref"]
         value["spec_task"] = {**base["candidate"]["spec_task"], "target_goal_fingerprint": goal.fingerprint}
@@ -315,7 +323,7 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
         app_id=base["id"], runtime_id=base["runtime_id"], instance_id=instance["id"],
         release_id=release["id"], release_fingerprint=release["fingerprint"],
         saved_app_fingerprint=base["fingerprint"], recipe_fingerprint=body.expected_recipe_fingerprint,
-        source_run_id=value["manifest"]["source_run_ref"],
+        source_run_id=base["candidate"]["manifest"]["source_run_ref"],
         source_audit_fingerprint=base_audit(store, c, user, base, family),
         request=body.model_dump(), target_goal=goal.model_dump(),
         variable_bindings=dict(resource_id=material["resource_id"], source_hash=material["hash"],
@@ -326,6 +334,11 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
         preview=natural.preview(material, value, {}), consent=family.consent,
         new_model_requests=0, artifact_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING",
         formal_publication_enabled=False)
+    if logic_origin is not None:
+        result["source_audit_fingerprint"] = fingerprint(dict(original=result["source_audit_fingerprint"],
+            logic_origin=logic_origin,effective_fingerprint=fingerprint(saved)))
+        result["saved_logic_source"] = dict(origin=copy.deepcopy(logic_origin),
+            effective_fingerprint=fingerprint(saved),recipe_fingerprint=fingerprint(saved["spec_recipe"]))
     if family == PA:
         result.update(instance_data_version=instance["data_version"],
             saved_origin={k: copy.deepcopy(base["candidate"][k]) for k in ("goal_application", "spec_binding") if k in base["candidate"]},
@@ -401,6 +414,19 @@ def audit(store, c, user, draft, *, family=PB):
     meta, seal_meta = pair(c, user, rid, family.meta, "accepted", RunScopeInput)
     snapshot = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == rid)).scalar_one()
     body, frozen = pair(c, user, meta.instance_id, family.use, snapshot[family.field]["review"]["request_key"], family.body_type)
+    require(("saved_logic_source" in frozen["reviewed"]) ==
+        (body.review.expected_recipe_fingerprint != fingerprint(base["candidate"]["spec_recipe"])),
+        "Changed recipe requires its independent logic source proof")
+    if "saved_logic_source" in frozen["reviewed"]:
+        from .lifecycle import read_release
+        current: dict[str, Any] = {}
+        release = read_release(store,c,user,meta.release_id,Limits(**snapshot["limits"]),_logic_out=current)
+        require(release["fingerprint"] == frozen["reviewed"]["release_fingerprint"]
+            == snapshot["expected_release_fp"])
+        saved = current["value"]["effective_candidate"]
+        require(frozen["reviewed"]["saved_logic_source"] == dict(
+            origin=release["snapshot"]["natural_logic_source"],effective_fingerprint=fingerprint(saved),
+            recipe_fingerprint=fingerprint(saved["spec_recipe"])), "Current logic source proof changed")
     return fingerprint(dict(base=base_audit(store, c, user, base, family), meta=meta.model_dump(),
         scope_seal=seal_meta, request=body.model_dump(), frozen=frozen))
 

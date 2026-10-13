@@ -781,14 +781,22 @@ $("registered-recovery-refresh").onclick=safe(async()=>{
 });
 
 // Per-Run inputs use the same saved app, Release and instance; old default runs remain explicit.
-let pbUseView=null;
+let pbUseView=null,pbUseRenderGeneration=0;
 const pbUsePending=new Map();
 function pbUseUnknown(iid){return (typeof naturalLogicUnknown==="function"&&naturalLogicUnknown(iid))||[...pbUsePending.values()].some(p=>p.instance_id===iid);}
-function clearPBUse(){if(pbUseView){pbUseView.edit++;pbUseView.panel.remove();pbUseView=null;}}
+function clearPBUse(){pbUseRenderGeneration++;if(pbUseView){pbUseView.edit++;pbUseView.panel.remove();pbUseView=null;}}
 async function renderPBUse(view){
   clearPBUse();if(!engineeringCurrent(view)||!view.instance)return;
-  const candidate=view.draft.candidate,isPB=candidate.spec_task?.kind==="pb_natural_spec_task.v1",isPA=candidate.namespace==="pa-natural-spec-app.v1"&&!candidate.spec_task&&(candidate.goal_application||candidate.spec_binding?.kind==="pa_model_spec_material_binding.v1");
-  if((!isPB&&!isPA)||view.releases.find(r=>r.id===view.instance.release_id)?.snapshot?.natural_logic_source)return;
+  const baseCandidate=view.draft.candidate;let candidate=baseCandidate;const isPB=baseCandidate.spec_task?.kind==="pb_natural_spec_task.v1",isPA=baseCandidate.namespace==="pa-natural-spec-app.v1"&&!baseCandidate.spec_task&&(baseCandidate.goal_application||baseCandidate.spec_binding?.kind==="pa_model_spec_material_binding.v1");
+  if(!isPB&&!isPA)return;
+  const opening={instance:view.instance,selection:view.instanceGeneration,workspace:workspaceSelectionGeneration,connection:identityConnectionGeneration,render:pbUseRenderGeneration};
+  const openingCurrent=()=>engineeringCurrent(view)&&view.instance===opening.instance&&view.instanceGeneration===opening.selection&&workspaceSelectionGeneration===opening.workspace&&identityConnectionGeneration===opening.connection&&pbUseRenderGeneration===opening.render;
+  const selected=await api(`/api/internal/releases/${opening.instance.release_id}`);if(!openingCurrent())return;
+  const selectedFP=await paHash(selected.snapshot);if(!openingCurrent())return;
+  if(selectedFP!==selected.fingerprint)throw Error("VERSION_CONFLICT");
+  const logicOrigin=selected.snapshot?.natural_logic_source;
+  if(selected.id!==view.instance.release_id||selected.fingerprint!==view.instance.release_fingerprint)throw Error("VERSION_CONFLICT");
+  if(logicOrigin){const recipe=structuredClone(baseCandidate.spec_recipe),q=recipe.steps[2],prior=recipe.steps[1],consume=!("prior_items" in q.inputs);for(const [name,field] of [["prior_items","items"],["prior_feedback","feedback"]]){if(consume)q.inputs[name]={source:"step",ref:prior.step_id,field};else delete q.inputs[name];}q.depends_on=[recipe.steps[0].step_id,...(consume?[prior.step_id]:[])];candidate=naturalLogicExpectedCandidate(baseCandidate,recipe,consume);}
   const mode=isPB?{route:"pb-use",namespace:"pb-natural-per-run.v1",consent:"RUN_THIS_SAVED_PB_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"}:{route:"pa-use",namespace:"pa-natural-per-run.v1",consent:"RUN_THIS_SAVED_PA_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"};
   const instance=view.instance,scope=goalRunCanonical([token,view.project,view.app,instance.id,instance.release_id,mode.route]);
   const panel=document.createElement("section");panel.id="pb-use-panel";
@@ -809,7 +817,7 @@ async function renderPBUse(view){
     if(!current()||s.busy||pbUseUnknown(instance.id)||engineeringPending.has(instance.id))return;s.review=null;ack.checked=false;proof.textContent="";s.busy=true;buttons();const generation=s.edit,cid=goal.value,rid=material.value,valid=()=>current()&&generation===s.edit&&goal.value===cid&&material.value===rid;
     try{const card=await api(`/api/goal-cards/${cid}`);if(!valid())return;const snapshot=card.history?.[0]?.snapshot,refs=snapshot?.resource_snapshots;
       if(!refs||refs.length!==1||refs[0].resource_id!==rid)throw Error("所选 Goal 必须明确引用本次材料");
-      const request={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,expected_app_fingerprint:view.draft.fingerprint,expected_recipe_fingerprint:isPB?candidate.spec_task.edited_recipe_fingerprint:await paHash(candidate.spec_recipe),resource_id:rid,card_id:cid,expected_goal_version:card.version,expected_goal_fingerprint:card.fingerprint,expected_source_hash:refs[0].hash,request_key:crypto.randomUUID()};
+      const request={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,expected_app_fingerprint:view.draft.fingerprint,expected_recipe_fingerprint:await paHash(candidate.spec_recipe),resource_id:rid,card_id:cid,expected_goal_version:card.version,expected_goal_fingerprint:card.fingerprint,expected_source_hash:refs[0].hash,request_key:crypto.randomUUID()};
       if(!valid())return;
       const result=await api(`/api/internal/instances/${instance.id}/${mode.route}-reviews`,"POST",request);if(!valid())return;
       const {review_fingerprint,...body}=result,fp=await paHash(body);if(!valid())return;
@@ -817,7 +825,8 @@ async function renderPBUse(view){
       const effectiveFP=await paHash(result.effective_candidate);if(!valid())return;
       if(effectiveFP!==result.effective_fingerprint)throw Error("VERSION_CONFLICT");
       if(result.target_goal?.version!==card.version||result.target_goal.fingerprint!==card.fingerprint||goalSnapshotFP!==card.fingerprint||goalRunCanonical(result.target_goal.snapshot)!==goalRunCanonical(snapshot)||goalRunCanonical(result.effective_candidate?.goal)!==goalRunCanonical(snapshot.content)||result.effective_candidate?.manifest?.goal_ref!==cid)throw Error("VERSION_CONFLICT");
-      if(result.namespace!==mode.namespace||result.app_id!==view.app||result.instance_id!==instance.id||result.release_id!==instance.release_id||result.release_fingerprint!==instance.release_fingerprint||result.runtime_id!==instance.runtime_id||result.principal_id!==instance.principal_id||result.project_id!==view.project||goalRunCanonical(result.request)!==goalRunCanonical(request)||fp!==review_fingerprint||result.saved_app_fingerprint!==view.draft.fingerprint||result.recipe_fingerprint!==request.expected_recipe_fingerprint||result.variable_bindings.resource_id!==rid||result.variable_bindings.source_hash!==request.expected_source_hash||result.target_goal.card_id!==cid||goalRunCanonical(result.effective_candidate.spec_recipe)!==goalRunCanonical(view.draft.candidate.spec_recipe)||result.consent!==mode.consent||result.new_model_requests!==0||result.semantic_status!=="UNKNOWN"||result.owner_acceptance!=="PENDING"||result.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
+      if(result.namespace!==mode.namespace||result.app_id!==view.app||result.instance_id!==instance.id||result.release_id!==instance.release_id||result.release_fingerprint!==instance.release_fingerprint||result.runtime_id!==instance.runtime_id||result.principal_id!==instance.principal_id||result.project_id!==view.project||goalRunCanonical(result.request)!==goalRunCanonical(request)||fp!==review_fingerprint||result.saved_app_fingerprint!==view.draft.fingerprint||result.recipe_fingerprint!==request.expected_recipe_fingerprint||result.variable_bindings.resource_id!==rid||result.variable_bindings.source_hash!==request.expected_source_hash||result.target_goal.card_id!==cid||goalRunCanonical(result.effective_candidate.spec_recipe)!==goalRunCanonical(candidate.spec_recipe)||result.consent!==mode.consent||result.new_model_requests!==0||result.semantic_status!=="UNKNOWN"||result.owner_acceptance!=="PENDING"||result.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
+      if(logicOrigin){const savedFP=await paHash(candidate);if(!valid())return;if(goalRunCanonical(result.saved_logic_source?.origin)!==goalRunCanonical(logicOrigin)||result.saved_logic_source?.effective_fingerprint!==savedFP||result.saved_logic_source?.recipe_fingerprint!==request.expected_recipe_fingerprint||goalRunCanonical(result.effective_candidate.logic_revision)!==goalRunCanonical(candidate.logic_revision)||result.effective_candidate.manifest.revision!==2||result.effective_candidate.actions[2].revision!==2||["goal_application","spec_binding","spec_task"].some(k=>k in result.effective_candidate))throw Error("VERSION_CONFLICT");}
       s.review=result;proof.textContent=JSON.stringify(result,null,2);status.textContent="精确预览已核对：同一 app/Release/实例、保存逻辑、此次材料/Goal与权限预算。尚未运行模型。";
     }catch(error){if(valid())status.textContent=error.detail||error.message;}finally{s.busy=false;buttons();}
   };

@@ -725,7 +725,7 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     # fully validated by load_binding rather than recursively replaying it twice.
     draft = release["snapshot"]["draft"]
     require(is_candidate(draft["candidate"]))
-    if "logic_check" in snapshot or "natural_logic_source" in release["snapshot"]:
+    if "logic_check" in snapshot or ("natural_logic_source" in release["snapshot"] and not ("pb_use" in snapshot or "pa_use" in snapshot)):
         from . import natural_logic_patches as logic
         if "logic_check" in snapshot:
             draft,manifest,report,source,goal = logic.check_job(store,c,user,job,snapshot,release,limits)
