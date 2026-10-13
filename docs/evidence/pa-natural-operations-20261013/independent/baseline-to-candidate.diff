@@ -1,0 +1,681 @@
+diff --git a/src/sim2act/natural_spec_runtime.py b/src/sim2act/natural_spec_runtime.py
+index 92a171ba..d74433bd 100644
+--- a/src/sim2act/natural_spec_runtime.py
++++ b/src/sim2act/natural_spec_runtime.py
+@@ -912,10 +912,9 @@ def advance_model(worker, run):
+                     fence=current["fence"],
+                 ),
+             )
+-            spec.receipts(store, c, current, current_binding)
+             # The last event/receipt callback can change live authority or time.
+-            # Re-read the current contract and all evidence before committing
+-            # VERIFIED, separately from the later project-save transaction.
++            # Check authority before replaying any protected receipts/Attempts,
++            # then re-read the full evidence before committing VERIFIED.
+             fresh = spec.commit_guard(worker, c, run, current_binding)
+             require(
+                 fresh["version"] == current["version"] == meta["run_version"]
+diff --git a/src/sim2act/pa_spec_apps.py b/src/sim2act/pa_spec_apps.py
+index 9eb3dc6b..4022c2f4 100644
+--- a/src/sim2act/pa_spec_apps.py
++++ b/src/sim2act/pa_spec_apps.py
+@@ -1050,6 +1050,7 @@ def advance(worker, run):
+         c.execute(update(runs).where(runs.c.id == job["id"]).values(context=context))
+         c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(status="RUNNING"))
+         store.event(c, job["id"], "SPEC_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=live["fence"]))
++        live = commit_guard(worker, c, run, b)
+         outputs[step["step_id"]] = value
+         proved.append(receipt)
+         if saved:
+@@ -1074,6 +1075,7 @@ def advance(worker, run):
+             state_write(store, c, live, a["id"], "SUCCEEDED", result=result_ref(b, proved, version))
+             store.event(c, job["id"], "SPEC_COMMITTED", dict(result_version=version, artifact_resource=value["resource_id"]))
+             # Recheck authority/lease after terminal writes without requiring RUNNING.
++            require(job_scope_gate(store, c, job["principal_id"], job["id"]))
+             terminal = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence,
+                 runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.worker_id, runs.c.version,
+                 runs.c.fingerprint, runs.c.request_key)
+@@ -1126,6 +1128,34 @@ def mount(app, store, limits, identity):
+     from fastapi import Depends
+     user_dependency = Depends(identity)
+ 
++    @app.get("/api/internal/instances/{iid}/spec-run-requests/{key}")
++    def read_run_request(iid: str, key: str, user=user_dependency):
++        from . import lifecycle
++        with store.tx() as c:
++            instance, release = lifecycle.instance(store, c, user, iid, limits)
++            require(is_candidate(release["snapshot"]["draft"]["candidate"]))
++            rid = c.execute(select(internal_run_bindings.c.run_id)
++                .join(internal_app_runs, internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
++                .where(internal_app_runs.c.instance_id == iid, internal_app_runs.c.principal_id == user,
++                    internal_app_runs.c.request_key == key)).scalar()
++            if rid is None:
++                raise DomainError("OUTCOME_UNKNOWN", "No accepted spec Run for this original key")
++            require(job_scope_gate(store, c, user, rid))
++            job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user,
++                runs.c.project_id == instance["project_id"])).mappings().one()
++            binding, _, _ = verify_job(store, c, user, job, limits)
++            snapshot, app_run = binding["snapshot"], binding["app_run"]
++            require(app_run["request_key"] == key and snapshot["instance_id"] == iid
++                and snapshot["app_run_id"] == app_run["id"])
++            return dict(namespace="spec-run-request.v1", project_id=job["project_id"],
++                principal_id=user, app_id=binding["draft"]["id"], instance_id=iid,
++                run_id=rid, app_run_id=app_run["id"], release_id=snapshot["release_id"],
++                request_key=key, request_fingerprint=snapshot["request_fingerprint"],
++                request=dict(expected_revision=snapshot["expected_revision"],
++                    expected_release_fingerprint=snapshot["expected_release_fp"],
++                    input=snapshot["input"], request_key=key),
++                status=job["status"], new_model_requests=0, project_writes=0)
++
+     @app.get("/api/projects/{pid}/spec-model-candidates")
+     def read_sources(pid: str, user=user_dependency):
+         return source_index(store, user, pid, limits)
+@@ -1140,8 +1170,16 @@ def mount(app, store, limits, identity):
+             output = binding["app_run"]["output"]
+             resource = authorized_read(store, c, user, job["runtime_id"], job["project_id"],
+                 "resource.read", dict(resource_id=output["resource_id"]))
+-            return dict(resource=resource, markdown_view=markdown_view(output["checklist"]),
+-                citation_status="PASS", semantic_goal_acceptance="NOT_RUN")
++            snapshot = binding["snapshot"]
++            return dict(namespace="spec-saved-artifact.v1", project_id=job["project_id"],
++                principal_id=user, app_id=binding["draft"]["id"], run_id=rid,
++                app_run_id=snapshot["app_run_id"], instance_id=snapshot["instance_id"],
++                release_id=snapshot["release_id"], result_version=binding["app_run"]["result_version"],
++                output_fingerprint=fingerprint(output), resource=resource,
++                markdown_view=markdown_view(output["checklist"]), citation_status="PASS",
++                semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
++                owner_acceptance="PENDING", formal_publication_enabled=False,
++                new_model_requests=0, project_writes=0)
+ 
+     @app.get("/api/projects/{pid}/spec-model-runs/{rid}/binding-options")
+     def read_options(pid: str, rid: str, card_id: str, user=user_dependency):
+diff --git a/src/sim2act/text_continuations.py b/src/sim2act/text_continuations.py
+index 7a7e8dc8..04f191f6 100644
+--- a/src/sim2act/text_continuations.py
++++ b/src/sim2act/text_continuations.py
+@@ -41,7 +41,7 @@ PREPARE, META, COMMIT, INDEX = ("text_software_" + s for s in ("prepare", "metad
+ CANCEL, REVOKE = "text_software_cancel", "text_software_revoke"
+ MAX = 64
+ ANCHOR_HASH = "24f26f3621b8fc49a24fa3566484b568148d9317f2d279d79f264416b994193a"
+-QUALIFICATION_HASH = "e3e4bf188a1c4932ba0950916c5fc570da8a4f6a4c47a0f074b1afd4c4d23ba0"
++QUALIFICATION_HASH = "7f9c65c847842687a227f05a4e991901e68387b5343a771cc5c613318ce25543"
+ CHANGED = {"api.py", "app_jobs.py", "internal_api.py", "owner_acceptance.py", "app_owner_goals.py",
+            "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py",
+            "text_workflows.py"}  # Closed new family; old literal compiler/kernel stays byte-identical.
+@@ -130,8 +130,8 @@ def qualified_target(current, anchors):
+             "review_candidate", "normalization", "files"}
+             and proof["version"] == "literal-software-qualification.v1"
+             and proof["anchor_hash"] == ANCHOR_HASH and proof["sources"] == sorted(anchors)
+-            and proof["review_baseline"] == "82717272e61c2fa174ad8772e54cd9e9eb947c49"
+-            and proof["review_candidate"] == "2fa5e92bd184164350451233730b7b78b99c74c3"
++            and proof["review_baseline"] == "147a6da63ecb8fe15b9dea99d1ff8035f31122c3"
++            and proof["review_candidate"] == "07c2acc225f2011f7e502fa022e842cf00c18d6c"
+             and proof["normalization"] == "sole-qualification-hash-literal-zero64.v1")
+         source = Path(__file__).read_bytes()
+         literal = ('QUALIFICATION_HASH = "' + QUALIFICATION_HASH + '"').encode()
+diff --git a/src/sim2act/text_software_qualification.json b/src/sim2act/text_software_qualification.json
+index 7435325e..6b59525b 100644
+--- a/src/sim2act/text_software_qualification.json
++++ b/src/sim2act/text_software_qualification.json
+@@ -39,12 +39,12 @@
+     "model_protocol.py": "1c613c8408537bdcb0f35f6e72b25d72bc28149a74b18683d84bafd261de05d8",
+     "natural_activations.py": "9ff2457f0f2b05ca74bfe66692c001e775afca2c27b1897afd6986ef9196cd2a",
+     "natural_receipt_extraction.py": "68d681fbc487a86851d640b173ce0fc956b6344ea3caa3b7626f57646999a33e",
+-    "natural_spec_runtime.py": "66c94110e6920dffa719de55707187b16a71e1fdf9f095e3e795a9cfa8f98c6c",
++    "natural_spec_runtime.py": "be8dd62232a2d7859ba7f2add68cbc2c71382d947d1ca2019d53e32b8fdf70db",
+     "natural_specs.py": "727bff95f1bc4fb9a61758c66c37ba3876750429ff1b28d8301dd72378f35710",
+     "one_shot_preparation.py": "0c279b0d7521754aa5704aa7bdf4b28edb77f3b937637097bb19ecc22b4a1ce5",
+     "owner_acceptance.py": "f880ff21d66001990bd788b0f79d97f5e186dfadf5f62bd9307e99804f28e2a4",
+     "pa_material_bindings.py": "24170dcf7a450aa6d6c70628b89c3cc76980bcf2ac3c7a1ea98ce88c329e5291",
+-    "pa_spec_apps.py": "17c1b3eff78f1e6e6980b35d9412565e9b19379ddb43c74e0b94fee7ecf72901",
++    "pa_spec_apps.py": "8558e51767a469ac55e47340034cfef4d4d25f54f3748260964e936ecc7fe100",
+     "planning.py": "82d0803e382c3be77f47bcd58577ca818e5d827b441991046956ceaf1977bfc1",
+     "preflight.py": "1b0d5d03602a53bb1e33cbd2d92cea7cc47f3e5616667c35c529a16875a45a61",
+     "probe.py": "55dbc4f56436b53f4c3c394cdcaec38fa4916e180146c3479cc39262e8d539d7",
+@@ -68,7 +68,7 @@
+     "status_report.py": "264450a972bae1f0f1679c4b5adf6ebdbb9c37e89ca32f0f2440eb978e5159b6",
+     "task_acceptance.py": "939e05155406218baf2098fab0d26b363e3b90887666740d6ff148288e1a830f",
+     "text_apps.py": "c61d81eb7095c3df9198bacf6684a7fd995f194846211154b7f25fa05d6bea0a",
+-    "text_continuations.py": "591e3e6e2fbcdcb77190891b1b0af452b9e32c22a57b2f7f2244cb6b1a5636e0",
++    "text_continuations.py": "9ab3790feda3e89f23ae8b48e8d780e3a071873f31f9481442e2892bd661a26d",
+     "text_logic_reuse.py": "5d87ec770eb17f5e2a6ca9b691c44e4230fb164713359070a9cfabb1b96c4045",
+     "text_run_checks.py": "20947d16df445e88d969c96e35eed0d23c18d704ad7d9f4c8f0254b64fb54616",
+     "text_workflows.py": "b8c8921b70d417ae61a5e2d38837c66ca8ce806c7a2088267b1df4803d034039",
+@@ -76,8 +76,8 @@
+     "worker.py": "b015d4ad1e9dbedb6f6be627e56b64001eceeae89cec769c23cb217d799f1c96"
+   },
+   "normalization": "sole-qualification-hash-literal-zero64.v1",
+-  "review_baseline": "82717272e61c2fa174ad8772e54cd9e9eb947c49",
+-  "review_candidate": "2fa5e92bd184164350451233730b7b78b99c74c3",
++  "review_baseline": "147a6da63ecb8fe15b9dea99d1ff8035f31122c3",
++  "review_candidate": "07c2acc225f2011f7e502fa022e842cf00c18d6c",
+   "sources": [
+     "08334fd20f4b3187ca2d5350bff50ec8d24cff881c2f1abaad821bd692bf1d2a",
+     "7f464d1099210fe485bb08ef455267cadf9970d5d1a098b1d00253ee1ad0edee"
+diff --git a/src/sim2act/web/internal.js b/src/sim2act/web/internal.js
+index d0a594c4..13bba5e3 100644
+--- a/src/sim2act/web/internal.js
++++ b/src/sim2act/web/internal.js
+@@ -44,7 +44,8 @@ function engineeringButtons(view) {
+   $("internal-run-submit").disabled=!!view.busy || !view.instance || engineeringPending.has(view.instance.id) || (view.agent && (!view.offlineReplay || !$("internal-term").value.trim()));
+   $("internal-retry").hidden=!view.instance || !engineeringPending.has(view.instance.id);
+   $("internal-retry").disabled=!!view.busy;
+-  $("internal-new-intent").hidden=$("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
++  $("internal-retry").textContent=view.spec ? "仅用原请求键读取运行回执" : "恢复原请求回执";
++  $("internal-new-intent").hidden=view.spec || $("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
+ }
+ async function engineeringAction(view,fn) {
+   if(!view || !engineeringCurrent(view) || view.busy)return;
+@@ -115,6 +116,7 @@ async function showInternalInstance(id,view=engineering) {
+     $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : (view.agent ? "加载对应离线响应并填写本次检索词；后台核查真实授权材料，不调用provider。关闭页面不会取消任务。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。");
+     if(view.workflow)$("internal-run-status").textContent="填写两次独立检索词，明确选择报告分支。报告未选时保留 PARTIAL 与三步回执；只用原请求 key 读取未知结果。";
+     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
++    if(view.spec)$("internal-run-status").textContent=engineeringPending.has(id) ? "本次提交结果尚未确认。仅用原请求键读取回执；不会重发或开始重复运行。" : "运行已保存材料与目标，完成后可读取此版本清单或下载成果。自然规范模型默认关闭；出处核验不代表语义验收。";
+     if(typeof openOwnerReview==="function")await openOwnerReview(view);
+   } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
+   engineeringButtons(view);
+@@ -165,6 +167,7 @@ async function submitInternal(view,retry=false) {
+   let pending=engineeringPending.get(instance.id);
+   if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.spec ? {} : view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
+   if(!pending)return;
++  if(view.spec)return submitSpecRun(view,instance,pending,retry);
+   const requestKey=pending.request_key;
+   const generation=view.instanceGeneration;
+   $("internal-run-status").textContent="正在提交持久任务…";
+@@ -176,6 +179,26 @@ async function submitInternal(view,retry=false) {
+   await showInternalInstance(instance.id,view);
+   if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(accepted.run_id,view,view.instance);
+ }
++async function submitSpecRun(view,instance,pending,retry){
++  const generation=view.instanceGeneration,workspace=workspaceSelectionGeneration;
++  const current=()=>engineeringCurrent(view)&&view.instance?.id===instance.id&&view.instanceGeneration===generation&&workspaceSelectionGeneration===workspace&&engineeringPending.get(instance.id)===pending;
++  $("internal-run-status").textContent=retry ? "正在仅用原请求键读取回执…" : "正在提交已保存规范的后台运行…";
++  let accepted=null;
++  if(!retry){
++    accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
++    if(!current())return;
++  }
++  const receipt=await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}`);
++  if(!current())return;
++  const expected={instance_id:instance.id,expected_revision:pending.expected_revision,expected_release_fp:pending.expected_release_fingerprint,input:pending.input};
++  const requestHash=await paHash(expected);
++  if(!current())return;
++  if(receipt.namespace!=="spec-run-request.v1"||receipt.principal_id!==instance.principal_id||receipt.project_id!==view.project||receipt.app_id!==view.app||receipt.instance_id!==instance.id||receipt.release_id!==instance.release_id||receipt.request_key!==pending.request_key||receipt.request_fingerprint!==requestHash||goalRunCanonical(receipt.request)!==goalRunCanonical(pending)||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||!/^iapprun_[a-f0-9]{32}$/.test(receipt.app_run_id)||receipt.new_model_requests!==0||receipt.project_writes!==0||(accepted&&(accepted.run_id!==receipt.run_id||accepted.app_run_id!==receipt.app_run_id)))throw Error("VERSION_CONFLICT");
++  engineeringPending.delete(instance.id);
++  $("internal-run-status").textContent=`已核对原请求 ${pending.request_key} · ${receipt.status}；回执读取没有重新执行。`;
++  await showInternalInstance(instance.id,view);
++  if(engineeringCurrent(view)&&view.instance?.id===instance.id&&workspaceSelectionGeneration===workspace)await showInternalRun(receipt.run_id,view,view.instance);
++}
+ $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
+   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
+   const inputGeneration=view.inputGeneration;
+@@ -200,6 +223,7 @@ $("internal-refresh").onclick=()=>engineeringAction(engineering,async()=>{const
+ $("internal-back").onclick=()=>{clearInternal();};
+ $("internal-run-form").onsubmit=event=>{event.preventDefault();const view=engineering;return engineeringAction(view,()=>submitInternal(view));};
+ $("internal-new-intent").onclick=()=>{const view=engineering,id=view?.instance?.id;return engineeringAction(view,async()=>{
++  if(view.spec)return;
+   if(!id)return;await showInternalInstance(id,view);
+   if(!engineeringCurrent(view) || view.instance?.id!==id)return;
+   engineeringPending.delete(id);$("internal-run-status").textContent="已读回当前历史并结束本页旧请求重试；不取消任何已接受后台任务。下一次提交是新运行。";
+@@ -276,6 +300,7 @@ function invalidateInternalContent(view) {
+   $("app-frozen-goal-text").textContent="";$("app-frozen-goal").hidden=true;$("app-manifest").textContent="";
+ }
+ function internalResult(record,view) {
++  if(view.spec)return specResult(record,view);
+   if(!view.agent&&!view.literal)return row(`结果 v${record.version} · ${record.release_id} · ${JSON.stringify(record.data.result)}`);
+   const value=record.data.result,node=document.createElement("article");node.className="agent-result";
+   const title=document.createElement("p");title.textContent=`历史结果 v${record.version} · ${record.release_id} · ${view.literal ? "确定性文本工具" : "离线 Replay"} · 字面检查 PASS · 语义 ${value.semantic_status}`;
+@@ -285,6 +310,59 @@ function internalResult(record,view) {
+   if(!value.citations.length)quotes.textContent="无字面命中；不代表语义不存在。";
+   node.append(title,scope,quotes);return node;
+ }
++function specResult(record,view){
++  const instance=view.instance,selection=view.instanceGeneration,value=record.data.result;
++  const run=instance.runs.find(item=>item.app_run_id===record.run_id&&item.result_version===record.version);
++  const node=document.createElement("article"),title=document.createElement("h3"),status=document.createElement("p"),body=document.createElement("div");
++  node.className="spec-result";title.textContent=`规范成果 v${record.version}`;
++  status.setAttribute("role","status");status.textContent="已保存；读取前将重新核对当前权限、来源和此版本内容。语义 UNKNOWN，人工验收 PENDING。";
++  node.append(title,status);let reading=0;
++  const buttons=[];
++  for(const [format,label] of [["view","读取此版本清单"],["json","下载 JSON"],["md","下载 Markdown"]]){
++    const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.specAction=format;buttons.push(button);node.append(button);
++    button.onclick=async()=>{
++      const generation=++reading,workspace=workspaceSelectionGeneration;
++      const current=()=>node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection&&workspaceSelectionGeneration===workspace&&generation===reading;
++      if(!current()||!run)return;
++      buttons.forEach(b=>b.disabled=true);body.replaceChildren();status.textContent="正在读取并核对此版本已保存成果…";
++      try{
++        const saved=await api(`/api/internal/app-run-jobs/${run.id}/spec-artifact`);
++        if(!current())return;
++        const outputHash=await paHash(value);
++        if(!current())return;
++        const bytesHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(saved.resource?.content))),b=>b.toString(16).padStart(2,"0")).join("");
++        if(!current())return;
++        if(saved.namespace!=="spec-saved-artifact.v1"||saved.principal_id!==instance.principal_id||saved.project_id!==view.project||saved.app_id!==view.app||saved.instance_id!==instance.id||saved.run_id!==run.id||saved.app_run_id!==record.run_id||saved.release_id!==record.release_id||saved.result_version!==record.version||saved.output_fingerprint!==outputHash||saved.resource?.resource_id!==value.resource_id||saved.resource.format!=="json"||saved.resource.hash!==value.hash||bytesHash!==value.hash||saved.resource.content!==goalRunCanonical(value.checklist)||saved.markdown_view!==run.markdown_view||typeof saved.markdown_view!=="string"||saved.citation_status!=="PASS"||saved.semantic_status!=="UNKNOWN"||saved.semantic_goal_acceptance!=="NOT_RUN"||saved.owner_acceptance!=="PENDING"||saved.formal_publication_enabled!==false||saved.new_model_requests!==0||saved.project_writes!==0)throw Error("VERSION_CONFLICT");
++        renderSpecChecklist(body,value.checklist);
++        status.textContent=`已核对成果 v${record.version} · 出处 PASS · 语义 UNKNOWN · 人工验收 PENDING。完整原文、条件、例外与未决项保留。`;
++        if(format!=="view"){
++          const url=URL.createObjectURL(new Blob([format==="json"?saved.resource.content:saved.markdown_view],{type:format==="json"?"application/json;charset=utf-8":"text/markdown;charset=utf-8"}));
++          const link=document.createElement("a");link.href=url;link.download=`spec-${instance.id}-v${record.version}.${format}`;node.append(link);link.click();link.remove();URL.revokeObjectURL(url);
++        }
++      }catch(error){if(current()){body.replaceChildren();status.textContent=`成果读取未通过：${error.detail||error.message}。未显示或下载此响应。`;}}
++      finally{if(node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection&&generation===reading)buttons.forEach(b=>b.disabled=false);}
++    };
++  }
++  node.append(body);return node;
++}
++function renderSpecChecklist(node,value){
++  const paragraph=(parent,tag,text)=>{const element=document.createElement(tag);element.textContent=text;parent.append(element);return element;};
++  if(value.check_version!=="natural.spec_citations.v1"){
++    paragraph(node,"pre",JSON.stringify(value,null,2));return;
++  }
++  paragraph(node,"p",`来源 ${value.source.resource_id} · SHA256 ${value.source.hash}`);
++  const labels={requirement:"要求",condition:"条件",exception:"例外",open_question:"未决问题",unclassified:"未分类"};
++  for(const item of value.items){
++    const fact=document.createElement("section");fact.dataset.specKind=item.kind;node.append(fact);
++    paragraph(fact,"h4",`${labels[item.kind]} · ${item.item_id}`);paragraph(fact,"p",item.summary);
++    paragraph(fact,"p",item.targets.length?`模型声明关联：${item.targets.join("、")}；待人工判断关系准确性。`:item.relation_status==="UNASSIGNED"?"关联尚未确定，保留待判断。":item.decision_status==="OPEN"?"此问题仍待决定。":"");
++    for(const cite of item.citations){paragraph(fact,"p",`原文字符 ${cite.start}—${cite.end}（Unicode 码点，右端不含）`);paragraph(fact,"blockquote",cite.quote);}
++  }
++  paragraph(node,"h4","人工未决项");const pending=document.createElement("ul");node.append(pending);for(const text of value.human_unresolved)paragraph(pending,"li",text);
++  paragraph(node,"h4","未被引用覆盖的原文");for(const gap of value.feedback.uncovered)paragraph(node,"blockquote",gap.quote);
++  if(!value.feedback.uncovered.length)paragraph(node,"p","未发现未被引用覆盖的非空白片段；含义与完整性仍待人工判断。");
++  const full=document.createElement("details");node.append(full);paragraph(full,"summary","完整原文（原样保留）");paragraph(full,"pre",value.source_content);
++}
+ function changeAgentInput() {
+   const view=engineering;if(!view || !engineeringCurrent(view) || !(view.agent||view.literal))return;
+   if(view.literal){clearReleaseApproval(view);engineeringButtons(view);return;}
+diff --git a/src/sim2act/web/owner-review.js b/src/sim2act/web/owner-review.js
+index d8f70f47..381e7446 100644
+--- a/src/sim2act/web/owner-review.js
++++ b/src/sim2act/web/owner-review.js
+@@ -105,6 +105,7 @@ async function ownerRead(view,key=null){
+ }
+ async function openOwnerReview(engineeringView){
+   clearOwnerReview();
++  if(engineeringView.spec){$("owner-panel").hidden=false;$("owner-status").textContent="规范清单人工验收 PENDING，语义 UNKNOWN。请阅读成果中的原文、条件、例外和未决项；当前尚不支持提交此家族的人工签收。";for(const id of ["owner-prepare","owner-submit","owner-cancel","owner-revoke","owner-refresh","owner-recover"])$(id).disabled=true;return;}
+   if(engineeringView.workflow){$("owner-panel").hidden=false;$("owner-status").textContent="本应用人工签收 PENDING；四步技术核查不替代语义判断。本切片暂不提交此家族的人工声明。";return;}
+   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
+   const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,state:null,busy:false,readGeneration:0};
+diff --git a/tests/pa_natural_spec_ui.cjs b/tests/pa_natural_spec_ui.cjs
+index cd439367..b4c5818c 100644
+--- a/tests/pa_natural_spec_ui.cjs
++++ b/tests/pa_natural_spec_ui.cjs
+@@ -2,6 +2,7 @@
+ const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
+ const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],hashes={},pending=new Map(),userActions=[],staticResourceLoads=[];
+ let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null,heldOwnerState=null,readOrderEvidence=null;
++const downloads=[],downloadWork=[];
+ readline.createInterface({input:process.stdin}).on("line",line=>{const result=JSON.parse(line),resolve=pending.get(result.id);pending.delete(result.id);resolve(result);});
+ const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
+ const check=(value,label)=>{assert(value,label);checks.push(label);};
+@@ -45,10 +46,17 @@ async function boot(app){
+  const html=await load("/");
+  hashes["index.html"]=crypto.createHash("sha256").update(html).digest("hex");
+  dom=new JSDOM(html,{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
++ const blobs=new Map();w.URL.createObjectURL=blob=>{const key=`blob:offline-${blobs.size}`;blobs.set(key,blob);return key;};w.URL.revokeObjectURL=key=>blobs.delete(key);
++ w.document.addEventListener("click",event=>{const link=event.target.closest("a[download]");if(!link)return;event.preventDefault();const blob=blobs.get(link.href),name=link.download;assert(blob);downloadWork.push(new Promise((resolve,reject)=>{const reader=new w.FileReader();reader.onload=()=>{downloads.push({name,content:reader.result,type:blob.type});resolve();};reader.onerror=reject;reader.readAsText(blob);}));},true);
+  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
+  const css=await load("/app.css");hashes["app.css"]=crypto.createHash("sha256").update(css).digest("hex");const style=w.document.createElement("style");style.textContent=css;w.document.head.append(style);
+  w.fetch=async(url,options={})=>{
+   const request={path:url,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
++  if(fault==="run-lost"&&request.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(url)){fault="";assert.equal(result.status,202);throw Error("actual accepted spec Run response lost");}
++  if(fault==="run-late"&&request.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(url)){fault="";assert.equal(result.status,202);await new Promise(resolve=>hold=resolve);}
++  if(fault==="run-receipt-poison"&&request.method==="GET"&&url.includes("/spec-run-requests/")){fault="";const value=JSON.parse(result.text);value.request_key="not-the-original-key";return new Response(JSON.stringify(value),{status:result.status,headers:{"Content-Type":"application/json"}});}
++  if(fault==="artifact-poison"&&request.method==="GET"&&url.endsWith("/spec-artifact")){fault="";const value=JSON.parse(result.text);value.markdown_view="Unbound changed Markdown";return new Response(JSON.stringify(value),{status:result.status,headers:{"Content-Type":"application/json"}});}
++  if(fault==="artifact-late"&&request.method==="GET"&&url.endsWith("/spec-artifact")){fault="";await new Promise(resolve=>hold=resolve);}
+   if(fault==="binding-lost"&&request.method==="POST"&&url.endsWith("/bindings")){fault="";assert.equal(result.status,201);throw Error("injected accepted typed binding response lost");}
+   if(fault==="binding-late"&&request.method==="POST"&&url.endsWith("/bindings")){fault="";assert.equal(result.status,201);await new Promise(resolve=>hold=resolve);}
+   if(fault==="scope-late"&&request.method==="GET"&&url.endsWith("/application-provider-scopes")){fault="";await new Promise(resolve=>hold=resolve);}
+@@ -133,11 +141,47 @@ async function boot(app){
+  const instance=w.eval("engineering.instance.id"),app=w.eval("activeApp");count=posts();await boot(app);
+  await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instance)));
+  check(posts()===count,"cold page resumes exact instance with reads only");
+- await click("internal-run-submit");await rpc({command:"cold-worker"});await click("internal-refresh");
++ check($("owner-status").textContent.includes("PENDING")&&!requests.some(r=>r.path.endsWith("/owner-review")),"spec states pending human acceptance without unsupported owner API");
++ if(["run-lost","run-late","run-receipt-poison"].includes(info.scenario))fault=info.scenario;
++ if(info.scenario==="run-late"){
++  const action=click("internal-run-submit");await wait(()=>hold);const release=hold;hold=null;await nav("projects");const reads=requests.length;release();await action;
++  check(requests.length===reads,"late accepted Run cannot follow up or paint after workspace switch");await nav("apps");
++ }else await click("internal-run-submit");
++ if(["run-lost","run-late","run-receipt-poison"].includes(info.scenario)){
++  if(info.scenario==="run-receipt-poison"){
++   check($("internal-status").textContent.includes("VERSION_CONFLICT"),"wrong original-key receipt is rejected");
++   await click(appButton("Visible spec app"));await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instance)));
++  }
++  check(!$("internal-retry").hidden&&$("internal-new-intent").hidden,"unknown spec submit retains original-key read and prevents duplicate intent");
++  count=posts();await click("internal-retry");check(posts()===count,"spec Run recovery performs GET only");
++ }
++ await rpc({command:"cold-worker"});await click("internal-refresh");
++ const savedVersion=()=>$("internal-data").querySelector(".spec-result");
++ check(savedVersion()&&!savedVersion().querySelector("blockquote"),"saved version offers explicit authorized content read");
++ if(info.scenario==="artifact-poison"){
++  fault=info.scenario;await click(savedVersion().querySelector('[data-spec-action="md"]'));
++  check(savedVersion().textContent.includes("VERSION_CONFLICT")&&!savedVersion().querySelector("blockquote")&&!downloads.length,"unbound Markdown is neither rendered nor downloaded");
++ }
++ if(info.scenario==="artifact-late"){
++  fault=info.scenario;const action=click(savedVersion().querySelector('[data-spec-action="json"]'));await wait(()=>hold);const release=hold;hold=null;
++  await nav("projects");const reads=requests.length;release();await action;
++  check(!downloads.length&&requests.length===reads&&!savedVersion().querySelector("blockquote"),"late artifact cannot paint or download after workspace switch");
++  await nav("apps");check(!savedVersion().querySelector('[data-spec-action="view"]').disabled,"returning to same result can explicitly read again after a discarded late response");
++ }
++ count=posts();await click(savedVersion().querySelector('[data-spec-action="view"]'));
++ check(posts()===count,"reading saved result creates no business write or model request");
+  check($("internal-data").textContent.includes("garden sensor samples")&&$("internal-data").textContent.includes("winter interval"),"cold actual worker saves newly computed constraints");
++ check(savedVersion().querySelectorAll('[data-spec-kind="condition"]').length===1&&savedVersion().querySelectorAll('[data-spec-kind="exception"]').length===1&&savedVersion().querySelectorAll('[data-spec-kind="open_question"]').length===1,"readable checklist separates condition exception and unresolved decision");
++ check(savedVersion().textContent.includes("Human question 15")&&savedVersion().textContent.includes("语义 UNKNOWN"),"all human unresolved items and semantic boundary remain visible");
++ const artifactReads=requests.filter(r=>r.path.endsWith("/spec-artifact")).length;
++ await click(savedVersion().querySelector('[data-spec-action="json"]'));await click(savedVersion().querySelector('[data-spec-action="md"]'));await Promise.all(downloadWork);
++ check(downloads.length===2&&downloads.every(file=>file.content.includes("garden sensor")&&!file.content.includes("desk lamp")),"JSON and Markdown download bytes contain only current cold material");
++ check(JSON.parse(downloads.find(file=>file.name.endsWith(".json")).content).owner_acceptance==="PENDING","downloaded saved JSON keeps pending semantic acceptance");
++ check(requests.filter(r=>r.path.endsWith("/spec-artifact")).length===artifactReads+2&&posts()===count,"each download rechecks actual authorized artifact through GET only");
++ check(requests.filter(r=>r.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(r.path)).length===1,"exactly one runtime submission despite unknown or delayed response");
+  check(!$("internal-data").textContent.includes("desk lamp"),"old source answers are absent from new output");
+  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/application-runs")).length===1,"one generation submission");
+  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/bindings")).length===1,"one binding submission despite recovery");
+  check(!requests.some(r=>r.method==="POST"&&r.path.includes("application-provider-scopes")),"no model scope or credential setup");
+- fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,model_requests:"SYNTHETIC_ONLY"},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
++ fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,downloads,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,model_requests:"SYNTHETIC_ONLY"},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
+  }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,user_actions:userActions,text:dom?.window.document.body.textContent},null,2));dom?.window.close();process.stderr.write(error.stack+"\n");process.exit(1);}})();
+diff --git a/tests/pa_spec_ui.cjs b/tests/pa_spec_ui.cjs
+index 6ac1bef2..be1bff9c 100644
+--- a/tests/pa_spec_ui.cjs
++++ b/tests/pa_spec_ui.cjs
+@@ -122,6 +122,7 @@ async function boot(app){
+  await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instance)));
+  check(posts()===count,"cold page resumes exact instance with reads only");
+  await click("internal-run-submit");await rpc({command:"cold-worker"});await click("internal-refresh");
++ await click($("internal-data").querySelector('[data-spec-action="view"]'));
+  check($("internal-data").textContent.includes("Stop before the local deadline.")&&$("internal-data").textContent.includes("Preserve manual locks."),"cold actual worker saves newly computed constraints");
+  check(!$("internal-data").textContent.includes("Keep earlier decisions."),"old source answers are absent from new output");
+  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/application-runs")).length===1,"one generation submission");
+diff --git a/tests/test_natural_spec_callback_reads.py b/tests/test_natural_spec_callback_reads.py
+new file mode 100644
+index 00000000..103d7ee8
+--- /dev/null
++++ b/tests/test_natural_spec_callback_reads.py
+@@ -0,0 +1,122 @@
++"""Exact event boundaries: row-cell observations, never a concurrent attack claim."""
++
++import json
++import sqlite3
++import time
++
++import pytest
++from sql_private_barrier import PrivateReadBarrier
++from sqlalchemy import select, update
++from test_natural_spec_apps import enqueue, ready, setup, transport
++
++from sim2act import pa_spec_apps as spec
++from sim2act.db import attempts, grants, internal_instance_data, operations, runs
++from sim2act.errors import DomainError
++from sim2act.worker import Worker
++
++
++class ObservedCells(PrivateReadBarrier):
++    """Let SQLite evaluate cells and record actual values only while armed.
++
++    The inherited guarded views evaluate a UDF per requested cell. This observer
++    does not reject reads, so the production authorization failure still occurs.
++    Synthetic source text is the protected sentinel; no customer data is used.
++    """
++
++    armed = False
++
++    def _authorize(self, action, table, column, database, source):
++        # Observation only: preserve real UPDATE ... response IS NULL CAS.
++        # SELECTs still pass through the inherited value-evaluating TEMP views.
++        return sqlite3.SQLITE_OK
++
++    def _cell(self, table, rid, column, value):
++        if self.armed and rid in self.rules[table][2]:
++            self.evaluated.append(dict(table=table, row_id=rid, column=column,
++                                       nonempty=bool(value),
++                                       synthetic_sentinel="desk lamp" in str(value)))
++        return value
++
++
++@pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
++@pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
++def test_event_authority_change_precedes_private_cell_evaluation(
++    env, monkeypatch, tmp_path, boundary, change
++):
++    data = setup(env)
++    store, settings = data[:2]
++    origin, _, release, inst, _ = ready(data)
++    clock = [time.time()]
++    monkeypatch.setattr(time, "time", lambda: clock[0])
++    # Freeze the finite lifetime before the tested runtime Run is enqueued.
++    with store.tx() as c:
++        c.execute(update(grants).where(grants.c.resource_id == data[5])
++                  .values(expires_at=clock[0] + 1))
++    job = enqueue(data, release, inst)
++    sent = []
++    worker = Worker(store, settings, goal_planner_transport=transport(sent))
++    run = store.claim(worker.id, settings.lease_seconds)
++    assert run["id"] == job
++    barrier = ObservedCells(store, {origin, job}, {data[5]})
++    barrier.rules["attempts"] = (
++        attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
++    )
++    original_event = store.event
++    reached = []
++
++    def event(c, rid, kind, value=None):
++        result = original_event(c, rid, kind, value)
++        if rid == job and kind == boundary and (
++            boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
++        ):
++            assert not reached
++            reached.append(kind)
++            if change == "expiry":
++                clock[0] += 2
++            else:
++                c.execute(update(grants).where(grants.c.resource_id == data[5])
++                          .values(revoked=True))
++            # New runtime operations were created after the observer was set up.
++            barrier.rules["operation_intents"][2].update(c.execute(
++                select(operations.c.id).where(operations.c.run_id == job)).scalars())
++            assert clock[0] < run["lease_until"]
++            assert clock[0] < run["created_at"] + settings.run_seconds
++            barrier.statements.clear()
++            barrier.armed = True
++        return result
++
++    monkeypatch.setattr(store, "event", event)
++    with barrier:
++        # Calibrate real row evaluation against nonempty synthetic protected data.
++        barrier.armed = True
++        with store.engine.connect() as c:
++            c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
++        calibration = list(barrier.evaluated)
++        assert any(cell["synthetic_sentinel"] for cell in calibration)
++        assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
++        barrier.evaluated.clear()
++        barrier.armed = False
++        with pytest.raises(DomainError) as failure:
++            for _ in range(4):
++                spec.advance(worker, run)
++        barrier.armed = False
++        observed = list(barrier.evaluated)
++        proof = dict(boundary=boundary, change=change, reached=reached,
++                     error=failure.value.code, observed=observed, calibration=calibration,
++                     lease_valid=clock[0] < run["lease_until"],
++                     deadline_valid=clock[0] < run["created_at"] + settings.run_seconds,
++                     sql=list(barrier.statements), real_model_requests=0)
++        (tmp_path / "callback-private-cells.json").write_text(json.dumps(proof, indent=2))
++    assert reached == [boundary]
++    assert failure.value.code == "GRANT_REVOKED"
++    with store.tx() as c:
++        assert not c.execute(select(internal_instance_data).where(
++            internal_instance_data.c.instance_id == inst["id"])).first()
++        assert c.execute(select(runs.c.status).where(runs.c.id == job)).scalar_one() != "SUCCEEDED"
++        if boundary == "SPEC_STEP_VERIFIED":
++            assert c.execute(select(attempts.c.status).where(attempts.c.run_id == job)).scalar_one() == "REJECTED_KNOWN"
++            assert c.execute(select(operations.c.receipt).where(
++                operations.c.run_id == job, operations.c.call_id == "infer_pick"
++            )).scalar_one() is None
++    assert len(sent) == 1
++    assert observed == [], "Authorization must be checked before private cells are evaluated"
+diff --git a/tests/test_pa_natural_spec_ui.py b/tests/test_pa_natural_spec_ui.py
+index 67f67613..a68319e8 100644
+--- a/tests/test_pa_natural_spec_ui.py
++++ b/tests/test_pa_natural_spec_ui.py
+@@ -21,7 +21,8 @@ from sim2act.worker import Worker
+ 
+ @pytest.mark.parametrize(
+     "scenario",
+-    ["valid", "binding-lost", "binding-late", "sample-tampered", "sample-nodes-tampered"],
++    ["valid", "binding-lost", "binding-late", "sample-tampered", "sample-nodes-tampered",
++     "run-lost", "run-late", "run-receipt-poison", "artifact-poison", "artifact-late"],
+ )
+ def test_natural_spec_page_actual_nodes_and_cold_material(env, tmp_path, scenario):
+     data = setup(env)
+diff --git a/tests/test_spec_app_operations.py b/tests/test_spec_app_operations.py
+new file mode 100644
+index 00000000..77692082
+--- /dev/null
++++ b/tests/test_spec_app_operations.py
+@@ -0,0 +1,142 @@
++"""Actual read-only recovery/artifact operations for the saved spec app."""
++
++import copy
++import hashlib
++import json
++
++import pytest
++from sqlalchemy import select, update
++from test_natural_spec_apps import enqueue, ready, setup, transport
++
++from sim2act.db import (
++    attempts,
++    fingerprint,
++    grants,
++    internal_app_runs,
++    internal_run_bindings,
++    meta,
++    resources,
++    runs,
++)
++from sim2act.worker import Worker
++
++
++def snapshot(store):
++    with store.tx() as c:
++        return {table.name: sorted((dict(row) for row in c.execute(select(table)).mappings()),
++                                   key=lambda row: json.dumps(row, sort_keys=True, default=str))
++                for table in meta.sorted_tables}
++
++
++def test_original_key_reads_queued_and_completed_without_reexecution(env, tmp_path):
++    data = setup(env)
++    _, app, release, instance, _ = ready(data)
++    job = enqueue(data, release, instance, key="original-key")
++    path = f"/api/internal/instances/{instance['id']}/spec-run-requests/original-key"
++    before = snapshot(data[0])
++    queued = data[2].get(path)
++    assert queued.status_code == 200, queued.text
++    queued = queued.json()
++    assert queued["namespace"] == "spec-run-request.v1"
++    assert queued["run_id"] == job and queued["app_id"] == app
++    assert queued["instance_id"] == instance["id"] and queued["principal_id"] == data[3]
++    assert queued["project_id"] == data[4] and queued["release_id"] == release["id"]
++    assert queued["request"] == dict(expected_revision=1,
++        expected_release_fingerprint=release["fingerprint"], input={}, request_key="original-key")
++    assert queued["request_fingerprint"] == fingerprint(dict(instance_id=instance["id"],
++        expected_revision=1, expected_release_fp=release["fingerprint"], input={}))
++    assert queued["status"] == "QUEUED"
++    assert snapshot(data[0]) == before
++    sent = []
++    assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
++    before = snapshot(data[0])
++    result = data[2].get(path)
++    assert result.status_code == 200, result.text
++    assert result.json() == {**queued, "status": "SUCCEEDED"}
++    assert snapshot(data[0]) == before and len(sent) == 1
++    (tmp_path / "original-key-receipts.json").write_text(json.dumps([queued, result.json()], indent=2))
++
++
++@pytest.mark.parametrize("fault", ["other_user", "missing_key", "binding", "accepted", "revoked"])
++def test_original_key_rejects_wrong_scope_or_changed_receipt(env, tmp_path, fault):
++    from sql_private_barrier import PrivateReadBarrier
++
++    from sim2act.db import events
++
++    data = setup(env)
++    origin, _, release, instance, _ = ready(data)
++    job = enqueue(data, release, instance, key="original-key")
++    path = f"/api/internal/instances/{instance['id']}/spec-run-requests/original-key"
++    if fault == "other_user":
++        data[2].headers["Authorization"] = "Bearer synthetic-test-B"
++    elif fault == "missing_key":
++        path = path.replace("original-key", "never-accepted")
++    else:
++        with data[0].tx() as c:
++            if fault == "revoked":
++                c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
++            elif fault == "accepted":
++                row = c.execute(select(events).where(events.c.run_id == job,
++                    events.c.kind == "ACCEPTED")).mappings().one()
++                c.execute(update(events).where(events.c.id == row["id"])
++                          .values(data={**row["data"], "instance_id": "foreign-instance"}))
++            else:
++                row = c.execute(select(internal_run_bindings).where(
++                    internal_run_bindings.c.run_id == job)).mappings().one()
++                changed = copy.deepcopy(row["snapshot"])
++                changed["request_fingerprint"] = "0" * 64
++                c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == job)
++                          .values(snapshot=changed))
++    before = snapshot(data[0])
++    if fault in {"revoked", "other_user"}:
++        with PrivateReadBarrier(data[0], {origin, job}, {data[5]}) as barrier:
++            response = data[2].get(path)
++            assert response.status_code == 403, response.text
++            assert not barrier.blocked and not barrier.evaluated
++            (tmp_path / "read-barrier.json").write_text(json.dumps(barrier.statements, indent=2))
++    else:
++        response = data[2].get(path)
++        assert response.status_code == (400 if fault == "missing_key" else 409), response.text
++        assert response.json()["error"]["code"] == ("OUTCOME_UNKNOWN" if fault == "missing_key" else "VERSION_CONFLICT")
++    assert snapshot(data[0]) == before
++
++
++@pytest.mark.parametrize("fault", [None, "artifact", "artifact_grant", "source_grant"])
++def test_saved_artifact_exact_scoped_bytes_and_read_only(env, tmp_path, fault):
++    data = setup(env)
++    _, app, release, instance, _ = ready(data)
++    job = enqueue(data, release, instance)
++    sent = []
++    assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
++    with data[0].tx() as c:
++        a = c.execute(select(internal_app_runs).where(
++            internal_app_runs.c.instance_id == instance["id"])).mappings().one()
++        output = a["output"]
++        if fault == "artifact":
++            c.execute(update(resources).where(resources.c.id == output["resource_id"])
++                      .values(content="{}"))
++        elif fault:
++            rid = output["resource_id"] if fault == "artifact_grant" else data[5]
++            c.execute(update(grants).where(grants.c.resource_id == rid).values(revoked=True))
++    before = snapshot(data[0])
++    response = data[2].get(f"/api/internal/app-run-jobs/{job}/spec-artifact")
++    if fault:
++        assert response.status_code == (400 if fault == "artifact" else 403), response.text
++        assert response.json()["error"]["code"] == ("VERIFICATION_FAILED" if fault == "artifact" else "GRANT_REVOKED")
++    else:
++        assert response.status_code == 200, response.text
++        result = response.json()
++        assert result["app_id"] == app and result["run_id"] == job
++        assert result["instance_id"] == instance["id"] and result["release_id"] == release["id"]
++        assert result["app_run_id"] == a["id"] and result["result_version"] == 1
++        assert result["output_fingerprint"] == fingerprint(output)
++        assert result["resource"]["hash"] == hashlib.sha256(result["resource"]["content"].encode()).hexdigest()
++        assert json.loads(result["resource"]["content"]) == output["checklist"]
++        assert "desk lamp" in result["markdown_view"]
++        assert result["semantic_status"] == "UNKNOWN" and result["owner_acceptance"] == "PENDING"
++        assert result["project_writes"] == result["new_model_requests"] == 0
++        (tmp_path / "saved-artifact.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
++    assert snapshot(data[0]) == before and len(sent) == 1
++    with data[0].tx() as c:
++        assert c.execute(select(attempts.c.id).where(attempts.c.run_id == job)).all()
++        assert c.execute(select(runs.c.status).where(runs.c.id == job)).scalar_one() == "SUCCEEDED"

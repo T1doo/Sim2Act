@@ -1,0 +1,151 @@
+F.F...FF..                                                               [100%]
+=================================== FAILURES ===================================
+_______ test_original_key_reads_queued_and_completed_without_reexecution _______
+
+env = (<sim2act.db.Store object at 0x7fec3f222750>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...9732637a5548e08a8bbf43033645bb', 'user_9c2a2fd613184fe28d4c8d8188e53cba', 'proj_49afe5f34af140dcaadd6235c95d4a34', ...)
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/operations-r1-tmp/test_original_key_reads_queued0')
+
+    def test_original_key_reads_queued_and_completed_without_reexecution(env, tmp_path):
+        data = setup(env)
+        _, app, release, instance, _ = ready(data)
+        job = enqueue(data, release, instance, key="original-key")
+        path = f"/api/internal/instances/{instance['id']}/spec-run-requests/original-key"
+        before = snapshot(data[0])
+        queued = data[2].get(path)
+        assert queued.status_code == 200, queued.text
+        queued = queued.json()
+        assert queued["namespace"] == "spec-run-request.v1"
+>       assert queued["run_id"] == job and queued["app_id"] == app["id"]
+                                                               ^^^^^^^^^
+E       TypeError: string indices must be integers, not 'str'
+
+tests/test_spec_app_operations.py:33: TypeError
+____ test_original_key_rejects_wrong_scope_or_changed_receipt[missing_key] _____
+
+env = (<sim2act.db.Store object at 0x7fec3ee3d3d0>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...2bea1bfa814482965436adf6ca9c87', 'user_7ebc5b13329a4ab98c47c155cd6b6417', 'proj_8c334a103ec04b218503b3f584cb59af', ...)
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/operations-r1-tmp/test_original_key_rejects_wron1')
+fault = 'missing_key'
+
+    @pytest.mark.parametrize("fault", ["other_user", "missing_key", "binding", "accepted", "revoked"])
+    def test_original_key_rejects_wrong_scope_or_changed_receipt(env, tmp_path, fault):
+        from sim2act.db import events
+        from sql_private_barrier import PrivateReadBarrier
+    
+        data = setup(env)
+        origin, _, release, instance, _ = ready(data)
+        job = enqueue(data, release, instance, key="original-key")
+        path = f"/api/internal/instances/{instance['id']}/spec-run-requests/original-key"
+        if fault == "other_user":
+            data[2].headers["Authorization"] = "Bearer synthetic-test-B"
+        elif fault == "missing_key":
+            path = path.replace("original-key", "never-accepted")
+        else:
+            with data[0].tx() as c:
+                if fault == "revoked":
+                    c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                elif fault == "accepted":
+                    row = c.execute(select(events).where(events.c.run_id == job,
+                        events.c.kind == "ACCEPTED")).mappings().one()
+                    c.execute(update(events).where(events.c.id == row["id"])
+                              .values(data={**row["data"], "instance_id": "foreign-instance"}))
+                else:
+                    row = c.execute(select(internal_run_bindings).where(
+                        internal_run_bindings.c.run_id == job)).mappings().one()
+                    changed = copy.deepcopy(row["snapshot"])
+                    changed["request_fingerprint"] = "0" * 64
+                    c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == job)
+                              .values(snapshot=changed))
+        before = snapshot(data[0])
+        if fault in {"revoked", "other_user"}:
+            with PrivateReadBarrier(data[0], {origin, job}, {data[5]}) as barrier:
+                response = data[2].get(path)
+                assert response.status_code == 403, response.text
+                assert not barrier.blocked and not barrier.evaluated
+                (tmp_path / "read-barrier.json").write_text(json.dumps(barrier.statements, indent=2))
+        else:
+            response = data[2].get(path)
+>           assert response.status_code == 409, response.text
+E           AssertionError: {"error":{"code":"OUTCOME_UNKNOWN","message":"No accepted spec Run for this original key","safe_retry":false,"effect_known":false,"user_action":"Check status, configuration and permissions"}}
+E           assert 400 == 409
+E            +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_spec_app_operations.py:90: AssertionError
+__________ test_saved_artifact_exact_scoped_bytes_and_read_only[None] __________
+
+env = (<sim2act.db.Store object at 0x7fec3f3cddf0>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...ce6f224c064623a409229a81a13dfb', 'user_f6e58664575e4033b4f2e59a89acb8e7', 'proj_11c8b7920ff54e8388e09b3c3747d1c2', ...)
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/operations-r1-tmp/test_saved_artifact_exact_scop0')
+fault = None
+
+    @pytest.mark.parametrize("fault", [None, "artifact", "artifact_grant", "source_grant"])
+    def test_saved_artifact_exact_scoped_bytes_and_read_only(env, tmp_path, fault):
+        data = setup(env)
+        _, app, release, instance, _ = ready(data)
+        job = enqueue(data, release, instance)
+        sent = []
+        assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
+        with data[0].tx() as c:
+            a = c.execute(select(internal_app_runs).where(
+                internal_app_runs.c.instance_id == instance["id"])).mappings().one()
+            output = a["output"]
+            if fault == "artifact":
+                c.execute(update(resources).where(resources.c.id == output["resource_id"])
+                          .values(content="{}"))
+            elif fault:
+                rid = output["resource_id"] if fault == "artifact_grant" else data[5]
+                c.execute(update(grants).where(grants.c.resource_id == rid).values(revoked=True))
+        before = snapshot(data[0])
+        response = data[2].get(f"/api/internal/app-run-jobs/{job}/spec-artifact")
+        if fault:
+            assert response.status_code in {403, 409}, response.text
+        else:
+            assert response.status_code == 200, response.text
+            result = response.json()
+>           assert result["app_id"] == app["id"] and result["run_id"] == job
+                                       ^^^^^^^^^
+E           TypeError: string indices must be integers, not 'str'
+
+tests/test_spec_app_operations.py:118: TypeError
+________ test_saved_artifact_exact_scoped_bytes_and_read_only[artifact] ________
+
+env = (<sim2act.db.Store object at 0x7fec3cba16d0>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...52493a9f814f3c82faeb22f4281dc5', 'user_5a883cc2845b4450982aefc12c0a01fd', 'proj_bd2116d05d7944849a3223d67bfed2c7', ...)
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/operations-r1-tmp/test_saved_artifact_exact_scop1')
+fault = 'artifact'
+
+    @pytest.mark.parametrize("fault", [None, "artifact", "artifact_grant", "source_grant"])
+    def test_saved_artifact_exact_scoped_bytes_and_read_only(env, tmp_path, fault):
+        data = setup(env)
+        _, app, release, instance, _ = ready(data)
+        job = enqueue(data, release, instance)
+        sent = []
+        assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
+        with data[0].tx() as c:
+            a = c.execute(select(internal_app_runs).where(
+                internal_app_runs.c.instance_id == instance["id"])).mappings().one()
+            output = a["output"]
+            if fault == "artifact":
+                c.execute(update(resources).where(resources.c.id == output["resource_id"])
+                          .values(content="{}"))
+            elif fault:
+                rid = output["resource_id"] if fault == "artifact_grant" else data[5]
+                c.execute(update(grants).where(grants.c.resource_id == rid).values(revoked=True))
+        before = snapshot(data[0])
+        response = data[2].get(f"/api/internal/app-run-jobs/{job}/spec-artifact")
+        if fault:
+>           assert response.status_code in {403, 409}, response.text
+E           AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"VERIFICATION_FAILED","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E           assert 400 in {403, 409}
+E            +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_spec_app_operations.py:114: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_spec_app_operations.py::test_original_key_reads_queued_and_completed_without_reexecution
+FAILED tests/test_spec_app_operations.py::test_original_key_rejects_wrong_scope_or_changed_receipt[missing_key]
+FAILED tests/test_spec_app_operations.py::test_saved_artifact_exact_scoped_bytes_and_read_only[None]
+FAILED tests/test_spec_app_operations.py::test_saved_artifact_exact_scoped_bytes_and_read_only[artifact]
+4 failed, 6 passed, 1 warning in 163.83s (0:02:43)

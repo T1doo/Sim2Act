@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="94.575" timestamp="2026-10-13T02:50:15.486087+00:00" hostname="9809f76d2248"><testcase classname="tests.test_natural_spec_callback_reads" name="test_event_authority_change_precedes_private_cell_evaluation[expiry-SPEC_STEP_VERIFIED]" time="18.783"><failure message="AssertionError: Authorization must be checked before private cells are evaluated&#10;assert [{'column': '...': True, ...}] == []&#10;  &#10;  Left contains 5 more items, first extra item: {'column': 'receipt', 'nonempty': True, 'row_id': 'run_e080684551ed47e5af34013357d55e64', 'synthetic_sentinel': True, ...}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7f0631a602c0&gt;, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...fa6204e30d45eda2f4e254bbbbc18e', 'user_4a673537048740dfb2a1d21a5f0eab60', 'proj_a3d934682442415cba598f97f7b45e4c', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f063197f890&gt;
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r3-tmp/test_event_authority_change_pr0')
+boundary = 'SPEC_STEP_VERIFIED', change = 'expiry'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] &lt; run["lease_until"]
+                assert clock[0] &lt; run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+                    spec.advance(worker, run)
+            barrier.armed = False
+            observed = list(barrier.evaluated)
+            proof = dict(boundary=boundary, change=change, reached=reached,
+                         error=failure.value.code, observed=observed, calibration=calibration,
+                         lease_valid=clock[0] &lt; run["lease_until"],
+                         deadline_valid=clock[0] &lt; run["created_at"] + settings.run_seconds,
+                         sql=list(barrier.statements), real_model_requests=0)
+            (tmp_path / "callback-private-cells.json").write_text(json.dumps(proof, indent=2))
+        assert reached == [boundary]
+        assert failure.value.code == "GRANT_REVOKED"
+        with store.tx() as c:
+            assert not c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == inst["id"])).first()
+            assert c.execute(select(runs.c.status).where(runs.c.id == job)).scalar_one() != "SUCCEEDED"
+            if boundary == "SPEC_STEP_VERIFIED":
+                assert c.execute(select(attempts.c.status).where(attempts.c.run_id == job)).scalar_one() == "REJECTED_KNOWN"
+                assert c.execute(select(operations.c.receipt).where(
+                    operations.c.run_id == job, operations.c.call_id == "infer_pick"
+                )).scalar_one() is None
+        assert len(sent) == 1
+&gt;       assert observed == [], "Authorization must be checked before private cells are evaluated"
+E       AssertionError: Authorization must be checked before private cells are evaluated
+E       assert [{'column': '...': True, ...}] == []
+E         
+E         Left contains 5 more items, first extra item: {'column': 'receipt', 'nonempty': True, 'row_id': 'run_e080684551ed47e5af34013357d55e64', 'synthetic_sentinel': True, ...}
+E         Use -v to get more diff
+
+tests/test_natural_spec_callback_reads.py:119: AssertionError</failure></testcase><testcase classname="tests.test_natural_spec_callback_reads" name="test_event_authority_change_precedes_private_cell_evaluation[expiry-SPEC_COMMITTED]" time="31.112"><failure message="AssertionError: Authorization must be checked before private cells are evaluated&#10;assert [{'column': '...: False, ...}] == []&#10;  &#10;  Left contains 5 more items, first extra item: {'column': 'goal', 'nonempty': True, 'row_id': 'run_3a2f6ba45485485ba43f99a9f9274dbd', 'synthetic_sentinel': False, ...}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7f062bf75070&gt;, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...4c5a52eeac403c83c4f0a33363a5a9', 'user_7ec911d3286f4d528d449b9235e9c660', 'proj_9e2534850af14a498a0cbbf497820248', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f062b211670&gt;
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r3-tmp/test_event_authority_change_pr1')
+boundary = 'SPEC_COMMITTED', change = 'expiry'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] &lt; run["lease_until"]
+                assert clock[0] &lt; run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+                    spec.advance(worker, run)
+            barrier.armed = False
+            observed = list(barrier.evaluated)
+            proof = dict(boundary=boundary, change=change, reached=reached,
+                         error=failure.value.code, observed=observed, calibration=calibration,
+                         lease_valid=clock[0] &lt; run["lease_until"],
+                         deadline_valid=clock[0] &lt; run["created_at"] + settings.run_seconds,
+                         sql=list(barrier.statements), real_model_requests=0)
+            (tmp_path / "callback-private-cells.json").write_text(json.dumps(proof, indent=2))
+        assert reached == [boundary]
+        assert failure.value.code == "GRANT_REVOKED"
+        with store.tx() as c:
+            assert not c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == inst["id"])).first()
+            assert c.execute(select(runs.c.status).where(runs.c.id == job)).scalar_one() != "SUCCEEDED"
+            if boundary == "SPEC_STEP_VERIFIED":
+                assert c.execute(select(attempts.c.status).where(attempts.c.run_id == job)).scalar_one() == "REJECTED_KNOWN"
+                assert c.execute(select(operations.c.receipt).where(
+                    operations.c.run_id == job, operations.c.call_id == "infer_pick"
+                )).scalar_one() is None
+        assert len(sent) == 1
+&gt;       assert observed == [], "Authorization must be checked before private cells are evaluated"
+E       AssertionError: Authorization must be checked before private cells are evaluated
+E       assert [{'column': '...: False, ...}] == []
+E         
+E         Left contains 5 more items, first extra item: {'column': 'goal', 'nonempty': True, 'row_id': 'run_3a2f6ba45485485ba43f99a9f9274dbd', 'synthetic_sentinel': False, ...}
+E         Use -v to get more diff
+
+tests/test_natural_spec_callback_reads.py:119: AssertionError</failure></testcase><testcase classname="tests.test_natural_spec_callback_reads" name="test_event_authority_change_precedes_private_cell_evaluation[injected_revoke-SPEC_STEP_VERIFIED]" time="18.332"><failure message="AssertionError: Authorization must be checked before private cells are evaluated&#10;assert [{'column': '...': True, ...}] == []&#10;  &#10;  Left contains 5 more items, first extra item: {'column': 'receipt', 'nonempty': True, 'row_id': 'run_06edfcc203db44c29405172b88d3b962', 'synthetic_sentinel': True, ...}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7f06317618b0&gt;, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...6898bf53aa4089a0f27d10c17a2489', 'user_05455adb4c734595aea4beaa0e58c400', 'proj_73044f88cb8f4e6a939b24cbd653ea57', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f062bf750d0&gt;
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r3-tmp/test_event_authority_change_pr2')
+boundary = 'SPEC_STEP_VERIFIED', change = 'injected_revoke'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] &lt; run["lease_until"]
+                assert clock[0] &lt; run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+                    spec.advance(worker, run)
+            barrier.armed = False
+            observed = list(barrier.evaluated)
+            proof = dict(boundary=boundary, change=change, reached=reached,
+                         error=failure.value.code, observed=observed, calibration=calibration,
+                         lease_valid=clock[0] &lt; run["lease_until"],
+                         deadline_valid=clock[0] &lt; run["created_at"] + settings.run_seconds,
+                         sql=list(barrier.statements), real_model_requests=0)
+            (tmp_path / "callback-private-cells.json").write_text(json.dumps(proof, indent=2))
+        assert reached == [boundary]
+        assert failure.value.code == "GRANT_REVOKED"
+        with store.tx() as c:
+            assert not c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == inst["id"])).first()
+            assert c.execute(select(runs.c.status).where(runs.c.id == job)).scalar_one() != "SUCCEEDED"
+            if boundary == "SPEC_STEP_VERIFIED":
+                assert c.execute(select(attempts.c.status).where(attempts.c.run_id == job)).scalar_one() == "REJECTED_KNOWN"
+                assert c.execute(select(operations.c.receipt).where(
+                    operations.c.run_id == job, operations.c.call_id == "infer_pick"
+                )).scalar_one() is None
+        assert len(sent) == 1
+&gt;       assert observed == [], "Authorization must be checked before private cells are evaluated"
+E       AssertionError: Authorization must be checked before private cells are evaluated
+E       assert [{'column': '...': True, ...}] == []
+E         
+E         Left contains 5 more items, first extra item: {'column': 'receipt', 'nonempty': True, 'row_id': 'run_06edfcc203db44c29405172b88d3b962', 'synthetic_sentinel': True, ...}
+E         Use -v to get more diff
+
+tests/test_natural_spec_callback_reads.py:119: AssertionError</failure></testcase><testcase classname="tests.test_natural_spec_callback_reads" name="test_event_authority_change_precedes_private_cell_evaluation[injected_revoke-SPEC_COMMITTED]" time="25.995"><failure message="AssertionError: Authorization must be checked before private cells are evaluated&#10;assert [{'column': '...: False, ...}] == []&#10;  &#10;  Left contains 5 more items, first extra item: {'column': 'goal', 'nonempty': True, 'row_id': 'run_015d3ae65b194f1891456e3fdc640c59', 'synthetic_sentinel': False, ...}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7f062bbfaf00&gt;, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...765cacc83345a89b62f85512937c55', 'user_a05bad9c24db48c6a8b862da84540776', 'proj_8a4f58f7b9944779a3cc02ab3b3b3dac', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f06314064b0&gt;
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r3-tmp/test_event_authority_change_pr3')
+boundary = 'SPEC_COMMITTED', change = 'injected_revoke'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] &lt; run["lease_until"]
+                assert clock[0] &lt; run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+                    spec.advance(worker, run)
+            barrier.armed = False
+            observed = list(barrier.evaluated)
+            proof = dict(boundary=boundary, change=change, reached=reached,
+                         error=failure.value.code, observed=observed, calibration=calibration,
+                         lease_valid=clock[0] &lt; run["lease_until"],
+                         deadline_valid=clock[0] &lt; run["created_at"] + settings.run_seconds,
+                         sql=list(barrier.statements), real_model_requests=0)
+            (tmp_path / "callback-private-cells.json").write_text(json.dumps(proof, indent=2))
+        assert reached == [boundary]
+        assert failure.value.code == "GRANT_REVOKED"
+        with store.tx() as c:
+            assert not c.execute(select(internal_instance_data).where(
+                internal_instance_data.c.instance_id == inst["id"])).first()
+            assert c.execute(select(runs.c.status).where(runs.c.id == job)).scalar_one() != "SUCCEEDED"
+            if boundary == "SPEC_STEP_VERIFIED":
+                assert c.execute(select(attempts.c.status).where(attempts.c.run_id == job)).scalar_one() == "REJECTED_KNOWN"
+                assert c.execute(select(operations.c.receipt).where(
+                    operations.c.run_id == job, operations.c.call_id == "infer_pick"
+                )).scalar_one() is None
+        assert len(sent) == 1
+&gt;       assert observed == [], "Authorization must be checked before private cells are evaluated"
+E       AssertionError: Authorization must be checked before private cells are evaluated
+E       assert [{'column': '...: False, ...}] == []
+E         
+E         Left contains 5 more items, first extra item: {'column': 'goal', 'nonempty': True, 'row_id': 'run_015d3ae65b194f1891456e3fdc640c59', 'synthetic_sentinel': False, ...}
+E         Use -v to get more diff
+
+tests/test_natural_spec_callback_reads.py:119: AssertionError</failure></testcase></testsuite></testsuites>

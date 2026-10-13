@@ -1,0 +1,1014 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_event_authority_change_precedes_private_cell_evaluation[expiry-SPEC_STEP_VERIFIED] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f12d7259220>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dd55fe00>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d777f890>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f12dc1f0530>
+parameters = [('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_toke...3f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5896802959905472, 'attempt_5b057737ca1741bca21d1e0eb3016340', ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dd55fe00>
+cursor = <sqlite3.Cursor object at 0x7f12d6cbf6c0>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...43f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5896802959905472, 'attempt_5b057737ca1741bca21d1e0eb3016340', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d777f890>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.DatabaseError: access to attempts.response is prohibited
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f12dd6318b0>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...fa723bdfb842b9a02f3bb90d3f3e4e', 'user_b81a63829a87454c97d4820e23f3d049', 'proj_b4896afa20b84ddc977145d707f293d8', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12dd4568d0>
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r2-tmp/test_event_authority_change_pr0')
+boundary = 'SPEC_STEP_VERIFIED', change = 'expiry'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] < run["lease_until"]
+                assert clock[0] < run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+>                   spec.advance(worker, run)
+
+tests/test_natural_spec_callback_reads.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:1006: in advance
+    handled = advance_model(worker, run)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:788: in advance_model
+    changed = c.execute(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dd55fe00>
+cursor = <sqlite3.Cursor object at 0x7f12d6cbf6c0>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...43f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5896802959905472, 'attempt_5b057737ca1741bca21d1e0eb3016340', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d777f890>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.DatabaseError: (sqlite3.DatabaseError) access to attempts.response is prohibited
+E       [SQL: UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL]
+E       [parameters: ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_tokens": 1000}}', '{"received_raw": "{\\"model\\":\\"intern-s2\\",\\"choices\\":[{\\"finish_reason\\":\\"stop\\",\\"message\\":{\\"role\\":\\"assistant\\",\\"content\\" ... (1607 characters truncated) ... kens\\":1000}}", "raw_evidence": {"status": "COMPLETE", "bytes": 1186, "sha256": "14fc1f2757f35355d1443f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5896802959905472, 'attempt_5b057737ca1741bca21d1e0eb3016340', 'run_8364fc8576c7427da9c7e5dd3be4e98f', 'STARTED')]
+E       (Background on this error at: https://sqlalche.me/e/20/4xp6)
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+_ test_event_authority_change_precedes_private_cell_evaluation[expiry-SPEC_COMMITTED] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f12d60e1cd0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dcdcd640>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d5b7f890>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f12dc52a1b0>
+parameters = [('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_toke...3f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5089249199954793, 'attempt_635ffa52dd724a57a2c55b7cbeff1b7c', ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dcdcd640>
+cursor = <sqlite3.Cursor object at 0x7f12d686ee40>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...43f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5089249199954793, 'attempt_635ffa52dd724a57a2c55b7cbeff1b7c', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d5b7f890>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.DatabaseError: access to attempts.response is prohibited
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f12dc321e50>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...1f4936ab63432c8db78fe7149b8df8', 'user_754d89b40a574f25868f7d8e4a89d422', 'proj_26e8d499ffc74cf69fcabe5517c10be8', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12d5e114c0>
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r2-tmp/test_event_authority_change_pr1')
+boundary = 'SPEC_COMMITTED', change = 'expiry'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] < run["lease_until"]
+                assert clock[0] < run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+>                   spec.advance(worker, run)
+
+tests/test_natural_spec_callback_reads.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:1006: in advance
+    handled = advance_model(worker, run)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:788: in advance_model
+    changed = c.execute(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dcdcd640>
+cursor = <sqlite3.Cursor object at 0x7f12d686ee40>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...43f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5089249199954793, 'attempt_635ffa52dd724a57a2c55b7cbeff1b7c', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d5b7f890>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.DatabaseError: (sqlite3.DatabaseError) access to attempts.response is prohibited
+E       [SQL: UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL]
+E       [parameters: ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_tokens": 1000}}', '{"received_raw": "{\\"model\\":\\"intern-s2\\",\\"choices\\":[{\\"finish_reason\\":\\"stop\\",\\"message\\":{\\"role\\":\\"assistant\\",\\"content\\" ... (1607 characters truncated) ... kens\\":1000}}", "raw_evidence": {"status": "COMPLETE", "bytes": 1186, "sha256": "14fc1f2757f35355d1443f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.5089249199954793, 'attempt_635ffa52dd724a57a2c55b7cbeff1b7c', 'run_c1c04e8dc45344afb3088a606553bfef', 'STARTED')]
+E       (Background on this error at: https://sqlalche.me/e/20/4xp6)
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+_ test_event_authority_change_precedes_private_cell_evaluation[injected_revoke-SPEC_STEP_VERIFIED] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f12dc2a56a0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dd17c800>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d77de5a0>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f12d77dc740>
+parameters = [('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_toke...43f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.481642703001853, 'attempt_435c77609371498d98a2eb06d2ea6384', ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dd17c800>
+cursor = <sqlite3.Cursor object at 0x7f12d6c509c0>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...443f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.481642703001853, 'attempt_435c77609371498d98a2eb06d2ea6384', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d77de5a0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.DatabaseError: access to attempts.response is prohibited
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f12d7524cb0>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...be2f86b03d4753a16feb8562b4d95c', 'user_9c681ae3e2a24b608e20745d3a4c5821', 'proj_c676b141c8224223a333c5b4f9062d34', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12dcdcc200>
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r2-tmp/test_event_authority_change_pr2')
+boundary = 'SPEC_STEP_VERIFIED', change = 'injected_revoke'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] < run["lease_until"]
+                assert clock[0] < run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+>                   spec.advance(worker, run)
+
+tests/test_natural_spec_callback_reads.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:1006: in advance
+    handled = advance_model(worker, run)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:788: in advance_model
+    changed = c.execute(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12dd17c800>
+cursor = <sqlite3.Cursor object at 0x7f12d6c509c0>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...443f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.481642703001853, 'attempt_435c77609371498d98a2eb06d2ea6384', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12d77de5a0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.DatabaseError: (sqlite3.DatabaseError) access to attempts.response is prohibited
+E       [SQL: UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL]
+E       [parameters: ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_tokens": 1000}}', '{"received_raw": "{\\"model\\":\\"intern-s2\\",\\"choices\\":[{\\"finish_reason\\":\\"stop\\",\\"message\\":{\\"role\\":\\"assistant\\",\\"content\\" ... (1607 characters truncated) ... kens\\":1000}}", "raw_evidence": {"status": "COMPLETE", "bytes": 1186, "sha256": "14fc1f2757f35355d1443f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.481642703001853, 'attempt_435c77609371498d98a2eb06d2ea6384', 'run_f4fd82c10b214faf98b5212f809ae776', 'STARTED')]
+E       (Background on this error at: https://sqlalche.me/e/20/4xp6)
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+_ test_event_authority_change_precedes_private_cell_evaluation[injected_revoke-SPEC_COMMITTED] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f12dd3df890>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12d77fb4d0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12dd2d8800>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f12dd2d8620>
+parameters = [('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_toke...3f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.4960393499932252, 'attempt_dd307833c4fd48b3931777160df1fab9', ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12d77fb4d0>
+cursor = <sqlite3.Cursor object at 0x7f12d6496b40>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...43f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.4960393499932252, 'attempt_dd307833c4fd48b3931777160df1fab9', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12dd2d8800>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.DatabaseError: access to attempts.response is prohibited
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f12dc386510>, Settings(database_url='sqlite:////workspace/pa-natural-operations-eviden...8d8a169d2f4153bc04e57c31265db2', 'user_9649a595ec354d8eb3cc3168fc37b417', 'proj_c3ed592bb8de455d817e834734c94739', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12dd31c2f0>
+tmp_path = PosixPath('/workspace/pa-natural-operations-evidence-20261013/author/red-callback-r2-tmp/test_event_authority_change_pr3')
+boundary = 'SPEC_COMMITTED', change = 'injected_revoke'
+
+    @pytest.mark.parametrize("boundary", ["SPEC_STEP_VERIFIED", "SPEC_COMMITTED"])
+    @pytest.mark.parametrize("change", ["expiry", "injected_revoke"])
+    def test_event_authority_change_precedes_private_cell_evaluation(
+        env, monkeypatch, tmp_path, boundary, change
+    ):
+        data = setup(env)
+        store, settings = data[:2]
+        origin, _, release, inst, _ = ready(data)
+        clock = [time.time()]
+        monkeypatch.setattr(time, "time", lambda: clock[0])
+        # Freeze the finite lifetime before the tested runtime Run is enqueued.
+        with store.tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == data[5])
+                      .values(expires_at=clock[0] + 1))
+        job = enqueue(data, release, inst)
+        sent = []
+        worker = Worker(store, settings, goal_planner_transport=transport(sent))
+        run = store.claim(worker.id, settings.lease_seconds)
+        assert run["id"] == job
+        barrier = ObservedCells(store, {origin, job}, {data[5]})
+        barrier.rules["attempts"] = (
+            attempts, "run_id", {origin, job}, {"parameters", "response", "usage"}
+        )
+        original_event = store.event
+        reached = []
+    
+        def event(c, rid, kind, value=None):
+            result = original_event(c, rid, kind, value)
+            if rid == job and kind == boundary and (
+                boundary == "SPEC_COMMITTED" or value["step_id"] == "infer_pick"
+            ):
+                assert not reached
+                reached.append(kind)
+                if change == "expiry":
+                    clock[0] += 2
+                else:
+                    c.execute(update(grants).where(grants.c.resource_id == data[5])
+                              .values(revoked=True))
+                assert clock[0] < run["lease_until"]
+                assert clock[0] < run["created_at"] + settings.run_seconds
+                barrier.statements.clear()
+                barrier.armed = True
+            return result
+    
+        monkeypatch.setattr(store, "event", event)
+        with barrier:
+            # Calibrate real row evaluation against nonempty synthetic protected data.
+            barrier.armed = True
+            with store.engine.connect() as c:
+                c.execute(select(attempts).where(attempts.c.run_id == origin)).mappings().all()
+            calibration = list(barrier.evaluated)
+            assert any(cell["synthetic_sentinel"] for cell in calibration)
+            assert {cell["column"] for cell in calibration} == {"parameters", "response", "usage"}
+            barrier.evaluated.clear()
+            barrier.armed = False
+            with pytest.raises(DomainError) as failure:
+                for _ in range(4):
+>                   spec.advance(worker, run)
+
+tests/test_natural_spec_callback_reads.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:1006: in advance
+    handled = advance_model(worker, run)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:788: in advance_model
+    changed = c.execute(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f12d77fb4d0>
+cursor = <sqlite3.Cursor object at 0x7f12d6496b40>
+statement = 'UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL'
+parameters = ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_token...43f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.4960393499932252, 'attempt_dd307833c4fd48b3931777160df1fab9', ...)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f12dd2d8800>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.DatabaseError: (sqlite3.DatabaseError) access to attempts.response is prohibited
+E       [SQL: UPDATE attempts SET response_model=?, status=?, usage=?, response=?, elapsed=? WHERE attempts.id = ? AND attempts.run_id = ? AND attempts.status = ? AND attempts.response IS NULL]
+E       [parameters: ('intern-s2', 'RECEIVED', '{"status": "known", "tokens": {"prompt_tokens": 100, "completion_tokens": 900, "total_tokens": 1000}}', '{"received_raw": "{\\"model\\":\\"intern-s2\\",\\"choices\\":[{\\"finish_reason\\":\\"stop\\",\\"message\\":{\\"role\\":\\"assistant\\",\\"content\\" ... (1607 characters truncated) ... kens\\":1000}}", "raw_evidence": {"status": "COMPLETE", "bytes": 1186, "sha256": "14fc1f2757f35355d1443f767bedb8ea0c9c3b79d5472e6f5e7820ba5c38d51c"}}', 1.4960393499932252, 'attempt_dd307833c4fd48b3931777160df1fab9', 'run_45a980ea40f547aaa844bce0c53ef2eb', 'STARTED')]
+E       (Background on this error at: https://sqlalche.me/e/20/4xp6)
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: DatabaseError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_spec_callback_reads.py::test_event_authority_change_precedes_private_cell_evaluation[expiry-SPEC_STEP_VERIFIED]
+FAILED tests/test_natural_spec_callback_reads.py::test_event_authority_change_precedes_private_cell_evaluation[expiry-SPEC_COMMITTED]
+FAILED tests/test_natural_spec_callback_reads.py::test_event_authority_change_precedes_private_cell_evaluation[injected_revoke-SPEC_STEP_VERIFIED]
+FAILED tests/test_natural_spec_callback_reads.py::test_event_authority_change_precedes_private_cell_evaluation[injected_revoke-SPEC_COMMITTED]
+4 failed, 1 warning in 60.18s (0:01:00)
