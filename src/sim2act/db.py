@@ -24,6 +24,7 @@ from sqlalchemy import (
     text,
     update,
 )
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.exc import IntegrityError
 
 from .contracts import FrozenRunContract, GoalSpec, Limits, ResourceSnapshot
@@ -571,6 +572,15 @@ class Store:
         ):
             raise ValueError("PostgreSQL required outside engineering tests")
         self.engine = create_engine(url, pool_pre_ping=True)
+
+        def proof_write_boundary(connection, cursor, statement, parameters, context, executemany):
+            # Conservatively invalidate ephemeral same-call proofs for every
+            # non-SELECT statement, including raw SQL, CTEs and failed writes.
+            if not statement.lstrip().upper().startswith("SELECT "):
+                connection.info["source_proof_write_epoch"] = (
+                    connection.info.get("source_proof_write_epoch", 0) + 1)
+
+        sqlalchemy_event.listen(self.engine, "before_cursor_execute", proof_write_boundary)
         self.sqlite = self.engine.dialect.name == "sqlite"
         self.test_only = test_only  # Explicit fixture guard; production entrypoints leave False.
 
@@ -944,13 +954,21 @@ class Store:
             or r["status"] not in {"RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"}
         ):
             raise DomainError("VERSION_CONFLICT", "Stale worker lease")
-        self.frozen_contract(c, r)
+        self._frozen_contract_after_scope(c, r)
         return dict(r)
 
     def frozen_contract(self, c, run):
         from .goal_applications import source_scope_gate
 
         source_scope_gate(self, c, run["id"])
+        return self._frozen_contract_after_scope(c, run)
+
+    def _frozen_contract_after_scope(self, c, run):
+        """Only after source_scope_gate in this same read-only call segment.
+
+        Internal callers must not cross writes, callbacks or transactions. The
+        complete typed/hash/resource/Goal validation is always performed.
+        """
         if not isinstance(run["context"], dict):
             raise DomainError("VERSION_CONFLICT", "Invalid persisted Run context")
         saved = (
@@ -1118,12 +1136,18 @@ class Store:
             else:
                 c.execute(insert(heartbeats).values(id=worker_id, at=time.time()))
             if run_id:
-                self.guard(c, run_id, fence)
-                c.execute(
+                current = self.guard(c, run_id, fence)
+                now = time.time()
+                renewed = c.execute(
                     update(runs)
-                    .where(runs.c.id == run_id)
-                    .values(lease_until=time.time() + lease_seconds)
+                    .where(runs.c.id == run_id, runs.c.worker_id == worker_id,
+                        runs.c.fence == fence, runs.c.lease_until == current["lease_until"],
+                        runs.c.lease_until > now,
+                        runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]))
+                    .values(lease_until=now + lease_seconds)
                 )
+                if renewed.rowcount != 1:
+                    raise DomainError("VERSION_CONFLICT", "Heartbeat ownership interval expired or changed")
 
     def require_run_owner(self, principal, run_id):
         """Authorize the public dispatcher before reading job markers or ledgers.

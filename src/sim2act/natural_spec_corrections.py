@@ -273,7 +273,7 @@ def validation_limits(value,fallback):
     return Limits(**anchor["validation_limits"])
 
 
-def logic_gate(store,c,user,rid,ref):
+def logic_gate(store,c,user,rid,ref, *, _logic_out=None, _release=None):
     """Fresh source/CHECK/Worker proof on every gate, including late callbacks."""
     marker = c.execute(select(internal_releases.c.snapshot["natural_logic_source"])
         .where(internal_releases.c.id == ref.release_id, internal_releases.c.principal_id == user,
@@ -283,7 +283,18 @@ def logic_gate(store,c,user,rid,ref):
     if marker is not None or "logic_source" in value:
         from .lifecycle import read_release
         source_limits = validation_limits(value,Limits(**value["proposed_limits"]))
-        release = read_release(store,c,user,ref.release_id,source_limits)
+        # Only the synchronous read-only load_binding/bound call chain supplies
+        # this ephemeral proof. No writes/callbacks occur between creation/use.
+        same_call = (_logic_out is not None and _release is not None
+            and _logic_out.get("_call_connection") is c
+            and _logic_out.get("_call_transaction") is c.get_transaction()
+            and c.get_transaction() is not None
+            and _logic_out.get("_call_write_epoch") == c.info.get("source_proof_write_epoch",0)
+            and _logic_out.get("principal_id") == user
+            and _logic_out.get("platform_limits") == source_limits.model_dump()
+            and _logic_out.get("release_id") == ref.release_id == _release["id"]
+            and _logic_out.get("release_fingerprint") == _release["fingerprint"])
+        release = _release if same_call else read_release(store,c,user,ref.release_id,source_limits)
         spec.require("natural_logic_source" in release["snapshot"]
             and value.get("logic_source") == logic_anchor(store,c,user,release,source_limits)
             and value["context"]["release_fingerprint"] == release["fingerprint"],
@@ -300,7 +311,7 @@ def logic_gate(store,c,user,rid,ref):
     return value
 
 
-def gate(store,c,user,rid):
+def gate(store,c,user,rid, *, _logic_out=None, _release=None):
     if not hint(c,rid):
         return None
     ref,frozen=pair(c,user,rid,ACCEPTED,"accepted",Reference)
@@ -336,12 +347,12 @@ def gate(store,c,user,rid):
         "Correction source was revoked or a competing result committed")
     owner.natural_payload(c,rejected(c,user,ref.instance_id,ref.parent_run_id,ref.declaration_id,ref.declaration_fingerprint,ref.declaration_sequence))
     spec.require(proof_digest(c,ref.parent_run_id,ref.parent_material_id,ref.parent_artifact_id,ref.goal_id,ref.goal_version,ref.project_id) == ref.parent_proof_digest, "Original actual Worker proof changed")
-    logic_gate(store,c,user,rid,ref)
+    logic_gate(store,c,user,rid,ref,_logic_out=_logic_out,_release=_release)
     return ref
 
 
-def bound(store,c,user,job,snapshot,release,limits):
-    ref=gate(store,c,user,job["id"])
+def bound(store,c,user,job,snapshot,release,limits, *, _logic_out=None):
+    ref=gate(store,c,user,job["id"],_logic_out=_logic_out,_release=release)
     spec.require(ref is not None and snapshot["human_correction"] == ref.model_dump())
     _,value=load_review(store,c,user,ref.instance_id,ref.parent_run_id,ref.review_key)
     spec.require(reference(value) == ref)
@@ -361,8 +372,8 @@ def bound(store,c,user,job,snapshot,release,limits):
     return draft,manifest,report,source,value["context"]["source_goal"]
 
 
-def feedback(store,c,user,job,snapshot):
-    ref=gate(store,c,user,job["id"])
+def feedback(store,c,user,job,snapshot, *, _logic_out=None, _release=None):
+    ref=gate(store,c,user,job["id"],_logic_out=_logic_out,_release=_release)
     if not ref:
         return None
     _,value=load_review(store,c,user,ref.instance_id,ref.parent_run_id,ref.review_key)

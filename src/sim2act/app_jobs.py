@@ -488,7 +488,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         expected_resource = r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
         if "human_correction" in s:
             from . import natural_spec_corrections
-            _, _, _, correction_source, _ = natural_spec_corrections.bound(store,c,user,job,s,r,limits)
+            _, _, _, correction_source, _ = natural_spec_corrections.bound(store,c,user,job,s,r,limits,_logic_out=logic_source)
             expected_resource = correction_source["resource_id"]
         elif "pb_use" in s or "pa_use" in s:
             from . import pb_natural_uses

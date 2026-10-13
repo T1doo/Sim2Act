@@ -597,7 +597,8 @@ def read_release(store, c, user, rid, limits, *, archival_software=None, _origin
         if _logic_out is not None:
             _logic_out.update(value=logic_value,principal_id=user,platform_limits=limits.model_dump(),
                 release_id=rid,release_fingerprint=r["fingerprint"],
-                _call_connection=c,_call_transaction=c.get_transaction())
+                _call_connection=c,_call_transaction=c.get_transaction(),
+                _call_write_epoch=c.info.get("source_proof_write_epoch",0))
     from . import text_logic_reuse
 
     if text_logic_reuse.independent(draft):

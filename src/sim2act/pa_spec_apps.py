@@ -727,7 +727,7 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     require(is_candidate(draft["candidate"]))
     if "human_correction" in snapshot:
         from . import natural_spec_corrections
-        draft, manifest, report, source, goal = natural_spec_corrections.bound(store,c,user,job,snapshot,release,limits)
+        draft, manifest, report, source, goal = natural_spec_corrections.bound(store,c,user,job,snapshot,release,limits,_logic_out=logic_out)
     elif "logic_check" in snapshot or ("natural_logic_source" in release["snapshot"] and not ("pb_use" in snapshot or "pa_use" in snapshot)):
         from . import natural_logic_patches as logic
         if "logic_check" in snapshot:
@@ -740,7 +740,8 @@ def bound(store, c, user, job, limits, *, validate_input=True):
             family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB,_logic_out=logic_out)
     else:
         manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
-    contract = store.frozen_contract(c, job)
+    # load_binding/correction.bound proved current scope; this call chain only reads.
+    contract = store._frozen_contract_after_scope(c, job)
     content = goal["snapshot"]["content"]
     require(contract.source_goal_card is None and contract.goal.goal_id == goal["card_id"]
         and contract.goal.goal == content["goal"] and contract.goal.constraints == content["constraints"]
@@ -776,11 +777,11 @@ def bound(store, c, user, job, limits, *, validate_input=True):
         source=source, goal=goal, plan=plan, report=report,
         audit_fingerprint=audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release))
     if "human_correction" in snapshot:
-        value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot)
+        value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot,_logic_out=logic_out,_release=release)
     return value
 
 
-def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None):
+def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None, _correction_scope_checked=False):
     """Exact transaction-local evidence digest after live audit scope authorization.
 
     No cross-transaction cache. Full model history is verified at step entry and
@@ -795,7 +796,14 @@ def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None):
         return fingerprint(dict(origin=value["context"]["audit_fingerprint"],preview=value["preview_fingerprint"]))
     if "correction_run_id" in draft:
         from . import natural_spec_corrections
-        ref = natural_spec_corrections.gate(store,c,user,draft["correction_run_id"])
+        if _correction_scope_checked:
+            # Only commit_guard's read-only segment after lock_live/Store.guard.
+            # Re-read paired identity; never reuse across a write or callback.
+            ref, _ = pair(c,user,draft["correction_run_id"],
+                natural_spec_corrections.ACCEPTED,"accepted",natural_spec_corrections.Reference)
+        else:
+            ref = natural_spec_corrections.gate(store,c,user,draft["correction_run_id"],
+                _logic_out=_logic_out,_release=_release)
         _, review = natural_spec_corrections.load_review(store,c,user,ref.instance_id,ref.parent_run_id,ref.review_key)
         if "logic_source" in review:
             require(fingerprint(draft["candidate"]) == review["context"]["effective_plan_fingerprint"])
@@ -1063,7 +1071,8 @@ def commit_guard(worker, c, run, b, delta=0):
     require(job["status"] == "RUNNING" and not job["cancel_intent"] and not worker.stop.is_set())
     limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
     from .db import goal_cards, internal_releases
-    require(job_scope_gate(worker.store, c, job["principal_id"], job["id"]))
+    # lock_live -> Store.guard already proved source scope on this connection.
+    # Only reads occur until the frozen contract below; no proof crosses writes.
     stored = c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == job["id"])).mappings().one()
     s = b["snapshot"]
     require(fingerprint(stored["snapshot"]) == stored["fingerprint"] == fingerprint(s) == job["fingerprint"])
@@ -1076,14 +1085,15 @@ def commit_guard(worker, c, run, b, delta=0):
     actual = authorized_read(worker.store, c, job["principal_id"], job["runtime_id"], job["project_id"],
         "resource.read", dict(resource_id=b["source"]["resource_id"]))
     require(fingerprint(actual) == fingerprint(b["source"]))
-    require(audit_fingerprint(worker.store, c, job["principal_id"], b["draft"]) == b["audit_fingerprint"])
+    require(audit_fingerprint(worker.store, c, job["principal_id"], b["draft"],
+        _correction_scope_checked=True) == b["audit_fingerprint"])
     instance = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"],
         internal_instances.c.principal_id == job["principal_id"])).mappings().one()
     require(instance["revision"] == s["expected_revision"] and instance["release_id"] == s["release_id"]
         and instance["runtime_id"] == job["runtime_id"] and instance["project_id"] == job["project_id"]
         and instance["source_app_id"] == b["draft"]["id"])
     declared = Limits(**b["draft"]["candidate"]["manifest"]["runtime_limits"])
-    frozen = worker.store.frozen_contract(c, job).limits
+    frozen = worker.store._frozen_contract_after_scope(c, job).limits
     if time.time() >= job["created_at"] + min(limits.run_seconds, declared.run_seconds, frozen.run_seconds) or job["context"]["tools"] + delta > min(limits.max_tools, declared.max_tools, frozen.max_tools):
         raise DomainError("BUDGET_EXHAUSTED")
     return job
