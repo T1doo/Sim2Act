@@ -354,35 +354,158 @@ def validate_source_bytes(store, c, user, draft):
     )
 
 
-def read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
+def owned_release_pointer(store, c, user, rid):
+    """Authorize identifiers before reading a Release body; never follow origins."""
     from .text_continuations import release_gate
 
     release_gate(store, c, user, rid)
-    r = c.execute(select(internal_releases).where(internal_releases.c.id == rid, internal_releases.c.principal_id == user)).mappings().first()
-    if not r or r["principal_id"] != user:
+    r = c.execute(select(internal_releases).where(internal_releases.c.id == rid,
+        internal_releases.c.principal_id == user)).mappings().first()
+    if r is None:
         raise DomainError("PERMISSION_DENIED")
     store.own_project(c, user, r["project_id"])
+    return r
+
+
+def immutable_release_pointer(c, user, r):
+    a = c.execute(select(internal_approvals).where(
+        internal_approvals.c.id == r["approval_id"])).mappings().first()
+    if (not a or not a["consumed"] or a["kind"] != "release"
+            or a["principal_id"] != user or a["project_id"] != r["project_id"]
+            or not isinstance(a["payload"], dict) or fingerprint(a["payload"]) != a["fingerprint"]
+            or a["payload"].get("snapshot") != r["snapshot"]
+            or fingerprint(r["snapshot"]) != r["fingerprint"]):
+        raise DomainError("VERSION_CONFLICT", "Immutable release/approval mismatch")
+
+
+def owned_instance_pointer(store, c, user, iid, project=None):
+    fields = (internal_instances.c.id, internal_instances.c.principal_id,
+        internal_instances.c.project_id, internal_instances.c.source_app_id,
+        internal_instances.c.runtime_id, internal_instances.c.release_id,
+        internal_instances.c.revision, internal_instances.c.data_version)
+    i = c.execute(select(*fields).where(internal_instances.c.id == iid,
+        internal_instances.c.principal_id == user)).mappings().first()
+    if i is None or (project is not None and i["project_id"] != project):
+        raise DomainError("PERMISSION_DENIED")
+    store.own_project(c, user, i["project_id"])
+    from .text_continuations import release_gate
+
+    release_gate(store, c, user, i["release_id"])
+    return dict(i)
+
+
+def logic_release_trace(store, c, user, root, *, proposed_instance=None):
+    """Iterative traversal of actual recursive origins, including a proposed edge.
+
+    This is only a metadata cycle gate. Full authority and Worker proofs still
+    follow it; a valid graph never substitutes for validate_snapshot.
+    """
+    from .natural_logic_patches import VERSION
+
+    current, visited, edges = root, set(), []
+    while True:
+        if current["id"] in visited:
+            return dict(cyclic=True, edges=edges)
+        visited.add(current["id"])
+        immutable_release_pointer(c, user, current)
+        origin = current["snapshot"].get("natural_logic_source")
+        if origin is None:
+            return dict(cyclic=False, edges=edges)
+        if (not isinstance(origin, dict) or set(origin) != {"namespace", "instance_id",
+                "preview_key", "preview_fingerprint", "check_fingerprint", "execution_digest"}
+                or origin["namespace"] != VERSION or not isinstance(origin["instance_id"], str)):
+            raise DomainError("VERSION_CONFLICT", "Invalid logic source pointer")
+        i = owned_instance_pointer(store, c, user, origin["instance_id"], root["project_id"])
+        next_id = root["id"] if i["id"] == proposed_instance else i["release_id"]
+        edges.append(dict(release_id=current["id"], release_fingerprint=current["fingerprint"],
+            origin=origin, instance=i, next_release_id=next_id))
+        current = owned_release_pointer(store, c, user, next_id)
+        if (current["project_id"] != i["project_id"]
+                or current["snapshot"]["draft"]["id"] != i["source_app_id"]
+                or current["snapshot"]["draft"]["runtime_id"] != i["runtime_id"]):
+            raise DomainError("VERSION_CONFLICT", "Source instance binding changed")
+
+
+def logic_source_pins(store, c, user, i):
+    """Committed origins and accepted check instances are immutable evidence."""
+    from . import natural_logic_patches as logic
+    from .db import delivery_graph_requests
+
+    marker = delivery_graph_requests
+    check_keys = c.execute(select(marker.c.app_id, marker.c.request_key).where(
+        marker.c.principal_id == user, marker.c.kind.in_([logic.CHECK, logic.CHECK + "_seal"]),
+        marker.c.snapshot["response"]["check_instance_id"].as_string() == i["id"])).all()
+    pins = []
+    for source, key in sorted(set(check_keys)):
+        owned_instance_pointer(store, c, user, source, i["project_id"])
+        _, started = logic.pair(c, user, source, logic.CHECK, key, logic.Check)
+        if started["check_instance_id"] != i["id"]:
+            raise DomainError("VERSION_CONFLICT", "Check instance index changed")
+        pins.append(dict(role="check", source_instance_id=source, preview_key=key,
+            accepted_fingerprint=fingerprint(started)))
+    # Either independent approval index can discover a delivered origin. A
+    # missing/mutated counterpart must not silently remove its protection.
+    released = c.execute(select(internal_releases.c.id).join(marker,
+        internal_releases.c.approval_id == marker.c.snapshot["response"]["id"].as_string()).where(
+        internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
+        marker.c.principal_id == user, marker.c.app_id == i["id"],
+        marker.c.kind.in_([logic.APPROVAL, logic.APPROVAL + "_seal"]))).scalars().all()
+    for rid in sorted(set(released)):
+        r = owned_release_pointer(store, c, user, rid)
+        immutable_release_pointer(c, user, r)
+        logic.validate_family(c, user, r["approval_id"], r["snapshot"])
+        origin = r["snapshot"]["natural_logic_source"]
+        if origin["instance_id"] != i["id"]:
+            raise DomainError("VERSION_CONFLICT", "Source instance index changed")
+        pins.append(dict(role="source", release_id=rid, release_fingerprint=r["fingerprint"], origin=origin))
+    return pins
+
+
+def switch_preflight(store, c, user, iid, target_id, *, _state_out=None):
+    i = owned_instance_pointer(store, c, user, iid)
+    old = owned_release_pointer(store, c, user, i["release_id"])
+    target = owned_release_pointer(store, c, user, target_id)
+    if (target["project_id"] != i["project_id"] or target["snapshot"]["draft"]["id"] != i["source_app_id"]
+            or target["snapshot"]["draft"]["runtime_id"] != i["runtime_id"]):
+        raise DomainError("PERMISSION_DENIED", "Cannot switch another app/runtime into this instance")
+    current_trace = logic_release_trace(store, c, user, old)
+    target_trace = logic_release_trace(store, c, user, target, proposed_instance=iid)
+    if current_trace["cyclic"] or target_trace["cyclic"]:
+        raise DomainError("VERSION_CONFLICT", "Instance switch would create or retain a logic source cycle")
+    pins = logic_source_pins(store, c, user, i)
+    if pins:
+        raise DomainError("VERSION_CONFLICT", "Instance supplies immutable logic source or check evidence")
+    state = dict(instance=i, current=current_trace, target=target_trace,
+        target_id=target_id, target_fingerprint=target["fingerprint"], pins=pins)
+    if _state_out is not None:
+        _state_out.update(state)
+    return fingerprint(state)
+
+
+def switch_policy(store, c, user, i):
+    pins = logic_source_pins(store, c, user, i)
+    targets = c.execute(select(internal_releases.c.id).where(
+        internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
+        internal_releases.c.snapshot["draft"]["id"].as_string() == i["source_app_id"])).scalars().all()
+    blocked = []
+    for rid in sorted(targets):
+        if pins or logic_release_trace(store, c, user,
+                owned_release_pointer(store, c, user, rid), proposed_instance=i["id"])["cyclic"]:
+            blocked.append(rid)
+    return dict(namespace="internal.logic-switch-policy.v1", instance_id=i["id"], revision=i["revision"],
+        roles=sorted({p["role"] for p in pins}), blocked_release_ids=blocked)
+
+
+def read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
+    r = owned_release_pointer(store, c, user, rid)
     if archival_software is not None:
         from .text_continuations import legacy_release
 
         legacy_release(store, c, user, r, limits, archival_software)
         return r
-    a = (
-        c.execute(select(internal_approvals).where(internal_approvals.c.id == r["approval_id"]))
-        .mappings()
-        .first()
-    )
-    if (
-        not a
-        or not a["consumed"]
-        or a["kind"] != "release"
-        or a["principal_id"] != user
-        or a["project_id"] != r["project_id"]
-        or fingerprint(a["payload"]) != a["fingerprint"]
-        or a["payload"]["snapshot"] != r["snapshot"]
-        or fingerprint(r["snapshot"]) != r["fingerprint"]
-    ):
-        raise DomainError("VERSION_CONFLICT", "Immutable release/approval mismatch")
+    immutable_release_pointer(c, user, r)
+    if "natural_logic_source" in r["snapshot"] and logic_release_trace(store, c, user, r)["cyclic"]:
+        raise DomainError("VERSION_CONFLICT", "Logic source dependency cycle")
     s = r["snapshot"]
     draft = s["draft"]
     from .csv_dag_instances import FIXED_REPORT_VERSION, validate_family, validate_snapshot
@@ -543,7 +666,8 @@ def inspect_instance(store, user, iid, limits):
             from .text_run_checks import verify_records
 
             verify_records(store, c, user, records, limits)
-        return {**dict(i), "namespace": NAMESPACE, "data": [dict(x) for x in records]}
+        return {**dict(i), "namespace": NAMESPACE, "data": [dict(x) for x in records],
+            "switch_policy": switch_policy(store, c, user, i)}
 
 
 def run_instance(
@@ -689,6 +813,7 @@ def prepare_switch(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
         ).scalar()
         store.lock_project(c, user, pid)
+        dependency_fp = switch_preflight(store, c, user, iid, target_id)
         i, old = instance(store, c, user, iid, limits, lock=True)
         target = read_release(store, c, user, target_id, limits)
         if i["revision"] != expected_revision:
@@ -699,6 +824,8 @@ def prepare_switch(
             and target["fingerprint"] != expected_target_fingerprint
         ):
             raise DomainError("VERSION_CONFLICT", "Selected target fingerprint changed")
+        if switch_preflight(store, c, user, iid, target_id) != dependency_fp:
+            raise DomainError("VERSION_CONFLICT", "Logic dependencies changed during switch preflight")
         return new_approval(
             c,
             user,
@@ -707,6 +834,7 @@ def prepare_switch(
             {
                 "instance_id": iid,
                 "from_release_id": old["id"],
+                "logic_dependency_fingerprint": dependency_fp,
                 "target_release_id": target_id,
                 "target_fingerprint": target["fingerprint"],
                 "revision": expected_revision,
@@ -721,6 +849,7 @@ def require_switch_payload(p):
     if (
         not {
             "instance_id",
+            "logic_dependency_fingerprint",
             "from_release_id",
             "target_release_id",
             "target_fingerprint",
@@ -733,7 +862,7 @@ def require_switch_payload(p):
     ):
         raise DomainError("VERSION_CONFLICT", "Incomplete switch approval")
     ids = ["instance_id", "from_release_id", "target_release_id"]
-    hashes = ["target_fingerprint", "data_fingerprint", "grant_version"]
+    hashes = ["target_fingerprint", "data_fingerprint", "grant_version", "logic_dependency_fingerprint"]
     if (
         any(type(p[k]) is not str or not 1 <= len(p[k]) <= 100 for k in ids)
         or any(
@@ -768,6 +897,8 @@ def inspect_switch_approval(store, user, iid, aid, limits):
         require_switch_payload(p)
         if p["instance_id"] != iid:
             raise DomainError("PERMISSION_DENIED")
+        if switch_preflight(store, c, user, iid, p["target_release_id"]) != p["logic_dependency_fingerprint"]:
+            raise DomainError("VERSION_CONFLICT", "Logic dependencies changed since switch approval")
         i, old = instance(store, c, user, iid, limits, lock=True)
         target = read_release(store, c, user, p["target_release_id"], limits)
         records = switch_target(store, c, user, i, old, target, limits)
@@ -780,6 +911,8 @@ def inspect_switch_approval(store, user, iid, aid, limits):
             or fingerprint([dict(x) for x in records]) != p["data_fingerprint"]
         ):
             raise DomainError("VERSION_CONFLICT", "Switch preconditions changed")
+        if switch_preflight(store, c, user, iid, target["id"]) != p["logic_dependency_fingerprint"] or a["expires_at"] <= time.time():
+            raise DomainError("VERSION_CONFLICT", "Logic dependencies changed during approval read")
         return {
             **dict(a),
             "retained_records": len(records),
@@ -806,6 +939,9 @@ def commit_switch(store, user, approval_id, exact_fp, limits):
         ).scalar()
         if instance_project != pid:
             raise DomainError("PERMISSION_DENIED", "Approval project differs from instance")
+        transition: dict[str, Any] = {}
+        if switch_preflight(store, c, user, p["instance_id"], p["target_release_id"], _state_out=transition) != p["logic_dependency_fingerprint"]:
+            raise DomainError("VERSION_CONFLICT", "Logic dependencies changed since switch approval")
         i, old = instance(store, c, user, p["instance_id"], limits, lock=True)
         target = read_release(store, c, user, p["target_release_id"], limits)
         if (
@@ -818,6 +954,8 @@ def commit_switch(store, user, approval_id, exact_fp, limits):
         ):
             raise DomainError("VERSION_CONFLICT", "Switch preconditions changed")
         switch_target(store, c, user, i, old, target, limits)
+        if switch_preflight(store, c, user, i["id"], target["id"]) != p["logic_dependency_fingerprint"] or a["expires_at"] <= time.time():
+            raise DomainError("VERSION_CONFLICT", "Logic dependencies changed before switch commit")
         history = [
             *i["history"],
             {
@@ -828,18 +966,35 @@ def commit_switch(store, user, approval_id, exact_fp, limits):
                 "kind": "switch",
             },
         ]
-        c.execute(
+        changed = c.execute(
             update(internal_instances)
-            .where(
-                internal_instances.c.id == i["id"], internal_instances.c.revision == p["revision"]
-            )
+            .where(internal_instances.c.id == i["id"], internal_instances.c.revision == p["revision"],
+                internal_instances.c.release_id == p["from_release_id"], internal_instances.c.data_version == p["data_version"])
             .values(release_id=target["id"], revision=i["revision"] + 1, history=history)
-        )
+        ).rowcount
+        if changed != 1:
+            raise DomainError("VERSION_CONFLICT", "Instance switch lost its compare-and-swap")
         c.execute(
             update(internal_approvals)
             .where(internal_approvals.c.id == approval_id)
             .values(consumed=True)
         )
+        # Verify the actual post-state inside this transaction. Any late source,
+        # authority, history or expiry failure rolls back pointer and consumption.
+        read_release(store, c, user, target["id"], limits)
+        after: dict[str, Any] = {}
+        switch_preflight(store, c, user, i["id"], target["id"], _state_out=after)
+        expected = copy.deepcopy(transition)
+        expected["instance"].update(release_id=target["id"], revision=i["revision"] + 1)
+        expected["current"] = expected["target"]
+        stored_history = c.execute(select(internal_instances.c.history).where(internal_instances.c.id == i["id"])).scalar_one()
+        committed_approval = approval(c, user, approval_id, exact_fp, "switch", allow_consumed=True)
+        if (not committed_approval["consumed"] or committed_approval["expires_at"] <= time.time()
+                or grant_version(c, i["project_id"], user) != p["grant_version"]
+                or fingerprint(after) != fingerprint(expected) or stored_history != history
+                or fingerprint([dict(x) for x in data_rows(c, i["id"], store=store, user=user)]) != p["data_fingerprint"]
+                or a["expires_at"] <= time.time()):
+            raise DomainError("VERSION_CONFLICT", "Switch postconditions changed before transaction commit")
         return {
             "instance_id": i["id"],
             "release_id": target["id"],

@@ -33,12 +33,17 @@ function clearInternal() {
   for(const id of ["internal-releases","internal-instances","internal-runs","internal-data","internal-controls"] )$(id).replaceChildren();
   $("internal-run-form").hidden=true;$("internal-retry").hidden=true;$("internal-new-intent").hidden=true;$("internal-run-detail").textContent="";$("internal-run-status").textContent="";$("internal-instance-info").textContent="";
 }
+function switchAllowed(view,targetId) {
+  const i=view.instance,p=i?.switch_policy;
+  return !!targetId && p?.namespace==="internal.logic-switch-policy.v1" && p.instance_id===i.id
+    && p.revision===i.revision && Array.isArray(p.blocked_release_ids) && !p.blocked_release_ids.includes(targetId);
+}
 function engineeringButtons(view) {
   if(!engineeringCurrent(view))return;
   const switchExpired=view.switchApproval && view.switchApproval.expires_at*1000<=Date.now();
-  $("internal-switch-prepare").disabled=!!view.busy || !view.instance || !$("internal-switch-target").value;
+  $("internal-switch-prepare").disabled=!!view.busy || !view.instance || !switchAllowed(view,$("internal-switch-target").value);
   $("internal-switch-target").disabled=!!view.busy;
-  $("internal-switch-commit").disabled=!!view.busy || !view.instance || !view.switchApproval || switchExpired || !$("internal-switch-ack").checked;
+  $("internal-switch-commit").disabled=!!view.busy || !view.instance || !view.switchApproval || !switchAllowed(view,view.switchApproval.payload?.target_release_id) || switchExpired || !$("internal-switch-ack").checked;
   if(switchExpired)$("internal-switch-status").textContent="批准已到期，请重新核查；不会自动重发确认。";
   const missingReplay=view.agent && (!view.offlineReplay || !$("app-agent-term").value.trim());
   const approvalExpired=view.approval && view.approval.expires_at*1000<=Date.now();
@@ -266,7 +271,9 @@ function clearSwitch(view) {
 }
 function renderSwitch(view) {
   $("internal-switch").hidden=false;
-  $("internal-switch-target").replaceChildren(new Option("请手动选择目标版本",""),...view.releases.filter(r=>r.id!==view.instance.release_id).map(r=>new Option(`${r.id} · schema v${r.snapshot.data_schema_version} · ${r.fingerprint.slice(0,16)}`,r.id)));
+  $("internal-switch-target").replaceChildren(new Option("请手动选择目标版本",""),...view.releases.filter(r=>r.id!==view.instance.release_id && switchAllowed(view,r.id)).map(r=>new Option(`${r.id} · schema v${r.snapshot.data_schema_version} · ${r.fingerprint.slice(0,16)}`,r.id)));
+  if(view.instance.switch_policy?.roles?.length)$("internal-switch-status").textContent="该实例提供已保存版本的来源或检查证据，不能切换版本。请使用独立业务实例。";
+  else if(view.instance.switch_policy?.blocked_release_ids?.some(id=>id!==view.instance.release_id))$("internal-switch-status").textContent="已排除会形成来源依赖循环的目标版本。";
   $("internal-switch-history").replaceChildren(...view.instance.history.map(h=>row(`revision ${h.revision} · ${h.previous_release_id || "初始版本"} → ${h.release_id} · ${h.kind || "create"}`)));
 }
 $("internal-switch-target").onchange=()=>{const view=engineering;if(!view)return;const value=$("internal-switch-target").value;clearSwitch(view);$("internal-switch-target").value=value;engineeringButtons(view);};
@@ -274,7 +281,7 @@ $("internal-switch-ack").onchange=()=>{if(engineering)engineeringButtons(enginee
 $("internal-switch-cancel").onclick=()=>{const view=engineering;if(!view)return;clearSwitch(view);$("internal-switch-status").textContent="已取消本页选择；已被服务接受的切换仍可能完成，请重新读取历史确认。";engineeringButtons(view);};
 $("internal-switch-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering,instance=view.instance,target=view.releases.find(r=>r.id===$("internal-switch-target").value);
-  if(!instance || !target)return;
+  if(!instance || !target || !switchAllowed(view,target.id))return;
   clearSwitch(view);$("internal-switch-target").value=target.id;
   const generation=view.switchGeneration,selection=view.instanceGeneration;
   const current=()=>engineeringCurrent(view) && selection===view.instanceGeneration && generation===view.switchGeneration && view.instance?.id===instance.id;
@@ -292,7 +299,7 @@ $("internal-switch-prepare").onclick=()=>engineeringAction(engineering,async()=>
 });
 $("internal-switch-commit").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering,instance=view.instance,approval=view.switchApproval;
-  if(!instance || !approval || !$("internal-switch-ack").checked || approval.expires_at*1000<=Date.now())return;
+  if(!instance || !approval || !switchAllowed(view,approval.payload?.target_release_id) || !$("internal-switch-ack").checked || approval.expires_at*1000<=Date.now())return;
   const generation=view.switchGeneration,selection=view.instanceGeneration;
   const current=()=>engineeringCurrent(view) && selection===view.instanceGeneration && generation===view.switchGeneration && view.instance?.id===instance.id;
   // A consumed approval is never retried. Lost response must be resolved by history readback.
