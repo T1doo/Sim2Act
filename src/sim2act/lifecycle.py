@@ -405,7 +405,10 @@ def logic_release_trace(store, c, user, root, *, proposed_instance=None):
     """
     from .natural_logic_patches import VERSION
 
-    current, visited, edges, nodes = root, set(), [], []
+    current = root
+    visited: set[str] = set()
+    edges: list[dict[str, Any]] = []
+    nodes: list[dict[str, Any]] = []
     while True:
         if current["id"] in visited:
             return dict(cyclic=True, over_limit=False, nodes=nodes, edges=edges)
