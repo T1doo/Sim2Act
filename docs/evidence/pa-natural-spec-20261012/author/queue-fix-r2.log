@@ -1,0 +1,205 @@
+.....F.                                                                  [100%]
+=================================== FAILURES ===================================
+_____ test_queued_scope_rejection_does_not_follow_corrupt_app_run_pointer ______
+
+self = <sqlalchemy.engine.base.Connection object at 0x7f8a0eabe6c0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f8a0ecd9370>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f8a0eabfec0>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7f8a0eabe9f0>
+parameters = [('iapprun_d1e9456e07e2438dae423bca2d465e34', 'run_a53b6db759b9405f9306e04834261bc8')]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f8a0ecd9370>
+cursor = <sqlite3.Cursor object at 0x7f8a0eca4bc0>
+statement = 'UPDATE internal_run_bindings SET app_run_id=? WHERE internal_run_bindings.run_id = ?'
+parameters = ('iapprun_d1e9456e07e2438dae423bca2d465e34', 'run_a53b6db759b9405f9306e04834261bc8')
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f8a0eabfec0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: UNIQUE constraint failed: internal_run_bindings.app_run_id
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+env = (<sim2act.db.Store object at 0x7f8a0e651940>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...d825c2e5ae494da28f3f08d59c8c61', 'user_4f4ded36f0764ddd857b226e6353ab29', 'proj_a4aeceb1ea3647ca848a3e82eb29c282', ...)
+
+    def test_queued_scope_rejection_does_not_follow_corrupt_app_run_pointer(env):
+        runtime, ids, _, _, _, rel, inst, value = setup(env)
+        first = jobs.enqueue(env[0], env[3], inst["id"], inst["revision"], rel["fingerprint"],
+                             {"term": value["term"]}, "first", limits(env))
+        second = jobs.enqueue(env[0], env[3], inst["id"], inst["revision"], rel["fingerprint"],
+                              {"term": value["term"]}, "second", limits(env))
+        with env[0].tx() as c:
+            other = c.execute(select(internal_run_bindings.c.app_run_id).where(
+                internal_run_bindings.c.run_id == second["run_id"])).scalar_one()
+            before = dict(c.execute(select(internal_app_runs).where(
+                internal_app_runs.c.id == other)).mappings().one())
+>           c.execute(update(internal_run_bindings).where(
+                internal_run_bindings.c.run_id == first["run_id"]).values(app_run_id=other))
+
+tests/test_bounded_agent_apps.py:475: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7f8a0ecd9370>
+cursor = <sqlite3.Cursor object at 0x7f8a0eca4bc0>
+statement = 'UPDATE internal_run_bindings SET app_run_id=? WHERE internal_run_bindings.run_id = ?'
+parameters = ('iapprun_d1e9456e07e2438dae423bca2d465e34', 'run_a53b6db759b9405f9306e04834261bc8')
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7f8a0eabfec0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: internal_run_bindings.app_run_id
+E       [SQL: UPDATE internal_run_bindings SET app_run_id=? WHERE internal_run_bindings.run_id = ?]
+E       [parameters: ('iapprun_d1e9456e07e2438dae423bca2d465e34', 'run_a53b6db759b9405f9306e04834261bc8')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+../Sim2Act/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_bounded_agent_apps.py::test_queued_scope_rejection_does_not_follow_corrupt_app_run_pointer
+1 failed, 6 passed, 1 warning in 10.71s

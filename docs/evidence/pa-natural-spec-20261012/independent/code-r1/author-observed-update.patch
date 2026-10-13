@@ -1,0 +1,173 @@
+--- initial/src/sim2act/natural_spec_runtime.py
++++ observed-update/src/sim2act/natural_spec_runtime.py
+@@ -133,11 +133,19 @@
+             .all()
+         )
+         require(len(ids) == len(set(ids)) and set(ids) <= {r["id"] for r in rows})
++        accepted_states = {
++            "NS_RESERVED": {"STARTED", "RECEIVED", "VERIFIED", "REJECTED_KNOWN"},
++            "NS_RECEIVED": {"RECEIVED", "VERIFIED", "REJECTED_KNOWN"},
++            "NS_SETTLED": {"VERIFIED"},
++            "NS_REJECTED": {"REJECTED_KNOWN"},
++        }[kind]
++        require(set(ids) == {r["id"] for r in rows if r["status"] in accepted_states})
+     ordinals, opids, steps = set(), set(), set()
+     for row in rows:
+         meta = row["parameters"].get("natural_spec")
+         require(
+             isinstance(meta, dict)
++            and row["status"] in {"STARTED", "RECEIVED", "VERIFIED", "REJECTED_KNOWN"}
+             and row["mode"] == "MOCK"
+             and row["request_model"] == "intern-s2"
+             and type(meta.get("ordinal")) is int
+@@ -403,7 +411,13 @@
+                     .where(
+                         events.c.run_id == job["id"],
+                         events.c.kind.in_(
+-                            ["NS_RESERVED", "NS_RECEIVED", "NS_SETTLED", "MODEL_RESERVED"]
++                            [
++                                "NS_RESERVED",
++                                "NS_RECEIVED",
++                                "NS_SETTLED",
++                                "NS_REJECTED",
++                                "MODEL_RESERVED",
++                            ]
+                         ),
+                     )
+                     .order_by(events.c.id)
+@@ -538,6 +552,11 @@
+                     internal_run_bindings.c.snapshot["principal_id"].as_string().label("uid"),
+                     internal_run_bindings.c.snapshot["project_id"].as_string().label("pid"),
+                     internal_run_bindings.c.snapshot["runtime_id"].as_string().label("runtime"),
++                    internal_run_bindings.c.snapshot["instance_id"].as_string().label("iid"),
++                    internal_run_bindings.c.snapshot["release_id"].as_string().label("release"),
++                    internal_run_bindings.c.snapshot["request_fingerprint"]
++                    .as_string()
++                    .label("request_fp"),
+                 ).where(internal_run_bindings.c.run_id == run["id"])
+             )
+             .mappings()
+@@ -552,11 +571,30 @@
+             and b["runtime"] == header["runtime_id"]
+             and header["request_key"] == "internal:" + b["app_run_id"]
+         ):
++            accepted = (
++                c.execute(
++                    select(
++                        events.c.data["app_run_id"].as_string().label("aid"),
++                        events.c.data["instance_id"].as_string().label("iid"),
++                        events.c.data["release_id"].as_string().label("release"),
++                        events.c.data["input_fingerprint"].as_string().label("request_fp"),
++                    ).where(events.c.run_id == run["id"], events.c.kind == "ACCEPTED")
++                )
++                .mappings()
++                .all()
++            )
++            pointer_valid = len(accepted) == 1 and dict(accepted[0]) == dict(
++                aid=b["app_run_id"], iid=b["iid"], release=b["release"], request_fp=b["request_fp"]
++            )
+             c.execute(
+                 update(internal_app_runs)
+                 .where(
+                     internal_app_runs.c.id == b["app_run_id"],
+                     internal_app_runs.c.principal_id == header["principal_id"],
++                    internal_app_runs.c.instance_id == b["iid"],
++                    internal_app_runs.c.release_id == b["release"],
++                    internal_app_runs.c.fingerprint == b["request_fp"],
++                    pointer_valid,
+                     internal_app_runs.c.status.in_(["QUEUED", "RUNNING"]),
+                 )
+                 .values(status=state, error=error.public())
+@@ -656,6 +694,7 @@
+ 
+     started = time.monotonic()
+     raw = None
++    failure: DomainError | None = None
+     try:
+         raw = InternModel(
+             replace(
+@@ -786,6 +825,14 @@
+                 ),
+             )
+             spec.receipts(store, c, current, current_binding)
++            # The last event/receipt callback can change live authority or time.
++            # Re-read the current contract and all evidence before committing
++            # VERIFIED, separately from the later project-save transaction.
++            fresh = spec.commit_guard(worker, c, run, current_binding)
++            enabled(worker)
++            final_binding = spec.bound(store, c, fresh["principal_id"], fresh, limits)
++            require(final_binding["audit_fingerprint"] == current_binding["audit_fingerprint"])
++            spec.receipts(store, c, fresh, final_binding)
+     except DomainError as rejected:
+         with store.tx() as c:
+             c.execute(
+--- initial/src/sim2act/natural_specs.py
++++ observed-update/src/sim2act/natural_specs.py
+@@ -379,7 +379,8 @@
+         return dict(source="step", ref=sid, field=field)
+ 
+     source_ports = {key: port(source_id, key) for key in sc["source"]["properties"]}
+-    actions, workflow, bindings, outputs = [], [], [], {}
++    actions, workflow, bindings = [], [], []
++    outputs: dict[str, str] = {}
+     declared = Limits(
+         **{
+             **limits.model_dump(),
+@@ -774,7 +775,7 @@
+         )
+     samples = {s["step_id"]: s["items"] for s in value["sample_nodes"]}
+     plan = dict(definition=candidate, input={})
+-    outputs = {}
++    outputs: dict[str, dict] = {}
+     for step, action in zip(candidate["manifest"]["workflow"], candidate["actions"], strict=True):
+         ref = action["executor"]["ref"]
+         if ref == SAVE:
+@@ -815,6 +816,7 @@
+     return dict(
+         candidate_fingerprint=fingerprint(candidate),
+         sample_fingerprint=fingerprint(value["sample_nodes"]),
++        sample_nodes=copy.deepcopy(value["sample_nodes"]),
+         preview=report(material, items, candidate["goal"]),
+         new_model_requests=0,
+         project_writes=0,
+--- initial/src/sim2act/web/goal-application.js
++++ observed-update/src/sim2act/web/goal-application.js
+@@ -2,6 +2,28 @@
+ // Immutable per-intent requests. Unknown POST outcomes recover through keyed GETs only.
+ const goalSpecFamily=family=>["spec_checklist","natural_spec"].includes(family);
+ const goalGenerationVersion=family=>family==="natural_spec"?"goal-natural-spec-application.v1":family==="spec_checklist"?"goal-spec-checklist-application.v1":"goal-text-application.v1";
++async function verifyNaturalSample(sample,candidate,snapshot){
++ const report=sample?.preview,value=report?.checklist,seal=candidate.model_sample_check;
++ if(sample.candidate_fingerprint!==await paHash(candidate)||sample.sample_fingerprint!==seal.sample_fingerprint||!Array.isArray(sample.sample_nodes)||await paHash(sample.sample_nodes)!==seal.sample_fingerprint||sample.new_model_requests!==0||sample.project_writes!==0||sample.semantic_status!=="UNKNOWN"||sample.semantic_goal_acceptance!=="NOT_RUN"||report?.citation_status!=="PASS"||report.semantic_status!=="UNKNOWN"||report.semantic_goal_acceptance!=="NOT_RUN"||typeof value?.source_content!=="string")throw Error("VERSION_CONFLICT");
++ const source=snapshot.resource_snapshots[0],text=value.source_content,chars=Array.from(text),covered=chars.map(()=>false);
++ const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,"0")).join("");
++ if(sha!==candidate.source_hash||sha!==source.hash||goalRunCanonical(value.source)!==goalRunCanonical({resource_id:source.resource_id,hash:sha,format:source.format,revision:1,coordinate_space:"unicode_scalar_index.v1"}))throw Error("VERSION_CONFLICT");
++ const items=sample.sample_nodes.flatMap(node=>node.items);
++ for(const item of items)for(const cite of item.citations){
++  if(!Number.isSafeInteger(cite.start)||!Number.isSafeInteger(cite.end)||cite.start<0||cite.start>=cite.end||cite.end>chars.length||chars.slice(cite.start,cite.end).join("")!==cite.quote)throw Error("VERSION_CONFLICT");
++  for(let index=cite.start;index<cite.end;index++)covered[index]=true;
++ }
++ const uncovered=[];let begin=null;
++ for(let index=0;index<=chars.length;index++){
++  const missing=index<chars.length&&!covered[index];if(missing&&begin===null)begin=index;
++  if(!missing&&begin!==null){const quote=chars.slice(begin,index).join("");if(quote.trim())uncovered.push({start:begin,end:index,quote});begin=null;}
++ }
++ const expected={check_version:"natural.spec_citations.v1",source:value.source,source_content:text,
++  items:items.map(item=>({...item,relation_status:item.targets.length?"MODEL_ASSERTED":["condition","exception"].includes(item.kind)?"UNASSIGNED":"NOT_APPLICABLE",decision_status:item.kind==="open_question"?"OPEN":"NOT_APPLICABLE"})),
++  feedback:{check:"natural.spec_citations.v1",citation_status:"PASS",coverage_status:uncovered.length?"PARTIAL":"FULL",uncovered,semantic_status:"UNKNOWN"},
++  human_unresolved:snapshot.content.unresolved,source_retention:"EXACT",semantic_goal_acceptance:"NOT_RUN",owner_acceptance:"PENDING"};
++ if(goalRunCanonical(value)!==goalRunCanonical(expected)||report.text!==goalRunCanonical(expected))throw Error("VERSION_CONFLICT");
++}
+ const goalApplications=new Map();
+ let goalApplicationDisplayed=null;
+ let goalApplicationDraftGeneration=0;
+@@ -53,7 +75,8 @@
+   if(entry.body.family==="natural_spec"&&run.status==="PARTIAL"){
+     const sample=await api(`/api/projects/${entry.project}/natural-spec-model-runs/${run.id}/sample-preview`);
+     if(!goalApplicationCurrent(entry))return;
+-    if(sample.candidate_fingerprint!==run.result.candidate_fingerprint||sample.new_model_requests!==0||sample.project_writes!==0||sample.semantic_status!=="UNKNOWN"||sample.semantic_goal_acceptance!=="NOT_RUN"||sample.preview?.checklist?.source_retention!=="EXACT")throw Error("VERSION_CONFLICT");
++    await verifyNaturalSample(sample,run.result.candidate,entry.snapshot);
++    if(!goalApplicationCurrent(entry))return;
+     entry.sample=sample;
+   }
+   $("goal-application-ack").checked=false;

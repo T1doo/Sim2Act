@@ -1,0 +1,48 @@
+F
+=================================== FAILURES ===================================
+_________ test_actual_nodes_and_atomic_pending_checklist[False-single] _________
+
+env = (<sim2act.db.Store object at 0x7fee530ee0f0>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...518494262a4ac3946ba5f1e511aa80', 'user_913d72c54f5745fa8c80cd72d9cf221a', 'proj_7e8ffbb0789745038fccfd677fc5eb03', ...)
+style = 'single', repair = False
+
+    @pytest.mark.parametrize("style", ["single", "parallel", "sequential"])
+    @pytest.mark.parametrize("repair", [False, True])
+    def test_actual_nodes_and_atomic_pending_checklist(env, style, repair):
+        data = setup(env);_, _, release, inst, generation = ready(data, style, repair)
+>       rid = enqueue(data, release, inst);sent = []
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_spec_apps.py:160: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7fee530ee0f0>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...c518494262a4ac3946ba5f1e511aa80', 'proj_7e8ffbb0789745038fccfd677fc5eb03', 'res_9aaa7c9f56544d7aaa2f3b310ee28667', ...)
+release = {'approval_id': 'iapproval_6d81a90d47d84b5a83b76a24d5a11ca1', 'fingerprint': '4e9c605fc8d8f2a7869eb5913b5fc4095a709b3876c0134cad40690bf10d0b67', 'formal_publication_enabled': False, 'id': 'irelease_54a6e4a0d0574661a980dcc1335f6506', ...}
+inst = {'data_version': 0, 'formal_publication_enabled': False, 'history': [{'kind': 'created', 'release_id': 'irelease_54a6e4a0d0574661a980dcc1335f6506', 'revision': 1}], 'id': 'iinstance_88be32c405644a8236399cbafaba6260', ...}
+key = 'spec-actual', value = None
+
+    def enqueue(data, release, inst, key="spec-actual", value=None):
+        response = data[2].post(
+            f"/api/internal/instances/{inst['id']}/runs",
+            json=dict(
+                expected_revision=inst["revision"],
+                expected_release_fingerprint=release["fingerprint"],
+                input={} if value is None else value,
+                request_key=key,
+            ),
+        )
+>       assert response.status_code == 202, response.text
+E       AssertionError: {"error":{"code":"INVALID_INPUT","message":"Explicit offline Replay required only for agent","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 202
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_pa_spec_apps.py:290: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_spec_apps.py::test_actual_nodes_and_atomic_pending_checklist[False-single]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 5.18s

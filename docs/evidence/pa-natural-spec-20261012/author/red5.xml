@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="18.008" timestamp="2026-10-13T00:15:48.550751+00:00" hostname="9809f76d2248"><testcase classname="tests.test_natural_spec_apps" name="test_actual_nodes_and_atomic_pending_checklist[False-single]" time="17.861"><failure message="AssertionError: assert ['requirement...pen_question'] == ['requirement...pen_question']&#10;  &#10;  At index 1 diff: 'condition' != 'exception'&#10;  Left contains one more item: 'open_question'&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7f484b0820c0&gt;, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...b139b8112b4f58b4754c0d11d7be1d', 'user_f641ca1dcd4c4e22a06edfc081c3e528', 'proj_054e73041366468eb262076778e3c744', ...)
+style = 'single', repair = False
+
+    @pytest.mark.parametrize("style", ["single", "parallel", "sequential"])
+    @pytest.mark.parametrize("repair", [False, True])
+    def test_actual_nodes_and_atomic_pending_checklist(env, style, repair):
+        data = setup(env)
+        _, _, release, inst, generation = ready(data, style, repair)
+        rid = enqueue(data, release, inst)
+        sent = []
+        assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
+        result = inspect(data, inst, rid)
+        assert result.status_code == 200, result.text
+        assert result.json()["status"] == "SUCCEEDED", result.text
+        checklist = result.json()["result"]["checklist"]
+        assert (
+            checklist["source_content"] == SOURCE
+            and checklist["human_unresolved"] == data[6]["content"]["unresolved"]
+        )
+&gt;       assert [i["kind"] for i in checklist["items"]] == ["requirement", "exception", "open_question"]
+E       AssertionError: assert ['requirement...pen_question'] == ['requirement...pen_question']
+E         
+E         At index 1 diff: 'condition' != 'exception'
+E         Left contains one more item: 'open_question'
+E         Use -v to get more diff
+
+tests/test_natural_spec_apps.py:288: AssertionError</failure></testcase></testsuite></testsuites>

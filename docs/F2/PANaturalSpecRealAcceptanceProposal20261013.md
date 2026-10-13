@@ -6,7 +6,7 @@
 
 请求模型严格为`intern-s2`，返回名字只接受既有明确别名`intern-s2`/`Intern-S2`，不使用latest或其他模型。唯一拟议POST端点为`https://chat.intern-ai.org.cn/api/v1/chat/completions`，不跟重定向、不请求模型列表、不使用内置联网或其他外部工具。官方当前文档明确列出模型ID和该ChatAPI端点；这只是公开文档核验，不是账户可用性证明。[官方模型文档](https://internlm.intern-ai.org.cn/docEn/docs/Models/)，[官方ChatAPI文档](https://internlm.intern-ai.org.cn/docEn/docs/Chat/index.html?id=1748476800101)。公开文档检查日期：2026-10-13 UTC。
 
-官方认证文档提供账户API Console入口，要求后端Bearer认证。仓库Settings.from_env已有合法显式入口`SIM2ACT_INTERN_TOKEN`，空值时允许`INTERN_API_TOKEN`；不自动寻找dotenv/磁盘凭据。**本次只读代码，未读取环境变量值、账户、API Console或任何token；当前凭据来源、是否存在、是否有效均NOT_VERIFIED。** 后续只能由账户所有人从官方入口取得凭据并通过已批准后端secret机制提供，不能把值写入浏览器、仓库、报告或聊天。[官方认证文档](https://internlm.intern-ai.org.cn/docEn/docs/Authentication/)。
+官方认证文档提供账户API Console入口，要求后端Bearer认证。仓库Settings.from_env已有合法显式入口`SIM2ACT_INTERN_TOKEN`，空值时允许`INTERN_API_TOKEN`；不自动寻找dotenv/磁盘凭据。**本次查验代码和本地非凭据运行参数，未查询凭据环境变量值、账户、API Console或任何token；当前凭据来源、是否存在、是否有效均NOT_VERIFIED。** 后续只能由账户所有人从官方入口取得凭据并通过已批准后端secret机制提供，不能把值写入浏览器、仓库、报告或聊天。[官方认证文档](https://internlm.intern-ai.org.cn/docEn/docs/Authentication/)。
 
 ## 唯一拟议试验和总上限
 

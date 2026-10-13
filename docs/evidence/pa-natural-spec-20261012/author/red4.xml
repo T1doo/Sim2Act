@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="23.143" timestamp="2026-10-13T00:14:27.727394+00:00" hostname="9809f76d2248"><testcase classname="tests.test_natural_spec_apps" name="test_actual_nodes_and_atomic_pending_checklist[False-single]" time="22.963"><failure message="KeyError: 'snapshot'">env = (&lt;sim2act.db.Store object at 0x7f003e16bda0&gt;, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...d0d1f6de4a41faae582eab24074fc9', 'user_ab71763290c24905941b0ad5c18b91a0', 'proj_90328430e3454ee18feaf9015c8309be', ...)
+style = 'single', repair = False
+
+    @pytest.mark.parametrize("style", ["single", "parallel", "sequential"])
+    @pytest.mark.parametrize("repair", [False, True])
+    def test_actual_nodes_and_atomic_pending_checklist(env, style, repair):
+        data = setup(env)
+        _, _, release, inst, generation = ready(data, style, repair)
+        rid = enqueue(data, release, inst)
+        sent = []
+        assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
+        result = inspect(data, inst, rid)
+        assert result.status_code == 200, result.text
+        assert result.json()["status"] == "SUCCEEDED", result.text
+        checklist = result.json()["result"]["checklist"]
+        assert (
+            checklist["source_content"] == SOURCE
+&gt;           and checklist["human_unresolved"] == data[6]["snapshot"]["content"]["unresolved"]
+                                                 ^^^^^^^^^^^^^^^^^^^
+        )
+E       KeyError: 'snapshot'
+
+tests/test_natural_spec_apps.py:282: KeyError</failure></testcase></testsuite></testsuites>

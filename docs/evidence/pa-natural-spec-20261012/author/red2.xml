@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.216" timestamp="2026-10-13T00:13:17.305115+00:00" hostname="9809f76d2248"><testcase classname="tests.test_natural_spec_apps" name="test_actual_nodes_and_atomic_pending_checklist[False-single]" time="1.954"><failure message="AssertionError: assert 'FAIL' == 'PASS'&#10;  &#10;  - PASS&#10;  + FAIL">env = (&lt;sim2act.db.Store object at 0x7ff7fa77b350&gt;, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...17c9aae60d48f4a1fa3e708a74a091', 'user_1dedb55950984cd79e55f3c0976bf546', 'proj_d8d9e09bb5a54e558f4e3de3514df695', ...)
+style = 'single', repair = False
+
+    @pytest.mark.parametrize("style", ["single", "parallel", "sequential"])
+    @pytest.mark.parametrize("repair", [False, True])
+    def test_actual_nodes_and_atomic_pending_checklist(env, style, repair):
+&gt;       data = setup(env);_, _, release, inst, generation = ready(data, style, repair)
+                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_spec_apps.py:159: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_spec_apps.py:127: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:119: in generate
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/worker.py:636: in once
+    self.process(run)
+src/sim2act/worker.py:391: in process
+    process(self, run, contract)
+src/sim2act/goal_applications.py:716: in process
+    raw = configured_provider(worker).request_serialized(wire, guard)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/model.py:176: in request_serialized
+    return self._request_serialized(body, wire_guard)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/model.py:206: in _request_serialized
+    return asyncio.run(self._deadline_request(request, envelope["deadline"]))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+src/sim2act/model.py:232: in _deadline_request
+    response = await client.send(request, stream=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_transports/mock.py:34: in handle_async_request
+    response = self.handler(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+request = &lt;Request('POST', 'https://chat.intern-ai.org.cn/api/v1/chat/completions')&gt;
+
+    def handler(request):
+        payload = json.loads(request.content);sent.append(payload)
+        native = json.loads(payload["messages"][1]["content"])["saved_goal"]["snapshot"]["content"]
+        graph = recipe(style);samples = []
+        for step in graph["steps"]:
+            if step["operator"] in natural.MODEL_KINDS:
+                samples.append(dict(step_id=step["step_id"], items=[i for i in facts(SOURCE) if i["kind"] in natural.MODEL_KINDS[step["operator"]]]))
+        candidate = dict(recipe=graph, sample_nodes=samples, source_hash=hashlib.sha256(SOURCE.encode()).hexdigest(), goal=native)
+        if len(sent) == 1:
+            tool, args = natural.READ, dict(resource_id=source_rid)
+        elif len(sent) == 2:
+            actual = json.loads(next(m["content"] for m in payload["messages"] if m["role"] == "tool"))
+            assert actual["data"]["content"] == SOURCE
+            if repair:candidate["sample_nodes"][0]["items"][0]["citations"][0]["quote"] = "Wrong quote"
+            tool, args = "spec.check_candidate", dict(candidate=candidate)
+        else:
+            feedback = json.loads([m["content"] for m in payload["messages"] if m["role"] == "tool"][-1])
+&gt;           assert feedback["data"]["status"] == ("FAIL" if repair else "PASS")
+E           AssertionError: assert 'FAIL' == 'PASS'
+E             
+E             - PASS
+E             + FAIL
+
+tests/test_natural_spec_apps.py:109: AssertionError</failure></testcase></testsuite></testsuites>

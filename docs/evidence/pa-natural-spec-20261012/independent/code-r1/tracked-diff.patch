@@ -1,0 +1,1004 @@
+diff --git a/src/sim2act/agent_apps.py b/src/sim2act/agent_apps.py
+index 1ee34024..9b5b8bbd 100644
+--- a/src/sim2act/agent_apps.py
++++ b/src/sim2act/agent_apps.py
+@@ -69,6 +69,9 @@ def offline_replay_model(responses):
+ 
+ 
+ def is_agent(candidate):
++    from .natural_specs import is_candidate
++    if is_candidate(candidate):
++        return False
+     return any(
+         a.get("executor", {}).get("kind") == "bounded_agent"
+         for a in candidate.get("actions", [])
+diff --git a/src/sim2act/api.py b/src/sim2act/api.py
+index bed733ec..71c21330 100644
+--- a/src/sim2act/api.py
++++ b/src/sim2act/api.py
+@@ -474,6 +474,12 @@ def create_app(store=None, settings=None):
+                 raise DomainError("PERMISSION_DENIED", "Spec checklist uses an isolated offline four-tool app budget")
+             app_limits = Limits(max_requests=1, max_tools=4, max_repairs=0, max_total_tokens=1, max_output_tokens=1,
+                 run_seconds=min(300, platform_limits.run_seconds))
++        if body.family == "natural_spec":
++            if body.activation is not None or platform_limits.max_tools < 4:
++                raise DomainError("PERMISSION_DENIED", "Natural-spec model nodes require a closed offline app budget")
++            app_limits = Limits(max_requests=min(2, platform_limits.max_requests), max_tools=4, max_repairs=0,
++                max_total_tokens=platform_limits.max_total_tokens, max_output_tokens=platform_limits.max_output_tokens,
++                run_seconds=min(300, platform_limits.run_seconds))
+         if body.activation is not None:
+             from .generation_approvals import submission
+ 
+diff --git a/src/sim2act/app_jobs.py b/src/sim2act/app_jobs.py
+index 1e5265f0..f465aa05 100644
+--- a/src/sim2act/app_jobs.py
++++ b/src/sim2act/app_jobs.py
+@@ -224,7 +224,7 @@ def enqueue(
+                     "repairs": 0,
+                     "reserved_tokens": 0,
+                     **({"text_workflow": text_workflows.VERSION} if text_workflows.is_candidate(draft["candidate"]) else {}),
+-                    **({"spec_family": pa_spec_apps.VERSION} if pa_spec_apps.is_candidate(draft["candidate"]) else {}),
++                    **({"spec_family": draft["candidate"]["namespace"]} if pa_spec_apps.is_candidate(draft["candidate"]) else {}),
+                 },
+                 version=1,
+                 cancel_intent=False,
+@@ -411,7 +411,7 @@ def inspect_job(store, user, rid):
+                 "semantic_status": "UNKNOWN", "owner_acceptance": "PENDING", "formal_publication_enabled": False}
+                if workflow or spec else {}),
+             **({"citation_status": "PASS" if job["status"] == "SUCCEEDED" else "NOT_RUN",
+-                "semantic_goal_acceptance": "NOT_RUN", "markdown_view": pa_spec_apps.oracle.markdown_view(a["output"]["checklist"]) if a["output"] else None}
++                "semantic_goal_acceptance": "NOT_RUN", "markdown_view": pa_spec_apps.markdown_view(a["output"]["checklist"]) if a["output"] else None}
+                 if spec else {}),
+         }
+ 
+@@ -881,6 +881,10 @@ def commit_result(worker, run, plan, output):
+ 
+ 
+ def fail_job(worker, run, error):
++    from .natural_specs import VERSION as natural_version
++    if run["context"].get("spec_family") == natural_version:
++        from .natural_spec_runtime import fail_owned
++        return fail_owned(worker, run, error)
+     # Contract rejection also needs lease/status fencing, but cannot require the bad contract.
+     store = worker.store
+     with store.tx() as c:
+diff --git a/src/sim2act/apps.py b/src/sim2act/apps.py
+index 0b267ac5..0bb67c44 100644
+--- a/src/sim2act/apps.py
++++ b/src/sim2act/apps.py
+@@ -333,11 +333,11 @@ def validate_source_family(c, user, draft):
+             raise DomainError("VERSION_CONFLICT", "Independent generation owner changed")
+         markers.append(("goal_application", "registered_tool"))
+         from .db import run_contracts
+-        from .pa_spec_apps import GENERATION
++        from .pa_spec_apps import GENERATIONS
+         from .pa_spec_apps import is_candidate as spec_candidate
+         generation_kind = c.execute(select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
+             .where(run_contracts.c.run_id == generated_text["run_id"])).scalar()
+-        if generation_kind == GENERATION:
++        if generation_kind in GENERATIONS:
+             if not spec_candidate(candidate):
+                 raise DomainError("VERSION_CONFLICT", "Independent spec generation cannot be downgraded")
+         elif (not isinstance(candidate, dict) or not isinstance(candidate.get("actions"), list)
+@@ -360,7 +360,11 @@ def validate_source_family(c, user, draft):
+             raise DomainError("VERSION_CONFLICT", "Independent extraction marker executor missing")
+         for action in actions:
+             executor = action.get("executor") if isinstance(action, dict) else None
+-            if not isinstance(executor, dict) or executor.get("kind") != markers[0][1]:
++            from .natural_specs import MODEL_KINDS
++            from .natural_specs import is_candidate as natural_candidate
++            natural_model = (natural_candidate(candidate) and isinstance(executor, dict)
++                and executor.get("kind") == "bounded_agent" and executor.get("ref") in MODEL_KINDS)
++            if not isinstance(executor, dict) or (executor.get("kind") != markers[0][1] and not natural_model):
+                 raise DomainError(
+                     "VERSION_CONFLICT", "Independent extraction marker executor changed"
+                 )
+diff --git a/src/sim2act/contracts.py b/src/sim2act/contracts.py
+index 9bf83797..4c0e7506 100644
+--- a/src/sim2act/contracts.py
++++ b/src/sim2act/contracts.py
+@@ -238,7 +238,7 @@ class ApplicationGenerationActivation(Strict):
+ 
+ 
+ class ApplicationGenerationPolicy(Strict):
+-    version: Literal["goal-text-application.v1", "goal-spec-checklist-application.v1"]
++    version: Literal["goal-text-application.v1", "goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"]
+     provider: Literal["disabled", "intern-s2"]
+     app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
+     action_id: str = Field(pattern=r"^action_[a-f0-9]{32}$")
+diff --git a/src/sim2act/goal_applications.py b/src/sim2act/goal_applications.py
+index dbd16696..76ca4944 100644
+--- a/src/sim2act/goal_applications.py
++++ b/src/sim2act/goal_applications.py
+@@ -61,6 +61,8 @@ READ_TOOLS = [
+ ]
+ 
+ 
++SPEC_GENERATIONS = {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}
++
+ def response_archive(raw):
+     """Protected Attempt evidence only; never copy private raw into public events/logs."""
+     if not isinstance(raw, dict):
+@@ -91,13 +93,13 @@ class GenerationRunInput(Strict):
+     expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+     request_key: str = Field(min_length=1, max_length=100)
+     activation: ApplicationGenerationActivation | None = None
+-    family: Literal["spec_checklist"] | None = None
++    family: Literal["spec_checklist", "natural_spec"] | None = None
+ 
+ 
+ def policy(provider, user, pid, body, activation=None, app_limits=None):
+     intent = fingerprint({"user": user, "project": pid, "input": body})
+     return ApplicationGenerationPolicy(
+-        version="goal-spec-checklist-application.v1" if body.get("family") == "spec_checklist" else "goal-text-application.v1",
++        version=("goal-natural-spec-application.v1" if body.get("family") == "natural_spec" else "goal-spec-checklist-application.v1" if body.get("family") == "spec_checklist" else "goal-text-application.v1"),
+         provider=provider,
+         app_id="app_" + intent[:32],
+         action_id="action_" + intent[32:],
+@@ -151,12 +153,12 @@ def source_scope_gate(store, c, rid):
+                 metadata["project_id"], metadata["runtime_id"], metadata["resource_refs"]):
+             raise DomainError("VERSION_CONFLICT")
+     if (any(hints[k] != anchored[0][k] for k in ("kind", "aid", "app_id"))
+-        or hints["kind"] not in {"goal-text-application.v1", "goal-spec-checklist-application.v1"} or hints["runtime"] != metadata["runtime_id"]
++        or hints["kind"] not in {"goal-text-application.v1", "goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"} or hints["runtime"] != metadata["runtime_id"]
+         or hints["owner"] != metadata["principal_id"] or hints["project"] != metadata["project_id"]
+         or hints["refs"] != metadata["resource_refs"] or hints["goal_refs"] != metadata["resource_refs"]
+         or hints["resource"] != metadata["resource_refs"][0]):
+         raise DomainError("VERSION_CONFLICT")
+-    if hints["kind"] == "goal-spec-checklist-application.v1":
++    if hints["kind"] in SPEC_GENERATIONS:
+         if aid is not None:
+             raise DomainError("PERMISSION_DENIED", "Spec generation has no LIVE scope")
+         store.authorize(c, metadata["principal_id"], metadata["runtime_id"], metadata["project_id"], metadata["project_id"], "artifact.save_text")
+@@ -207,7 +209,7 @@ def source(store, c, run):
+ 
+ def initial_messages(store, c, run):
+     contract, material = source(store, c, run)
+-    if contract.application_generation.version == "goal-spec-checklist-application.v1":
++    if contract.application_generation.version in SPEC_GENERATIONS:
+         from .pa_spec_apps import initial_messages as spec_messages
+         return spec_messages(store, c, run)
+     from .agent_apps import schemas
+@@ -259,14 +261,14 @@ def body(messages, tools, max_output):
+ def stage_tools(selected, index):
+     if index == 0:
+         return READ_TOOLS
+-    if selected.version == "goal-spec-checklist-application.v1" and index == 1:
++    if selected.version in SPEC_GENERATIONS and index == 1:
+         from .pa_spec_apps import check_tools
+-        return check_tools()
++        return check_tools(selected.version)
+     return []
+ 
+ 
+ def parse_generation(raw, selected):
+-    if selected.version == "goal-spec-checklist-application.v1":
++    if selected.version in SPEC_GENERATIONS:
+         from .pa_spec_apps import CHECK_TOOL, check_envelope
+         return parse_response(raw, {CHECK_TOOL: check_envelope})
+     return parse_response(raw)
+@@ -409,11 +411,11 @@ def history(store, c, run):
+             messages.append(
+                 {
+                     "role": "user",
+-                    "content": ("Call spec.check_candidate with the full compact recipe and example checklist now." if selected.version == "goal-spec-checklist-application.v1" else "Return the complete candidate now, including source_hash and the full frozen goal object. No further tools."),
++                    "content": ("Call spec.check_candidate with the full compact recipe and example checklist now." if selected.version in SPEC_GENERATIONS else "Return the complete candidate now, including source_hash and the full frozen goal object. No further tools."),
+                 }
+             )
+         elif index == 1:
+-            if selected.version == "goal-spec-checklist-application.v1":
++            if selected.version in SPEC_GENERATIONS:
+                 from .pa_spec_apps import check_receipt
+                 calls = attempt["response"].get("tool_calls", [])
+                 if len(calls) != 1:
+@@ -505,7 +507,7 @@ def parse_candidate(store, c, run, message, limits):
+         raise DomainError("INVALID_MANIFEST", "Content-only candidate response required")
+     value = strict_json(message["content"], 16384)
+     contract, _ = source(store, c, run)
+-    if contract.application_generation.version == "goal-spec-checklist-application.v1":
++    if contract.application_generation.version in SPEC_GENERATIONS:
+         from .pa_spec_apps import check_receipt, from_response
+         checked = c.execute(select(attempts.c.response).where(attempts.c.run_id == run["id"],
+             attempts.c.parameters["generation_index"].as_integer() == 1)).scalar()
+@@ -544,7 +546,7 @@ def verified_candidate(store, c, run, limits):
+     _, rows = history(store, c, run)
+     if len(rows) not in {2, 3}:
+         raise DomainError("VERIFICATION_FAILED", "Candidate lacks read/feedback/generation history")
+-    spec = contract.application_generation.version == "goal-spec-checklist-application.v1"
++    spec = contract.application_generation.version in SPEC_GENERATIONS
+     if (spec and len(rows) != 3) or (not spec and len(rows) == 3 and rows[1]["parameters"].get("generation_diagnostic") is None):
+         raise DomainError("VERSION_CONFLICT", "Unapproved repair request")
+     if rows[-1]["parameters"].get("generation_diagnostic") is not None:
+@@ -571,7 +573,7 @@ def check_provider(worker, c, run, contract, attempt_id=None):
+         or worker.s.goal_planner_provider != "intern-s2"):
+         raise DomainError("RESOURCE_UNAVAILABLE", "Explicit Intern generation provider required")
+     activation = contract.application_generation.activation
+-    if contract.application_generation.version == "goal-spec-checklist-application.v1" and activation is not None:
++    if contract.application_generation.version in SPEC_GENERATIONS and activation is not None:
+         raise DomainError("PERMISSION_DENIED", "Spec checklist generation is offline only")
+     if activation is not None:
+         from .generation_approvals import validate_run
+@@ -617,7 +619,7 @@ def check_sender(worker, c, run, messages, tools):
+         or len(rows) >= min(contract.application_generation.request_limit, worker.s.max_requests)
+         or (
+             len(rows) == 2
+-            and contract.application_generation.version != "goal-spec-checklist-application.v1"
++            and contract.application_generation.version not in SPEC_GENERATIONS
+             and (
+                 rows[-1]["parameters"].get("generation_diagnostic") is None
+                 or worker.s.max_repairs < 1
+@@ -775,7 +777,7 @@ def process(worker, run, contract):
+                     settle_generation(worker, contract, rid, aid)
+                     continue
+                 if calls:
+-                    if contract.application_generation.version == "goal-spec-checklist-application.v1" and len(prior) == 1 and len(calls) == 1:
++                    if contract.application_generation.version in SPEC_GENERATIONS and len(prior) == 1 and len(calls) == 1:
+                         from .pa_spec_apps import dispatch_check
+                         with worker.store.tx() as c:
+                             current = locked(worker, c, rid, fence)
+@@ -788,7 +790,7 @@ def process(worker, run, contract):
+                                 worker.store.event(c, rid, "GA_DIAGNOSTIC", dict(attempt_id=aid, diagnostic=report["diagnostic"]))
+                         continue
+                     raise DomainError("PERMISSION_DENIED", "Candidate and repair cannot call tools")
+-                if contract.application_generation.version == "goal-spec-checklist-application.v1" and len(prior) != 2:
++                if contract.application_generation.version in SPEC_GENERATIONS and len(prior) != 2:
+                     raise DomainError("PERMISSION_DENIED", "Actual checker tool must precede final candidate")
+                 with worker.store.tx() as c:
+                     current = locked(worker, c, rid, fence)
+@@ -797,7 +799,7 @@ def process(worker, run, contract):
+                         candidate = parse_candidate(worker.store, c, current, msg, contract.limits)
+                     except DomainError as exc:
+                         if (
+-                            contract.application_generation.version == "goal-spec-checklist-application.v1"
++                            contract.application_generation.version in SPEC_GENERATIONS
+                             or
+                             exc.code not in {"INVALID_MANIFEST", "INVALID_INPUT"}
+                             or prior[-1]["parameters"].get("generation_diagnostic") is not None
+@@ -968,7 +970,7 @@ def check_active(worker, c, run, attempt_id=None):
+ def check_counters(store, c, run, rows):
+     contract = store.frozen_contract(c, run)
+     limits = contract.limits
+-    spec = contract.application_generation.version == "goal-spec-checklist-application.v1"
++    spec = contract.application_generation.version in SPEC_GENERATIONS
+     ctx = run["context"]
+     if any(
+         not isinstance(a["parameters"], dict)
+@@ -1052,7 +1054,7 @@ def confirm(store, user, rid, request, limits):
+             load_draft(store, c, user, aid, limits, lock=True)
+             return {"id": aid, "state": "PREVIEW_ONLY", "cached": True}
+         contract, material = source(store, c, run)
+-        spec = contract.application_generation.version == "goal-spec-checklist-application.v1"
++        spec = contract.application_generation.version in SPEC_GENERATIONS
+         if spec and request.artifact_write_consent is None:
+             raise DomainError("PERMISSION_DENIED", "Explicit project checklist artifact consent required")
+         if not spec and request.artifact_write_consent is not None:
+diff --git a/src/sim2act/pa_material_bindings.py b/src/sim2act/pa_material_bindings.py
+index fc943933..1f740b3e 100644
+--- a/src/sim2act/pa_material_bindings.py
++++ b/src/sim2act/pa_material_bindings.py
+@@ -129,7 +129,7 @@ def model_source(store, c, user, rid, limits, expected_pid=None, *, family="lite
+     run = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
+     raw = verified_candidate(store, c, run, limits)
+     if family == "spec":
+-        require(raw.get("namespace") == "pa-spec-checklist-app.v1")
++        require(raw.get("namespace") in {"pa-spec-checklist-app.v1", "pa-natural-spec-app.v1"})
+     else:
+         require(family == "literal" and raw.get("namespace") is None and len(raw.get("actions", [])) == 1
+             and raw["actions"][0].get("executor", {}).get("ref") == "text.literal_evidence")
+diff --git a/src/sim2act/pa_spec_apps.py b/src/sim2act/pa_spec_apps.py
+index ec11571a..be323463 100644
+--- a/src/sim2act/pa_spec_apps.py
++++ b/src/sim2act/pa_spec_apps.py
+@@ -13,6 +13,7 @@ from typing import Any, Literal
+ from pydantic import Field
+ from sqlalchemy import insert, select, update
+ 
++from . import natural_specs as natural
+ from . import spec_checklists as oracle
+ from .apps import object_schema
+ from .contracts import ActionSpec, AppManifest, FieldSource, Limits, Strict, validate_value
+@@ -44,6 +45,8 @@ from .tools import authorized_read, write_text_artifact
+ 
+ VERSION = "pa-spec-checklist-app.v1"
+ GENERATION = "goal-spec-checklist-application.v1"
++GENERATIONS = {GENERATION, natural.GENERATION}
++FAMILIES = {VERSION, natural.VERSION}
+ CODEC = "spec-checklist-recipe.v1"
+ CHECK_TOOL = "spec.check_candidate"
+ RULES, JSON_TOOL, FUSED = "text.spec_rules", "text.spec_json", "text.spec_checklist"
+@@ -70,7 +73,25 @@ def require(value, message="Exact spec application contract changed"):
+ 
+ 
+ def is_candidate(candidate):
+-    return isinstance(candidate, dict) and candidate.get("namespace") == VERSION
++    return isinstance(candidate, dict) and candidate.get("namespace") in FAMILIES
++
++
++def check_version(candidate):
++    return natural.CHECK if natural.is_candidate(candidate) else oracle.CHECK
++
++
++def source_check(source, family=VERSION):
++    return natural.bounded_source(source) if family == natural.VERSION else oracle.source_checklist(source)
++
++
++def markdown_view(checklist):
++    return natural.markdown_view(checklist) if checklist.get("check_version") == natural.CHECK else oracle.markdown_view(checklist)
++
++
++def verify_saved(source, text, candidate):
++    if natural.is_candidate(candidate):
++        return natural.verify_saved(source, text, candidate["goal"])
++    return oracle.verify_candidate(source, text)
+ 
+ 
+ def schemas():
+@@ -171,6 +192,8 @@ def expand(recipe, aid, cid, pid, source_hash, resource, goal, limits, checked_s
+ 
+ @controlled
+ def compile_candidate(candidate, limits):
++    if natural.is_candidate(candidate):
++        return natural.compile_candidate(candidate, limits)
+     allowed = {"namespace", "manifest", "actions", "spec_recipe", "source_hash", "goal", "model_sample_check"}
+     if set(candidate) not in [allowed, allowed | {"goal_application"}, allowed | {"spec_binding"}]:
+         raise DomainError("INVALID_MANIFEST", "Closed compiled spec application required")
+@@ -215,6 +238,8 @@ def pure(ref, args, source):
+ 
+ 
+ def preview(source, candidate, input_value):
++    if natural.is_candidate(candidate):
++        return natural.preview(source, candidate, input_value)
+     validate_value(candidate["manifest"]["input_schema"], input_value)
+     plan = dict(definition=candidate, input=input_value)
+     outputs: dict[str, dict] = {}
+@@ -256,16 +281,18 @@ def check_envelope(args):
+         raise DomainError("INVALID_INPUT", "Closed candidate check envelope required")
+ 
+ 
+-def check_tools():
++def check_tools(version=GENERATION):
+     return [dict(type="function", function=dict(name=CHECK_TOOL,
+         description="Compile the proposed model recipe and check its example against the actual read; no write or semantic acceptance",
+-        parameters=object_schema(dict(candidate=candidate_schema()))))]
++        parameters=object_schema(dict(candidate=natural.candidate_schema() if version == natural.GENERATION else candidate_schema()))))]
+ 
+ 
+ def initial_messages(store, c, run):
+     from .goal_applications import source
+ 
+     contract, material = source(store, c, run)
++    if contract.application_generation.version == natural.GENERATION:
++        return natural.initial_messages(store, c, run)
+     oracle.source_checklist(material)
+     value = dict(saved_goal=contract.source_goal_card.model_dump(),
+         server_ids=contract.application_generation.model_dump(exclude_none=True),
+@@ -283,6 +310,8 @@ def from_response(store, c, run, value):
+     from .goal_applications import source
+ 
+     contract, material = source(store, c, run)
++    if contract.application_generation.version == natural.GENERATION:
++        return natural.from_response(store, c, run, value)
+     if not isinstance(value, dict) or set(value) != {"recipe", "sample_checklist", "source_hash", "goal"}:
+         raise DomainError("INVALID_MANIFEST", "Complete compact recipe and sample required")
+     require(value["source_hash"] == material["hash"]
+@@ -302,7 +331,8 @@ def from_response(store, c, run, value):
+ def check_report(store, c, run, candidate):
+     from .goal_applications import source
+ 
+-    _, material = source(store, c, run)
++    contract, material = source(store, c, run)
++    check = natural.CHECK if contract.application_generation.version == natural.GENERATION else oracle.CHECK
+     status, diagnostic = "PASS", None
+     try:
+         compiled = from_response(store, c, run, candidate)
+@@ -312,7 +342,7 @@ def check_report(store, c, run, candidate):
+             raise
+         status, diagnostic, plan_hash = "FAIL", exc.public(), None
+     return dict(version="spec.candidate_check.v1", candidate_fingerprint=fingerprint(candidate),
+-        source_hash=material["hash"], check=oracle.CHECK, status=status,
++        source_hash=material["hash"], check=check, status=status,
+         recipe_fingerprint=plan_hash, diagnostic=diagnostic,
+         semantic_goal_acceptance="NOT_RUN", project_writes=0)
+ 
+@@ -339,7 +369,7 @@ def check_receipt(store, c, run, call):
+     report = check_report(store, c, run, args["candidate"])
+     receipt = dict(operation_id=op["id"], status="VERIFIED", data=report,
+         artifact_refs=[], receipt_ref=op["id"],
+-        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=oracle.CHECK, status=report["status"])],
++        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=report["check"], status=report["status"])],
+         usage_ref=None, error=None)
+     require(op["status"] == "VERIFIED" and op["tool_ref"] == CHECK_TOOL
+         and fingerprint(intent) == fingerprint(expected) == op["fingerprint"]
+@@ -361,7 +391,7 @@ def dispatch_check(worker, c, run, call):
+         fingerprint=fingerprint(intent), tool_ref=CHECK_TOOL, status="PREPARED"))
+     c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
+     receipt = dict(operation_id=oid, status="VERIFIED", data=report, artifact_refs=[], receipt_ref=oid,
+-        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=oracle.CHECK, status=report["status"])],
++        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=report["check"], status=report["status"])],
+         usage_ref=None, error=None)
+     c.execute(update(operations).where(operations.c.id == oid).values(status="VERIFIED", receipt=receipt))
+     ctx = {**run["context"], "tools": run["context"]["tools"] + 1, "repairs": int(report["status"] == "FAIL")}
+@@ -402,7 +432,7 @@ def scope_gate(store, c, user, aid):
+     from .db import delivery_graph_requests
+     ledger = c.execute(select(delivery_graph_requests.c.app_id).where(delivery_graph_requests.c.app_id == aid,
+         delivery_graph_requests.c.kind.in_([META, META + "_seal", BIND, BIND + "_seal"]))).first()
+-    if not ((location and (location["family"] == VERSION or location["binding"] == KIND)) or kind == KIND or gen == GENERATION or ledger is not None):
++    if not ((location and (location["family"] in FAMILIES or location["binding"] == KIND)) or kind == KIND or gen in GENERATIONS or ledger is not None):
+         return False
+     require(location is not None)
+     store.own_project(c, user, location["project_id"])
+@@ -413,7 +443,7 @@ def scope_gate(store, c, user, aid):
+             and meta.runtime_id == location["runtime_id"] and meta.project_id == location["project_id"]
+             and meta.resource_id == location["resource"])
+     else:
+-        require(gen == GENERATION, "Independent model generation marker required")
++        require(gen in GENERATIONS, "Independent model generation marker required")
+         origin = c.execute(select(goal_application_candidates.c.run_id).where(
+             goal_application_candidates.c.app_id == aid, goal_application_candidates.c.principal_id == user)).scalar()
+         require(origin is not None)
+@@ -479,18 +509,19 @@ def model_source(store, c, user, rid, limits, pid):
+ 
+ 
+ @controlled
+-def target(store, c, user, pid, cid, version=None, goal_fp=None, runtime=None):
++def target(store, c, user, pid, cid, version=None, goal_fp=None, runtime=None, *, family=VERSION):
+     from .pa_material_bindings import target as read_target
+     project = store.own_project(c, user, pid)
+     store.authorize(c, user, runtime or project["runtime_id"], pid, pid, SAVE)
+     source, goal = read_target(store, c, user, pid, cid, version, goal_fp, runtime)
+-    oracle.source_checklist(source)
++    source_check(source, family)
+     return source, goal
+ 
+ 
+ def binding_candidate(raw, body, goal, material, aid, pid):
+     require(fingerprint(raw["spec_recipe"]) == body.expected_recipe_fingerprint)
+-    result = expand(raw["spec_recipe"], aid, goal.card_id, pid, material["hash"], material["resource_id"],
++    factory = natural.expand if natural.is_candidate(raw) else expand
++    result = factory(raw["spec_recipe"], aid, goal.card_id, pid, material["hash"], material["resource_id"],
+         goal.snapshot["content"], Limits(**raw["manifest"]["runtime_limits"]),
+         raw["model_sample_check"]["sample_fingerprint"])
+     result["spec_binding"] = dict(kind=KIND, source_candidate_fingerprint=fingerprint(raw),
+@@ -513,10 +544,11 @@ def verify_origin(store, c, user, draft, limits):
+             and frozen == dict(kind=KIND, app_id=draft["id"], project_id=draft["project_id"],
+                 runtime_id=draft["runtime_id"], source_run_id=marker["task_id"],
+                 candidate_fingerprint=draft["fingerprint"], request_key=body.request_key,
+-                request_fingerprint=fingerprint(body.model_dump())))
++                request_fingerprint=fingerprint(body.model_dump()),
++                **({"application_namespace": natural.VERSION} if natural.is_candidate(draft["candidate"]) else {})))
+         raw, old = model_source(store, c, user, marker["task_id"], limits, draft["project_id"])
+         source, goal = target(store, c, user, draft["project_id"], body.card_id,
+-            body.expected_goal_version, body.expected_goal_fingerprint, draft["runtime_id"])
++            body.expected_goal_version, body.expected_goal_fingerprint, draft["runtime_id"], family=draft["candidate"]["namespace"])
+         require(source["resource_id"] != old["resource_refs"][0] and source["hash"] != raw["source_hash"]
+             and source["hash"] == body.expected_source_hash and fingerprint(raw) == body.expected_model_candidate_fingerprint)
+         wanted = binding_candidate(raw, body, goal, source, draft["id"], draft["project_id"])
+@@ -536,7 +568,7 @@ def verify_origin(store, c, user, draft, limits):
+             .where(goal_application_candidates.c.app_id == draft["id"])).scalar_one()
+         require(confirmation.get("artifact_write_consent") == CONSENT)
+         source, current = target(store, c, user, draft["project_id"], goal.card_id, goal.version,
+-            goal.fingerprint, draft["runtime_id"])
++            goal.fingerprint, draft["runtime_id"], family=draft["candidate"]["namespace"])
+         require(fingerprint(current.model_dump()) == fingerprint(goal.model_dump()))
+     require(source["hash"] == draft["candidate"]["source_hash"]
+         and manifest.data_bindings[0].resource_ref == source["resource_id"])
+@@ -544,29 +576,32 @@ def verify_origin(store, c, user, draft, limits):
+ 
+ 
+ @controlled
+-def options(store, user, pid, rid, cid, limits):
++def options(store, user, pid, rid, cid, limits, *, family=VERSION):
+     with store.tx() as c:
+         store.lock_project(c, user, pid)
+         raw, metadata = model_source(store, c, user, rid, limits, pid)
+-        source, goal = target(store, c, user, pid, cid)
++        require(raw["namespace"] == family)
++        source, goal = target(store, c, user, pid, cid, family=family)
+         require(source["resource_id"] != metadata["resource_refs"][0] and source["hash"] != raw["source_hash"])
+-        return dict(namespace=VERSION, source_run_id=rid, model_candidate_fingerprint=fingerprint(raw),
++        return dict(namespace=family, source_run_id=rid, model_candidate_fingerprint=fingerprint(raw),
+             recipe=raw["spec_recipe"], recipe_fingerprint=fingerprint(raw["spec_recipe"]),
+             model_graph=raw["spec_recipe"], graph_fingerprint=fingerprint(raw["spec_recipe"]),
+             target_goal=goal.model_dump(), resource_id=source["resource_id"], source_hash=source["hash"],
+             semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN", model_requests=0,
+             owner_acceptance="PENDING", formal_publication_enabled=False,
+-            artifact_write_consent=CONSENT, project_id=pid)
++            artifact_write_consent=CONSENT, project_id=pid,
++            **({"preview": natural.preview(source, {**raw, "goal": goal.snapshot["content"]}, {})} if family == natural.VERSION else {}))
+ 
+ 
+ @controlled
+-def bind(store, user, pid, rid, body, limits):
++def bind(store, user, pid, rid, body, limits, *, family=VERSION):
+     from .apps import load_draft
+     from .db import principals
+     with store.tx() as c:
+         store.lock_project(c, user, pid)
+         raw, metadata = model_source(store, c, user, rid, limits, pid)
+-        source, goal = target(store, c, user, pid, body.card_id, body.expected_goal_version, body.expected_goal_fingerprint)
++        require(raw["namespace"] == family)
++        source, goal = target(store, c, user, pid, body.card_id, body.expected_goal_version, body.expected_goal_fingerprint, family=family)
+         require(fingerprint(raw) == body.expected_model_candidate_fingerprint
+             and source["hash"] == body.expected_source_hash and source["hash"] != raw["source_hash"]
+             and source["resource_id"] != metadata["resource_refs"][0] and body.name.strip())
+@@ -591,6 +626,7 @@ def bind(store, user, pid, rid, body, limits):
+             name=body.name, candidate=value, fingerprint=fingerprint(value), created_at=time.time()))
+         frozen = dict(kind=KIND, app_id=aid, project_id=pid, runtime_id=runtime,
+             source_run_id=rid, candidate_fingerprint=fingerprint(value), request_key=body.request_key,
++            **({"application_namespace": natural.VERSION} if family == natural.VERSION else {}),
+             request_fingerprint=fingerprint(body.model_dump()))
+         c.execute(insert(task_extractions).values(task_id=rid, principal_id=user, request_key=body.request_key,
+             request_fingerprint=fingerprint(body.model_dump()), app_id=aid, snapshot=frozen))
+@@ -603,7 +639,7 @@ def bind(store, user, pid, rid, body, limits):
+ 
+ 
+ @controlled
+-def recover(store, user, pid, rid, key, limits):
++def recover(store, user, pid, rid, key, limits, *, family=VERSION):
+     from .apps import load_draft
+     with store.tx() as c:
+         store.own_project(c, user, pid)
+@@ -612,27 +648,27 @@ def recover(store, user, pid, rid, key, limits):
+         if aid is None:
+             raise DomainError("OUTCOME_UNKNOWN", "No spec binding for the original request key")
+         draft, _, _, _ = load_draft(store, c, user, aid, limits)
+-        require(draft["project_id"] == pid)
++        require(draft["project_id"] == pid and draft["candidate"]["namespace"] == family)
+         body, frozen = pair(c, user, aid, BIND, key, BindInput)
+         return binding_receipt(frozen, body, cached=True)
+ 
+ 
+ def binding_receipt(frozen, body, *, cached):
+-    return dict(namespace=VERSION, id=frozen["app_id"], project_id=frozen["project_id"],
++    return dict(namespace=frozen.get("application_namespace", VERSION), id=frozen["app_id"], project_id=frozen["project_id"],
+         runtime_id=frozen["runtime_id"], candidate_fingerprint=frozen["candidate_fingerprint"],
+         source_run_id=frozen["source_run_id"], request_key=body.request_key,
+         request_fingerprint=fingerprint(body.model_dump()), model_requests=0,
+         semantic_status="UNKNOWN", owner_acceptance="PENDING", formal_publication_enabled=False, cached=cached)
+ 
+ 
+-def source_index(store, user, pid, limits):
++def source_index(store, user, pid, limits, *, family=VERSION):
+     with store.tx() as c:
+         store.own_project(c, user, pid)
+         ids = c.execute(select(goal_application_candidates.c.run_id).join(runs,
+             runs.c.id == goal_application_candidates.c.run_id).join(run_contracts, run_contracts.c.run_id == runs.c.id)
+             .where(runs.c.project_id == pid, runs.c.principal_id == user,
+                 goal_application_candidates.c.principal_id == user,
+-                run_contracts.c.snapshot["application_generation"]["version"].as_string() == GENERATION)
++                run_contracts.c.snapshot["application_generation"]["version"].as_string() == (natural.GENERATION if family == natural.VERSION else GENERATION))
+             .order_by(runs.c.created_at.desc()).limit(64)).scalars().all()
+         result = []
+         for rid in ids:
+@@ -643,7 +679,7 @@ def source_index(store, user, pid, limits):
+                     step_ids=[s["step_id"] for s in raw["spec_recipe"]["steps"]]))
+             except DomainError:
+                 continue
+-        return dict(project_id=pid, namespace=VERSION, options=result, new_model_requests=0)
++        return dict(project_id=pid, namespace=family, options=result, new_model_requests=0)
+ 
+ 
+ def goal_unresolved(goal):
+@@ -676,11 +712,15 @@ def bound(store, c, user, job, limits, *, validate_input=True):
+         and len(contract.resources) == 1 and contract.resources[0].content_hash == source["hash"]
+         and contract.resources[0].resource_id == source["resource_id"] and contract.resources[0].format == source["format"]
+         and contract.mode == "mock" and contract.application_generation is None and contract.natural_planning is None
+-        and job["context"].get("spec_family") == VERSION)
+-    require(all(type(job["context"].get(k)) is int and job["context"][k] == 0
+-        for k in ("requests", "repairs", "reserved_tokens"))
+-        and type(job["context"].get("tools")) is int and 0 <= job["context"]["tools"] <= 4)
+-    require(c.execute(select(attempts.c.id).where(attempts.c.run_id == job["id"])).first() is None)
++        and job["context"].get("spec_family") == draft["candidate"]["namespace"])
++    if natural.is_candidate(draft["candidate"]):
++        from .natural_spec_runtime import counters
++        counters(c, job, manifest)
++    else:
++        require(all(type(job["context"].get(k)) is int and job["context"][k] == 0
++            for k in ("requests", "repairs", "reserved_tokens"))
++            and type(job["context"].get("tools")) is int and 0 <= job["context"]["tools"] <= 4)
++        require(c.execute(select(attempts.c.id).where(attempts.c.run_id == job["id"])).first() is None)
+     if validate_input:
+         validate_value(manifest.input_schema, snapshot["input"])
+     plan = dict(definition=draft["candidate"], input=snapshot["input"],
+@@ -745,11 +785,11 @@ def receipt_for(oid, step, action, plan, intent, value):
+         action_revision=action["revision"], input_fingerprint=fingerprint(intent["args"]),
+         output_fingerprint=fingerprint(value), predecessor_receipts=intent["predecessor_receipts"],
+         input_sources=intent["input_sources"], artifact_refs=[value["resource_id"]] if saved else [],
+-        check_results=[dict(check="receipt.readback.v1" if saved else oracle.CHECK, status="PASS")])
++        check_results=[dict(check="receipt.readback.v1" if saved else check_version(plan["definition"]), status="PASS")])
+ 
+ 
+ @controlled
+-def receipts(store, c, job, binding):
++def receipts(store, c, job, binding, *, pending_id=None, allow_pending=False):
+     plan, source = binding["plan"], binding["source"]
+     ops = c.execute(select(operations).where(operations.c.run_id == job["id"])).mappings().all()
+     by_step = {op["call_id"]: op for op in ops}
+@@ -768,6 +808,14 @@ def receipts(store, c, job, binding):
+         stored = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar()
+         require(fingerprint(stored) == fingerprint(intent) == op["fingerprint"] and op["tool_ref"] == intent["tool"])
+         if op["status"] != "VERIFIED":
++            if allow_pending and natural.is_candidate(plan["definition"]):
++                from .natural_spec_runtime import prove_pending
++                prove_pending(store, c, job, binding, op, intent, action)
++                require(not (set(ids[index + 1:]) & set(by_step)))
++                break
++            if op["id"] == pending_id:
++                require(not (set(ids[index + 1:]) & set(by_step)))
++                break
+             raise DomainError("OUTCOME_UNKNOWN", "Unresolved spec node is never resent")
+         validate_value(action["output_schema"], op["receipt"]["data"])
+         value = op["receipt"]["data"]
+@@ -777,9 +825,16 @@ def receipts(store, c, job, binding):
+             actual = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
+                 "resource.read", dict(resource_id=value["resource_id"]))
+             require(actual["hash"] == value["hash"] and actual["content"] == intent["args"]["text"] and actual["format"] == "json")
+-            oracle.verify_candidate(source, actual["content"])
++            verify_saved(source, actual["content"], plan["definition"])
+         else:
+-            expected = pure(action["executor"]["ref"], intent["args"], source)
++            if natural.is_candidate(plan["definition"]):
++                if action["executor"]["ref"] in natural.MODEL_KINDS:
++                    from .natural_spec_runtime import prove_node
++                    expected = prove_node(store, c, job, binding, op, intent, action)
++                else:
++                    expected = natural.pure(action["executor"]["ref"], intent["args"], source, plan["definition"]["goal"])
++            else:
++                expected = pure(action["executor"]["ref"], intent["args"], source)
+             require(fingerprint(expected) == fingerprint(value), "Spec node readback differs from actual material")
+             require(c.execute(select(local_effects.c.operation_id).where(local_effects.c.operation_id == op["id"])).first() is None)
+         wanted = receipt_for(op["id"], step, action, plan, intent, value)
+@@ -793,7 +848,7 @@ def receipts(store, c, job, binding):
+                 events.c.data["fence"].as_integer() == anchors[0]["fence"])).first() is not None)
+         outputs[sid] = value
+         proved.append(wanted)
+-    require(job["context"]["tools"] == len(proved))
++    require(job["context"]["tools"] == sum(p["step_id"] not in {s["step_id"] for s, a in zip(steps, plan["definition"]["actions"], strict=True) if a["executor"]["ref"] in natural.MODEL_KINDS} for p in proved))
+     return outputs, proved
+ 
+ 
+@@ -803,17 +858,17 @@ def output_for(plan, outputs):
+ 
+ def result_ref(binding, proved, version):
+     s = binding["snapshot"]
+-    return dict(namespace=VERSION, app_run_id=s["app_run_id"], instance_id=s["instance_id"],
++    return dict(namespace=binding["draft"]["candidate"]["namespace"], app_run_id=s["app_run_id"], instance_id=s["instance_id"],
+         release_id=s["release_id"], result_version=version, plan_fingerprint=binding["plan"]["plan_fingerprint"],
+         receipt_refs=[p["operation_id"] for p in proved],
+-        model_requests=0, citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
++        model_requests=sum(a["executor"]["ref"] in natural.MODEL_KINDS for a in binding["draft"]["candidate"]["actions"]), **({"real_model_requests": 0} if natural.is_candidate(binding["draft"]["candidate"]) else {}), citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
+         formal_publication_enabled=False)
+ 
+ 
+ @controlled
+ def verify_job(store, c, user, job, limits):
+     b = bound(store, c, user, job, limits, validate_input=False)
+-    outputs, proved = receipts(store, c, job, b)
++    outputs, proved = receipts(store, c, job, b, allow_pending=True)
+     a, s = b["app_run"], b["snapshot"]
+     rows = c.execute(select(internal_instance_data).where(internal_instance_data.c.instance_id == s["instance_id"],
+         internal_instance_data.c.run_id == a["id"])).mappings().all()
+@@ -929,6 +984,10 @@ def commit_guard(worker, c, run, b, delta=0):
+ def advance(worker, run):
+     from .app_jobs import load_binding, lock_live, state_write, stop_state
+     store = worker.store
++    from .natural_spec_runtime import advance_model
++    handled = advance_model(worker, run)
++    if handled:
++        return True
+     with store.tx() as c:
+         job = lock_live(store, c, run)
+         if job["status"] != "RUNNING" or worker.stop.is_set() or job["cancel_intent"]:
+@@ -951,16 +1010,19 @@ def advance(worker, run):
+             fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
+         c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
+         saved = intent["tool"] == SAVE
++        from .natural_spec_runtime import ledger_digest
++        runtime_audit = ledger_digest(c, job) if saved and natural.is_candidate(plan["definition"]) else None
+         if saved:
+-            oracle.verify_candidate(b["source"], intent["args"]["text"])
++            verify_saved(b["source"], intent["args"]["text"], plan["definition"])
+             value = write_text_artifact(store, c, job["principal_id"], job["runtime_id"], job["project_id"], intent["args"]["text"], artifact_format="json")
+             c.execute(insert(local_effects).values(operation_id=oid, resource_id=value["resource_id"], content_hash=value["hash"]))
+             actual = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
+                 "resource.read", dict(resource_id=value["resource_id"]))
+             require(actual["hash"] == value["hash"] and actual["content"] == intent["args"]["text"] and actual["format"] == "json")
+-            oracle.verify_candidate(b["source"], actual["content"])
++            verify_saved(b["source"], actual["content"], plan["definition"])
+         else:
+-            value = pure(intent["tool"], intent["args"], b["source"])
++            value = (natural.pure(intent["tool"], intent["args"], b["source"], plan["definition"]["goal"])
++                if natural.is_candidate(plan["definition"]) else pure(intent["tool"], intent["args"], b["source"]))
+         validate_value(action["output_schema"], value)
+         receipt = receipt_for(oid, step, action, plan, intent, value)
+         live = commit_guard(worker, c, run, b, 1)
+@@ -1012,6 +1074,8 @@ def advance(worker, run):
+             current_job = c.execute(select(runs).where(runs.c.id == job["id"], runs.c.principal_id == job["principal_id"],
+                 runs.c.project_id == job["project_id"], runs.c.runtime_id == job["runtime_id"])).mappings().one()
+             final_binding, _, _ = verify_job(store, c, job["principal_id"], current_job, limits)
++            if runtime_audit is not None:
++                require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
+             require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
+                 "Original model audit bytes changed during the final save transaction")
+             require(not worker.stop.is_set() and time.time() < live["lease_until"]
+@@ -1049,7 +1113,7 @@ def mount(app, store, limits, identity):
+             output = binding["app_run"]["output"]
+             resource = authorized_read(store, c, user, job["runtime_id"], job["project_id"],
+                 "resource.read", dict(resource_id=output["resource_id"]))
+-            return dict(resource=resource, markdown_view=oracle.markdown_view(output["checklist"]),
++            return dict(resource=resource, markdown_view=markdown_view(output["checklist"]),
+                 citation_status="PASS", semantic_goal_acceptance="NOT_RUN")
+ 
+     @app.get("/api/projects/{pid}/spec-model-runs/{rid}/binding-options")
+@@ -1063,3 +1127,31 @@ def mount(app, store, limits, identity):
+     @app.get("/api/projects/{pid}/spec-model-runs/{rid}/bindings/by-key/{key}")
+     def recover_binding(pid: str, rid: str, key: str, user=user_dependency):
+         return recover(store, user, pid, rid, key, limits)
++
++
++    @app.get("/api/projects/{pid}/natural-spec-model-candidates")
++    def natural_sources(pid: str, user=user_dependency):
++        return source_index(store, user, pid, limits, family=natural.VERSION)
++
++    @app.get("/api/projects/{pid}/natural-spec-model-runs/{rid}/binding-options")
++    def natural_options(pid: str, rid: str, card_id: str, user=user_dependency):
++        return options(store, user, pid, rid, card_id, limits, family=natural.VERSION)
++
++    @app.post("/api/projects/{pid}/natural-spec-model-runs/{rid}/bindings", status_code=201)
++    def natural_bind(pid: str, rid: str, body: BindInput, user=user_dependency):
++        return bind(store, user, pid, rid, body, limits, family=natural.VERSION)
++
++    @app.get("/api/projects/{pid}/natural-spec-model-runs/{rid}/bindings/by-key/{key}")
++    def natural_recover(pid: str, rid: str, key: str, user=user_dependency):
++        return recover(store, user, pid, rid, key, limits, family=natural.VERSION)
++
++    @app.get("/api/projects/{pid}/natural-spec-model-runs/{rid}/sample-preview")
++    def natural_sample(pid: str, rid: str, user=user_dependency):
++        from .goal_applications import source_scope_gate
++        with store.tx() as c:
++            store.own_project(c, user, pid)
++            metadata = c.execute(select(runs.c.principal_id, runs.c.project_id).where(runs.c.id == rid)).mappings().first()
++            require(metadata is not None and metadata["principal_id"] == user and metadata["project_id"] == pid)
++            source_scope_gate(store, c, rid)
++            job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user, runs.c.project_id == pid)).mappings().one()
++            return natural.sample_preview(store, c, job)
+diff --git a/src/sim2act/web/goal-application.js b/src/sim2act/web/goal-application.js
+index bcb88d12..a23b08f1 100644
+--- a/src/sim2act/web/goal-application.js
++++ b/src/sim2act/web/goal-application.js
+@@ -1,5 +1,7 @@
+ "use strict";
+ // Immutable per-intent requests. Unknown POST outcomes recover through keyed GETs only.
++const goalSpecFamily=family=>["spec_checklist","natural_spec"].includes(family);
++const goalGenerationVersion=family=>family==="natural_spec"?"goal-natural-spec-application.v1":family==="spec_checklist"?"goal-spec-checklist-application.v1":"goal-text-application.v1";
+ const goalApplications=new Map();
+ let goalApplicationDisplayed=null;
+ let goalApplicationDraftGeneration=0;
+@@ -23,13 +25,13 @@ function renderGoalApplicationControls(){
+   $("goal-application-confirm-read").hidden=!entry?.confirmBody;
+   $("goal-application-confirm-read").disabled=!!entry?.busy;
+   $("goal-provider-refresh").disabled=!key||!!entry;
+-  $("goal-provider-select").disabled=!!entry||$("goal-application-family").value==="spec_checklist";
++  $("goal-provider-select").disabled=!!entry||goalSpecFamily($("goal-application-family").value);
+   $("goal-application-family").disabled=!!entry;
+-  const specFamily=entry?.body.family==="spec_checklist"||(!entry&&$("goal-application-family").value==="spec_checklist");
++  const specFamily=goalSpecFamily(entry?.body.family)||(!entry&&goalSpecFamily($("goal-application-family").value));
+   $("goal-application-write-label").hidden=!specFamily;
+   if(specFamily&&!$("goal-application-write-ack").checked)$("goal-application-confirm").disabled=true;
+   renderPaBinding();
+-  $("goal-application-proof").textContent=entry?.result ? JSON.stringify({run_id:entry.runId,version:entry.version,...entry.result},null,2) : "";
++  $("goal-application-proof").textContent=entry?.result ? JSON.stringify({run_id:entry.runId,version:entry.version,...entry.result,...(entry.sample ? {protected_sample_preview:entry.sample}: {})},null,2) : "";
+   $("goal-application-status").textContent=entry?.message||"使用已保存目标；未保存编辑不纳入生成。真实模型调用关闭，语义接受 NOT_RUN。";
+ }
+ function goalApplicationCurrent(entry){return goalApplicationKey()===entry.key&&entry.connection===identityConnectionGeneration&&entry.selection===goalSelectionGeneration;}
+@@ -39,15 +41,21 @@ async function readGoalApplication(entry,acceptedRunId=null){
+   if((entry.runId&&run.id!==entry.runId)||(acceptedRunId&&run.id!==acceptedRunId))throw Error("VERSION_CONFLICT");
+   const source=run.contract?.snapshot?.source_goal_card;
+   const selected=run.contract?.snapshot?.application_generation;
+-  if(!/^run_[a-f0-9]{32}$/.test(run.id)||!Number.isSafeInteger(run.version)||run.version<1||!source||source.card_id!==entry.card||source.version!==entry.body.expected_version||source.fingerprint!==entry.body.expected_fingerprint||goalRunCanonical(source.snapshot)!==goalRunCanonical(entry.snapshot)||selected?.version!==(entry.body.family==="spec_checklist"?"goal-spec-checklist-application.v1":"goal-text-application.v1")||selected.live_request_allowance!==0)throw Error("VERSION_CONFLICT");
++  if(!/^run_[a-f0-9]{32}$/.test(run.id)||!Number.isSafeInteger(run.version)||run.version<1||!source||source.card_id!==entry.card||source.version!==entry.body.expected_version||source.fingerprint!==entry.body.expected_fingerprint||goalRunCanonical(source.snapshot)!==goalRunCanonical(entry.snapshot)||selected?.version!==(goalGenerationVersion(entry.body.family))||selected.live_request_allowance!==0)throw Error("VERSION_CONFLICT");
+   if(goalRunCanonical(selected.activation||null)!==goalRunCanonical(entry.body.activation||null))throw Error("VERSION_CONFLICT");
+   if(run.status==="PARTIAL"){
+     const result=run.result,candidate=result?.candidate;
+-    if(result?.goal_acceptance!=="NOT_RUN"||result.semantic_status!=="UNKNOWN"||result.app_created!==false||run.cancel_intent||run.error||!candidate||candidate.manifest?.app_id!==selected.app_id||(entry.body.family==="spec_checklist" ? (candidate.namespace!=="pa-spec-checklist-app.v1"||![3,4].includes(candidate.actions?.length)||candidate.spec_recipe?.steps?.length!==candidate.actions.length||goalRunCanonical(candidate.manifest.runtime_limits)!==goalRunCanonical(selected.app_limits)) : (candidate.actions?.length!==1||candidate.actions[0].action_id!==selected.action_id||candidate.actions[0].executor?.ref!=="text.literal_evidence"))||goalRunCanonical(candidate.goal)!==goalRunCanonical(entry.snapshot.content))throw Error("VERSION_CONFLICT");
++    if(result?.goal_acceptance!=="NOT_RUN"||result.semantic_status!=="UNKNOWN"||result.app_created!==false||run.cancel_intent||run.error||!candidate||candidate.manifest?.app_id!==selected.app_id||(goalSpecFamily(entry.body.family) ? (candidate.namespace!==(entry.body.family==="natural_spec"?"pa-natural-spec-app.v1":"pa-spec-checklist-app.v1")||!(entry.body.family==="natural_spec"?[4,6]:[3,4]).includes(candidate.actions?.length)||candidate.spec_recipe?.steps?.length!==candidate.actions.length||(entry.body.family==="natural_spec"?Object.keys(selected.app_limits).some(k=>!Number.isSafeInteger(candidate.manifest.runtime_limits?.[k])||candidate.manifest.runtime_limits[k]>selected.app_limits[k]):goalRunCanonical(candidate.manifest.runtime_limits)!==goalRunCanonical(selected.app_limits))) : (candidate.actions?.length!==1||candidate.actions[0].action_id!==selected.action_id||candidate.actions[0].executor?.ref!=="text.literal_evidence"))||goalRunCanonical(candidate.goal)!==goalRunCanonical(entry.snapshot.content))throw Error("VERSION_CONFLICT");
+     const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(candidate)))),b=>b.toString(16).padStart(2,"0")).join("");
+     if(!goalApplicationCurrent(entry))return;
+     if(digest!==result.candidate_fingerprint)throw Error("VERSION_CONFLICT");
+   }
++  if(entry.body.family==="natural_spec"&&run.status==="PARTIAL"){
++    const sample=await api(`/api/projects/${entry.project}/natural-spec-model-runs/${run.id}/sample-preview`);
++    if(!goalApplicationCurrent(entry))return;
++    if(sample.candidate_fingerprint!==run.result.candidate_fingerprint||sample.new_model_requests!==0||sample.project_writes!==0||sample.semantic_status!=="UNKNOWN"||sample.semantic_goal_acceptance!=="NOT_RUN"||sample.preview?.checklist?.source_retention!=="EXACT")throw Error("VERSION_CONFLICT");
++    entry.sample=sample;
++  }
+   $("goal-application-ack").checked=false;
+   entry.runId=run.id;entry.version=run.version;entry.result=run.status==="PARTIAL" ? run.result : null;
+   if(entry.result)entry.expectedAppId=entry.result.candidate.manifest.app_id;
+@@ -79,14 +87,14 @@ $("goal-application-start").onclick=()=>{
+   const entry={key,project:$("project-select").value,card:card.id,snapshot:structuredClone(card.snapshot),connection:identityConnectionGeneration,selection:goalSelectionGeneration,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},busy:false,result:null,confirmBody:null,message:"正在接受冻结目标…"};
+   const choice=goalProviderChoices.get(key)?.find(value=>value.activation.approval_id===$("goal-provider-select").value);
+   if($("goal-provider-select").value&&!choice)return;
+-  if($("goal-application-family").value==="spec_checklist"){if(choice)return;entry.body.family="spec_checklist";}
++  if(goalSpecFamily($("goal-application-family").value)){if(choice)return;entry.body.family=$("goal-application-family").value;}
+   if(choice){entry.body.activation=structuredClone(choice.activation);entry.body.request_key=choice.request_key;}
+   goalApplications.set(key,entry);$("goal-application-ack").checked=false;
+   return goalApplicationAction(entry,async()=>{
+     const accepted=await api(`/api/projects/${entry.project}/goal-cards/${entry.card}/application-runs`,"POST",entry.body);
+     if(!goalApplicationCurrent(entry))return;
+     const fields=["run_id","status","goal_card_id","goal_version","goal_fingerprint","goal_acceptance","candidate_generated","generation_policy"];
+-    if(!accepted||Object.keys(accepted).sort().join()!==fields.sort().join()||accepted.goal_card_id!==entry.card||accepted.goal_fingerprint!==entry.body.expected_fingerprint||accepted.goal_version!==entry.body.expected_version||accepted.status!=="ACCEPTED"||accepted.goal_acceptance!=="NOT_RUN"||accepted.candidate_generated!==false||!/^run_[a-f0-9]{32}$/.test(accepted.run_id)||accepted.generation_policy?.version!==(entry.body.family==="spec_checklist"?"goal-spec-checklist-application.v1":"goal-text-application.v1")||accepted.generation_policy.live_request_allowance!==0||goalRunCanonical(accepted.generation_policy.activation||null)!==goalRunCanonical(entry.body.activation||null))throw Error("VERSION_CONFLICT");
++    if(!accepted||Object.keys(accepted).sort().join()!==fields.sort().join()||accepted.goal_card_id!==entry.card||accepted.goal_fingerprint!==entry.body.expected_fingerprint||accepted.goal_version!==entry.body.expected_version||accepted.status!=="ACCEPTED"||accepted.goal_acceptance!=="NOT_RUN"||accepted.candidate_generated!==false||!/^run_[a-f0-9]{32}$/.test(accepted.run_id)||accepted.generation_policy?.version!==(goalGenerationVersion(entry.body.family))||accepted.generation_policy.live_request_allowance!==0||goalRunCanonical(accepted.generation_policy.activation||null)!==goalRunCanonical(entry.body.activation||null))throw Error("VERSION_CONFLICT");
+     // A POST id is only a hint. The original-key GET proves the accepted request
+     // before readGoalApplication promotes its verified id to future Run reads.
+     await readGoalApplication(entry,accepted.run_id);
+@@ -98,14 +106,14 @@ $("goal-application-write-ack").onchange=renderGoalApplicationControls;
+ $("goal-application-family").onchange=()=>{$("goal-provider-select").value="";$("goal-provider-proof").textContent="";$("goal-application-write-ack").checked=false;renderGoalApplicationControls();};
+ $("goal-application-confirm").onclick=()=>{
+   const entry=goalApplications.get(goalApplicationKey());if(!entry?.result||entry.confirmBody||!$("goal-application-ack").checked)return;
+-  if(entry.body.family==="spec_checklist"&&!$("goal-application-write-ack").checked)return;
++  if(goalSpecFamily(entry.body.family)&&!$("goal-application-write-ack").checked)return;
+   const handoff=goalApplicationHandoff(entry);
+-  entry.confirmBody={expected_version:entry.version,candidate_fingerprint:entry.result.candidate_fingerprint,request_key:crypto.randomUUID(),name:$("goal-application-name").value,...(entry.body.family==="spec_checklist"?{artifact_write_consent:"ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"}:{})};
++  entry.confirmBody={expected_version:entry.version,candidate_fingerprint:entry.result.candidate_fingerprint,request_key:crypto.randomUUID(),name:$("goal-application-name").value,...(goalSpecFamily(entry.body.family)?{artifact_write_consent:"ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"}:{})};
+   return goalApplicationAction(entry,async()=>{
+     const saved=await api(`/api/runs/${entry.runId}/confirm-application-candidate`,"POST",entry.confirmBody);
+     if(!goalApplicationCurrent(entry))return;
+     if(saved.id!==entry.result.candidate.manifest.app_id||saved.state!=="PREVIEW_ONLY")throw Error("VERSION_CONFLICT");
+-    entry.message=entry.body.family==="spec_checklist"?`已确认 ${saved.id}，授权冻结材料读取和本项目 JSON 清单保存；语义 NOT_RUN。`:`已确认 ${saved.id}，仅授权冻结材料的读取。`;
++    entry.message=goalSpecFamily(entry.body.family)?`已确认 ${saved.id}，授权冻结材料读取和本项目 JSON 清单保存；语义 NOT_RUN。`:`已确认 ${saved.id}，仅授权冻结材料的读取。`;
+     await openGoalApplication(entry,saved,handoff);
+   });
+ };
+@@ -125,8 +133,10 @@ $("goal-application-confirm-read").onclick=()=>{
+ const paBindingNamespace="pa-model-literal-material-binding.v1";
+ const specBindingNamespace="pa-spec-checklist-app.v1";
+ const specBindingConsent="ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT";
+-const paBindingFamily=()=>$("pa-binding-family").value==="spec";
+-const paBindingExpected=()=>paBindingFamily()?specBindingNamespace:paBindingNamespace;
++const paBindingFamily=()=>["spec","natural"].includes($("pa-binding-family").value);
++const paBindingNatural=()=>$("pa-binding-family").value==="natural";
++const paBindingPath=state=>state.natural?"natural-spec-model-runs":state.spec?"spec-model-runs":"pa-model-candidates";
++const paBindingExpected=()=>paBindingNatural()?"pa-natural-spec-app.v1":paBindingFamily()?specBindingNamespace:paBindingNamespace;
+ $("pa-binding-family").onchange=()=>{paBindingSourceReadGeneration++;$("pa-binding-source").replaceChildren();paBindingState=null;$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;renderPaBinding();};
+ const paBindingConsent="REUSE_ONLY_THIS_MODEL_GRAPH_WITH_THIS_EXPLICIT_TARGET_GOAL_AND_NEW_MATERIAL";
+ const paHash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");
+@@ -166,7 +176,7 @@ $("pa-binding-source").onchange=()=>{paBindingState=null;$("pa-binding-proof").t
+ $("pa-binding-sources").onclick=async()=>{
+  const context=paContext(),pid=$("project-select").value,generation=++paBindingSourceReadGeneration;
+  const current=()=>context.current()&&generation===paBindingSourceReadGeneration;paBindingState=null;$("pa-binding-source").replaceChildren();$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;renderPaBinding();
+- try{const value=await api(`/api/projects/${pid}/${paBindingFamily()?"spec-model-candidates":"pa-model-candidates"}`);if(!current())return;
++ try{const value=await api(`/api/projects/${pid}/${paBindingNatural()?"natural-spec-model-candidates":paBindingFamily()?"spec-model-candidates":"pa-model-candidates"}`);if(!current())return;
+   if(value.project_id!==pid||value.namespace!==paBindingExpected()||value.new_model_requests!==0||!Array.isArray(value.options)||value.options.length>64)throw Error("VERSION_CONFLICT");
+   $("pa-binding-source").add(new Option("明确选择已确认的模型来源",""));
+   for(const source of value.options){if(!/^run_[a-f0-9]{32}$/.test(source.run_id)||source.model!=="intern-s2"||!/^[a-f0-9]{64}$/.test(source.graph_fingerprint))throw Error("VERSION_CONFLICT");const option=new Option(source.run_id+" · "+source.step_ids.join(","),source.run_id);option.dataset.graph=source.graph_fingerprint;option.dataset.candidate=source.model_candidate_fingerprint;$("pa-binding-source").add(option);}
+@@ -175,8 +185,8 @@ $("pa-binding-sources").onclick=async()=>{
+ };
+ $("pa-binding-preview").onclick=async()=>{
+  const card=activeGoalCard,source=$("pa-binding-source").selectedOptions[0],context=paContext(),pid=$("project-select").value;if(!card||!source?.value)return;
+- const state={context,pid,spec:paBindingFamily(),rid:source.value,card:structuredClone(card),busy:true,options:null,body:null,saved:null};paBindingState=state;$("pa-binding-ack").checked=false;renderPaBinding();
+- try{const value=await api(`/api/projects/${pid}/${state.spec?"spec-model-runs":"pa-model-candidates"}/${state.rid}/${state.spec?"binding-options":"material-binding-options"}?card_id=${card.id}`);
++ const state={context,pid,spec:paBindingFamily(),natural:paBindingNatural(),rid:source.value,card:structuredClone(card),busy:true,options:null,body:null,saved:null};paBindingState=state;$("pa-binding-ack").checked=false;renderPaBinding();
++ try{const value=await api(`/api/projects/${pid}/${paBindingPath(state)}/${state.rid}/${state.spec?"binding-options":"material-binding-options"}?card_id=${card.id}`);
+   if(!context.current()||paBindingState!==state)return;
+   if(value.namespace!==paBindingExpected()||value.project_id!==pid||value.source_run_id!==state.rid||value.model_requests!==0||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"||value.formal_publication_enabled!==false||value.target_goal.card_id!==card.id||value.target_goal.version!==card.version||value.target_goal.fingerprint!==card.fingerprint||goalRunCanonical(value.target_goal.snapshot)!==goalRunCanonical(card.snapshot)||value.model_candidate_fingerprint!==source.dataset.candidate||value.graph_fingerprint!==source.dataset.graph||await paHash(value.model_graph)!==value.graph_fingerprint||await paHash(value.target_goal.snapshot)!==card.fingerprint||value.resource_id!==card.snapshot.content.resource_refs[0]||value.source_hash!==card.snapshot.resource_snapshots[0].hash)throw Error("VERSION_CONFLICT");
+   if(!context.current()||paBindingState!==state)return;state.options=value;$("pa-binding-proof").textContent=JSON.stringify(value,null,2);$("pa-binding-status").textContent="已预览实际模型图和完整新目标；明确确认后保存应用；规范能力在实际运行时保存本项目一个 JSON 清单，语义完整性未验。";
+@@ -186,16 +196,16 @@ async function paBindingAction(state,operation){
+  if(!state||state.busy||paBindingState!==state||!state.context.current())return;state.busy=true;renderPaBinding();
+  try{const saved=await operation();if(paBindingState!==state||!state.context.current())return;
+   const fields=["namespace","id","project_id","runtime_id","candidate_fingerprint","source_run_id","request_key","request_fingerprint","model_requests","semantic_status","owner_acceptance","formal_publication_enabled","cached"];
+-  if(!saved||Object.keys(saved).sort().join()!==fields.sort().join()||saved.namespace!==(state.spec?specBindingNamespace:paBindingNamespace)||saved.project_id!==state.pid||saved.source_run_id!==state.rid||saved.request_key!==state.body.request_key||saved.request_fingerprint!==await paHash(state.body)||!/^app_[a-f0-9]{32}$/.test(saved.id)||saved.model_requests!==0||saved.semantic_status!=="UNKNOWN"||saved.owner_acceptance!=="PENDING"||saved.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
++  if(!saved||Object.keys(saved).sort().join()!==fields.sort().join()||saved.namespace!==(state.natural?"pa-natural-spec-app.v1":state.spec?specBindingNamespace:paBindingNamespace)||saved.project_id!==state.pid||saved.source_run_id!==state.rid||saved.request_key!==state.body.request_key||saved.request_fingerprint!==await paHash(state.body)||!/^app_[a-f0-9]{32}$/.test(saved.id)||saved.model_requests!==0||saved.semantic_status!=="UNKNOWN"||saved.owner_acceptance!=="PENDING"||saved.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
+   if(paBindingState!==state||!state.context.current())return;state.saved=saved;$("pa-binding-status").textContent=`已保存 ${saved.id}；另行打开核查新材料执行。`;
+  }catch(error){if(paBindingState===state&&state.context.current()){state.saved=null;$("pa-binding-status").textContent=error.message+"；仅用原key GET恢复，不自动重发。";}}finally{state.busy=false;if(paBindingState===state&&goalApplicationCurrent(state.context.entry))renderPaBinding();}
+ }
+ $("pa-binding-save").onclick=()=>{
+  const state=paBindingState;if(!state?.options||state.body||!$("pa-binding-ack").checked||!state.context.current())return;
+  const value=state.options;state.body={card_id:state.card.id,expected_goal_version:state.card.version,expected_goal_fingerprint:state.card.fingerprint,expected_source_hash:value.source_hash,expected_model_candidate_fingerprint:value.model_candidate_fingerprint,...(state.spec?{expected_recipe_fingerprint:value.recipe_fingerprint}:{expected_graph_fingerprint:value.graph_fingerprint}),name:$("pa-binding-name").value,consent:state.spec?specBindingConsent:paBindingConsent,request_key:crypto.randomUUID()};
+- return paBindingAction(state,()=>api(`/api/projects/${state.pid}/${state.spec?"spec-model-runs":"pa-model-candidates"}/${state.rid}/${state.spec?"bindings":"material-bindings"}`,"POST",state.body));
++ return paBindingAction(state,()=>api(`/api/projects/${state.pid}/${paBindingPath(state)}/${state.rid}/${state.spec?"bindings":"material-bindings"}`,"POST",state.body));
+ };
+-$("pa-binding-recover").onclick=()=>{const state=paBindingState;if(!state?.body||state.busy||!goalApplicationCurrent(state.context.entry))return;state.context=paContext();return paBindingAction(state,()=>api(`/api/projects/${state.pid}/${state.spec?"spec-model-runs":"pa-model-candidates"}/${state.rid}/${state.spec?"bindings/by-key":"material-binding-requests"}/${encodeURIComponent(state.body.request_key)}`));};
++$("pa-binding-recover").onclick=()=>{const state=paBindingState;if(!state?.body||state.busy||!goalApplicationCurrent(state.context.entry))return;state.context=paContext();return paBindingAction(state,()=>api(`/api/projects/${state.pid}/${paBindingPath(state)}/${state.rid}/${state.spec?"bindings/by-key":"material-binding-requests"}/${encodeURIComponent(state.body.request_key)}`));};
+ $("pa-binding-open").onclick=async()=>{
+  const state=paBindingState;if(!state?.saved||state.busy||!state.context.current())return;
+  const saved=state.saved,entry=state.context.entry;entry.project=state.pid;entry.message=`已保存 ${saved.id}；请核查本目标新材料的逐字引用。`;
+diff --git a/src/sim2act/web/index.html b/src/sim2act/web/index.html
+index c1eae2f0..11e23f3a 100644
+--- a/src/sim2act/web/index.html
++++ b/src/sim2act/web/index.html
+@@ -4,7 +4,7 @@
+ <section id="login"><label>本机访问令牌 <input id="token" type="password" autocomplete="off"></label><button id="connect">连接</button><p>令牌仅保存在本页内存。当前为 F1 工程版本，MOCK 不能作为真实模型验收。</p></section>
+ <nav id="workspace-nav" aria-label="工作区"><button type="button" data-tab="projects" aria-controls="projects" aria-current="true">项目</button><button type="button" data-tab="apps" aria-controls="apps">应用</button><button type="button" data-tab="resources" aria-controls="resources">资源</button></nav>
+ <main><p id="error" role="alert"></p><section id="project-context" aria-label="当前项目范围"><p id="project-context-status" role="status" aria-live="polite" aria-atomic="true">请先连接本机 API，再选择项目。材料仅在所选项目内保存和授权。</p><button id="project-context-open" type="button" aria-describedby="project-context-status">填写连接令牌</button></section>
+-<section id="projects"><h1>项目</h1><form id="project-form"><label>项目名称 <input id="project-name" required maxlength="200"></label><button>创建项目</button></form><label>当前项目 <select id="project-select"></select></label><fieldset id="text-logic-panel"><legend>当前项目的独立文本逻辑</legend><p>冷页面从独立授权读取固定字面逻辑，不打开旧来源。选择另一份已有授权 TXT/MD，明确建立一个无令牌、仅该材料 resource.read 权限的新身份。目标用户权限或新身份权限撤销后拒绝；旧目标应用自身身份不被复制。owner PENDING，语义 UNKNOWN，未发布。</p><button id="text-logic-history" type="button">读取项目文本逻辑</button><select id="text-logic-selected" aria-label="独立文本逻辑"></select><button id="text-logic-read" type="button">读取当前逻辑状态</button><button id="text-logic-materials" type="button">预览当前授权新材料</button><label>已有文本应用<select id="text-logic-target"></select></label><label>新应用名称<input id="text-logic-name" maxlength="200" value="独立文本检索应用"></label><label><input id="text-logic-bind-confirm" type="checkbox">核对逻辑、新材料版本和期限，明确创建只读新身份并保存新应用</label><button id="text-logic-bind" type="button">绑定新材料并保存应用</button><button id="text-logic-open" type="button">打开新应用，另行核查执行</button><label>原请求key<input id="text-logic-key" maxlength="100" autocomplete="off"></label><button id="text-logic-recover" type="button">仅GET读取原请求回执</button><label><input id="text-logic-revoke-confirm" type="checkbox">明确不可逆撤销所选独立文本逻辑</label><button id="text-logic-revoke" type="button">撤销独立文本逻辑</button><pre id="text-logic-proof"></pre><p id="text-logic-status" role="status" aria-live="polite"></p></fieldset><fieldset id="text-continuation-panel"><legend>已有文本实例的软件兼容接续</legend><p>仅支持可证明兼容的固定字面检索软件。选择一个已有实例，冻结精确新旧版本、权限、预算和保留数据，先预检再手动确认。原数据与历史保留；旧人工签收失效，语义 UNKNOWN，未发布。</p><button id="text-continuation-list" type="button">读取待接续实例（元数据）</button><label>已有实例<select id="text-continuation-selected"></select></label><label>预检样例词<input id="text-continuation-term" value="Alpha" maxlength="80"></label><button id="text-continuation-preview" type="button">预检所选实例与精确软件</button><pre id="text-continuation-proof"></pre><label><input id="text-continuation-ack" type="checkbox">我已核对精确版本、保留范围、样例结果和有效期，确认只接续此实例</label><button id="text-continuation-commit" type="button" disabled>确认此精确软件接续</button><button id="text-continuation-open" type="button" disabled>打开所选实例，另行提交新输入</button><label>原请求 key<input id="text-continuation-key" maxlength="100" autocomplete="off"></label><button id="text-continuation-recover" type="button">仅用原 key GET 读取恢复</button><label>停止依据<input id="text-continuation-reason" maxlength="500"></label><label><input id="text-continuation-stop-ack" type="checkbox">明确取消待批准预检，或撤回所选已提交的软件执行许可</label><button id="text-continuation-stop" type="button" disabled>停止所选预检 / 兼容执行许可</button><p id="text-continuation-status" role="status" aria-live="polite"></p></fieldset><fieldset id="csv-logic-panel"><legend>当前项目的独立 CSV 逻辑授权</legend><p>仅已实际成功的读取 → 求和（→ 报告）结构；无原材料内容、列名或结果。须在来源仍可完整核查时另行确认24小时授权，再注册新CSV；不能从失效来源补发。原材料撤权不撤销这份结构授权，目标仍需当前权限。语义 UNKNOWN，用户 PENDING，发布关闭。</p><button id="csv-logic-history" type="button">读取项目逻辑授权（只读）</button><select id="csv-logic-selected"></select><button id="csv-logic-read" type="button">读取当前授权状态</button><button id="csv-logic-options" type="button">读取当前授权目标</button><label>已有CSV草案<select id="csv-logic-target"></select></label><label>本次新材料列<select id="csv-logic-column"></select></label><label><input id="csv-logic-confirm" type="checkbox">核对逻辑授权、新材料版本、列及冻结预算，确认保存目标计划</label><button id="csv-logic-plan" type="button">保存独立目标计划</button><button id="csv-logic-open" type="button">打开目标计划，另行确认执行</button><label><input id="csv-logic-revoke-confirm" type="checkbox">永久撤销所选逻辑授权；此授权的所有目标和实例将停止复用</label><button id="csv-logic-revoke" type="button">撤销独立逻辑授权</button><button id="csv-logic-recover" type="button" hidden>恢复本次原键回执</button><p id="csv-logic-status" role="status"></p><pre id="csv-logic-proof"></pre></fieldset><div class="grid"><section><h2>指令区</h2><form id="run-form"><label>目标 <textarea id="goal" required maxlength="4000"></textarea></label><p>本增量读取当前项目已授权材料；未完成应用生成和目标语义验收。</p><button id="run-submit">提交持久任务</button><p id="run-submit-status" role="status" aria-live="polite"></p><button id="run-submit-recover" type="button" hidden>恢复同一提交的回执</button><button id="run-submit-read" type="button" hidden>重新读取已接受任务</button><p>任务在后台持久执行。刷新页面后请先查任务历史，避免另建重复任务。</p></form><h2>任务历史</h2><p>按目标摘要与接受时间定位原任务。提交模式不代表已调用模型或目标验收。</p><button id="run-history-refresh" type="button">刷新任务历史（只读）</button><p id="run-history-status" role="status" aria-live="polite"></p><div id="runs"></div></section><section><h2>成果画布</h2><div id="result">选择任务查看持久状态与成果。</div><div id="commands"></div><details><summary>事件、来源与完整回执</summary><pre id="events"></pre><pre id="raw-result"></pre></details></section></div><section id="protocol-panel"><h2>注册任务与可复用协议成果</h2><p>有限只读工程入口。独立注册核查与 owner 语义签收分开；不会自动核查或发布。默认协议 provider 未配置时等待资源。</p><form id="protocol-source-form"><label>已注册任务 <select id="protocol-contract" required></select></label><p id="protocol-source-goal"></p><div id="protocol-source-materials"></div><div id="protocol-inputs"></div><button id="protocol-source-submit" disabled>提交来源任务</button><p id="protocol-source-status" role="status"></p></form><section id="protocol-detail" hidden><h3>当前协议成果 <span id="protocol-run-id"></span></h3><p id="protocol-state" role="status" aria-live="polite"></p><button id="protocol-read" type="button">重新读取成果与核查状态</button><button id="protocol-extract" type="button" hidden>从已核查来源提取可复用协议草案</button><form id="protocol-cold-form" hidden><p>协议草案尚未发布，也不是既有应用清单。请选择与来源目标匹配的冷契约；服务端逐项复核，不匹配将拒绝。冷运行读取新材料，创建新任务；owner 语义签收仍为 PENDING。</p><label>冷输入注册契约 <select id="protocol-cold-contract" required></select></label><div id="protocol-cold-materials"></div><div id="protocol-cold-inputs"></div><button id="protocol-cold-submit">提交新材料冷运行</button></form><button id="protocol-recover" type="button">核对持久状态（不继续执行）</button><button id="protocol-recover-retry" type="button" hidden>用原核对键重读回执</button><details><summary>结果、来源、结构与已记录证据</summary><pre id="protocol-result"></pre></details></section></section><section id="goal-cards-panel"><h2>目标卡与验收草案</h2><p>人工草案，尚未验收。保存不执行；显式执行已保存版本将提交普通持久任务。每次保存保留旧版本；旧窗口冲突时请重新打开目标卡。</p><button id="goal-card-new" type="button">新建目标卡</button><div class="grid"><section><form id="goal-card-form"><label>名称 <input id="goal-card-title" required maxlength="200"></label><label>目标 <textarea id="goal-card-goal" required maxlength="4000"></textarea></label><label>已知（每行一项）<textarea id="goal-card-known"></textarea></label><label>假设（每行一项）<textarea id="goal-card-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="goal-card-unresolved"></textarea></label><label>硬条件（每行一项）<textarea id="goal-card-constraints"></textarea></label><label>验收检查（每行一项）<textarea id="goal-card-acceptance_checks"></textarea></label><label>同项目授权材料（可多选，最多8份）<select id="goal-card-resources" multiple></select></label><p>每类最多16项，每项1000字。绑定材料版本；撤权或材料变更会阻止回读旧快照。</p><button id="goal-card-save">保存新版本</button><p id="goal-card-status" role="status">新建草案</p><section aria-label="自然语言规划"><h3>目标 → 计划 → 确认 → 回执</h3><p>使用已保存目标及其材料。生成计划后先查看校验与未决项，再显式确认只读执行。</p><p id="natural-goal-config" role="status">先保存并打开目标，再读取规划配置。</p><section aria-label="已批准的有限合成会话"><h4>已批准会话（不新增授权）</h4><p>这里只支持会话冻结的合成 CSV 预览和 quantity_z 求和。会话授权与下方计划执行确认分开；不会创建候选或发布应用。</p><button id="natural-activation-refresh" type="button">读取当前项目会话（只读）</button><label>选择已有会话 <select id="natural-activation-select"><option value="">未选择；沿用默认关闭的普通规划</option></select></label><p id="natural-activation-status" role="status">尚未读取会话。</p><div id="natural-activation-goals"></div></section><label><input id="natural-fixed-acceptance" type="checkbox">为本次新任务冻结固定合成目标整体验收（不是人工签收或发布）</label><button id="natural-goal-generate" type="button" disabled>生成已保存目标的计划</button><button id="natural-goal-recover" type="button" hidden>恢复同一规划请求回执</button><button id="natural-goal-read" type="button" hidden>重新读取规划与回执</button><button id="natural-goal-new" type="button" hidden>显式新建另一规划请求</button><button id="natural-goal-back" type="button">返回编辑（不取消后台任务）</button><p id="natural-goal-status" role="status" aria-live="polite"></p><p>刷新后从任务历史打开原任务；历史读取不提交或确认。</p></section><button id="goal-card-run" type="button" disabled>按已保存版本执行任务</button><fieldset id="goal-application-panel"><legend>已保存目标 → 字面引用应用</legend><p>限一份 TXT/MD，逐字匹配并返回所有完整行；不接受语义推断。模型先选择读取工具，再根据实际反馈生成候选。默认真实请求预算为0；这里只能手动选择已有精确批准，读取与选择不会新增授权。合成响应仅为工程证据。冻结完整目标和材料，先查看候选，再明确授权该应用只读这一份材料。</p><button id="goal-provider-refresh" type="button">读取已有精确模型批准</button><label>本次已有批准<select id="goal-provider-select"><option value="">未选择；默认真实请求预算0</option></select></label><pre id="goal-provider-proof"></pre><p id="goal-provider-status" role="status">未选择模型批准。</p><label>应用名称<input id="goal-application-name" maxlength="100" value="字面引用应用"></label><button id="goal-application-start" type="button">按已保存目标生成候选</button><button id="goal-application-read" type="button">只读恢复原请求与状态</button><pre id="goal-application-proof"></pre><label>有限能力<select id="goal-application-family"><option value="">字面检索</option><option value="spec_checklist">合成标记规范 → 引用清单（真实模型关闭）</option></select></label><label id="goal-application-write-label" hidden><input id="goal-application-write-ack" type="checkbox">仅授权此应用在本项目保存核验后的一个 JSON 清单；引用通过不代表语义完整</label><label><input id="goal-application-ack" type="checkbox">已核对完整目标、来源、预算和候选指纹，授权此应用只读所选材料</label><button id="goal-application-confirm" type="button">确认精确候选并创建预览</button><button id="goal-application-confirm-read" type="button" hidden>只读恢复原确认回执</button><p id="goal-application-status" role="status"></p><section aria-label="复用已确认的模型图到新材料"><h4>已有模型图 → 明确新目标与新材料</h4><p>先打开绑定另一份TXT/MD的已保存目标，再读取已确认的模型来源。只替换明示身份、目标和材料槽；模型步骤与接口保留，源材料仍需审计读取权限。复用不请求模型，语义 UNKNOWN，人工签收 PENDING，未发布。</p><label>模型图能力<select id="pa-binding-family"><option value="">字面检索</option><option value="spec">合成规范引用清单（本项目 JSON 保存）</option></select></label><button id="pa-binding-sources" type="button">读取项目已确认模型来源</button><label>模型来源<select id="pa-binding-source"></select></label><button id="pa-binding-preview" type="button">预览实际模型图与本目标新材料</button><pre id="pa-binding-proof"></pre><label>新应用名称<input id="pa-binding-name" maxlength="100" value="模型图新材料引用应用"></label><label><input id="pa-binding-ack" type="checkbox">核对完整新目标、材料指纹和模型图，只授权此新应用读取此新材料</label><button id="pa-binding-save" type="button" disabled>确认并保存精确复用</button><button id="pa-binding-recover" type="button" disabled>原请求key只读恢复</button><button id="pa-binding-open" type="button" disabled>打开已保存新材料应用</button><p id="pa-binding-status" role="status"></p></section></fieldset><button id="goal-card-run-recover" type="button" hidden>恢复同一执行的回执</button><p id="goal-card-run-status" role="status"></p></form></section><section><h3>从已保存目标创建候选</h3><p>仅固定 CSV 数值列求和 · MOCK · 0 模型请求。使用已保存版本，未保存编辑不纳入候选；目标条件保留但尚未验收。</p><form id="goal-candidate-form" hidden><label>目标卡已绑定的 CSV <select id="goal-candidate-resource" required></select></label><label>可信能力 <select id="goal-candidate-capability" required></select></label><p>创建将授权候选应用读取和汇总所选材料24小时，不授权写入。</p><button id="goal-candidate-create">创建候选并授权预览</button><button id="goal-candidate-cancel" type="button">返回编辑 / 取消选择</button></form><p id="goal-candidate-status" role="status">先打开已保存目标卡。</p><div id="goal-candidate-list"></div><h3>目标卡</h3><div id="goal-card-list"></div><h3>版本历史（最近50版）</h3><div id="goal-card-history"></div><pre id="goal-card-history-detail"></pre></section></div></section></section>
++<section id="projects"><h1>项目</h1><form id="project-form"><label>项目名称 <input id="project-name" required maxlength="200"></label><button>创建项目</button></form><label>当前项目 <select id="project-select"></select></label><fieldset id="text-logic-panel"><legend>当前项目的独立文本逻辑</legend><p>冷页面从独立授权读取固定字面逻辑，不打开旧来源。选择另一份已有授权 TXT/MD，明确建立一个无令牌、仅该材料 resource.read 权限的新身份。目标用户权限或新身份权限撤销后拒绝；旧目标应用自身身份不被复制。owner PENDING，语义 UNKNOWN，未发布。</p><button id="text-logic-history" type="button">读取项目文本逻辑</button><select id="text-logic-selected" aria-label="独立文本逻辑"></select><button id="text-logic-read" type="button">读取当前逻辑状态</button><button id="text-logic-materials" type="button">预览当前授权新材料</button><label>已有文本应用<select id="text-logic-target"></select></label><label>新应用名称<input id="text-logic-name" maxlength="200" value="独立文本检索应用"></label><label><input id="text-logic-bind-confirm" type="checkbox">核对逻辑、新材料版本和期限，明确创建只读新身份并保存新应用</label><button id="text-logic-bind" type="button">绑定新材料并保存应用</button><button id="text-logic-open" type="button">打开新应用，另行核查执行</button><label>原请求key<input id="text-logic-key" maxlength="100" autocomplete="off"></label><button id="text-logic-recover" type="button">仅GET读取原请求回执</button><label><input id="text-logic-revoke-confirm" type="checkbox">明确不可逆撤销所选独立文本逻辑</label><button id="text-logic-revoke" type="button">撤销独立文本逻辑</button><pre id="text-logic-proof"></pre><p id="text-logic-status" role="status" aria-live="polite"></p></fieldset><fieldset id="text-continuation-panel"><legend>已有文本实例的软件兼容接续</legend><p>仅支持可证明兼容的固定字面检索软件。选择一个已有实例，冻结精确新旧版本、权限、预算和保留数据，先预检再手动确认。原数据与历史保留；旧人工签收失效，语义 UNKNOWN，未发布。</p><button id="text-continuation-list" type="button">读取待接续实例（元数据）</button><label>已有实例<select id="text-continuation-selected"></select></label><label>预检样例词<input id="text-continuation-term" value="Alpha" maxlength="80"></label><button id="text-continuation-preview" type="button">预检所选实例与精确软件</button><pre id="text-continuation-proof"></pre><label><input id="text-continuation-ack" type="checkbox">我已核对精确版本、保留范围、样例结果和有效期，确认只接续此实例</label><button id="text-continuation-commit" type="button" disabled>确认此精确软件接续</button><button id="text-continuation-open" type="button" disabled>打开所选实例，另行提交新输入</button><label>原请求 key<input id="text-continuation-key" maxlength="100" autocomplete="off"></label><button id="text-continuation-recover" type="button">仅用原 key GET 读取恢复</button><label>停止依据<input id="text-continuation-reason" maxlength="500"></label><label><input id="text-continuation-stop-ack" type="checkbox">明确取消待批准预检，或撤回所选已提交的软件执行许可</label><button id="text-continuation-stop" type="button" disabled>停止所选预检 / 兼容执行许可</button><p id="text-continuation-status" role="status" aria-live="polite"></p></fieldset><fieldset id="csv-logic-panel"><legend>当前项目的独立 CSV 逻辑授权</legend><p>仅已实际成功的读取 → 求和（→ 报告）结构；无原材料内容、列名或结果。须在来源仍可完整核查时另行确认24小时授权，再注册新CSV；不能从失效来源补发。原材料撤权不撤销这份结构授权，目标仍需当前权限。语义 UNKNOWN，用户 PENDING，发布关闭。</p><button id="csv-logic-history" type="button">读取项目逻辑授权（只读）</button><select id="csv-logic-selected"></select><button id="csv-logic-read" type="button">读取当前授权状态</button><button id="csv-logic-options" type="button">读取当前授权目标</button><label>已有CSV草案<select id="csv-logic-target"></select></label><label>本次新材料列<select id="csv-logic-column"></select></label><label><input id="csv-logic-confirm" type="checkbox">核对逻辑授权、新材料版本、列及冻结预算，确认保存目标计划</label><button id="csv-logic-plan" type="button">保存独立目标计划</button><button id="csv-logic-open" type="button">打开目标计划，另行确认执行</button><label><input id="csv-logic-revoke-confirm" type="checkbox">永久撤销所选逻辑授权；此授权的所有目标和实例将停止复用</label><button id="csv-logic-revoke" type="button">撤销独立逻辑授权</button><button id="csv-logic-recover" type="button" hidden>恢复本次原键回执</button><p id="csv-logic-status" role="status"></p><pre id="csv-logic-proof"></pre></fieldset><div class="grid"><section><h2>指令区</h2><form id="run-form"><label>目标 <textarea id="goal" required maxlength="4000"></textarea></label><p>本增量读取当前项目已授权材料；未完成应用生成和目标语义验收。</p><button id="run-submit">提交持久任务</button><p id="run-submit-status" role="status" aria-live="polite"></p><button id="run-submit-recover" type="button" hidden>恢复同一提交的回执</button><button id="run-submit-read" type="button" hidden>重新读取已接受任务</button><p>任务在后台持久执行。刷新页面后请先查任务历史，避免另建重复任务。</p></form><h2>任务历史</h2><p>按目标摘要与接受时间定位原任务。提交模式不代表已调用模型或目标验收。</p><button id="run-history-refresh" type="button">刷新任务历史（只读）</button><p id="run-history-status" role="status" aria-live="polite"></p><div id="runs"></div></section><section><h2>成果画布</h2><div id="result">选择任务查看持久状态与成果。</div><div id="commands"></div><details><summary>事件、来源与完整回执</summary><pre id="events"></pre><pre id="raw-result"></pre></details></section></div><section id="protocol-panel"><h2>注册任务与可复用协议成果</h2><p>有限只读工程入口。独立注册核查与 owner 语义签收分开；不会自动核查或发布。默认协议 provider 未配置时等待资源。</p><form id="protocol-source-form"><label>已注册任务 <select id="protocol-contract" required></select></label><p id="protocol-source-goal"></p><div id="protocol-source-materials"></div><div id="protocol-inputs"></div><button id="protocol-source-submit" disabled>提交来源任务</button><p id="protocol-source-status" role="status"></p></form><section id="protocol-detail" hidden><h3>当前协议成果 <span id="protocol-run-id"></span></h3><p id="protocol-state" role="status" aria-live="polite"></p><button id="protocol-read" type="button">重新读取成果与核查状态</button><button id="protocol-extract" type="button" hidden>从已核查来源提取可复用协议草案</button><form id="protocol-cold-form" hidden><p>协议草案尚未发布，也不是既有应用清单。请选择与来源目标匹配的冷契约；服务端逐项复核，不匹配将拒绝。冷运行读取新材料，创建新任务；owner 语义签收仍为 PENDING。</p><label>冷输入注册契约 <select id="protocol-cold-contract" required></select></label><div id="protocol-cold-materials"></div><div id="protocol-cold-inputs"></div><button id="protocol-cold-submit">提交新材料冷运行</button></form><button id="protocol-recover" type="button">核对持久状态（不继续执行）</button><button id="protocol-recover-retry" type="button" hidden>用原核对键重读回执</button><details><summary>结果、来源、结构与已记录证据</summary><pre id="protocol-result"></pre></details></section></section><section id="goal-cards-panel"><h2>目标卡与验收草案</h2><p>人工草案，尚未验收。保存不执行；显式执行已保存版本将提交普通持久任务。每次保存保留旧版本；旧窗口冲突时请重新打开目标卡。</p><button id="goal-card-new" type="button">新建目标卡</button><div class="grid"><section><form id="goal-card-form"><label>名称 <input id="goal-card-title" required maxlength="200"></label><label>目标 <textarea id="goal-card-goal" required maxlength="4000"></textarea></label><label>已知（每行一项）<textarea id="goal-card-known"></textarea></label><label>假设（每行一项）<textarea id="goal-card-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="goal-card-unresolved"></textarea></label><label>硬条件（每行一项）<textarea id="goal-card-constraints"></textarea></label><label>验收检查（每行一项）<textarea id="goal-card-acceptance_checks"></textarea></label><label>同项目授权材料（可多选，最多8份）<select id="goal-card-resources" multiple></select></label><p>每类最多16项，每项1000字。绑定材料版本；撤权或材料变更会阻止回读旧快照。</p><button id="goal-card-save">保存新版本</button><p id="goal-card-status" role="status">新建草案</p><section aria-label="自然语言规划"><h3>目标 → 计划 → 确认 → 回执</h3><p>使用已保存目标及其材料。生成计划后先查看校验与未决项，再显式确认只读执行。</p><p id="natural-goal-config" role="status">先保存并打开目标，再读取规划配置。</p><section aria-label="已批准的有限合成会话"><h4>已批准会话（不新增授权）</h4><p>这里只支持会话冻结的合成 CSV 预览和 quantity_z 求和。会话授权与下方计划执行确认分开；不会创建候选或发布应用。</p><button id="natural-activation-refresh" type="button">读取当前项目会话（只读）</button><label>选择已有会话 <select id="natural-activation-select"><option value="">未选择；沿用默认关闭的普通规划</option></select></label><p id="natural-activation-status" role="status">尚未读取会话。</p><div id="natural-activation-goals"></div></section><label><input id="natural-fixed-acceptance" type="checkbox">为本次新任务冻结固定合成目标整体验收（不是人工签收或发布）</label><button id="natural-goal-generate" type="button" disabled>生成已保存目标的计划</button><button id="natural-goal-recover" type="button" hidden>恢复同一规划请求回执</button><button id="natural-goal-read" type="button" hidden>重新读取规划与回执</button><button id="natural-goal-new" type="button" hidden>显式新建另一规划请求</button><button id="natural-goal-back" type="button">返回编辑（不取消后台任务）</button><p id="natural-goal-status" role="status" aria-live="polite"></p><p>刷新后从任务历史打开原任务；历史读取不提交或确认。</p></section><button id="goal-card-run" type="button" disabled>按已保存版本执行任务</button><fieldset id="goal-application-panel"><legend>已保存目标 → 字面引用应用</legend><p>限一份 TXT/MD，逐字匹配并返回所有完整行；不接受语义推断。模型先选择读取工具，再根据实际反馈生成候选。默认真实请求预算为0；这里只能手动选择已有精确批准，读取与选择不会新增授权。合成响应仅为工程证据。冻结完整目标和材料，先查看候选，再明确授权该应用只读这一份材料。</p><button id="goal-provider-refresh" type="button">读取已有精确模型批准</button><label>本次已有批准<select id="goal-provider-select"><option value="">未选择；默认真实请求预算0</option></select></label><pre id="goal-provider-proof"></pre><p id="goal-provider-status" role="status">未选择模型批准。</p><label>应用名称<input id="goal-application-name" maxlength="100" value="字面引用应用"></label><button id="goal-application-start" type="button">按已保存目标生成候选</button><button id="goal-application-read" type="button">只读恢复原请求与状态</button><pre id="goal-application-proof"></pre><label>有限能力<select id="goal-application-family"><option value="">字面检索</option><option value="spec_checklist">合成标记规范 → 引用清单（真实模型关闭）</option><option value="natural_spec">未标注短规范 → 条件/例外/未决清单（真实模型关闭，语义待验）</option></select></label><label id="goal-application-write-label" hidden><input id="goal-application-write-ack" type="checkbox">仅授权此应用在本项目保存核验后的一个 JSON 清单；引用通过不代表语义完整</label><label><input id="goal-application-ack" type="checkbox">已核对完整目标、来源、预算和候选指纹，授权此应用只读所选材料</label><button id="goal-application-confirm" type="button">确认精确候选并创建预览</button><button id="goal-application-confirm-read" type="button" hidden>只读恢复原确认回执</button><p id="goal-application-status" role="status"></p><section aria-label="复用已确认的模型图到新材料"><h4>已有模型图 → 明确新目标与新材料</h4><p>先打开绑定另一份TXT/MD的已保存目标，再读取已确认的模型来源。只替换明示身份、目标和材料槽；模型步骤与接口保留，源材料仍需审计读取权限。保存复用不请求模型；未标注规范实际运行需模型，默认关闭。语义 UNKNOWN，人工签收 PENDING，未发布。</p><label>模型图能力<select id="pa-binding-family"><option value="">字面检索</option><option value="spec">合成规范引用清单（本项目 JSON 保存）</option><option value="natural">未标注规范模型图（运行需模型，默认关闭）</option></select></label><button id="pa-binding-sources" type="button">读取项目已确认模型来源</button><label>模型来源<select id="pa-binding-source"></select></label><button id="pa-binding-preview" type="button">预览实际模型图与本目标新材料</button><pre id="pa-binding-proof"></pre><label>新应用名称<input id="pa-binding-name" maxlength="100" value="模型图新材料引用应用"></label><label><input id="pa-binding-ack" type="checkbox">核对完整新目标、材料指纹和模型图，只授权此新应用读取此新材料</label><button id="pa-binding-save" type="button" disabled>确认并保存精确复用</button><button id="pa-binding-recover" type="button" disabled>原请求key只读恢复</button><button id="pa-binding-open" type="button" disabled>打开已保存新材料应用</button><p id="pa-binding-status" role="status"></p></section></fieldset><button id="goal-card-run-recover" type="button" hidden>恢复同一执行的回执</button><p id="goal-card-run-status" role="status"></p></form></section><section><h3>从已保存目标创建候选</h3><p>仅固定 CSV 数值列求和 · MOCK · 0 模型请求。使用已保存版本，未保存编辑不纳入候选；目标条件保留但尚未验收。</p><form id="goal-candidate-form" hidden><label>目标卡已绑定的 CSV <select id="goal-candidate-resource" required></select></label><label>可信能力 <select id="goal-candidate-capability" required></select></label><p>创建将授权候选应用读取和汇总所选材料24小时，不授权写入。</p><button id="goal-candidate-create">创建候选并授权预览</button><button id="goal-candidate-cancel" type="button">返回编辑 / 取消选择</button></form><p id="goal-candidate-status" role="status">先打开已保存目标卡。</p><div id="goal-candidate-list"></div><h3>目标卡</h3><div id="goal-card-list"></div><h3>版本历史（最近50版）</h3><div id="goal-card-history"></div><pre id="goal-card-history-detail"></pre></section></div></section></section>
+ <section id="apps" hidden><section id="registered-recovery-panel"><h2>关闭页面后的原请求恢复</h2><p>只读发现本项目的原请求身份。正文不存入浏览器；当前权限允许时按原 key 核对，未知结果不自动重发。</p><button id="registered-recovery-refresh" type="button">读取本项目原请求索引</button><p id="registered-recovery-status" role="status" aria-live="polite"></p><div id="registered-recovery-list"></div></section><section id="report-apps"><h2>保存的条件报告草案</h2><p>仅虚构 A-S 有限规则的命名 PREVIEW_ONLY 草案；共享已有项目运行授权，不新增应用身份或授权，不是 AppManifest 发布。规则资料固定；本次只填写新假设。整体 NOT_ACCEPTED、语义 UNKNOWN、用户确认 PENDING。默认无 provider 会停在 WAITING_RESOURCE。</p><button id="report-app-list-refresh" type="button">刷新保存的条件报告草案（只读）</button><div id="report-app-list"></div><h3 id="report-app-name">选择保存的条件报告草案</h3><form id="report-app-form" hidden><fieldset><legend>新的显式假设事实</legend><label>行程已结束<select id="report-app-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="report-app-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="report-app-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="report-app-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="report-app-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="report-app-submit">创建新的条件报告运行</button></form><button id="report-app-retry" type="button" hidden>用原键恢复本次接受回执</button><button id="report-manifest-promote" type="button" hidden>保存为 canonical Report Manifest 预览草案</button><button id="report-manifest-promote-retry" type="button" hidden>原键恢复 Manifest 保存回执</button><p id="report-manifest-status" role="status"></p><button id="report-app-refresh" type="button">刷新实际运行历史（只读）</button><p id="report-app-output" role="status" aria-live="polite"></p><div id="report-app-history"></div><details><summary>固定资料、来源与共享授权范围</summary><pre id="report-app-origin"></pre></details></section><section id="application-use"><h2>使用已保存的本地应用</h2><p>仅已核查CSV实例；未发布内部版本，不新增授权。选择数值列会创建新的后台运行。材料固定，历史成功不代表本次结果。</p><div class="grid"><section><div id="use-list"></div></section><section><p id="use-info" role="status"></p><form id="use-form" hidden><label>本次数值列 <select id="use-column" required></select></label><button id="use-submit">运行此本地应用</button></form><button id="use-recover" type="button" hidden>恢复接受回执</button><button id="use-refresh" type="button" hidden>刷新本次状态与历史（只读）</button><div id="use-output" role="status" aria-live="polite"></div><h3>只读验收核对</h3><div id="use-acceptance" role="status" aria-live="polite"></div><h3>运行与结果历史</h3><div id="use-history"></div><details><summary>版本、材料与来源范围</summary><pre id="use-provenance"></pre></details></section></div></section><section id="conditional-panel"><h2>核对条件报告与规则资料</h2><p>仅人工注册的虚构差旅规则 A-S v1；不支持任意语言规则抽取。与上方 CSV 技术验收独立，不为所选应用自动签收。当前真实模型请求0；语义 UNKNOWN、用户确认 PENDING、发布关闭。</p><button id="condition-list" type="button">刷新当前授权规则资料（清除旧证据）</button><label>选择已有资料<select id="condition-resource"><option value="">请选择</option></select></label><button id="condition-open" type="button">打开并核查此资料版本</button><p id="condition-status" role="status" aria-live="polite">先选择并打开授权资料；不会自动读取内容。</p><div id="condition-source"></div><section id="condition-run-panel"><h3>从真实任务回执绑定条件检查与有限候选</h3><p>此入口不使用下方人工报告。先显式打开上方已授权 A-S 资料，再提交假设事实。后台读取与模型结果必须有完整可信回执；有限检查 PASS 不代表真实事实、整体任务成功或用户签收。语义 UNKNOWN、整体 NOT_ACCEPTED、发布关闭。默认无已批准 provider 会停在 WAITING_RESOURCE；页面不会启用模型或准备器。</p><form id="condition-run-source-form" hidden><fieldset><legend>本次源任务的显式假设（不从人工报告复制）</legend><label>行程已结束<select id="condition-run-source-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-source-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-source-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-source-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-source-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-start">创建来源绑定任务</button></form><button id="condition-run-refresh" type="button" hidden>重新核查当前任务与来源（只读）</button><button id="condition-run-retry" type="button" hidden>恢复同一提交回执（同键，不另建任务）</button><p id="condition-run-status" role="status" aria-live="polite">先显式打开已授权规则资料。</p><div id="condition-run-output" role="status" aria-live="polite"></div><button id="condition-run-check" type="button" hidden>独立核对此 Run 的实际报告</button><div id="condition-run-check-output" role="status" aria-live="polite"></div><button id="condition-run-extract" type="button" hidden>提取当前检查绑定的有限候选</button><div id="condition-run-extract-output" role="status" aria-live="polite"></div><details id="condition-run-plan" hidden><summary>受限 DAG、候选回执与来源绑定</summary><pre id="condition-run-plan-text"></pre></details><form id="report-save-form" hidden><h4>保存为可重开的命名条件报告草案</h4><p>服务端只保存受封闭回执绑定的固定规则包装；不运行，不新增授权，不签收。</p><label>固定已有授权规则资料<select id="report-save-resource" required></select></label><label>草案名称<input id="report-save-name" maxlength="200" required value="假设差旅条件报告"></label><button id="report-save-submit">保存条件报告草案</button><button id="report-save-retry" type="button" hidden>原键恢复保存回执</button><p id="report-save-status" role="status"></p></form><form id="condition-run-cold-form" hidden><label>冷运行的当前授权规则资料<select id="condition-run-cold-resource" required></select></label><fieldset><legend>新 Scenario：不会复制旧结果</legend><label>行程已结束<select id="condition-run-cold-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-cold-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-cold-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-cold-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-cold-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-cold-start">用有限候选创建新假设冷运行</button></form><div id="condition-run-cold-output" role="status" aria-live="polite"></div><button id="condition-run-cold-check" type="button" hidden>独立核对此冷 Run 的新报告</button><div id="condition-run-cold-check-output" role="status" aria-live="polite"></div></section><h3>人工条件报告核对（不绑定任务来源）</h3><form id="condition-form" hidden><fieldset><legend>显式假设事实（不从材料案例自动填入）</legend><label>行程已结束<select id="condition-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-amount" type="number" min="0" max="1000000" step="1"></label><label>收据齐全<select id="condition-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>已取得主管批准<select id="condition-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>行程结束后的自然日数（空为未知）<input id="condition-days" type="number" min="0" max="3650" step="1"></label></fieldset><fieldset><legend>人工待核对报告（不会自动生成正确答案）</legend><label>R1 是否适用<select id="condition-R1"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R2 是否适用<select id="condition-R2"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R3 是否适用<select id="condition-R3"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><p>每条引用使用上方已授权原文行；引用位置匹配不代表开放语言理解。</p><label>报告决策<select id="condition-decision"><option>UNKNOWN</option><option>BLOCK</option><option>ALLOW</option></select></label><label>报告下一步（可多选）<select id="condition-actions" multiple required><option value="wait_trip_end">等待行程结束</option><option value="obtain_receipt">补齐收据</option><option value="obtain_prior_approval">先取得批准</option><option value="clarify_facts">澄清未知事实</option><option value="clarify_late_policy">澄清逾期规则</option><option value="submit_claim_and_receipt">提交报销单与收据</option></select></label><label>报告原始期限（自然日）<input id="condition-deadline" type="number" min="1" max="3650" required></label><label>报告绝对日期（资料未给出时填写 UNKNOWN）<input id="condition-date" maxlength="40" required></label><label>报告是否认为补齐收据重启期限<select id="condition-restart"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>报告说明（自由文字不评分）<textarea id="condition-explanation" maxlength="1000" required></textarea></label></fieldset><button id="condition-submit">核对此报告（不启动应用任务）</button></form><button id="condition-recheck" type="button" hidden>重新授权读取并核对此报告</button><div id="condition-results" role="status" aria-live="polite"></div></section><h1>应用草案预览</h1><p>内部工程草案 · CSV 可信汇总与 TXT/MD 字面证据 agent（仅离线 Replay），未发布。成功 CSV 任务可保存为可信模板草案；目标语义和真实模型自主生成尚未验收。</p><div class="grid"><section><h2>直接创建 CSV 固定模板草案</h2><form id="app-form"><label>应用名称 <input id="app-name" required maxlength="200" value="CSV 数值汇总"></label><label>目标说明 <textarea id="app-goal" required maxlength="4000">每次选择一个数值列，查看这份 CSV 的合计和记录数。</textarea></label><label>当前项目的 CSV 材料 <select id="app-resource" required></select></label><p>此入口不绑定目标卡版本。仅授权这个应用读取和汇总所选材料（24 小时），不授权写入。材料版本改变后需重新创建草案。</p><button id="app-create-submit">创建草案并授权读取</button><p id="app-create-status" role="status" aria-live="polite"></p></form><h2>当前项目草案</h2><div id="app-list"></div></section><section><h2 id="app-title">选择草案</h2><p id="app-origin" role="status"></p><details id="app-frozen-goal" hidden><summary>冻结目标条件与验收草案</summary><pre id="app-frozen-goal-text"></pre></details><button id="app-back-goal" type="button" hidden>返回来源目标卡</button><form id="app-preview-form" hidden><label id="app-column-label">数值列 <select id="app-column" required></select></label><label id="app-agent-term-label" hidden>样例字面检索词 <input id="app-agent-term" maxlength="80" autocomplete="off"></label><p id="app-input-hint" role="status"></p><button id="app-preview-submit">运行新预览</button></form><form id="manifest-report-form" hidden><fieldset><legend>新 Scenario：显式假设，不复制来源事实或报告</legend><label>行程已结束<select id="manifest-report-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="manifest-report-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="manifest-report-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="manifest-report-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="manifest-report-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="manifest-report-submit">创建新的 Report 预览运行</button></form><button id="manifest-report-retry" type="button" hidden>原键恢复本次接受回执</button><button id="manifest-report-refresh" type="button" hidden>刷新实际 Report 历史（只读）</button><div id="app-output" role="status" aria-live="polite"></div><button id="app-read-retry" type="button" hidden>重新读取已保存记录</button><h2>预览历史</h2><div id="app-history"></div><section id="csv-extraction-panel"><h2>从已完成预览任务提取候选（P-B工程子集）</h2><p>来源限定本地合成PREVIEW成功回执，不代表F1 Run或目标语义成功；仅可信求和逻辑，不是通用应用验收。新CSV在创建时绑定，数值列为运行参数。源材料仍需可授权核查；未发布。</p><form id="extraction-form" hidden><label>成功源回执 <select id="extraction-preview" required></select></label><label>同项目的新CSV <select id="extraction-resource" required></select></label><label>候选名称 <input id="extraction-name" required maxlength="200" value="从已完成预览提取的汇总"></label><p>创建授权应用只读新材料24小时；已接受创建不能由页面导航撤销。</p><button id="extraction-create">提取并授权新材料预览</button></form><p id="extraction-status" role="status"></p></section><section id="delivery-panel" hidden><h2>派生图与影响规划</h2><p>保存来源绑定图锚，只规划现有节点的影响。原影响规划仍不执行；下方 CSV 列绑定入口可保存新草案并独立确认只读检查；语义 UNKNOWN，用户确认 PENDING，发布关闭。</p><button id="delivery-read" type="button">读取当前图与规划历史</button><button id="delivery-derive" type="button">保存派生图锚</button><button id="delivery-plan" type="button">规划所选原节点影响</button><button id="delivery-retry" type="button" hidden>原键恢复未知回执</button><p id="delivery-status" role="status"></p><section id="manual-lock-panel" hidden><h3>单节点编辑保护</h3><p>仅保护本项目内编辑；不改变访问权限，锁或解锁后须重新派生图。</p><select id="manual-lock-node"></select><select id="manual-lock-target"><option value="true">锁定</option><option value="false">解锁</option></select><label><input id="manual-lock-confirm" type="checkbox">我已核对当前图、节点及锁修订，明确确认此编辑保护变更（不是权限授权或验收）</label><button id="manual-lock-submit" type="button">确认精确节点锁状态</button><button id="manual-lock-retry" type="button" hidden>原键恢复未知锁回执</button><button id="manual-lock-read" type="button">读取锁状态与历史</button><p id="manual-lock-status" role="status"></p><pre id="manual-lock-history"></pre></section><div id="delivery-nodes"></div><div id="delivery-plans"></div><section id="column-patch-panel" hidden><h3>CSV 列绑定局部修改（离线工程病例）</h3><p>保存同一求和节点的新列绑定草案；保留原清单、输入 schema、材料、布局与历史。另行确认精确草案版本后才执行只读检查。候选未验收，语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><label>原绑定列<select id="column-patch-from"></select></label><label>新定义绑定列<select id="column-patch-to"></select></label><button id="column-patch-save" type="button">提交新定义并保存草案补丁</button><label>已读回的精确草案<select id="column-patch-selected"></select></label><label><input id="column-patch-confirm" type="checkbox">我已核对下方新定义、来源和精确版本；运行有限只读检查（不是人工签收）</label><button id="column-patch-check" type="button">确认版本并执行受影响检查</button><div id="column-patch-history"></div></section><section id="csv-dag-panel" hidden><label>计划方式<select id="csv-dag-mode"><option value="legacy">原三节点流程</option><option value="composition">有限只读节点组合（最多四个）</option></select></label><fieldset id="csv-dag-composition" hidden><legend>在当前授权 CSV 上连接读取、求和和报告</legend><p>每个求和节点选择自己的列；报告连接一个求和节点。额外前驱用于顺序或条件；跳过只传递到后继。全部末端节点的新输出均保留。</p><div id="csv-dag-nodes"></div><button id="csv-dag-node-add" type="button">添加节点</button></fieldset><h3>CSV 只读 DAG 计划</h3><p>离线工程候选：同一授权来源。原模式为预览 → 求和 → 报告；组合模式可编辑一至四个节点，保留各末端的新输出。模型调用 0，业务写入 0；语义 UNKNOWN，用户验收 PENDING，正式发布关闭。</p><label>原三节点模式的求和列<select id="csv-dag-column"></select></label><button id="csv-dag-wiring-read" type="button">读取服务端允许接线</button><fieldset id="csv-dag-wiring" hidden><legend>仅已有三节点端口；preview → aggregate 屏障固定</legend><div id="csv-dag-wiring-ports"></div><pre id="csv-dag-wiring-proof"></pre></fieldset><fieldset id="csv-dag-branch"><legend>原三节点模式的可选条件（组合条件在各节点内选择）</legend><label>条件节点<select id="csv-dag-branch-target"><option value="">不使用条件（保留原流程）</option><option value="aggregate">aggregate</option><option value="report">report</option></select></label><label>操作符<select id="csv-dag-branch-op"><option>eq</option><option>in</option><option>exists</option></select></label><label>引用<select id="csv-dag-branch-source"><option value="input:include_report">本次输入 include_report（boolean，可缺失）</option><option value="input:column">输入 column（string）</option><option value="aggregate:count">已验证 aggregate.count（integer，仅 report）</option><option value="aggregate:sum">已验证 aggregate.sum（string，仅 report）</option></select></label><label>比较值（JSON；in 使用数组，exists 不填）<input id="csv-dag-branch-value" value="true" maxlength="1000"></label></fieldset><label>本次条件输入 include_report<select id="csv-dag-branch-input"><option value="">缺失（不自动补值）</option><option value="true">true</option><option value="false">false</option></select></label><button id="csv-dag-plan" type="button">保存所选计划草案</button><label><input id="csv-dag-confirm" type="checkbox">我已核对下方计划、来源、列及精确指纹；确认本次离线运行（不是人工签收）</label><button id="csv-dag-run" type="button">确认精确计划并排队运行</button><button id="csv-dag-retry" type="button" hidden>原键恢复未知接受回执</button><button id="csv-dag-refresh" type="button">读回本次运行</button><button id="csv-dag-pause" type="button">暂停</button><button id="csv-dag-resume" type="button">继续</button><button id="csv-dag-cancel" type="button">取消</button><button id="csv-dag-history-read" type="button">读取已有计划与运行</button><div id="csv-dag-history"></div><p id="csv-dag-status" role="status"></p><pre id="csv-dag-definition"></pre><pre id="csv-dag-result"></pre><fieldset id="dag-reuse-panel"><legend>将已完成的读取 → 求和（→ 报告）或双求和保存为内部版本</legend><p>复用无条件的读取、求和及可选报告，或一次读取与两个求和节点。保留每步已核来源与预算；实例每次为各求和节点选择已冻结的数值列，重新执行完整流程，按节点保存完整结果。报告保留在运行回执中。语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><button id="dag-reuse-prepare" type="button">从本次成功流程准备版本</button><label><input id="dag-reuse-confirm" type="checkbox">已核对下方来源、全部步骤回执、允许列与内部版本</label><button id="dag-reuse-commit" type="button">确认并保存内部版本</button><button id="dag-reuse-history" type="button">读取已有版本与实例</button><label>已核内部版本<select id="dag-reuse-release"></select></label><button id="dag-reuse-create" type="button">创建独立实例</button><label>已有实例<select id="dag-reuse-instance"></select></label><button id="dag-reuse-read" type="button">只读恢复实例与结果</button><label><span id="dag-reuse-column-label">本次数值列</span><select id="dag-reuse-column"></select></label><label id="dag-reuse-second-label" hidden><span id="dag-reuse-column-second-label">第二节点数值列</span><select id="dag-reuse-column-second"></select></label><label><input id="dag-reuse-run-confirm" type="checkbox">按下方精确版本和各节点所选列执行完整流程，保存本次完整结果</label><button id="dag-reuse-run" type="button">确认新列并排队</button><button id="dag-reuse-recover" type="button" hidden>恢复原请求回执</button><button id="dag-reuse-pause" type="button">暂停实例运行</button><button id="dag-reuse-resume" type="button">继续实例运行</button><button id="dag-reuse-cancel" type="button">取消实例运行</button><p id="dag-reuse-status" role="status"></p><div id="dag-reuse-results" role="status"></div><pre id="dag-reuse-proof"></pre><fieldset><legend>升级或回退此实例的内部版本</legend><p>先完成或取消尚未结束的运行。仅切换兼容流程，原结果和结果版本保留；切换后新输入须另行确认。</p><label>目标内部版本<select id="dag-reuse-switch-target"></select></label><button id="dag-reuse-switch-prepare" type="button">核查目标版本与保留结果</button><pre id="dag-reuse-switch-proof"></pre><label><input id="dag-reuse-switch-confirm" type="checkbox">我已核对来源、目标和实例修订，确认此版本切换</label><button id="dag-reuse-switch-commit" type="button">确认升级或回退</button></fieldset><fieldset><legend>先另行授权无原内容的逻辑</legend><label><input id="csv-logic-authorize-confirm" type="checkbox">允许所选成功版本的规范化结构在本项目复用24小时，即使原材料以后撤权或不可读；不授权读材料，可单独永久撤销</label><button id="csv-logic-authorize" type="button">授权独立CSV逻辑（不执行）</button></fieldset><fieldset id="dag-material-panel"><legend>在另一份已有授权 CSV 上复用流程</legend><p>仅当前已注册 CSV 草案与读取 → 求和（→ 报告）结构。旧来源仍须可核查；新增材料可能改变授权基线，需要重新核查并保存来源版本。先选择新材料及数值列，保存独立计划；再确认实际运行，成功后另存版本与实例。旧结果保留。语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><button id="dag-material-options" type="button">读取当前可用新材料</button><label>已有 CSV 草案<select id="dag-material-target"></select></label><label>本次数值列<select id="dag-material-column"></select></label><label><input id="dag-material-confirm" type="checkbox">已核对新材料、列、权限与冻结预算；仅保存新计划</label><button id="dag-material-plan" type="button">确认并保存新材料计划</button><button id="dag-material-open" type="button">打开已核新材料计划</button><p id="dag-material-status" role="status"></p><pre id="dag-material-proof"></pre></fieldset></fieldset></section><details><summary>实际图、来源版本与当前授权绑定</summary><pre id="delivery-proof"></pre></details></section><details><summary>声明式清单、来源与权限</summary><pre id="app-manifest"></pre></details></section></div></section>
+ <section id="internal-panel" hidden aria-labelledby="internal-title"><h2 id="internal-title">内部工程入口 · 只读运行</h2><section id="app-own-goal-panel" hidden><h3>本应用自己的目标与适用范围</h3><p>填写新材料的完整目标卡，逐项签收将依据自己的当前已保存版本。新卡不继承原任务或原材料应用的目标和签收。固定字面能力、语义 UNKNOWN、正式发布关闭。</p><button id="app-own-goal-read" type="button">读取自己的目标版本</button><form id="app-own-goal-form"><label>标题<input id="app-own-goal-title" maxlength="200" required></label><label>目标<textarea id="app-own-goal-goal" maxlength="4000" required></textarea></label><label>已知（每行一项）<textarea id="app-own-goal-known"></textarea></label><label>假设（每行一项）<textarea id="app-own-goal-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="app-own-goal-unresolved"></textarea></label><label>约束（每行一项，至少一项）<textarea id="app-own-goal-constraints" required></textarea></label><label>验收条目（每行一项，至少一项）<textarea id="app-own-goal-acceptance_checks" required></textarea></label><label>适用范围（每行一项，至少一项）<textarea id="app-own-goal-applicability" required></textarea></label><label><input id="app-own-goal-ack" type="checkbox">核对本应用、新材料及完整目标和范围，明确保存自己的新版本</label><button id="app-own-goal-save" type="submit">保存自己的目标版本</button></form><label>原请求key<input id="app-own-goal-key" maxlength="100" autocomplete="off"></label><button id="app-own-goal-recover" type="button">仅GET读取原目标请求</button><pre id="app-own-goal-proof"></pre><p id="app-own-goal-status" role="status" aria-live="polite"></p></section><p>仅已认证的本机工程验证：冻结只读清单、独立实例结果和持久后台任务。正式发布与部署仍关闭，不新增授权，0 网络模型请求。agent 仅接受明确提供的离线 Replay。</p><p id="internal-status" role="status" aria-live="polite"></p><section id="internal-agent" hidden><h3>有界 agent · 离线 Replay</h3><p>候选与响应由离线调用者提供，尚无真实模型自主生成。仅核查字面命中和引用定位；语义 UNKNOWN。绑定 TXT/MD 及当前授权不变，仅 resource.read。</p><label>离线 Replay JSON 文件（恰好两条 wire 响应，UTF-8 不超过 32000 字节）<input id="internal-replay-file" type="file" accept=".json,application/json"></label><p id="internal-replay-status" role="status" aria-live="polite"></p></section><div class="grid"><section><h3>冻结内部 Release</h3><p id="internal-prepare-hint">使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。</p><button id="internal-prepare" type="button">核查并准备内部快照</button><button id="internal-back" type="button">取消选择 / 返回预览</button><section id="internal-approval" hidden><p id="internal-approval-label"></p><details open><summary>待确认的冻结快照与检查证据</summary><pre id="internal-approval-detail"></pre></details><label><input id="internal-approval-ack" type="checkbox">我已检查上述精确快照；仅保存内部版本，不开通发布或授权。</label><button id="internal-commit" type="button" disabled>确认保存此内部 Release</button></section><h3>内部 Release 历史</h3><div id="internal-releases"></div><h3>独立实例</h3><div id="internal-instances"></div><button id="internal-refresh" type="button">重新读取内部历史</button></section><section><h3 id="internal-instance-title">选择内部实例</h3><p id="internal-instance-info"></p><section id="internal-switch" hidden><h3>切换内部版本 / 兼容回退</h3><p>保留实例结果与历史。回退版本不撤销数据或外部动作；已接受任务不会自动取消。不新增授权。</p><label>目标 Release <select id="internal-switch-target"><option value="">请手动选择目标版本</option></select></label><button id="internal-switch-prepare" type="button">核查兼容性与精确切换快照</button><button id="internal-switch-cancel" type="button">取消本页切换选择</button><p id="internal-switch-status" role="status" aria-live="polite"></p><section id="internal-switch-approval" hidden><p id="internal-switch-summary"></p><details><summary>精确切换指纹、版本与权限快照</summary><pre id="internal-switch-detail"></pre></details><label><input id="internal-switch-ack" type="checkbox">我已核对目标版本及保留数据范围，确认仅切换此内部实例。</label><button id="internal-switch-commit" type="button" disabled>确认切换到此精确版本</button></section><h4>实例版本切换历史</h4><div id="internal-switch-history"></div></section><form id="internal-run-form" hidden><label id="internal-column-label">冻结材料的数值列 <select id="internal-column" required></select></label><label id="internal-term-label" hidden>本次字面检索词 <input id="internal-term" maxlength="80" autocomplete="off"></label><button id="internal-run-submit">提交新持久 AppRun</button></form><button id="internal-retry" type="button" hidden>用原请求键恢复提交</button><button id="internal-new-intent" type="button" hidden>读回历史后结束本页旧请求重试</button><p id="internal-run-status" role="status" aria-live="polite"></p><div id="internal-controls"></div><section id="registered-extraction" hidden><section id="text-logic-source" hidden><h3>授权无旧内容的文本逻辑</h3><p>只保留固定字面检索结构、变量和限额。旧材料撤销后仍可复用；新材料必须另行明确绑定。24小时，owner PENDING、语义 UNKNOWN，未发布。</p><button id="text-logic-source-preview" type="button">预览独立文本逻辑</button><pre id="text-logic-source-proof"></pre><label><input id="text-logic-source-confirm" type="checkbox">核对来源证明、Release指纹与固定限额，明确授权本项目的无旧内容逻辑</label><button id="text-logic-authorize" type="button">建立独立逻辑授权</button><p id="text-logic-source-status" role="status"></p></section><button id="registered-extraction-open" type="button">将这次任务保存为可复用草案</button><form id="registered-extraction-form" hidden><p>服务端核查成功任务，提取已登记的 CSV 求和或 TXT/MD 字面检索逻辑形成独立草案。仅沿用所选应用已有授权；撤权同时影响共享此授权域的草案。不创建授权，0 模型请求，目标语义条件未验收。</p><label>已有授权的新材料应用 <select id="registered-extraction-target" required></select></label><label>草案名称 <input id="registered-extraction-name" required maxlength="200" value="从成功任务保存的汇总"></label><pre id="registered-extraction-proof"></pre><p id="registered-extraction-target-info"></p><button id="registered-extraction-submit">保存可复用草案</button><button id="registered-extraction-retry" type="button" hidden>用原请求键恢复生成回执</button><button id="registered-extraction-new" type="button" hidden>核对原请求后开始另一次明确提取</button><p id="registered-extraction-request-info"></p></form><p id="registered-extraction-status" role="status" aria-live="polite"></p></section><section id="owner-panel" hidden aria-labelledby="owner-title"><h3 id="owner-title">精确版本 owner 逐项签收</h3><p>人工核对冻结目标、约束、未解决问题和实际新输入结果。技术 PASS 不替代语义验收；逐项明确接受或拒绝并填写依据。此声明仅属于下列版本，正式发布关闭。</p><p id="owner-status" role="status" aria-live="polite"></p><label>新输入成功任务 <select id="owner-run"><option value="">请手动选择</option></select></label><button id="owner-prepare" type="button" disabled>冻结此版本与新输入证据</button><button id="owner-refresh" type="button">读取当前签收状态</button><details open><summary>精确冻结目标、来源、版本、证据与有效期</summary><pre id="owner-proof"></pre></details><form id="owner-form" hidden><div id="owner-criteria"></div><label><input id="owner-ack" type="checkbox">我已逐项核对上述精确版本，以下为我的人工判断。</label><button id="owner-submit" disabled>提交此精确版本的逐项人工决定</button></form><label>取消 / 撤销依据 <input id="owner-stop-reason" maxlength="500"></label><button id="owner-cancel" type="button" disabled>取消当前待签收预览</button><button id="owner-revoke" type="button" disabled>撤销最新人工声明</button><label>原请求 key <input id="owner-key" maxlength="100" autocomplete="off"></label><button id="owner-recover" type="button" disabled>仅用原 key 读取回执</button><details><summary>不可变人工记录历史；历史回执不等于当前签收</summary><pre id="owner-history"></pre></details></section><h3>后台运行历史</h3><div id="internal-runs"></div><h3>实例结果版本（只读）</h3><div id="internal-data"></div><details><summary>状态、取消意图与事件</summary><pre id="internal-run-detail"></pre></details></section></div></section>
+ <section id="resources" hidden><h1>资源</h1><nav id="resource-filters" aria-label="资源类别"><button type="button" data-resource-category="materials" aria-controls="resource-materials" aria-current="true">材料</button><button type="button" data-resource-category="capabilities" aria-controls="resource-capabilities">可信能力</button><button type="button" data-resource-category="connections" aria-controls="resource-connections">连接</button></nav><section id="resource-materials"><h2>材料</h2><form id="resource-form"><label>本地文本文件（可选）<input id="resource-file" type="file" accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json"></label><p>支持 UTF-8 TXT、MD、CSV、JSON，文件为1–32768字节。CSV/JSON 不支持 BOM；TXT/MD 保留 BOM。选择只在本页读取和预览，不会自动上传或保存；核对后点击原保存按钮才授权当前项目。也可直接填写文本。</p><button id="resource-file-clear" type="button">清除选择和待保存内容</button><label>名称 <input id="resource-name" required maxlength="200"></label><label>类型 <select id="format"><option>txt</option><option>md</option><option>csv</option><option>json</option></select></label><label>授权给当前项目的文本 <textarea id="content" required maxlength="32768"></textarea></label><button id="resource-save">保存并授权项目内使用（24小时）</button><p id="resource-file-status" role="status" aria-live="polite"></p><pre id="resource-file-preview" hidden aria-label="本地文件预览（尚未保存）"></pre><button id="resource-save-read" type="button" hidden>刷新材料列表核对（只读）</button><button id="resource-save-reset" type="button" hidden>我已核对列表，重新填写材料</button></form><div id="materials"></div><pre id="resource-preview" hidden></pre><h2>授权</h2><div id="grants"></div></section><section id="resource-capabilities" hidden><h2>可信能力</h2><p>连接本机 API 后显示当前注册目录。目录不代表材料已获授权；实际使用仍须通过原授权检查。</p><pre id="capabilities"></pre></section><section id="resource-connections" hidden><h2>连接</h2><p>连接本机 API 后显示当前模型、模式与验收状态。MOCK 工程模拟不代表真实模型接入；LIVE_NOT_ACCEPTED 表示真实模型尚未验收。</p><pre id="connections"></pre></section></section>
+diff --git a/src/sim2act/worker.py b/src/sim2act/worker.py
+index 9f0a0298..d61c45a7 100644
+--- a/src/sim2act/worker.py
++++ b/src/sim2act/worker.py
+@@ -49,9 +49,14 @@ class Worker:
+         self.stop = threading.Event()
+ 
+     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
+-                planner_request=False, generation_request=False):
++                planner_request=False, generation_request=False, natural_spec_request=None):
+         s = self.s
+-        protocol_request = request_tools is not None and not planner_request and not generation_request
++        if natural_spec_request is not None:
++            from .natural_spec_runtime import reservation_settings
++            if planner_request or generation_request:
++                raise DomainError("PERMISSION_DENIED", "Reservation families cannot be combined")
++            s = reservation_settings(self, natural_spec_request)
++        protocol_request = request_tools is not None and not planner_request and not generation_request and natural_spec_request is None
+         request_tools = definitions() if request_tools is None else request_tools
+         wire_seal = None
+         # Conservative byte envelope, not a claim of actual tokenizer usage.
+@@ -63,7 +68,7 @@ class Worker:
+             )
+             + s.max_output_tokens
+         )
+-        if protocol_request or planner_request or generation_request:
++        if protocol_request or planner_request or generation_request or natural_spec_request is not None:
+             import httpx
+ 
+             serialized = httpx.Request(
+@@ -94,6 +99,9 @@ class Worker:
+                 )
+                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
+             run = self.store.guard(c, run_id, fence)
++            if natural_spec_request is not None:
++                from .natural_spec_runtime import reservation_check
++                reservation_check(self, c, run, context, request_tools, natural_spec_request, s)
+             if generation_request:
+                 from .goal_applications import check_sender as check_generation_sender
+ 
+@@ -202,7 +210,9 @@ class Worker:
+                             }
+                         ),
+                         **({"planning_wire" if planner_request else "protocol_wire": wire_seal}
+-                           if wire_seal is not None and not generation_request else {}),
++                           if wire_seal is not None and not generation_request and natural_spec_request is None else {}),
++                        **({"natural_spec": natural_spec_request, "natural_spec_wire": wire_seal}
++                           if natural_spec_request is not None else {}),
+                         **({"planning_fence": fence} if planner_request else {}),
+                         **({"generation_wire": (wire_seal or {})["sha256"],
+                             "generation_fence": fence,
+@@ -215,7 +225,10 @@ class Worker:
+ 
+                 assert wire_seal is not None
+                 reserve_natural_slot(self.store, c, run, fence, aid, envelope, wire_seal["sha256"], s)
+-            if wire_seal is not None and not generation_request:
++            if natural_spec_request is not None:
++                from .natural_spec_runtime import reserve_node
++                reserve_node(self, c, run, aid, natural_spec_request)
++            if wire_seal is not None and not generation_request and natural_spec_request is None:
+                 self.store.event(
+                     c,
+                     run_id,
+@@ -277,7 +290,7 @@ class Worker:
+                 if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
+                     from .goal_applications import check_active, verified_candidate
+ 
+-                    if frozen.application_generation.activation is not None or frozen.application_generation.version == "goal-spec-checklist-application.v1":
++                    if frozen.application_generation.activation is not None or frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}:
+                         check_active(self, c, run)
+                     candidate = verified_candidate(self.store, c, run, frozen.limits)
+                     if state != "PARTIAL" or result != {
+@@ -328,11 +341,11 @@ class Worker:
+                 )
+             )
+             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
+-            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and (frozen.application_generation.activation is not None or frozen.application_generation.version == "goal-spec-checklist-application.v1"):
++            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and (frozen.application_generation.activation is not None or frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}):
+                 check_active(self, c, run)
+                 if run["lease_until"] <= time.time():
+                     raise DomainError("VERSION_CONFLICT", "Original worker lease expired before final commit")
+-                if frozen.application_generation.version == "goal-spec-checklist-application.v1":
++                if frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}:
+                     current = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence, runs.c.version)
+                         .where(runs.c.id == run_id)).mappings().one()
+                     if current["status"] != state or current["cancel_intent"] or current["fence"] != fence or current["version"] != run["version"] + 1:

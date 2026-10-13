@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="14.023" timestamp="2026-10-13T00:45:10.144609+00:00" hostname="9809f76d2248"><testcase classname="tests.test_pa_natural_spec_ui" name="test_natural_spec_page_actual_nodes_and_cold_material[valid]" time="13.341"><failure message="KeyError: 'checklist'">env = (&lt;sim2act.db.Store object at 0x7ff87e9f52e0&gt;, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...06186f5d6548468f9da701ae5a6ff3', 'user_da3fe2700b4142fc9f1e1054643f77fc', 'proj_9bab070665af4cc79a26a76325165b06', ...)
+tmp_path = PosixPath('/workspace/pa-natural-spec-runtime-evidence-20261012/author/ui-r2-tmp/test_natural_spec_page_actual_0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        ["valid", "binding-lost", "binding-late", "sample-tampered", "sample-nodes-tampered"],
+    )
+    def test_natural_spec_page_actual_nodes_and_cold_material(env, tmp_path, scenario):
+        data = setup(env)
+        store, settings, client, _, pid, resource, card = data
+        target_resource, target_card = material(client, pid, COLD, "Cold operating notes")
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                dict(
+                    project=pid,
+                    card=card["id"],
+                    target_card=target_card["id"],
+                    target_resource=target_resource,
+                    scenario=scenario,
+                    output=str(tmp_path / "results.json"),
+                )
+            )
+        )
+        sent = []
+        runtime_sent = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            sent.append(payload)
+            initial = json.loads(payload["messages"][1]["content"])
+            feedback = [json.loads(m["content"]) for m in payload["messages"] if m["role"] == "tool"]
+            if len(sent) == 1:
+                message = dict(
+                    role="assistant",
+                    content="",
+                    tool_calls=[
+                        dict(
+                            id="model-read",
+                            type="function",
+                            function=dict(
+                                name="resource.read", arguments=json.dumps(dict(resource_id=resource))
+                            ),
+                        )
+                    ],
+                )
+            else:
+                assert feedback[0]["data"]["content"] == SOURCE
+                value = dict(
+                    recipe=recipe("sequential"),
+                    sample_nodes=[
+                        dict(
+                            step_id=step["step_id"],
+                            items=[
+                                i
+                                for i in facts(SOURCE)
+                                if i["kind"] in natural.MODEL_KINDS[step["operator"]]
+                            ],
+                        )
+                        for step in recipe("sequential")["steps"]
+                        if step["operator"] in natural.MODEL_KINDS
+                    ],
+                    source_hash=feedback[0]["data"]["hash"],
+                    goal=initial["saved_goal"]["snapshot"]["content"],
+                )
+                if len(sent) == 2:
+                    message = dict(
+                        role="assistant",
+                        content="",
+                        tool_calls=[
+                            dict(
+                                id="model-check",
+                                type="function",
+                                function=dict(
+                                    name="spec.check_candidate",
+                                    arguments=json.dumps(dict(candidate=value)),
+                                ),
+                            )
+                        ],
+                    )
+                else:
+                    assert feedback[-1]["data"]["status"] == "PASS"
+                    message = dict(role="assistant", content=json.dumps(value))
+            return httpx.Response(
+                200, json=wire(message, "tool_calls" if "tool_calls" in message else "stop")
+            )
+    
+        process = subprocess.Popen(
+            ["node", "tests/pa_natural_spec_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+        )
+        cold = cold_client = None
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command"):
+                    if request["command"] == "provider-worker":
+                        assert Worker(
+                            store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                        ).once()
+                    else:
+                        assert request["command"] == "cold-worker"
+                        cold = Store(settings.database_url, test_only=True)
+                        cold_settings = replace(
+                            settings, goal_planner_provider="intern-s2", live_enabled=False, token=""
+                        )
+                        cold_client = TestClient(create_app(cold, cold_settings))
+                        cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
+                        assert Worker(
+                            cold, cold_settings, goal_planner_transport=transport(runtime_sent, COLD)
+                        ).once()
+                    answer = dict(id=request["id"], status=200, text="{}")
+                else:
+&gt;                   reply = (cold_client or client).request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+
+tests/test_pa_natural_spec_ui.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../Sim2Act/.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:170: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../Sim2Act/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../Sim2Act/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:762: in run_preview
+    return preview(db, user, aid, body.input, body.request_key, platform_limits)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = &lt;sim2act.db.Store object at 0x7ff87e9f52e0&gt;
+user = 'user_bf06186f5d6548468f9da701ae5a6ff3'
+aid = 'app_68c02fd836be4b6e9e1618187cc45d61', input_value = {}
+key = '5af0e065-6609-47ac-8d37-befd7288c4fe'
+platform_limits = Limits(max_requests=4, max_tools=4, max_repairs=1, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)
+
+    def preview(store, user, aid, input_value, key, platform_limits):
+        with store.tx() as c:
+            draft, manifest, action, report = load_draft(
+                store, c, user, aid, platform_limits, lock=True
+            )
+            from .text_continuations import no_context
+    
+            no_context(store, c, user, draft)
+            if action.executor.kind == "bounded_agent":
+                raise DomainError("UNSUPPORTED_CAPABILITY", "Use internal offline AppRun service")
+            fp = fingerprint({"candidate": draft["fingerprint"], "input": input_value})
+            old = (
+                c.execute(
+                    select(app_previews).where(
+                        app_previews.c.app_id == aid,
+                        app_previews.c.principal_id == user,
+                        app_previews.c.request_key == key,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if old:
+                if old["fingerprint"] != fp:
+                    raise DomainError("VERSION_CONFLICT", "请求键已绑定其他输入")
+                return public_preview(old)
+            output, error = None, None
+            try:
+                if draft["candidate"].get("namespace") in {"closed-text-four-step.v1", "pa-spec-checklist-app.v1"}:
+                    from .lifecycle import execute
+    
+                    output = execute(store, c, user, draft, platform_limits, input_value)
+                    row = dict(id=new_id("preview"), app_id=aid, principal_id=user, request_key=key,
+                        fingerprint=fp, input=input_value, status="SUCCEEDED", output=output,
+                        error=None, created_at=time.time())
+                    c.execute(insert(app_previews).values(**row))
+                    return public_preview(row)
+                validate_value(manifest.input_schema, input_value)
+                step = manifest.workflow[0]
+                data = {d.binding_id: {"resource_id": d.resource_ref} for d in manifest.data_bindings}
+                args = {
+                    field: (input_value if source.source == "input" else data[source.ref])[source.field]
+                    for field, source in step.inputs.items()
+                }
+                validate_action_input(action, args)
+                # Dynamic argument must remain within the compiled declaration and app grants.
+                if args["resource_id"] != manifest.data_bindings[0].resource_ref:
+                    raise DomainError("PERMISSION_DENIED")
+                if action.executor.ref == "text.literal_evidence":
+                    from .text_apps import compute
+    
+                    source = authorized_read(store, c, user, draft["runtime_id"], draft["project_id"],
+                                             "resource.read", {"resource_id": args["resource_id"]})
+                    value = compute(source, args)
+                else:
+                    validate_call(action.executor.ref, args)
+                    value = authorized_read(
+                        store, c, user, draft["runtime_id"], draft["project_id"], action.executor.ref, args
+                    )
+                validate_value(action.output_schema, value, "action_output")
+&gt;               output = {field: value[source.field] for field, source in manifest.outputs.items()}
+                                 ^^^^^^^^^^^^^^^^^^^
+E               KeyError: 'checklist'
+
+src/sim2act/apps.py:569: KeyError</failure></testcase></testsuite></testsuites>

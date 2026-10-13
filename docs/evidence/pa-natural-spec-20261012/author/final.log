@@ -1,0 +1,1050 @@
+........................................................................ [ 31%]
+........................................................................ [ 63%]
+................................................FFFF..............s..... [ 94%]
+.......FFFFF                                                             [100%]
+=================================== FAILURES ===================================
+_______ test_current_read_grant_rechecked_before_dispatch[revoked-user] ________
+
+env = (<sim2act.db.Store object at 0x7f73c1d55fa0>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...01ef88f58b4f01bfb87332d607cf6b', 'user_ef6ab5d64236421cbce4cecfdba19bcb', 'proj_078cebe9aff542a1b083dc46468dd1f9', ...)
+identity = 'user', case = 'revoked'
+
+    @pytest.mark.parametrize("identity", ["user", "app"])
+    @pytest.mark.parametrize("case", ["revoked", "expired"])
+    def test_current_read_grant_rechecked_before_dispatch(env, identity, case):
+        runtime, ids, _, _, _, rel, inst, value = setup(env)
+        accepted = jobs.enqueue(
+            env[0],
+            env[3],
+            inst["id"],
+            inst["revision"],
+            rel["fingerprint"],
+            {"term": value["term"]},
+            "queued",
+            limits(env),
+        )
+        with env[0].tx() as c:
+            c.execute(
+                update(grants)
+                .where(
+                    grants.c.principal_id == (env[3] if identity == "user" else runtime),
+                    grants.c.resource_id == ids[0],
+                )
+                .values(**({"revoked": True} if case == "revoked" else {"expires_at": time.time() - 1}))
+            )
+        protocol = replay(ids[0], value)
+        Worker(env[0], env[1], protocol).once()
+        assert not protocol.requests
+        with env[0].tx() as c:
+>           assert (
+                c.execute(select(runs.c.status).where(runs.c.id == accepted["run_id"])).scalar_one()
+                == "WAITING_RESOURCE"
+            )
+E           AssertionError: assert 'FAILED' == 'WAITING_RESOURCE'
+E             
+E             - WAITING_RESOURCE
+E             + FAILED
+
+tests/test_bounded_agent_apps.py:428: AssertionError
+________ test_current_read_grant_rechecked_before_dispatch[revoked-app] ________
+
+env = (<sim2act.db.Store object at 0x7f73c1972d20>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...ce4b1b900e4ed1b088cc8b35971489', 'user_240409ff44694fbcbedc0fe13c361a3f', 'proj_4b469ba0928842b7bb539bfa57d3ad69', ...)
+identity = 'app', case = 'revoked'
+
+    @pytest.mark.parametrize("identity", ["user", "app"])
+    @pytest.mark.parametrize("case", ["revoked", "expired"])
+    def test_current_read_grant_rechecked_before_dispatch(env, identity, case):
+        runtime, ids, _, _, _, rel, inst, value = setup(env)
+        accepted = jobs.enqueue(
+            env[0],
+            env[3],
+            inst["id"],
+            inst["revision"],
+            rel["fingerprint"],
+            {"term": value["term"]},
+            "queued",
+            limits(env),
+        )
+        with env[0].tx() as c:
+            c.execute(
+                update(grants)
+                .where(
+                    grants.c.principal_id == (env[3] if identity == "user" else runtime),
+                    grants.c.resource_id == ids[0],
+                )
+                .values(**({"revoked": True} if case == "revoked" else {"expires_at": time.time() - 1}))
+            )
+        protocol = replay(ids[0], value)
+        Worker(env[0], env[1], protocol).once()
+        assert not protocol.requests
+        with env[0].tx() as c:
+>           assert (
+                c.execute(select(runs.c.status).where(runs.c.id == accepted["run_id"])).scalar_one()
+                == "WAITING_RESOURCE"
+            )
+E           AssertionError: assert 'FAILED' == 'WAITING_RESOURCE'
+E             
+E             - WAITING_RESOURCE
+E             + FAILED
+
+tests/test_bounded_agent_apps.py:428: AssertionError
+_______ test_current_read_grant_rechecked_before_dispatch[expired-user] ________
+
+env = (<sim2act.db.Store object at 0x7f73c21ddf70>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...a34b21b23c43d3a325787dff6b0dd2', 'user_75f80f58cd3d4636b9152a84c754e276', 'proj_bc0dfa1165fe43f4945097c402936fdf', ...)
+identity = 'user', case = 'expired'
+
+    @pytest.mark.parametrize("identity", ["user", "app"])
+    @pytest.mark.parametrize("case", ["revoked", "expired"])
+    def test_current_read_grant_rechecked_before_dispatch(env, identity, case):
+        runtime, ids, _, _, _, rel, inst, value = setup(env)
+        accepted = jobs.enqueue(
+            env[0],
+            env[3],
+            inst["id"],
+            inst["revision"],
+            rel["fingerprint"],
+            {"term": value["term"]},
+            "queued",
+            limits(env),
+        )
+        with env[0].tx() as c:
+            c.execute(
+                update(grants)
+                .where(
+                    grants.c.principal_id == (env[3] if identity == "user" else runtime),
+                    grants.c.resource_id == ids[0],
+                )
+                .values(**({"revoked": True} if case == "revoked" else {"expires_at": time.time() - 1}))
+            )
+        protocol = replay(ids[0], value)
+        Worker(env[0], env[1], protocol).once()
+        assert not protocol.requests
+        with env[0].tx() as c:
+>           assert (
+                c.execute(select(runs.c.status).where(runs.c.id == accepted["run_id"])).scalar_one()
+                == "WAITING_RESOURCE"
+            )
+E           AssertionError: assert 'FAILED' == 'WAITING_RESOURCE'
+E             
+E             - WAITING_RESOURCE
+E             + FAILED
+
+tests/test_bounded_agent_apps.py:428: AssertionError
+________ test_current_read_grant_rechecked_before_dispatch[expired-app] ________
+
+env = (<sim2act.db.Store object at 0x7f73c1d85ee0>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...070d185b0147ad8a10656cc22a59b8', 'user_f471de45e6fb4ef78ef75eb860082ee5', 'proj_95f307ec7b584528b772ca470eca532f', ...)
+identity = 'app', case = 'expired'
+
+    @pytest.mark.parametrize("identity", ["user", "app"])
+    @pytest.mark.parametrize("case", ["revoked", "expired"])
+    def test_current_read_grant_rechecked_before_dispatch(env, identity, case):
+        runtime, ids, _, _, _, rel, inst, value = setup(env)
+        accepted = jobs.enqueue(
+            env[0],
+            env[3],
+            inst["id"],
+            inst["revision"],
+            rel["fingerprint"],
+            {"term": value["term"]},
+            "queued",
+            limits(env),
+        )
+        with env[0].tx() as c:
+            c.execute(
+                update(grants)
+                .where(
+                    grants.c.principal_id == (env[3] if identity == "user" else runtime),
+                    grants.c.resource_id == ids[0],
+                )
+                .values(**({"revoked": True} if case == "revoked" else {"expires_at": time.time() - 1}))
+            )
+        protocol = replay(ids[0], value)
+        Worker(env[0], env[1], protocol).once()
+        assert not protocol.requests
+        with env[0].tx() as c:
+>           assert (
+                c.execute(select(runs.c.status).where(runs.c.id == accepted["run_id"])).scalar_one()
+                == "WAITING_RESOURCE"
+            )
+E           AssertionError: assert 'FAILED' == 'WAITING_RESOURCE'
+E             
+E             - WAITING_RESOURCE
+E             + FAILED
+
+tests/test_bounded_agent_apps.py:428: AssertionError
+_______________ test_goal_text_offline_page_actual_worker[valid] _______________
+
+env = (<sim2act.db.Store object at 0x7f73c10ebcb0>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...d97eb57b004f2884b68009c5ad3ab8', 'user_65bcc46bb6b04407865863f3878ff98f', 'proj_e27e2ae936a54784932e217f8fad9c63', ...)
+tmp_path = PosixPath('/workspace/pa-natural-spec-runtime-evidence-20261012/author/final-tmp/test_goal_text_offline_page_ac0')
+scenario = 'valid'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+            "owner-read-order-error",
+            "owner-read-order-invalid",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs:2:138)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:155: AssertionError
+__________ test_goal_text_offline_page_actual_worker[lost-generation] __________
+
+env = (<sim2act.db.Store object at 0x7f73c0faef30>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...52e3c283fa44ebbbb52539d3dc5e58', 'user_e4e782b8269a4ab08dfff615769347d4', 'proj_612b3e5b1ca7407da2fa7c0557812948', ...)
+tmp_path = PosixPath('/workspace/pa-natural-spec-runtime-evidence-20261012/author/final-tmp/test_goal_text_offline_page_ac1')
+scenario = 'lost-generation'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+            "owner-read-order-error",
+            "owner-read-order-invalid",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs:2:138)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:155: AssertionError
+___________ test_goal_text_offline_page_actual_worker[lost-confirm] ____________
+
+env = (<sim2act.db.Store object at 0x7f73c0cd2900>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...704be5a0d345be8d31a65594fa4649', 'user_1678da66f06e434bb81e7e1945e5fa29', 'proj_7a1af6a9d97d4819a2290fac2bc57b66', ...)
+tmp_path = PosixPath('/workspace/pa-natural-spec-runtime-evidence-20261012/author/final-tmp/test_goal_text_offline_page_ac2')
+scenario = 'lost-confirm'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+            "owner-read-order-error",
+            "owner-read-order-invalid",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs:2:138)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:155: AssertionError
+______ test_goal_text_offline_page_actual_worker[late-confirm-edit-undo] _______
+
+env = (<sim2act.db.Store object at 0x7f73c1c53230>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...1bafc7c28e4d278c26bf99ebb571fa', 'user_1a3afedc579448288e05d4721cfaca68', 'proj_72f55accd38e4770b66cc60e8c71de0b', ...)
+tmp_path = PosixPath('/workspace/pa-natural-spec-runtime-evidence-20261012/author/final-tmp/test_goal_text_offline_page_ac3')
+scenario = 'late-confirm-edit-undo'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+            "owner-read-order-error",
+            "owner-read-order-invalid",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs:2:138)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:155: AssertionError
+____ test_goal_text_offline_page_actual_worker[late-confirm-read-edit-undo] ____
+
+env = (<sim2act.db.Store object at 0x7f73c226d520>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...176393e8364d78b0cc040a5f19da53', 'user_cfa6cb7eec354a2abb04b24c52e98ac8', 'proj_542c05bc69144f3681d7cfc92aa4ebe1', ...)
+tmp_path = PosixPath('/workspace/pa-natural-spec-runtime-evidence-20261012/author/final-tmp/test_goal_text_offline_page_ac4')
+scenario = 'late-confirm-read-edit-undo'
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "valid",
+            "lost-generation",
+            "lost-confirm",
+            "late-generation",
+            "poison-accepted-id",
+            "poison-accepted-shape",
+            "poison-accepted-fields",
+            "late-confirm-navigation",
+            "late-confirm-edit",
+            "late-confirm-edit-undo",
+            "late-confirm-read-edit-undo",
+            "late-confirm-app",
+            "late-confirm-goal",
+            "late-app-read",
+            "late-internal-read",
+            "owner-accept",
+            "owner-reject",
+            "owner-lost-prepare",
+            "owner-lost-decision",
+            "owner-late-prepare-undo",
+            "owner-late-decision-undo",
+            "owner-late-read-undo",
+            "owner-late-navigation-undo",
+            "owner-cancel",
+            "owner-revoke",
+            "owner-read-order-revoke",
+            "owner-read-order-prepare",
+            "owner-read-order-error",
+            "owner-read-order-invalid",
+        ],
+    )
+    def test_goal_text_offline_page_actual_worker(env, tmp_path, scenario):
+        store, settings, client, user, pid, text, card = setup(env)
+        other_app = None
+        if scenario == "late-confirm-app":
+            other = client.post(
+                f"/api/projects/{pid}/apps/csv-preview",
+                json={"resource_id": env[6], "name": "Other app", "goal": "Fixed CSV fixture"},
+            )
+            assert other.status_code == 201, other.text
+            other_app = other.json()["id"]
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                {
+                    "project": pid,
+                    "card": card["id"],
+                    "scenario": scenario,
+                    "other": store.project(user, "Other selection"),
+                    "other_app": other_app,
+                    "output": str(tmp_path / "results.json"),
+                }
+            )
+        )
+        wires = []
+    
+        def handler(request):
+            payload = json.loads(request.content)
+            wires.append(payload)
+            if len(wires) == 1:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "page-read",
+                            "type": "function",
+                            "function": {
+                                "name": "resource.read",
+                                "arguments": json.dumps({"resource_id": text}),
+                            },
+                        }
+                    ],
+                }
+                result = wire(message, "tool_calls")
+            else:
+                initial = json.loads(payload["messages"][1]["content"])
+                value = fixture_candidate(initial)
+                if len(wires) == 2:
+                    value["manifest"]["workflow"][0]["inputs"].pop("term")
+                result = wire(
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(value, ensure_ascii=False, separators=(",", ":")),
+                    }
+                )
+            return httpx.Response(200, json=result)
+    
+        process = subprocess.Popen(
+            ["node", "tests/goal_text_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules"),
+            },
+        )
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                if request.get("command") == "worker":
+                    worker = Worker(
+                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                    )
+                    assert worker.once()
+                    answer = {"id": request["id"], "status": 200, "text": "{}"}
+                else:
+                    r = client.request(
+                        request["method"],
+                        request["path"],
+                        json=request.get("body"),
+                        headers=request.get("headers"),
+                    )
+                    answer = {
+                        "id": request["id"],
+                        "status": r.status_code,
+                        "text": r.text,
+                        "content_type": r.headers.get("content-type"),
+                    }
+                process.stdin.write(json.dumps(answer) + "\n")
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / "driver.log").write_text(errors)
+            output = os.environ.get("SIM2ACT_PA_EVIDENCE_DIR")
+            if output:
+                target = Path(output)
+                target.mkdir(parents=True, exist_ok=True)
+                (target / (scenario + ".log")).write_text(errors)
+                result_path = tmp_path / "results.json"
+                if result_path.exists():
+                    (target / (scenario + ".json")).write_bytes(result_path.read_bytes())
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs:2:138)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act-pa-provider/tests/goal_text_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_goal_text_ui.py:155: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_bounded_agent_apps.py::test_current_read_grant_rechecked_before_dispatch[revoked-user]
+FAILED tests/test_bounded_agent_apps.py::test_current_read_grant_rechecked_before_dispatch[revoked-app]
+FAILED tests/test_bounded_agent_apps.py::test_current_read_grant_rechecked_before_dispatch[expired-user]
+FAILED tests/test_bounded_agent_apps.py::test_current_read_grant_rechecked_before_dispatch[expired-app]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[valid]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[lost-generation]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[lost-confirm]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[late-confirm-edit-undo]
+FAILED tests/test_goal_text_ui.py::test_goal_text_offline_page_actual_worker[late-confirm-read-edit-undo]
+9 failed, 218 passed, 1 skipped, 1 warning in 2242.20s (0:37:22)

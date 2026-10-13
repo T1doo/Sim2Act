@@ -1,0 +1,37 @@
+F
+=================================== FAILURES ===================================
+_________ test_actual_nodes_and_atomic_pending_checklist[False-single] _________
+
+env = (<sim2act.db.Store object at 0x7f003e16bda0>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...d0d1f6de4a41faae582eab24074fc9', 'user_ab71763290c24905941b0ad5c18b91a0', 'proj_90328430e3454ee18feaf9015c8309be', ...)
+style = 'single', repair = False
+
+    @pytest.mark.parametrize("style", ["single", "parallel", "sequential"])
+    @pytest.mark.parametrize("repair", [False, True])
+    def test_actual_nodes_and_atomic_pending_checklist(env, style, repair):
+        data = setup(env)
+        _, _, release, inst, generation = ready(data, style, repair)
+        rid = enqueue(data, release, inst)
+        sent = []
+        assert Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
+        result = inspect(data, inst, rid)
+        assert result.status_code == 200, result.text
+        assert result.json()["status"] == "SUCCEEDED", result.text
+        checklist = result.json()["result"]["checklist"]
+        assert (
+            checklist["source_content"] == SOURCE
+>           and checklist["human_unresolved"] == data[6]["snapshot"]["content"]["unresolved"]
+                                                 ^^^^^^^^^^^^^^^^^^^
+        )
+E       KeyError: 'snapshot'
+
+tests/test_natural_spec_apps.py:282: KeyError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_spec_apps.py::test_actual_nodes_and_atomic_pending_checklist[False-single]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 23.15s

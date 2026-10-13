@@ -8,7 +8,7 @@
 
 新生成家族 `goal-natural-spec-application.v1`，应用 namespace `pa-natural-spec-app.v1`，recipe `natural-spec-recipe.v1`。真实P-A sender的合成响应先选择实际resource.read，再提出完整节点/边及样例抽取，调用实际spec.check_candidate消费引用/结构反馈，最终同一候选或一次修订。用户不写候选JSON。样例答案只留在受保护模型历史；应用定义只保留recipe、声明的schema/prompt依赖与样例指纹。
 
-注册节点为 resource.read、model.spec.all/model.spec.requirements/model.spec.qualifiers、spec.merge_evidence、spec.verify_citations、artifact.save_text。模型选择1或2个抽取节点、其任意有限稳定ID、依赖与端口；可选择单节点覆盖，或2节点并行/后一节点读取前一抽取及真实检查反馈后补充。两个节点须经合并且保留两个原结果；模型负责结构化事实和关系，服务端只展开固定工具/schema/caps。没有任意代码或自由工具。DAG至多6步；模型节点单次请求、最多2节点，纯工具最多4，global4请求/4工具/1024输出/64000总封顶/300秒与原lease不提高。
+注册节点为 resource.read、model.spec.all/model.spec.requirements/model.spec.qualifiers、spec.merge_evidence、spec.verify_citations、artifact.save_text。模型选择1或2个抽取节点、其任意有限稳定ID、依赖与端口；可选择单节点覆盖、两个逻辑独立节点，或后一节点读取前一抽取及真实检查反馈后补充。当前独立节点也按稳定次序串行发送，不声明同时dispatch。两个节点须经合并且保留两个原结果；模型负责结构化事实和关系，服务端只展开固定工具/schema/caps。没有任意代码或自由工具。DAG至多6步；模型节点单次请求、最多2节点，纯工具最多4，global4请求/4工具/1024输出/64000总封顶/300秒与原lease不提高。
 
 每个模型事实有稳定ID、kind（requirement/condition/exception/open_question/unclassified）、说明、一个或多个原文char span+quote及目标ID关系。条件/例外引用相应requirement，无法确认关系保留UNASSIGNED；open_question没有自动resolved状态。模型输出完整保留，合并不可删除首节点中的条件/例外/未决项。未覆盖的原文片段显式列出，完整原文始终进入待验成果。因此出处、结构和原文保留可以核验；含义、遗漏、错误分类和scope关系准确性仍UNKNOWN/NOT_RUN，不以引用覆盖冒称语义完整。
 
@@ -41,3 +41,5 @@
 新Run的created_at和原绝对deadline另封在accepted binding（指纹仍受Run与独立scope保护），模型reservation再绑定run_version/created_at/deadline。收到原始响应后先只写owned Attempt及接收锚，保持parameters不变；当前授权失败时错误收尾只投影标识与状态。操作写与失败历史写均精确限定原Run、instance、Release与request指纹，错误链接只记录原Run错误，不污染另一scope。
 
 模型节点最后一个回调后再重读live合同、精确version、原deadline、原审计和本次完整账本；VERIFIED不允许有REJECTED锚。最终保存入口与出口比较本次Attempt/参数/完整raw/usage/所有NS事件及未发生自身变化的Run metadata/context。SQLite事务边界及发送/收到后的既有heartbeat保持30秒lease；过期lease不续，原绝对deadline不延。页面用candidate内opaque sample seal核实际sample_nodes，再独立重算完整来源SHA、Unicode scalar出处、保留项和固定UNKNOWN/PENDING展示。
+
+完整回归发现并修复了旧队列前置授权失效的状态兼容：claim仍先核权限，资源撤权/不可用以元数据事务同步原Run/AppRun至WAITING_RESOURCE，结构错误FAILED，取消优先CANCELLED；坏pointer不跟随，version/fence/cancel CAS失败整体回滚，未恢复授权不能resume。最终冻结为c28e91a5066e59c1c36e76b910515298d0d1eb28；实际结果、原失败和独审源图见[最终验收](PANaturalSpecAcceptance20261013.md)。

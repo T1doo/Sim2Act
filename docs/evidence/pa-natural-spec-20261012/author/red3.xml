@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="5.183" timestamp="2026-10-13T00:14:06.387333+00:00" hostname="9809f76d2248"><testcase classname="tests.test_natural_spec_apps" name="test_actual_nodes_and_atomic_pending_checklist[False-single]" time="5.060"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;INVALID_INPUT&quot;,&quot;message&quot;:&quot;Explicit offline Replay required only for agent&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 == 202&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fee530ee0f0&gt;, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...518494262a4ac3946ba5f1e511aa80', 'user_913d72c54f5745fa8c80cd72d9cf221a', 'proj_7e8ffbb0789745038fccfd677fc5eb03', ...)
+style = 'single', repair = False
+
+    @pytest.mark.parametrize("style", ["single", "parallel", "sequential"])
+    @pytest.mark.parametrize("repair", [False, True])
+    def test_actual_nodes_and_atomic_pending_checklist(env, style, repair):
+        data = setup(env);_, _, release, inst, generation = ready(data, style, repair)
+&gt;       rid = enqueue(data, release, inst);sent = []
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_spec_apps.py:160: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (&lt;sim2act.db.Store object at 0x7fee530ee0f0&gt;, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...c518494262a4ac3946ba5f1e511aa80', 'proj_7e8ffbb0789745038fccfd677fc5eb03', 'res_9aaa7c9f56544d7aaa2f3b310ee28667', ...)
+release = {'approval_id': 'iapproval_6d81a90d47d84b5a83b76a24d5a11ca1', 'fingerprint': '4e9c605fc8d8f2a7869eb5913b5fc4095a709b3876c0134cad40690bf10d0b67', 'formal_publication_enabled': False, 'id': 'irelease_54a6e4a0d0574661a980dcc1335f6506', ...}
+inst = {'data_version': 0, 'formal_publication_enabled': False, 'history': [{'kind': 'created', 'release_id': 'irelease_54a6e4a0d0574661a980dcc1335f6506', 'revision': 1}], 'id': 'iinstance_88be32c405644a8236399cbafaba6260', ...}
+key = 'spec-actual', value = None
+
+    def enqueue(data, release, inst, key="spec-actual", value=None):
+        response = data[2].post(
+            f"/api/internal/instances/{inst['id']}/runs",
+            json=dict(
+                expected_revision=inst["revision"],
+                expected_release_fingerprint=release["fingerprint"],
+                input={} if value is None else value,
+                request_key=key,
+            ),
+        )
+&gt;       assert response.status_code == 202, response.text
+E       AssertionError: {"error":{"code":"INVALID_INPUT","message":"Explicit offline Replay required only for agent","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 == 202
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_pa_spec_apps.py:290: AssertionError</failure></testcase></testsuite></testsuites>

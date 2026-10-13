@@ -1,0 +1,30 @@
+.............F
+=================================== FAILURES ===================================
+__________ test_cold_new_store_reads_new_material_without_old_answers __________
+
+env = (<sim2act.db.Store object at 0x7fe826da3aa0>, Settings(database_url='sqlite:////workspace/pa-natural-spec-runtime-evid...4a349484d4486db573b5c3e5182ac6', 'user_3554e17529f143cabfbdc63afcd01fca', 'proj_3247ad294f054201a23fa1aca9f9b050', ...)
+
+            summary="An intentionally inaccurate summary",
+            citations=[dict(start=0, end=len(text), quote=text)],
+            targets=[],
+        )
+    ]
+    result = natural.report(source, items, dict(unresolved=["Human pending"]))
+    assert result["citation_status"] == "PASS" and result["semantic_status"] == "UNKNOWN"
+    assert result["checklist"]["items"][0]["relation_status"] == "UNASSIGNED"
+    items[0]["citations"][0]["start"] = True
+>   with pytest.raises(DomainError):
+           ^^^^^^^^^^^^
+E   KeyError: 'preview'
+
+tests/test_natural_spec_apps.py:409: KeyError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_spec_apps.py::test_cold_new_store_reads_new_material_without_old_answers
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 13 passed, 1 warning in 215.23s (0:03:35)
