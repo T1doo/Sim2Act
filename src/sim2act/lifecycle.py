@@ -159,7 +159,8 @@ def new_approval(c, user, pid, kind, payload):
 def approval(c, user, aid, fp, kind, *, allow_consumed=False):
     row = (
         c.execute(
-            select(internal_approvals).where(internal_approvals.c.id == aid).with_for_update()
+            select(internal_approvals).where(internal_approvals.c.id == aid,
+                internal_approvals.c.principal_id == user).with_for_update()
         )
         .mappings()
         .first()
@@ -941,7 +942,9 @@ def inspect_switch_approval(store, user, iid, aid, limits):
         ).scalar()
         store.lock_project(c, user, pid)
         row = (
-            c.execute(select(internal_approvals).where(internal_approvals.c.id == aid))
+            c.execute(select(internal_approvals).where(internal_approvals.c.id == aid,
+                internal_approvals.c.principal_id == user, internal_approvals.c.project_id == pid,
+                internal_approvals.c.kind == "switch"))
             .mappings()
             .first()
         )

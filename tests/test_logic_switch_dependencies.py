@@ -296,7 +296,7 @@ def test_actual_existing_business_adopts_modified_logic_and_keeps_history(env, t
         r.text
     )  # Existing consumed-approval protocol, no duplicate mutation.
     assert snapshot(store) == stable
-    new_run = enqueue(data, modified, switched)
+    new_run = enqueue(data, modified, switched, key="business-modified-actual")
     cold = Store(data[1].database_url, test_only=True)
     coldclient = TestClient(create_app(cold, data[1]))
     coldclient.headers["Authorization"] = "Bearer synthetic-test-A"
