@@ -65,6 +65,9 @@ class Reference(Strict):
     parent_output_fingerprint: str = Field(pattern=HASH)
     parent_binding_fingerprint: str = Field(pattern=HASH)
     parent_proof_digest: str = Field(pattern=HASH)
+    parent_material_id: str
+    parent_artifact_id: str
+    project_id: str
     base_data_version: int
     instance_revision: int
     release_id: str
@@ -78,7 +81,7 @@ def bounded_limits(*limits):
     return Limits(**{name:min(getattr(x,name) for x in limits) for name in Limits.model_fields})
 
 
-def proof_digest(c,rid):
+def proof_digest(c,rid,material,artifact,goal,version,project):
     # Called only after parent material/artifact scope authorization. Snapshot was
     # fully verify_job-proven at preview; equality revalidates every frozen byte.
     from .db import (
@@ -99,10 +102,17 @@ def proof_digest(c,rid):
     bound_snapshot=c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == rid)).scalar_one()
     source_ids=c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
     artifact_ids=c.execute(select(local_effects.c.resource_id).where(local_effects.c.operation_id.in_(op_ids))).scalars().all()
-    tables.extend([(resources,resources.c.id.in_(source_ids+artifact_ids)),
-        (goal_cards,goal_cards.c.id == bound_snapshot["spec_goal"]["card_id"]),
-        (goal_card_versions,(goal_card_versions.c.card_id == bound_snapshot["spec_goal"]["card_id"]) &
-            (goal_card_versions.c.version == bound_snapshot["spec_goal"]["version"])),(operation_intents,operation_intents.c.operation_id.in_(op_ids)),
+    frozen_goal=bound_snapshot.get("spec_goal")
+    goal_project=c.execute(select(goal_cards.c.project_id).where(goal_cards.c.id == goal)).scalar()
+    spec.require(source_ids == [material] and artifact_ids == [artifact]
+        and isinstance(frozen_goal,dict) and frozen_goal.get("card_id") == goal
+        and frozen_goal.get("version") == version and goal_project == project,
+        "Source proof pointers differ from independently authorized frozen scope")
+    # Never follow poisoned Run/binding/effect pointers to extra private objects.
+    tables.extend([(resources,resources.c.id.in_([material,artifact])),
+        (goal_cards,goal_cards.c.id == goal),
+        (goal_card_versions,(goal_card_versions.c.card_id == goal) &
+            (goal_card_versions.c.version == version)),(operation_intents,operation_intents.c.operation_id.in_(op_ids)),
         (local_effects,local_effects.c.operation_id.in_(op_ids)),
         (reservations,reservations.c.id.in_(attempt_ids))])
     return fingerprint({table.name:sorted((dict(r) for r in c.execute(select(table).where(condition)).mappings()),
@@ -149,7 +159,8 @@ def preview(store, user, iid, rid, limits, body):
             instance_id=iid,parent_run_id=rid,request_key=body.request_key,
             declaration=dict(row,payload=declaration),context=context,
             effective_candidate=binding["draft"]["candidate"],
-            parent_binding_fingerprint=job["fingerprint"],parent_proof_digest=proof_digest(c,rid),
+            parent_binding_fingerprint=job["fingerprint"],parent_proof_digest=proof_digest(c,rid,context["material"]["resource_id"],context["output"]["resource_id"],
+                context["source_goal"]["card_id"],context["source_goal"]["version"],context["project_id"]),
             proposed_limits=bounded_limits(limits,store.frozen_contract(c,job).limits,
                 Limits(**binding["draft"]["candidate"]["manifest"]["runtime_limits"])).model_dump(),
             proposed_model_nodes=sum(x["executor"]["ref"] in natural_specs.MODEL_KINDS for x in binding["draft"]["candidate"]["actions"]),
@@ -198,7 +209,8 @@ def reference(value):
         review_key=value["request_key"],review_fingerprint=value["review_fingerprint"],
         declaration_id=row["id"],declaration_fingerprint=row["fingerprint"],declaration_sequence=row["sequence"],
         parent_app_run_id=ctx["app_run_id"],parent_typed_fingerprint=ctx["typed_fingerprint"],
-        parent_output_fingerprint=ctx["output_fingerprint"],parent_binding_fingerprint=value["parent_binding_fingerprint"],parent_proof_digest=value["parent_proof_digest"],
+        parent_output_fingerprint=ctx["output_fingerprint"],parent_binding_fingerprint=value["parent_binding_fingerprint"],parent_proof_digest=value["parent_proof_digest"],parent_material_id=ctx["material"]["resource_id"],
+        parent_artifact_id=ctx["output"]["resource_id"],project_id=ctx["project_id"],
         base_data_version=ctx["result_version"],instance_revision=ctx["instance_revision"],release_id=ctx["release_id"],
         goal_id=ctx["source_goal"]["card_id"],goal_version=ctx["source_goal"]["version"],goal_fingerprint=ctx["source_goal"]["fingerprint"])
 
@@ -228,7 +240,8 @@ def gate(store,c,user,rid):
     spec.require(accepted == [dict(parent_run_id=ref.parent_run_id,review_key=ref.review_key,
         review_fingerprint=ref.review_fingerprint)])
     owner.natural_scope(store,c,user,ref.instance_id,ref.parent_run_id)
-    owner.natural_authority(store,c,user,ref.instance_id,ref.parent_run_id)
+    authority=owner.natural_authority(store,c,user,ref.instance_id,ref.parent_run_id)
+    spec.require(authority["project_id"] == ref.project_id)
     rejected(c,user,ref.instance_id,ref.parent_run_id,ref.declaration_id,ref.declaration_fingerprint,ref.declaration_sequence)
     head=c.execute(select(goal_cards.c.version,goal_cards.c.fingerprint).where(goal_cards.c.id == ref.goal_id)).mappings().first()
     i=c.execute(select(internal_instances.c.revision,internal_instances.c.release_id,internal_instances.c.data_version)
@@ -251,7 +264,7 @@ def gate(store,c,user,rid):
             i["data_version"] == own_stage == own_typed == ref.base_data_version+1),
         "Correction source was revoked or a competing result committed")
     owner.natural_payload(c,rejected(c,user,ref.instance_id,ref.parent_run_id,ref.declaration_id,ref.declaration_fingerprint,ref.declaration_sequence))
-    spec.require(proof_digest(c,ref.parent_run_id) == ref.parent_proof_digest, "Original actual Worker proof changed")
+    spec.require(proof_digest(c,ref.parent_run_id,ref.parent_material_id,ref.parent_artifact_id,ref.goal_id,ref.goal_version,ref.project_id) == ref.parent_proof_digest, "Original actual Worker proof changed")
     return ref
 
 

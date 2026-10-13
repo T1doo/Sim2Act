@@ -291,6 +291,12 @@ async function correctionValidate(v,value,current){
   if(value.namespace!=="natural-spec-correction.v1"||value.principal_id!==v.principal||value.project_id!==v.project||value.instance_id!==v.iid||value.parent_run_id!==v.rid||value.formal_publication_enabled!==false||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"||value.real_model_allowance!==0||value.proposed_artifact_writes_at_most!==1||value.consent!=="RUN_NEW_BOUNDED_CORRECTION_KEEP_ORIGINAL_GOAL_AND_CRITERIA"||!value.declaration?.payload?.choices?.some(x=>x.decision==="REJECT"))throw Error("修正预览的身份、原拒绝或限额不一致");
   const hash=await ownerHash(unsigned);if(!current())return false;
   if(hash!==review_fingerprint)throw Error("修正预览指纹不一致");
+  const payloadHash=await ownerHash(value.declaration.payload);if(!current())return false;
+  if(payloadHash!==value.declaration.fingerprint)throw Error("原声明正文指纹不一致");
+  const {payload,fingerprint,...metadata}=value.declaration;
+  if(!ownerSame(payload.metadata,metadata))throw Error("原声明元数据不一致");
+  const candidateHash=await ownerHash(value.effective_candidate);if(!current())return false;
+  if(candidateHash!==value.context.effective_plan_fingerprint)throw Error("原实际流程指纹不一致");
   if(value.context.run_id!==v.rid||value.context.instance_id!==v.iid||value.declaration.kind!=="DECIDE"||value.declaration.status!=="REJECTED"||!ownerSame(value.context.items,value.declaration.payload.contract.items)||!ownerSame(value.context.goal,value.declaration.payload.contract.goal))throw Error("修正不能降低原Goal或验收标准");
   return true;
 }
@@ -313,6 +319,10 @@ async function correctionRecover(v,key,stage){
   const review=stage==="REVIEW"?value:value.review;
   if(!await correctionValidate(v,review,current)||!current())return false;
   const pending=correctionPending.get(ownerKey(v));
+  if(stage==="REVIEW"&&pending?.key===key){
+    const contextHash=await ownerHash(review.context);if(!current())return false;
+    if(contextHash!==pending.body.expected_context_fingerprint||review.declaration.id!==pending.body.declaration_id||review.declaration.fingerprint!==pending.body.declaration_fingerprint||review.declaration.sequence!==pending.body.expected_owner_sequence)throw Error("原key预览与原请求锚不一致");
+  }
   if(review.request_key!==key||(pending&&pending.key===key&&(pending.stage!==stage||pending.body.expected_review_fingerprint&&pending.body.expected_review_fingerprint!==review.review_fingerprint)))throw Error("原key修正回执不一致");
   if(stage==="RUN"&&(value.run_id===v.rid||value.principal_id!==v.principal||value.instance_id!==v.iid||value.parent_run_id!==v.rid||value.request_key!==key||value.formal_publication_enabled!==false||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"))throw Error("新Run回执绑定不一致");
   if(pending?.key===key)correctionPending.delete(ownerKey(v));
