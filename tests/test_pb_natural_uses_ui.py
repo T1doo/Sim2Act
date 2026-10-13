@@ -17,7 +17,7 @@ from sim2act.api import create_app
 from sim2act.db import Store, internal_run_bindings, runs
 
 
-@pytest.mark.parametrize("scenario", ["valid", "lost", "review-late-edit", "commit-late-navigation", "receipt-poison"])
+@pytest.mark.parametrize("scenario", ["valid", "lost", "review-late-navigation", "commit-late-navigation", "receipt-poison"])
 def test_successful_task_visible_extraction_and_cold_reuse(env, tmp_path, scenario):
     data, app, release, inst, target_resource, goal, body, route = prepared_use(env)
     aid = app["id"]

@@ -24,7 +24,7 @@ async function boot(){
  const style=w.document.createElement("style");style.textContent=await load("/app.css");w.document.head.append(style);
  w.fetch=async(path,options={})=>{const request={path,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
   if(fault==="lost"&&request.method==="POST"&&path.endsWith("/pb-use-runs")){fault="";assert.equal(result.status,202);throw Error("actual accepted P-B response lost");}
-  if((fault==="review-late-edit"&&path.endsWith("/pb-use-reviews"))||(fault==="commit-late-navigation"&&request.method==="POST"&&path.endsWith("/pb-use-runs"))){fault="";assert.equal(result.status,path.endsWith("/pb-use-runs")?202:200);await new Promise(resolve=>hold=resolve);}
+  if((fault==="review-late-navigation"&&path.endsWith("/pb-use-reviews"))||(fault==="commit-late-navigation"&&request.method==="POST"&&path.endsWith("/pb-use-runs"))){fault="";assert.equal(result.status,path.endsWith("/pb-use-runs")?202:200);await new Promise(resolve=>hold=resolve);}
   if(fault==="receipt-poison"&&request.method==="GET"&&path.includes("/pb-use-requests/")){fault="";const value=JSON.parse(result.text);value.request_key="wrong-key";return new Response(JSON.stringify(value),{status:result.status});}
   return new Response(result.text,{status:result.status,headers:{"Content-Type":result.content_type||"application/json"}});
  };
@@ -36,9 +36,13 @@ async function main(){
  await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));
  check(visible($("pb-use-panel")),"same saved P-B app exposes explicit per-use form");
  await edit("pb-use-material",info.target_resource);await edit("pb-use-goal",info.target);
- if(info.scenario==="review-late-edit"){
-  fault=info.scenario;const request=click("pb-use-preview");await wait(()=>!!hold);await edit("pb-use-goal","");await edit("pb-use-goal",info.target);hold();hold=null;await request;
-  check(w.eval("pbUseView.review===null"),"ABA input invalidates late preview");check($("pb-use-submit").disabled,"late preview cannot enable commit");
+ if(info.scenario==="review-late-navigation"){
+  fault=info.scenario;const request=click("pb-use-preview");await wait(()=>!!hold);
+  check($("pb-use-goal").disabled&&$("pb-use-material").disabled,"pending preview freezes material and Goal inputs");
+  await nav("resources");hold();hold=null;await request;await nav("apps");
+  await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));
+  check(w.eval("pbUseView.review===null")&&$("pb-use-proof").textContent==="","late preview cannot bind newly selected view");check($("pb-use-submit").disabled,"late preview cannot enable commit");
+  await edit("pb-use-material",info.target_resource);await edit("pb-use-goal",info.target);
  }
  await click("pb-use-preview");check(w.eval("pbUseView.review!==null"),"typed material and Goal preview verified");
  check($("pb-use-proof").textContent.includes(info.target_resource),"full review displays exact material");check($("pb-use-submit").disabled,"explicit consent required");await click("pb-use-ack");

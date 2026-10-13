@@ -70,17 +70,24 @@ def test_late_third_input_result_never_saves(env, tmp_path, fault):
         real_model_requests=0, typed_saves=0), indent=2))
 
 
-def test_natural_grant_expiry_invalidates_confirmation(env):
+def test_natural_grant_expiry_invalidates_confirmation(env, tmp_path):
     data, app, release, inst, resource, goal, body, route = prepared_use(env)
+    expires = time.time() + 30
     with data[0].tx() as c:
         c.execute(insert(grants).values(id=new_id('grant'), principal_id=inst['runtime_id'],
             project_id=data[4], resource_id=resource, tool_ref=natural.READ,
-            expires_at=time.time()+2, revision=1, revoked=False))
+            expires_at=expires, revision=1, revoked=False))
     checked = data[2].post(route + '/pb-use-reviews', json=body)
     assert checked.status_code == 200, checked.text
+    assert checked.json()['approved_grant_state'][0]['effective'] is True
     before = snapshot(data[0])
-    time.sleep(2.1)
+    time.sleep(max(0, expires - time.time()) + 0.1)
+    assert time.time() >= expires
+    assert snapshot(data[0]) == before
     commit = dict(review=body, expected_review_fingerprint=checked.json()['review_fingerprint'], consent=use.CONSENT)
     rejected = data[2].post(route + '/pb-use-runs', json=commit)
     assert rejected.status_code == 409, rejected.text
     assert snapshot(data[0]) == before
+    (tmp_path / 'natural-expiry-proof.json').write_text(json.dumps(dict(
+        preview=checked.json(), expires_at=expires, confirmed_after=time.time(),
+        rejected=rejected.json(), grants_unchanged=True, real_model_requests=0), indent=2))
