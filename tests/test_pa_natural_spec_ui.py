@@ -21,7 +21,8 @@ from sim2act.worker import Worker
 
 @pytest.mark.parametrize(
     "scenario",
-    ["valid", "binding-lost", "binding-late", "sample-tampered", "sample-nodes-tampered"],
+    ["valid", "binding-lost", "binding-late", "sample-tampered", "sample-nodes-tampered",
+     "run-lost", "run-late", "run-receipt-poison", "artifact-poison", "artifact-late"],
 )
 def test_natural_spec_page_actual_nodes_and_cold_material(env, tmp_path, scenario):
     data = setup(env)

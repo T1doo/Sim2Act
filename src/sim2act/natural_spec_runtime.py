@@ -912,10 +912,9 @@ def advance_model(worker, run):
                     fence=current["fence"],
                 ),
             )
-            spec.receipts(store, c, current, current_binding)
             # The last event/receipt callback can change live authority or time.
-            # Re-read the current contract and all evidence before committing
-            # VERIFIED, separately from the later project-save transaction.
+            # Check authority before replaying any protected receipts/Attempts,
+            # then re-read the full evidence before committing VERIFIED.
             fresh = spec.commit_guard(worker, c, run, current_binding)
             require(
                 fresh["version"] == current["version"] == meta["run_version"]

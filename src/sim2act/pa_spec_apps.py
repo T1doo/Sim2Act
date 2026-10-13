@@ -1050,6 +1050,7 @@ def advance(worker, run):
         c.execute(update(runs).where(runs.c.id == job["id"]).values(context=context))
         c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(status="RUNNING"))
         store.event(c, job["id"], "SPEC_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=live["fence"]))
+        live = commit_guard(worker, c, run, b)
         outputs[step["step_id"]] = value
         proved.append(receipt)
         if saved:
@@ -1074,6 +1075,7 @@ def advance(worker, run):
             state_write(store, c, live, a["id"], "SUCCEEDED", result=result_ref(b, proved, version))
             store.event(c, job["id"], "SPEC_COMMITTED", dict(result_version=version, artifact_resource=value["resource_id"]))
             # Recheck authority/lease after terminal writes without requiring RUNNING.
+            require(job_scope_gate(store, c, job["principal_id"], job["id"]))
             terminal = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence,
                 runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.worker_id, runs.c.version,
                 runs.c.fingerprint, runs.c.request_key)
@@ -1126,6 +1128,34 @@ def mount(app, store, limits, identity):
     from fastapi import Depends
     user_dependency = Depends(identity)
 
+    @app.get("/api/internal/instances/{iid}/spec-run-requests/{key}")
+    def read_run_request(iid: str, key: str, user=user_dependency):
+        from . import lifecycle
+        with store.tx() as c:
+            instance, release = lifecycle.instance(store, c, user, iid, limits)
+            require(is_candidate(release["snapshot"]["draft"]["candidate"]))
+            rid = c.execute(select(internal_run_bindings.c.run_id)
+                .join(internal_app_runs, internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
+                .where(internal_app_runs.c.instance_id == iid, internal_app_runs.c.principal_id == user,
+                    internal_app_runs.c.request_key == key)).scalar()
+            if rid is None:
+                raise DomainError("OUTCOME_UNKNOWN", "No accepted spec Run for this original key")
+            require(job_scope_gate(store, c, user, rid))
+            job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user,
+                runs.c.project_id == instance["project_id"])).mappings().one()
+            binding, _, _ = verify_job(store, c, user, job, limits)
+            snapshot, app_run = binding["snapshot"], binding["app_run"]
+            require(app_run["request_key"] == key and snapshot["instance_id"] == iid
+                and snapshot["app_run_id"] == app_run["id"])
+            return dict(namespace="spec-run-request.v1", project_id=job["project_id"],
+                principal_id=user, app_id=binding["draft"]["id"], instance_id=iid,
+                run_id=rid, app_run_id=app_run["id"], release_id=snapshot["release_id"],
+                request_key=key, request_fingerprint=snapshot["request_fingerprint"],
+                request=dict(expected_revision=snapshot["expected_revision"],
+                    expected_release_fingerprint=snapshot["expected_release_fp"],
+                    input=snapshot["input"], request_key=key),
+                status=job["status"], new_model_requests=0, project_writes=0)
+
     @app.get("/api/projects/{pid}/spec-model-candidates")
     def read_sources(pid: str, user=user_dependency):
         return source_index(store, user, pid, limits)
@@ -1140,8 +1170,16 @@ def mount(app, store, limits, identity):
             output = binding["app_run"]["output"]
             resource = authorized_read(store, c, user, job["runtime_id"], job["project_id"],
                 "resource.read", dict(resource_id=output["resource_id"]))
-            return dict(resource=resource, markdown_view=markdown_view(output["checklist"]),
-                citation_status="PASS", semantic_goal_acceptance="NOT_RUN")
+            snapshot = binding["snapshot"]
+            return dict(namespace="spec-saved-artifact.v1", project_id=job["project_id"],
+                principal_id=user, app_id=binding["draft"]["id"], run_id=rid,
+                app_run_id=snapshot["app_run_id"], instance_id=snapshot["instance_id"],
+                release_id=snapshot["release_id"], result_version=binding["app_run"]["result_version"],
+                output_fingerprint=fingerprint(output), resource=resource,
+                markdown_view=markdown_view(output["checklist"]), citation_status="PASS",
+                semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
+                owner_acceptance="PENDING", formal_publication_enabled=False,
+                new_model_requests=0, project_writes=0)
 
     @app.get("/api/projects/{pid}/spec-model-runs/{rid}/binding-options")
     def read_options(pid: str, rid: str, card_id: str, user=user_dependency):

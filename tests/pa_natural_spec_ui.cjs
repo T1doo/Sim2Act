@@ -2,6 +2,7 @@
 const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
 const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],hashes={},pending=new Map(),userActions=[],staticResourceLoads=[];
 let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null,heldOwnerState=null,readOrderEvidence=null;
+const downloads=[],downloadWork=[];
 readline.createInterface({input:process.stdin}).on("line",line=>{const result=JSON.parse(line),resolve=pending.get(result.id);pending.delete(result.id);resolve(result);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
 const check=(value,label)=>{assert(value,label);checks.push(label);};
@@ -45,10 +46,17 @@ async function boot(app){
  const html=await load("/");
  hashes["index.html"]=crypto.createHash("sha256").update(html).digest("hex");
  dom=new JSDOM(html,{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
+ const blobs=new Map();w.URL.createObjectURL=blob=>{const key=`blob:offline-${blobs.size}`;blobs.set(key,blob);return key;};w.URL.revokeObjectURL=key=>blobs.delete(key);
+ w.document.addEventListener("click",event=>{const link=event.target.closest("a[download]");if(!link)return;event.preventDefault();const blob=blobs.get(link.href),name=link.download;assert(blob);downloadWork.push(new Promise((resolve,reject)=>{const reader=new w.FileReader();reader.onload=()=>{downloads.push({name,content:reader.result,type:blob.type});resolve();};reader.onerror=reject;reader.readAsText(blob);}));},true);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
  const css=await load("/app.css");hashes["app.css"]=crypto.createHash("sha256").update(css).digest("hex");const style=w.document.createElement("style");style.textContent=css;w.document.head.append(style);
  w.fetch=async(url,options={})=>{
   const request={path:url,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
+  if(fault==="run-lost"&&request.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(url)){fault="";assert.equal(result.status,202);throw Error("actual accepted spec Run response lost");}
+  if(fault==="run-late"&&request.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(url)){fault="";assert.equal(result.status,202);await new Promise(resolve=>hold=resolve);}
+  if(fault==="run-receipt-poison"&&request.method==="GET"&&url.includes("/spec-run-requests/")){fault="";const value=JSON.parse(result.text);value.request_key="not-the-original-key";return new Response(JSON.stringify(value),{status:result.status,headers:{"Content-Type":"application/json"}});}
+  if(fault==="artifact-poison"&&request.method==="GET"&&url.endsWith("/spec-artifact")){fault="";const value=JSON.parse(result.text);value.markdown_view="Unbound changed Markdown";return new Response(JSON.stringify(value),{status:result.status,headers:{"Content-Type":"application/json"}});}
+  if(fault==="artifact-late"&&request.method==="GET"&&url.endsWith("/spec-artifact")){fault="";await new Promise(resolve=>hold=resolve);}
   if(fault==="binding-lost"&&request.method==="POST"&&url.endsWith("/bindings")){fault="";assert.equal(result.status,201);throw Error("injected accepted typed binding response lost");}
   if(fault==="binding-late"&&request.method==="POST"&&url.endsWith("/bindings")){fault="";assert.equal(result.status,201);await new Promise(resolve=>hold=resolve);}
   if(fault==="scope-late"&&request.method==="GET"&&url.endsWith("/application-provider-scopes")){fault="";await new Promise(resolve=>hold=resolve);}
@@ -133,11 +141,47 @@ async function boot(app){
  const instance=w.eval("engineering.instance.id"),app=w.eval("activeApp");count=posts();await boot(app);
  await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instance)));
  check(posts()===count,"cold page resumes exact instance with reads only");
- await click("internal-run-submit");await rpc({command:"cold-worker"});await click("internal-refresh");
+ check($("owner-status").textContent.includes("PENDING")&&!requests.some(r=>r.path.endsWith("/owner-review")),"spec states pending human acceptance without unsupported owner API");
+ if(["run-lost","run-late","run-receipt-poison"].includes(info.scenario))fault=info.scenario;
+ if(info.scenario==="run-late"){
+  const action=click("internal-run-submit");await wait(()=>hold);const release=hold;hold=null;await nav("projects");const reads=requests.length;release();await action;
+  check(requests.length===reads,"late accepted Run cannot follow up or paint after workspace switch");await nav("apps");
+ }else await click("internal-run-submit");
+ if(["run-lost","run-late","run-receipt-poison"].includes(info.scenario)){
+  if(info.scenario==="run-receipt-poison"){
+   check($("internal-status").textContent.includes("VERSION_CONFLICT"),"wrong original-key receipt is rejected");
+   await click(appButton("Visible spec app"));await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instance)));
+  }
+  check(!$("internal-retry").hidden&&$("internal-new-intent").hidden,"unknown spec submit retains original-key read and prevents duplicate intent");
+  count=posts();await click("internal-retry");check(posts()===count,"spec Run recovery performs GET only");
+ }
+ await rpc({command:"cold-worker"});await click("internal-refresh");
+ const savedVersion=()=>$("internal-data").querySelector(".spec-result");
+ check(savedVersion()&&!savedVersion().querySelector("blockquote"),"saved version offers explicit authorized content read");
+ if(info.scenario==="artifact-poison"){
+  fault=info.scenario;await click(savedVersion().querySelector('[data-spec-action="md"]'));
+  check(savedVersion().textContent.includes("VERSION_CONFLICT")&&!savedVersion().querySelector("blockquote")&&!downloads.length,"unbound Markdown is neither rendered nor downloaded");
+ }
+ if(info.scenario==="artifact-late"){
+  fault=info.scenario;const action=click(savedVersion().querySelector('[data-spec-action="json"]'));await wait(()=>hold);const release=hold;hold=null;
+  await nav("projects");const reads=requests.length;release();await action;
+  check(!downloads.length&&requests.length===reads&&!savedVersion().querySelector("blockquote"),"late artifact cannot paint or download after workspace switch");
+  await nav("apps");check(!savedVersion().querySelector('[data-spec-action="view"]').disabled,"returning to same result can explicitly read again after a discarded late response");
+ }
+ count=posts();await click(savedVersion().querySelector('[data-spec-action="view"]'));
+ check(posts()===count,"reading saved result creates no business write or model request");
  check($("internal-data").textContent.includes("garden sensor samples")&&$("internal-data").textContent.includes("winter interval"),"cold actual worker saves newly computed constraints");
+ check(savedVersion().querySelectorAll('[data-spec-kind="condition"]').length===1&&savedVersion().querySelectorAll('[data-spec-kind="exception"]').length===1&&savedVersion().querySelectorAll('[data-spec-kind="open_question"]').length===1,"readable checklist separates condition exception and unresolved decision");
+ check(savedVersion().textContent.includes("Human question 15")&&savedVersion().textContent.includes("语义 UNKNOWN"),"all human unresolved items and semantic boundary remain visible");
+ const artifactReads=requests.filter(r=>r.path.endsWith("/spec-artifact")).length;
+ await click(savedVersion().querySelector('[data-spec-action="json"]'));await click(savedVersion().querySelector('[data-spec-action="md"]'));await Promise.all(downloadWork);
+ check(downloads.length===2&&downloads.every(file=>file.content.includes("garden sensor")&&!file.content.includes("desk lamp")),"JSON and Markdown download bytes contain only current cold material");
+ check(JSON.parse(downloads.find(file=>file.name.endsWith(".json")).content).owner_acceptance==="PENDING","downloaded saved JSON keeps pending semantic acceptance");
+ check(requests.filter(r=>r.path.endsWith("/spec-artifact")).length===artifactReads+2&&posts()===count,"each download rechecks actual authorized artifact through GET only");
+ check(requests.filter(r=>r.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(r.path)).length===1,"exactly one runtime submission despite unknown or delayed response");
  check(!$("internal-data").textContent.includes("desk lamp"),"old source answers are absent from new output");
  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/application-runs")).length===1,"one generation submission");
  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/bindings")).length===1,"one binding submission despite recovery");
  check(!requests.some(r=>r.method==="POST"&&r.path.includes("application-provider-scopes")),"no model scope or credential setup");
- fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,model_requests:"SYNTHETIC_ONLY"},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
+ fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,downloads,user_actions:userActions,static_resource_loads:staticResourceLoads,loaded_source_sha256:hashes,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",scenario:info.scenario,model_requests:"SYNTHETIC_ONLY"},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
  }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,user_actions:userActions,text:dom?.window.document.body.textContent},null,2));dom?.window.close();process.stderr.write(error.stack+"\n");process.exit(1);}})();

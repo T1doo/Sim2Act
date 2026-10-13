@@ -122,6 +122,7 @@ async function boot(app){
  await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instance)));
  check(posts()===count,"cold page resumes exact instance with reads only");
  await click("internal-run-submit");await rpc({command:"cold-worker"});await click("internal-refresh");
+ await click($("internal-data").querySelector('[data-spec-action="view"]'));
  check($("internal-data").textContent.includes("Stop before the local deadline.")&&$("internal-data").textContent.includes("Preserve manual locks."),"cold actual worker saves newly computed constraints");
  check(!$("internal-data").textContent.includes("Keep earlier decisions."),"old source answers are absent from new output");
  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/application-runs")).length===1,"one generation submission");

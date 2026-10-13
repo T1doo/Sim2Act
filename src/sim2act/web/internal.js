@@ -44,7 +44,8 @@ function engineeringButtons(view) {
   $("internal-run-submit").disabled=!!view.busy || !view.instance || engineeringPending.has(view.instance.id) || (view.agent && (!view.offlineReplay || !$("internal-term").value.trim()));
   $("internal-retry").hidden=!view.instance || !engineeringPending.has(view.instance.id);
   $("internal-retry").disabled=!!view.busy;
-  $("internal-new-intent").hidden=$("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
+  $("internal-retry").textContent=view.spec ? "仅用原请求键读取运行回执" : "恢复原请求回执";
+  $("internal-new-intent").hidden=view.spec || $("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
 }
 async function engineeringAction(view,fn) {
   if(!view || !engineeringCurrent(view) || view.busy)return;
@@ -115,6 +116,7 @@ async function showInternalInstance(id,view=engineering) {
     $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : (view.agent ? "加载对应离线响应并填写本次检索词；后台核查真实授权材料，不调用provider。关闭页面不会取消任务。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。");
     if(view.workflow)$("internal-run-status").textContent="填写两次独立检索词，明确选择报告分支。报告未选时保留 PARTIAL 与三步回执；只用原请求 key 读取未知结果。";
     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
+    if(view.spec)$("internal-run-status").textContent=engineeringPending.has(id) ? "本次提交结果尚未确认。仅用原请求键读取回执；不会重发或开始重复运行。" : "运行已保存材料与目标，完成后可读取此版本清单或下载成果。自然规范模型默认关闭；出处核验不代表语义验收。";
     if(typeof openOwnerReview==="function")await openOwnerReview(view);
   } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
   engineeringButtons(view);
@@ -165,6 +167,7 @@ async function submitInternal(view,retry=false) {
   let pending=engineeringPending.get(instance.id);
   if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.spec ? {} : view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
+  if(view.spec)return submitSpecRun(view,instance,pending,retry);
   const requestKey=pending.request_key;
   const generation=view.instanceGeneration;
   $("internal-run-status").textContent="正在提交持久任务…";
@@ -175,6 +178,26 @@ async function submitInternal(view,retry=false) {
   $("internal-run-status").textContent=`已接受 ${accepted.run_id}，关闭页面不取消。`;
   await showInternalInstance(instance.id,view);
   if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(accepted.run_id,view,view.instance);
+}
+async function submitSpecRun(view,instance,pending,retry){
+  const generation=view.instanceGeneration,workspace=workspaceSelectionGeneration;
+  const current=()=>engineeringCurrent(view)&&view.instance?.id===instance.id&&view.instanceGeneration===generation&&workspaceSelectionGeneration===workspace&&engineeringPending.get(instance.id)===pending;
+  $("internal-run-status").textContent=retry ? "正在仅用原请求键读取回执…" : "正在提交已保存规范的后台运行…";
+  let accepted=null;
+  if(!retry){
+    accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
+    if(!current())return;
+  }
+  const receipt=await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}`);
+  if(!current())return;
+  const expected={instance_id:instance.id,expected_revision:pending.expected_revision,expected_release_fp:pending.expected_release_fingerprint,input:pending.input};
+  const requestHash=await paHash(expected);
+  if(!current())return;
+  if(receipt.namespace!=="spec-run-request.v1"||receipt.principal_id!==instance.principal_id||receipt.project_id!==view.project||receipt.app_id!==view.app||receipt.instance_id!==instance.id||receipt.release_id!==instance.release_id||receipt.request_key!==pending.request_key||receipt.request_fingerprint!==requestHash||goalRunCanonical(receipt.request)!==goalRunCanonical(pending)||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||!/^iapprun_[a-f0-9]{32}$/.test(receipt.app_run_id)||receipt.new_model_requests!==0||receipt.project_writes!==0||(accepted&&(accepted.run_id!==receipt.run_id||accepted.app_run_id!==receipt.app_run_id)))throw Error("VERSION_CONFLICT");
+  engineeringPending.delete(instance.id);
+  $("internal-run-status").textContent=`已核对原请求 ${pending.request_key} · ${receipt.status}；回执读取没有重新执行。`;
+  await showInternalInstance(instance.id,view);
+  if(engineeringCurrent(view)&&view.instance?.id===instance.id&&workspaceSelectionGeneration===workspace)await showInternalRun(receipt.run_id,view,view.instance);
 }
 $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
@@ -200,6 +223,7 @@ $("internal-refresh").onclick=()=>engineeringAction(engineering,async()=>{const 
 $("internal-back").onclick=()=>{clearInternal();};
 $("internal-run-form").onsubmit=event=>{event.preventDefault();const view=engineering;return engineeringAction(view,()=>submitInternal(view));};
 $("internal-new-intent").onclick=()=>{const view=engineering,id=view?.instance?.id;return engineeringAction(view,async()=>{
+  if(view.spec)return;
   if(!id)return;await showInternalInstance(id,view);
   if(!engineeringCurrent(view) || view.instance?.id!==id)return;
   engineeringPending.delete(id);$("internal-run-status").textContent="已读回当前历史并结束本页旧请求重试；不取消任何已接受后台任务。下一次提交是新运行。";
@@ -276,6 +300,7 @@ function invalidateInternalContent(view) {
   $("app-frozen-goal-text").textContent="";$("app-frozen-goal").hidden=true;$("app-manifest").textContent="";
 }
 function internalResult(record,view) {
+  if(view.spec)return specResult(record,view);
   if(!view.agent&&!view.literal)return row(`结果 v${record.version} · ${record.release_id} · ${JSON.stringify(record.data.result)}`);
   const value=record.data.result,node=document.createElement("article");node.className="agent-result";
   const title=document.createElement("p");title.textContent=`历史结果 v${record.version} · ${record.release_id} · ${view.literal ? "确定性文本工具" : "离线 Replay"} · 字面检查 PASS · 语义 ${value.semantic_status}`;
@@ -284,6 +309,59 @@ function internalResult(record,view) {
   for(const cite of value.citations){const line=document.createElement("li"),label=document.createElement("span"),quote=document.createElement("blockquote");label.textContent=`第 ${cite.start_line}—${cite.end_line} 行`;quote.textContent=cite.quote;line.append(label,quote);quotes.append(line);}
   if(!value.citations.length)quotes.textContent="无字面命中；不代表语义不存在。";
   node.append(title,scope,quotes);return node;
+}
+function specResult(record,view){
+  const instance=view.instance,selection=view.instanceGeneration,value=record.data.result;
+  const run=instance.runs.find(item=>item.app_run_id===record.run_id&&item.result_version===record.version);
+  const node=document.createElement("article"),title=document.createElement("h3"),status=document.createElement("p"),body=document.createElement("div");
+  node.className="spec-result";title.textContent=`规范成果 v${record.version}`;
+  status.setAttribute("role","status");status.textContent="已保存；读取前将重新核对当前权限、来源和此版本内容。语义 UNKNOWN，人工验收 PENDING。";
+  node.append(title,status);let reading=0;
+  const buttons=[];
+  for(const [format,label] of [["view","读取此版本清单"],["json","下载 JSON"],["md","下载 Markdown"]]){
+    const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.specAction=format;buttons.push(button);node.append(button);
+    button.onclick=async()=>{
+      const generation=++reading,workspace=workspaceSelectionGeneration;
+      const current=()=>node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection&&workspaceSelectionGeneration===workspace&&generation===reading;
+      if(!current()||!run)return;
+      buttons.forEach(b=>b.disabled=true);body.replaceChildren();status.textContent="正在读取并核对此版本已保存成果…";
+      try{
+        const saved=await api(`/api/internal/app-run-jobs/${run.id}/spec-artifact`);
+        if(!current())return;
+        const outputHash=await paHash(value);
+        if(!current())return;
+        const bytesHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(saved.resource?.content))),b=>b.toString(16).padStart(2,"0")).join("");
+        if(!current())return;
+        if(saved.namespace!=="spec-saved-artifact.v1"||saved.principal_id!==instance.principal_id||saved.project_id!==view.project||saved.app_id!==view.app||saved.instance_id!==instance.id||saved.run_id!==run.id||saved.app_run_id!==record.run_id||saved.release_id!==record.release_id||saved.result_version!==record.version||saved.output_fingerprint!==outputHash||saved.resource?.resource_id!==value.resource_id||saved.resource.format!=="json"||saved.resource.hash!==value.hash||bytesHash!==value.hash||saved.resource.content!==goalRunCanonical(value.checklist)||saved.markdown_view!==run.markdown_view||typeof saved.markdown_view!=="string"||saved.citation_status!=="PASS"||saved.semantic_status!=="UNKNOWN"||saved.semantic_goal_acceptance!=="NOT_RUN"||saved.owner_acceptance!=="PENDING"||saved.formal_publication_enabled!==false||saved.new_model_requests!==0||saved.project_writes!==0)throw Error("VERSION_CONFLICT");
+        renderSpecChecklist(body,value.checklist);
+        status.textContent=`已核对成果 v${record.version} · 出处 PASS · 语义 UNKNOWN · 人工验收 PENDING。完整原文、条件、例外与未决项保留。`;
+        if(format!=="view"){
+          const url=URL.createObjectURL(new Blob([format==="json"?saved.resource.content:saved.markdown_view],{type:format==="json"?"application/json;charset=utf-8":"text/markdown;charset=utf-8"}));
+          const link=document.createElement("a");link.href=url;link.download=`spec-${instance.id}-v${record.version}.${format}`;node.append(link);link.click();link.remove();URL.revokeObjectURL(url);
+        }
+      }catch(error){if(current()){body.replaceChildren();status.textContent=`成果读取未通过：${error.detail||error.message}。未显示或下载此响应。`;}}
+      finally{if(node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection&&generation===reading)buttons.forEach(b=>b.disabled=false);}
+    };
+  }
+  node.append(body);return node;
+}
+function renderSpecChecklist(node,value){
+  const paragraph=(parent,tag,text)=>{const element=document.createElement(tag);element.textContent=text;parent.append(element);return element;};
+  if(value.check_version!=="natural.spec_citations.v1"){
+    paragraph(node,"pre",JSON.stringify(value,null,2));return;
+  }
+  paragraph(node,"p",`来源 ${value.source.resource_id} · SHA256 ${value.source.hash}`);
+  const labels={requirement:"要求",condition:"条件",exception:"例外",open_question:"未决问题",unclassified:"未分类"};
+  for(const item of value.items){
+    const fact=document.createElement("section");fact.dataset.specKind=item.kind;node.append(fact);
+    paragraph(fact,"h4",`${labels[item.kind]} · ${item.item_id}`);paragraph(fact,"p",item.summary);
+    paragraph(fact,"p",item.targets.length?`模型声明关联：${item.targets.join("、")}；待人工判断关系准确性。`:item.relation_status==="UNASSIGNED"?"关联尚未确定，保留待判断。":item.decision_status==="OPEN"?"此问题仍待决定。":"");
+    for(const cite of item.citations){paragraph(fact,"p",`原文字符 ${cite.start}—${cite.end}（Unicode 码点，右端不含）`);paragraph(fact,"blockquote",cite.quote);}
+  }
+  paragraph(node,"h4","人工未决项");const pending=document.createElement("ul");node.append(pending);for(const text of value.human_unresolved)paragraph(pending,"li",text);
+  paragraph(node,"h4","未被引用覆盖的原文");for(const gap of value.feedback.uncovered)paragraph(node,"blockquote",gap.quote);
+  if(!value.feedback.uncovered.length)paragraph(node,"p","所有字符均已被引用覆盖；含义与完整性仍待人工判断。");
+  const full=document.createElement("details");node.append(full);paragraph(full,"summary","完整原文（原样保留）");paragraph(full,"pre",value.source_content);
 }
 function changeAgentInput() {
   const view=engineering;if(!view || !engineeringCurrent(view) || !(view.agent||view.literal))return;
