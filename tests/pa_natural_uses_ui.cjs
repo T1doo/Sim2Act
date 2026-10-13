@@ -38,7 +38,7 @@ async function boot(){await closePage();const boot=++boots;const load=async path
  const run=w.eval("engineering.run.id");check(run&&run!==info.original&&w.eval("pbUsePending.size")===0,"one distinct accepted new Run with verified receipt");
  check(requests.filter(x=>x.method==="POST"&&x.path.endsWith("/pa-use-runs")).length===1,"exactly one explicit P-A per-use POST");
  assert.equal((await rpc({command:"worker",rid:run})).status,200);
- await click("internal-refresh");await edit("owner-run",run);
+ await click("internal-refresh");await wait(()=>visible($("owner-run"))&&[...$("owner-run").options].some(o=>o.value===run));await edit("owner-run",run);
  check($("owner-status").textContent.includes("PENDING"),"new result has fresh PENDING owner state");
  const contract=JSON.parse($("owner-proof").textContent).contract;
  check(contract.source_goal.card_id===info.goal&&contract.material.resource_id===info.resource&&contract.result_version===3,"fresh owner contract binds third Goal/source/exact version3");
