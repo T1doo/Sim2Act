@@ -25,6 +25,7 @@ from .db import (
     internal_instances,
     internal_releases,
     internal_run_bindings,
+    run_contracts,
     runs,
 )
 from .errors import DomainError
@@ -169,7 +170,7 @@ def preview(store, user, iid, rid, limits, body):
             semantic_status="UNKNOWN",owner_acceptance="PENDING",formal_publication_enabled=False)
         release = binding["release"]  # Fully proven parent effective plan, never the editable draft.
         if "natural_logic_source" in release["snapshot"]:
-            value["logic_source"] = logic_anchor(release,limits)
+            value["logic_source"] = logic_anchor(store,c,user,release,limits)
         value["review_fingerprint"] = fingerprint(value)
         owner.natural_final_gate(store,c,user,iid,rid,context)
         remember(c,user,iid,REVIEW,body.request_key,body,value)
@@ -252,15 +253,24 @@ def accepted_child(c,user,iid,parent):
             events.c.data["parent_run_id"].as_string() == parent)).first())
 
 
-def logic_anchor(release,limits):
+def logic_anchor(store,c,user,release,limits):
+    from .lifecycle import logic_release_trace
+    trace = logic_release_trace(store,c,user,release)
+    spec.require(not trace["cyclic"] and not trace["over_limit"], "Finite logic dependency changed")
     return dict(release_id=release["id"], release_fingerprint=release["fingerprint"],
         origin=copy.deepcopy(release["snapshot"]["natural_logic_source"]),
-        validation_limits=limits.model_dump())
+        validation_limits=limits.model_dump(), dependencies=trace)
 
 
 def validation_limits(value,fallback):
     # Historical source-proof parameters only. Never used as new execution quota.
-    return Limits(**value["logic_source"]["validation_limits"]) if "logic_source" in value else fallback
+    if "logic_source" not in value:
+        return fallback
+    anchor = value["logic_source"]
+    spec.require(isinstance(anchor,dict) and isinstance(anchor.get("validation_limits"),dict)
+        and set(anchor["validation_limits"]) == set(Limits.model_fields),
+        "Frozen logic validation profile missing; no implicit upgrade")
+    return Limits(**anchor["validation_limits"])
 
 
 def logic_gate(store,c,user,rid,ref):
@@ -275,12 +285,17 @@ def logic_gate(store,c,user,rid,ref):
         source_limits = validation_limits(value,Limits(**value["proposed_limits"]))
         release = read_release(store,c,user,ref.release_id,source_limits)
         spec.require("natural_logic_source" in release["snapshot"]
-            and value.get("logic_source") == logic_anchor(release,source_limits)
+            and value.get("logic_source") == logic_anchor(store,c,user,release,source_limits)
             and value["context"]["release_fingerprint"] == release["fingerprint"],
             "Modified logic source proof changed")
         # Source authorization/proof must precede child private Run/contract reads.
-        child = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
-        spec.require(store.frozen_contract(c,child).limits.model_dump() == value["proposed_limits"],
+        # Store.frozen_contract itself re-enters this scope gate. Compare only
+        # the owned budget projection here; its complete typed/hash checks stay
+        # in the existing outer contract validator before execution.
+        budget = c.execute(select(run_contracts.c.snapshot["limits"]).join(runs,
+            runs.c.id == run_contracts.c.run_id).where(runs.c.id == rid,
+                runs.c.principal_id == user, runs.c.project_id == ref.project_id)).scalar_one()
+        spec.require(budget == value["proposed_limits"],
             "Frozen correction execution limits changed")
     return value
 

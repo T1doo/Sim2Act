@@ -515,8 +515,7 @@ def inspect_job(store, user, rid):
         if not job or job["principal_id"] != user:
             raise DomainError("PERMISSION_DENIED")
         limits = store.frozen_contract(c, job).limits
-        s, a = load_binding(store, c, user, job, limits)
-        release = read_release(store, c, user, s["release_id"], limits)
+        s, a, release = load_binding(store, c, user, job, limits, return_release=True)
         from . import text_workflows
 
         workflow = text_workflows.is_candidate(release["snapshot"]["draft"]["candidate"])
@@ -618,12 +617,12 @@ def command_job(store, user, rid, command, version):
         ):
             if unknown:
                 raise DomainError("OUTCOME_UNKNOWN")
-            load_binding(store, c, user, job, store.frozen_contract(c, job).limits)
+            _, _, release = load_binding(store, c, user, job, store.frozen_contract(c, job).limits,
+                return_release=True)
             from .text_continuations import execution
 
             limits = store.frozen_contract(c, job).limits
             instance_row = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"])).mappings().one()
-            release = read_release(store, c, user, s["release_id"], limits)
             execution(store, c, user, instance_row, release, limits)
             state = "QUEUED"
         else:
