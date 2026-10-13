@@ -28,6 +28,7 @@ from sim2act.db import (
     grants,
     internal_app_runs,
     internal_instance_data,
+    internal_run_bindings,
     new_id,
     operations,
     principals,
@@ -429,6 +430,67 @@ def test_current_read_grant_rechecked_before_dispatch(env, identity, case):
             c.execute(select(runs.c.status).where(runs.c.id == accepted["run_id"])).scalar_one()
             == "WAITING_RESOURCE"
         )
+
+
+def test_revoked_queued_pair_can_resume_only_after_grant_restored(env):
+    runtime, ids, _, _, _, rel, inst, value = setup(env)
+    accepted = jobs.enqueue(env[0], env[3], inst["id"], inst["revision"],
+                            rel["fingerprint"], {"term": value["term"]}, "restore", limits(env))
+    with env[0].tx() as c:
+        c.execute(update(grants).where(grants.c.principal_id == runtime,
+                  grants.c.resource_id == ids[0]).values(revoked=True))
+    model = replay(ids[0], value)
+    assert not Worker(env[0], env[1], model).once()
+    assert not model.requests
+    with env[0].tx() as c:
+        job = c.execute(select(runs.c.status, runs.c.version).where(
+            runs.c.id == accepted["run_id"])).mappings().one()
+        aid = c.execute(select(internal_run_bindings.c.app_run_id).where(
+            internal_run_bindings.c.run_id == accepted["run_id"])).scalar_one()
+        assert job["status"] == c.execute(select(internal_app_runs.c.status).where(
+            internal_app_runs.c.id == aid)).scalar_one() == "WAITING_RESOURCE"
+    with pytest.raises(DomainError) as caught:
+        jobs.command_job(env[0], env[3], accepted["run_id"], "resume", job["version"])
+    assert caught.value.code == "GRANT_REVOKED" and not model.requests
+    with env[0].tx() as c:
+        c.execute(update(grants).where(grants.c.principal_id == runtime,
+                  grants.c.resource_id == ids[0]).values(revoked=False))
+    assert jobs.command_job(env[0], env[3], accepted["run_id"], "resume", job["version"]) == "QUEUED"
+    assert Worker(env[0], env[1], model).once()
+    result = jobs.inspect_job(env[0], env[3], accepted["run_id"])
+    assert result["status"] == "SUCCEEDED" and model.requests
+
+
+def test_queued_scope_rejection_does_not_follow_corrupt_app_run_pointer(env):
+    from sqlalchemy import delete
+
+    runtime, ids, _, _, _, rel, inst, value = setup(env)
+    first = jobs.enqueue(env[0], env[3], inst["id"], inst["revision"], rel["fingerprint"],
+                         {"term": value["term"]}, "first", limits(env))
+    second = jobs.enqueue(env[0], env[3], inst["id"], inst["revision"], rel["fingerprint"],
+                          {"term": value["term"]}, "second", limits(env))
+    with env[0].tx() as c:
+        other = c.execute(select(internal_run_bindings.c.app_run_id).where(
+            internal_run_bindings.c.run_id == second["run_id"])).scalar_one()
+        before = dict(c.execute(select(internal_app_runs).where(
+            internal_app_runs.c.id == other)).mappings().one())
+        # An orphan history row has no unique queue pointer to protect it.
+        # Preserve that actual AppRun, then fault only queue linkage metadata.
+        c.execute(delete(internal_run_bindings).where(
+            internal_run_bindings.c.run_id == second["run_id"]))
+        c.execute(update(internal_run_bindings).where(
+            internal_run_bindings.c.run_id == first["run_id"]).values(app_run_id=other))
+        c.execute(update(grants).where(grants.c.principal_id == runtime,
+                  grants.c.resource_id == ids[0]).values(revoked=True))
+    model = replay(ids[0], value)
+    assert not Worker(env[0], env[1], model).once() and not model.requests
+    with env[0].tx() as c:
+        assert c.execute(select(runs.c.status).where(
+            runs.c.id == first["run_id"])).scalar_one() == "WAITING_RESOURCE"
+        assert dict(c.execute(select(internal_app_runs).where(
+            internal_app_runs.c.id == other)).mappings().one()) == before
+        assert c.execute(select(runs.c.status).where(
+            runs.c.id == second["run_id"])).scalar_one() == "QUEUED"
 
 
 def test_no_project_runtime_fallback_no_cross_owner_project(env):

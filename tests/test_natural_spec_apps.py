@@ -751,6 +751,40 @@ def test_node_last_callback_rechecks_live_gate_before_verification(env, monkeypa
     assert len(sent) == 1
 
 
+def test_queued_revocation_updates_pair_without_private_body_reads(env, tmp_path):
+    from sql_private_barrier import PrivateReadBarrier
+    from sqlalchemy.exc import DatabaseError
+
+    from sim2act.db import grants, internal_app_runs
+
+    data = setup(env)
+    origin, _, release, inst, _ = ready(data)
+    job = enqueue(data, release, inst)
+    with data[0].tx() as c:
+        c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+    sent = []
+    with PrivateReadBarrier(data[0], {origin, job}, {data[5]}) as barrier:
+        assert not Worker(data[0], data[1], goal_planner_transport=transport(sent)).once()
+        assert not sent and not barrier.blocked and not barrier.evaluated
+        proof = dict(blocked=list(barrier.blocked), evaluated=list(barrier.evaluated),
+                     sql=list(barrier.statements))
+        with pytest.raises(DatabaseError):
+            with data[0].tx() as c:
+                c.execute(select(runs).where(runs.c.id == job)).mappings().one()
+        assert barrier.blocked
+        proof["calibration"] = list(barrier.blocked)
+    (tmp_path / "queued-barrier.json").write_text(json.dumps(proof, indent=2))
+    with data[0].tx() as c:
+        header = c.execute(select(runs.c.status, runs.c.error, runs.c.request_key).where(
+            runs.c.id == job)).mappings().one()
+        app = c.execute(select(internal_app_runs.c.status, internal_app_runs.c.error).where(
+            internal_app_runs.c.id == header["request_key"].removeprefix("internal:"))).mappings().one()
+        assert header["status"] == app["status"] == "WAITING_RESOURCE"
+        assert header["error"] == app["error"] and header["error"]["code"] == "GRANT_REVOKED"
+        assert not c.execute(select(attempts.c.id).where(attempts.c.run_id == job)).first()
+        assert not c.execute(select(operations.c.id).where(operations.c.run_id == job)).first()
+
+
 def test_revoked_receiver_only_preserves_owned_raw_no_protected_full_read(env, tmp_path):
     from sql_private_barrier import PrivateReadBarrier
     from sqlalchemy.exc import DatabaseError

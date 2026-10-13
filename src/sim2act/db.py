@@ -1056,9 +1056,9 @@ class Store:
             try:
                 source_scope_gate(self, c, row)
             except DomainError as exc:
-                c.execute(update(runs).where(runs.c.id == row).values(
-                    status="FAILED", error=exc.public(), lease_until=0))
-                self.event(c, row, "CONTRACT_REJECTED", exc.public())
+                from .app_jobs import reject_queued_scope
+
+                reject_queued_scope(self, c, row, exc)
                 return None
             # The queue's metadata lock selected this exact Run. Load only its
             # payload, never the private fields of other queued/history rows.

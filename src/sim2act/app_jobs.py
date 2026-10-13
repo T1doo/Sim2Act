@@ -512,6 +512,61 @@ def state_write(store, c, job, aid, state, error=None, result=None):
     store.event(c, job["id"], "STATE", {"status": state, "error": error})
 
 
+def reject_queued_scope(store, c, rid, error):
+    """Reject before claim without reading revoked Run or AppRun payloads."""
+    header = c.execute(select(
+        runs.c.id, runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
+        runs.c.status, runs.c.version, runs.c.fence, runs.c.fingerprint,
+        runs.c.request_key, runs.c.cancel_intent,
+    ).where(runs.c.id == rid, runs.c.status == "QUEUED").with_for_update()).mappings().first()
+    if header is None:
+        return
+    state = ("CANCELLED" if header["cancel_intent"] else "WAITING_RESOURCE"
+             if error.code in {"GRANT_REVOKED", "RESOURCE_UNAVAILABLE"} else "FAILED")
+    binding = c.execute(select(
+        internal_run_bindings.c.app_run_id, internal_run_bindings.c.fingerprint,
+    ).where(internal_run_bindings.c.run_id == rid)).mappings().first()
+    accepted = c.execute(select(
+        events.c.data["namespace"].as_string().label("namespace"),
+        events.c.data["app_run_id"].as_string().label("aid"),
+        events.c.data["instance_id"].as_string().label("iid"),
+        events.c.data["release_id"].as_string().label("release"),
+        events.c.data["input_fingerprint"].as_string().label("request_fp"),
+    ).where(events.c.run_id == rid, events.c.kind == "ACCEPTED")).mappings().all()
+    if (binding and len(accepted) == 1 and accepted[0]["namespace"] == KIND
+            and all(isinstance(accepted[0][key], str) and accepted[0][key]
+                    for key in ("aid", "iid", "release", "request_fp"))
+            and binding["fingerprint"] == header["fingerprint"]
+            and binding["app_run_id"] == accepted[0]["aid"]
+            and header["request_key"] == "internal:" + accepted[0]["aid"]):
+        anchor = accepted[0]
+        owned = c.execute(select(internal_instances.c.id).where(
+            internal_instances.c.id == anchor["iid"],
+            internal_instances.c.principal_id == header["principal_id"],
+            internal_instances.c.project_id == header["project_id"],
+            internal_instances.c.runtime_id == header["runtime_id"],
+        )).first()
+        if owned:
+            c.execute(update(internal_app_runs).where(
+                internal_app_runs.c.id == anchor["aid"],
+                internal_app_runs.c.principal_id == header["principal_id"],
+                internal_app_runs.c.instance_id == anchor["iid"],
+                internal_app_runs.c.release_id == anchor["release"],
+                internal_app_runs.c.fingerprint == anchor["request_fp"],
+                internal_app_runs.c.status == "QUEUED",
+            ).values(status=state, error=error.public()))
+    changed = c.execute(update(runs).where(
+        runs.c.id == rid, runs.c.status == "QUEUED", runs.c.version == header["version"],
+        runs.c.fence == header["fence"], runs.c.principal_id == header["principal_id"],
+        runs.c.cancel_intent == header["cancel_intent"],
+        runs.c.project_id == header["project_id"], runs.c.runtime_id == header["runtime_id"],
+        runs.c.fingerprint == header["fingerprint"], runs.c.request_key == header["request_key"],
+    ).values(status=state, error=error.public(), lease_until=0, version=header["version"] + 1))
+    if changed.rowcount != 1:
+        raise DomainError("VERSION_CONFLICT", "Queued rejection ownership changed")
+    store.event(c, rid, "CONTRACT_REJECTED", error.public())
+
+
 def prepare_dispatch(worker, run):
     store = worker.store
     with store.tx() as c:
