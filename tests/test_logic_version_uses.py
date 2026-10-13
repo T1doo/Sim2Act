@@ -240,6 +240,7 @@ def test_pa_modified_release_third_material_cold_worker_and_fresh_owner(env, tmp
 
 
 def test_pb_modified_release_third_material_cold_worker_and_fresh_owner(env, tmp_path):
+    from test_pa_spec_apps import instance
     from test_pb_natural_specs import prepare, preview_commit
 
     prepared = prepare(env, style="sequential", edit=False)
