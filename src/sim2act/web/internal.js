@@ -203,7 +203,7 @@ async function submitSpecRun(view,instance,pending,retry){
     catch(error){
       if(await internalSubmissionRejected(error,view,instance,pending,"runs",pending)&&engineeringPending.get(instance.id)===pending){
         const live=current();engineeringPending.delete(instance.id);
-        if(live){$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";}if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;
+        if(live){$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";}if(pbUseView?.instance.id===instance.id&&pbUseView.view.token===view.token&&pbUseView.view.project===view.project)pbUseView.buttons();if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;
       }
       throw error;
     }
