@@ -324,12 +324,15 @@ def logic_gate(store,c,user,rid,ref, *, _logic_out=None, _release=None):
 def scope_segment(store,c,user,rid):
     token = c.info.get("correction_scope_segment")
     proof = token.get("logic",{}) if isinstance(token,dict) else {}
-    if not (token and token.get("run_id") == rid and token.get("principal_id") == user
+    if not (token and token.get("spec_scope_checked") is True
+            and token.get("run_id") == rid and token.get("principal_id") == user
             and proof.get("_call_connection") is c
             and proof.get("_call_transaction") is c.get_transaction()
             and c.get_transaction() is not None
             and proof.get("_call_write_epoch") == c.info.get("source_proof_write_epoch",0)):
         return None
+    for check in token["scope_authorities"]:
+        store.authorize(c,*check)
     store.recheck_proof_authorities(c,proof)
     return token
 

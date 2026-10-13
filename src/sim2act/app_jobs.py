@@ -407,8 +407,14 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
     if authorize:
         from .text_continuations import job_gate
 
-        job_gate(store, c, user, job["id"],_spec_scope_checked=scope is not None)
+        reused_scope = scope is not None
+        job_gate(store, c, user, job["id"],_spec_scope_checked=reused_scope)
         scope = correction.scope_segment(store,c,user,job["id"])
+        if reused_scope and scope is None:
+            # A write invalidated the pure read segment; authorize again before
+            # any binding/AppRun body, never merely at the later contract check.
+            job_gate(store,c,user,job["id"])
+            scope = correction.scope_segment(store,c,user,job["id"])
     b = (
         c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == job["id"]))
         .mappings()

@@ -471,6 +471,22 @@ def scope_gate(store, c, user, aid):
 
 @controlled
 def job_scope_gate(store, c, user, rid):
+    # Capture the ENTIRE scope gate, including material/SAVE and the actual
+    # parent artifact authority checked before Release proof validation.
+    c.info.pop("correction_scope_segment", None)
+    epoch = c.info.get("source_proof_write_epoch",0)
+    with store.proof_authorities(c) as authorities:
+        result = _job_scope_gate(store,c,user,rid)
+    token = c.info.get("correction_scope_segment")
+    if (result and token and token.get("run_id") == rid
+            and token.get("principal_id") == user
+            and epoch == c.info.get("source_proof_write_epoch",0)):
+        token["spec_scope_checked"] = True
+        token["scope_authorities"] = tuple(sorted(authorities))
+    return result
+
+
+def _job_scope_gate(store, c, user, rid):
     row = c.execute(select(runs.c.project_id, runs.c.runtime_id, runs.c.principal_id,
         runs.c.request_key).where(runs.c.id == rid)).mappings().first()
     if row is None:
