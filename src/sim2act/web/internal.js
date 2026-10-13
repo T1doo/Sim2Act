@@ -273,7 +273,7 @@ function renderSwitch(view) {
   $("internal-switch").hidden=false;
   $("internal-switch-target").replaceChildren(new Option("请手动选择目标版本",""),...view.releases.filter(r=>r.id!==view.instance.release_id && switchAllowed(view,r.id)).map(r=>new Option(`${r.id} · schema v${r.snapshot.data_schema_version} · ${r.fingerprint.slice(0,16)}`,r.id)));
   if(view.instance.switch_policy?.roles?.length)$("internal-switch-status").textContent="该实例提供已保存版本的来源或检查证据，不能切换版本。请使用独立业务实例。";
-  else if(view.instance.switch_policy?.blocked_release_ids?.some(id=>id!==view.instance.release_id))$("internal-switch-status").textContent="已排除会形成来源依赖循环的目标版本。";
+  else if(view.instance.switch_policy?.blocked_release_ids?.some(id=>id!==view.instance.release_id))$("internal-switch-status").textContent="已排除存在来源循环或超出有限检查范围的目标版本。";
   $("internal-switch-history").replaceChildren(...view.instance.history.map(h=>row(`revision ${h.revision} · ${h.previous_release_id || "初始版本"} → ${h.release_id} · ${h.kind || "create"}`)));
 }
 $("internal-switch-target").onchange=()=>{const view=engineering;if(!view)return;const value=$("internal-switch-target").value;clearSwitch(view);$("internal-switch-target").value=value;engineeringButtons(view);};

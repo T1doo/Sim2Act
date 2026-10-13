@@ -353,3 +353,31 @@ def test_actual_existing_business_adopts_modified_logic_and_keeps_history(env, t
     finally:
         coldclient.close()
         cold.engine.dispose()
+
+
+def test_long_metadata_chain_is_bounded_and_unrelated_instance_stays_readable(env):
+    store, user = env[0], env[3]
+    base, _, _ = release(env)
+    business = create(env, base)
+    previous = base
+    for _ in range(lifecycle.MAX_LOGIC_SOURCE_DEPTH):
+        source = create(env, base)
+        with store.tx() as c:
+            c.execute(
+                update(internal_instances)
+                .where(internal_instances.c.id == source["id"])
+                .values(release_id=previous["id"])
+            )
+        previous = metadata_release(store, user, base, source["id"])
+    with store.tx() as c:
+        trace = lifecycle.logic_release_trace(store, c, user, previous)
+        assert trace["over_limit"] and len(trace["nodes"]) == lifecycle.MAX_LOGIC_SOURCE_DEPTH
+        with pytest.raises(DomainError, match="finite depth"):
+            lifecycle.read_release(store, c, user, previous["id"], limits(env))
+    with pytest.raises(DomainError, match="finite depth"):
+        lifecycle.prepare_switch(
+            store, user, business["id"], previous["id"], business["revision"], limits(env)
+        )
+    state = lifecycle.inspect_instance(store, user, business["id"], limits(env))
+    assert state["release_id"] == base["id"] and not state["switch_policy"]["roles"]
+    assert previous["id"] in state["switch_policy"]["blocked_release_ids"]

@@ -26,6 +26,7 @@ from .extraction import exact_sum_oracle
 from .tools import authorized_read
 
 NAMESPACE = "INTERNAL_ENGINEERING_ONLY"
+MAX_LOGIC_SOURCE_DEPTH = 16
 
 
 def grant_version(c, project, user):
@@ -369,7 +370,8 @@ def owned_release_pointer(store, c, user, rid):
 
 def immutable_release_pointer(c, user, r):
     a = c.execute(select(internal_approvals).where(
-        internal_approvals.c.id == r["approval_id"])).mappings().first()
+        internal_approvals.c.id == r["approval_id"], internal_approvals.c.principal_id == user,
+        internal_approvals.c.project_id == r["project_id"], internal_approvals.c.kind == "release")).mappings().first()
     if (not a or not a["consumed"] or a["kind"] != "release"
             or a["principal_id"] != user or a["project_id"] != r["project_id"]
             or not isinstance(a["payload"], dict) or fingerprint(a["payload"]) != a["fingerprint"]
@@ -402,15 +404,18 @@ def logic_release_trace(store, c, user, root, *, proposed_instance=None):
     """
     from .natural_logic_patches import VERSION
 
-    current, visited, edges = root, set(), []
+    current, visited, edges, nodes = root, set(), [], []
     while True:
         if current["id"] in visited:
-            return dict(cyclic=True, edges=edges)
+            return dict(cyclic=True, over_limit=False, nodes=nodes, edges=edges)
+        if len(visited) >= MAX_LOGIC_SOURCE_DEPTH:
+            return dict(cyclic=False, over_limit=True, nodes=nodes, edges=edges)
         visited.add(current["id"])
+        nodes.append(dict(release_id=current["id"], release_fingerprint=current["fingerprint"]))
         immutable_release_pointer(c, user, current)
         origin = current["snapshot"].get("natural_logic_source")
         if origin is None:
-            return dict(cyclic=False, edges=edges)
+            return dict(cyclic=False, over_limit=False, nodes=nodes, edges=edges)
         if (not isinstance(origin, dict) or set(origin) != {"namespace", "instance_id",
                 "preview_key", "preview_fingerprint", "check_fingerprint", "execution_digest"}
                 or origin["namespace"] != VERSION or not isinstance(origin["instance_id"], str)):
@@ -426,15 +431,57 @@ def logic_release_trace(store, c, user, root, *, proposed_instance=None):
             raise DomainError("VERSION_CONFLICT", "Source instance binding changed")
 
 
+def logic_source_hints(c, user, i):
+    """Owned scalar indexes are discovery hints, never accepted source proofs."""
+    from . import natural_logic_patches as logic
+    from .db import delivery_graph_requests, internal_run_bindings, runs
+
+    marker = delivery_graph_requests
+    check_keys = set(c.execute(select(marker.c.app_id, marker.c.request_key).where(
+        marker.c.principal_id == user, marker.c.kind.in_([logic.CHECK, logic.CHECK + "_seal"]),
+        marker.c.snapshot["response"]["check_instance_id"].as_string() == i["id"])).all())
+    # The accepted binding and independent JOB receipts retain the role even
+    # when both CHECK indexes disappear. Read scoped identifiers, not wire bodies.
+    check_keys.update(c.execute(select(
+        internal_run_bindings.c.snapshot["logic_check"]["instance_id"].as_string(),
+        internal_run_bindings.c.snapshot["logic_check"]["preview_key"].as_string()).join(
+        runs, runs.c.id == internal_run_bindings.c.run_id).join(
+        internal_app_runs, internal_app_runs.c.id == internal_run_bindings.c.app_run_id).where(
+        runs.c.principal_id == user, runs.c.project_id == i["project_id"],
+        internal_app_runs.c.principal_id == user, internal_app_runs.c.instance_id == i["id"],
+        internal_run_bindings.c.snapshot["instance_id"].as_string() == i["id"],
+        internal_run_bindings.c.snapshot["logic_check"]["instance_id"].as_string().is_not(None))).all())
+    check_keys.update(c.execute(select(marker.c.snapshot["response"]["instance_id"].as_string(),
+        marker.c.snapshot["response"]["preview_key"].as_string()).join(
+        runs, marker.c.app_id == runs.c.id).join(internal_app_runs,
+        runs.c.request_key == "internal:" + internal_app_runs.c.id).where(
+        marker.c.principal_id == user, marker.c.kind.in_([logic.JOB, logic.JOB + "_seal"]),
+        runs.c.principal_id == user, runs.c.project_id == i["project_id"],
+        internal_app_runs.c.principal_id == user, internal_app_runs.c.instance_id == i["id"])).all())
+    source_ids = set(c.execute(select(internal_releases.c.id).join(marker,
+        internal_releases.c.approval_id == marker.c.snapshot["response"]["id"].as_string()).where(
+        internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
+        marker.c.principal_id == user, marker.c.app_id == i["id"],
+        marker.c.kind.in_([logic.APPROVAL, logic.APPROVAL + "_seal"]))).scalars().all())
+    source_ids.update(c.execute(select(internal_releases.c.id).where(
+        internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
+        internal_releases.c.snapshot["natural_logic_source"]["instance_id"].as_string() == i["id"])).scalars().all())
+    # The immutable delivered snapshot also retains its isolated check identity.
+    check_keys.update(c.execute(select(
+        internal_releases.c.snapshot["natural_logic_source"]["instance_id"].as_string(),
+        internal_releases.c.snapshot["natural_logic_source"]["preview_key"].as_string()).where(
+        internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
+        internal_releases.c.snapshot["check_evidence"]["check_instance_id"].as_string() == i["id"])).all())
+    return dict(check_keys=check_keys, source_ids=source_ids)
+
+
 def logic_source_pins(store, c, user, i):
     """Committed origins and accepted check instances are immutable evidence."""
     from . import natural_logic_patches as logic
-    from .db import delivery_graph_requests
-
-    marker = delivery_graph_requests
-    check_keys = c.execute(select(marker.c.app_id, marker.c.request_key).where(
-        marker.c.principal_id == user, marker.c.kind.in_([logic.CHECK, logic.CHECK + "_seal"]),
-        marker.c.snapshot["response"]["check_instance_id"].as_string() == i["id"])).all()
+    hints = logic_source_hints(c, user, i)
+    check_keys = hints["check_keys"]
+    if any(not isinstance(source, str) or not isinstance(key, str) for source, key in check_keys):
+        raise DomainError("VERSION_CONFLICT", "Invalid check instance discovery hint")
     pins = []
     for source, key in sorted(set(check_keys)):
         owned_instance_pointer(store, c, user, source, i["project_id"])
@@ -445,11 +492,7 @@ def logic_source_pins(store, c, user, i):
             accepted_fingerprint=fingerprint(started)))
     # Either independent approval index can discover a delivered origin. A
     # missing/mutated counterpart must not silently remove its protection.
-    released = c.execute(select(internal_releases.c.id).join(marker,
-        internal_releases.c.approval_id == marker.c.snapshot["response"]["id"].as_string()).where(
-        internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
-        marker.c.principal_id == user, marker.c.app_id == i["id"],
-        marker.c.kind.in_([logic.APPROVAL, logic.APPROVAL + "_seal"]))).scalars().all()
+    released = hints["source_ids"]
     for rid in sorted(set(released)):
         r = owned_release_pointer(store, c, user, rid)
         immutable_release_pointer(c, user, r)
@@ -470,6 +513,8 @@ def switch_preflight(store, c, user, iid, target_id, *, _state_out=None):
         raise DomainError("PERMISSION_DENIED", "Cannot switch another app/runtime into this instance")
     current_trace = logic_release_trace(store, c, user, old)
     target_trace = logic_release_trace(store, c, user, target, proposed_instance=iid)
+    if current_trace["over_limit"] or target_trace["over_limit"]:
+        raise DomainError("BUDGET_EXHAUSTED", "Logic source dependency exceeds finite depth")
     if current_trace["cyclic"] or target_trace["cyclic"]:
         raise DomainError("VERSION_CONFLICT", "Instance switch would create or retain a logic source cycle")
     pins = logic_source_pins(store, c, user, i)
@@ -483,17 +528,23 @@ def switch_preflight(store, c, user, iid, target_id, *, _state_out=None):
 
 
 def switch_policy(store, c, user, i):
-    pins = logic_source_pins(store, c, user, i)
+    # Role existence disables selection even if its proof is damaged. Preparing
+    # a switch still verifies the full independent pairs and rejects corruption.
+    hints = logic_source_hints(c, user, i)
+    roles = (["check"] if hints["check_keys"] else []) + (["source"] if hints["source_ids"] else [])
     targets = c.execute(select(internal_releases.c.id).where(
         internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
         internal_releases.c.snapshot["draft"]["id"].as_string() == i["source_app_id"])).scalars().all()
     blocked = []
     for rid in sorted(targets):
-        if pins or logic_release_trace(store, c, user,
-                owned_release_pointer(store, c, user, rid), proposed_instance=i["id"])["cyclic"]:
+        if roles:
             blocked.append(rid)
+        else:
+            trace = logic_release_trace(store, c, user, owned_release_pointer(store, c, user, rid), proposed_instance=i["id"])
+            if trace["cyclic"] or trace["over_limit"]:
+                blocked.append(rid)
     return dict(namespace="internal.logic-switch-policy.v1", instance_id=i["id"], revision=i["revision"],
-        roles=sorted({p["role"] for p in pins}), blocked_release_ids=blocked)
+        roles=sorted(roles), blocked_release_ids=blocked)
 
 
 def read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
@@ -504,8 +555,12 @@ def read_release(store, c, user, rid, limits, *, archival_software=None, _origin
         legacy_release(store, c, user, r, limits, archival_software)
         return r
     immutable_release_pointer(c, user, r)
-    if "natural_logic_source" in r["snapshot"] and logic_release_trace(store, c, user, r)["cyclic"]:
-        raise DomainError("VERSION_CONFLICT", "Logic source dependency cycle")
+    if "natural_logic_source" in r["snapshot"]:
+        trace = logic_release_trace(store, c, user, r)
+        if trace["over_limit"]:
+            raise DomainError("BUDGET_EXHAUSTED", "Logic source dependency exceeds finite depth")
+        if trace["cyclic"]:
+            raise DomainError("VERSION_CONFLICT", "Logic source dependency cycle")
     s = r["snapshot"]
     draft = s["draft"]
     from .csv_dag_instances import FIXED_REPORT_VERSION, validate_family, validate_snapshot
