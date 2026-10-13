@@ -131,6 +131,27 @@ def scope_gate(store, c, user, rid, header):
     require(location is not None and location["namespace"] == natural.VERSION
         and (location["task"] == pb.KIND if family == PB else location["task"] is None
              and (location["binding"] == spec.KIND or location["generation"] is not None)))
+    if family == PA:
+        from .db import internal_instance_data, internal_instances
+        base = c.execute(select(internal_run_bindings.c.snapshot["pa_base_data_version"].as_integer())
+            .where(internal_run_bindings.c.run_id == rid)).scalar_one_or_none()
+        live = c.execute(select(runs.c.status).where(runs.c.id == rid)).scalar_one()
+        current = c.execute(select(internal_instances.c.data_version, internal_instances.c.source_app_id,
+            internal_instances.c.project_id, internal_instances.c.runtime_id)
+            .where(internal_instances.c.id == meta.instance_id, internal_instances.c.principal_id == user)).mappings().first()
+        require(type(base) is int and base >= 0 and current is not None
+            and current["source_app_id"] == meta.app_id and current["project_id"] == meta.project_id
+            and current["runtime_id"] == meta.runtime_id)
+        if live not in {"SUCCEEDED", "FAILED", "CANCELLED"} and current["data_version"] != base:
+            own = c.execute(select(internal_app_runs.c.status, internal_app_runs.c.result_version)
+                .where(internal_app_runs.c.id == meta.app_run_id, internal_app_runs.c.instance_id == meta.instance_id,
+                    internal_app_runs.c.principal_id == user)).mappings().first()
+            typed = c.execute(select(internal_instance_data.c.version).where(
+                internal_instance_data.c.instance_id == meta.instance_id,
+                internal_instance_data.c.run_id == meta.app_run_id)).scalars().all()
+            require(current["data_version"] == base + 1 and own is not None and own["status"] == "SUCCEEDED"
+                and own["result_version"] == base + 1 and typed == [base + 1], "Confirmed P-A result version competed")
+
     store.own_project(c, user, meta.project_id)
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, natural.READ)
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.project_id, natural.SAVE)
@@ -156,7 +177,13 @@ def protected_instance(c, iid):
         .where(internal_app_runs.c.instance_id == iid,
             ((internal_run_bindings.c.snapshot["pb_use"]["review"]["resource_id"].as_string().is_not(None))
              | (internal_run_bindings.c.snapshot["pa_use"]["review"]["resource_id"].as_string().is_not(None))))).first()
-    return kind == pb.KIND or app_kind == pb.KIND or bool(ledger or overlay)
+    release_namespace = c.execute(select(internal_releases.c.snapshot["draft"]["candidate"]["namespace"].as_string())
+        .join(internal_instances, internal_instances.c.release_id == internal_releases.c.id)
+        .where(internal_instances.c.id == iid)).scalar_one_or_none()
+    app_namespace = c.execute(select(app_drafts.c.candidate["namespace"].as_string())
+        .join(internal_instances, internal_instances.c.source_app_id == app_drafts.c.id)
+        .where(internal_instances.c.id == iid)).scalar_one_or_none()
+    return release_namespace == natural.VERSION or app_namespace == natural.VERSION or kind == pb.KIND or app_kind == pb.KIND or bool(ledger or overlay)
 
 
 @controlled
@@ -299,6 +326,7 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
         formal_publication_enabled=False)
     if family == PA:
         result.update(instance_data_version=instance["data_version"],
+            saved_origin={k: copy.deepcopy(base["candidate"][k]) for k in ("goal_application", "spec_binding") if k in base["candidate"]},
             proposed_limits=declared.model_dump(), proposed_model_nodes=declared.max_requests,
             proposed_artifact_writes_at_most=1, real_model_allowance=0)
     return {**result, "review_fingerprint": fingerprint(result)}, material, goal
@@ -347,8 +375,9 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB):
     # Historic results retain their accepted revision; the existing commit guard
     # separately requires the live revision for any new side effect.
     accepted_instance = {**dict(instance), "revision": snapshot["expected_revision"],
-                         "runtime_id": snapshot["runtime_id"], "source_app_id": release["snapshot"]["draft"]["id"],
-                         "data_version": snapshot["base_data_version"]}
+                         "runtime_id": snapshot["runtime_id"], "source_app_id": release["snapshot"]["draft"]["id"]}
+    if family == PA:
+        accepted_instance["data_version"] = snapshot["pa_base_data_version"]
     checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"], family=family)
     require(body.expected_review_fingerprint == checked["review_fingerprint"]
         and frozen["reviewed"] == checked and frozen["request_fingerprint"] == fingerprint(body.model_dump())

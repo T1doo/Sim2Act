@@ -227,6 +227,8 @@ def enqueue(
             "namespace": KIND,
             "model_requests": 0,
         }
+        if pa_use is not None:
+            snapshot["pa_base_data_version"] = i["data_version"]
         if own_goal is not None:
             snapshot["owner_goal"] = own_goal
         goal = "Internal fixed Release result run"
