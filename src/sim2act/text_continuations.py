@@ -487,9 +487,10 @@ def release_gate(store, c, user, rid):
         draft_gate(store, c, user, aid)
 
 
-def job_gate(store, c, user, rid):
+def job_gate(store, c, user, rid, *, _spec_scope_checked=False):
     from .pa_spec_apps import job_scope_gate as spec_job_gate
-    spec_job_gate(store, c, user, rid)
+    if not _spec_scope_checked:
+        spec_job_gate(store, c, user, rid)
     from .text_workflows import job_scope_gate
 
     job_scope_gate(store, c, user, rid)

@@ -294,7 +294,12 @@ def logic_gate(store,c,user,rid,ref, *, _logic_out=None, _release=None):
             and _logic_out.get("platform_limits") == source_limits.model_dump()
             and _logic_out.get("release_id") == ref.release_id == _release["id"]
             and _logic_out.get("release_fingerprint") == _release["fingerprint"])
-        release = _release if same_call else read_release(store,c,user,ref.release_id,source_limits)
+        proven = _logic_out if same_call else {}
+        if same_call:
+            store.recheck_proof_authorities(c, proven)
+            release = _release
+        else:
+            release = read_release(store,c,user,ref.release_id,source_limits,_logic_out=proven)
         spec.require("natural_logic_source" in release["snapshot"]
             and value.get("logic_source") == logic_anchor(store,c,user,release,source_limits)
             and value["context"]["release_fingerprint"] == release["fingerprint"],
@@ -308,7 +313,25 @@ def logic_gate(store,c,user,rid,ref, *, _logic_out=None, _release=None):
                 runs.c.principal_id == user, runs.c.project_id == ref.project_id)).scalar_one()
         spec.require(budget == value["proposed_limits"],
             "Frozen correction execution limits changed")
+        if not same_call:
+            # Produced by the current complete gate, consumed only by the
+            # synchronous read-only load_binding chain on this connection.
+            c.info["correction_scope_segment"] = dict(run_id=rid,principal_id=user,
+                reference=ref.model_dump(),release=release,logic=proven)
     return value
+
+
+def scope_segment(store,c,user,rid):
+    token = c.info.get("correction_scope_segment")
+    proof = token.get("logic",{}) if isinstance(token,dict) else {}
+    if not (token and token.get("run_id") == rid and token.get("principal_id") == user
+            and proof.get("_call_connection") is c
+            and proof.get("_call_transaction") is c.get_transaction()
+            and c.get_transaction() is not None
+            and proof.get("_call_write_epoch") == c.info.get("source_proof_write_epoch",0)):
+        return None
+    store.recheck_proof_authorities(c,proof)
+    return token
 
 
 def gate(store,c,user,rid, *, _logic_out=None, _release=None):

@@ -577,6 +577,7 @@ class Store:
             # Conservatively invalidate ephemeral same-call proofs for every
             # non-SELECT statement, including raw SQL, CTEs and failed writes.
             if not statement.lstrip().upper().startswith("SELECT "):
+                connection.info.pop("correction_scope_segment", None)
                 connection.info["source_proof_write_epoch"] = (
                     connection.info.get("source_proof_write_epoch", 0) + 1)
 
@@ -609,6 +610,7 @@ class Store:
                     c.rollback()
                     raise
             finally:
+                c.info.pop("correction_scope_segment", None)
                 if prior_timeout is not None and raw is not None:
                     raw.execute(f"PRAGMA busy_timeout = {prior_timeout}")
 
@@ -707,6 +709,23 @@ class Store:
             raise DomainError("PERMISSION_DENIED")
         return p
 
+    @contextmanager
+    def proof_authorities(self, c):
+        """Collect successful logical authorities only during a synchronous proof."""
+        stack = c.info.setdefault("source_proof_authorities", [])
+        checks = set()
+        stack.append(checks)
+        try:
+            yield checks
+        finally:
+            stack.pop()
+            if not stack:
+                c.info.pop("source_proof_authorities", None)
+
+    def recheck_proof_authorities(self, c, proof):
+        for check in proof.get("_call_authorities", ()):
+            self.authorize(c, *check)
+
     def authorize(self, c, principal, runtime, project_id, rid, tool):
         self.own_project(c, principal, project_id)
         if rid != project_id and tool != "resource.read":
@@ -740,6 +759,8 @@ class Store:
                 raise DomainError("PERMISSION_DENIED")
             if not any(not x["revoked"] and x["expires_at"] > time.time() for x in g):
                 raise DomainError("GRANT_REVOKED")
+        for checks in c.info.get("source_proof_authorities", ()):
+            checks.add((principal, runtime, project_id, rid, tool))
 
     def add_grants(self, c, principal, runtime, project_id, rid, tools):
         for who in [principal, runtime]:

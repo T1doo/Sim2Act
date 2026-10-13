@@ -46,3 +46,23 @@ def test_live_heartbeat_extends_only_same_interval(env):
                           .where(runs.c.id == rid)).mappings().one()
     assert saved["lease_until"] > run["lease_until"]
     assert saved["worker_id"] == "original-worker" and saved["fence"] == run["fence"]
+
+
+def test_authority_refresh_detects_expiry_without_a_write(env, monkeypatch):
+    from sim2act.db import grants
+
+    store, _, _, user, _, project, resource = env
+    clock = [100.0]
+    monkeypatch.setattr(db, "time", SimpleNamespace(time=lambda: clock[0]))
+    with store.tx() as c:
+        runtime = store.own_project(c, user, project)["runtime_id"]
+        c.execute(db.update(grants).where(grants.c.resource_id == resource)
+                  .values(expires_at=101.0))
+        with store.proof_authorities(c) as authorities:
+            store.authorize(c, user, runtime, project, resource, "resource.read")
+        proof = {"_call_authorities": tuple(authorities)}
+        epoch = c.info["source_proof_write_epoch"]
+        clock[0] = 101.0
+        with pytest.raises(DomainError, match="GRANT_REVOKED"):
+            store.recheck_proof_authorities(c, proof)
+        assert c.info["source_proof_write_epoch"] == epoch

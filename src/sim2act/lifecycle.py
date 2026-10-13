@@ -552,6 +552,18 @@ def switch_policy(store, c, user, i):
 
 
 def read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
+    epoch = c.info.get("source_proof_write_epoch", 0)
+    with store.proof_authorities(c) as authorities:
+        value = _read_release(store,c,user,rid,limits,archival_software=archival_software,
+            _origin_out=_origin_out,_logic_out=_logic_out,_reuse_origin=_reuse_origin)
+    if _logic_out is not None and _logic_out.get("_call_connection") is c:
+        _logic_out["_call_authorities"] = tuple(sorted(authorities))
+        _logic_out["_call_write_epoch"] = (epoch
+            if epoch == c.info.get("source_proof_write_epoch",0) else None)
+    return value
+
+
+def _read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
     r = owned_release_pointer(store, c, user, rid)
     if archival_software is not None:
         from .text_continuations import legacy_release

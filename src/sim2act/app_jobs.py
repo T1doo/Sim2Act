@@ -402,10 +402,13 @@ def enqueue(
 def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None):
     if return_release and not authorize:
         raise DomainError("PERMISSION_DENIED", "Verified release requires authorization")
+    from . import natural_spec_corrections as correction
+    scope = correction.scope_segment(store,c,user,job["id"]) if authorize else None
     if authorize:
         from .text_continuations import job_gate
 
-        job_gate(store, c, user, job["id"])
+        job_gate(store, c, user, job["id"],_spec_scope_checked=scope is not None)
+        scope = correction.scope_segment(store,c,user,job["id"])
     b = (
         c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == job["id"]))
         .mappings()
@@ -465,7 +468,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         raise DomainError("VERSION_CONFLICT", "AppRun no longer matches accepted queue binding")
     store.own_project(c, user, s["project_id"])
     if authorize:
-        contract = store.frozen_contract(c, job)
+        contract = (store._frozen_contract_after_scope(c,job) if scope is not None
+            else store.frozen_contract(c, job))
         if contract.limits.model_dump() != s["limits"]:
             raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
         logic_source: dict[str, Any] = _logic_out if _logic_out is not None else {}
@@ -475,7 +479,15 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
             ref = s["human_correction"]
             _, reviewed = natural_spec_corrections.load_review(store,c,user,ref["instance_id"],ref["parent_run_id"],ref["review_key"])
             scope_limits = natural_spec_corrections.validation_limits(reviewed,limits)
-        r = read_release(store, c, user, s["release_id"], scope_limits, archival_software=archival_software,_logic_out=logic_source)
+        if (scope is not None and archival_software is None
+                and scope["reference"] == s.get("human_correction")
+                and scope["release"]["id"] == s["release_id"]
+                and scope["logic"].get("platform_limits") == scope_limits.model_dump()):
+            r = scope["release"]
+            logic_source.update(scope["logic"])
+        else:
+            r = read_release(store, c, user, s["release_id"], scope_limits,
+                archival_software=archival_software,_logic_out=logic_source)
         from .app_owner_goals import verify_frozen_run
 
         verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
