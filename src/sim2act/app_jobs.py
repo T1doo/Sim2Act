@@ -123,7 +123,10 @@ def enqueue(
         if human_correction is not None:
             from . import natural_spec_corrections
             guard["proof"] = natural_spec_corrections.rejection_proof(c,user,iid,human_correction[1]["parent_run_id"],human_correction[0])
-        i, release = instance(store, c, user, iid, limits, lock=True)
+        scope_limits = limits
+        if human_correction is not None:
+            limits = natural_spec_corrections.bounded_limits(limits,Limits(**human_correction[1]["proposed_limits"]))
+        i, release = instance(store, c, user, iid, scope_limits, lock=True)
         if "natural_logic_source" in release["snapshot"] and logic_check is not None:
             raise DomainError("UNSUPPORTED_CAPABILITY", "This finite logic version supports its original source only")
         from .text_continuations import execution
@@ -466,7 +469,13 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         if contract.limits.model_dump() != s["limits"]:
             raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
         logic_source: dict[str, Any] = _logic_out if _logic_out is not None else {}
-        r = read_release(store, c, user, s["release_id"], limits, archival_software=archival_software,_logic_out=logic_source)
+        scope_limits = limits
+        if "human_correction" in s:
+            from . import natural_spec_corrections
+            ref = s["human_correction"]
+            _, reviewed = natural_spec_corrections.load_review(store,c,user,ref["instance_id"],ref["parent_run_id"],ref["review_key"])
+            scope_limits = natural_spec_corrections.validation_limits(reviewed,limits)
+        r = read_release(store, c, user, s["release_id"], scope_limits, archival_software=archival_software,_logic_out=logic_source)
         from .app_owner_goals import verify_frozen_run
 
         verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)

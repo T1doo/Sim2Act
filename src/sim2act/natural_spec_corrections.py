@@ -169,7 +169,7 @@ def preview(store, user, iid, rid, limits, body):
             semantic_status="UNKNOWN",owner_acceptance="PENDING",formal_publication_enabled=False)
         release = binding["release"]  # Fully proven parent effective plan, never the editable draft.
         if "natural_logic_source" in release["snapshot"]:
-            value["logic_source"] = logic_anchor(release)
+            value["logic_source"] = logic_anchor(release,limits)
         value["review_fingerprint"] = fingerprint(value)
         owner.natural_final_gate(store,c,user,iid,rid,context)
         remember(c,user,iid,REVIEW,body.request_key,body,value)
@@ -194,7 +194,7 @@ def approve(store,c,user,iid,rid,limits,body,value):
         and time.time() < fresh["expires_at"], "Correction confirmation expired or changed")
     spec.require(not hint(c,rid))
     spec.require(not accepted_child(c,user,iid,rid), "This rejection already has an accepted correction")
-    current = owner.natural_context(store,c,user,iid,rid,limits)
+    current = owner.natural_context(store,c,user,iid,rid,validation_limits(fresh,limits))
     spec.require(current == fresh["context"], "Original Goal, criteria, material or result changed")
     row = rejected(c,user,iid,rid,original.declaration_id,original.declaration_fingerprint,original.expected_owner_sequence)
     spec.require(owner.natural_payload(c,row) == fresh["declaration"]["payload"])
@@ -237,10 +237,12 @@ def accepted_child(c,user,iid,parent):
         runs.c.principal_id == user)).scalar()
     return bool(c.execute(select(marker.c.app_id).where(marker.c.principal_id == user,
         marker.c.kind.in_([ACCEPTED,ACCEPTED+"_seal"]),
+        marker.c.snapshot["request"]["project_id"].as_string() == project,
         marker.c.snapshot["request"]["instance_id"].as_string() == iid,
         marker.c.snapshot["request"]["parent_run_id"].as_string() == parent)).first()
         or c.execute(select(internal_run_bindings.c.run_id).join(runs,
             runs.c.id == internal_run_bindings.c.run_id).where(runs.c.principal_id == user,
+            runs.c.project_id == project,
             internal_run_bindings.c.snapshot["instance_id"].as_string() == iid,
             internal_run_bindings.c.snapshot["human_correction"]["parent_run_id"].as_string() == parent)).first()
         or c.execute(select(events.c.id).join(runs,runs.c.id == events.c.run_id).where(
@@ -250,9 +252,15 @@ def accepted_child(c,user,iid,parent):
             events.c.data["parent_run_id"].as_string() == parent)).first())
 
 
-def logic_anchor(release):
+def logic_anchor(release,limits):
     return dict(release_id=release["id"], release_fingerprint=release["fingerprint"],
-        origin=copy.deepcopy(release["snapshot"]["natural_logic_source"]))
+        origin=copy.deepcopy(release["snapshot"]["natural_logic_source"]),
+        validation_limits=limits.model_dump())
+
+
+def validation_limits(value,fallback):
+    # Historical source-proof parameters only. Never used as new execution quota.
+    return Limits(**value["logic_source"]["validation_limits"]) if "logic_source" in value else fallback
 
 
 def logic_gate(store,c,user,rid,ref):
@@ -264,12 +272,16 @@ def logic_gate(store,c,user,rid,ref):
     spec.require(reference(value) == ref)
     if marker is not None or "logic_source" in value:
         from .lifecycle import read_release
-        release = read_release(store,c,user,ref.release_id,store.frozen_contract(c,
-            c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()).limits)
+        source_limits = validation_limits(value,Limits(**value["proposed_limits"]))
+        release = read_release(store,c,user,ref.release_id,source_limits)
         spec.require("natural_logic_source" in release["snapshot"]
-            and value.get("logic_source") == logic_anchor(release)
+            and value.get("logic_source") == logic_anchor(release,source_limits)
             and value["context"]["release_fingerprint"] == release["fingerprint"],
             "Modified logic source proof changed")
+        # Source authorization/proof must precede child private Run/contract reads.
+        child = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
+        spec.require(store.frozen_contract(c,child).limits.model_dump() == value["proposed_limits"],
+            "Frozen correction execution limits changed")
     return value
 
 
@@ -388,7 +400,7 @@ def mount(app,store,limits,identity):
             guard["proof"]=rejection_proof(c,user,iid,rid,body)
             _,value=load_review(store,c,user,iid,rid,body.request_key)
         return enqueue(store,user,iid,value["context"]["instance_revision"],value["context"]["release_fingerprint"],
-            {},body.request_key,bounded_limits(limits,Limits(**value["proposed_limits"])),human_correction=(body,value),
+            {},body.request_key,limits,human_correction=(body,value),
             submission=dict(endpoint="correction-runs",body=body.model_dump()))
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/correction-requests/{key}")

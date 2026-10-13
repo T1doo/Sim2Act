@@ -279,7 +279,7 @@ function clearCorrectionView(){
 function correctionButtons(view){
   if(!ownerCurrent(view))return;
   const pending=correctionPending.get(ownerKey(view));
-  $("correction-panel").hidden=!view.spec||!!view.engineering.releases.find(r=>r.id===view.engineering.instance?.release_id)?.snapshot?.natural_logic_source;
+  $("correction-panel").hidden=!view.spec;
   $("correction-prepare").disabled=view.busy||!!pending||view.state?.owner_acceptance!=="REJECTED"||!view.state?.content_access||!!view.state?.current?.human_correction;
   $("correction-submit").disabled=view.busy||!!pending||!view.correctionReview||!$("correction-ack").checked;
   $("correction-recover").disabled=view.busy||!view.rid||!$("correction-key").value.trim();
@@ -306,6 +306,8 @@ function correctionRender(v,value){
   $("correction-key").value=value.request_key;
   $("correction-proof").textContent=JSON.stringify({original_goal:value.context.goal,original_criteria:value.context.items,
     rejected_declaration:value.declaration,original_result_version:value.context.result_version,
+    material:value.context.material,effective_recipe:value.effective_candidate.spec_recipe,
+    effective_plan_fingerprint:value.context.effective_plan_fingerprint,
     proposed_limits:value.proposed_limits,proposed_model_nodes:value.proposed_model_nodes,
     proposed_artifact_writes_at_most:value.proposed_artifact_writes_at_most,real_model_allowance:value.real_model_allowance,
     expires_at:value.expires_at,review_fingerprint:value.review_fingerprint},null,2);
