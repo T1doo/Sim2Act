@@ -640,6 +640,12 @@ def natural_context(store, c, user, iid, rid, limits):
         .join(internal_run_bindings, internal_run_bindings.c.app_run_id == internal_app_runs.c.id)
         .where(internal_run_bindings.c.run_id == rid,
             internal_app_runs.c.instance_id == iid, internal_app_runs.c.principal_id == user)).mappings().one()
+    accepted = c.execute(select(events.c.data["instance_id"].as_string().label("iid"),
+        events.c.data["app_run_id"].as_string().label("aid"))
+        .where(events.c.run_id == rid, events.c.kind == "ACCEPTED",
+            events.c.data["namespace"].as_string() == app_jobs.KIND)).mappings().all()
+    spec.require(len(accepted) == 1 and accepted[0]["iid"] == iid
+        and accepted[0]["aid"] == linked["id"], "Route differs from independently accepted Run scope")
     typed_artifacts = c.execute(select(internal_instance_data.c.data["result"]["resource_id"].as_string())
         .where(internal_instance_data.c.instance_id == iid,
             internal_instance_data.c.run_id == linked["id"])).scalars().all()

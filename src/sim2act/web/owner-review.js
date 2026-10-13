@@ -139,7 +139,7 @@ async function ownerAction(body){
     const reading=ownerRead(view,request.request_key);readGeneration=view.readGeneration;
     await reading;
   }catch(error){
-    if(view.spec && readGeneration===null && error.httpStatus>=400 && error.httpStatus<500){
+    if(view.spec && readGeneration===null && error.httpStatus>=400 && error.httpStatus<500 && ["INVALID_INPUT","VERSION_CONFLICT","GRANT_REVOKED","PERMISSION_DENIED","RESOURCE_UNAVAILABLE","UNSUPPORTED_CAPABILITY"].includes(error.message)){
       const proof=error.submissionRejection;
       const hash=await ownerHash(request);
       if(proof?.namespace==="natural-owner-submission-rejection.v1" && proof.principal_id===scope.principal && proof.project_id===scope.project && proof.instance_id===scope.iid && proof.run_id===scope.rid && proof.request_key===request.request_key && proof.request_fingerprint===hash && proof.acceptance==="NOT_ACCEPTED" && proof.previous_request==="ABSENT" && proof.phase==="TRANSACTION_ROLLED_BACK" && ownerPending.get(scopeKey)===request)ownerPending.delete(scopeKey);
