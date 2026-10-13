@@ -1,18 +1,20 @@
 """Model-chosen finite spec DAG; registered expansion, never stored source answers.
 
-Only the existing synthetic labelled MUST/MUST_NOT grammar is supported. Citation
-and explicit-label coverage checks grant no natural-language semantic acceptance.
+Dispatches the original labelled local family and the bounded natural model family.
+Citation and structure checks preserve semantic uncertainty.
 """
 
 import copy
 import hashlib
 import json
+import math
 import time
 from typing import Any, Literal
 
 from pydantic import Field
 from sqlalchemy import insert, select, update
 
+from . import natural_specs as natural
 from . import spec_checklists as oracle
 from .apps import object_schema
 from .contracts import ActionSpec, AppManifest, FieldSource, Limits, Strict, validate_value
@@ -44,6 +46,8 @@ from .tools import authorized_read, write_text_artifact
 
 VERSION = "pa-spec-checklist-app.v1"
 GENERATION = "goal-spec-checklist-application.v1"
+GENERATIONS = {GENERATION, natural.GENERATION}
+FAMILIES = {VERSION, natural.VERSION}
 CODEC = "spec-checklist-recipe.v1"
 CHECK_TOOL = "spec.check_candidate"
 RULES, JSON_TOOL, FUSED = "text.spec_rules", "text.spec_json", "text.spec_checklist"
@@ -70,7 +74,25 @@ def require(value, message="Exact spec application contract changed"):
 
 
 def is_candidate(candidate):
-    return isinstance(candidate, dict) and candidate.get("namespace") == VERSION
+    return isinstance(candidate, dict) and candidate.get("namespace") in FAMILIES
+
+
+def check_version(candidate):
+    return natural.CHECK if natural.is_candidate(candidate) else oracle.CHECK
+
+
+def source_check(source, family=VERSION):
+    return natural.bounded_source(source) if family == natural.VERSION else oracle.source_checklist(source)
+
+
+def markdown_view(checklist):
+    return natural.markdown_view(checklist) if checklist.get("check_version") == natural.CHECK else oracle.markdown_view(checklist)
+
+
+def verify_saved(source, text, candidate):
+    if natural.is_candidate(candidate):
+        return natural.verify_saved(source, text, candidate["goal"])
+    return oracle.verify_candidate(source, text)
 
 
 def schemas():
@@ -171,6 +193,8 @@ def expand(recipe, aid, cid, pid, source_hash, resource, goal, limits, checked_s
 
 @controlled
 def compile_candidate(candidate, limits):
+    if natural.is_candidate(candidate):
+        return natural.compile_candidate(candidate, limits)
     allowed = {"namespace", "manifest", "actions", "spec_recipe", "source_hash", "goal", "model_sample_check"}
     if set(candidate) not in [allowed, allowed | {"goal_application"}, allowed | {"spec_binding"}]:
         raise DomainError("INVALID_MANIFEST", "Closed compiled spec application required")
@@ -215,6 +239,8 @@ def pure(ref, args, source):
 
 
 def preview(source, candidate, input_value):
+    if natural.is_candidate(candidate):
+        return natural.preview(source, candidate, input_value)
     validate_value(candidate["manifest"]["input_schema"], input_value)
     plan = dict(definition=candidate, input=input_value)
     outputs: dict[str, dict] = {}
@@ -256,16 +282,18 @@ def check_envelope(args):
         raise DomainError("INVALID_INPUT", "Closed candidate check envelope required")
 
 
-def check_tools():
+def check_tools(version=GENERATION):
     return [dict(type="function", function=dict(name=CHECK_TOOL,
         description="Compile the proposed model recipe and check its example against the actual read; no write or semantic acceptance",
-        parameters=object_schema(dict(candidate=candidate_schema()))))]
+        parameters=object_schema(dict(candidate=natural.candidate_schema() if version == natural.GENERATION else candidate_schema()))))]
 
 
 def initial_messages(store, c, run):
     from .goal_applications import source
 
     contract, material = source(store, c, run)
+    if contract.application_generation.version == natural.GENERATION:
+        return natural.initial_messages(store, c, run)
     oracle.source_checklist(material)
     value = dict(saved_goal=contract.source_goal_card.model_dump(),
         server_ids=contract.application_generation.model_dump(exclude_none=True),
@@ -283,6 +311,8 @@ def from_response(store, c, run, value):
     from .goal_applications import source
 
     contract, material = source(store, c, run)
+    if contract.application_generation.version == natural.GENERATION:
+        return natural.from_response(store, c, run, value)
     if not isinstance(value, dict) or set(value) != {"recipe", "sample_checklist", "source_hash", "goal"}:
         raise DomainError("INVALID_MANIFEST", "Complete compact recipe and sample required")
     require(value["source_hash"] == material["hash"]
@@ -302,7 +332,8 @@ def from_response(store, c, run, value):
 def check_report(store, c, run, candidate):
     from .goal_applications import source
 
-    _, material = source(store, c, run)
+    contract, material = source(store, c, run)
+    check = natural.CHECK if contract.application_generation.version == natural.GENERATION else oracle.CHECK
     status, diagnostic = "PASS", None
     try:
         compiled = from_response(store, c, run, candidate)
@@ -312,7 +343,7 @@ def check_report(store, c, run, candidate):
             raise
         status, diagnostic, plan_hash = "FAIL", exc.public(), None
     return dict(version="spec.candidate_check.v1", candidate_fingerprint=fingerprint(candidate),
-        source_hash=material["hash"], check=oracle.CHECK, status=status,
+        source_hash=material["hash"], check=check, status=status,
         recipe_fingerprint=plan_hash, diagnostic=diagnostic,
         semantic_goal_acceptance="NOT_RUN", project_writes=0)
 
@@ -339,7 +370,7 @@ def check_receipt(store, c, run, call):
     report = check_report(store, c, run, args["candidate"])
     receipt = dict(operation_id=op["id"], status="VERIFIED", data=report,
         artifact_refs=[], receipt_ref=op["id"],
-        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=oracle.CHECK, status=report["status"])],
+        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=report["check"], status=report["status"])],
         usage_ref=None, error=None)
     require(op["status"] == "VERIFIED" and op["tool_ref"] == CHECK_TOOL
         and fingerprint(intent) == fingerprint(expected) == op["fingerprint"]
@@ -361,7 +392,7 @@ def dispatch_check(worker, c, run, call):
         fingerprint=fingerprint(intent), tool_ref=CHECK_TOOL, status="PREPARED"))
     c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
     receipt = dict(operation_id=oid, status="VERIFIED", data=report, artifact_refs=[], receipt_ref=oid,
-        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=oracle.CHECK, status=report["status"])],
+        check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=report["check"], status=report["status"])],
         usage_ref=None, error=None)
     c.execute(update(operations).where(operations.c.id == oid).values(status="VERIFIED", receipt=receipt))
     ctx = {**run["context"], "tools": run["context"]["tools"] + 1, "repairs": int(report["status"] == "FAIL")}
@@ -396,13 +427,19 @@ def scope_gate(store, c, user, aid):
         .where(app_drafts.c.id == aid)).mappings().first()
     kind = c.execute(select(task_extractions.c.snapshot["kind"].as_string())
         .where(task_extractions.c.app_id == aid)).scalar()
-    gen = c.execute(select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
-        .join(goal_application_candidates, goal_application_candidates.c.run_id == run_contracts.c.run_id)
-        .where(goal_application_candidates.c.app_id == aid)).scalar()
     from .db import delivery_graph_requests
     ledger = c.execute(select(delivery_graph_requests.c.app_id).where(delivery_graph_requests.c.app_id == aid,
         delivery_graph_requests.c.kind.in_([META, META + "_seal", BIND, BIND + "_seal"]))).first()
-    if not ((location and (location["family"] == VERSION or location["binding"] == KIND)) or kind == KIND or gen == GENERATION or ledger is not None):
+    confirmed = c.execute(select(goal_application_candidates.c.app_id).where(goal_application_candidates.c.app_id == aid)).first()
+    hinted = bool((location and (location["family"] in FAMILIES or location["binding"] == KIND)) or kind == KIND or ledger is not None or confirmed is not None)
+    if hinted:
+        require(location is not None)
+        store.own_project(c, user, location["project_id"])
+        store.authorize(c, user, location["runtime_id"], location["project_id"], location["resource"], "resource.read")
+    gen = c.execute(select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
+        .join(goal_application_candidates, goal_application_candidates.c.run_id == run_contracts.c.run_id)
+        .where(goal_application_candidates.c.app_id == aid)).scalar()
+    if not ((location and (location["family"] in FAMILIES or location["binding"] == KIND)) or kind == KIND or gen in GENERATIONS or ledger is not None):
         return False
     require(location is not None)
     store.own_project(c, user, location["project_id"])
@@ -413,7 +450,7 @@ def scope_gate(store, c, user, aid):
             and meta.runtime_id == location["runtime_id"] and meta.project_id == location["project_id"]
             and meta.resource_id == location["resource"])
     else:
-        require(gen == GENERATION, "Independent model generation marker required")
+        require(gen in GENERATIONS, "Independent model generation marker required")
         origin = c.execute(select(goal_application_candidates.c.run_id).where(
             goal_application_candidates.c.app_id == aid, goal_application_candidates.c.principal_id == user)).scalar()
         require(origin is not None)
@@ -479,18 +516,19 @@ def model_source(store, c, user, rid, limits, pid):
 
 
 @controlled
-def target(store, c, user, pid, cid, version=None, goal_fp=None, runtime=None):
+def target(store, c, user, pid, cid, version=None, goal_fp=None, runtime=None, *, family=VERSION):
     from .pa_material_bindings import target as read_target
     project = store.own_project(c, user, pid)
     store.authorize(c, user, runtime or project["runtime_id"], pid, pid, SAVE)
     source, goal = read_target(store, c, user, pid, cid, version, goal_fp, runtime)
-    oracle.source_checklist(source)
+    source_check(source, family)
     return source, goal
 
 
 def binding_candidate(raw, body, goal, material, aid, pid):
     require(fingerprint(raw["spec_recipe"]) == body.expected_recipe_fingerprint)
-    result = expand(raw["spec_recipe"], aid, goal.card_id, pid, material["hash"], material["resource_id"],
+    factory = natural.expand if natural.is_candidate(raw) else expand
+    result = factory(raw["spec_recipe"], aid, goal.card_id, pid, material["hash"], material["resource_id"],
         goal.snapshot["content"], Limits(**raw["manifest"]["runtime_limits"]),
         raw["model_sample_check"]["sample_fingerprint"])
     result["spec_binding"] = dict(kind=KIND, source_candidate_fingerprint=fingerprint(raw),
@@ -513,10 +551,11 @@ def verify_origin(store, c, user, draft, limits):
             and frozen == dict(kind=KIND, app_id=draft["id"], project_id=draft["project_id"],
                 runtime_id=draft["runtime_id"], source_run_id=marker["task_id"],
                 candidate_fingerprint=draft["fingerprint"], request_key=body.request_key,
-                request_fingerprint=fingerprint(body.model_dump())))
+                request_fingerprint=fingerprint(body.model_dump()),
+                **({"application_namespace": natural.VERSION} if natural.is_candidate(draft["candidate"]) else {})))
         raw, old = model_source(store, c, user, marker["task_id"], limits, draft["project_id"])
         source, goal = target(store, c, user, draft["project_id"], body.card_id,
-            body.expected_goal_version, body.expected_goal_fingerprint, draft["runtime_id"])
+            body.expected_goal_version, body.expected_goal_fingerprint, draft["runtime_id"], family=draft["candidate"]["namespace"])
         require(source["resource_id"] != old["resource_refs"][0] and source["hash"] != raw["source_hash"]
             and source["hash"] == body.expected_source_hash and fingerprint(raw) == body.expected_model_candidate_fingerprint)
         wanted = binding_candidate(raw, body, goal, source, draft["id"], draft["project_id"])
@@ -536,7 +575,7 @@ def verify_origin(store, c, user, draft, limits):
             .where(goal_application_candidates.c.app_id == draft["id"])).scalar_one()
         require(confirmation.get("artifact_write_consent") == CONSENT)
         source, current = target(store, c, user, draft["project_id"], goal.card_id, goal.version,
-            goal.fingerprint, draft["runtime_id"])
+            goal.fingerprint, draft["runtime_id"], family=draft["candidate"]["namespace"])
         require(fingerprint(current.model_dump()) == fingerprint(goal.model_dump()))
     require(source["hash"] == draft["candidate"]["source_hash"]
         and manifest.data_bindings[0].resource_ref == source["resource_id"])
@@ -544,29 +583,32 @@ def verify_origin(store, c, user, draft, limits):
 
 
 @controlled
-def options(store, user, pid, rid, cid, limits):
+def options(store, user, pid, rid, cid, limits, *, family=VERSION):
     with store.tx() as c:
         store.lock_project(c, user, pid)
         raw, metadata = model_source(store, c, user, rid, limits, pid)
-        source, goal = target(store, c, user, pid, cid)
+        require(raw["namespace"] == family)
+        source, goal = target(store, c, user, pid, cid, family=family)
         require(source["resource_id"] != metadata["resource_refs"][0] and source["hash"] != raw["source_hash"])
-        return dict(namespace=VERSION, source_run_id=rid, model_candidate_fingerprint=fingerprint(raw),
+        return dict(namespace=family, source_run_id=rid, model_candidate_fingerprint=fingerprint(raw),
             recipe=raw["spec_recipe"], recipe_fingerprint=fingerprint(raw["spec_recipe"]),
             model_graph=raw["spec_recipe"], graph_fingerprint=fingerprint(raw["spec_recipe"]),
             target_goal=goal.model_dump(), resource_id=source["resource_id"], source_hash=source["hash"],
             semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN", model_requests=0,
             owner_acceptance="PENDING", formal_publication_enabled=False,
-            artifact_write_consent=CONSENT, project_id=pid)
+            artifact_write_consent=CONSENT, project_id=pid,
+            **({"preview": natural.preview(source, {**raw, "goal": goal.snapshot["content"]}, {})} if family == natural.VERSION else {}))
 
 
 @controlled
-def bind(store, user, pid, rid, body, limits):
+def bind(store, user, pid, rid, body, limits, *, family=VERSION):
     from .apps import load_draft
     from .db import principals
     with store.tx() as c:
         store.lock_project(c, user, pid)
         raw, metadata = model_source(store, c, user, rid, limits, pid)
-        source, goal = target(store, c, user, pid, body.card_id, body.expected_goal_version, body.expected_goal_fingerprint)
+        require(raw["namespace"] == family)
+        source, goal = target(store, c, user, pid, body.card_id, body.expected_goal_version, body.expected_goal_fingerprint, family=family)
         require(fingerprint(raw) == body.expected_model_candidate_fingerprint
             and source["hash"] == body.expected_source_hash and source["hash"] != raw["source_hash"]
             and source["resource_id"] != metadata["resource_refs"][0] and body.name.strip())
@@ -591,6 +633,7 @@ def bind(store, user, pid, rid, body, limits):
             name=body.name, candidate=value, fingerprint=fingerprint(value), created_at=time.time()))
         frozen = dict(kind=KIND, app_id=aid, project_id=pid, runtime_id=runtime,
             source_run_id=rid, candidate_fingerprint=fingerprint(value), request_key=body.request_key,
+            **({"application_namespace": natural.VERSION} if family == natural.VERSION else {}),
             request_fingerprint=fingerprint(body.model_dump()))
         c.execute(insert(task_extractions).values(task_id=rid, principal_id=user, request_key=body.request_key,
             request_fingerprint=fingerprint(body.model_dump()), app_id=aid, snapshot=frozen))
@@ -603,7 +646,7 @@ def bind(store, user, pid, rid, body, limits):
 
 
 @controlled
-def recover(store, user, pid, rid, key, limits):
+def recover(store, user, pid, rid, key, limits, *, family=VERSION):
     from .apps import load_draft
     with store.tx() as c:
         store.own_project(c, user, pid)
@@ -612,27 +655,27 @@ def recover(store, user, pid, rid, key, limits):
         if aid is None:
             raise DomainError("OUTCOME_UNKNOWN", "No spec binding for the original request key")
         draft, _, _, _ = load_draft(store, c, user, aid, limits)
-        require(draft["project_id"] == pid)
+        require(draft["project_id"] == pid and draft["candidate"]["namespace"] == family)
         body, frozen = pair(c, user, aid, BIND, key, BindInput)
         return binding_receipt(frozen, body, cached=True)
 
 
 def binding_receipt(frozen, body, *, cached):
-    return dict(namespace=VERSION, id=frozen["app_id"], project_id=frozen["project_id"],
+    return dict(namespace=frozen.get("application_namespace", VERSION), id=frozen["app_id"], project_id=frozen["project_id"],
         runtime_id=frozen["runtime_id"], candidate_fingerprint=frozen["candidate_fingerprint"],
         source_run_id=frozen["source_run_id"], request_key=body.request_key,
         request_fingerprint=fingerprint(body.model_dump()), model_requests=0,
         semantic_status="UNKNOWN", owner_acceptance="PENDING", formal_publication_enabled=False, cached=cached)
 
 
-def source_index(store, user, pid, limits):
+def source_index(store, user, pid, limits, *, family=VERSION):
     with store.tx() as c:
         store.own_project(c, user, pid)
         ids = c.execute(select(goal_application_candidates.c.run_id).join(runs,
             runs.c.id == goal_application_candidates.c.run_id).join(run_contracts, run_contracts.c.run_id == runs.c.id)
             .where(runs.c.project_id == pid, runs.c.principal_id == user,
                 goal_application_candidates.c.principal_id == user,
-                run_contracts.c.snapshot["application_generation"]["version"].as_string() == GENERATION)
+                run_contracts.c.snapshot["application_generation"]["version"].as_string() == (natural.GENERATION if family == natural.VERSION else GENERATION))
             .order_by(runs.c.created_at.desc()).limit(64)).scalars().all()
         result = []
         for rid in ids:
@@ -643,7 +686,7 @@ def source_index(store, user, pid, limits):
                     step_ids=[s["step_id"] for s in raw["spec_recipe"]["steps"]]))
             except DomainError:
                 continue
-        return dict(project_id=pid, namespace=VERSION, options=result, new_model_requests=0)
+        return dict(project_id=pid, namespace=family, options=result, new_model_requests=0)
 
 
 def goal_unresolved(goal):
@@ -670,17 +713,29 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     require(contract.source_goal_card is None and contract.goal.goal_id == goal["card_id"]
         and contract.goal.goal == content["goal"] and contract.goal.constraints == content["constraints"]
         and contract.goal.unresolved == goal_unresolved(goal)
+        and job["goal"] == content["goal"]
         and contract.goal.owner_id == user and contract.goal.project_id == draft["project_id"]
         and fingerprint(snapshot.get("spec_goal")) == fingerprint(goal)
         and contract.goal.resource_refs == job["resource_refs"] == [source["resource_id"]]
         and len(contract.resources) == 1 and contract.resources[0].content_hash == source["hash"]
         and contract.resources[0].resource_id == source["resource_id"] and contract.resources[0].format == source["format"]
         and contract.mode == "mock" and contract.application_generation is None and contract.natural_planning is None
-        and job["context"].get("spec_family") == VERSION)
-    require(all(type(job["context"].get(k)) is int and job["context"][k] == 0
-        for k in ("requests", "repairs", "reserved_tokens"))
-        and type(job["context"].get("tools")) is int and 0 <= job["context"]["tools"] <= 4)
-    require(c.execute(select(attempts.c.id).where(attempts.c.run_id == job["id"])).first() is None)
+        and job["context"].get("spec_family") == draft["candidate"]["namespace"])
+    if natural.is_candidate(draft["candidate"]):
+        from .natural_spec_runtime import counters
+        clock = snapshot.get("natural_spec_clock")
+        require(isinstance(clock, dict) and set(clock) == {"created_at", "deadline"}
+            and type(clock["created_at"]) is float and type(clock["deadline"]) is float
+            and math.isfinite(clock["created_at"]) and math.isfinite(clock["deadline"])
+            and 0 < clock["created_at"] < clock["deadline"]
+            and clock["created_at"] == job["created_at"]
+            and clock["deadline"] == job["created_at"] + min(contract.limits.run_seconds, manifest.runtime_limits.run_seconds))
+        counters(c, job, manifest)
+    else:
+        require(all(type(job["context"].get(k)) is int and job["context"][k] == 0
+            for k in ("requests", "repairs", "reserved_tokens"))
+            and type(job["context"].get("tools")) is int and 0 <= job["context"]["tools"] <= 4)
+        require(c.execute(select(attempts.c.id).where(attempts.c.run_id == job["id"])).first() is None)
     if validate_input:
         validate_value(manifest.input_schema, snapshot["input"])
     plan = dict(definition=draft["candidate"], input=snapshot["input"],
@@ -745,11 +800,11 @@ def receipt_for(oid, step, action, plan, intent, value):
         action_revision=action["revision"], input_fingerprint=fingerprint(intent["args"]),
         output_fingerprint=fingerprint(value), predecessor_receipts=intent["predecessor_receipts"],
         input_sources=intent["input_sources"], artifact_refs=[value["resource_id"]] if saved else [],
-        check_results=[dict(check="receipt.readback.v1" if saved else oracle.CHECK, status="PASS")])
+        check_results=[dict(check="receipt.readback.v1" if saved else check_version(plan["definition"]), status="PASS")])
 
 
 @controlled
-def receipts(store, c, job, binding):
+def receipts(store, c, job, binding, *, pending_id=None, allow_pending=False):
     plan, source = binding["plan"], binding["source"]
     ops = c.execute(select(operations).where(operations.c.run_id == job["id"])).mappings().all()
     by_step = {op["call_id"]: op for op in ops}
@@ -768,6 +823,14 @@ def receipts(store, c, job, binding):
         stored = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar()
         require(fingerprint(stored) == fingerprint(intent) == op["fingerprint"] and op["tool_ref"] == intent["tool"])
         if op["status"] != "VERIFIED":
+            if allow_pending and natural.is_candidate(plan["definition"]):
+                from .natural_spec_runtime import prove_pending
+                prove_pending(store, c, job, binding, op, intent, action)
+                require(not (set(ids[index + 1:]) & set(by_step)))
+                break
+            if op["id"] == pending_id:
+                require(not (set(ids[index + 1:]) & set(by_step)))
+                break
             raise DomainError("OUTCOME_UNKNOWN", "Unresolved spec node is never resent")
         validate_value(action["output_schema"], op["receipt"]["data"])
         value = op["receipt"]["data"]
@@ -777,9 +840,16 @@ def receipts(store, c, job, binding):
             actual = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
                 "resource.read", dict(resource_id=value["resource_id"]))
             require(actual["hash"] == value["hash"] and actual["content"] == intent["args"]["text"] and actual["format"] == "json")
-            oracle.verify_candidate(source, actual["content"])
+            verify_saved(source, actual["content"], plan["definition"])
         else:
-            expected = pure(action["executor"]["ref"], intent["args"], source)
+            if natural.is_candidate(plan["definition"]):
+                if action["executor"]["ref"] in natural.MODEL_KINDS:
+                    from .natural_spec_runtime import prove_node
+                    expected = prove_node(store, c, job, binding, op, intent, action)
+                else:
+                    expected = natural.pure(action["executor"]["ref"], intent["args"], source, plan["definition"]["goal"])
+            else:
+                expected = pure(action["executor"]["ref"], intent["args"], source)
             require(fingerprint(expected) == fingerprint(value), "Spec node readback differs from actual material")
             require(c.execute(select(local_effects.c.operation_id).where(local_effects.c.operation_id == op["id"])).first() is None)
         wanted = receipt_for(op["id"], step, action, plan, intent, value)
@@ -793,7 +863,7 @@ def receipts(store, c, job, binding):
                 events.c.data["fence"].as_integer() == anchors[0]["fence"])).first() is not None)
         outputs[sid] = value
         proved.append(wanted)
-    require(job["context"]["tools"] == len(proved))
+    require(job["context"]["tools"] == sum(p["step_id"] not in {s["step_id"] for s, a in zip(steps, plan["definition"]["actions"], strict=True) if a["executor"]["ref"] in natural.MODEL_KINDS} for p in proved))
     return outputs, proved
 
 
@@ -803,17 +873,17 @@ def output_for(plan, outputs):
 
 def result_ref(binding, proved, version):
     s = binding["snapshot"]
-    return dict(namespace=VERSION, app_run_id=s["app_run_id"], instance_id=s["instance_id"],
+    return dict(namespace=binding["draft"]["candidate"]["namespace"], app_run_id=s["app_run_id"], instance_id=s["instance_id"],
         release_id=s["release_id"], result_version=version, plan_fingerprint=binding["plan"]["plan_fingerprint"],
         receipt_refs=[p["operation_id"] for p in proved],
-        model_requests=0, citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
+        model_requests=sum(a["executor"]["ref"] in natural.MODEL_KINDS for a in binding["draft"]["candidate"]["actions"]), **({"real_model_requests": 0} if natural.is_candidate(binding["draft"]["candidate"]) else {}), citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
         formal_publication_enabled=False)
 
 
 @controlled
 def verify_job(store, c, user, job, limits):
     b = bound(store, c, user, job, limits, validate_input=False)
-    outputs, proved = receipts(store, c, job, b)
+    outputs, proved = receipts(store, c, job, b, allow_pending=True)
     a, s = b["app_run"], b["snapshot"]
     rows = c.execute(select(internal_instance_data).where(internal_instance_data.c.instance_id == s["instance_id"],
         internal_instance_data.c.run_id == a["id"])).mappings().all()
@@ -894,6 +964,9 @@ def verify_instance_records(store, c, user, instance, records, limits):
 def commit_guard(worker, c, run, b, delta=0):
     from .app_jobs import lock_live
     job = lock_live(worker.store, c, run)
+    if natural.is_candidate(b["draft"]["candidate"]):
+        require(job["created_at"] == run["created_at"] and job["fingerprint"] == run["fingerprint"],
+            "Original accepted Run metadata changed")
     if worker.s.mode != "mock" or worker.s.live_enabled:
         raise DomainError("PERMISSION_DENIED", "Spec family is offline only")
     require(job["status"] == "RUNNING" and not job["cancel_intent"] and not worker.stop.is_set())
@@ -929,6 +1002,10 @@ def commit_guard(worker, c, run, b, delta=0):
 def advance(worker, run):
     from .app_jobs import load_binding, lock_live, state_write, stop_state
     store = worker.store
+    from .natural_spec_runtime import advance_model
+    handled = advance_model(worker, run)
+    if handled:
+        return True
     with store.tx() as c:
         job = lock_live(store, c, run)
         if job["status"] != "RUNNING" or worker.stop.is_set() or job["cancel_intent"]:
@@ -951,16 +1028,19 @@ def advance(worker, run):
             fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
         c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
         saved = intent["tool"] == SAVE
+        from .natural_spec_runtime import ledger_digest
+        runtime_audit = ledger_digest(c, job) if saved and natural.is_candidate(plan["definition"]) else None
         if saved:
-            oracle.verify_candidate(b["source"], intent["args"]["text"])
+            verify_saved(b["source"], intent["args"]["text"], plan["definition"])
             value = write_text_artifact(store, c, job["principal_id"], job["runtime_id"], job["project_id"], intent["args"]["text"], artifact_format="json")
             c.execute(insert(local_effects).values(operation_id=oid, resource_id=value["resource_id"], content_hash=value["hash"]))
             actual = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
                 "resource.read", dict(resource_id=value["resource_id"]))
             require(actual["hash"] == value["hash"] and actual["content"] == intent["args"]["text"] and actual["format"] == "json")
-            oracle.verify_candidate(b["source"], actual["content"])
+            verify_saved(b["source"], actual["content"], plan["definition"])
         else:
-            value = pure(intent["tool"], intent["args"], b["source"])
+            value = (natural.pure(intent["tool"], intent["args"], b["source"], plan["definition"]["goal"])
+                if natural.is_candidate(plan["definition"]) else pure(intent["tool"], intent["args"], b["source"]))
         validate_value(action["output_schema"], value)
         receipt = receipt_for(oid, step, action, plan, intent, value)
         live = commit_guard(worker, c, run, b, 1)
@@ -1012,6 +1092,8 @@ def advance(worker, run):
             current_job = c.execute(select(runs).where(runs.c.id == job["id"], runs.c.principal_id == job["principal_id"],
                 runs.c.project_id == job["project_id"], runs.c.runtime_id == job["runtime_id"])).mappings().one()
             final_binding, _, _ = verify_job(store, c, job["principal_id"], current_job, limits)
+            if runtime_audit is not None:
+                require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
             require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
                 "Original model audit bytes changed during the final save transaction")
             require(not worker.stop.is_set() and time.time() < live["lease_until"]
@@ -1028,6 +1110,15 @@ def is_job(store, job):
 
 def process_job(worker, run):
     from .text_workflows import process_job as process
+    if run["context"].get("spec_family") == natural.VERSION:
+        def advance_and_renew(worker, current):
+            again = advance(worker, current)
+            if again:
+                # Existing lease guard at a transaction boundary prevents SQLite
+                # writer starvation; it cannot renew an expired lease or deadline.
+                worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds)
+            return again
+        return process(worker, run, advance_fn=advance_and_renew)
     return process(worker, run, advance_fn=advance)
 
 
@@ -1049,7 +1140,7 @@ def mount(app, store, limits, identity):
             output = binding["app_run"]["output"]
             resource = authorized_read(store, c, user, job["runtime_id"], job["project_id"],
                 "resource.read", dict(resource_id=output["resource_id"]))
-            return dict(resource=resource, markdown_view=oracle.markdown_view(output["checklist"]),
+            return dict(resource=resource, markdown_view=markdown_view(output["checklist"]),
                 citation_status="PASS", semantic_goal_acceptance="NOT_RUN")
 
     @app.get("/api/projects/{pid}/spec-model-runs/{rid}/binding-options")
@@ -1063,3 +1154,31 @@ def mount(app, store, limits, identity):
     @app.get("/api/projects/{pid}/spec-model-runs/{rid}/bindings/by-key/{key}")
     def recover_binding(pid: str, rid: str, key: str, user=user_dependency):
         return recover(store, user, pid, rid, key, limits)
+
+
+    @app.get("/api/projects/{pid}/natural-spec-model-candidates")
+    def natural_sources(pid: str, user=user_dependency):
+        return source_index(store, user, pid, limits, family=natural.VERSION)
+
+    @app.get("/api/projects/{pid}/natural-spec-model-runs/{rid}/binding-options")
+    def natural_options(pid: str, rid: str, card_id: str, user=user_dependency):
+        return options(store, user, pid, rid, card_id, limits, family=natural.VERSION)
+
+    @app.post("/api/projects/{pid}/natural-spec-model-runs/{rid}/bindings", status_code=201)
+    def natural_bind(pid: str, rid: str, body: BindInput, user=user_dependency):
+        return bind(store, user, pid, rid, body, limits, family=natural.VERSION)
+
+    @app.get("/api/projects/{pid}/natural-spec-model-runs/{rid}/bindings/by-key/{key}")
+    def natural_recover(pid: str, rid: str, key: str, user=user_dependency):
+        return recover(store, user, pid, rid, key, limits, family=natural.VERSION)
+
+    @app.get("/api/projects/{pid}/natural-spec-model-runs/{rid}/sample-preview")
+    def natural_sample(pid: str, rid: str, user=user_dependency):
+        from .goal_applications import source_scope_gate
+        with store.tx() as c:
+            store.own_project(c, user, pid)
+            metadata = c.execute(select(runs.c.principal_id, runs.c.project_id).where(runs.c.id == rid)).mappings().first()
+            require(metadata is not None and metadata["principal_id"] == user and metadata["project_id"] == pid)
+            source_scope_gate(store, c, rid)
+            job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user, runs.c.project_id == pid)).mappings().one()
+            return natural.sample_preview(store, c, job)

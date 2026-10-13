@@ -129,7 +129,7 @@ def model_source(store, c, user, rid, limits, expected_pid=None, *, family="lite
     run = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
     raw = verified_candidate(store, c, run, limits)
     if family == "spec":
-        require(raw.get("namespace") == "pa-spec-checklist-app.v1")
+        require(raw.get("namespace") in {"pa-spec-checklist-app.v1", "pa-natural-spec-app.v1"})
     else:
         require(family == "literal" and raw.get("namespace") is None and len(raw.get("actions", [])) == 1
             and raw["actions"][0].get("executor", {}).get("ref") == "text.literal_evidence")

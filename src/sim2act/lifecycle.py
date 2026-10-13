@@ -232,6 +232,9 @@ def prepare_release(
             "data_schema_version": data_schema_version,
             "check_evidence": {
                 "ref": (
+                    "natural.recipe_compile.v1"
+                    if draft["candidate"].get("namespace") == "pa-natural-spec-app.v1"
+                    else
                     "spec.labeled_citations.v1"
                     if draft["candidate"].get("namespace") == "pa-spec-checklist-app.v1"
                     else
@@ -251,6 +254,9 @@ def prepare_release(
             "model_requests": 0,
             "formal_publication_enabled": False,
         }
+        if draft["candidate"].get("namespace") == "pa-natural-spec-app.v1":
+            snapshot["check_evidence"].update(execution_mode="MODEL_EXECUTION_REQUIRED_OFF_BY_DEFAULT",
+                citation_status="NOT_RUN", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN")
         if agent:
             snapshot["check_evidence"].update(
                 execution_mode="OFFLINE_REPLAY_ONLY",

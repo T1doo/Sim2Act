@@ -474,6 +474,12 @@ def create_app(store=None, settings=None):
                 raise DomainError("PERMISSION_DENIED", "Spec checklist uses an isolated offline four-tool app budget")
             app_limits = Limits(max_requests=1, max_tools=4, max_repairs=0, max_total_tokens=1, max_output_tokens=1,
                 run_seconds=min(300, platform_limits.run_seconds))
+        if body.family == "natural_spec":
+            if body.activation is not None or platform_limits.max_tools < 4:
+                raise DomainError("PERMISSION_DENIED", "Natural-spec model nodes require a closed offline app budget")
+            app_limits = Limits(max_requests=min(2, platform_limits.max_requests), max_tools=4, max_repairs=0,
+                max_total_tokens=platform_limits.max_total_tokens, max_output_tokens=platform_limits.max_output_tokens,
+                run_seconds=min(300, platform_limits.run_seconds))
         if body.activation is not None:
             from .generation_approvals import submission
 

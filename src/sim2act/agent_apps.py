@@ -69,6 +69,9 @@ def offline_replay_model(responses):
 
 
 def is_agent(candidate):
+    from .natural_specs import is_candidate
+    if is_candidate(candidate):
+        return False
     return any(
         a.get("executor", {}).get("kind") == "bounded_agent"
         for a in candidate.get("actions", [])

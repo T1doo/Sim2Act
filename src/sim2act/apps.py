@@ -333,11 +333,11 @@ def validate_source_family(c, user, draft):
             raise DomainError("VERSION_CONFLICT", "Independent generation owner changed")
         markers.append(("goal_application", "registered_tool"))
         from .db import run_contracts
-        from .pa_spec_apps import GENERATION
+        from .pa_spec_apps import GENERATIONS
         from .pa_spec_apps import is_candidate as spec_candidate
         generation_kind = c.execute(select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
             .where(run_contracts.c.run_id == generated_text["run_id"])).scalar()
-        if generation_kind == GENERATION:
+        if generation_kind in GENERATIONS:
             if not spec_candidate(candidate):
                 raise DomainError("VERSION_CONFLICT", "Independent spec generation cannot be downgraded")
         elif (not isinstance(candidate, dict) or not isinstance(candidate.get("actions"), list)
@@ -360,7 +360,11 @@ def validate_source_family(c, user, draft):
             raise DomainError("VERSION_CONFLICT", "Independent extraction marker executor missing")
         for action in actions:
             executor = action.get("executor") if isinstance(action, dict) else None
-            if not isinstance(executor, dict) or executor.get("kind") != markers[0][1]:
+            from .natural_specs import MODEL_KINDS
+            from .natural_specs import is_candidate as natural_candidate
+            natural_model = (natural_candidate(candidate) and isinstance(executor, dict)
+                and executor.get("kind") == "bounded_agent" and executor.get("ref") in MODEL_KINDS)
+            if not isinstance(executor, dict) or (executor.get("kind") != markers[0][1] and not natural_model):
                 raise DomainError(
                     "VERSION_CONFLICT", "Independent extraction marker executor changed"
                 )
@@ -530,7 +534,7 @@ def preview(store, user, aid, input_value, key, platform_limits):
             return public_preview(old)
         output, error = None, None
         try:
-            if draft["candidate"].get("namespace") in {"closed-text-four-step.v1", "pa-spec-checklist-app.v1"}:
+            if draft["candidate"].get("namespace") in {"closed-text-four-step.v1", "pa-spec-checklist-app.v1", "pa-natural-spec-app.v1"}:
                 from .lifecycle import execute
 
                 output = execute(store, c, user, draft, platform_limits, input_value)
@@ -641,7 +645,7 @@ def inspect_draft(store, user, aid, platform_limits):
                if draft["candidate"].get("namespace") == "closed-text-four-step.v1" else {}),
             "input_guidance": (
                 {"mode": "MODEL_SPEC_CHECKLIST", "citation_status": "PREVIEW_ONLY", "semantic_status": "UNKNOWN", "semantic_goal_acceptance": "NOT_RUN"}
-                if draft["candidate"].get("namespace") == "pa-spec-checklist-app.v1"
+                if draft["candidate"].get("namespace") in {"pa-spec-checklist-app.v1", "pa-natural-spec-app.v1"}
                 else
                 {"mode": "CLOSED_TEXT_WORKFLOW", "semantic_status": "UNKNOWN"}
                 if draft["candidate"].get("namespace") == "closed-text-four-step.v1"

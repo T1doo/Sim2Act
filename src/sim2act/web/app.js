@@ -398,6 +398,7 @@ function previewText(r) {
   return `预览成功（SUCCEEDED） · ${r.output.column} 合计 ${r.output.sum}，共 ${r.output.count} 条 · 0 模型请求 · 仅预览`;
 }
 function showPreviewResult(r,history=false){
+  if(r.output?.status === "MODEL_EXECUTION_REQUIRED"){$("app-output").dataset.state="pending";$("app-output").textContent=(history ? "历史材料预览\n" : "本次材料预览\n")+"抽取需模型执行，默认关闭；此预览没有生成答案，语义待验。\n"+JSON.stringify(r.output,null,2);return;}
   if(r.output?.citations||r.output?.checklist){$("app-output").dataset.state="success";$("app-output").textContent=(history ? "历史记录\n" : "本次预览\n")+JSON.stringify(r.output,null,2);return;}
   $("app-output").dataset.state=r.status === "FAILED" ? "error" : "success";
   $("app-output").replaceChildren(row(`${history ? "历史记录 · " : ""}${previewText(r)} · ${r.id.slice(0,16)}`));
@@ -414,11 +415,11 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
   activeApp=id;activeAppProject=pid;
   if(a.input_guidance.mode === "MODEL_SPEC_CHECKLIST"){
-    $("app-title").textContent=a.name+" · 合成标记规范清单 · 未发布";
+    $("app-title").textContent=a.name+(a.candidate.namespace==="pa-natural-spec-app.v1"?" · 未标注规范待验清单 · 未发布":" · 合成标记规范清单 · 未发布");
     $("app-origin").textContent="模型选择的有限步骤图；出处核查与语义完整性分开。真实模型关闭，语义 NOT_RUN。";
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(a.candidate.goal,null,2);
     $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,recipe:a.candidate.spec_recipe,fingerprint:a.fingerprint},null,2);
-    $("app-preview-form").hidden=false;$("app-preview-submit").hidden=false;$("app-preview-submit").disabled=appPreviewRequests.has(id);$("app-input-hint").textContent="预览不保存业务制品；实际内部实例运行保存一个 JSON 清单。";$("app-column-label").hidden=true;$("app-column").required=false;
+    $("app-preview-form").hidden=false;$("app-preview-submit").hidden=false;$("app-preview-submit").disabled=appPreviewRequests.has(id);$("app-input-hint").textContent=a.candidate.namespace==="pa-natural-spec-app.v1"?"新材料抽取需模型执行，默认关闭；预览保留原文和完整目标，不生成答案，不保存制品。":"预览不保存业务制品；实际内部实例运行保存一个 JSON 清单。";$("app-column-label").hidden=true;$("app-column").required=false;
     $("app-agent-term-label").hidden=true;$("app-agent-term").required=false;$("csv-extraction-panel").hidden=true;
     await openInternal(a,generation);return generation===appSelectionGeneration&&selectionCurrent();
   }

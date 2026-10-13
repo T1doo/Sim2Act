@@ -49,9 +49,14 @@ class Worker:
         self.stop = threading.Event()
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
-                planner_request=False, generation_request=False):
+                planner_request=False, generation_request=False, natural_spec_request=None):
         s = self.s
-        protocol_request = request_tools is not None and not planner_request and not generation_request
+        if natural_spec_request is not None:
+            from .natural_spec_runtime import reservation_settings
+            if planner_request or generation_request:
+                raise DomainError("PERMISSION_DENIED", "Reservation families cannot be combined")
+            s = reservation_settings(self, natural_spec_request)
+        protocol_request = request_tools is not None and not planner_request and not generation_request and natural_spec_request is None
         request_tools = definitions() if request_tools is None else request_tools
         wire_seal = None
         # Conservative byte envelope, not a claim of actual tokenizer usage.
@@ -63,7 +68,7 @@ class Worker:
             )
             + s.max_output_tokens
         )
-        if protocol_request or planner_request or generation_request:
+        if protocol_request or planner_request or generation_request or natural_spec_request is not None:
             import httpx
 
             serialized = httpx.Request(
@@ -94,6 +99,9 @@ class Worker:
                 )
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
+            if natural_spec_request is not None:
+                from .natural_spec_runtime import reservation_check
+                reservation_check(self, c, run, context, request_tools, natural_spec_request, s)
             if generation_request:
                 from .goal_applications import check_sender as check_generation_sender
 
@@ -202,7 +210,9 @@ class Worker:
                             }
                         ),
                         **({"planning_wire" if planner_request else "protocol_wire": wire_seal}
-                           if wire_seal is not None and not generation_request else {}),
+                           if wire_seal is not None and not generation_request and natural_spec_request is None else {}),
+                        **({"natural_spec": natural_spec_request, "natural_spec_wire": wire_seal}
+                           if natural_spec_request is not None else {}),
                         **({"planning_fence": fence} if planner_request else {}),
                         **({"generation_wire": (wire_seal or {})["sha256"],
                             "generation_fence": fence,
@@ -215,7 +225,10 @@ class Worker:
 
                 assert wire_seal is not None
                 reserve_natural_slot(self.store, c, run, fence, aid, envelope, wire_seal["sha256"], s)
-            if wire_seal is not None and not generation_request:
+            if natural_spec_request is not None:
+                from .natural_spec_runtime import reserve_node
+                reserve_node(self, c, run, aid, natural_spec_request)
+            if wire_seal is not None and not generation_request and natural_spec_request is None:
                 self.store.event(
                     c,
                     run_id,
@@ -277,7 +290,7 @@ class Worker:
                 if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
                     from .goal_applications import check_active, verified_candidate
 
-                    if frozen.application_generation.activation is not None or frozen.application_generation.version == "goal-spec-checklist-application.v1":
+                    if frozen.application_generation.activation is not None or frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}:
                         check_active(self, c, run)
                     candidate = verified_candidate(self.store, c, run, frozen.limits)
                     if state != "PARTIAL" or result != {
@@ -328,11 +341,11 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
-            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and (frozen.application_generation.activation is not None or frozen.application_generation.version == "goal-spec-checklist-application.v1"):
+            if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and (frozen.application_generation.activation is not None or frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}):
                 check_active(self, c, run)
                 if run["lease_until"] <= time.time():
                     raise DomainError("VERSION_CONFLICT", "Original worker lease expired before final commit")
-                if frozen.application_generation.version == "goal-spec-checklist-application.v1":
+                if frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}:
                     current = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence, runs.c.version)
                         .where(runs.c.id == run_id)).mappings().one()
                     if current["status"] != state or current["cancel_intent"] or current["fence"] != fence or current["version"] != run["version"] + 1:

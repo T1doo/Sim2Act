@@ -197,6 +197,11 @@ def enqueue(
                 constraints=content["constraints"], unresolved=text_workflows.goal_unresolved(source_goal))
             FrozenRunContract.model_validate(contract)
             goal = content["goal"]
+        accepted_created_at = time.time()
+        from . import natural_specs
+        if natural_specs.is_candidate(draft["candidate"]):
+            snapshot["natural_spec_clock"] = dict(created_at=accepted_created_at,
+                deadline=accepted_created_at + min(limits.run_seconds, draft["candidate"]["manifest"]["runtime_limits"]["run_seconds"]))
         c.execute(
             insert(run_contracts).values(
                 run_id=jid, snapshot=contract, fingerprint=fingerprint(contract)
@@ -213,7 +218,7 @@ def enqueue(
                 status="QUEUED",
                 request_key="internal:" + aid,
                 fingerprint=fingerprint(snapshot),
-                created_at=time.time(),
+                created_at=accepted_created_at,
                 lease_until=0,
                 fence=0,
                 context={
@@ -224,7 +229,7 @@ def enqueue(
                     "repairs": 0,
                     "reserved_tokens": 0,
                     **({"text_workflow": text_workflows.VERSION} if text_workflows.is_candidate(draft["candidate"]) else {}),
-                    **({"spec_family": pa_spec_apps.VERSION} if pa_spec_apps.is_candidate(draft["candidate"]) else {}),
+                    **({"spec_family": draft["candidate"]["namespace"]} if pa_spec_apps.is_candidate(draft["candidate"]) else {}),
                 },
                 version=1,
                 cancel_intent=False,
@@ -411,7 +416,7 @@ def inspect_job(store, user, rid):
                 "semantic_status": "UNKNOWN", "owner_acceptance": "PENDING", "formal_publication_enabled": False}
                if workflow or spec else {}),
             **({"citation_status": "PASS" if job["status"] == "SUCCEEDED" else "NOT_RUN",
-                "semantic_goal_acceptance": "NOT_RUN", "markdown_view": pa_spec_apps.oracle.markdown_view(a["output"]["checklist"]) if a["output"] else None}
+                "semantic_goal_acceptance": "NOT_RUN", "markdown_view": pa_spec_apps.markdown_view(a["output"]["checklist"]) if a["output"] else None}
                 if spec else {}),
         }
 
@@ -881,6 +886,10 @@ def commit_result(worker, run, plan, output):
 
 
 def fail_job(worker, run, error):
+    from .natural_specs import VERSION as natural_version
+    if run["context"].get("spec_family") == natural_version:
+        from .natural_spec_runtime import fail_owned
+        return fail_owned(worker, run, error)
     # Contract rejection also needs lease/status fencing, but cannot require the bad contract.
     store = worker.store
     with store.tx() as c:

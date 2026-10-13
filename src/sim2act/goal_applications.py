@@ -61,6 +61,8 @@ READ_TOOLS = [
 ]
 
 
+SPEC_GENERATIONS = {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}
+
 def response_archive(raw):
     """Protected Attempt evidence only; never copy private raw into public events/logs."""
     if not isinstance(raw, dict):
@@ -91,13 +93,13 @@ class GenerationRunInput(Strict):
     expected_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     request_key: str = Field(min_length=1, max_length=100)
     activation: ApplicationGenerationActivation | None = None
-    family: Literal["spec_checklist"] | None = None
+    family: Literal["spec_checklist", "natural_spec"] | None = None
 
 
 def policy(provider, user, pid, body, activation=None, app_limits=None):
     intent = fingerprint({"user": user, "project": pid, "input": body})
     return ApplicationGenerationPolicy(
-        version="goal-spec-checklist-application.v1" if body.get("family") == "spec_checklist" else "goal-text-application.v1",
+        version=("goal-natural-spec-application.v1" if body.get("family") == "natural_spec" else "goal-spec-checklist-application.v1" if body.get("family") == "spec_checklist" else "goal-text-application.v1"),
         provider=provider,
         app_id="app_" + intent[:32],
         action_id="action_" + intent[32:],
@@ -113,7 +115,20 @@ def policy(provider, user, pid, body, activation=None, app_limits=None):
 def source_scope_gate(store, c, rid):
     """Only identifier projections before authorization; never fetch protected bodies."""
     metadata = c.execute(select(runs.c.principal_id, runs.c.project_id,
-        runs.c.runtime_id, runs.c.resource_refs).where(runs.c.id == rid)).mappings().first()
+        runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
+    if metadata is not None:
+        from .pa_spec_apps import job_scope_gate
+        # Application family scope is independently identified and authorized
+        # before any Run resource list or frozen contract body is evaluated.
+        if job_scope_gate(store, c, metadata["principal_id"], rid):
+            return False
+        store.own_project(c, metadata["principal_id"], metadata["project_id"])
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        if not isinstance(refs, list):
+            raise DomainError("VERSION_CONFLICT")
+        for resource_id in refs:
+            store.authorize(c, metadata["principal_id"], metadata["runtime_id"], metadata["project_id"], resource_id, "resource.read")
+        metadata = {**metadata, "resource_refs": refs}
     hints = c.execute(select(
         run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
         run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),
@@ -151,12 +166,12 @@ def source_scope_gate(store, c, rid):
                 metadata["project_id"], metadata["runtime_id"], metadata["resource_refs"]):
             raise DomainError("VERSION_CONFLICT")
     if (any(hints[k] != anchored[0][k] for k in ("kind", "aid", "app_id"))
-        or hints["kind"] not in {"goal-text-application.v1", "goal-spec-checklist-application.v1"} or hints["runtime"] != metadata["runtime_id"]
+        or hints["kind"] not in {"goal-text-application.v1", "goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"} or hints["runtime"] != metadata["runtime_id"]
         or hints["owner"] != metadata["principal_id"] or hints["project"] != metadata["project_id"]
         or hints["refs"] != metadata["resource_refs"] or hints["goal_refs"] != metadata["resource_refs"]
         or hints["resource"] != metadata["resource_refs"][0]):
         raise DomainError("VERSION_CONFLICT")
-    if hints["kind"] == "goal-spec-checklist-application.v1":
+    if hints["kind"] in SPEC_GENERATIONS:
         if aid is not None:
             raise DomainError("PERMISSION_DENIED", "Spec generation has no LIVE scope")
         store.authorize(c, metadata["principal_id"], metadata["runtime_id"], metadata["project_id"], metadata["project_id"], "artifact.save_text")
@@ -207,7 +222,7 @@ def source(store, c, run):
 
 def initial_messages(store, c, run):
     contract, material = source(store, c, run)
-    if contract.application_generation.version == "goal-spec-checklist-application.v1":
+    if contract.application_generation.version in SPEC_GENERATIONS:
         from .pa_spec_apps import initial_messages as spec_messages
         return spec_messages(store, c, run)
     from .agent_apps import schemas
@@ -259,14 +274,14 @@ def body(messages, tools, max_output):
 def stage_tools(selected, index):
     if index == 0:
         return READ_TOOLS
-    if selected.version == "goal-spec-checklist-application.v1" and index == 1:
+    if selected.version in SPEC_GENERATIONS and index == 1:
         from .pa_spec_apps import check_tools
-        return check_tools()
+        return check_tools(selected.version)
     return []
 
 
 def parse_generation(raw, selected):
-    if selected.version == "goal-spec-checklist-application.v1":
+    if selected.version in SPEC_GENERATIONS:
         from .pa_spec_apps import CHECK_TOOL, check_envelope
         return parse_response(raw, {CHECK_TOOL: check_envelope})
     return parse_response(raw)
@@ -409,11 +424,11 @@ def history(store, c, run):
             messages.append(
                 {
                     "role": "user",
-                    "content": ("Call spec.check_candidate with the full compact recipe and example checklist now." if selected.version == "goal-spec-checklist-application.v1" else "Return the complete candidate now, including source_hash and the full frozen goal object. No further tools."),
+                    "content": ("Call spec.check_candidate with the complete recipe and sample_nodes now." if selected.version == "goal-natural-spec-application.v1" else "Call spec.check_candidate with the full compact recipe and example checklist now." if selected.version in SPEC_GENERATIONS else "Return the complete candidate now, including source_hash and the full frozen goal object. No further tools."),
                 }
             )
         elif index == 1:
-            if selected.version == "goal-spec-checklist-application.v1":
+            if selected.version in SPEC_GENERATIONS:
                 from .pa_spec_apps import check_receipt
                 calls = attempt["response"].get("tool_calls", [])
                 if len(calls) != 1:
@@ -505,7 +520,7 @@ def parse_candidate(store, c, run, message, limits):
         raise DomainError("INVALID_MANIFEST", "Content-only candidate response required")
     value = strict_json(message["content"], 16384)
     contract, _ = source(store, c, run)
-    if contract.application_generation.version == "goal-spec-checklist-application.v1":
+    if contract.application_generation.version in SPEC_GENERATIONS:
         from .pa_spec_apps import check_receipt, from_response
         checked = c.execute(select(attempts.c.response).where(attempts.c.run_id == run["id"],
             attempts.c.parameters["generation_index"].as_integer() == 1)).scalar()
@@ -544,7 +559,7 @@ def verified_candidate(store, c, run, limits):
     _, rows = history(store, c, run)
     if len(rows) not in {2, 3}:
         raise DomainError("VERIFICATION_FAILED", "Candidate lacks read/feedback/generation history")
-    spec = contract.application_generation.version == "goal-spec-checklist-application.v1"
+    spec = contract.application_generation.version in SPEC_GENERATIONS
     if (spec and len(rows) != 3) or (not spec and len(rows) == 3 and rows[1]["parameters"].get("generation_diagnostic") is None):
         raise DomainError("VERSION_CONFLICT", "Unapproved repair request")
     if rows[-1]["parameters"].get("generation_diagnostic") is not None:
@@ -571,7 +586,7 @@ def check_provider(worker, c, run, contract, attempt_id=None):
         or worker.s.goal_planner_provider != "intern-s2"):
         raise DomainError("RESOURCE_UNAVAILABLE", "Explicit Intern generation provider required")
     activation = contract.application_generation.activation
-    if contract.application_generation.version == "goal-spec-checklist-application.v1" and activation is not None:
+    if contract.application_generation.version in SPEC_GENERATIONS and activation is not None:
         raise DomainError("PERMISSION_DENIED", "Spec checklist generation is offline only")
     if activation is not None:
         from .generation_approvals import validate_run
@@ -617,7 +632,7 @@ def check_sender(worker, c, run, messages, tools):
         or len(rows) >= min(contract.application_generation.request_limit, worker.s.max_requests)
         or (
             len(rows) == 2
-            and contract.application_generation.version != "goal-spec-checklist-application.v1"
+            and contract.application_generation.version not in SPEC_GENERATIONS
             and (
                 rows[-1]["parameters"].get("generation_diagnostic") is None
                 or worker.s.max_repairs < 1
@@ -775,7 +790,7 @@ def process(worker, run, contract):
                     settle_generation(worker, contract, rid, aid)
                     continue
                 if calls:
-                    if contract.application_generation.version == "goal-spec-checklist-application.v1" and len(prior) == 1 and len(calls) == 1:
+                    if contract.application_generation.version in SPEC_GENERATIONS and len(prior) == 1 and len(calls) == 1:
                         from .pa_spec_apps import dispatch_check
                         with worker.store.tx() as c:
                             current = locked(worker, c, rid, fence)
@@ -788,7 +803,7 @@ def process(worker, run, contract):
                                 worker.store.event(c, rid, "GA_DIAGNOSTIC", dict(attempt_id=aid, diagnostic=report["diagnostic"]))
                         continue
                     raise DomainError("PERMISSION_DENIED", "Candidate and repair cannot call tools")
-                if contract.application_generation.version == "goal-spec-checklist-application.v1" and len(prior) != 2:
+                if contract.application_generation.version in SPEC_GENERATIONS and len(prior) != 2:
                     raise DomainError("PERMISSION_DENIED", "Actual checker tool must precede final candidate")
                 with worker.store.tx() as c:
                     current = locked(worker, c, rid, fence)
@@ -797,7 +812,7 @@ def process(worker, run, contract):
                         candidate = parse_candidate(worker.store, c, current, msg, contract.limits)
                     except DomainError as exc:
                         if (
-                            contract.application_generation.version == "goal-spec-checklist-application.v1"
+                            contract.application_generation.version in SPEC_GENERATIONS
                             or
                             exc.code not in {"INVALID_MANIFEST", "INVALID_INPUT"}
                             or prior[-1]["parameters"].get("generation_diagnostic") is not None
@@ -968,7 +983,7 @@ def check_active(worker, c, run, attempt_id=None):
 def check_counters(store, c, run, rows):
     contract = store.frozen_contract(c, run)
     limits = contract.limits
-    spec = contract.application_generation.version == "goal-spec-checklist-application.v1"
+    spec = contract.application_generation.version in SPEC_GENERATIONS
     ctx = run["context"]
     if any(
         not isinstance(a["parameters"], dict)
@@ -1052,7 +1067,7 @@ def confirm(store, user, rid, request, limits):
             load_draft(store, c, user, aid, limits, lock=True)
             return {"id": aid, "state": "PREVIEW_ONLY", "cached": True}
         contract, material = source(store, c, run)
-        spec = contract.application_generation.version == "goal-spec-checklist-application.v1"
+        spec = contract.application_generation.version in SPEC_GENERATIONS
         if spec and request.artifact_write_consent is None:
             raise DomainError("PERMISSION_DENIED", "Explicit project checklist artifact consent required")
         if not spec and request.artifact_write_consent is not None:
