@@ -94,7 +94,7 @@ def enqueue(
         fp = fingerprint(request)
         old = (
             c.execute(
-                select(internal_app_runs).where(
+                select(internal_app_runs.c.id, internal_app_runs.c.fingerprint).where(
                     internal_app_runs.c.instance_id == iid,
                     internal_app_runs.c.principal_id == user,
                     internal_app_runs.c.request_key == key,
@@ -104,26 +104,26 @@ def enqueue(
             .first()
         )
         if old:
-            binding = (
-                c.execute(
-                    select(internal_run_bindings).where(
-                        internal_run_bindings.c.app_run_id == old["id"]
-                    )
-                )
-                .mappings()
-                .first()
-            )
-            if not binding or old["fingerprint"] != fp:
+            binding = c.execute(select(internal_run_bindings.c.run_id,
+                internal_run_bindings.c.snapshot["instance_id"].as_string().label("iid"))
+                .where(internal_run_bindings.c.app_run_id == old["id"])).mappings().first()
+            if not binding or binding["iid"] != iid:
+                raise DomainError("VERSION_CONFLICT")
+            header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
+                runs.c.request_key).where(runs.c.id == binding["run_id"])).mappings().first()
+            if (not header or header["principal_id"] != user or header["project_id"] != pid
+                    or header["runtime_id"] != i["runtime_id"] or header["request_key"] != "internal:" + old["id"]):
+                raise DomainError("PERMISSION_DENIED")
+            from .text_continuations import job_gate
+
+            job_gate(store, c, user, binding["run_id"])
+            if old["fingerprint"] != fp:
                 raise DomainError("VERSION_CONFLICT")
             job = c.execute(select(runs).where(runs.c.id == binding["run_id"])).mappings().one()
             load_binding(store, c, user, job, limits)
             return {
-                "run_id": job["id"],
-                "app_run_id": old["id"],
-                "status": job["status"],
-                "version": job["version"],
-                "cached": True,
-                "namespace": NAMESPACE,
+                "run_id": job["id"], "app_run_id": old["id"], "status": job["status"],
+                "version": job["version"], "cached": True, "namespace": NAMESPACE,
             }
         if i["revision"] != expected_revision or release["fingerprint"] != release_fp:
             raise DomainError("VERSION_CONFLICT")
@@ -408,7 +408,7 @@ def inspect_job(store, user, rid):
 
             if is_agent(release["snapshot"]["draft"]["candidate"]):
                 verified_source(store, c, user, rid, limits, require_initial=False)
-        records = data_rows(c, s["instance_id"])
+        records = data_rows(c, s["instance_id"], store=store, user=user, run_id=a["id"])
         result = next((dict(r) for r in records if r["run_id"] == a["id"]), None)
         if (release["snapshot"]["draft"]["candidate"]["actions"][0]["executor"]["ref"] == "text.literal_evidence"
                 and (job["status"] == "SUCCEEDED" or a["output"] is not None or a["result_version"] is not None
@@ -450,11 +450,22 @@ def command_job(store, user, rid, command, version):
     with store.tx() as c:
         pid = c.execute(select(runs.c.project_id).where(runs.c.id == rid)).scalar()
         store.lock_project(c, user, pid)
-        job = c.execute(select(runs).where(runs.c.id == rid).with_for_update()).mappings().first()
+        from .pb_natural_uses import control_scope
+
+        metadata = control_scope(store, c, user, rid, lock=True)
+        if metadata is not None and command != "resume":
+            job, a = metadata
+        else:
+            if metadata is not None:
+                from .text_continuations import job_gate
+
+                job_gate(store, c, user, rid)
+            job = c.execute(select(runs).where(runs.c.id == rid).with_for_update()).mappings().first()
         if not job or job["principal_id"] != user:
             raise DomainError("PERMISSION_DENIED")
         # Stop commands must remain possible after revocation. Resume requires current gateway.
-        s, a = load_binding(store, c, user, job, None, authorize=False)
+        if metadata is None or command == "resume":
+            s, a = load_binding(store, c, user, job, None, authorize=False)
         if job["version"] != version:
             raise DomainError("VERSION_CONFLICT")
         state = job["status"]

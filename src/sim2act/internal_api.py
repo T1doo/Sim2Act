@@ -103,6 +103,20 @@ def mount(app, store, limits, identity):
             if pid is None:
                 raise DomainError("PERMISSION_DENIED")
             store.own_project(c, user, pid)
+            # The requested instance is an authorization boundary, checked with
+            # scalar identifiers before any Run or accepted-binding body.
+            association = c.execute(select(internal_app_runs.c.instance_id,
+                internal_run_bindings.c.snapshot["instance_id"].as_string().label("accepted_iid"))
+                .join(internal_run_bindings, internal_run_bindings.c.app_run_id == internal_app_runs.c.id)
+                .where(internal_run_bindings.c.run_id == rid, internal_app_runs.c.principal_id == user)).mappings().first()
+            if not association or association["instance_id"] != iid or association["accepted_iid"] != iid:
+                raise DomainError("PERMISSION_DENIED")
+            if not historical:
+                from .pb_natural_uses import control_scope
+
+                metadata = control_scope(store, c, user, rid, iid=iid)
+                if metadata is not None:
+                    return {**metadata[0], "accepted_spec_metadata": True}
             if historical:
                 from .text_continuations import job_gate
 
@@ -284,7 +298,7 @@ def mount(app, store, limits, identity):
                 value, rel = lifecycle.instance(store, c, user, iid, limits)
                 if ("execution_source" in rel["snapshot"]) == dag_only:
                     items.append({**dict(value), "namespace": lifecycle.NAMESPACE,
-                        **({} if dag_only else {"data": [dict(x) for x in lifecycle.data_rows(c, iid)]})})
+                        **({} if dag_only else {"data": [dict(x) for x in lifecycle.data_rows(c, iid, store=store, user=user)]})})
         return envelope(items=items)
 
     @app.get("/api/internal/instances/{iid}")
@@ -478,6 +492,8 @@ def mount(app, store, limits, identity):
 
     @app.post("/api/internal/instances/{iid}/runs/{rid}/commands")
     def command(iid: str, rid: str, body: ControlInput, user=user_dependency):
-        scope_run(user, iid, rid)
-        status = (csv_dag.command_job if csv_dag.is_job(store, rid) else app_jobs.command_job)(store, user, rid, body.command, body.version)
+        scoped = scope_run(user, iid, rid)
+        dispatch = app_jobs.command_job if scoped.get("accepted_spec_metadata") else (
+            csv_dag.command_job if csv_dag.is_job(store, rid) else app_jobs.command_job)
+        status = dispatch(store, user, rid, body.command, body.version)
         return envelope(status=status)

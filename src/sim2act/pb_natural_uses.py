@@ -15,6 +15,7 @@ from .db import (
     delivery_graph_requests,
     fingerprint,
     grants,
+    internal_app_runs,
     internal_run_bindings,
     new_id,
     runs,
@@ -49,8 +50,7 @@ class CommitInput(Strict):
     consent: Literal["RUN_THIS_SAVED_PB_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"]
 
 
-@controlled
-def scope_gate(store, c, user, rid, header):
+def use_hint(c, rid):
     hinted = c.execute(select(delivery_graph_requests.c.app_id).where(
         delivery_graph_requests.c.app_id == rid,
         delivery_graph_requests.c.kind.in_([META, META + "_seal"]))).first()
@@ -61,7 +61,12 @@ def scope_gate(store, c, user, rid, header):
     hinted = hinted or c.execute(select(delivery_graph_requests.c.app_id).where(
         delivery_graph_requests.c.kind == USE,
         delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == rid)).first()
-    if not hinted:
+    return bool(hinted)
+
+
+@controlled
+def scope_gate(store, c, user, rid, header):
+    if not use_hint(c, rid):
         return False
     meta, seal = pair(c, user, rid, META, "accepted", RunScopeInput)
     require(fingerprint(meta.model_dump()) == fingerprint(seal) and meta.run_id == rid
@@ -77,6 +82,115 @@ def scope_gate(store, c, user, rid, header):
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, natural.READ)
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.project_id, natural.SAVE)
     return True
+
+
+def protected_instance(c, iid):
+    """Independent identifier-only hints, never a material or result body."""
+    from .db import app_drafts, internal_instances, internal_releases
+
+    kind = c.execute(select(internal_releases.c.snapshot["draft"]["candidate"]["spec_task"]["kind"].as_string())
+        .join(internal_instances, internal_instances.c.release_id == internal_releases.c.id)
+        .where(internal_instances.c.id == iid)).scalar_one_or_none()
+    app_kind = c.execute(select(app_drafts.c.candidate["spec_task"]["kind"].as_string())
+        .join(internal_instances, internal_instances.c.source_app_id == app_drafts.c.id)
+        .where(internal_instances.c.id == iid)).scalar_one_or_none()
+    ledger = c.execute(select(delivery_graph_requests.c.app_id).where(
+        ((delivery_graph_requests.c.app_id == iid) & delivery_graph_requests.c.kind.in_([USE, USE + "_seal"]))
+        | (delivery_graph_requests.c.kind.in_([spec.RUN_META, spec.RUN_META + "_seal"])
+           & (delivery_graph_requests.c.snapshot["request"]["instance_id"].as_string() == iid)))).first()
+    overlay = c.execute(select(internal_run_bindings.c.run_id)
+        .join(internal_app_runs, internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
+        .where(internal_app_runs.c.instance_id == iid,
+            internal_run_bindings.c.snapshot["pb_use"]["review"]["resource_id"].as_string().is_not(None))).first()
+    return kind == pb.KIND or app_kind == pb.KIND or bool(ledger or overlay)
+
+
+@controlled
+def data_scope_gate(store, c, user, iid, *, app_run_id=None):
+    if not protected_instance(c, iid):
+        return False
+    if store is None or user is None:
+        raise DomainError("PERMISSION_DENIED", "Protected history requires current target authority")
+    from .db import internal_instance_data, internal_instances
+
+    i = c.execute(select(internal_instances).where(internal_instances.c.id == iid,
+        internal_instances.c.principal_id == user)).mappings().first()
+    if i is None:
+        raise DomainError("PERMISSION_DENIED")
+    store.own_project(c, user, i["project_id"])
+    scope = internal_app_runs.c.instance_id == iid
+    records_scope = internal_instance_data.c.instance_id == iid
+    if app_run_id is not None:
+        scope = scope & (internal_app_runs.c.id == app_run_id)
+        records_scope = records_scope & (internal_instance_data.c.run_id == app_run_id)
+    app_headers = c.execute(select(internal_app_runs.c.id, internal_app_runs.c.instance_id,
+        internal_app_runs.c.principal_id, internal_app_runs.c.release_id, internal_app_runs.c.status,
+        internal_app_runs.c.result_version).where(scope)).mappings().all()
+    require(all(a["principal_id"] == user and a["instance_id"] == iid for a in app_headers))
+    covered = {a["id"]: a for a in app_headers}
+    record_headers = c.execute(select(internal_instance_data.c.run_id, internal_instance_data.c.release_id,
+        internal_instance_data.c.version).where(records_scope)).mappings().all()
+    require(all(r["run_id"] in covered and covered[r["run_id"]]["status"] == "SUCCEEDED"
+        and covered[r["run_id"]]["release_id"] == r["release_id"]
+        and covered[r["run_id"]]["result_version"] == r["version"] for r in record_headers),
+        "Typed history is outside the accepted instance scope")
+    spec.instance_scope_gate(store, c, user, i, app_run_id=app_run_id)
+    return True
+
+
+@controlled
+def control_scope(store, c, user, rid, *, iid=None, lock=False):
+    """Owner stop authority uses accepted identifiers, never protected bodies.
+
+    Current resource authority is deliberately required by resume's job gate;
+    pause/cancel remain possible after revocation or expiry.
+    """
+    from .db import events, internal_instances
+
+    hint = c.execute(select(delivery_graph_requests.c.app_id).where(
+        delivery_graph_requests.c.app_id == rid,
+        delivery_graph_requests.c.kind.in_([spec.RUN_META, spec.RUN_META + "_seal"]))).first()
+    association = c.execute(select(internal_run_bindings.c.snapshot["instance_id"].as_string())
+        .where(internal_run_bindings.c.run_id == rid)).scalar_one_or_none()
+    protected = association is not None and protected_instance(c, association)
+    if not hint and not use_hint(c, rid) and not protected:
+        return None
+    q = select(runs.c.id, runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
+        runs.c.request_key, runs.c.fingerprint, runs.c.status, runs.c.version, runs.c.cancel_intent)
+    header = c.execute((q.with_for_update() if lock else q).where(runs.c.id == rid)).mappings().first()
+    if header is None or header["principal_id"] != user:
+        raise DomainError("PERMISSION_DENIED")
+    store.own_project(c, user, header["project_id"])
+    meta, seal_meta = pair(c, user, rid, spec.RUN_META, "accepted", RunScopeInput)
+    require(meta.model_dump() == seal_meta and meta.run_id == rid
+        and meta.principal_id == user and meta.project_id == header["project_id"]
+        and meta.runtime_id == header["runtime_id"] and header["request_key"] == "internal:" + meta.app_run_id)
+    if iid is not None and meta.instance_id != iid:
+        raise DomainError("PERMISSION_DENIED")
+    if use_hint(c, rid):
+        own, own_seal = pair(c, user, rid, META, "accepted", RunScopeInput)
+        require(own.model_dump() == own_seal == meta.model_dump())
+    instance = c.execute(select(internal_instances.c.project_id, internal_instances.c.runtime_id,
+        internal_instances.c.source_app_id).where(internal_instances.c.id == meta.instance_id,
+        internal_instances.c.principal_id == user)).mappings().first()
+    require(instance is not None and instance["project_id"] == meta.project_id
+        and instance["runtime_id"] == meta.runtime_id and instance["source_app_id"] == meta.app_id)
+    fields = ["run_id", "app_run_id", "instance_id", "release_id", "principal_id", "project_id", "runtime_id", "request_fingerprint"]
+    binding = c.execute(select(internal_run_bindings.c.fingerprint,
+        *(internal_run_bindings.c.snapshot[k].as_string().label(k) for k in fields))
+        .where(internal_run_bindings.c.run_id == rid, internal_run_bindings.c.app_run_id == meta.app_run_id)).mappings().first()
+    app_run = c.execute(select(internal_app_runs.c.id, internal_app_runs.c.fingerprint,
+        internal_app_runs.c.instance_id, internal_app_runs.c.principal_id, internal_app_runs.c.release_id)
+        .where(internal_app_runs.c.id == meta.app_run_id)).mappings().first()
+    require(binding is not None and app_run is not None and binding["fingerprint"] == header["fingerprint"]
+        and all(binding[k] == getattr(meta, k) for k in fields if k != "request_fingerprint")
+        and app_run["instance_id"] == meta.instance_id and app_run["principal_id"] == user
+        and app_run["release_id"] == meta.release_id and app_run["fingerprint"] == binding["request_fingerprint"])
+    accepted = c.execute(select(events.c.data["instance_id"].as_string().label("iid"),
+        events.c.data["app_run_id"].as_string().label("aid")).where(events.c.run_id == rid,
+        events.c.kind == "ACCEPTED", events.c.data["namespace"].as_string() == "INTERNAL_APPRUN")).mappings().all()
+    require(len(accepted) == 1 and accepted[0]["iid"] == meta.instance_id and accepted[0]["aid"] == meta.app_run_id)
+    return dict(header), dict(app_run)
 
 
 @controlled

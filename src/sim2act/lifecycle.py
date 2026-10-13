@@ -477,11 +477,15 @@ def instance(store, c, user, iid, limits, *, lock=False):
     return i, r
 
 
-def data_rows(c, iid):
+def data_rows(c, iid, *, store=None, user=None, run_id=None):
+    from .pb_natural_uses import data_scope_gate
+
+    data_scope_gate(store, c, user, iid, app_run_id=run_id)
     rows = (
         c.execute(
             select(internal_instance_data)
-            .where(internal_instance_data.c.instance_id == iid)
+            .where(internal_instance_data.c.instance_id == iid,
+                *([] if run_id is None else [internal_instance_data.c.run_id == run_id]))
             .order_by(internal_instance_data.c.version)
         )
         .mappings()
@@ -509,7 +513,7 @@ def data_rows(c, iid):
 def inspect_instance(store, user, iid, limits):
     with store.tx() as c:
         i, release = instance(store, c, user, iid, limits)
-        records = data_rows(c, iid)
+        records = data_rows(c, iid, store=store, user=user)
         from . import pa_spec_apps, text_workflows
         if pa_spec_apps.is_candidate(release["snapshot"]["draft"]["candidate"]):
             pa_spec_apps.verify_instance_records(store, c, user, i, records, limits)
@@ -655,7 +659,7 @@ def switch_target(store, c, user, i, old, target, limits):
         not same_schema and target_version <= old_version
     ):
         raise DomainError("VERSION_CONFLICT", "Unknown data version transition")
-    records = data_rows(c, i["id"])
+    records = data_rows(c, i["id"], store=store, user=user)
     for record in records:
         validate_value(target["snapshot"]["data_schema"], record["data"], "retained_data")
     return records
@@ -794,7 +798,7 @@ def commit_switch(store, user, approval_id, exact_fp, limits):
             or i["data_version"] != p["data_version"]
             or target["fingerprint"] != p["target_fingerprint"]
             or grant_version(c, pid, user) != p["grant_version"]
-            or fingerprint([dict(x) for x in data_rows(c, i["id"])]) != p["data_fingerprint"]
+            or fingerprint([dict(x) for x in data_rows(c, i["id"], store=store, user=user)]) != p["data_fingerprint"]
         ):
             raise DomainError("VERSION_CONFLICT", "Switch preconditions changed")
         switch_target(store, c, user, i, old, target, limits)

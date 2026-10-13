@@ -505,6 +505,7 @@ def job_scope_gate(store, c, user, rid):
         and meta.app_id in ids and row["request_key"] == "internal:" + meta.app_run_id
         and len(accepted) == 1 and accepted[0]["iid"] == meta.instance_id
         and accepted[0]["aid"] == meta.app_run_id)
+    store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, "resource.read")
     require(scope_gate(store, c, user, meta.app_id))
     return True
 
@@ -949,17 +950,26 @@ def verify_job(store, c, user, job, limits):
 
 
 @controlled
-def verify_instance_records(store, c, user, instance, records, limits):
+def instance_scope_gate(store, c, user, instance, *, app_run_id=None):
     from .db import delivery_graph_requests
-    apps = set(c.execute(select(internal_app_runs.c.id).where(internal_app_runs.c.instance_id == instance["id"])).scalars())
+    q = select(internal_app_runs.c.id).where(internal_app_runs.c.instance_id == instance["id"])
+    if app_run_id is not None:
+        q = q.where(internal_app_runs.c.id == app_run_id)
+    apps = set(c.execute(q).scalars())
+    require(app_run_id is None or apps == {app_run_id})
+    binding_scope = internal_run_bindings.c.snapshot["instance_id"].as_string() == instance["id"]
+    event_scope = events.c.data["instance_id"].as_string() == instance["id"]
+    if app_run_id is not None:
+        binding_scope = binding_scope & (internal_run_bindings.c.snapshot["app_run_id"].as_string() == app_run_id)
+        event_scope = event_scope & (events.c.data["app_run_id"].as_string() == app_run_id)
     bindings = c.execute(select(internal_run_bindings.c.run_id, internal_run_bindings.c.app_run_id,
         internal_run_bindings.c.snapshot["instance_id"].as_string().label("iid"))
-        .where((internal_run_bindings.c.snapshot["instance_id"].as_string() == instance["id"])
+        .where(binding_scope
             | internal_run_bindings.c.app_run_id.in_(apps))).mappings().all()
     accepted = c.execute(select(events.c.run_id, events.c.data["app_run_id"].as_string().label("aid"),
         events.c.data["instance_id"].as_string().label("iid"))
         .where(events.c.kind == "ACCEPTED", events.c.data["namespace"].as_string() == "INTERNAL_APPRUN",
-            (events.c.data["instance_id"].as_string() == instance["id"])
+            event_scope
             | events.c.data["app_run_id"].as_string().in_(apps)
             | events.c.run_id.in_([b["run_id"] for b in bindings]))).mappings().all()
     require(len(bindings) == len(apps) == len(accepted)
@@ -968,9 +978,24 @@ def verify_instance_records(store, c, user, instance, records, limits):
         and all(b["iid"] == instance["id"] for b in bindings) and all(a["iid"] == instance["id"] for a in accepted))
     jobs = {b["run_id"] for b in bindings}
     for kind in (RUN_META, RUN_META + "_seal"):
-        ids = set(c.execute(select(delivery_graph_requests.c.app_id).where(delivery_graph_requests.c.kind == kind,
-            delivery_graph_requests.c.snapshot["request"]["instance_id"].as_string() == instance["id"])).scalars())
+        ledger_scope = delivery_graph_requests.c.snapshot["request"]["instance_id"].as_string() == instance["id"]
+        if app_run_id is not None:
+            ledger_scope = ledger_scope & (delivery_graph_requests.c.snapshot["request"]["app_run_id"].as_string() == app_run_id)
+        ids = set(c.execute(select(delivery_graph_requests.c.app_id).where(
+            delivery_graph_requests.c.kind == kind, ledger_scope)).scalars())
         require(ids == jobs)
+    for rid in jobs:
+        require(job_scope_gate(store, c, user, rid))
+        header = c.execute(select(runs.c.project_id, runs.c.runtime_id, runs.c.principal_id)
+            .where(runs.c.id == rid)).mappings().first()
+        require(header is not None and header["project_id"] == instance["project_id"]
+            and header["runtime_id"] == instance["runtime_id"] and header["principal_id"] == user)
+    return jobs
+
+
+@controlled
+def verify_instance_records(store, c, user, instance, records, limits):
+    jobs = instance_scope_gate(store, c, user, instance)
     verified = set()
     for rid in jobs:
         job_scope_gate(store, c, user, rid)
