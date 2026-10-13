@@ -152,9 +152,8 @@ def test_same_saved_pa_third_material_cold_worker_and_fresh_owner(env, tmp_path)
         assert s["current"]["source_goal"]["card_id"] == goal["id"] and s["latest"] is None
         reviewed, _ = preview(current, path)
         accepted = client.post(path + "-requests", json=decision(reviewed))
-        assert accepted.status_code == 201 and accepted.json()["status"] == "ACCEPTED", (
-            accepted.text
-        )
+        assert accepted.status_code == 201, accepted.text
+        assert state(current, path, "decision")["owner_acceptance"] == "ACCEPTED"
         assert checklist["owner_acceptance"] == "PENDING"
         (tmp_path / "third-proof.json").write_text(
             json.dumps(
