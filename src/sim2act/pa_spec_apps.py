@@ -507,6 +507,8 @@ def job_scope_gate(store, c, user, rid):
         and accepted[0]["aid"] == meta.app_run_id)
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, "resource.read")
     require(scope_gate(store, c, user, meta.app_id))
+    from . import natural_spec_corrections
+    natural_spec_corrections.gate(store,c,user,rid)
     return True
 
 
@@ -722,7 +724,10 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     # fully validated by load_binding rather than recursively replaying it twice.
     draft = release["snapshot"]["draft"]
     require(is_candidate(draft["candidate"]))
-    if "pb_use" in snapshot:
+    if "human_correction" in snapshot:
+        from . import natural_spec_corrections
+        draft, manifest, report, source, goal = natural_spec_corrections.bound(store,c,user,job,snapshot,release,limits)
+    elif "pb_use" in snapshot:
         from . import pb_natural_uses
         draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits)
     else:
@@ -759,9 +764,12 @@ def bound(store, c, user, job, limits, *, validate_input=True):
         validate_value(manifest.input_schema, snapshot["input"])
     plan = dict(definition=draft["candidate"], input=snapshot["input"],
         plan_fingerprint=fingerprint(draft["candidate"]), source_hash=source["hash"])
-    return dict(snapshot=snapshot, app_run=app_run, release=release, draft=draft,
+    value = dict(snapshot=snapshot, app_run=app_run, release=release, draft=draft,
         source=source, goal=goal, plan=plan, report=report,
         audit_fingerprint=audit_fingerprint(store, c, user, draft))
+    if "human_correction" in snapshot:
+        value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot)
+    return value
 
 
 def audit_fingerprint(store, c, user, draft):
@@ -770,6 +778,11 @@ def audit_fingerprint(store, c, user, draft):
     No cross-transaction cache. Full model history is verified at step entry and
     final readback; repeated commit guards compare every stored audit byte.
     """
+    if "correction_run_id" in draft:
+        from . import natural_spec_corrections
+        ref = natural_spec_corrections.gate(store,c,user,draft["correction_run_id"])
+        return fingerprint(dict(correction=ref.model_dump(),base=audit_fingerprint(store,c,user,
+            c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"])).mappings().one())))
     if "pb_use_run_id" in draft:
         from .pb_natural_uses import audit
         return audit(store, c, user, draft)

@@ -530,6 +530,8 @@ def submit(store, user, iid, limits, body):
 
 
 def mount(app, store, limits, identity):
+    from . import natural_spec_corrections
+    natural_spec_corrections.mount(app, store, limits, identity)
     user_dependency = Depends(identity)
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/spec-owner-review")
@@ -621,8 +623,7 @@ def natural_payload(c, row):
     return value
 
 
-def natural_context(store, c, user, iid, rid, limits):
-    from . import natural_specs
+def natural_authority(store, c, user, iid, rid):
     from . import pa_spec_apps as spec
     spec.require(spec.job_scope_gate(store, c, user, rid))
     # Authorize saved artifact BEFORE full Run, AppRun, typed body or owner payload.
@@ -653,11 +654,18 @@ def natural_context(store, c, user, iid, rid, limits):
         and committed == effects == typed_artifacts == [linked["artifact"]],
         "Exact successful saved artifact required")
     store.authorize(c, user, header["runtime_id"], header["project_id"], committed[0], "resource.read")
+    return dict(header)
+
+
+def natural_context(store, c, user, iid, rid, limits):
+    from . import natural_specs
+    from . import pa_spec_apps as spec
+    natural_authority(store, c, user, iid, rid)
     job = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
     binding, _, proved = spec.verify_job(store, c, user, job, limits)
     a, snap, release = binding["app_run"], binding["snapshot"], binding["release"]
     spec.require(natural_specs.is_candidate(binding["draft"]["candidate"])
-        and a["instance_id"] == iid and a["output"]["resource_id"] == committed[0])
+        and a["instance_id"] == iid and a["output"]["resource_id"] == c.execute(select(events.c.data["artifact_resource"].as_string()).where(events.c.run_id == rid, events.c.kind == "SPEC_COMMITTED")).scalar_one())
     i = dict(c.execute(select(internal_instances).where(internal_instances.c.id == iid)).mappings().one())
     spec.require(i["revision"] == snap["expected_revision"] and i["release_id"] == release["id"]
         and i["data_version"] == a["result_version"], "Selected result is no longer current")
@@ -678,7 +686,7 @@ def natural_context(store, c, user, iid, rid, limits):
         items.extend(dict(id=f"{name}.{n}", text=text) for n, text in enumerate(content[name], 1))
     items.append(dict(id="source-and-result", text="核对原文、成果的条件、例外、关系与未决项；引用 PASS 不证明语义正确"))
     spec.require(len(items) <= 100)
-    return dict(version=NATURAL_VERSION, principal_id=user, project_id=i["project_id"],
+    value = dict(version=NATURAL_VERSION, principal_id=user, project_id=i["project_id"],
         instance_id=iid, app_id=i["source_app_id"], run_id=rid, app_run_id=a["id"],
         instance_revision=i["revision"], release_id=release["id"], release_fingerprint=release["fingerprint"],
         effective_plan_fingerprint=fingerprint(binding["draft"]["candidate"]),
@@ -687,6 +695,9 @@ def natural_context(store, c, user, iid, rid, limits):
         output_fingerprint=fingerprint(a["output"]), output=a["output"],
         actual_operations=proved, grant_version=lifecycle.grant_version(c, i["project_id"], user),
         technical_semantic_status="UNKNOWN", formal_publication_enabled=False)
+    if binding.get("human_correction"):
+        value["human_correction"] = binding["human_correction"]
+    return value
 
 
 def natural_append(c, user, pid, iid, rid, rows, body, status, **details):

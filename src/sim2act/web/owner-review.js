@@ -11,7 +11,7 @@ function ownerFence(view){
   return ()=>ownerCurrent(view) && generation===ownerGeneration && edit===ownerEditGeneration && workspace===workspaceSelectionGeneration;
 }
 function clearOwnerReview(){
-  ownerGeneration++;ownerEditGeneration++;ownerView=null;
+  clearCorrectionView();ownerGeneration++;ownerEditGeneration++;ownerView=null;
   $("owner-panel").hidden=true;$("owner-criteria").replaceChildren();$("owner-proof").textContent="";$("owner-natural-evidence").replaceChildren();
   $("owner-status").textContent="";$("owner-history").textContent="";$("owner-form").hidden=true;
   $("owner-ack").checked=false;$("owner-stop-reason").value="";$("owner-key").value="";
@@ -24,6 +24,7 @@ function ownerButtons(view){
   $("owner-cancel").disabled=view.busy || !!pending || latest?.kind!=="PREPARE" || !$("owner-stop-reason").value.trim();
   $("owner-revoke").disabled=view.busy || !!pending || latest?.kind!=="DECIDE" || !$("owner-stop-reason").value.trim();
   $("owner-refresh").disabled=view.busy || (view.spec && !view.rid);$("owner-recover").disabled=view.busy || (view.spec && !view.rid) || !$("owner-key").value.trim();
+  correctionButtons(view);
 }
 function ownerEdited(){ownerEditGeneration++;if(ownerView)ownerButtons(ownerView);}
 function ownerRender(view,state){
@@ -34,7 +35,14 @@ function ownerRender(view,state){
   const record=state.record,contract=record?.payload?.contract || state.current || state.prepare_current;
   $("owner-proof").textContent=(state.content_access || state.prepare_current) && contract ? JSON.stringify({record_id:record?.id,record_fingerprint:record?.fingerprint,expires_at:record?.payload?.expires_at,contract,choices:record?.payload?.choices},null,2) : "当前仅可读取本人停止控制元数据；历史回执不代表当前版本仍获签收。";
   $("owner-natural-evidence").replaceChildren();
-  if(view.spec && state.content_access && contract?.output?.checklist)renderSpecChecklist($("owner-natural-evidence"),contract.output.checklist);
+  if(view.spec && state.content_access && contract?.output?.checklist){
+    renderSpecChecklist($("owner-natural-evidence"),contract.output.checklist);
+    if(contract.human_correction){
+      const title=document.createElement("h4");title.textContent=`原结果 v${contract.human_correction.reference.base_data_version} 的修正问题 → 本结果 v${contract.result_version}，仍须逐项人工判断`;
+      $("owner-natural-evidence").append(title);
+      for(const issue of contract.human_correction.issues){const text=document.createElement("p");text.textContent=`${issue.item_id} · 原标准：${issue.criterion} · 原要求修正的理由：${issue.reason} · 本结果的同一标准待重新判定（不声明已修复）`;$("owner-natural-evidence").append(text);}
+    }
+  }
   const canDecide=state.content_access && state.owner_acceptance==="PENDING" && record?.kind==="PREPARE";
   $("owner-form").hidden=!canDecide;
   if(!canDecide || record.id!==previous){
@@ -114,6 +122,7 @@ async function openOwnerReview(engineeringView){
   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
   const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,connection:identityConnectionGeneration,spec:!!engineeringView.spec,rid:null,state:null,busy:false,readGeneration:0};
   ownerView=view;$("owner-panel").hidden=false;
+  $("correction-key").value=correctionPending.get(ownerKey(view))?.key||"";
   $("owner-run").replaceChildren(new Option("手动选择已完成的新输入任务",""),...instance.runs.filter(run=>run.status==="SUCCEEDED").map(run=>new Option(`${run.id} · 结果 v${run.result_version}`,run.id)));
   const pending=ownerPending.get(ownerKey(view));if(pending)$("owner-key").value=pending.request_key;
   ownerButtons(view);
@@ -169,10 +178,11 @@ for(const [id,command] of [["owner-cancel","CANCEL"],["owner-revoke","REVOKE"]])
 for(const id of ["owner-run","owner-ack","owner-stop-reason","owner-key"]){$(id).oninput=ownerEdited;$(id).onchange=ownerEdited;}
 $("owner-run").onchange=safe(async()=>{
   ownerEdited();const view=ownerView;if(!view?.spec || !ownerCurrent(view))return;
-  ownerGeneration++;view.readGeneration++;view.rid=$("owner-run").value;view.state=null;
+  clearCorrectionView();ownerGeneration++;view.readGeneration++;view.rid=$("owner-run").value;view.state=null;
   $("owner-form").hidden=true;$("owner-criteria").replaceChildren();$("owner-proof").textContent="";
   $("owner-history").textContent="";$("owner-natural-evidence").replaceChildren();$("owner-ack").checked=false;
   $("owner-key").value=ownerPending.get(ownerKey(view))?.request_key||"";
+  $("correction-key").value=correctionPending.get(ownerKey(view))?.key||"";
   ownerButtons(view);if(!view.rid)return;
   const current=ownerFence(view),reading=ownerRead(view),generation=view.readGeneration;
   try{await reading;}catch(error){if(current()&&generation===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail||error.message}`;}
@@ -257,3 +267,98 @@ for(const [id,recover] of [["app-own-goal-read",false],["app-own-goal-recover",t
   try{await reading;}catch(e){if(current()&&readGeneration===v.readGeneration)$("app-own-goal-status").textContent=e.message;}
   finally{v.busy=false;if(appOwnGoalCurrent(v))appOwnGoalButtons(v);}
 });
+
+// A correction is a separate explicit bounded Run; old declarations are immutable.
+const correctionPending=new Map();
+function clearCorrectionView(){
+  $("correction-panel").hidden=true;
+  for(const id of ["correction-proof","correction-status","correction-key"])$(id)[id==="correction-key"?"value":"textContent"]="";
+  $("correction-ack").checked=false;$("correction-approval").hidden=true;
+  if(ownerView)ownerView.correctionReview=null;
+}
+function correctionButtons(view){
+  if(!ownerCurrent(view))return;
+  const pending=correctionPending.get(ownerKey(view));
+  $("correction-panel").hidden=!view.spec;
+  $("correction-prepare").disabled=view.busy||!!pending||view.state?.owner_acceptance!=="REJECTED"||!view.state?.content_access||!!view.state?.current?.human_correction;
+  $("correction-submit").disabled=view.busy||!!pending||!view.correctionReview||!$("correction-ack").checked;
+  $("correction-recover").disabled=view.busy||!view.rid||!$("correction-key").value.trim();
+  $("correction-reset").disabled=view.busy||!!pending;
+}
+function correctionPath(v){return `/api/internal/instances/${v.iid}/runs/${encodeURIComponent(v.rid)}`;}
+async function correctionValidate(v,value,current){
+  const {review_fingerprint,...unsigned}=value;
+  if(value.namespace!=="natural-spec-correction.v1"||value.principal_id!==v.principal||value.project_id!==v.project||value.instance_id!==v.iid||value.parent_run_id!==v.rid||value.formal_publication_enabled!==false||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"||value.real_model_allowance!==0||value.proposed_artifact_writes_at_most!==1||value.consent!=="RUN_NEW_BOUNDED_CORRECTION_KEEP_ORIGINAL_GOAL_AND_CRITERIA"||!value.declaration?.payload?.choices?.some(x=>x.decision==="REJECT"))throw Error("修正预览的身份、原拒绝或限额不一致");
+  const hash=await ownerHash(unsigned);if(!current())return false;
+  if(hash!==review_fingerprint)throw Error("修正预览指纹不一致");
+  if(value.context.run_id!==v.rid||value.context.instance_id!==v.iid||value.declaration.kind!=="DECIDE"||value.declaration.status!=="REJECTED"||!ownerSame(value.context.items,value.declaration.payload.contract.items)||!ownerSame(value.context.goal,value.declaration.payload.contract.goal))throw Error("修正不能降低原Goal或验收标准");
+  return true;
+}
+function correctionRender(v,value){
+  if(!ownerCurrent(v))return;
+  v.correctionReview=value;$("correction-approval").hidden=false;$("correction-ack").checked=false;
+  $("correction-key").value=value.request_key;
+  $("correction-proof").textContent=JSON.stringify({original_goal:value.context.goal,original_criteria:value.context.items,
+    rejected_declaration:value.declaration,original_result_version:value.context.result_version,
+    proposed_limits:value.proposed_limits,proposed_model_nodes:value.proposed_model_nodes,
+    proposed_artifact_writes_at_most:value.proposed_artifact_writes_at_most,real_model_allowance:value.real_model_allowance,
+    expires_at:value.expires_at,review_fingerprint:value.review_fingerprint},null,2);
+  $("correction-status").textContent="原Goal与全部验收标准保持不变。请核对逐项理由、本次限额与模型节点；确认后仅创建一条新Run，新结果需另行人工判定。真实模型额度0，正式发布关闭。";
+  correctionButtons(v);
+}
+async function correctionRecover(v,key,stage){
+  const fence=ownerFence(v),serial=++v.readGeneration,current=()=>fence()&&serial===v.readGeneration;
+  const value=await api(correctionPath(v)+(stage==="REVIEW"?"/correction-reviews/":"/correction-requests/")+encodeURIComponent(key));
+  if(!current())return false;
+  const review=stage==="REVIEW"?value:value.review;
+  if(!await correctionValidate(v,review,current)||!current())return false;
+  const pending=correctionPending.get(ownerKey(v));
+  if(review.request_key!==key||(pending&&pending.key===key&&(pending.stage!==stage||pending.body.expected_review_fingerprint&&pending.body.expected_review_fingerprint!==review.review_fingerprint)))throw Error("原key修正回执不一致");
+  if(stage==="RUN"&&(value.run_id===v.rid||value.principal_id!==v.principal||value.instance_id!==v.iid||value.parent_run_id!==v.rid||value.request_key!==key||value.formal_publication_enabled!==false||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"))throw Error("新Run回执绑定不一致");
+  if(pending?.key===key)correctionPending.delete(ownerKey(v));
+  correctionRender(v,review);
+  if(stage==="RUN"){
+    v.correctionReview=null;$("correction-approval").hidden=true;
+    $("correction-status").textContent=`旧问题来自结果 v${review.context.result_version} · 新Run ${value.run_id} · ${value.status}${value.result_version?" · 新结果 v"+value.result_version:""}。旧成果与声明保留；刷新运行历史选择新结果，再独立人工判定。`;
+    $("correction-proof").textContent=JSON.stringify(value,null,2);
+  }
+  correctionButtons(v);return true;
+}
+$("correction-prepare").onclick=safe(async()=>{
+  const v=ownerView;if(!v?.spec||!ownerCurrent(v)||v.busy||correctionPending.has(ownerKey(v))||v.state?.owner_acceptance!=="REJECTED"||!v.state.content_access||v.state.current.human_correction)return;
+  const fence=ownerFence(v),context=v.state.current,decl=v.state.latest,scopeKey=ownerKey(v),endpoint=correctionPath(v),serial=++v.readGeneration;
+  const hash=await ownerHash(context);if(!fence()||serial!==v.readGeneration||v.state.current!==context)return;
+  const body={request_key:crypto.randomUUID(),expected_owner_sequence:v.state.sequence,declaration_id:decl.id,declaration_fingerprint:decl.fingerprint,expected_context_fingerprint:hash};
+  correctionPending.set(scopeKey,{key:body.request_key,stage:"REVIEW",body});$("correction-key").value=body.request_key;v.busy=true;correctionButtons(v);
+  try{const value=await api(endpoint+"/correction-reviews","POST",body);
+    if(!fence()||serial!==v.readGeneration||!await correctionValidate(v,value,fence)||!fence())return;
+    if(value.request_key!==body.request_key||value.declaration.id!==decl.id||value.declaration.fingerprint!==decl.fingerprint||await ownerHash(value.context)!==hash)throw Error("原拒绝预览回执不一致");
+    if(!fence())return;correctionPending.delete(scopeKey);correctionRender(v,value);
+  }catch(e){if(fence())$("correction-status").textContent=`预览回执未确认：${e.detail||e.message}。保留原key，仅GET恢复。`;}
+  finally{v.busy=false;if(ownerCurrent(v))correctionButtons(v);}
+});
+$("correction-submit").onclick=safe(async()=>{
+  const v=ownerView;if(!v?.spec||!ownerCurrent(v)||v.busy||!v.correctionReview||!$("correction-ack").checked||correctionPending.has(ownerKey(v)))return;
+  const review=v.correctionReview,scopeKey=ownerKey(v),endpoint=correctionPath(v),rid=v.rid,fence=ownerFence(v);
+  const body={request_key:review.request_key,expected_review_fingerprint:review.review_fingerprint,consent:review.consent};
+  const pending={key:body.request_key,stage:"RUN",body};correctionPending.set(scopeKey,pending);v.busy=true;v.readGeneration++;correctionButtons(v);
+  let reading=false;
+  try{const receipt=await api(endpoint+"/correction-runs","POST",body);
+    if(!fence())return;if(receipt.run_id===rid||!receipt.run_id)throw Error("新Run回执不一致");
+    reading=true;await correctionRecover(v,body.request_key,"RUN");
+  }catch(e){
+    const proof=e.submissionRejection;
+    if(!reading&&e.httpStatus>=400&&e.httpStatus<500&&["INVALID_INPUT","VERSION_CONFLICT","GRANT_REVOKED","PERMISSION_DENIED","RESOURCE_UNAVAILABLE","UNSUPPORTED_CAPABILITY"].includes(e.message)&&proof?.namespace==="internal-run-rejection.v1"&&proof.endpoint==="correction-runs"&&proof.parent_run_id===rid&&proof.principal_id===v.principal&&proof.project_id===v.project&&proof.instance_id===v.iid&&proof.request_key===body.request_key&&proof.acceptance==="NOT_ACCEPTED"&&proof.previous_request==="ABSENT"&&proof.phase==="CORRECTION_TX_ROLLED_BACK"&&proof.request_fingerprint===await ownerHash(body)&&correctionPending.get(scopeKey)===pending)correctionPending.delete(scopeKey);
+    if(fence())$("correction-status").textContent=`修正提交未确认：${e.detail||e.message}。未知结果只以原key读取，不自动重发。`;
+  }finally{v.busy=false;if(ownerCurrent(v))correctionButtons(v);else if(ownerView&&ownerCurrent(ownerView)&&ownerKey(ownerView)===scopeKey)correctionButtons(ownerView);}
+});
+$("correction-recover").onclick=safe(async()=>{
+  const v=ownerView;if(!v?.spec||!ownerCurrent(v)||v.busy)return;
+  const key=$("correction-key").value.trim(),pending=correctionPending.get(ownerKey(v));
+  const stage=pending?.key===key?pending.stage:($("correction-recovery-stage").value||"RUN");
+  const fence=ownerFence(v);v.busy=true;correctionButtons(v);
+  try{await correctionRecover(v,key,stage);}catch(e){if(fence())$("correction-status").textContent=`读取未确认：${e.detail||e.message}；保留原key。`;}
+  finally{v.busy=false;if(ownerCurrent(v))correctionButtons(v);}
+});
+$("correction-reset").onclick=safe(()=>{const v=ownerView;if(!v||v.busy||correctionPending.has(ownerKey(v)))return;clearCorrectionView();correctionButtons(v);});
+for(const id of ["correction-ack","correction-key","correction-recovery-stage"]){$(id).oninput=()=>{ownerEdited();if(ownerView)correctionButtons(ownerView);};$(id).onchange=$(id).oninput;}

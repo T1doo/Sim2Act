@@ -98,10 +98,12 @@ def submission_tx(store, guard):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
+    if human_correction is not None and (pb_use is not None or offline_replay is not None or owner_goal_fp is not None):
+        raise DomainError("INVALID_INPUT", "Correction cannot change another execution mode")
     guard: dict = {}
     with submission_tx(store, guard) as c:
         pid = c.execute(
@@ -110,6 +112,9 @@ def enqueue(
         store.lock_project(c, user, pid)
         if submission is not None:
             guard["proof"] = rejection_proof(c, user, iid, pid, key, submission, "TX_ROLLED_BACK")
+        if human_correction is not None:
+            from . import natural_spec_corrections
+            guard["proof"] = natural_spec_corrections.rejection_proof(c,user,iid,human_correction[1]["parent_run_id"],human_correction[0])
         i, release = instance(store, c, user, iid, limits, lock=True)
         from .text_continuations import execution
 
@@ -140,6 +145,12 @@ def enqueue(
             request["owner_goal_binding_fingerprint"] = owner_goal_fp
         if pb_use is not None:
             request["pb_use"] = pb_use.model_dump()
+        if human_correction is not None:
+            from . import natural_spec_corrections as correction
+            correction_body, correction_value = human_correction
+            correction_ref = correction.reference(correction_value)
+            request["human_correction"] = correction_ref.model_dump()
+            request["correction_request"] = correction_body.model_dump()
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -187,6 +198,10 @@ def enqueue(
         ):
             raise DomainError("VERSION_CONFLICT", "Confirm the current own GoalCard binding for this Run")
         use_checked = use_goal = None
+        if human_correction is not None:
+            correction.approve(store,c,user,iid,correction_ref.parent_run_id,limits,correction_body,correction_value)
+            draft = {**copy.deepcopy(draft), "candidate": correction_value["effective_candidate"],
+                "fingerprint": fingerprint(correction_value["effective_candidate"])}
         if pb_use is not None:
             from . import pb_natural_uses
             use_checked, _, use_goal = pb_natural_uses.approve(store, c, user, i, release, pb_use, limits)
@@ -238,7 +253,7 @@ def enqueue(
         ).model_dump()
         from . import pa_spec_apps, text_workflows
         if pa_spec_apps.is_candidate(draft["candidate"]):
-            source_goal = use_goal.model_dump() if use_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
+            source_goal = correction_value["context"]["source_goal"] if human_correction is not None else use_goal.model_dump() if use_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
             snapshot["spec_goal"] = source_goal
             content = source_goal["snapshot"]["content"]
             contract["goal"].update(goal_id=source_goal["card_id"], goal=content["goal"],
@@ -332,6 +347,14 @@ def enqueue(
                 "input_fingerprint": fp,
             },
         )
+        if human_correction is not None:
+            correction.seal(c,user,snapshot,correction_ref)
+            store.event(c,jid,"HUMAN_CORRECTION_ACCEPTED",dict(parent_run_id=correction_ref.parent_run_id,
+                review_key=correction_ref.review_key,review_fingerprint=correction_ref.review_fingerprint))
+            correction.gate(store,c,user,jid)
+            from . import owner_acceptance
+            owner_acceptance.natural_final_gate(store,c,user,iid,correction_ref.parent_run_id,
+                correction_value["context"],expires_at=correction_value["expires_at"])
         if pb_use is not None:
             # Verify all new grants, accepted binding and seals before transaction commit.
             job = c.execute(select(runs).where(runs.c.id == jid)).mappings().one()
@@ -379,6 +402,9 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
     }
     if "pb_use" in s:
         request["pb_use"] = s["pb_use"]
+    if "human_correction" in s:
+        request["human_correction"] = s["human_correction"]
+        request["correction_request"] = s["correction_request"]
     if "offline_replay" in s:
         request["offline_replay"] = s["offline_replay"]
     if "owner_goal_binding_fingerprint" in s:
@@ -416,7 +442,11 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
                 raise DomainError("VERSION_CONFLICT", "Offline Replay cannot change executor family")
             offline_replay_model(s["offline_replay"])
         expected_resource = r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
-        if "pb_use" in s:
+        if "human_correction" in s:
+            from . import natural_spec_corrections
+            _, _, _, correction_source, _ = natural_spec_corrections.bound(store,c,user,job,s,r,limits)
+            expected_resource = correction_source["resource_id"]
+        elif "pb_use" in s:
             from . import pb_natural_uses
             _, _, _, use_source, _ = pb_natural_uses.bound(store, c, user, job, s, r, limits)
             expected_resource = use_source["resource_id"]
