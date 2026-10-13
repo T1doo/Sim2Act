@@ -360,7 +360,7 @@ function renderSpecChecklist(node,value){
   }
   paragraph(node,"h4","人工未决项");const pending=document.createElement("ul");node.append(pending);for(const text of value.human_unresolved)paragraph(pending,"li",text);
   paragraph(node,"h4","未被引用覆盖的原文");for(const gap of value.feedback.uncovered)paragraph(node,"blockquote",gap.quote);
-  if(!value.feedback.uncovered.length)paragraph(node,"p","所有字符均已被引用覆盖；含义与完整性仍待人工判断。");
+  if(!value.feedback.uncovered.length)paragraph(node,"p","未发现未被引用覆盖的非空白片段；含义与完整性仍待人工判断。");
   const full=document.createElement("details");node.append(full);paragraph(full,"summary","完整原文（原样保留）");paragraph(full,"pre",value.source_content);
 }
 function changeAgentInput() {
