@@ -207,3 +207,21 @@ def test_goal_version_change_invalidates_exact_review(env):
     assert s['owner_acceptance']=='STALE' and 'payload' not in s['recovered']
     r=data[2].post(path+'-requests',json=decision(review))
     assert r.status_code==409 and r.json()['error']['submission_rejection']['previous_request']=='ABSENT'
+
+
+def test_precommit_typed_change_rolls_back_declaration(env,monkeypatch):
+    from sim2act import owner_acceptance as owner
+    from sim2act.db import internal_instance_data
+    data,_,_,_,_,_,path=flow(env)
+    review,_=preview(data,path)
+    original=owner.natural_append;before=all_rows(data[0])
+    def append_then_mutate(c,*args,**kwargs):
+        row=original(c,*args,**kwargs)
+        c.execute(update(internal_instance_data).where(
+            internal_instance_data.c.run_id==review['payload']['contract']['app_run_id']).values(fingerprint='0'*64))
+        return row
+    monkeypatch.setattr(owner,'natural_append',append_then_mutate)
+    body=decision(review);r=data[2].post(path+'-requests',json=body)
+    assert r.status_code==409,r.text
+    assert all_rows(data[0])==before
+    assert r.json()['error']['submission_rejection']['previous_request']=='ABSENT'

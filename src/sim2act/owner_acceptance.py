@@ -755,7 +755,15 @@ def natural_final_gate(store, c, user, iid, rid, fresh, *, expires_at=None):
             goal_cards.c.project_id == fresh["project_id"])).mappings().first()
     instance = c.execute(select(internal_instances.c.revision, internal_instances.c.data_version,
         internal_instances.c.release_id).where(internal_instances.c.id == iid)).mappings().one()
-    spec.require(head is not None and head["version"] == fresh["source_goal"]["version"]
+    typed = c.execute(select(internal_instance_data.c.fingerprint,
+        internal_instance_data.c.version, internal_instance_data.c.release_id).where(
+        internal_instance_data.c.instance_id == iid,
+        internal_instance_data.c.run_id == fresh["app_run_id"])).mappings().first()
+    job = c.execute(select(runs.c.status, runs.c.cancel_intent).where(runs.c.id == rid)).mappings().one()
+    spec.require(typed is not None and typed["fingerprint"] == fresh["typed_fingerprint"]
+        and typed["version"] == fresh["result_version"] and typed["release_id"] == fresh["release_id"]
+        and job["status"] == "SUCCEEDED" and not job["cancel_intent"]
+        and head is not None and head["version"] == fresh["source_goal"]["version"]
         and head["fingerprint"] == fresh["source_goal"]["fingerprint"]
         and instance["revision"] == fresh["instance_revision"]
         and instance["data_version"] == fresh["result_version"]
@@ -765,7 +773,7 @@ def natural_final_gate(store, c, user, iid, rid, fresh, *, expires_at=None):
 
 
 def natural_submit(store, user, iid, rid, limits, body):
-    guard = {}
+    guard: dict = {}
     with app_jobs.submission_tx(store, guard) as c:
         pid = natural_scope(store, c, user, iid, rid)
         rows = natural_ledger(c, user, iid, rid)
