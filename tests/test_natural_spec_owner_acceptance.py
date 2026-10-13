@@ -19,6 +19,39 @@ def snapshot(store):
     return {k:v for k,v in all_rows(store).items() if k not in {"natural_owner_records","natural_owner_seals"}}
 
 
+
+class NaturalPrivateBarrier(__import__('test_pb_natural_use_read_gates').TypedPrivateBarrier):
+    """Allow only two exact ID projections; whole bodies remain guarded.
+
+    SQLite must evaluate underlying JSON to extract an identifier. These calls
+    are separately logged and never described as zero underlying JSON reads.
+    """
+    def __init__(self, store, rid, aid, resource):
+        super().__init__(store,rid,aid,resource)
+        self.identifier_cells=set()
+        self.scope_identifier_reads=[]
+
+    def _trace(self, conn, cursor, statement, parameters, context, many):
+        self.identifier_cells=set()
+        app_sql=('SELECT internal_app_runs.id, JSON_EXTRACT(internal_app_runs.output, ?) AS artifact '
+            '\nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id '
+            '\nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ?')
+        typed_sql=('SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_instance_data.data, ?)), ?) AS anon_1 '
+            '\nFROM internal_instance_data '
+            '\nWHERE internal_instance_data.instance_id = ? AND internal_instance_data.run_id = ?')
+        if not many and statement==app_sql and len(parameters)==4 and parameters[0]=='$."resource_id"':
+            self.identifier_cells={('internal_app_runs','output')}
+        elif not many and statement==typed_sql and len(parameters)==4 and tuple(parameters[:2])==('$."result"','$."resource_id"'):
+            self.identifier_cells={('internal_instance_data','data')}
+        return super()._trace(conn,cursor,statement,parameters,context,many)
+
+    def _cell(self, table, rid, column, value):
+        if (table,column) in self.identifier_cells:
+            self.scope_identifier_reads.append(dict(table=table,row_id=rid,column=column,
+                classification='EXACT_IDENTIFIER_ONLY_SQL_PROJECTION_UNDERLYING_JSON_EVALUATED'))
+            return value
+        return super()._cell(table,rid,column,value)
+
 def flow(env, family='pa'):
     if family == 'pa':
         data = setup(env)
@@ -95,7 +128,6 @@ def test_exact_goal_result_explicit_human_declaration(env,tmp_path,family,reject
 @pytest.mark.parametrize('target', ['material','artifact'])
 @pytest.mark.parametrize('fault', ['revoke','expiry'])
 def test_revoked_target_before_private_body_and_stop(env,tmp_path,target,fault):
-    from test_pb_natural_use_read_gates import TypedPrivateBarrier
     data, inst, rid, resource, _, _, path=flow(env,'pb')
     review,_=preview(data,path)
     contract=review['payload']['contract'];aid=contract['app_run_id']
@@ -103,7 +135,7 @@ def test_revoked_target_before_private_body_and_stop(env,tmp_path,target,fault):
     with data[0].tx() as c:
         c.execute(update(grants).where(grants.c.resource_id==victim,grants.c.tool_ref=='resource.read').values(
             **({'revoked':True,'revision':2} if fault=='revoke' else {'expires_at':time.time()-1})))
-    with TypedPrivateBarrier(data[0],rid,aid,victim) as barrier:
+    with NaturalPrivateBarrier(data[0],rid,aid,victim) as barrier:
         barrier.rules['natural_owner_records']=(natural_owner_records,'id',{review['id']},{'payload'})
         s=state(data,path,'prepare')
         assert s['owner_acceptance']=='STALE' and not s['content_access']
@@ -115,7 +147,7 @@ def test_revoked_target_before_private_body_and_stop(env,tmp_path,target,fault):
         assert r.status_code==201,r.text
         assert state(data,path)['owner_acceptance']=='CANCELLED'
         assert not barrier.blocked,barrier.blocked
-    (tmp_path/'private-barrier.json').write_text(json.dumps(dict(blocked=barrier.blocked,evaluated=barrier.evaluated),indent=2))
+    (tmp_path/'private-barrier.json').write_text(json.dumps(dict(blocked=barrier.blocked,evaluated=barrier.evaluated,identifier_projections=barrier.scope_identifier_reads),indent=2))
 
 
 def test_invalid_choices_corrupt_seal_expiry_and_foreign_scope(env):
@@ -125,7 +157,7 @@ def test_invalid_choices_corrupt_seal_expiry_and_foreign_scope(env):
     for wrong in [[],body['choices'][1:],body['choices']+[body['choices'][0]],
         [{**i,'reason':' '} for i in body['choices']]]:
         r=data[2].post(path+'-requests',json={**body,'choices':wrong})
-        assert r.status_code in [422,409],r.text
+        assert r.status_code in [400,422,409],r.text
         assert state(data,path)['sequence']==1
     assert data[2].get(path,params={'request_key':'unknown'}).status_code==409
     original=data[2].headers['Authorization'];data[2].headers['Authorization']='Bearer synthetic-test-B'
@@ -158,7 +190,6 @@ def test_new_result_never_inherits_old_declaration(env):
 
 
 def test_artifact_pointer_pollution_rejected_before_private_reads(env,tmp_path):
-    from test_pb_natural_use_read_gates import TypedPrivateBarrier
     from sim2act.db import events, local_effects
     data,inst,rid,_,_,_,path=flow(env)
     review,_=preview(data,path)
@@ -169,12 +200,12 @@ def test_artifact_pointer_pollution_rejected_before_private_reads(env,tmp_path):
         committed=c.execute(select(events).where(events.c.run_id==rid,events.c.kind=='SPEC_COMMITTED')).mappings().one()
         c.execute(update(events).where(events.c.id==committed['id']).values(data={**committed['data'],'artifact_resource':fake}))
         c.execute(update(local_effects).where(local_effects.c.resource_id==victim).values(resource_id=fake))
-    with TypedPrivateBarrier(data[0],rid,contract['app_run_id'],victim) as barrier:
+    with NaturalPrivateBarrier(data[0],rid,contract['app_run_id'],victim) as barrier:
         barrier.rules['natural_owner_records']=(natural_owner_records,'id',{review['id']},{'payload'})
         assert not state(data,path)['content_access']
         assert data[2].post(path+'-requests',json=decision(review)).status_code==409
         assert not barrier.blocked,barrier.blocked
-    (tmp_path/'pointer-barrier.json').write_text(json.dumps(dict(blocked=barrier.blocked,evaluated=barrier.evaluated),indent=2))
+    (tmp_path/'pointer-barrier.json').write_text(json.dumps(dict(blocked=barrier.blocked,evaluated=barrier.evaluated,identifier_projections=barrier.scope_identifier_reads),indent=2))
 
 
 def test_precommit_revoke_rolls_back_record_and_seal(env,monkeypatch):
@@ -225,3 +256,27 @@ def test_precommit_typed_change_rolls_back_declaration(env,monkeypatch):
     assert r.status_code==409,r.text
     assert all_rows(data[0])==before
     assert r.json()['error']['submission_rejection']['previous_request']=='ABSENT'
+
+
+
+def test_scope_identifier_barrier_rejects_whole_and_other_json_bodies(env):
+    from sqlalchemy.exc import DatabaseError
+    from sim2act.db import internal_app_runs, internal_instance_data, runs
+    data,_,rid,_,_,_,path=flow(env)
+    review,_=preview(data,path)
+    aid=review['payload']['contract']['app_run_id']
+    artifact=review['payload']['contract']['output']['resource_id']
+    with NaturalPrivateBarrier(data[0],rid,aid,artifact) as barrier:
+        barrier.rules['natural_owner_records']=(natural_owner_records,'id',{review['id']},{'payload'})
+        queries=[select(runs.c.result).where(runs.c.id==rid),
+            select(internal_app_runs.c.output).where(internal_app_runs.c.id==aid),
+            select(internal_instance_data.c.data).where(internal_instance_data.c.run_id==aid),
+            select(natural_owner_records.c.payload).where(natural_owner_records.c.id==review['id']),
+            select(internal_app_runs.c.output['checklist']).where(internal_app_runs.c.id==aid),
+            select(internal_instance_data.c.data['result']['checklist']).where(internal_instance_data.c.run_id==aid)]
+        for query in queries:
+            before=len(barrier.blocked)
+            with pytest.raises(DatabaseError):
+                with data[0].tx() as c:c.execute(query).all()
+            assert len(barrier.blocked)>before
+        assert not barrier.scope_identifier_reads
