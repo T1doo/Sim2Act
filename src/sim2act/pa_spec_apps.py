@@ -716,7 +716,7 @@ def goal_unresolved(goal):
 def bound(store, c, user, job, limits, *, validate_input=True):
     from . import app_jobs
     from .db import attempts
-    logic_out = {}
+    logic_out: dict[str, Any] = {}
     snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits, return_release=True,_logic_out=logic_out)
     accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "ACCEPTED")).scalars().all()
     require(fingerprint(accepted) == fingerprint([dict(namespace=app_jobs.KIND, app_run_id=snapshot["app_run_id"],

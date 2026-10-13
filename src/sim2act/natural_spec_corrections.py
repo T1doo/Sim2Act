@@ -23,6 +23,7 @@ from .db import (
     internal_app_runs,
     internal_instance_data,
     internal_instances,
+    internal_releases,
     internal_run_bindings,
     runs,
 )
@@ -130,6 +131,11 @@ def rejected(c, user, iid, rid, declaration_id, declaration_fp, sequence):
 def preview(store, user, iid, rid, limits, body):
     with store.tx() as c:
         owner.natural_scope(store,c,user,iid,rid)
+        logic = c.execute(select(internal_releases.c.snapshot["natural_logic_source"]["namespace"].as_string())
+            .join(internal_instances,internal_instances.c.release_id == internal_releases.c.id)
+            .where(internal_instances.c.id == iid,internal_instances.c.principal_id == user)).scalar()
+        if logic is not None:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Corrections of this finite logic version are not supported")
         owner.natural_authority(store,c,user,iid,rid)
         old = c.execute(select(delivery_graph_requests.c.app_id).where(
             delivery_graph_requests.c.app_id == iid, delivery_graph_requests.c.principal_id == user,

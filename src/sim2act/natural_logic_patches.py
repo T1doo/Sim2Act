@@ -6,7 +6,7 @@ An independently confirmed new internal Release keeps the original draft intact.
 """
 import copy
 from contextlib import contextmanager
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import Depends
 from pydantic import Field
@@ -28,6 +28,7 @@ from .text_logic_reuse import pair, remember
 VERSION = "natural-local-logic.v1"
 PREVIEW = VERSION + ".preview"
 CHECK = VERSION + ".check"
+CHECKED = VERSION + ".checked"
 JOB = VERSION + ".job"
 APPROVAL = VERSION + ".approval"
 CHECK_CONSENT = "RUN_EXACT_LOCAL_LOGIC_CHECK_KEEP_ORIGINAL"
@@ -122,7 +123,7 @@ def effective(base, consume, limits):
 
 
 def context(store, c, user, iid, limits, *, original=True):
-    origin = {}
+    origin: dict[str, Any] = {}
     instance, release = lifecycle.instance(store, c, user, iid, limits, lock=True,_origin_out=origin)
     if "natural_logic_source" in release["snapshot"]:
         raise DomainError("UNSUPPORTED_CAPABILITY", "Logic patches of patched versions are outside this finite slice")
@@ -186,6 +187,7 @@ def preview(store,user,iid,limits,body):
         return value
 
 
+@graph.controlled
 def load_preview(store,c,user,iid,key,limits,*,original=True):
     current = context(store,c,user,iid,limits,original=original)
     ctx,_,release,_ = current
@@ -251,9 +253,15 @@ def checked(store,c,user,iid,key,limits,*,original=True):
         actual_proof_fingerprint=fingerprint(dict(job=dict(job),output=outputs,proved=proved)),
         status="PASS",citation_status="PASS",semantic_status="UNKNOWN",owner_acceptance="PENDING")
     result["check_fingerprint"] = fingerprint(result)
+    if graph.lookup(c,user,iid,CHECKED,key):
+        old,sealed=pair(c,user,iid,CHECKED,key,Check)
+        spec.require(old == body and sealed == result, "Actual check receipt changed")
+    else:
+        remember(c,user,iid,CHECKED,key,body,result)
     return value,result
 
 
+@graph.controlled
 def execution_digest(store,c,user,value,started):
     """Exact bytes after full Worker readback; no cross-transaction cache.
 
@@ -273,6 +281,12 @@ def execution_digest(store,c,user,value,started):
     ctx=value["context"]
     owner.natural_scope(store,c,user,started["check_instance_id"],started["run_id"])
     owner.natural_authority(store,c,user,started["check_instance_id"],started["run_id"])
+    expected=reference(ctx["instance_id"],value["request_key"],value)
+    job_ref,job_seal=pair(c,user,started["run_id"],JOB,"accepted",Reference)
+    spec.require(job_ref == expected and job_seal == expected.model_dump(), "Actual logic check seals changed")
+    _,proof=pair(c,user,ctx["instance_id"],CHECKED,value["request_key"],Check)
+    spec.require(proof["run_id"] == started["run_id"] and proof["check_instance_id"] == started["check_instance_id"]
+        and proof["preview_fingerprint"] == value["preview_fingerprint"] and proof["effective_fingerprint"] == value["effective_fingerprint"])
     coverage=c.execute(select(internal_instance_data.c.run_id,internal_instance_data.c.version,
         internal_instance_data.c.release_id).where(
             internal_instance_data.c.instance_id == started["check_instance_id"])).all()
@@ -303,6 +317,7 @@ def execution_digest(store,c,user,value,started):
     return fingerprint(dict(full=full,app=dict(app),instance=dict(instance),typed=[dict(r) for r in rows]))
 
 
+@graph.controlled
 def validate_snapshot(store,c,user,snapshot,limits,*,commit=False):
     origin = snapshot["natural_logic_source"]
     spec.require(set(origin) == {"namespace","instance_id","preview_key","preview_fingerprint","check_fingerprint","execution_digest"}
@@ -313,6 +328,8 @@ def validate_snapshot(store,c,user,snapshot,limits,*,commit=False):
     else:
         _,value=load_preview(store,c,user,origin["instance_id"],origin["preview_key"],limits,original=False)
     _,started=pair(c,user,origin["instance_id"],CHECK,origin["preview_key"],Check)
+    _,sealed=pair(c,user,origin["instance_id"],CHECKED,origin["preview_key"],Check)
+    spec.require(sealed["check_fingerprint"] == origin["check_fingerprint"])
     spec.require(execution_digest(store,c,user,value,started) == origin["execution_digest"]
         and value["preview_fingerprint"] == origin["preview_fingerprint"]
         and snapshot["draft"]["fingerprint"] == value["context"]["draft_fingerprint"])
@@ -376,9 +393,13 @@ def mount(app,store,limits,identity):
             owner.natural_scope(store,c,user,started["check_instance_id"],started["run_id"])
             job=c.execute(select(runs.c.status,runs.c.version,runs.c.cancel_intent)
                 .where(runs.c.id == started["run_id"],runs.c.principal_id == user)).mappings().one()
+            proof={}
+            if graph.lookup(c,user,iid,CHECKED,key):
+                _,sealed=pair(c,user,iid,CHECKED,key,Check)
+                proof={k:sealed[k] for k in ("check_fingerprint","actual_proof_fingerprint")}
             return dict(namespace=VERSION+".control",instance_id=iid,request_key=key,
                 check_instance_id=started["check_instance_id"],run_id=started["run_id"],
-                principal_id=user,accepted_request_fingerprint=fingerprint(accepted_body.model_dump()),**dict(job))
+                principal_id=user,accepted_request_fingerprint=fingerprint(accepted_body.model_dump()),**dict(job),**proof)
 
     @app.post(base + "/version-approvals",status_code=201)
     def propose(iid:str,body:Version,user=dep):
@@ -411,6 +432,7 @@ def mount(app,store,limits,identity):
             return pair(c,user,iid,APPROVAL,key,Version)[1]
 
 
+@graph.controlled
 def validate_family(c,user,approval_id,snapshot):
     rows=c.execute(select(delivery_graph_requests.c.app_id,delivery_graph_requests.c.request_key)
         .where(delivery_graph_requests.c.kind == APPROVAL,

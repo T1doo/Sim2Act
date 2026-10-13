@@ -8,7 +8,7 @@ from typing import NoReturn
 
 from fastapi import Depends
 from pydantic import Field, ValidationError
-from sqlalchemy import insert, select, update
+from sqlalchemy import insert, select, true, update
 
 from . import apps
 from . import delivery_graph as core
@@ -138,7 +138,7 @@ def load_family(store, c, user, pid, aid, limits, *, _natural_origin=None):
             select(grants)
             .where(grants.c.project_id == pid, grants.c.principal_id.in_(identities))
             .where(grants.c.resource_id.in_(allowed + [pid])
-                if draft["candidate"].get("namespace") == "pa-natural-spec-app.v1" else True)
+                if draft["candidate"].get("namespace") == "pa-natural-spec-app.v1" else true())
             .order_by(grants.c.id)
         ).mappings()
     ]

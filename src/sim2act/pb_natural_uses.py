@@ -278,6 +278,8 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
 
 @controlled
 def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB):
+    if "natural_logic_source" in release["snapshot"]:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "This finite logic version supports its original source only")
     base = release["snapshot"]["draft"]
     require(saved_family(base["candidate"]) == family
         and instance["source_app_id"] == base["id"] and instance["runtime_id"] == base["runtime_id"]
