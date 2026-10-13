@@ -7,6 +7,7 @@ new identity/grant, publication, deployment, external effects or generic busines
 import copy
 import threading
 import time
+from contextlib import contextmanager
 
 from sqlalchemy import insert, select, update
 
@@ -50,17 +51,60 @@ def is_app_job(store, rid):
         return bool(binding or (isinstance(context, dict) and context.get("kind") == KIND))
 
 
+SUBMISSION_REJECTION = "internal-run-rejection.v1"
+
+
+def rejection_proof(c, user, iid, pid, key, submission, phase):
+    from .db import delivery_graph_requests
+    # Project lock is held; scalar existence reads never inspect accepted bodies.
+    old = c.execute(select(internal_app_runs.c.id).where(
+        internal_app_runs.c.instance_id == iid, internal_app_runs.c.principal_id == user,
+        internal_app_runs.c.request_key == key)).first()
+    ledger = c.execute(select(delivery_graph_requests.c.request_key).where(
+        delivery_graph_requests.c.app_id == iid, delivery_graph_requests.c.principal_id == user,
+        delivery_graph_requests.c.request_key == key)).first()
+    if old or ledger:
+        return None
+    return dict(namespace=SUBMISSION_REJECTION, endpoint=submission["endpoint"],
+        principal_id=user, project_id=pid, instance_id=iid, request_key=key,
+        request_fingerprint=fingerprint(submission["body"]), acceptance="NOT_ACCEPTED",
+        previous_request="ABSENT", phase=phase)
+
+
+@contextmanager
+def submission_tx(store, guard):
+    failure = None
+    try:
+        with store.tx() as c:
+            try:
+                yield c
+            except DomainError as exc:
+                failure = exc
+                raise
+    except DomainError as exc:
+        # Only the body failed, and the transaction has successfully rolled back.
+        # A commit/rollback/connection failure, cached key or unknown effect has no proof.
+        if (exc is failure and guard.get("proof") and exc.code in {
+                "INVALID_INPUT", "VERSION_CONFLICT", "GRANT_REVOKED", "PERMISSION_DENIED",
+                "RESOURCE_UNAVAILABLE", "UNSUPPORTED_CAPABILITY"}):
+            exc.submission_rejection = guard["proof"]
+        raise
+
+
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
-    with store.tx() as c:
+    guard = {}
+    with submission_tx(store, guard) as c:
         pid = c.execute(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
         ).scalar()
         store.lock_project(c, user, pid)
+        if submission is not None:
+            guard["proof"] = rejection_proof(c, user, iid, pid, key, submission, "TX_ROLLED_BACK")
         i, release = instance(store, c, user, iid, limits, lock=True)
         from .text_continuations import execution
 

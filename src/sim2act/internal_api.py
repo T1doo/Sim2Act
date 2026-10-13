@@ -364,6 +364,7 @@ def mount(app, store, limits, identity):
                 offline_replay=body.offline_replay,
                 require_offline_replay=True,
                 owner_goal_fp=body.expected_owner_goal_binding_fingerprint,
+                submission=dict(endpoint="runs", body=body.model_dump(exclude_unset=True)),
             )
         )
 

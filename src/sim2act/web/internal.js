@@ -187,13 +187,25 @@ async function submitInternal(view,retry=false) {
   await showInternalInstance(instance.id,view);
   if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(accepted.run_id,view,view.instance);
 }
+async function internalSubmissionRejected(error,view,instance,pending,endpoint,body){
+  const proof=error.submissionRejection;
+  if(!Number.isInteger(error.httpStatus)||error.httpStatus<400||error.httpStatus>=500||!proof)return false;
+  const fp=await paHash(body);
+  return proof.namespace==="internal-run-rejection.v1"&&proof.endpoint===endpoint&&proof.principal_id===instance.principal_id&&proof.project_id===view.project&&proof.instance_id===instance.id&&proof.request_key===(endpoint==="pb-use-runs"?body.review.request_key:body.request_key)&&proof.request_fingerprint===fp&&proof.acceptance==="NOT_ACCEPTED"&&proof.previous_request==="ABSENT"&&["TX_ROLLED_BACK","VALIDATION_NOT_STARTED"].includes(proof.phase);
+}
 async function submitSpecRun(view,instance,pending,retry){
-  const generation=view.instanceGeneration,workspace=workspaceSelectionGeneration;
-  const current=()=>engineeringCurrent(view)&&view.instance?.id===instance.id&&view.instanceGeneration===generation&&workspaceSelectionGeneration===workspace&&engineeringPending.get(instance.id)===pending;
+  const generation=view.instanceGeneration,workspace=workspaceSelectionGeneration,connection=identityConnectionGeneration;
+  const current=()=>engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===generation&&workspaceSelectionGeneration===workspace&&connection===identityConnectionGeneration&&engineeringPending.get(instance.id)===pending;
   $("internal-run-status").textContent=retry ? "正在仅用原请求键读取回执…" : "正在提交已保存规范的后台运行…";
   let accepted=null;
   if(!retry){
-    accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
+    try{accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);}
+    catch(error){
+      if(await internalSubmissionRejected(error,view,instance,pending,"runs",pending)&&current()){
+        engineeringPending.delete(instance.id);$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";engineeringButtons(view);return;
+      }
+      throw error;
+    }
     if(!current())return;
   }
   const receipt=await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}`);
@@ -786,7 +798,7 @@ async function renderPBUse(view){
     status.textContent=pbUsePending.has(scope)?"保留本次未知请求，仅原 key GET 恢复；不能重发或另建意图。":"请选择材料与匹配的已保存 Goal；预览不运行模型、不写资源。";
   }catch(error){if(current())status.textContent=error.message;}buttons();
   preview.onclick=async()=>{
-    if(!current()||s.busy||pbUseUnknown(instance.id)||engineeringPending.has(instance.id))return;s.busy=true;buttons();const generation=s.edit,cid=goal.value,rid=material.value,valid=()=>current()&&generation===s.edit&&goal.value===cid&&material.value===rid;
+    if(!current()||s.busy||pbUseUnknown(instance.id)||engineeringPending.has(instance.id))return;s.review=null;ack.checked=false;proof.textContent="";s.busy=true;buttons();const generation=s.edit,cid=goal.value,rid=material.value,valid=()=>current()&&generation===s.edit&&goal.value===cid&&material.value===rid;
     try{const card=await api(`/api/goal-cards/${cid}`);if(!valid())return;const snapshot=card.history?.[0]?.snapshot,refs=snapshot?.resource_snapshots;
       if(!refs||refs.length!==1||refs[0].resource_id!==rid)throw Error("所选 Goal 必须明确引用本次材料");
       const request={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,expected_app_fingerprint:view.draft.fingerprint,expected_recipe_fingerprint:view.draft.candidate.spec_task.edited_recipe_fingerprint,resource_id:rid,card_id:cid,expected_goal_version:card.version,expected_goal_fingerprint:card.fingerprint,expected_source_hash:refs[0].hash,request_key:crypto.randomUUID()};
@@ -804,6 +816,8 @@ async function renderPBUse(view){
     pbUsePending.delete(scope);status.textContent=`已核对原 key ${value.request_key} 的独立运行 ${value.run_id}；不会重新提交。`;s.review=null;ack.checked=false;
     await showInternalInstance(instance.id,view);if(engineeringCurrent(view)&&view.instance?.id===instance.id&&workspaceSelectionGeneration===s.workspace)await showInternalRun(value.run_id,view,view.instance);
   };
-  const action=async commit=>{if(!current()||s.busy)return;let pending=pbUsePending.get(scope);if(commit){if(pending||pbUseUnknown(instance.id)||engineeringPending.has(instance.id)||!s.review||!ack.checked)return;pending={instance_id:instance.id,body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent},review:structuredClone(s.review)};pbUsePending.set(scope,pending);$("internal-run-submit").disabled=true;}if(!pending)return;s.busy=true;buttons();try{if(commit){await api(`/api/internal/instances/${instance.id}/pb-use-runs`,"POST",pending.body);if(!current()||pbUsePending.get(scope)!==pending)return;}await receipt(pending);}catch(error){if(current())status.textContent=`回执未确认：${error.detail||error.message}。仅原 key GET 恢复；不重发。`;}finally{s.busy=false;buttons();}};
+  const action=async commit=>{if(!current()||s.busy)return;let pending=pbUsePending.get(scope);if(commit){if(pending||pbUseUnknown(instance.id)||engineeringPending.has(instance.id)||!s.review||!ack.checked)return;pending={instance_id:instance.id,body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent},review:structuredClone(s.review)};pbUsePending.set(scope,pending);$("internal-run-submit").disabled=true;}if(!pending)return;s.busy=true;buttons();try{if(commit){try{await api(`/api/internal/instances/${instance.id}/pb-use-runs`,"POST",pending.body);}catch(error){
+      if(await internalSubmissionRejected(error,view,instance,pending,"pb-use-runs",pending.body)&&current()&&pbUsePending.get(scope)===pending){pbUsePending.delete(scope);edit();status.textContent="明确未受理；可修正材料/Goal并重新预览确认。原成功结果保留，不会自动提交。";engineeringButtons(view);return;}throw error;
+    }if(!current()||pbUsePending.get(scope)!==pending)return;}await receipt(pending);}catch(error){if(current())status.textContent=`回执未确认：${error.detail||error.message}。仅原 key GET 恢复；不重发。`;}finally{s.busy=false;buttons();}};
   submit.onclick=()=>action(true);recover.onclick=()=>action(false);
 }

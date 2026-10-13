@@ -322,7 +322,8 @@ def mount(app, store, limits, identity):
     def run(iid: str, body: CommitInput, user=user_dep):
         from .app_jobs import enqueue
         return enqueue(store, user, iid, body.review.expected_revision,
-            body.review.expected_release_fingerprint, {}, body.review.request_key, limits, pb_use=body)
+            body.review.expected_release_fingerprint, {}, body.review.request_key, limits, pb_use=body,
+            submission=dict(endpoint="pb-use-runs", body=body.model_dump(exclude_unset=True)))
 
     @app.get("/api/internal/instances/{iid}/pb-use-requests/{key}")
     @controlled

@@ -24,7 +24,7 @@ async function api(path, method = "GET", body) {
   const clockHeader=response.headers?.get?.("X-Sim2Act-Server-Time");
   if(clockHeader && data?.natural_deadline && Number.isFinite(Number(clockHeader)))
     Object.defineProperty(data,"naturalServerTime",{value:Number(clockHeader)});
-  if (!response.ok) {const error=new Error(data.error?.code || data.detail?.[0]?.msg || "请求失败");error.detail=data.error?.message;error.httpStatus=response.status;throw error;}
+  if (!response.ok) {const error=new Error(data.error?.code || data.detail?.[0]?.msg || "请求失败");error.detail=data.error?.message;error.httpStatus=response.status;error.submissionRejection=data.error?.submission_rejection||data.submission_rejection;throw error;}
   return data;
 }
 const safe = (fn) => async (event) => { event?.preventDefault(); $("error").textContent = ""; try {await fn(event);} catch (e) {$("error").textContent = e.message;} };

@@ -6,10 +6,14 @@ class DomainError(Exception):
         super().__init__(self.message)
 
     def public(self):
-        return {
+        value = {
             "code": self.code,
             "message": self.message,
             "safe_retry": self.retryable,
             "effect_known": self.code != "OUTCOME_UNKNOWN",
             "user_action": "Check status, configuration and permissions",
         }
+
+        if hasattr(self, "submission_rejection"):
+            value["submission_rejection"] = self.submission_rejection
+        return value

@@ -1,7 +1,10 @@
+import re
 import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, Request, Response
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import Field
 from sqlalchemy import select, update
@@ -173,6 +176,34 @@ def create_app(store=None, settings=None):
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_internal_submission(request, exc):
+        response = await request_validation_exception_handler(request, exc)
+        match = re.fullmatch(r"/api/internal/instances/(iinstance_[a-f0-9]{32})/(runs|pb-use-runs)", request.url.path)
+        body = exc.body
+        if request.method != "POST" or not match or not isinstance(body, dict):
+            return response
+        iid, endpoint = match.groups()
+        key = body.get("review", {}).get("request_key") if endpoint == "pb-use-runs" and isinstance(body.get("review"), dict) else body.get("request_key")
+        if not isinstance(key, str) or not 1 <= len(key) <= 100:
+            return response
+        from .app_jobs import rejection_proof
+        from .db import internal_instances
+        try:
+            user = identity(request.headers.get("authorization", ""))
+            with store.tx() as c:
+                pid = c.execute(select(internal_instances.c.project_id).where(internal_instances.c.id == iid)).scalar()
+                store.lock_project(c, user, pid)
+                proof = rejection_proof(c, user, iid, pid, key, dict(endpoint=endpoint, body=body), "VALIDATION_NOT_STARTED")
+            if proof:
+                import json
+                value = json.loads(response.body)
+                value["submission_rejection"] = proof
+                return JSONResponse(value, status_code=422)
+        except DomainError:
+            pass
         return response
 
     @app.exception_handler(DomainError)
