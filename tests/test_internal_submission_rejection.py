@@ -55,7 +55,7 @@ def test_fresh_rejection_exact_body_and_existing_key_has_no_negative_proof(env, 
     assert replay.status_code == 403 and 'submission_rejection' not in replay.json()['error']
     assert snapshot(data[0]) == revoked
     with data[0].tx() as c:
-        c.execute(update(internal_instances).where(internal_instances.c.id == inst['id']).values(principal_id=data[6]))
+        c.execute(update(internal_instances).where(internal_instances.c.id == inst['id']).values(principal_id=env[4]))
     foreign = snapshot(data[0])
     malformed['review']['request_key'] = 'foreign-instance-new-key'
     denied = data[2].post(route + '/pb-use-runs', json=malformed)
@@ -83,3 +83,24 @@ def test_commit_rollback_and_unknown_failures_never_supply_rejection_proof(failu
             if failure != 'commit':
                 raise DomainError('OUTCOME_UNKNOWN' if failure == 'unknown' else 'INVALID_INPUT')
     assert caught.value.submission_rejection is None
+
+
+def test_default_effective_store_validation_with_sqlite_constructor_shim(env, tmp_path, monkeypatch):
+    import json
+
+    from fastapi.testclient import TestClient
+
+    import sim2act.api as api_module
+    from sim2act.db import Store
+
+    monkeypatch.setattr(api_module, "Store", lambda url: Store(url, test_only=True))
+    app = api_module.create_app(settings=env[1])
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post('/api/internal/instances/iinstance_' + '0' * 32 + '/runs',
+            headers={'Authorization': 'Bearer synthetic-test-A'}, json={
+                'expected_revision': 0, 'expected_release_fingerprint': '0' * 64,
+                'input': {}, 'request_key': 'default-store-invalid'})
+    assert response.status_code == 422
+    (tmp_path / 'default-store-proof.json').write_text(json.dumps(dict(status=response.status_code,
+        response=response.json(), store_argument='omitted', sqlite_constructor_shim=True,
+        pg_native='NOT_RUN', real_model_requests=0), indent=2))

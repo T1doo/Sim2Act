@@ -193,9 +193,9 @@ def create_app(store=None, settings=None):
         from .db import internal_instances
         try:
             user = identity(request.headers.get("authorization", ""))
-            with store.tx() as c:
+            with db.tx() as c:
                 pid = c.execute(select(internal_instances.c.project_id).where(internal_instances.c.id == iid)).scalar()
-                store.lock_project(c, user, pid)
+                db.lock_project(c, user, pid)
                 proof = rejection_proof(c, user, iid, pid, key, dict(endpoint=endpoint, body=body), "VALIDATION_NOT_STARTED")
             if proof:
                 import json

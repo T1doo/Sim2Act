@@ -203,7 +203,7 @@ async function submitSpecRun(view,instance,pending,retry){
     catch(error){
       if(await internalSubmissionRejected(error,view,instance,pending,"runs",pending)&&engineeringPending.get(instance.id)===pending){
         const live=current();engineeringPending.delete(instance.id);
-        if(live){$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";engineeringButtons(view);}return;
+        if(live){$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";}if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;
       }
       throw error;
     }
@@ -792,6 +792,7 @@ async function renderPBUse(view){
   const current=()=>pbUseView===s&&panel.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===s.selection&&s.workspace===workspaceSelectionGeneration&&s.connection===identityConnectionGeneration;
   const material=panel.querySelector('#pb-use-material'),goal=panel.querySelector('#pb-use-goal'),preview=panel.querySelector('#pb-use-preview'),ack=panel.querySelector('#pb-use-ack'),submit=panel.querySelector('#pb-use-submit'),recover=panel.querySelector('#pb-use-recover'),status=panel.querySelector('#pb-use-status'),proof=panel.querySelector('#pb-use-proof');
   const buttons=()=>{if(!current())return;const pending=pbUsePending.get(scope),other=engineeringPending.has(instance.id)||(!pending&&pbUseUnknown(instance.id));material.disabled=goal.disabled=!!pending||other||s.busy;preview.disabled=!!pending||other||s.busy||!material.value||!goal.value;ack.disabled=!!pending||other||s.busy||!s.review;submit.disabled=!!pending||other||s.busy||!s.review||!ack.checked;recover.disabled=!pending||s.busy;};
+  s.buttons=buttons;
   const edit=()=>{s.edit++;s.review=null;ack.checked=false;proof.textContent="";buttons();};material.onchange=goal.onchange=edit;ack.onchange=buttons;buttons();
   try{const [materials,cards]=await Promise.all([api(`/api/projects/${view.project}/resources`),api(`/api/projects/${view.project}/goal-cards`)]);if(!current())return;
     material.replaceChildren(new Option("明确选择本次 TXT/MD",""),...materials.filter(x=>['txt','md'].includes(x.format)).map(x=>new Option(`${x.name} · ${x.id}`,x.id)));
@@ -818,7 +819,7 @@ async function renderPBUse(view){
     await showInternalInstance(instance.id,view);if(engineeringCurrent(view)&&view.instance?.id===instance.id&&workspaceSelectionGeneration===s.workspace)await showInternalRun(value.run_id,view,view.instance);
   };
   const action=async commit=>{if(!current()||s.busy)return;let pending=pbUsePending.get(scope);if(commit){if(pending||pbUseUnknown(instance.id)||engineeringPending.has(instance.id)||!s.review||!ack.checked)return;pending={instance_id:instance.id,body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent},review:structuredClone(s.review)};pbUsePending.set(scope,pending);$("internal-run-submit").disabled=true;}if(!pending)return;s.busy=true;buttons();try{if(commit){try{await api(`/api/internal/instances/${instance.id}/pb-use-runs`,"POST",pending.body);}catch(error){
-      if(await internalSubmissionRejected(error,view,instance,pending,"pb-use-runs",pending.body)&&pbUsePending.get(scope)===pending){pbUsePending.delete(scope);s.review=null;if(current()){edit();status.textContent="明确未受理；可修正材料/Goal并重新预览确认。原成功结果保留，不会自动提交。";engineeringButtons(view);}return;}throw error;
+      if(await internalSubmissionRejected(error,view,instance,pending,"pb-use-runs",pending.body)&&pbUsePending.get(scope)===pending){pbUsePending.delete(scope);s.review=null;if(current()){edit();status.textContent="明确未受理；可修正材料/Goal并重新预览确认。原成功结果保留，不会自动提交。";engineeringButtons(view);}if(pbUseView?.scope===scope&&pbUseView!==s)pbUseView.buttons();if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;}throw error;
     }if(!current()||pbUsePending.get(scope)!==pending)return;}await receipt(pending);}catch(error){if(current())status.textContent=`回执未确认：${error.detail||error.message}。仅原 key GET 恢复；不重发。`;}finally{s.busy=false;buttons();}};
   submit.onclick=()=>action(true);recover.onclick=()=>action(false);
 }

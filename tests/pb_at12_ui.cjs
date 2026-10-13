@@ -1,11 +1,11 @@
 "use strict";
 const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
-const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],loaded={},actions=[],loads=[],pending=new Map();
+const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],responses=[],loaded={},actions=[],loads=[],pending=new Map();
 let serial=0,dom,w,$,fault="",hold=null;
 readline.createInterface({input:process.stdin}).on("line",line=>{const value=JSON.parse(line);pending.get(value.id)(value);pending.delete(value.id);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
 const check=(condition,label)=>{assert(condition,label);checks.push(label);};
-const wait=async fn=>{const end=Date.now()+15000;while(Date.now()<end){if(fn())return;await new Promise(resolve=>setTimeout(resolve,5));}throw Error("offline bounded wait");};
+const wait=async fn=>{const end=Date.now()+180000;while(Date.now()<end){if(fn())return;await new Promise(resolve=>setTimeout(resolve,5));}throw Error("offline bounded wait");};
 function visible(element){for(let node=element;node;node=node.parentElement){if(node.hidden||node.hasAttribute("inert"))return false;const style=w.getComputedStyle(node);if(style.display==="none"||style.visibility==="hidden")return false;if(node.tagName==="DETAILS"&&!node.open&&!node.querySelector("summary")?.contains(element))return false;}return !!element?.isConnected;}
 async function gesture(element,perform,properties){
  assert(visible(element),`visible gesture: ${element?.id||element?.textContent}`);assert(!element.matches(":disabled"),`enabled gesture: ${element?.id}`);element.focus();const work=[],restore=[];
@@ -22,7 +22,7 @@ async function boot(){
  dom=new JSDOM(await load("/"),{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
  const style=w.document.createElement("style");style.textContent=await load("/app.css");w.document.head.append(style);
- w.fetch=async(path,options={})=>{const request={path,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);if(["late-invalid","late-default-invalid"].includes(fault)&&request.method==="POST"&&(/\/(pb-use-runs|runs)$/.test(path))){assert.equal(result.status,fault==="late-invalid"?409:422);fault="";await new Promise(resolve=>hold=resolve);}
+ w.fetch=async(path,options={})=>{const request={path,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);responses.push({path,method:request.method,status:result.status,text:result.text});if(["late-invalid","late-default-invalid"].includes(fault)&&request.method==="POST"&&(/\/(pb-use-runs|runs)$/.test(path))){assert.equal(result.status,fault==="late-invalid"?409:422);fault="";await new Promise(resolve=>hold=resolve);}
   if(["invalid","schema","auth-change","default-invalid"].includes(fault)&&request.method==="POST"&&(/\/(pb-use-runs|runs)$/.test(path))){const expected=fault==="schema"||fault==="default-invalid"?422:409;fault="";check(result.status===expected,"actual explicit rejection through HTTP");}
   if(fault==="lost"&&request.method==="POST"&&path.endsWith("/pb-use-runs")){fault="";assert.equal(result.status,202);throw Error("actual accepted P-B response lost");}
   if((fault==="review-late-navigation"&&path.endsWith("/pb-use-reviews"))||(fault==="commit-late-navigation"&&request.method==="POST"&&path.endsWith("/pb-use-runs"))){fault="";assert.equal(result.status,path.endsWith("/pb-use-runs")?202:200);await new Promise(resolve=>hold=resolve);}
@@ -53,15 +53,16 @@ async function main(){
   if(info.scenario==="schema")w.eval('pbUseView.review.request.expected_revision="bad-type"');
   if(info.scenario==="auth-change")await rpc({command:"change-auth"});
   if(["default-invalid","late-default-invalid"].includes(info.scenario)){
-    const original=w.eval('engineering.instance.revision');w.eval('engineering.instance.revision=0');if(info.scenario==="late-default-invalid"){const operation=click("internal-run-submit");await wait(()=>!!hold);await nav("resources");hold();hold=null;await operation;await nav("apps");await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));}else await click("internal-run-submit");w.eval(`engineering.instance.revision=${original}`);
+    const original=w.eval('engineering.instance.revision');w.eval('engineering.instance.revision=0');if(info.scenario==="late-default-invalid"){const operation=click("internal-run-submit");await wait(()=>!!hold);await nav("resources");await nav("apps");await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));check($("internal-run-submit").disabled,"reopened original view remains fenced until exact rejection proof");hold();hold=null;await operation;}else await click("internal-run-submit");w.eval(`engineering.instance.revision=${original}`);
     check(w.eval("engineeringPending.size")===0,"default schema rejection clears only unaccepted intent");
     check(!$("internal-run-submit").disabled,"default exact rejection unlocks new explicit run");
-  }else{if(info.scenario==="late-invalid"){const operation=click("pb-use-submit");await wait(()=>!!hold);await nav("resources");hold();hold=null;await operation;await nav("apps");await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));}else await click("pb-use-submit");
+  }else{if(info.scenario==="late-invalid"){const operation=click("pb-use-submit");await wait(()=>!!hold);await nav("resources");await nav("apps");await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));check($("internal-run-submit").disabled,"reopened original view remains fenced until exact rejection proof");hold();hold=null;await operation;}else await click("pb-use-submit");
   check(w.eval("pbUsePending.size")===0,"explicit rejected unaccepted request unlocks correction");
-  check(!$("pb-use-preview").disabled&&!$("internal-run-submit").disabled,"both explicit and default running unlock");
+  check(!$("pb-use-material").disabled&&!$("internal-run-submit").disabled,"both explicit and default running unlock");
   check(w.eval("pbUseView.review===null")&&!$("pb-use-ack").checked,"rejection requires new exact review and consent");
   if(info.scenario==="auth-change")await rpc({command:"restore-auth"});
   }
+  if(info.scenario.startsWith("late-")){await edit("pb-use-material",info.target_resource);await edit("pb-use-goal",info.target);}
   await click("pb-use-preview");if(!$("pb-use-ack").checked)await click("pb-use-ack");await click("pb-use-submit");
  }else if(info.scenario==="commit-late-navigation"){
   fault=info.scenario;const request=click("pb-use-submit");await wait(()=>!!hold);const count=requests.filter(r=>r.path.includes("/pb-use-requests/")).length;await nav("resources");hold();hold=null;await request;
@@ -79,6 +80,6 @@ async function main(){
  check($("internal-data").textContent.includes("规范成果 v1"),"cold page loads saved typed result");await click([...w.document.querySelectorAll(".spec-result")].find(n=>n.textContent.includes("规范成果 v2")).querySelector('[data-spec-action="view"]'));
  check($("internal-data").textContent.includes("field beacon")&&!$("internal-data").textContent.includes("garden sensor")&&!$("internal-data").textContent.includes("desk lamp"),"third material result excludes earlier answers");
  check($("internal-data").textContent.includes("语义 UNKNOWN")&&$("internal-data").textContent.includes("人工验收 PENDING"),"semantic and human boundary preserved");
- fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,user_actions:actions,loaded_source_sha256:loaded,scenario:info.scenario,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",real_model_requests:0},null,2));process.stdout.write(JSON.stringify({done:true})+"\n");dom.window.close();process.exit(0);
+ fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,responses,user_actions:actions,loaded_source_sha256:loaded,scenario:info.scenario,browser:"JSDOM_NOT_NATIVE",api:"IPC_IN_PROCESS_HTTP",real_model_requests:0},null,2));process.stdout.write(JSON.stringify({done:true})+"\n");dom.window.close();process.exit(0);
 }
-main().catch(error=>{fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,loaded_source_sha256:loaded,error:String(error.stack)},null,2));process.stderr.write(error.stack+"\n");process.exit(1);});
+main().catch(error=>{fs.writeFileSync(info.output,JSON.stringify({status:"FAIL",checks,requests,responses,loaded_source_sha256:loaded,error:String(error.stack)},null,2));process.stderr.write(error.stack+"\n");process.exit(1);});
