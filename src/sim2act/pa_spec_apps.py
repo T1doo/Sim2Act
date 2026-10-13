@@ -727,9 +727,10 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     if "human_correction" in snapshot:
         from . import natural_spec_corrections
         draft, manifest, report, source, goal = natural_spec_corrections.bound(store,c,user,job,snapshot,release,limits)
-    elif "pb_use" in snapshot:
+    elif "pb_use" in snapshot or "pa_use" in snapshot:
         from . import pb_natural_uses
-        draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits)
+        draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits,
+            family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB)
     else:
         manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
     contract = store.frozen_contract(c, job)
@@ -783,9 +784,9 @@ def audit_fingerprint(store, c, user, draft):
         ref = natural_spec_corrections.gate(store,c,user,draft["correction_run_id"])
         return fingerprint(dict(correction=ref.model_dump(),base=audit_fingerprint(store,c,user,
             c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"])).mappings().one())))
-    if "pb_use_run_id" in draft:
-        from .pb_natural_uses import audit
-        return audit(store, c, user, draft)
+    if "pb_use_run_id" in draft or "pa_use_run_id" in draft:
+        from .pb_natural_uses import PA, PB, audit
+        return audit(store, c, user, draft, family=PA if "pa_use_run_id" in draft else PB)
     if "spec_task" in draft["candidate"]:
         from .pb_natural_specs import audit_fingerprint as pb_audit
         return pb_audit(store, c, user, draft)
@@ -917,6 +918,10 @@ def result_ref(binding, proved, version):
                 pb_use_review_fingerprint=s["pb_use"]["expected_review_fingerprint"],
                 target_goal_id=binding["goal"]["card_id"], target_resource_id=binding["source"]["resource_id"])
            if "pb_use" in s else {}),
+        **(dict(saved_app_fingerprint=binding["release"]["snapshot"]["draft"]["fingerprint"],
+                pa_use_review_fingerprint=s["pa_use"]["expected_review_fingerprint"],
+                target_goal_id=binding["goal"]["card_id"], target_resource_id=binding["source"]["resource_id"])
+           if "pa_use" in s else {}),
         receipt_refs=[p["operation_id"] for p in proved],
         model_requests=sum(a["executor"]["ref"] in natural.MODEL_KINDS for a in binding["draft"]["candidate"]["actions"]), **({"real_model_requests": 0} if natural.is_candidate(binding["draft"]["candidate"]) else {}), citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
         formal_publication_enabled=False)

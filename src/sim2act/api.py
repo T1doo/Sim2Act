@@ -181,12 +181,12 @@ def create_app(store=None, settings=None):
     @app.exception_handler(RequestValidationError)
     async def invalid_internal_submission(request, exc):
         response = await request_validation_exception_handler(request, exc)
-        match = re.fullmatch(r"/api/internal/instances/(iinstance_[a-f0-9]{32})/(runs|pb-use-runs)", request.url.path)
+        match = re.fullmatch(r"/api/internal/instances/(iinstance_[a-f0-9]{32})/(runs|pb-use-runs|pa-use-runs)", request.url.path)
         body = exc.body
         if request.method != "POST" or not match or not isinstance(body, dict):
             return response
         iid, endpoint = match.groups()
-        key = body.get("review", {}).get("request_key") if endpoint == "pb-use-runs" and isinstance(body.get("review"), dict) else body.get("request_key")
+        key = body.get("review", {}).get("request_key") if endpoint in {"pb-use-runs", "pa-use-runs"} and isinstance(body.get("review"), dict) else body.get("request_key")
         if not isinstance(key, str) or not 1 <= len(key) <= 100:
             return response
         from .app_jobs import rejection_proof
@@ -866,6 +866,8 @@ def create_app(store=None, settings=None):
     mount_pb_natural_specs(app, db, platform_limits, identity)
     from .pb_natural_uses import mount as mount_pb_natural_uses
     mount_pb_natural_uses(app, db, platform_limits, identity)
+    from .pb_natural_uses import PA
+    mount_pb_natural_uses(app, db, platform_limits, identity, family=PA)
     mount_protocol_api(app, db, platform_limits, identity, s)
     mount_protocol_recovery(app, db, identity)
     mount_protocol_reviews(app, db, identity)

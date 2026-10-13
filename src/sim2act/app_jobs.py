@@ -98,12 +98,16 @@ def submission_tx(store, guard):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
+    if pa_use is not None and (pb_use is not None or human_correction is not None or offline_replay is not None or owner_goal_fp is not None):
+        raise DomainError("INVALID_INPUT", "Per-use modes are mutually exclusive")
     if human_correction is not None and (pb_use is not None or offline_replay is not None or owner_goal_fp is not None):
         raise DomainError("INVALID_INPUT", "Correction cannot change another execution mode")
+    use_body = pa_use if pa_use is not None else pb_use
+    use_field = "pa_use" if pa_use is not None else "pb_use"
     guard: dict = {}
     with submission_tx(store, guard) as c:
         pid = c.execute(
@@ -143,8 +147,8 @@ def enqueue(
             request["offline_replay"] = offline_replay
         if owner_goal_fp is not None:
             request["owner_goal_binding_fingerprint"] = owner_goal_fp
-        if pb_use is not None:
-            request["pb_use"] = pb_use.model_dump()
+        if use_body is not None:
+            request[use_field] = use_body.model_dump()
         if human_correction is not None:
             from . import natural_spec_corrections as correction
             correction_body, correction_value = human_correction
@@ -202,9 +206,10 @@ def enqueue(
             correction.approve(store,c,user,iid,correction_ref.parent_run_id,limits,correction_body,correction_value)
             draft = {**copy.deepcopy(draft), "candidate": correction_value["effective_candidate"],
                 "fingerprint": fingerprint(correction_value["effective_candidate"])}
-        if pb_use is not None:
+        if use_body is not None:
             from . import pb_natural_uses
-            use_checked, _, use_goal = pb_natural_uses.approve(store, c, user, i, release, pb_use, limits)
+            use_family = pb_natural_uses.PA if pa_use is not None else pb_natural_uses.PB
+            use_checked, _, use_goal = pb_natural_uses.approve(store, c, user, i, release, use_body, limits, family=use_family)
             draft = {**copy.deepcopy(draft), "candidate": use_checked["effective_candidate"],
                      "fingerprint": use_checked["effective_fingerprint"]}
         resource_ref = draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
@@ -270,7 +275,7 @@ def enqueue(
             FrozenRunContract.model_validate(contract)
             goal = content["goal"]
         if use_checked is not None:
-            snapshot["pb_effective_fingerprint"] = use_checked["effective_fingerprint"]
+            snapshot["pa_effective_fingerprint" if pa_use is not None else "pb_effective_fingerprint"] = use_checked["effective_fingerprint"]
         accepted_created_at = time.time()
         from . import natural_specs
         if natural_specs.is_candidate(draft["candidate"]):
@@ -333,8 +338,8 @@ def enqueue(
             text_workflows.seal_job_scope(c, user, draft, snapshot)
         if pa_spec_apps.is_candidate(draft["candidate"]):
             pa_spec_apps.seal_job_scope(c, user, draft, snapshot)
-        if pb_use is not None:
-            pb_natural_uses.seal(c, user, release["snapshot"]["draft"], snapshot, pb_use, use_checked)
+        if use_body is not None:
+            pb_natural_uses.seal(c, user, release["snapshot"]["draft"], snapshot, use_body, use_checked, family=use_family)
         store.event(
             c,
             jid,
@@ -355,7 +360,7 @@ def enqueue(
             from . import owner_acceptance
             owner_acceptance.natural_final_gate(store,c,user,iid,correction_ref.parent_run_id,
                 correction_value["context"],expires_at=correction_value["expires_at"])
-        if pb_use is not None:
+        if use_body is not None:
             # Verify all new grants, accepted binding and seals before transaction commit.
             job = c.execute(select(runs).where(runs.c.id == jid)).mappings().one()
             pa_spec_apps.verify_job(store, c, user, job, limits)
@@ -400,8 +405,9 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
     request = {
         k: s[k] for k in ["instance_id", "expected_revision", "expected_release_fp", "input"]
     }
-    if "pb_use" in s:
-        request["pb_use"] = s["pb_use"]
+    for use_field in ("pb_use", "pa_use"):
+        if use_field in s:
+            request[use_field] = s[use_field]
     if "human_correction" in s:
         request["human_correction"] = s["human_correction"]
         request["correction_request"] = s["correction_request"]
@@ -446,9 +452,10 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
             from . import natural_spec_corrections
             _, _, _, correction_source, _ = natural_spec_corrections.bound(store,c,user,job,s,r,limits)
             expected_resource = correction_source["resource_id"]
-        elif "pb_use" in s:
+        elif "pb_use" in s or "pa_use" in s:
             from . import pb_natural_uses
-            _, _, _, use_source, _ = pb_natural_uses.bound(store, c, user, job, s, r, limits)
+            use_family = pb_natural_uses.PA if "pa_use" in s else pb_natural_uses.PB
+            _, _, _, use_source, _ = pb_natural_uses.bound(store, c, user, job, s, r, limits, family=use_family)
             expected_resource = use_source["resource_id"]
         if (
             r["fingerprint"] != s["expected_release_fp"]

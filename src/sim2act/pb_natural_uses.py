@@ -1,6 +1,7 @@
-"""Explicit per-Run target bindings for one saved P-B app and immutable Release."""
+"""Shared sealed per-Run binding engine; distinct saved P-A/P-B provenance."""
 import copy
 import time
+from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import Depends
@@ -50,16 +51,59 @@ class CommitInput(Strict):
     consent: Literal["RUN_THIS_SAVED_PB_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"]
 
 
-def use_hint(c, rid):
+PA_CONSENT = "RUN_THIS_SAVED_PA_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"
+
+
+class PACommitInput(Strict):
+    review: ReviewInput
+    expected_review_fingerprint: str = Field(pattern=HASH)
+    consent: Literal["RUN_THIS_SAVED_PA_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"]
+
+
+@dataclass(frozen=True)
+class Family:
+    field: str
+    namespace: str
+    use: str
+    meta: str
+    consent: str
+    body_type: type[CommitInput] | type[PACommitInput]
+    route: str
+
+
+PB = Family("pb_use", VERSION, USE, META, CONSENT, CommitInput, "pb-use")
+PA = Family("pa_use", "pa-natural-per-run.v1", "pa_natural_use", "pa_natural_use_scope",
+    PA_CONSENT, PACommitInput, "pa-use")
+FAMILIES = (PB, PA)
+
+
+def saved_family(candidate):
+    if not natural.is_candidate(candidate):
+        return None
+    if candidate.get("spec_task", {}).get("kind") == pb.KIND:
+        return PB
+    if "spec_task" not in candidate and ("goal_application" in candidate or
+            candidate.get("spec_binding", {}).get("kind") == spec.KIND):
+        return PA
+    return None
+
+
+def base_audit(store, c, user, base, family):
+    return (pb.audit_fingerprint if family == PB else spec.audit_fingerprint)(store, c, user, base)
+
+
+def use_hint(c, rid, family=None):
+    if family is None:
+        return any(use_hint(c, rid, f) for f in FAMILIES)
     hinted = c.execute(select(delivery_graph_requests.c.app_id).where(
         delivery_graph_requests.c.app_id == rid,
-        delivery_graph_requests.c.kind.in_([META, META + "_seal"]))).first()
+        delivery_graph_requests.c.kind.in_([family.meta, family.meta + "_seal"]))).first()
     # Independent scalar identifiers prevent deleting both dedicated seals from
     # downgrading a per-use Run to its saved default target's authorization.
-    hinted = hinted or c.execute(select(internal_run_bindings.c.snapshot["pb_use"]["review"]["resource_id"].as_string())
+    hinted = hinted or c.execute(select(internal_run_bindings.c.snapshot[family.field]["review"]["resource_id"].as_string())
         .where(internal_run_bindings.c.run_id == rid)).scalar_one_or_none()
     hinted = hinted or c.execute(select(delivery_graph_requests.c.app_id).where(
-        delivery_graph_requests.c.kind == USE,
+        delivery_graph_requests.c.kind == family.use,
         delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == rid)).first()
     return bool(hinted)
 
@@ -68,16 +112,25 @@ def use_hint(c, rid):
 def scope_gate(store, c, user, rid, header):
     if not use_hint(c, rid):
         return False
-    meta, seal = pair(c, user, rid, META, "accepted", RunScopeInput)
+    hints = [f for f in FAMILIES if use_hint(c, rid, f)]
+    require(len(hints) == 1, "Exact per-use family required")
+    family = hints[0]
+    meta, seal = pair(c, user, rid, family.meta, "accepted", RunScopeInput)
     require(fingerprint(meta.model_dump()) == fingerprint(seal) and meta.run_id == rid
         and meta.principal_id == user == header["principal_id"]
         and meta.project_id == header["project_id"] and meta.runtime_id == header["runtime_id"])
     from .db import app_drafts
     accepted, accepted_seal = pair(c, user, rid, spec.RUN_META, "accepted", RunScopeInput)
     require(accepted.model_dump() == meta.model_dump() == accepted_seal)
-    require(c.execute(select(app_drafts.c.candidate["spec_task"]["kind"].as_string()).where(
-        app_drafts.c.id == meta.app_id, app_drafts.c.project_id == meta.project_id,
-        app_drafts.c.runtime_id == meta.runtime_id)).scalar_one_or_none() == pb.KIND)
+    location = c.execute(select(app_drafts.c.candidate["namespace"].as_string().label("namespace"),
+        app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task"),
+        app_drafts.c.candidate["spec_binding"]["kind"].as_string().label("binding"),
+        app_drafts.c.candidate["goal_application"]["run_id"].as_string().label("generation"))
+        .where(app_drafts.c.id == meta.app_id, app_drafts.c.project_id == meta.project_id,
+        app_drafts.c.runtime_id == meta.runtime_id)).mappings().first()
+    require(location is not None and location["namespace"] == natural.VERSION
+        and (location["task"] == pb.KIND if family == PB else location["task"] is None
+             and (location["binding"] == spec.KIND or location["generation"] is not None)))
     store.own_project(c, user, meta.project_id)
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, natural.READ)
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.project_id, natural.SAVE)
@@ -95,13 +148,14 @@ def protected_instance(c, iid):
         .join(internal_instances, internal_instances.c.source_app_id == app_drafts.c.id)
         .where(internal_instances.c.id == iid)).scalar_one_or_none()
     ledger = c.execute(select(delivery_graph_requests.c.app_id).where(
-        ((delivery_graph_requests.c.app_id == iid) & delivery_graph_requests.c.kind.in_([USE, USE + "_seal"]))
+        ((delivery_graph_requests.c.app_id == iid) & delivery_graph_requests.c.kind.in_([f.use + suffix for f in FAMILIES for suffix in ("", "_seal")]))
         | (delivery_graph_requests.c.kind.in_([spec.RUN_META, spec.RUN_META + "_seal"])
            & (delivery_graph_requests.c.snapshot["request"]["instance_id"].as_string() == iid)))).first()
     overlay = c.execute(select(internal_run_bindings.c.run_id)
         .join(internal_app_runs, internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
         .where(internal_app_runs.c.instance_id == iid,
-            internal_run_bindings.c.snapshot["pb_use"]["review"]["resource_id"].as_string().is_not(None))).first()
+            ((internal_run_bindings.c.snapshot["pb_use"]["review"]["resource_id"].as_string().is_not(None))
+             | (internal_run_bindings.c.snapshot["pa_use"]["review"]["resource_id"].as_string().is_not(None))))).first()
     return kind == pb.KIND or app_kind == pb.KIND or bool(ledger or overlay)
 
 
@@ -168,7 +222,9 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
     if iid is not None and meta.instance_id != iid:
         raise DomainError("PERMISSION_DENIED")
     if use_hint(c, rid):
-        own, own_seal = pair(c, user, rid, META, "accepted", RunScopeInput)
+        hints = [f for f in FAMILIES if use_hint(c, rid, f)]
+        require(len(hints) == 1)
+        own, own_seal = pair(c, user, rid, hints[0].meta, "accepted", RunScopeInput)
         require(own.model_dump() == own_seal == meta.model_dump())
     instance = c.execute(select(internal_instances.c.project_id, internal_instances.c.runtime_id,
         internal_instances.c.source_app_id).where(internal_instances.c.id == meta.instance_id,
@@ -194,9 +250,9 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
 
 
 @controlled
-def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None):
+def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB):
     base = release["snapshot"]["draft"]
-    require(base["candidate"].get("spec_task", {}).get("kind") == pb.KIND
+    require(saved_family(base["candidate"]) == family
         and instance["source_app_id"] == base["id"] and instance["runtime_id"] == base["runtime_id"]
         and instance["revision"] == body.expected_revision
         and release["fingerprint"] == body.expected_release_fingerprint
@@ -209,9 +265,15 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
     value = natural.expand(base["candidate"]["spec_recipe"], base["id"], goal.card_id,
         base["project_id"], material["hash"], material["resource_id"], goal.snapshot["content"],
         declared, base["candidate"]["model_sample_check"]["sample_fingerprint"])
-    value["manifest"]["origin"] = "task_run"
-    value["manifest"]["source_run_ref"] = base["candidate"]["manifest"]["source_run_ref"]
-    value["spec_task"] = {**base["candidate"]["spec_task"], "target_goal_fingerprint": goal.fingerprint}
+    if family == PB:
+        value["manifest"]["origin"] = "task_run"
+        value["manifest"]["source_run_ref"] = base["candidate"]["manifest"]["source_run_ref"]
+        value["spec_task"] = {**base["candidate"]["spec_task"], "target_goal_fingerprint": goal.fingerprint}
+    else:
+        spec.verify_origin(store, c, user, base, limits)
+        for marker in ("goal_application", "spec_binding"):
+            if marker in base["candidate"]:
+                value[marker] = copy.deepcopy(base["candidate"][marker])
     _, _, report = natural.compile_candidate(value, limits)
     grant_state = approved_grants
     if grant_state is None:
@@ -220,33 +282,37 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
             grants.c.project_id == instance["project_id"],
             grants.c.resource_id == material["resource_id"], grants.c.tool_ref == natural.READ)
             .order_by(grants.c.id)).mappings()]
-    result = dict(approved_grant_state=grant_state, namespace=VERSION, principal_id=user, project_id=instance["project_id"],
+    result = dict(approved_grant_state=grant_state, namespace=family.namespace, principal_id=user, project_id=instance["project_id"],
         app_id=base["id"], runtime_id=base["runtime_id"], instance_id=instance["id"],
         release_id=release["id"], release_fingerprint=release["fingerprint"],
         saved_app_fingerprint=base["fingerprint"], recipe_fingerprint=body.expected_recipe_fingerprint,
         source_run_id=value["manifest"]["source_run_ref"],
-        source_audit_fingerprint=pb.audit_fingerprint(store, c, user, base),
+        source_audit_fingerprint=base_audit(store, c, user, base, family),
         request=body.model_dump(), target_goal=goal.model_dump(),
         variable_bindings=dict(resource_id=material["resource_id"], source_hash=material["hash"],
             format=material["format"], goal_id=goal.card_id, goal_version=goal.version),
         effective_candidate=value, effective_fingerprint=fingerprint(value), report=report,
         required_permissions=[dict(tool_ref=natural.READ, resource_ref=material["resource_id"]),
             dict(tool_ref=natural.SAVE, resource_ref=instance["project_id"])],
-        preview=natural.preview(material, value, {}), consent=CONSENT,
+        preview=natural.preview(material, value, {}), consent=family.consent,
         new_model_requests=0, artifact_writes=0, semantic_status="UNKNOWN", owner_acceptance="PENDING",
         formal_publication_enabled=False)
+    if family == PA:
+        result.update(instance_data_version=instance["data_version"],
+            proposed_limits=declared.model_dump(), proposed_model_nodes=declared.max_requests,
+            proposed_artifact_writes_at_most=1, real_model_allowance=0)
     return {**result, "review_fingerprint": fingerprint(result)}, material, goal
 
 
 @controlled
-def approve(store, c, user, instance, release, body, limits):
-    checked, material, goal = review(store, c, user, instance, release, body.review, limits)
+def approve(store, c, user, instance, release, body, limits, *, family=PB):
+    checked, material, goal = review(store, c, user, instance, release, body.review, limits, family=family)
     require(checked["review_fingerprint"] == body.expected_review_fingerprint)
     existing = c.execute(select(delivery_graph_requests.c.request_key).where(
         delivery_graph_requests.c.app_id == instance["id"], delivery_graph_requests.c.principal_id == user,
-        delivery_graph_requests.c.kind == USE)).all()
+        delivery_graph_requests.c.kind == family.use)).all()
     if len(existing) >= MAX:
-        raise DomainError("BUDGET_EXHAUSTED", "Finite per-instance P-B use capacity exhausted")
+        raise DomainError("BUDGET_EXHAUSTED", "Finite per-instance use capacity exhausted")
     if c.execute(select(grants.c.id).where(grants.c.principal_id == instance["runtime_id"],
         grants.c.project_id == instance["project_id"], grants.c.resource_id == material["resource_id"],
         grants.c.tool_ref == natural.READ, grants.c.revoked.is_(False), grants.c.expires_at > time.time())).first() is None:
@@ -254,78 +320,80 @@ def approve(store, c, user, instance, release, body, limits):
             project_id=instance["project_id"], resource_id=material["resource_id"], tool_ref=natural.READ,
             expires_at=time.time() + 86400, revision=1, revoked=False))
     checked_again, _, _ = review(store, c, user, instance, release, body.review, limits,
-                                runtime=instance["runtime_id"], approved_grants=checked["approved_grant_state"])
+                                runtime=instance["runtime_id"], approved_grants=checked["approved_grant_state"], family=family)
     require(checked_again == checked)
     return checked, material, goal
 
 
-def seal(c, user, base, snapshot, body, checked):
+def seal(c, user, base, snapshot, body, checked, *, family=PB):
     frozen = dict(run_id=snapshot["run_id"], app_run_id=snapshot["app_run_id"], reviewed=checked,
         request_fingerprint=fingerprint(body.model_dump()), review_fingerprint=checked["review_fingerprint"])
-    remember(c, user, snapshot["instance_id"], USE, body.review.request_key, body, frozen)
+    remember(c, user, snapshot["instance_id"], family.use, body.review.request_key, body, frozen)
     meta = RunScopeInput(app_id=base["id"], principal_id=user, project_id=base["project_id"],
         runtime_id=base["runtime_id"], resource_id=checked["variable_bindings"]["resource_id"],
         run_id=snapshot["run_id"], instance_id=snapshot["instance_id"],
         app_run_id=snapshot["app_run_id"], release_id=snapshot["release_id"])
-    remember(c, user, snapshot["run_id"], META, "accepted", meta, meta.model_dump())
+    remember(c, user, snapshot["run_id"], family.meta, "accepted", meta, meta.model_dump())
 
 
 @controlled
-def bound(store, c, user, job, snapshot, release, limits):
+def bound(store, c, user, job, snapshot, release, limits, *, family=PB):
     from .db import internal_instances
-    body, frozen = pair(c, user, snapshot["instance_id"], USE, snapshot["pb_use"]["review"]["request_key"], CommitInput)
-    require(body.model_dump() == snapshot["pb_use"] and frozen["run_id"] == job["id"]
+    body, frozen = pair(c, user, snapshot["instance_id"], family.use, snapshot[family.field]["review"]["request_key"], family.body_type)
+    require(body.model_dump() == snapshot[family.field] and frozen["run_id"] == job["id"]
         and frozen["app_run_id"] == snapshot["app_run_id"])
     instance = c.execute(select(internal_instances).where(internal_instances.c.id == snapshot["instance_id"],
         internal_instances.c.principal_id == user, internal_instances.c.project_id == job["project_id"])).mappings().one()
     # Historic results retain their accepted revision; the existing commit guard
     # separately requires the live revision for any new side effect.
     accepted_instance = {**dict(instance), "revision": snapshot["expected_revision"],
-                         "runtime_id": snapshot["runtime_id"], "source_app_id": release["snapshot"]["draft"]["id"]}
-    checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"])
+                         "runtime_id": snapshot["runtime_id"], "source_app_id": release["snapshot"]["draft"]["id"],
+                         "data_version": snapshot["base_data_version"]}
+    checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"], family=family)
     require(body.expected_review_fingerprint == checked["review_fingerprint"]
         and frozen["reviewed"] == checked and frozen["request_fingerprint"] == fingerprint(body.model_dump())
-        and snapshot["pb_effective_fingerprint"] == checked["effective_fingerprint"])
+        and snapshot["pb_effective_fingerprint" if family == PB else "pa_effective_fingerprint"] == checked["effective_fingerprint"])
     draft = {**copy.deepcopy(release["snapshot"]["draft"]), "candidate": checked["effective_candidate"],
-        "fingerprint": checked["effective_fingerprint"], "pb_use_run_id": job["id"]}
+        "fingerprint": checked["effective_fingerprint"], family.field + "_run_id": job["id"]}
     manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
     return draft, manifest, report, material, goal.model_dump()
 
 
 @controlled
-def audit(store, c, user, draft):
-    rid = draft["pb_use_run_id"]
+def audit(store, c, user, draft, *, family=PB):
+    rid = draft[family.field + "_run_id"]
     header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id).where(runs.c.id == rid)).mappings().one()
     require(scope_gate(store, c, user, rid, header))
     from .db import app_drafts
     base = c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"],
         app_drafts.c.project_id == draft["project_id"])).mappings().one()
-    meta, seal_meta = pair(c, user, rid, META, "accepted", RunScopeInput)
+    meta, seal_meta = pair(c, user, rid, family.meta, "accepted", RunScopeInput)
     snapshot = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == rid)).scalar_one()
-    body, frozen = pair(c, user, meta.instance_id, USE, snapshot["pb_use"]["review"]["request_key"], CommitInput)
-    return fingerprint(dict(base=pb.audit_fingerprint(store, c, user, base), meta=meta.model_dump(),
+    body, frozen = pair(c, user, meta.instance_id, family.use, snapshot[family.field]["review"]["request_key"], family.body_type)
+    return fingerprint(dict(base=base_audit(store, c, user, base, family), meta=meta.model_dump(),
         scope_seal=seal_meta, request=body.model_dump(), frozen=frozen))
 
 
-def mount(app, store, limits, identity):
+def mount(app, store, limits, identity, *, family=PB):
     user_dep = Depends(identity)
+    body_type = family.body_type
 
-    @app.post("/api/internal/instances/{iid}/pb-use-reviews")
+    @app.post("/api/internal/instances/{iid}/" + family.route + "-reviews")
     def preview(iid: str, body: ReviewInput, user=user_dep):
         from .lifecycle import instance
         with store.tx() as c:
             i, release = instance(store, c, user, iid, limits)
-            checked, _, _ = review(store, c, user, i, release, body, limits)
+            checked, _, _ = review(store, c, user, i, release, body, limits, family=family)
             return checked
 
-    @app.post("/api/internal/instances/{iid}/pb-use-runs", status_code=202)
-    def run(iid: str, body: CommitInput, user=user_dep):
+    @app.post("/api/internal/instances/{iid}/" + family.route + "-runs", status_code=202)
+    def run(iid: str, body: body_type, user=user_dep):
         from .app_jobs import enqueue
         return enqueue(store, user, iid, body.review.expected_revision,
-            body.review.expected_release_fingerprint, {}, body.review.request_key, limits, pb_use=body,
-            submission=dict(endpoint="pb-use-runs", body=body.model_dump(exclude_unset=True)))
+            body.review.expected_release_fingerprint, {}, body.review.request_key, limits, **{family.field: body},
+            submission=dict(endpoint=family.route + "-runs", body=body.model_dump(exclude_unset=True)))
 
-    @app.get("/api/internal/instances/{iid}/pb-use-requests/{key}")
+    @app.get("/api/internal/instances/{iid}/" + family.route + "-requests/{key}")
     @controlled
     def recover(iid: str, key: str, user=user_dep):
         from .lifecycle import instance
@@ -334,16 +402,16 @@ def mount(app, store, limits, identity):
             # Only the Run identifier is inspected before target authorization.
             rid = c.execute(select(delivery_graph_requests.c.snapshot["response"]["run_id"].as_string()).where(
                 delivery_graph_requests.c.app_id == iid, delivery_graph_requests.c.principal_id == user,
-                delivery_graph_requests.c.kind == USE, delivery_graph_requests.c.request_key == key)).scalar_one_or_none()
+                delivery_graph_requests.c.kind == family.use, delivery_graph_requests.c.request_key == key)).scalar_one_or_none()
             if rid is None:
                 raise DomainError("OUTCOME_UNKNOWN", "No accepted use for this original key")
             require(spec.job_scope_gate(store, c, user, rid))
-            body, frozen = pair(c, user, iid, USE, key, CommitInput)
+            body, frozen = pair(c, user, iid, family.use, key, family.body_type)
             require(frozen["run_id"] == rid)
             job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user,
                 runs.c.project_id == i["project_id"])).mappings().one()
             binding, _, _ = spec.verify_job(store, c, user, job, limits)
-            return dict(namespace=VERSION, request=body.model_dump(), request_key=key,
+            return dict(namespace=family.namespace, request=body.model_dump(), request_key=key,
                 **frozen, principal_id=user, project_id=i["project_id"], app_id=i["source_app_id"],
                 instance_id=iid, release_id=binding["release"]["id"], status=job["status"],
                 effective_fingerprint=binding["draft"]["fingerprint"], new_model_requests=0,
