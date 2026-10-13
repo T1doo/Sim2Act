@@ -475,6 +475,8 @@ def job_scope_gate(store, c, user, rid):
         runs.c.request_key).where(runs.c.id == rid)).mappings().first()
     if row is None:
         return False
+    from . import pb_natural_uses
+    pb_natural_uses.scope_gate(store, c, user, rid, row)
     ids = set(c.execute(select(app_drafts.c.id).where(app_drafts.c.runtime_id == row["runtime_id"],
         app_drafts.c.project_id == row["project_id"])).scalars())
     accepted = c.execute(select(events.c.data["instance_id"].as_string().label("iid"),
@@ -719,7 +721,11 @@ def bound(store, c, user, job, limits, *, validate_input=True):
     # fully validated by load_binding rather than recursively replaying it twice.
     draft = release["snapshot"]["draft"]
     require(is_candidate(draft["candidate"]))
-    manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
+    if "pb_use" in snapshot:
+        from . import pb_natural_uses
+        draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits)
+    else:
+        manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
     contract = store.frozen_contract(c, job)
     content = goal["snapshot"]["content"]
     require(contract.source_goal_card is None and contract.goal.goal_id == goal["card_id"]
@@ -763,6 +769,9 @@ def audit_fingerprint(store, c, user, draft):
     No cross-transaction cache. Full model history is verified at step entry and
     final readback; repeated commit guards compare every stored audit byte.
     """
+    if "pb_use_run_id" in draft:
+        from .pb_natural_uses import audit
+        return audit(store, c, user, draft)
     if "spec_task" in draft["candidate"]:
         from .pb_natural_specs import audit_fingerprint as pb_audit
         return pb_audit(store, c, user, draft)
@@ -890,6 +899,10 @@ def result_ref(binding, proved, version):
     s = binding["snapshot"]
     return dict(namespace=binding["draft"]["candidate"]["namespace"], app_run_id=s["app_run_id"], instance_id=s["instance_id"],
         release_id=s["release_id"], result_version=version, plan_fingerprint=binding["plan"]["plan_fingerprint"],
+        **(dict(saved_app_fingerprint=binding["release"]["snapshot"]["draft"]["fingerprint"],
+                pb_use_review_fingerprint=s["pb_use"]["expected_review_fingerprint"],
+                target_goal_id=binding["goal"]["card_id"], target_resource_id=binding["source"]["resource_id"])
+           if "pb_use" in s else {}),
         receipt_refs=[p["operation_id"] for p in proved],
         model_requests=sum(a["executor"]["ref"] in natural.MODEL_KINDS for a in binding["draft"]["candidate"]["actions"]), **({"real_model_requests": 0} if natural.is_candidate(binding["draft"]["candidate"]) else {}), citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
         formal_publication_enabled=False)

@@ -52,7 +52,7 @@ def is_app_job(store, rid):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
@@ -89,6 +89,8 @@ def enqueue(
             request["offline_replay"] = offline_replay
         if owner_goal_fp is not None:
             request["owner_goal_binding_fingerprint"] = owner_goal_fp
+        if pb_use is not None:
+            request["pb_use"] = pb_use.model_dump()
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -135,6 +137,12 @@ def enqueue(
             own_goal is None and owner_goal_fp is not None
         ):
             raise DomainError("VERSION_CONFLICT", "Confirm the current own GoalCard binding for this Run")
+        use_checked = use_goal = None
+        if pb_use is not None:
+            from . import pb_natural_uses
+            use_checked, _, use_goal = pb_natural_uses.approve(store, c, user, i, release, pb_use, limits)
+            draft = {**copy.deepcopy(draft), "candidate": use_checked["effective_candidate"],
+                     "fingerprint": use_checked["effective_fingerprint"]}
         resource_ref = draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
         source = c.execute(select(resources).where(resources.c.id == resource_ref)).mappings().one()
         snapshot = {
@@ -181,7 +189,7 @@ def enqueue(
         ).model_dump()
         from . import pa_spec_apps, text_workflows
         if pa_spec_apps.is_candidate(draft["candidate"]):
-            _, _, _, source_goal = pa_spec_apps.verify_origin(store, c, user, draft, limits)
+            source_goal = use_goal.model_dump() if use_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
             snapshot["spec_goal"] = source_goal
             content = source_goal["snapshot"]["content"]
             contract["goal"].update(goal_id=source_goal["card_id"], goal=content["goal"],
@@ -197,6 +205,8 @@ def enqueue(
                 constraints=content["constraints"], unresolved=text_workflows.goal_unresolved(source_goal))
             FrozenRunContract.model_validate(contract)
             goal = content["goal"]
+        if use_checked is not None:
+            snapshot["pb_effective_fingerprint"] = use_checked["effective_fingerprint"]
         accepted_created_at = time.time()
         from . import natural_specs
         if natural_specs.is_candidate(draft["candidate"]):
@@ -259,6 +269,8 @@ def enqueue(
             text_workflows.seal_job_scope(c, user, draft, snapshot)
         if pa_spec_apps.is_candidate(draft["candidate"]):
             pa_spec_apps.seal_job_scope(c, user, draft, snapshot)
+        if pb_use is not None:
+            pb_natural_uses.seal(c, user, release["snapshot"]["draft"], snapshot, pb_use, use_checked)
         store.event(
             c,
             jid,
@@ -271,6 +283,10 @@ def enqueue(
                 "input_fingerprint": fp,
             },
         )
+        if pb_use is not None:
+            # Verify all new grants, accepted binding and seals before transaction commit.
+            job = c.execute(select(runs).where(runs.c.id == jid)).mappings().one()
+            pa_spec_apps.verify_job(store, c, user, job, limits)
         return {
             "run_id": jid,
             "app_run_id": aid,
@@ -312,6 +328,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
     request = {
         k: s[k] for k in ["instance_id", "expected_revision", "expected_release_fp", "input"]
     }
+    if "pb_use" in s:
+        request["pb_use"] = s["pb_use"]
     if "offline_replay" in s:
         request["offline_replay"] = s["offline_replay"]
     if "owner_goal_binding_fingerprint" in s:
@@ -348,12 +366,17 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
             if not is_agent(r["snapshot"]["draft"]["candidate"]):
                 raise DomainError("VERSION_CONFLICT", "Offline Replay cannot change executor family")
             offline_replay_model(s["offline_replay"])
+        expected_resource = r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
+        if "pb_use" in s:
+            from . import pb_natural_uses
+            _, _, _, use_source, _ = pb_natural_uses.bound(store, c, user, job, s, r, limits)
+            expected_resource = use_source["resource_id"]
         if (
             r["fingerprint"] != s["expected_release_fp"]
             or r["project_id"] != s["project_id"]
             or r["snapshot"]["draft"]["runtime_id"] != s["runtime_id"]
             or job["resource_refs"]
-            != [r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]]
+            != [expected_resource]
         ):
             raise DomainError("VERSION_CONFLICT")
     return (s, a, r) if return_release else (s, a)

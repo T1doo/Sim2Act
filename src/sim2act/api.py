@@ -833,6 +833,8 @@ def create_app(store=None, settings=None):
     mount_spec_apps(app, db, platform_limits, identity)
     from .pb_natural_specs import mount as mount_pb_natural_specs
     mount_pb_natural_specs(app, db, platform_limits, identity)
+    from .pb_natural_uses import mount as mount_pb_natural_uses
+    mount_pb_natural_uses(app, db, platform_limits, identity)
     mount_protocol_api(app, db, platform_limits, identity, s)
     mount_protocol_recovery(app, db, identity)
     mount_protocol_reviews(app, db, identity)
