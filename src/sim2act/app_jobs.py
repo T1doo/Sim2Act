@@ -57,6 +57,11 @@ SUBMISSION_REJECTION = "internal-run-rejection.v1"
 def rejection_proof(c, user, iid, pid, key, submission, phase):
     from .db import delivery_graph_requests
     # Project lock is held; scalar existence reads never inspect accepted bodies.
+    owned = c.execute(select(internal_instances.c.id).where(
+        internal_instances.c.id == iid, internal_instances.c.principal_id == user,
+        internal_instances.c.project_id == pid)).first()
+    if not owned:
+        return None
     old = c.execute(select(internal_app_runs.c.id).where(
         internal_app_runs.c.instance_id == iid, internal_app_runs.c.principal_id == user,
         internal_app_runs.c.request_key == key)).first()
@@ -97,7 +102,7 @@ def enqueue(
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
-    guard = {}
+    guard: dict = {}
     with submission_tx(store, guard) as c:
         pid = c.execute(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)

@@ -22,7 +22,7 @@ async function boot(){
  dom=new JSDOM(await load("/"),{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
  const style=w.document.createElement("style");style.textContent=await load("/app.css");w.document.head.append(style);
- w.fetch=async(path,options={})=>{const request={path,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
+ w.fetch=async(path,options={})=>{const request={path,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);if(["late-invalid","late-default-invalid"].includes(fault)&&request.method==="POST"&&(/\/(pb-use-runs|runs)$/.test(path))){assert.equal(result.status,fault==="late-invalid"?409:422);fault="";await new Promise(resolve=>hold=resolve);}
   if(["invalid","schema","auth-change","default-invalid"].includes(fault)&&request.method==="POST"&&(/\/(pb-use-runs|runs)$/.test(path))){const expected=fault==="schema"||fault==="default-invalid"?422:409;fault="";check(result.status===expected,"actual explicit rejection through HTTP");}
   if(fault==="lost"&&request.method==="POST"&&path.endsWith("/pb-use-runs")){fault="";assert.equal(result.status,202);throw Error("actual accepted P-B response lost");}
   if((fault==="review-late-navigation"&&path.endsWith("/pb-use-reviews"))||(fault==="commit-late-navigation"&&request.method==="POST"&&path.endsWith("/pb-use-runs"))){fault="";assert.equal(result.status,path.endsWith("/pb-use-runs")?202:200);await new Promise(resolve=>hold=resolve);}
@@ -47,16 +47,16 @@ async function main(){
  }
  await click("pb-use-preview");check(w.eval("pbUseView.review!==null"),"typed material and Goal preview verified");
  check($("pb-use-proof").textContent.includes(info.target_resource),"full review displays exact material");check($("pb-use-submit").disabled,"explicit consent required");await click("pb-use-ack");
- if(["invalid","schema","auth-change","default-invalid"].includes(info.scenario)){
+ if(["invalid","schema","auth-change","default-invalid","late-invalid","late-default-invalid"].includes(info.scenario)){
   fault=info.scenario;
-  if(info.scenario==="invalid")w.eval('pbUseView.review.review_fingerprint="0".repeat(64)');
+  if(["invalid","late-invalid"].includes(info.scenario))w.eval('pbUseView.review.review_fingerprint="0".repeat(64)');
   if(info.scenario==="schema")w.eval('pbUseView.review.request.expected_revision="bad-type"');
   if(info.scenario==="auth-change")await rpc({command:"change-auth"});
-  if(info.scenario==="default-invalid"){
-    const original=w.eval('engineering.instance.revision');w.eval('engineering.instance.revision=0');await click("internal-run-submit");w.eval(`engineering.instance.revision=${original}`);
+  if(["default-invalid","late-default-invalid"].includes(info.scenario)){
+    const original=w.eval('engineering.instance.revision');w.eval('engineering.instance.revision=0');if(info.scenario==="late-default-invalid"){const operation=click("internal-run-submit");await wait(()=>!!hold);await nav("resources");hold();hold=null;await operation;await nav("apps");await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));}else await click("internal-run-submit");w.eval(`engineering.instance.revision=${original}`);
     check(w.eval("engineeringPending.size")===0,"default schema rejection clears only unaccepted intent");
     check(!$("internal-run-submit").disabled,"default exact rejection unlocks new explicit run");
-  }else{await click("pb-use-submit");
+  }else{if(info.scenario==="late-invalid"){const operation=click("pb-use-submit");await wait(()=>!!hold);await nav("resources");hold();hold=null;await operation;await nav("apps");await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));}else await click("pb-use-submit");
   check(w.eval("pbUsePending.size")===0,"explicit rejected unaccepted request unlocks correction");
   check(!$("pb-use-preview").disabled&&!$("internal-run-submit").disabled,"both explicit and default running unlock");
   check(w.eval("pbUseView.review===null")&&!$("pb-use-ack").checked,"rejection requires new exact review and consent");
@@ -72,7 +72,7 @@ async function main(){
   if(["lost","receipt-poison"].includes(info.scenario))fault=info.scenario;await click("pb-use-submit");
   if(["lost","receipt-poison"].includes(info.scenario)){check(w.eval("pbUsePending.size")===1,"unknown receipt retains exact pending intent");check($("pb-use-preview").disabled&&$("internal-run-submit").disabled,"unknown intent disables duplicate default and explicit submit");await click("pb-use-recover");}
  }
- check(countPost("/pb-use-runs")===(["invalid","schema","auth-change"].includes(info.scenario)?2:1),"recovery never repeats POST");check(w.eval("pbUsePending.size")===0,"verified original receipt clears pending");
+ check(countPost("/pb-use-runs")===(["invalid","schema","auth-change","late-invalid"].includes(info.scenario)?2:1),"recovery never repeats POST");check(w.eval("pbUsePending.size")===0,"verified original receipt clears pending");
  const run=w.eval("engineering.run.id");check(w.eval("activeApp")===info.app&&w.eval("engineering.instance.id")===info.instance,"same app and instance retained");
  await rpc({command:"cold-worker",run_id:run,instance_id:info.instance});
  await boot();await click([...$("app-list").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.name)));await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));

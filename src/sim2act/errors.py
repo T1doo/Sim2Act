@@ -1,4 +1,5 @@
 class DomainError(Exception):
+    submission_rejection: dict | None = None
     def __init__(self, code: str, message: str = "", *, retryable: bool = False):
         self.code = code
         self.message = message or code
@@ -14,6 +15,6 @@ class DomainError(Exception):
             "user_action": "Check status, configuration and permissions",
         }
 
-        if hasattr(self, "submission_rejection"):
+        if self.submission_rejection is not None:
             value["submission_rejection"] = self.submission_rejection
         return value

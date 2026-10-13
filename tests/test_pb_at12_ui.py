@@ -17,7 +17,7 @@ from sim2act.api import create_app
 from sim2act.db import Store, grants, internal_instance_data, internal_run_bindings, new_id, runs
 
 
-@pytest.mark.parametrize("scenario", ["invalid", "schema", "auth-change", "default-invalid", "lost", "commit-late-navigation", "receipt-poison"])
+@pytest.mark.parametrize("scenario", ["invalid", "schema", "auth-change", "default-invalid", "lost", "commit-late-navigation", "receipt-poison", "late-invalid", "late-default-invalid"])
 def test_at12_rejected_correction_and_original_key_recovery(env, tmp_path, scenario):
     data, app, release, inst, target_resource, goal, body, route = prepared_use(env, run_base=True)
     aid = app["id"]
