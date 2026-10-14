@@ -230,7 +230,8 @@ def load_preview(store,c,user,iid,key,limits,*,original=True,_verified_origin=No
     if original and _verified_origin is None and _prepared is None:
         from .project_natural_revalidation import local_preview_segment
         segment=local_preview_segment(store,c,user,iid,key,limits)
-        if segment is not None:return segment
+        if segment is not None:
+            return segment
     current = _prepared or context(store,c,user,iid,limits,original=original,_verified_origin=_verified_origin)
     spec.require(current[0]['instance_id']==iid and current[0]['principal_id']==user
         and current[0]['limits']==limits.model_dump())
