@@ -340,7 +340,8 @@ def _generation_accounted(store, c, user, contract, approval_key, gen_id):
                 and settlement["response_sha256"] == raw.get("sha256")
                 and settlement["response_ascii_bytes"] == raw.get("bytes")
                 and usage.get("status") == "known"
-                and all(settlement[k] == usage.get(k) for k in
+                and isinstance(usage.get("tokens"), dict)
+                and all(settlement[k] == usage["tokens"].get(k) for k in
                     ("prompt_tokens", "completion_tokens", "total_tokens")),
                 "Independent Generate trial charge/raw/usage evidence differs")
 

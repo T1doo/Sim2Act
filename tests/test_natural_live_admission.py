@@ -1,5 +1,6 @@
 """Synthetic SQLite admission proofs; no real HTTP, fee or account probing."""
 
+import asyncio
 import copy
 import hashlib
 import importlib.util
@@ -292,14 +293,6 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
                 attempts.c.status == "STARTED")).mappings().one()
         stage = "generate" if active["runtime_id"] == contract.runtime_id else (
             "source" if active["resource_refs"] == [contract.bindings[0].resource_id] else "cold")
-        try:
-            previous = budget.read(data[0], data[3], scope.model_dump())["ledger"]["last_reserved_at"]
-        except DomainError as error:
-            assert error.code == "VERSION_CONFLICT"
-            previous = None
-        # Actual wall time, same original account limit, no fake clock/lease.
-        while previous is not None and time.time() < previous + 60:
-            time.sleep(min(0.5, previous + 60 - time.time()))
         reservation = budget.Reservation(request_key=actual["id"], stage=stage,
             run_id=active["id"], expected_version=active["version"], fence=active["fence"],
             wire_sha256=hashlib.sha256(request.content).hexdigest(), wire_bytes=len(request.content))
@@ -314,14 +307,27 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
         usage = normalize_usage(response.json())
         assert raw is not None and archive["status"] == "COMPLETE"
         settlement = budget.Settlement(request_key=actual["id"], response_sha256=archive["sha256"],
-            response_ascii_bytes=archive["bytes"], **{k: usage[k] for k in
+            response_ascii_bytes=archive["bytes"], **{k: usage["tokens"][k] for k in
                 ("prompt_tokens", "completion_tokens", "total_tokens")})
         result = budget.settle(data[0], data[3], scope, contract, settlement, admission=admitted)
         assert result["ledger"]["slots"][-1]["accepted"] is True
         slot_ids.append(actual["id"])
         return response
 
-    monkeypatch.setattr(httpx.MockTransport, "handle_request", accountable)
+    async def async_accountable(self, request):
+        await request.aread()
+        try:
+            previous = budget.read(data[0], data[3], scope.model_dump())["ledger"]["last_reserved_at"]
+        except DomainError as error:
+            assert error.code == "VERSION_CONFLICT"
+            previous = None
+        # Actual wall time with a cancellation-cooperative transport. Deadline
+        # and heartbeat mechanisms stay active; no fake clock or longer lease.
+        while previous is not None and time.time() < previous + 60:
+            await asyncio.sleep(min(0.5, previous + 60 - time.time()))
+        return accountable(self, request)
+
+    monkeypatch.setattr(httpx.MockTransport, "handle_async_request", async_accountable)
     generation, _, release, inst, sent = ready(data, style="ordered")
     assert len(sent) == 3
     job_id = enqueue(data, release, inst)
