@@ -276,6 +276,7 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
     gate.approve(data[0], data[3], contract, body)
     scope = budget.scope_for(contract, body.request_key)
     permits = []
+    fresh_permits = []
     slot_ids = []
     raw_handle = httpx.MockTransport.handle_request
     fee = gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject)
@@ -300,8 +301,8 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
         assert receipt["dispatch_authorized"] is False
         # Fresh admission follows durable accounting before this offline fixture dispatch.
         with data[0].tx() as c:
-            admitted(data[0], c, data[3], contract, body.request_key, stage,
-                     active["id"], active["version"], active["fence"])
+            fresh_permits.append(admitted(data[0], c, data[3], contract, body.request_key, stage,
+                                          active["id"], active["version"], active["fence"]))
         response = raw_handle(self, request)
         raw, archive = response_archive(response.json())
         usage = normalize_usage(response.json())
@@ -344,9 +345,7 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
     observed = []
 
     def guard(request):
-        with data[0].tx() as c:
-            job = c.execute(select(runs).where(runs.c.id == job_id)).mappings().one()
-        observed.append(permit(data, contract, body, job, stage="source"))
+        observed.append(fresh_permits[-1])
         history = gate.recover_stage(data[0], data[3], contract, body.request_key,
                                      "source", stage_body.request_key)
         assert history["request"] == stage_body.model_dump() and history["live_allowed"] is False
@@ -390,9 +389,7 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
     cold_permits = []
 
     def cold_guard(request):
-        with data[0].tx() as c:
-            job = c.execute(select(runs).where(runs.c.id == cold_id)).mappings().one()
-        cold_permits.append(permit(data, contract, body, job, stage="cold"))
+        cold_permits.append(fresh_permits[-1])
         return raw_handle(transport([], COLD), request)
 
     assert Worker(data[0], data[1], goal_planner_transport=httpx.MockTransport(cold_guard)).once()

@@ -31,7 +31,7 @@ from .goals import GoalCardInput, validate_card_version
 from .text_logic_reuse import pair, remember
 from .tools import authorized_read
 
-VERSION = "natural-live-trial.v1"
+VERSION: Literal["natural-live-trial.v1"] = "natural-live-trial.v1"
 SCOPE, APPROVE, REVOKE, PHASE = (VERSION + "." + s for s in ("scope", "approve", "revoke", "phase"))
 CONSENT = "APPROVE_ONLY_THIS_EXACT_SEVEN_SLOT_ZERO_PAID_NATURAL_TRIAL"
 HASH = r"^[a-f0-9]{64}$"
