@@ -960,11 +960,19 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
 
     thread = threading.Thread(target=beat, daemon=True)
     thread.start()
+    observed_contention = False
     try:
         while True:
             if failed.is_set():
                 logging.getLogger(__name__).info("heartbeat_failure_observed", extra=dict(
                     run_id=run["id"], fence=run["fence"]))
+                if _sqlite_heartbeat_contention(worker.store, failure[0]):
+                    # A known driver lock failure ends this invocation; it is
+                    # not an unexpected worker crash or proof of a known effect.
+                    # The existing metadata writer alone decides ownership,
+                    # stop intent and unknown-result settlement.
+                    observed_contention = True
+                    raise DomainError("RESOURCE_UNAVAILABLE", "Heartbeat renewal could not acquire the database lock") from failure[0]
                 raise failure[0]
             again = (advance_fn or advance)(worker, run)
             # A completed terminal transaction wins over a late background
@@ -972,7 +980,16 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
             if not again:
                 break
     except DomainError as exc:
-        fail_job(worker, run, exc)
+        try:
+            fail_job(worker, run, exc)
+        except Exception as settlement_error:
+            if not (observed_contention
+                    and _sqlite_heartbeat_contention(worker.store, settlement_error)):
+                raise
+            # No settlement committed. Leave the exact original Run and lease
+            # for fenced recovery; do not retry, renew or fabricate a terminal.
+            logging.getLogger(__name__).info("heartbeat_settlement_contended", extra=dict(
+                run_id=run["id"], fence=run["fence"], error_type=type(settlement_error).__name__))
     finally:
         stopped.set()
         thread.join(timeout=2)

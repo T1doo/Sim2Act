@@ -4,7 +4,7 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import OperationalError
 from test_foundation import enqueue
 
@@ -139,9 +139,16 @@ def test_fatal_failure_is_seen_before_next_step(env, monkeypatch, fault):
         flow.process_job(worker, run, advance, _heartbeat_state=state)
         with worker.store.tx() as c:
             assert c.execute(select(runs.c.status).where(runs.c.id == run["id"])).scalar_one() == "WAITING_RESOURCE"
-    else:
+    elif fault in {"unknown", "other-sqlite", "foreign-progress"}:
         with pytest.raises(type(exc)):
             flow.process_job(worker, run, advance, _heartbeat_state=state)
+    else:
+        flow.process_job(worker, run, advance, _heartbeat_state=state)
+        with worker.store.tx() as c:
+            row = c.execute(select(runs.c.status, runs.c.error).where(
+                runs.c.id == run["id"])).mappings().one()
+        assert row["status"] == "WAITING_RESOURCE"
+        assert row["error"]["code"] == "RESOURCE_UNAVAILABLE"
     assert len(advances) == 1 and len(calls) == (3 if fault == "exhausted" else 1)
 
 
@@ -255,3 +262,97 @@ def test_model_sync_renewal_publishes_committed_lease(env):
     with pytest.raises(DomainError):
         renew(worker, run, 0, _heartbeat_state=state)
     assert state["lease_until"] == previous
+
+
+@pytest.mark.parametrize("boundary,expected", [
+    ("owned", "WAITING_RESOURCE"), ("unknown", "WAITING_RESOURCE"),
+    ("unknown-cancel", "RECONCILING"),
+    ("pause", "PAUSED"), ("cancel", "CANCELLED"),
+    ("expired", "RUNNING"), ("new-owner", "RUNNING"),
+    ("settlement-busy", "RUNNING"),
+])
+def test_exhausted_background_contention_keeps_worker_and_owned_boundaries(
+    env, monkeypatch, boundary, expected,
+):
+    from sim2act.worker import Worker
+
+    worker, run, state, done, _ = setup(env, monkeypatch)
+    store = worker.store
+    with store.tx() as c:
+        changes = {}
+        if boundary == "expired":
+            changes["lease_until"] = 0
+        elif boundary == "new-owner":
+            changes.update(worker_id="replacement-worker", fence=run["fence"] + 2)
+        elif boundary == "pause":
+            changes["status"] = "PAUSE_REQUESTED"
+        elif boundary in {"cancel", "unknown-cancel"}:
+            changes.update(status="CANCEL_REQUESTED", cancel_intent=True)
+        if changes:
+            c.execute(update(runs).where(runs.c.id == run["id"]).values(**changes))
+        if boundary in {"unknown", "unknown-cancel"}:
+            c.execute(insert(db.operations).values(id="synthetic-unknown", run_id=run["id"],
+                call_id="pending", status="OUTCOME_UNKNOWN", receipt={"known": False}))
+        before = dict(c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one())
+    calls, steps = [], []
+    original_heartbeat = store.heartbeat
+
+    def contended(worker_id, run_id=None, *args, **kwargs):
+        if run_id == run["id"]:
+            calls.append(1)
+            raise error(sqlite3.SQLITE_BUSY)
+        return original_heartbeat(worker_id, run_id, *args, **kwargs)
+
+    monkeypatch.setattr(store, "heartbeat", contended)
+    if boundary == "settlement-busy":
+        monkeypatch.setattr("sim2act.app_jobs.fail_job", lambda *_: (_ for _ in ()).throw(error(6)))
+
+    def advance(*_):
+        steps.append(1)
+        assert done.wait(3)
+        return True
+
+    actual = Worker(store, worker.s)
+    actual.id = worker.id
+    monkeypatch.setattr(actual, "process", lambda claimed: flow.process_job(
+        actual, claimed, advance, _heartbeat_state=state))
+    # Exercise the real once() error boundary, using the already claimed original Run.
+    original_claim = store.claim
+    monkeypatch.setattr(store, "claim", lambda *_: run)
+    assert actual.once() is True
+    assert len(calls) == 3 and len(steps) == 1
+    with store.tx() as c:
+        current = dict(c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one())
+        assert current["status"] == expected
+        for field in ("fence", "worker_id", "request_key", "context"):
+            assert current[field] == before[field]
+        assert current["lease_until"] == (before["lease_until"] if expected == "RUNNING" else 0)
+        if boundary in {"unknown", "unknown-cancel"}:
+            assert c.execute(select(db.operations.c.status).where(
+                db.operations.c.id == "synthetic-unknown")).scalar_one() == "OUTCOME_UNKNOWN"
+        if expected != "RUNNING":
+            assert current["error"]["code"] == "RESOURCE_UNAVAILABLE"
+    # The same Worker survives and can claim a distinct ordinary queued Run.
+    monkeypatch.setattr(store, "claim", original_claim)
+    next_id = enqueue(env, "after-heartbeat-contention")
+    # Old expired/replacement claims are deliberately not replayed here.
+    with store.tx() as c:
+        c.execute(update(runs).where(runs.c.id == run["id"]).values(lease_until=10**12))
+    claimed = []
+    monkeypatch.setattr(actual, "process", lambda new_run: claimed.append(new_run["id"]))
+    assert actual.once() is True and claimed == [next_id]
+
+
+@pytest.mark.parametrize("fault", [RuntimeError("unexpected settlement"), error(10)])
+def test_unexpected_settlement_failure_still_propagates(env, monkeypatch, fault):
+    worker, run, state, done, _ = setup(env, monkeypatch)
+    monkeypatch.setattr(worker.store, "heartbeat", lambda *_args, **_kwargs:
+        (_ for _ in ()).throw(error(5)))
+    monkeypatch.setattr("sim2act.app_jobs.fail_job", lambda *_:
+        (_ for _ in ()).throw(fault))
+    def advance(*_):
+        assert done.wait(3)
+        return True
+    with pytest.raises(type(fault)) as seen:
+        flow.process_job(worker, run, advance, _heartbeat_state=state)
+    assert seen.value is fault
