@@ -29,7 +29,17 @@ def cohort(env):
     # Generate a separate existing app before freezing either project's graph.
     data, aid, release, inst, _, path, _, _ = prepared(env)
     rid, goal = material(data[2], data[4], COLD, "Separate peer Goal")
-    peer_data = (*data[:5], rid, goal)
+
+    class PeerClient:
+        def __getattr__(self, name):
+            return getattr(data[2], name)
+
+        def post(self, path, **kwargs):
+            if path.endswith("/application-runs"):
+                kwargs["json"] = {**kwargs["json"], "request_key": "peer-natural-generation"}
+            return data[2].post(path, **kwargs)
+
+    peer_data = (data[0], data[1], PeerClient(), data[3], data[4], rid, goal)
     _, peer, peer_release, peer_inst, _ = ready(peer_data, "sequential")
     peer_app = data[2].get("/api/apps/" + peer).json()
     response = data[2].post(

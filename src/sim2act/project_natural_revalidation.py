@@ -30,7 +30,9 @@ from .project_revalidation import SafeInput
 from .text_logic_reuse import pair, remember
 
 VERSION = "project-natural-check.v1"
-PLAN, START, JOB, PROOF = (VERSION + "." + x for x in ("plan", "start", "job", "proof"))
+PLAN, START, JOB, PROOF, SOURCE = (
+    VERSION + "." + x for x in ("plan", "start", "job", "proof", "source")
+)
 KEY = r"^[A-Za-z0-9_-]{1,80}$"
 CONSENT = "RUN_EXACT_ISOLATED_APPLICATION_CHECK_IN_FROZEN_PROJECT"
 
@@ -197,28 +199,10 @@ def calculate(store, c, user, pid, body, limits, *, catalog=None, _replay=False)
     for choice in sorted(body.selections, key=lambda x: x.app_id):
         spec.require((choice.preview_key is None) == (choice.expected_preview_fingerprint is None))
         # A CHECK result is evidence, not a new source application instance.
-        project_jobs = (
-            c.execute(
-                select(delivery_graph_requests.c.app_id).where(
-                    delivery_graph_requests.c.principal_id == user,
-                    delivery_graph_requests.c.kind == JOB,
-                )
-            )
-            .scalars()
-            .all()
-        )
-        checked_ids = (
-            c.execute(
-                select(internal_run_bindings.c.snapshot["instance_id"].as_string()).where(
-                    internal_run_bindings.c.run_id.in_(project_jobs)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        owned = lifecycle.owned_instance_pointer(store, c, user, choice.instance_id, pid)
         spec.require(
-            choice.instance_id not in checked_ids,
-            "Project CHECK instances cannot become account sources",
+            not any(x["role"] == "project_check" for x in pins(c, user, owned)),
+            "Project CHECK evidence cannot become a new account source",
         )
         ctx, _, release, saved = logic.context(
             store, c, user, choice.instance_id, limits, _allow_last=True
@@ -323,6 +307,13 @@ def load_plan(store, c, user, pid, key, limits):
         _replay=True,
     )
     spec.require(fresh == value, "Exact frozen project contract changed")
+    for binding in value["applications"]:
+        expected = ref(pid, key, value, binding["context"]["app_id"])
+        accepted, seal = pair(c, user, binding["context"]["instance_id"], SOURCE, key, Reference)
+        spec.require(
+            accepted == expected and seal == expected.model_dump(),
+            "Independent source roles changed",
+        )
     return body, value
 
 
@@ -561,26 +552,42 @@ def require_complete_checks(store, c, user, reference, limits):
 
 
 def pins(c, user, i):
-    # Independent accepted JOB index and accepted bindings both discover CHECK
-    # identities; PLAN pairs discover source roles. Discovery never proves PASS.
+    """Owned scalar role hints: rejection only, never proof or private PLAN read."""
     source = (
         c.execute(
             select(delivery_graph_requests.c.request_key).where(
                 delivery_graph_requests.c.principal_id == user,
-                delivery_graph_requests.c.app_id == i["project_id"],
-                delivery_graph_requests.c.kind.in_([PLAN, PLAN + "_seal"]),
+                delivery_graph_requests.c.app_id == i["id"],
+                delivery_graph_requests.c.kind.in_([SOURCE, SOURCE + "_seal"]),
             )
         )
         .scalars()
         .all()
     )
-    values = []
-    for key in sorted(set(source)):
-        body, plan = pair(c, user, i["project_id"], PLAN, key, Prepare)
-        if any(x.instance_id == i["id"] for x in body.selections):
-            values.append(
-                dict(role="project_source", plan_key=key, plan_fingerprint=plan["plan_fingerprint"])
+    # PLAN's two public source identifiers retain roles even if SOURCE is missing.
+    from sqlalchemy import or_
+
+    source += (
+        c.execute(
+            select(delivery_graph_requests.c.request_key).where(
+                delivery_graph_requests.c.principal_id == user,
+                delivery_graph_requests.c.app_id == i["project_id"],
+                delivery_graph_requests.c.kind.in_([PLAN, PLAN + "_seal"]),
+                or_(
+                    delivery_graph_requests.c.snapshot["request"]["selections"][0][
+                        "instance_id"
+                    ].as_string()
+                    == i["id"],
+                    delivery_graph_requests.c.snapshot["request"]["selections"][1][
+                        "instance_id"
+                    ].as_string()
+                    == i["id"],
+                ),
             )
+        )
+        .scalars()
+        .all()
+    )
     jobs = (
         c.execute(
             select(internal_run_bindings.c.run_id)
@@ -589,8 +596,11 @@ def pins(c, user, i):
             .where(
                 runs.c.principal_id == user,
                 runs.c.project_id == i["project_id"],
+                internal_app_runs.c.principal_id == user,
                 internal_app_runs.c.instance_id == i["id"],
-                internal_run_bindings.c.snapshot["project_check"].is_not(None),
+                internal_run_bindings.c.snapshot["project_check"]["project_id"]
+                .as_string()
+                .is_not(None),
             )
         )
         .scalars()
@@ -604,7 +614,9 @@ def pins(c, user, i):
             .where(
                 delivery_graph_requests.c.principal_id == user,
                 delivery_graph_requests.c.kind.in_([JOB, JOB + "_seal"]),
+                runs.c.principal_id == user,
                 runs.c.project_id == i["project_id"],
+                internal_app_runs.c.principal_id == user,
                 internal_app_runs.c.instance_id == i["id"],
             )
         )
@@ -624,11 +636,10 @@ def pins(c, user, i):
         .scalars()
         .all()
     )
-    for jid in sorted(set(jobs) | set(indexed) | set(retained)):
-        reference, sealed = pair(c, user, jid, JOB, "accepted", Reference)
-        spec.require(reference.model_dump() == sealed)
-        values.append(dict(role="project_check", run_id=jid, reference=sealed))
-    return values
+    return [dict(role="project_source", plan_key=key) for key in sorted(set(source))] + [
+        dict(role="project_check", run_id=jid)
+        for jid in sorted(set(jobs) | set(indexed) | set(retained), key=str)
+    ]
 
 
 def version_receipt(store, c, user, pid, key, limits):
@@ -707,6 +718,17 @@ def mount(app, store, limits, identity):
             value = calculate(store, c, user, pid, body, limits, catalog=catalog)
             spec.require(options(store, c, user, pid, limits) == catalog)
             remember(c, user, pid, PLAN, body.request_key, body, value)
+            for binding in value["applications"]:
+                reference = ref(pid, body.request_key, value, binding["context"]["app_id"])
+                remember(
+                    c,
+                    user,
+                    binding["context"]["instance_id"],
+                    SOURCE,
+                    body.request_key,
+                    reference,
+                    reference.model_dump(),
+                )
             return value
 
     @app.get(base + "/plans")
