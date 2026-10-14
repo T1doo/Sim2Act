@@ -844,6 +844,18 @@ def control_binding(store, c, user, job, meta):
     accepted, sealed = pair(c, user, job["id"], JOB, "accepted", Reference)
     reference = accepted.model_dump()
     spec.require(reference == sealed == public and accepted.project_id == job["project_id"])
+    instance_key = (
+        "project-check-"
+        + fingerprint(dict(pid=accepted.project_id, key=accepted.plan_key, aid=accepted.app_id))[
+            :48
+        ]
+    )
+    spec.require(
+        meta.instance_id
+        == "iinstance_"
+        + fingerprint(dict(user=user, release=meta.release_id, key=instance_key))[:32],
+        "Accepted CHECK instance cannot be rebound to another project account",
+    )
     indices = c.execute(
         select(
             delivery_graph_requests.c.kind,

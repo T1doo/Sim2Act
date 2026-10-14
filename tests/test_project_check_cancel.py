@@ -344,3 +344,78 @@ def test_two_store_cancel_version_competition_accepts_once(env, tmp_path):
     (tmp_path / "cancel-version-race.json").write_text(
         json.dumps({"results": results, "after": final}, indent=2)
     )
+
+
+def test_resealed_project_markers_cannot_rebind_original_run_to_another_key(env):
+    from sim2act.db import internal_run_bindings
+    from sim2act.text_logic_reuse import remember
+
+    data, aid, _, _, base, plan, started, path, command = accepted(env)
+    version = status(data[2], path, True)["run_version"]
+    options = data[2].get(base + "/options").json()
+    body = copy.deepcopy(plan["request"])
+    body["request_key"] = "another-explicit-account"
+    body["expected_options_fingerprint"] = options["options_fingerprint"]
+    for selection in body["selections"]:
+        selection["preview_key"] = None
+        selection["expected_preview_fingerprint"] = None
+    reply = data[2].post(base + "/plans", json=body)
+    assert reply.status_code == 201, reply.text
+    other = reply.json()
+    with data[0].tx() as c:
+        start_body, start_value = project.pair(
+            c, data[3], data[4], project.START, plan["request_key"] + ":" + aid, project.Start
+        )
+        c.execute(
+            delete(delivery_graph_requests).where(
+                delivery_graph_requests.c.principal_id == data[3],
+                delivery_graph_requests.c.kind.in_(
+                    [project.START, project.START + "_seal", project.JOB, project.JOB + "_seal"]
+                ),
+            )
+        )
+        reference = project.ref(data[4], other["request_key"], other, aid)
+        remember(
+            c,
+            data[3],
+            started["run_id"],
+            project.JOB,
+            "accepted",
+            reference,
+            reference.model_dump(),
+        )
+        start_body = project.Start(
+            expected_plan_fingerprint=other["plan_fingerprint"], consent=project.CONSENT
+        )
+        forged = {
+            **start_value,
+            "plan_key": other["request_key"],
+            "plan_fingerprint": other["plan_fingerprint"],
+            "role": "REVALIDATE_UNCHANGED",
+        }
+        remember(
+            c, data[3], data[4], project.START, other["request_key"] + ":" + aid, start_body, forged
+        )
+        binding = (
+            c.execute(
+                select(internal_run_bindings).where(
+                    internal_run_bindings.c.run_id == started["run_id"]
+                )
+            )
+            .mappings()
+            .one()
+        )
+        changed = copy.deepcopy(binding["snapshot"])
+        changed["project_check"] = reference.model_dump()
+        c.execute(
+            update(internal_run_bindings)
+            .where(internal_run_bindings.c.run_id == started["run_id"])
+            .values(snapshot=changed)
+        )
+    before = snapshot(data[0])
+    # Every public project pair and scalar reference agree with the other genuine PLAN.
+    # The independent originally accepted CHECK id still belongs to the original key.
+    other_path = base + f"/plans/{other['request_key']}/applications/{aid}/run-control"
+    assert data[2].get(other_path).status_code == 409
+    assert data[2].post(command, json={"command": "cancel", "version": version}).status_code == 409
+    assert snapshot(data[0]) == before
