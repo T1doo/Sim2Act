@@ -1117,109 +1117,118 @@ def commit_guard(worker, c, run, b, delta=0):
 
 @controlled
 def advance(worker, run):
-    from .app_jobs import load_binding, lock_live, state_write, stop_state
-    store = worker.store
+    from .app_jobs import lock_live
     from .natural_spec_runtime import advance_model
-    handled = advance_model(worker, run)
-    if handled:
-        return True
-    with store.tx() as c:
-        job = lock_live(store, c, run)
-        if job["status"] != "RUNNING" or worker.stop.is_set() or job["cancel_intent"]:
-            s, a = load_binding(store, c, job["principal_id"], job, None, authorize=False)
-            state_write(store, c, job, a["id"], stop_state(job, store.has_unknown(c, job["id"])))
-            return False
-        limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
+    if run["context"].get("spec_family") == natural.VERSION:
+        # The runtime validates and selects both local and model nodes once,
+        # on one connection/transaction before any write or external response.
+        return advance_model(worker, run)
+    with worker.store.tx() as c:
+        job = lock_live(worker.store, c, run)
+        return _advance_local(worker, c, run, job)
+
+
+@controlled
+def _advance_local(worker, c, run, job, b=None, checked=None):
+    """Internal same-transaction local dispatch, never persisted proof reuse."""
+    from .app_jobs import load_binding, state_write, stop_state
+    store = worker.store
+    if job["status"] != "RUNNING" or worker.stop.is_set() or job["cancel_intent"]:
+        s, a = load_binding(store, c, job["principal_id"], job, None, authorize=False)
+        state_write(store, c, job, a["id"], stop_state(job, store.has_unknown(c, job["id"])))
+        return False
+    limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
+    if b is None:
         b = bound(store, c, job["principal_id"], job, limits)
-        if store.has_unknown(c, job["id"]):
-            raise DomainError("OUTCOME_UNKNOWN")
-        outputs, proved = receipts(store, c, job, b)
-        plan, s, a = b["plan"], b["snapshot"], b["app_run"]
-        steps = plan["definition"]["manifest"]["workflow"]
-        require(len(proved) < len(steps), "Completed save cannot be dispatched again")
-        step, action = steps[len(proved)], plan["definition"]["actions"][len(proved)]
-        intent = intent_for(step, action, plan, outputs, proved)
-        oid = new_id("op")
-        commit_guard(worker, c, run, b, 1)
-        c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
-            fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
-        c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
-        saved = intent["tool"] == SAVE
-        from .natural_spec_runtime import ledger_digest
-        runtime_audit = ledger_digest(c, job) if saved and natural.is_candidate(plan["definition"]) else None
-        if saved:
-            verify_saved(b["source"], intent["args"]["text"], plan["definition"])
-            value = write_text_artifact(store, c, job["principal_id"], job["runtime_id"], job["project_id"], intent["args"]["text"], artifact_format="json")
-            c.execute(insert(local_effects).values(operation_id=oid, resource_id=value["resource_id"], content_hash=value["hash"]))
-            actual = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
-                "resource.read", dict(resource_id=value["resource_id"]))
-            require(actual["hash"] == value["hash"] and actual["content"] == intent["args"]["text"] and actual["format"] == "json")
-            verify_saved(b["source"], actual["content"], plan["definition"])
-        else:
-            value = (natural.pure(intent["tool"], intent["args"], b["source"], plan["definition"]["goal"])
-                if natural.is_candidate(plan["definition"]) else pure(intent["tool"], intent["args"], b["source"]))
-        validate_value(action["output_schema"], value)
-        receipt = receipt_for(oid, step, action, plan, intent, value)
-        live = commit_guard(worker, c, run, b, 1)
-        c.execute(update(operations).where(operations.c.id == oid).values(status="VERIFIED", receipt=receipt))
-        context = copy.deepcopy(live["context"])
-        context["tools"] += 1
-        c.execute(update(runs).where(runs.c.id == job["id"]).values(context=context))
-        c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(status="RUNNING"))
-        store.event(c, job["id"], "SPEC_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=live["fence"]))
+    if store.has_unknown(c, job["id"]):
+        raise DomainError("OUTCOME_UNKNOWN")
+    outputs, proved = checked if checked is not None else receipts(store, c, job, b)
+    plan, s, a = b["plan"], b["snapshot"], b["app_run"]
+    steps = plan["definition"]["manifest"]["workflow"]
+    require(len(proved) < len(steps), "Completed save cannot be dispatched again")
+    step, action = steps[len(proved)], plan["definition"]["actions"][len(proved)]
+    intent = intent_for(step, action, plan, outputs, proved)
+    oid = new_id("op")
+    commit_guard(worker, c, run, b, 1)
+    c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
+        fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
+    c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
+    saved = intent["tool"] == SAVE
+    from .natural_spec_runtime import ledger_digest
+    runtime_audit = ledger_digest(c, job) if saved and natural.is_candidate(plan["definition"]) else None
+    if saved:
+        verify_saved(b["source"], intent["args"]["text"], plan["definition"])
+        value = write_text_artifact(store, c, job["principal_id"], job["runtime_id"], job["project_id"], intent["args"]["text"], artifact_format="json")
+        c.execute(insert(local_effects).values(operation_id=oid, resource_id=value["resource_id"], content_hash=value["hash"]))
+        actual = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
+            "resource.read", dict(resource_id=value["resource_id"]))
+        require(actual["hash"] == value["hash"] and actual["content"] == intent["args"]["text"] and actual["format"] == "json")
+        verify_saved(b["source"], actual["content"], plan["definition"])
+    else:
+        value = (natural.pure(intent["tool"], intent["args"], b["source"], plan["definition"]["goal"])
+            if natural.is_candidate(plan["definition"]) else pure(intent["tool"], intent["args"], b["source"]))
+    validate_value(action["output_schema"], value)
+    receipt = receipt_for(oid, step, action, plan, intent, value)
+    live = commit_guard(worker, c, run, b, 1)
+    c.execute(update(operations).where(operations.c.id == oid).values(status="VERIFIED", receipt=receipt))
+    context = copy.deepcopy(live["context"])
+    context["tools"] += 1
+    c.execute(update(runs).where(runs.c.id == job["id"]).values(context=context))
+    c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(status="RUNNING"))
+    store.event(c, job["id"], "SPEC_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=live["fence"]))
+    live = commit_guard(worker, c, run, b)
+    outputs[step["step_id"]] = value
+    proved.append(receipt)
+    if saved:
+        instance = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"])).mappings().one()
+        version = instance["data_version"] + 1
+        output = output_for(plan, outputs)
+        validate_value(plan["definition"]["manifest"]["output_schema"], output)
+        data = dict(result=output)
+        if "release_ref" in b["release"]["snapshot"]["data_schema"]["properties"]:
+            data["release_ref"] = s["release_id"]
+        validate_value(b["release"]["snapshot"]["data_schema"], data)
+        c.execute(insert(internal_instance_data).values(instance_id=instance["id"], version=version,
+            run_id=a["id"], release_id=s["release_id"], schema_version=b["release"]["snapshot"]["data_schema_version"],
+            data=data, fingerprint=fingerprint(data)))
+        updated = c.execute(update(internal_instances).where(internal_instances.c.id == instance["id"],
+            internal_instances.c.data_version == instance["data_version"], internal_instances.c.revision == s["expected_revision"],
+            internal_instances.c.release_id == s["release_id"]).values(data_version=version))
+        require(updated.rowcount == 1, "Instance data version competed")
+        c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(
+            output=output, result_version=version, status="SUCCEEDED", error=None))
         live = commit_guard(worker, c, run, b)
-        outputs[step["step_id"]] = value
-        proved.append(receipt)
-        if saved:
-            instance = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"])).mappings().one()
-            version = instance["data_version"] + 1
-            output = output_for(plan, outputs)
-            validate_value(plan["definition"]["manifest"]["output_schema"], output)
-            data = dict(result=output)
-            if "release_ref" in b["release"]["snapshot"]["data_schema"]["properties"]:
-                data["release_ref"] = s["release_id"]
-            validate_value(b["release"]["snapshot"]["data_schema"], data)
-            c.execute(insert(internal_instance_data).values(instance_id=instance["id"], version=version,
-                run_id=a["id"], release_id=s["release_id"], schema_version=b["release"]["snapshot"]["data_schema_version"],
-                data=data, fingerprint=fingerprint(data)))
-            updated = c.execute(update(internal_instances).where(internal_instances.c.id == instance["id"],
-                internal_instances.c.data_version == instance["data_version"], internal_instances.c.revision == s["expected_revision"],
-                internal_instances.c.release_id == s["release_id"]).values(data_version=version))
-            require(updated.rowcount == 1, "Instance data version competed")
-            c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(
-                output=output, result_version=version, status="SUCCEEDED", error=None))
-            live = commit_guard(worker, c, run, b)
-            state_write(store, c, live, a["id"], "SUCCEEDED", result=result_ref(b, proved, version))
-            store.event(c, job["id"], "SPEC_COMMITTED", dict(result_version=version, artifact_resource=value["resource_id"]))
-            # Recheck authority/lease after terminal writes without requiring RUNNING.
-            require(job_scope_gate(store, c, job["principal_id"], job["id"]))
-            terminal = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence,
-                runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.worker_id, runs.c.version,
-                runs.c.fingerprint, runs.c.request_key)
-                .where(runs.c.id == job["id"])).mappings().one()
-            require(not worker.stop.is_set() and not terminal["cancel_intent"]
-                and terminal["status"] == "SUCCEEDED" and terminal["fence"] == run["fence"]
-                and terminal["principal_id"] == job["principal_id"] and terminal["project_id"] == job["project_id"]
-                and terminal["runtime_id"] == job["runtime_id"] and terminal["worker_id"] == run["worker_id"]
-                and terminal["version"] == live["version"] + 1 and terminal["fingerprint"] == job["fingerprint"]
-                and terminal["request_key"] == job["request_key"])
-            final_instance = c.execute(select(internal_instances).where(internal_instances.c.id == instance["id"])).mappings().one()
-            require(final_instance["principal_id"] == job["principal_id"] and final_instance["project_id"] == job["project_id"]
-                and final_instance["runtime_id"] == job["runtime_id"] and final_instance["source_app_id"] == b["draft"]["id"]
-                and final_instance["revision"] == s["expected_revision"] and final_instance["release_id"] == s["release_id"]
-                and type(final_instance["data_version"]) is int and final_instance["data_version"] == version)
-            current_job = c.execute(select(runs).where(runs.c.id == job["id"], runs.c.principal_id == job["principal_id"],
-                runs.c.project_id == job["project_id"], runs.c.runtime_id == job["runtime_id"])).mappings().one()
-            final_binding, _, _ = verify_job(store, c, job["principal_id"], current_job, limits)
-            if runtime_audit is not None:
-                require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
-            require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
-                "Original model audit bytes changed during the final save transaction")
-            require(not worker.stop.is_set() and time.time() < live["lease_until"]
-                and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
-            return False
-        commit_guard(worker, c, run, b)
-        return True
+        state_write(store, c, live, a["id"], "SUCCEEDED", result=result_ref(b, proved, version))
+        store.event(c, job["id"], "SPEC_COMMITTED", dict(result_version=version, artifact_resource=value["resource_id"]))
+        # Recheck authority/lease after terminal writes without requiring RUNNING.
+        require(job_scope_gate(store, c, job["principal_id"], job["id"]))
+        terminal = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence,
+            runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.worker_id, runs.c.version,
+            runs.c.fingerprint, runs.c.request_key)
+            .where(runs.c.id == job["id"])).mappings().one()
+        require(not worker.stop.is_set() and not terminal["cancel_intent"]
+            and terminal["status"] == "SUCCEEDED" and terminal["fence"] == run["fence"]
+            and terminal["principal_id"] == job["principal_id"] and terminal["project_id"] == job["project_id"]
+            and terminal["runtime_id"] == job["runtime_id"] and terminal["worker_id"] == run["worker_id"]
+            and terminal["version"] == live["version"] + 1 and terminal["fingerprint"] == job["fingerprint"]
+            and terminal["request_key"] == job["request_key"])
+        final_instance = c.execute(select(internal_instances).where(internal_instances.c.id == instance["id"])).mappings().one()
+        require(final_instance["principal_id"] == job["principal_id"] and final_instance["project_id"] == job["project_id"]
+            and final_instance["runtime_id"] == job["runtime_id"] and final_instance["source_app_id"] == b["draft"]["id"]
+            and final_instance["revision"] == s["expected_revision"] and final_instance["release_id"] == s["release_id"]
+            and type(final_instance["data_version"]) is int and final_instance["data_version"] == version)
+        current_job = c.execute(select(runs).where(runs.c.id == job["id"], runs.c.principal_id == job["principal_id"],
+            runs.c.project_id == job["project_id"], runs.c.runtime_id == job["runtime_id"])).mappings().one()
+        final_binding, _, _ = verify_job(store, c, job["principal_id"], current_job, limits)
+        if runtime_audit is not None:
+            require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
+        require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
+            "Original model audit bytes changed during the final save transaction")
+        require(not worker.stop.is_set() and time.time() < live["lease_until"]
+            and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
+        return False
+    commit_guard(worker, c, run, b)
+    return True
 
 
 def is_job(store, job):

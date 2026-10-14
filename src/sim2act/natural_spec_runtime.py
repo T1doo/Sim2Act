@@ -667,13 +667,10 @@ def advance_model(worker, run):
     store = worker.store
     with store.tx() as c:
         job = lock_live(store, c, run)
-        if (
-            job["context"].get("spec_family") != codec.VERSION
-            or job["status"] != "RUNNING"
-            or job["cancel_intent"]
-            or worker.stop.is_set()
-        ):
-            return False
+        require(job["context"].get("spec_family") == codec.VERSION,
+            "Accepted spec family changed before node dispatch")
+        if (job["status"] != "RUNNING" or job["cancel_intent"] or worker.stop.is_set()):
+            return spec._advance_local(worker, c, run, job)
         limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
         binding = spec.bound(store, c, job["principal_id"], job, limits)
         outputs, proved = spec.receipts(store, c, job, binding)
@@ -682,7 +679,7 @@ def advance_model(worker, run):
         require(index < len(candidate["actions"]))
         step, action = candidate["manifest"]["workflow"][index], candidate["actions"][index]
         if action["executor"]["ref"] not in codec.MODEL_KINDS:
-            return False
+            return spec._advance_local(worker, c, run, job, binding, (outputs, proved))
         enabled(worker)
         spec.commit_guard(worker, c, run, binding)
         node_limits = effective(worker, c, job, binding, action)
