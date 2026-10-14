@@ -616,14 +616,16 @@ def compile_candidate(candidate, limits):
         rebuilt["manifest"]["source_run_ref"] = task["source_run_id"]
     if "logic_revision" in candidate:
         marker = candidate["logic_revision"]
-        require(isinstance(marker,dict) and set(marker) == {"version","step_id"}
+        require(isinstance(marker,dict) and set(marker) in ({"version","step_id"}, {"version","step_id","revision"})
+            and ("revision" not in marker or type(marker["revision"]) is int and marker["revision"] == 3)
             and marker["version"] == "natural-local-logic.v1"
             and marker["step_id"] in [s["step_id"] for s in rebuilt["spec_recipe"]["steps"]
                 if s["operator"] == "model.spec.qualifiers"], "Finite local logic revision required")
-        rebuilt["manifest"]["revision"] = 2
+        revision = marker.get("revision",2)
+        rebuilt["manifest"]["revision"] = revision
         index = next(i for i,s in enumerate(rebuilt["spec_recipe"]["steps"]) if s["step_id"] == marker["step_id"])
-        rebuilt["actions"][index]["revision"] = 2
-        rebuilt["manifest"]["action_bindings"][index]["revision"] = 2
+        rebuilt["actions"][index]["revision"] = revision
+        rebuilt["manifest"]["action_bindings"][index]["revision"] = revision
     require(
         fingerprint(rebuilt) == fingerprint({k: candidate[k] for k in keys}),
         "Natural recipe expansion changed",

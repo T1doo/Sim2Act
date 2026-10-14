@@ -111,10 +111,14 @@ def effective(base, consume, limits):
         m["permission_requirements"][-1]["resource_ref"], base["source_hash"],
         m["data_bindings"][0]["resource_ref"], base["goal"], Limits(**m["runtime_limits"]),
         base["model_sample_check"]["sample_fingerprint"])
+    revision = base["manifest"]["revision"] + 1
+    spec.require(revision in {2, 3}, "At most two explicit local adjustments")
     candidate["logic_revision"] = dict(version=VERSION,step_id=changed["step_id"])
-    candidate["manifest"]["revision"] = 2
-    candidate["actions"][2]["revision"] = 2
-    candidate["manifest"]["action_bindings"][2]["revision"] = 2
+    if revision == 3:
+        candidate["logic_revision"]["revision"] = revision
+    candidate["manifest"]["revision"] = revision
+    candidate["actions"][2]["revision"] = revision
+    candidate["manifest"]["action_bindings"][2]["revision"] = revision
     natural.compile_candidate(candidate, limits)
     spec.require([a["action_id"] for a in base["actions"]] == [a["action_id"] for a in candidate["actions"]])
     # The effective candidate has no PA/PB generation marker. Original marker is
@@ -122,16 +126,45 @@ def effective(base, consume, limits):
     return candidate, changed["step_id"]
 
 
-def context(store, c, user, iid, limits, *, original=True, _verified_origin=None):
+def context(store, c, user, iid, limits, *, original=True, _verified_origin=None, _allow_last=False):
     origin: dict[str, Any] = {}
-    instance, release = lifecycle.instance(store, c, user, iid, limits, lock=True,_origin_out=origin,_verified_origin=_verified_origin)
+    logic_out: dict[str, Any] = {}
+    instance, release = lifecycle.instance(store, c, user, iid, limits, lock=True,
+        _origin_out=origin,_verified_origin=_verified_origin,_logic_out=logic_out)
+    parent = None
     if "natural_logic_source" in release["snapshot"]:
-        raise DomainError("UNSUPPORTED_CAPABILITY", "Logic patches of patched versions are outside this finite slice")
+        trace = lifecycle.logic_release_trace(store,c,user,release)
+        depth = len(trace["edges"])
+        spec.require(not trace["cyclic"] and not trace["over_limit"] and depth in {1, 2})
+        if depth == 2 and not _allow_last:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "At most two explicit local adjustments")
+        parent = logic_out["value"]["effective_candidate"]
+        spec.require(parent["manifest"]["revision"] == depth + 1)
     base = release["snapshot"]["draft"]
     spec.require(natural.is_candidate(base["candidate"]))
     _, _, source, goal = origin["origin"]
     family = graph.load_family(store,c,user,instance["project_id"],base["id"],limits,_natural_origin=origin)
     saved = graph.current(store, c, user, instance["project_id"], base["id"], limits,_family=family)
+    anchor = saved
+    if parent is not None:
+        # Original anchor stays independently authorized and immutable. Derive
+        # only the proven parent's effective graph using the same trusted IDs,
+        # external versions and current locks; never write a replacement anchor.
+        saved = copy.deepcopy(anchor)
+        ctx = saved["context"]
+        for node in anchor["graph"]["nodes"]:
+            if node["kind"] == "ACTION":
+                step = node["key"].split(":",1)[1]
+                index = next(i for i,x in enumerate(parent["spec_recipe"]["steps"]) if x["step_id"] == step)
+                ctx["node_revisions"][node["key"]] = parent["actions"][index]["revision"]
+            elif node["kind"] in {"MANIFEST", "ARTIFACT", "VIEW"}:
+                ctx["node_revisions"][node["key"]] = parent["manifest"]["revision"]
+        saved["graph"] = graph.core.derive_manifest_graph(parent["manifest"],parent["actions"],
+            anchor["source_versions"],{n["key"]:n["id"] for n in anchor["graph"]["nodes"]},ctx,limits,
+            natural_candidate=parent)
+        ctx["graph_fingerprint"] = saved["graph"]["graph_fingerprint"]
+        saved["candidate_fingerprint"] = fingerprint(parent)
+        saved["effective_candidate"] = parent
     if any(x["scope"] == "PROJECT" for x in saved["graph"]["unknown_dependencies"]):
         raise DomainError("UNSUPPORTED_CAPABILITY", "Unknown project dependencies require project validation outside this finite application slice")
     value = dict(instance_id=iid, project_id=instance["project_id"], principal_id=user,
@@ -140,6 +173,11 @@ def context(store, c, user, iid, limits, *, original=True, _verified_origin=None
         graph_fingerprint=saved["graph"]["graph_fingerprint"],
         graph_revision=saved["graph_revision"], audit_fingerprint=spec.audit_fingerprint(store,c,user,base),
         source=source, goal=goal, limits=limits.model_dump())
+    if parent is not None:
+        value["parent_logic"] = dict(depth=depth,
+            origin=copy.deepcopy(release["snapshot"]["natural_logic_source"]),
+            effective_fingerprint=fingerprint(parent),
+            anchor_graph_fingerprint=anchor["graph"]["graph_fingerprint"])
     if original:
         value.update(instance_revision=instance["revision"], data_version=instance["data_version"])
     return value, instance, release, saved
@@ -150,13 +188,13 @@ def calculate(store, c, user, iid, limits, body, *, prepared=None):
     spec.require(instance["revision"] == body.expected_revision
         and release["fingerprint"] == body.expected_release_fingerprint
         and ctx["graph_fingerprint"] == body.expected_graph_fingerprint)
-    candidate, sid = effective(release["snapshot"]["draft"]["candidate"], body.consume_prior_feedback, limits)
+    candidate, sid = effective(saved.get("effective_candidate",release["snapshot"]["draft"]["candidate"]), body.consume_prior_feedback, limits)
     node = next(n for n in saved["graph"]["nodes"] if n["key"] == "action:" + sid)
     plan = graph.core.plan_change(saved["graph"], body.expected_graph_fingerprint,
         dict(project_id=ctx["project_id"], app_id=ctx["app_id"], request_key=body.request_key,
             changes=[dict(node_id=node["id"], expected_revision=node["revision"],
                 expected_content_fingerprint=node["content_fingerprint"]) ]), saved["context"])
-    base = release["snapshot"]["draft"]["candidate"]
+    base = saved.get("effective_candidate",release["snapshot"]["draft"]["candidate"])
     preserved = [dict(step_id=base["spec_recipe"]["steps"][i]["step_id"], action_id=old["action_id"],
         definition_fingerprint=fingerprint(old)) for i, old in enumerate(base["actions"])
         if old == candidate["actions"][i]]
@@ -190,7 +228,7 @@ def preview(store,user,iid,limits,body):
 @graph.controlled
 def load_preview(store,c,user,iid,key,limits,*,original=True,_verified_origin=None):
     current = context(store,c,user,iid,limits,original=original,_verified_origin=_verified_origin)
-    ctx,_,release,_ = current
+    ctx,_,release,saved = current
     body,value = pair(c,user,iid,PREVIEW,key,Preview)
     frozen = copy.deepcopy(value["context"])
     if not original:
@@ -200,7 +238,7 @@ def load_preview(store,c,user,iid,key,limits,*,original=True,_verified_origin=No
     if original:
         spec.require(calculate(store,c,user,iid,limits,body,prepared=current) == value, "Exact local logic proposal changed")
     else:
-        candidate,_ = effective(release["snapshot"]["draft"]["candidate"],body.consume_prior_feedback,limits)
+        candidate,_ = effective(saved.get("effective_candidate",release["snapshot"]["draft"]["candidate"]),body.consume_prior_feedback,limits)
         spec.require(candidate == value["effective_candidate"])
         check = copy.deepcopy(value)
         fp = check.pop("preview_fingerprint")
@@ -343,6 +381,15 @@ def release_bound(store,c,user,release,limits):
 def mount(app,store,limits,identity):
     dep=Depends(identity)
     base="/api/internal/instances/{iid}/logic-patches"
+    @app.get(base + "/context")
+    def baseline(iid:str,user=dep):
+        with store.tx() as c:
+            ctx,_,release,saved=context(store,c,user,iid,limits,_allow_last=True)
+            candidate=saved.get("effective_candidate",release["snapshot"]["draft"]["candidate"])
+            return dict(namespace=VERSION+".context",context=ctx,base_candidate=candidate,
+                graph={**graph.metadata(saved),"graph":saved["graph"],"source_versions":saved["source_versions"]},
+                remaining_adjustments=3-candidate["manifest"]["revision"])
+
     @app.post(base + "/previews",status_code=201)
     def prepare(iid:str,body:Preview,user=dep):
         return preview(store,user,iid,limits,body)

@@ -673,12 +673,12 @@ def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, requ
     return row
 
 
-def instance(store, c, user, iid, limits, *, lock=False, _origin_out=None, _verified_origin=None):
+def instance(store, c, user, iid, limits, *, lock=False, _origin_out=None, _verified_origin=None, _logic_out=None):
     q = select(internal_instances).where(internal_instances.c.id == iid)
     i = c.execute(q.with_for_update() if lock else q).mappings().first()
     if not i or i["principal_id"] != user:
         raise DomainError("PERMISSION_DENIED")
-    r = read_release(store, c, user, i["release_id"], limits, _origin_out=_origin_out,_reuse_origin=_verified_origin)
+    r = read_release(store, c, user, i["release_id"], limits, _origin_out=_origin_out,_reuse_origin=_verified_origin,_logic_out=_logic_out)
     if (
         r["project_id"] != i["project_id"]
         or r["snapshot"]["draft"]["id"] != i["source_app_id"]

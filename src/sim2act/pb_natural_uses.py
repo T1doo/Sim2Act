@@ -307,9 +307,10 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
         declared, base["candidate"]["model_sample_check"]["sample_fingerprint"])
     if logic_origin is not None:
         value["logic_revision"] = copy.deepcopy(saved["logic_revision"])
-        value["manifest"]["revision"] = 2
-        value["actions"][2]["revision"] = 2
-        value["manifest"]["action_bindings"][2]["revision"] = 2
+        revision = saved["manifest"]["revision"]
+        value["manifest"]["revision"] = revision
+        value["actions"][2]["revision"] = revision
+        value["manifest"]["action_bindings"][2]["revision"] = revision
     elif family == PB:
         value["manifest"]["origin"] = "task_run"
         value["manifest"]["source_run_ref"] = base["candidate"]["manifest"]["source_run_ref"]
