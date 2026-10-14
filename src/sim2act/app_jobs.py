@@ -127,8 +127,6 @@ def enqueue(
         if human_correction is not None:
             limits = natural_spec_corrections.bounded_limits(limits,Limits(**human_correction[1]["proposed_limits"]))
         i, release = instance(store, c, user, iid, scope_limits, lock=True)
-        if "natural_logic_source" in release["snapshot"] and logic_check is not None:
-            raise DomainError("UNSUPPORTED_CAPABILITY", "This finite logic version supports its original source only")
         from .text_continuations import execution
 
         execution(store, c, user, i, release, limits)
@@ -217,7 +215,10 @@ def enqueue(
         if logic_check is not None:
             from . import natural_logic_patches as logic
             _, logic_value = logic.load_preview(store,c,user,logic_check.instance_id,logic_check.preview_key,limits)
-            if logic.reference(logic_check.instance_id,logic_check.preview_key,logic_value) != logic_check:
+            if (logic.reference(logic_check.instance_id,logic_check.preview_key,logic_value) != logic_check
+                    or release["id"] != logic_value["context"]["release_id"]
+                    or release["fingerprint"] != logic_value["context"]["release_fingerprint"]
+                    or iid == logic_check.instance_id):
                 raise DomainError("VERSION_CONFLICT")
             draft,_,_,_,logic_goal = logic.effective_bound(release,logic_value,limits)
         elif "natural_logic_source" in release["snapshot"] and use_body is None and human_correction is None:
