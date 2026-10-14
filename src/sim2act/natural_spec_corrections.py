@@ -321,8 +321,11 @@ def logic_gate(store,c,user,rid,ref, *, _logic_out=None, _release=None):
     return value
 
 
-def scope_segment(store,c,user,rid):
-    token = c.info.get("correction_scope_segment")
+def scope_segment(store,c,user,rid, *, _segment=None):
+    # A nested read-only source gate can replace the ambient slot. The caller
+    # may retain its already complete proof only within this synchronous call;
+    # every identity/epoch/authority check below still applies to that handle.
+    token = _segment if _segment is not None else c.info.get("correction_scope_segment")
     proof = token.get("logic",{}) if isinstance(token,dict) else {}
     if not (token and token.get("spec_scope_checked") is True
             and token.get("run_id") == rid and token.get("principal_id") == user

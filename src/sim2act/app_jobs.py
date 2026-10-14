@@ -409,7 +409,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
 
         reused_scope = scope is not None
         job_gate(store, c, user, job["id"],_spec_scope_checked=reused_scope)
-        scope = correction.scope_segment(store,c,user,job["id"])
+        scope = correction.scope_segment(store,c,user,job["id"],_segment=scope)
         if reused_scope and scope is None:
             # A write invalidated the pure read segment; authorize again before
             # any binding/AppRun body, never merely at the later contract check.
