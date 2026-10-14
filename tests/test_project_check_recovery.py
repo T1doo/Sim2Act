@@ -39,15 +39,19 @@ def expired_return(env):
 
     def delayed(raw, payload):
         before = status(data[2], path)
-        with data[0].tx() as c:
-            original.append(dict(c.execute(select(runs).where(
-                runs.c.id == started["run_id"])).mappings().one()))
         assert data[1].lease_seconds == 30
         pause = data[2].post(command, json={"command": "pause", "version": before["run_version"]})
         assert pause.status_code == 200, pause.text
         current = status(data[2], path)
         cancel = data[2].post(command, json={"command": "cancel", "version": current["run_version"]})
         assert cancel.status_code == 200 and cancel.json()["status"] == "RECONCILING"
+        # A RUNNING heartbeat may renew before pause/cancel commits. Capture the
+        # same owner's actual interval after cancellation, when renewal is denied.
+        with data[0].tx() as c:
+            original.append(dict(c.execute(select(runs).where(
+                runs.c.id == started["run_id"])).mappings().one()))
+        assert original[0]["status"] == "RECONCILING" and original[0]["cancel_intent"]
+        assert original[0]["worker_id"] == worker.id
         assert not recover_cancelled_checks(data[0])  # Still unknown, and active owner.
         # Real elapsed ownership interval, never rewrite clocks/leases or budgets.
         while time.time() <= original[0]["lease_until"]:
