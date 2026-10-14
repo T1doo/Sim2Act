@@ -62,11 +62,18 @@ def renew(worker, job, deadline):
     worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds)
 
 
-def effective(worker, c, job, binding, action):
+def effective(worker, c, job, binding, action, *, _scope_checked=False):
+    # Only the two internal callers below have just completed a full scope
+    # check on this connection, with no intervening write, callback or tx exit.
+    # The helper still validates every typed/hash/resource/Goal contract field.
     limits = [
         Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields}),
         Limits(**binding["draft"]["candidate"]["manifest"]["runtime_limits"]),
-        worker.store.frozen_contract(c, job).limits,
+        (
+            worker.store._frozen_contract_after_scope(c, job)
+            if _scope_checked
+            else worker.store.frozen_contract(c, job)
+        ).limits,
         Limits(**action["limits"]),
     ]
     return Limits(**{k: min(getattr(v, k) for v in limits) for k in Limits.model_fields})
@@ -270,7 +277,7 @@ def reservation_check(worker, c, job, ctx, tools, meta, settings):
     require(index < len(candidate["actions"]))
     step, action = candidate["manifest"]["workflow"][index], candidate["actions"][index]
     intent = spec.intent_for(step, action, binding["plan"], outputs, proved)
-    expected = effective(worker, c, job, binding, action)
+    expected = effective(worker, c, job, binding, action, _scope_checked=True)
     require(
         action["executor"]["ref"] in codec.MODEL_KINDS
         and meta
@@ -682,7 +689,7 @@ def advance_model(worker, run):
             return spec._advance_local(worker, c, run, job, binding, (outputs, proved))
         enabled(worker)
         spec.commit_guard(worker, c, run, binding)
-        node_limits = effective(worker, c, job, binding, action)
+        node_limits = effective(worker, c, job, binding, action, _scope_checked=True)
         intent = spec.intent_for(step, action, binding["plan"], outputs, proved)
         ctx = copy.deepcopy(job["context"])
         ctx["messages"] = messages(binding, step, action, intent)
