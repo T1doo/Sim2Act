@@ -3,9 +3,7 @@
 import asyncio
 import copy
 import hashlib
-import importlib.util
 import json
-import sys
 import time
 from pathlib import Path
 
@@ -251,18 +249,9 @@ def test_pair_loss_does_not_reprepare_or_reapprove(approved):
 
 
 def load_budget():
-    try:
-        from sim2act import natural_trial_budget
-        return natural_trial_budget
-    except ImportError:
-        # Read-only dependency in the explicitly isolated parallel work package.
-        # Root's combined tree takes the normal import branch after integration.
-        path = Path('/workspace/Sim2Act-trial-budget-20261015/src/sim2act/natural_trial_budget.py')
-        spec = importlib.util.spec_from_file_location("sim2act.natural_trial_budget", path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        return module
+    from sim2act import natural_trial_budget
+
+    return natural_trial_budget
 
 
 def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypatch, tmp_path):

@@ -273,11 +273,6 @@ def test_unknown_usage_recovery_wrong_original_proof_atomic(trial, changes):
 def test_actual_admission_generate_worker_reservation_combination(env):
     """Root runs this after integrating both modules; no transport invocation."""
     import copy
-    import importlib
-    import importlib.util
-    import os
-    import sys
-    from pathlib import Path
 
     import httpx
     from test_natural_spec_apps import setup
@@ -286,23 +281,10 @@ def test_actual_admission_generate_worker_reservation_combination(env):
     from sim2act.db import events
     from sim2act.worker import Worker
 
-    external = os.environ.get("SIM2ACT_TEST_ADMISSION_ROOT")
-    if external:
-        path = Path(external) / "src/sim2act/natural_live_admission.py"
-        spec = importlib.util.spec_from_file_location("sim2act.natural_live_admission", path)
-        gate = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = gate
-        spec.loader.exec_module(gate)
-        helper_path = Path(external) / "tests/test_natural_live_admission.py"
-    else:
-        try:
-            gate = importlib.import_module("sim2act.natural_live_admission")
-        except ModuleNotFoundError:
-            pytest.skip("Actual admission module is an explicit root integration dependency")
-        helper_path = Path(__file__).with_name("test_natural_live_admission.py")
-    helper_spec = importlib.util.spec_from_file_location("budget_admission_helper", helper_path)
-    helper = importlib.util.module_from_spec(helper_spec)
-    helper_spec.loader.exec_module(helper)
+    import test_natural_live_admission as helper
+
+    from sim2act import natural_live_admission as gate
+
     data = setup(env)
     try:
         contract, body = helper.frozen(data, ttl=1200.0)
