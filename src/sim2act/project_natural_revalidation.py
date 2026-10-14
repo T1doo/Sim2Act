@@ -278,6 +278,43 @@ def calculate(store, c, user, pid, body, limits, *, catalog=None, _replay=False)
 
 @graph.controlled
 def load_plan(store, c, user, pid, key, limits):
+    """Reuse only the already complete proof within this locked transaction.
+
+    Every non-SELECT invalidates the window. No token crosses a transaction,
+    model response, callback or heartbeat; all successful logical authorities
+    are rechecked even during same-window reuse (including grant expiry).
+    """
+    store.lock_project(c, user, pid)
+    identity = (user, pid, key, fingerprint(limits.model_dump()))
+    transaction = c.get_transaction()
+    epoch = c.info.get("source_proof_write_epoch", 0)
+    token = c.info.get("project_scope_segments", {}).get(identity)
+    if (
+        token
+        and transaction is not None
+        and token["transaction"] is transaction
+        and token["epoch"] == epoch
+    ):
+        store.recheck_proof_authorities(c, {"_call_authorities": token["authorities"]})
+        return Prepare.model_validate(copy.deepcopy(token["request"])), copy.deepcopy(token["plan"])
+    with store.proof_authorities(c) as authorities:
+        body, value = _load_plan(store, c, user, pid, key, limits)
+    if (
+        transaction is not None
+        and transaction is c.get_transaction()
+        and epoch == c.info.get("source_proof_write_epoch", 0)
+    ):
+        c.info.setdefault("project_scope_segments", {})[identity] = dict(
+            transaction=transaction,
+            epoch=epoch,
+            authorities=tuple(sorted(authorities)),
+            request=copy.deepcopy(body.model_dump()),
+            plan=copy.deepcopy(value),
+        )
+    return body, value
+
+
+def _load_plan(store, c, user, pid, key, limits):
     current = members(store, c, user, pid, limits)
     body, value = pair(c, user, pid, PLAN, key, Prepare)
     fp = {k: x for k, x in value.items() if k != "plan_fingerprint"}

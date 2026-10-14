@@ -578,6 +578,7 @@ class Store:
             # non-SELECT statement, including raw SQL, CTEs and failed writes.
             if not statement.lstrip().upper().startswith("SELECT "):
                 connection.info.pop("correction_scope_segment", None)
+                connection.info.pop("project_scope_segments", None)
                 connection.info["source_proof_write_epoch"] = (
                     connection.info.get("source_proof_write_epoch", 0) + 1)
 
@@ -614,6 +615,7 @@ class Store:
                     raise
             finally:
                 c.info.pop("correction_scope_segment", None)
+                c.info.pop("project_scope_segments", None)
                 if prior_timeout is not None and raw is not None:
                     raw.execute(f"PRAGMA busy_timeout = {prior_timeout}")
 
