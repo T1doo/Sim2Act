@@ -3,6 +3,7 @@
 import time
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import NoResultFound
 
 from . import natural_spec_runtime as model
 from . import natural_specs as codec
@@ -66,20 +67,33 @@ def known_receipts(c, job, meta):
     return rows
 
 
-def recover_cancelled_checks(store):
+SCAN_LIMIT = 16
+
+
+def recover_cancelled_checks(store, *, scan=None):
     """A new worker may stop a known CHECK, but gains no execution authority."""
+    scan = {} if scan is None else scan
     with store.tx() as c:
-        ids = c.execute(select(runs.c.id).join(internal_run_bindings,
+        query = select(runs.c.id).join(internal_run_bindings,
             internal_run_bindings.c.run_id == runs.c.id).where(
                 runs.c.status == "RECONCILING", runs.c.cancel_intent.is_(True),
                 runs.c.lease_until <= time.time(),
                 internal_run_bindings.c.snapshot["project_check"]["project_id"].as_string().is_not(None)
-            ).order_by(runs.c.created_at, runs.c.id)).scalars().all()
+            )
+        if scan.get("after") is not None:
+            query = query.where(runs.c.id > scan["after"])
+        ids = c.execute(query.order_by(runs.c.id).limit(SCAN_LIMIT)).scalars().all()
+    scan["after"] = ids[-1] if ids else None
     for rid in ids:
         with store.tx() as c:
             owner = c.execute(select(runs.c.principal_id, runs.c.project_id).where(
-                runs.c.id == rid)).mappings().one()
-            store.lock_project(c, owner["principal_id"], owner["project_id"])
+                runs.c.id == rid)).mappings().first()
+            if owner is None:
+                continue
+            try:
+                store.lock_project(c, owner["principal_id"], owner["project_id"])
+            except DomainError:
+                continue
             job = c.execute(select(runs).where(runs.c.id == rid)
                 .with_for_update()).mappings().one()
             if (job["status"] != "RECONCILING" or not job["cancel_intent"]
@@ -102,7 +116,7 @@ def recover_cancelled_checks(store):
                     internal_app_runs.c.id == app_run["id"])).scalar_one()
                 spec.require(state == "RECONCILING")
                 receipts = known_receipts(c, job, meta)
-            except (DomainError, ValueError, KeyError, TypeError):
+            except (DomainError, ValueError, KeyError, TypeError, NoResultFound):
                 # Incomplete/corrupted evidence is not terminal authority.
                 continue
             effects = store.known_effects(c, rid)

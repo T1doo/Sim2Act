@@ -8,4 +8,6 @@
 
 同时修复已实测的 PROJECT QUEUED pause→resume：command_job 的首个 load_binding 使用原 frozen_contract.limits，后续重用同一原契约；旧 stop metadata 路径不读取私有材料/Goal，不增加/重建预算。非 PROJECT 与无 metadata 的停止逻辑保留既有行为。
 
+普通 Worker 每次最多扫描 16 个候选，进程内仅保留按 Run id 轮转的游标；游标不是权限或执行证据，冷启动从头检查，不修改 Run。坏项目权限、缺失/损坏证据只跳过该候选，普通 queued 工作仍交给原 claim；后续轮次继续，坏候选不能永久占住首批。项目锁在 Run 锁之前取得，事务内复核原 owner pair；实际 PG 锁行为仍 NOT RUN。
+
 实际验收等待候选源码独审、精确软件资格重新冻结后执行。测试将实际等待原 30 秒 lease，包含真实 mock Worker 接收、原公开 commands、已知回收、未知保留、撤权停止、坏索引/响应/预算证据 fail closed、双 Store 竞争、原 worker fence 拒绝、回执故障回滚和原 QUEUED resume。真实模型、费用、Windows、PG、原生浏览器与人工语义均 NOT RUN。

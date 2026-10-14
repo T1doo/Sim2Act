@@ -8,7 +8,7 @@ from threading import Barrier
 
 import httpx
 import pytest
-from sqlalchemy import select, tuple_, update
+from sqlalchemy import delete, insert, select, tuple_, update
 from test_natural_spec_apps import transport
 from test_project_check_cancel import accepted, original_objects, status
 from test_spec_app_operations import snapshot
@@ -23,6 +23,7 @@ from sim2act.db import (
     events,
     grants,
     internal_app_runs,
+    internal_releases,
     internal_run_bindings,
     operations,
     runs,
@@ -102,6 +103,16 @@ def test_expired_known_cancel_recovery_failclosed_matrix_rollback_revocation_and
         assert snapshot(store) == damaged
         with store.tx() as c:
             c.execute(update(table).where(identity == key).values({field: saved}))
+    # Missing evidence returns no authority, rather than breaking the worker loop.
+    with store.tx() as c:
+        release = dict(c.execute(select(internal_releases).where(
+            internal_releases.c.id == before["release_id"])).mappings().one())
+        c.execute(delete(internal_releases).where(internal_releases.c.id == release["id"]))
+    missing = snapshot(store)
+    assert not recover_cancelled_checks(store)
+    assert snapshot(store) == missing
+    with store.tx() as c:
+        c.execute(insert(internal_releases).values(**release))
     own_event = store.event
 
     def failed_receipt(c, rid, kind, value):
@@ -209,3 +220,36 @@ def test_project_queued_pause_resume_uses_original_limits_and_rejects_stale_revo
     before = snapshot(data[0])
     assert data[2].post(command, json={"command": "resume", "version": cancelled["run_version"]}).status_code == 409
     assert snapshot(data[0]) == before and cancelled["run_status"] == "CANCELLED"
+
+
+def test_bounded_round_robin_bad_candidates_allow_real_queue_and_real_known_cancel(env):
+    data, started, path, _, sent, old, _ = expired_return(env)
+    store = data[0]
+    with store.tx() as c:
+        binding = dict(c.execute(select(internal_run_bindings).where(
+            internal_run_bindings.c.run_id == old["id"])).mappings().one())
+        original = dict(c.execute(select(runs).where(runs.c.id == old["id"])).mappings().one())
+        # Explicitly unaccepted malformed metadata, never represented as real accepted Runs.
+        for index in range(32):
+            bad_id = f"000-invalid-cancel-{index:02}"
+            fake = {**original, "id": bad_id, "request_key": "unaccepted-" + bad_id}
+            if index < 16:
+                fake["project_id"] = "missing-project"
+            c.execute(insert(runs).values(**fake))
+            c.execute(insert(internal_run_bindings).values(**{
+                **binding, "run_id": bad_id, "app_run_id": "unaccepted-" + bad_id}))
+    ordinary = store.submit(env[3], env[5], "ordinary local test", [], "recovery-fair-queue")
+    worker = Worker(store, data[1], goal_planner_transport=transport(sent))
+    assert worker.once()  # Examines at most sixteen bad candidates, then ordinary claim.
+    with store.tx() as c:
+        assert c.execute(select(events.c.id).where(events.c.run_id == ordinary,
+            events.c.kind == "CLAIMED")).first()
+    assert status(data[2], path)["run_status"] == "RECONCILING"
+    assert not worker.once()  # The next sixteen invalid bindings cannot block progress.
+    assert worker.once()  # Cursor reaches the genuine known cancellation.
+    assert status(data[2], path)["run_status"] == "CANCELLED" and len(sent) == 1
+    with store.tx() as c:
+        assert len(c.execute(select(runs.c.id).where(runs.c.id.like("000-invalid-cancel-%"),
+            runs.c.status == "RECONCILING")).all()) == 32
+    assert not worker.once()  # Wrap is read-only; neither cold recovery nor cancellation resends.
+    assert started["run_id"] == old["id"]

@@ -47,6 +47,7 @@ class Worker:
             raise DomainError("PERMISSION_DENIED", "Synthetic protocol clock is test-only")
         self.protocol_clock = protocol_clock
         self.stop = threading.Event()
+        self._project_cancel_scan = {}
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
                 planner_request=False, generation_request=False, natural_spec_request=None):
@@ -631,7 +632,7 @@ class Worker:
         self.store.heartbeat(self.id)
         from .project_check_recovery import recover_cancelled_checks
 
-        if recover_cancelled_checks(self.store):
+        if recover_cancelled_checks(self.store, scan=self._project_cancel_scan):
             return True
         run = self.store.claim(self.id, self.s.lease_seconds)
         if run:
