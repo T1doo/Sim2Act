@@ -273,6 +273,9 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
         events.c.data["app_run_id"].as_string().label("aid")).where(events.c.run_id == rid,
         events.c.kind == "ACCEPTED", events.c.data["namespace"].as_string() == "INTERNAL_APPRUN")).mappings().all()
     require(len(accepted) == 1 and accepted[0]["iid"] == meta.instance_id and accepted[0]["aid"] == meta.app_run_id)
+    from .project_natural_revalidation import control_binding
+
+    control_binding(store, c, user, header, meta)
     return dict(header), dict(app_run)
 
 

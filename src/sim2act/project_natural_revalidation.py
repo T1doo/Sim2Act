@@ -9,6 +9,7 @@ import sqlite3
 from typing import Literal
 
 from fastapi import Depends
+from fastapi.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import OperationalError
@@ -20,12 +21,15 @@ from . import natural_specs as natural
 from . import pa_spec_apps as spec
 from .db import (
     app_drafts,
+    attempts,
     delivery_graph_requests,
     fingerprint,
     internal_app_runs,
     internal_instances,
     internal_releases,
     internal_run_bindings,
+    local_effects,
+    operations,
     runs,
 )
 from .errors import DomainError
@@ -818,6 +822,91 @@ def job_gate(store, c, user, job, snapshot, limits):
     return plan
 
 
+@graph.controlled
+def control_binding(store, c, user, job, meta):
+    """Accepted public identifiers for owner stop, including after revocation."""
+    public = c.execute(
+        select(internal_run_bindings.c.snapshot["project_check"]).where(
+            internal_run_bindings.c.run_id == job["id"]
+        )
+    ).scalar_one_or_none()
+    hint = c.execute(
+        select(delivery_graph_requests.c.request_key).where(
+            delivery_graph_requests.c.principal_id == user,
+            delivery_graph_requests.c.kind.in_([JOB, JOB + "_seal", START, START + "_seal"]),
+            (delivery_graph_requests.c.app_id == job["id"])
+            | (delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == job["id"]),
+        )
+    ).first()
+    spec.require(bool(hint) == (public is not None), "Project stop role cannot be removed")
+    if public is None:
+        return None
+    accepted, sealed = pair(c, user, job["id"], JOB, "accepted", Reference)
+    reference = accepted.model_dump()
+    spec.require(reference == sealed == public and accepted.project_id == job["project_id"])
+    indices = c.execute(
+        select(
+            delivery_graph_requests.c.kind,
+            delivery_graph_requests.c.app_id,
+            delivery_graph_requests.c.request_key,
+        ).where(
+            delivery_graph_requests.c.principal_id == user,
+            (
+                (delivery_graph_requests.c.kind.in_([JOB, JOB + "_seal"]))
+                & (delivery_graph_requests.c.app_id == job["id"])
+            )
+            | (
+                (delivery_graph_requests.c.kind.in_([START, START + "_seal"]))
+                & (
+                    delivery_graph_requests.c.snapshot["response"]["run_id"].as_string()
+                    == job["id"]
+                )
+            ),
+        )
+    ).all()
+    spec.require(
+        set(indices)
+        == {
+            (JOB, job["id"], "accepted"),
+            (JOB + "_seal", job["id"], "accepted"),
+            (START, accepted.project_id, accepted.plan_key + ":" + accepted.app_id),
+            (START + "_seal", accepted.project_id, accepted.plan_key + ":" + accepted.app_id),
+        }
+        and len(indices) == 4,
+        "Exact independent project control indices required",
+    )
+    store.own_project(c, user, accepted.project_id)
+    _, sources, releases = plan_metadata(c, user, accepted.project_id, accepted.plan_key)
+    selected = [
+        (source, release)
+        for source, release in zip(sources, releases, strict=True)
+        if source["app_id"] == accepted.app_id
+    ]
+    spec.require(
+        len(selected) == 1 and not close_present(c, user, accepted.project_id, accepted.plan_key)
+    )
+    source, release = selected[0]
+    spec.require({k: v for k, v in source.items() if k != "instance_id"} == reference)
+    own, own_seal = pair(c, user, source["instance_id"], SOURCE, accepted.plan_key, Reference)
+    spec.require(own.model_dump() == own_seal == reference)
+    started_body, started = pair(
+        c, user, accepted.project_id, START, accepted.plan_key + ":" + accepted.app_id, Start
+    )
+    spec.require(
+        started_body.expected_plan_fingerprint == accepted.plan_fingerprint
+        and started["run_id"] == job["id"]
+        and started["check_instance_id"] == meta.instance_id
+        and started["project_id"] == accepted.project_id
+        and started["app_id"] == accepted.app_id
+        and started["plan_key"] == accepted.plan_key
+        and started["plan_fingerprint"] == accepted.plan_fingerprint
+        and meta.app_id == accepted.app_id
+        and meta.release_id == release
+        and meta.instance_id != source["instance_id"]
+    )
+    return reference
+
+
 def start(store, user, pid, key, aid, body, limits):
     try:
         return _start(store, user, pid, key, aid, body, limits)
@@ -1013,6 +1102,92 @@ def require_complete_checks(store, c, user, reference, limits):
             "Project member CHECK has not passed",
         )
     return plan
+
+
+@graph.controlled
+def run_status(store, c, user, pid, key, aid, limits):
+    """Read the exact accepted CHECK; never dispatch, reconcile or unlock it."""
+    _, plan = load_plan(store, c, user, pid, key, limits)
+    selected = member(plan, aid)
+    _, started = pair(c, user, pid, START, key + ":" + aid, Start)
+    job = (
+        c.execute(
+            select(runs).where(
+                runs.c.id == started["run_id"],
+                runs.c.principal_id == user,
+                runs.c.project_id == pid,
+            )
+        )
+        .mappings()
+        .one()
+    )
+    bound, _, _ = spec.verify_job(store, c, user, job, limits)
+    job_gate(store, c, user, job, bound["snapshot"], limits)
+    spec.require(
+        bound["snapshot"]["instance_id"] == started["check_instance_id"]
+        and bound["snapshot"]["release_id"] == selected["context"]["release_id"]
+    )
+    usage = [
+        dict(x)
+        for x in c.execute(
+            select(
+                attempts.c.id.label("attempt_id"),
+                attempts.c.status,
+                attempts.c.usage,
+                attempts.c.reserved_tokens,
+            )
+            .where(attempts.c.run_id == job["id"])
+            .order_by(attempts.c.created_at, attempts.c.id)
+        ).mappings()
+    ]
+    unresolved = [
+        dict(x)
+        for x in c.execute(
+            select(
+                operations.c.id.label("operation_id"),
+                operations.c.tool_ref,
+                operations.c.status,
+            )
+            .where(
+                operations.c.run_id == job["id"],
+                operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN", "RECEIPT_KNOWN"]),
+            )
+            .order_by(operations.c.id)
+        ).mappings()
+    ]
+    effects = [
+        dict(x)
+        for x in c.execute(
+            select(local_effects)
+            .join(
+                operations,
+                operations.c.id == local_effects.c.operation_id,
+            )
+            .where(operations.c.run_id == job["id"])
+            .order_by(local_effects.c.operation_id)
+        ).mappings()
+    ]
+    value = dict(
+        **flags(),
+        project_id=pid,
+        principal_id=user,
+        plan_key=key,
+        plan_fingerprint=plan["plan_fingerprint"],
+        app_id=aid,
+        role=selected["role"],
+        run_id=job["id"],
+        check_instance_id=started["check_instance_id"],
+        release_id=selected["context"]["release_id"],
+        run_version=job["version"],
+        run_status=job["status"],
+        cancel_intent=job["cancel_intent"],
+        effect_known=not store.has_unknown(c, job["id"]),
+        known_effects=effects,
+        model_usage=usage,
+        unresolved_operations=unresolved,
+        executed_model_requests=job["context"]["requests"],
+    )
+    return dict(**value, control_fingerprint=fingerprint(value))
 
 
 def pins(c, user, i):
@@ -1313,6 +1488,92 @@ def mount(app, store, limits, identity):
     @app.post(base + "/plans/{key}/applications/{aid}/checks", status_code=202)
     def check(pid: str, key: str, aid: str, body: Start, user=dep):
         return start(store, user, pid, key, aid, body, limits)
+
+    @app.get(base + "/plans/{key}/applications/{aid}/run-status")
+    def check_status(pid: str, key: str, aid: str, user=dep):
+        with store.tx() as c:
+            return JSONResponse(
+                run_status(store, c, user, pid, key, aid, limits),
+                headers={"Cache-Control": "no-store", "Vary": "Authorization"},
+            )
+
+    @app.get(base + "/plans/{key}/applications/{aid}/run-control")
+    def check_control(pid: str, key: str, aid: str, user=dep):
+        from .pb_natural_uses import control_scope
+
+        with store.tx() as c:
+            store.own_project(c, user, pid)
+            _, started = pair(c, user, pid, START, key + ":" + aid, Start)
+            metadata = control_scope(
+                store, c, user, started["run_id"], iid=started["check_instance_id"]
+            )
+            spec.require(metadata is not None)
+            job, app_run = metadata
+            accepted, _ = pair(c, user, job["id"], JOB, "accepted", Reference)
+            spec.require(
+                accepted.project_id == pid and accepted.plan_key == key and accepted.app_id == aid
+            )
+            value = dict(
+                **flags(),
+                project_id=pid,
+                principal_id=user,
+                plan_key=key,
+                plan_fingerprint=accepted.plan_fingerprint,
+                app_id=aid,
+                run_id=job["id"],
+                check_instance_id=app_run["instance_id"],
+                release_id=app_run["release_id"],
+                run_version=job["version"],
+                run_status=job["status"],
+                cancel_intent=job["cancel_intent"],
+                content_access=False,
+            )
+            return JSONResponse(
+                dict(**value, control_fingerprint=fingerprint(value)),
+                headers={"Cache-Control": "no-store", "Vary": "Authorization"},
+            )
+
+    @app.get(base + "/plans/{key}/run-controls")
+    def check_controls(pid: str, key: str, user=dep):
+        with store.tx() as c:
+            store.own_project(c, user, pid)
+            _, sources, _ = plan_metadata(c, user, pid, key)
+            spec.require(not close_present(c, user, pid, key))
+            items = []
+            for source in sources:
+                stage = key + ":" + source["app_id"]
+                hint = graph.lookup(c, user, pid, START, stage) or graph.lookup(
+                    c, user, pid, START + "_seal", stage
+                )
+                hint = (
+                    hint
+                    or c.execute(
+                        select(delivery_graph_requests.c.request_key).where(
+                            delivery_graph_requests.c.principal_id == user,
+                            delivery_graph_requests.c.kind.in_([JOB, JOB + "_seal"]),
+                            delivery_graph_requests.c.snapshot["request"]["project_id"].as_string()
+                            == pid,
+                            delivery_graph_requests.c.snapshot["request"]["plan_key"].as_string()
+                            == key,
+                            delivery_graph_requests.c.snapshot["request"]["app_id"].as_string()
+                            == source["app_id"],
+                        )
+                    ).first()
+                )
+                items.append(dict(app_id=source["app_id"], accepted_check=bool(hint)))
+            value = dict(
+                **flags(),
+                project_id=pid,
+                principal_id=user,
+                plan_key=key,
+                plan_fingerprint=sources[0]["plan_fingerprint"],
+                content_access=False,
+                applications=items,
+            )
+            return JSONResponse(
+                dict(**value, control_fingerprint=fingerprint(value)),
+                headers={"Cache-Control": "no-store", "Vary": "Authorization"},
+            )
 
     @app.post(base + "/plans/{key}/version-approvals", status_code=201)
     def approve(pid: str, key: str, body: Version, user=dep):
