@@ -16,4 +16,16 @@ Generate 的 runtime 与未来生成应用的 runtime 不能混同。来源/冷�
 
 合法生产开放仍需：账户所有人的当前免费权益与强制零收费机制证据、受信 server-side fee authority 实现及独审、完整精确 trial 封存对象和独立批准、合法后端 secret 机制。当前无需提供 token，不自动开启 LIVE。真实工程验收与独立人工语义验收分开；引用/结构即便 PASS，语义 UNKNOWN/owner PENDING/formal publication false 保持。
 
-实际首轮及修正轮命令、源码 before/after、原 stdout/stderr/XML 将保存在 /workspace/natural-live-admission-evidence-20261015/author；终态统计和独审结论待实际完成后记录。PG、Windows、原生浏览器、真实模型、账户免费权益、费用、人工语义、完整 P-A/P-B、部署/CI NOT RUN。
+实际命令、源码 before/after、原 stdout/stderr/XML、逐条用例及全部历史在 /workspace/natural-live-admission-evidence-20261015；最终索引为 AUTHOR_FINAL_INDEX.json。PG、Windows、原生浏览器、真实模型、账户免费权益、费用、人工语义、完整 P-A/P-B、部署/CI NOT RUN。
+
+## 精确工程终态与独审
+
+产品与测试冻结 `033204609063c4b4bbcbd6434e1c804d8de9917f`。本隔离树当前源码 **34 唯一 PASS / 0 FAIL / 0 ERROR / 0 SKIP**：final-short 33 PASS（另1 deselected，不重复加分母）+ final-seven 1 PASS，两组均实际终态，同一423源文件 before/after/current 全相等。外部并行预算模块实际只读导入路径为 `/workspace/Sim2Act-trial-budget-20261015/src/sim2act/natural_trial_budget.py`，源码 SHA `b372708a3da4c0f8176189f8bf7f8de5cef0deee851b5c392b37cfd4df1e56ce`；两轮前后均相同，并封存实际执行字节。本模块 SHA `ca0227e0b34f83c4d84e8320e0cadf2ba95949dc5e9c81a3c6dccd9371ec2480`。
+
+实际组合JSON（author/final-seven-tmp/test_actual_mock_generated_app0/actual-combined-admission-budget.json）SHA `b1121423b76ae0bcacab30246bb6ebe5fc1af236459f48a7d6b698630fba921a`：三个不同实际Run，Generate3+Source2+Cold2 七个不同真实 mock Attempt，全部已知并被原试验总账接受，ACCOUNTED/KNOWN，保守预留48354、真实合成usage total7000。相邻预留间隔最小60.080589秒。21个实际返回 Permit 均为 SYNTHETIC_ONLY/live_allowed=false，budget回执 dispatch_authorized=false；必须经过真正新鲜 sender guard 后才进入明确离线 MockTransport。这个 fixture 新批准的独立绝对 expiry 为1200秒以容纳实际七槽，不延任何已批准对象；原每Run300秒、lease30秒、每分钟1槽、原7/3/2/2及全部字节/token上限未改。源、冷阶段既有 Run 均真实完成保存；确认丢ACK历史读取覆盖 RUNNING、SUCCEEDED、instance revision 改变之后，以及错误原key/撤权拒绝，读取不写、不重新批准或扣槽。
+
+原历史不并入本次分母：first 33 PASS 是尚未加入同trial实际账本审计的前身支持；final-combined 为33 PASS/1 FAIL（夹具拦同步而实际sender走异步，未入总账，阶段正确拒绝）；strict-combined 为33 PASS/1 FAIL（第七槽已预留但未结算，冷Run HTTP为RUNNING/error null，总账RECONCILING/UNKNOWN）。这两个原失败全部保存，未恢复、重发、退款或删除其锁，也不把它们改签为通过。修正严格按真实 usage.tokens 字段核对，使用取消可协作异步 transport，在真正 admission→reserve→fresh admission→dispatch→settle 之后复用已有 fresh Permit 作观察，去掉只为观察的第4次完整 proof 遍历；不改租约/时钟/权限，不称原未知原因已定位或原Run已恢复。
+
+独审最终报告 `/workspace/natural-live-gates-review-20261015/ADMISSION_033_FINAL.md`（副本 independent/ADMISSION_033_FINAL.md），SHA `9f37da876be2ca217cde3dddcada000c9c5ce336749b08a21316f77cde413b17`，仅只读 code/XML/JSON/Git，未跑测试或读取DB：本有限工程原语与合成组合 **无P1阻塞**。确认版本Literal类型标注的代码桥、完整原阶段权威/同trial三实际Attempt证明、历史原key只读恢复和精确预算边界。
+
+Ruff新增模块与测试实际 exit0。单模块 mypy 实际 exit1：tools.py 两项既有注解错误，另隔离树不存在并行预算文件的 `natural_trial_budget` 静态 import attr-defined 一项；保留正常固定 import，不通过动态加载或抑制来制造类型绿。原namespace Literal赋值类型错误已修。根合并后预算模块存在，须重新核完整类型/软件资格/实际组合；本文不能代替该验证。本子任务不改资格或push，由根统一独审集成、正常分支交付。根树将使用正常本地导入移除隔离依赖 fallback，并在实际同一完整源码闭包复验。
