@@ -77,11 +77,15 @@ def recover_cancelled_checks(store):
             ).order_by(runs.c.created_at, runs.c.id)).scalars().all()
     for rid in ids:
         with store.tx() as c:
+            owner = c.execute(select(runs.c.principal_id, runs.c.project_id).where(
+                runs.c.id == rid)).mappings().one()
+            store.lock_project(c, owner["principal_id"], owner["project_id"])
             job = c.execute(select(runs).where(runs.c.id == rid)
                 .with_for_update()).mappings().one()
             if (job["status"] != "RECONCILING" or not job["cancel_intent"]
                     or job["lease_until"] > time.time() or job["result"] is not None
-                    or store.has_unknown(c, rid)):
+                    or store.has_unknown(c, rid)
+                    or any(job[k] != owner[k] for k in ("principal_id", "project_id"))):
                 continue
             try:
                 scope = uses.control_scope(store, c, job["principal_id"], rid, lock=True)
