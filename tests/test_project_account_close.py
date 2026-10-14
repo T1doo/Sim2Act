@@ -1,6 +1,7 @@
 """Public SQLite unstarted-account closure, immutable history and actual CHECK use."""
 
 import copy
+import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
@@ -341,7 +342,7 @@ def test_closed_receipt_corruption_never_unlocks_or_reopens(env, fault):
     assert check(data[2], base, plan, aid).status_code == 409
 
 
-def test_close_vs_start_two_store_transactions_exactly_one_accepts(env):
+def test_close_vs_start_two_store_transactions_exactly_one_accepts(env, tmp_path):
     data, aid, _, inst, _, base, _, plan = one(env)
     with data[0].tx() as c:
         before_runs = set(c.execute(select(runs.c.id)).scalars())
@@ -369,6 +370,17 @@ def test_close_vs_start_two_store_transactions_exactly_one_accepts(env):
     assert ledger.status_code == 200, ledger.text
     with data[0].tx() as c:
         all_runs = set(c.execute(select(runs.c.id)).scalars()) - before_runs
+    (tmp_path / "close-start-race.json").write_text(
+        json.dumps(
+            dict(
+                results=results,
+                new_run_ids=sorted(all_runs),
+                account_status=ledger.json().get("account_status", "OPEN"),
+            ),
+            indent=2,
+        )
+        + "\n"
+    )
     if results["close"] == 200:
         assert ledger.json()["account_status"] == "CLOSED_UNSTARTED"
         assert not all_runs
@@ -381,3 +393,20 @@ def test_close_vs_start_two_store_transactions_exactly_one_accepts(env):
     else:
         assert len(all_runs) == 1 and ledger.json()["applications"][0]["run_status"] == "QUEUED"
         assert close(data[2], base, plan).status_code == 409
+
+
+def test_cancelled_accepted_check_still_cannot_close_account(env):
+    data, aid, _, _, _, base, _, plan = one(env)
+    response = check(data[2], base, plan, aid)
+    assert response.status_code == 202, response.text
+    accepted = response.json()
+    run_path = f"/api/internal/instances/{accepted['check_instance_id']}/runs/{accepted['run_id']}"
+    before = data[2].get(run_path).json()
+    response = data[2].post(
+        run_path + "/commands", json=dict(command="cancel", version=before["version"])
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "CANCELLED"
+    before = snapshot(data[0])
+    assert close(data[2], base, plan).status_code == 409
+    assert snapshot(data[0]) == before

@@ -10,7 +10,7 @@ from typing import Literal
 
 from fastapi import Depends
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import OperationalError
 
 from . import delivery_graph_apps as graph
@@ -424,6 +424,21 @@ def plan_metadata(c, user, pid, key):
         delivery_graph_requests.c.snapshot["request"].label("request"),
         delivery_graph_requests.c.snapshot["response"]["plan_fingerprint"].as_string().label("fp"),
     ]
+    application_array = delivery_graph_requests.c.snapshot["response"]["applications"]
+    if c.dialect.name == "sqlite":
+        array_type = func.json_type(application_array)
+        array_count = func.json_array_length(application_array)
+    elif c.dialect.name == "postgresql":
+        array_type = func.json_typeof(application_array)
+        array_count = func.json_array_length(application_array)
+    else:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "No exact historical JSON metadata contract")
+    columns.extend(
+        [
+            array_type.label("application_type"),
+            case((array_type == "array", array_count), else_=0).label("application_count"),
+        ]
+    )
     for field in ("project_id", "principal_id", "request_key"):
         columns.append(
             delivery_graph_requests.c.snapshot["response"][field].as_string().label(field)
@@ -461,6 +476,10 @@ def plan_metadata(c, user, pid, key):
         body.request_key == key and rows[0]["request_fingerprint"] == fingerprint(body.model_dump())
     )
     choices = sorted(body.selections, key=lambda x: x.app_id)
+    spec.require(
+        row["application_type"] == "array" and row["application_count"] == len(choices),
+        "Exact historical application array required",
+    )
     spec.require(
         len({x.app_id for x in choices}) == len(choices)
         and len({x.instance_id for x in choices}) == len(choices)
@@ -1207,8 +1226,8 @@ def mount(app, store, limits, identity):
             )
             items = []
             for key in keys:
-                _, plan = pair(c, user, pid, PLAN, key, Prepare)
-                items.append(dict(request_key=key, plan_fingerprint=plan["plan_fingerprint"]))
+                _, sources, _ = plan_metadata(c, user, pid, key)
+                items.append(dict(request_key=key, plan_fingerprint=sources[0]["plan_fingerprint"]))
             return dict(**flags(), project_id=pid, principal_id=user, items=items)
 
     @app.post(base + "/plans/{key}/close")

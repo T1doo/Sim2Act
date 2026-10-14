@@ -1,5 +1,6 @@
 import copy
 
+import pytest
 from sqlalchemy import select
 from test_project_account_close import check, close, one
 
@@ -233,3 +234,74 @@ def test_rehashed_public_pointer_context_mismatch_rejects_before_plan_body(env, 
     monkeypatch.setattr(project, "pair", guarded)
     response = data[2].get(base + "/plans/" + plan["request_key"])
     assert response.status_code == 409, response.text
+
+
+@pytest.mark.parametrize("fault", ["third_context", "null_second", "not_array"])
+def test_exact_historical_array_shape_checked_before_plan_body(env, monkeypatch, fault):
+    from sqlalchemy import update
+
+    from sim2act import project_natural_revalidation as project
+    from sim2act.db import delivery_graph_requests as markers
+    from sim2act.db import fingerprint
+
+    data, _, _, _, _, base, _, plan = one(env)
+    assert close(data[2], base, plan).status_code == 200
+    with data[0].tx() as c:
+        rows = (
+            c.execute(
+                select(markers).where(markers.c.kind.in_([project.PLAN, project.PLAN + "_seal"]))
+            )
+            .mappings()
+            .all()
+        )
+        for row in rows:
+            snap = copy.deepcopy(row["snapshot"])
+            applications = snap["response"]["applications"]
+            if fault == "third_context":
+                applications.extend(
+                    [
+                        copy.deepcopy(applications[0]),
+                        dict(context=dict(private_fixture="not authorized")),
+                    ]
+                )
+            elif fault == "null_second":
+                applications.append(dict(context=None))
+            else:
+                snap["response"]["applications"] = dict(unknown="non-array")
+            c.execute(
+                update(markers)
+                .where(
+                    markers.c.app_id == row["app_id"],
+                    markers.c.kind == row["kind"],
+                    markers.c.request_key == row["request_key"],
+                )
+                .values(snapshot=snap, fingerprint=fingerprint(snap))
+            )
+    pair = project.pair
+
+    def guarded(*args, **kwargs):
+        assert args[4] != project.PLAN, "Array shape rejected before full historical PLAN body"
+        return pair(*args, **kwargs)
+
+    monkeypatch.setattr(project, "pair", guarded)
+    response = data[2].get(base + "/plans/" + plan["request_key"])
+    assert response.status_code == 409, response.text
+
+
+def test_history_list_reads_public_metadata_never_private_plan_body(env, monkeypatch):
+    from sim2act import project_natural_revalidation as project
+
+    data, _, _, _, _, base, _, plan = one(env)
+    assert close(data[2], base, plan).status_code == 200
+    pair = project.pair
+
+    def guarded(*args, **kwargs):
+        assert args[4] != project.PLAN, "History discovery must never read private PLAN body"
+        return pair(*args, **kwargs)
+
+    monkeypatch.setattr(project, "pair", guarded)
+    response = data[2].get(base + "/plans")
+    assert response.status_code == 200, response.text
+    assert response.json()["items"] == [
+        dict(request_key=plan["request_key"], plan_fingerprint=plan["plan_fingerprint"])
+    ]
