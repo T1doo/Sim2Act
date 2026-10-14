@@ -713,7 +713,7 @@ class Store:
     def proof_authorities(self, c):
         """Collect successful logical authorities only during a synchronous proof."""
         stack = c.info.setdefault("source_proof_authorities", [])
-        checks = set()
+        checks: set[tuple[str, str, str, str, str]] = set()
         stack.append(checks)
         try:
             yield checks
