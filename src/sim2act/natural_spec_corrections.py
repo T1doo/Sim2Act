@@ -474,5 +474,6 @@ def mount(app,store,limits,identity):
             return dict(namespace=VERSION,principal_id=user,project_id=job["project_id"],instance_id=iid,
                 parent_run_id=rid,request_key=key,review=value,run_id=child,app_run_id=binding["app_run"]["id"],
                 status=job["status"],fence=job["fence"],accepted_at=job["created_at"],
+                deadline=binding["snapshot"].get("natural_spec_clock",{}).get("deadline"),
                 result_version=binding["app_run"]["result_version"],
                 owner_acceptance="PENDING",semantic_status="UNKNOWN",formal_publication_enabled=False)

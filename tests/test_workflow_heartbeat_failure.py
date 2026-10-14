@@ -57,8 +57,11 @@ def setup(env, monkeypatch):
     return worker, run, state, done, observed
 
 
-def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch):
+@pytest.mark.parametrize("publication", ["known", "late"])
+def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch, publication):
     worker, run, state, done, observed = setup(env, monkeypatch)
+    if publication == "late":
+        state["deadline"] = None
     ready, release = threading.Event(), threading.Event()
     original = worker.store.heartbeat
     calls, codes = [], []
@@ -79,6 +82,8 @@ def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch):
             result = original(*args, **kwargs)
         except OperationalError as exc:
             codes.append(exc.orig.sqlite_errorcode)
+            with state["lock"]:
+                state["deadline"] = run["created_at"] + worker.s.run_seconds
             release.set()
             holder.join(timeout=2)
             raise
@@ -102,16 +107,21 @@ def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch):
     assert row["lease_until"] == state["lease_until"] > run["lease_until"]
 
 
-@pytest.mark.parametrize("fault", ["unknown", "other-sqlite", "revoked", "unverified", "expired", "exhausted"])
+@pytest.mark.parametrize("fault", ["unknown", "other-sqlite", "revoked", "unverified", "expired", "exhausted", "unverified-progress", "deadline-progress", "foreign-progress"])
 def test_fatal_failure_is_seen_before_next_step(env, monkeypatch, fault):
     worker, run, state, done, observed = setup(env, monkeypatch)
     calls, advances = [], []
     exc = (DomainError("GRANT_REVOKED") if fault == "revoked" else RuntimeError("synthetic unknown")
-        if fault == "unknown" else error(10 if fault == "other-sqlite" else 5))
-    if fault == "unverified":
+        if fault in {"unknown", "foreign-progress"} else error(10 if fault == "other-sqlite" else 5))
+    if fault in {"unverified", "unverified-progress"}:
         state["deadline"] = None
     def failing(*_, **__):
         calls.append(1)
+        if fault in {"unverified-progress", "deadline-progress", "foreign-progress"}:
+            with state["lock"]:
+                state["lease_until"] = run["lease_until"] + 1
+                if fault == "deadline-progress":
+                    state["deadline"] = 0
         if fault == "expired":
             state["lease_until"] = 0
             # The captured retry cutoff must also have elapsed.
@@ -130,6 +140,33 @@ def test_fatal_failure_is_seen_before_next_step(env, monkeypatch, fault):
         with pytest.raises(type(exc)):
             flow.process_job(worker, run, advance, _heartbeat_state=state)
     assert len(advances) == 1 and len(calls) == (3 if fault == "exhausted" else 1)
+
+
+def test_exhausted_batch_defers_only_with_committed_owned_progress(env, monkeypatch, caplog):
+    worker, run, state, done, observed = setup(env, monkeypatch)
+    original = worker.store.heartbeat
+    calls = []
+    caplog.set_level("INFO", logger=flow.__name__)
+    def contended(*args, **kwargs):
+        calls.append(1)
+        if len(calls) <= 3:
+            # Schedule a separately committed same-owner synchronous renewal
+            # between synthetic background driver failures.
+            renewed = original(worker.id, run["id"], run["fence"], 30)
+            with state["lock"]:
+                state["lease_until"] = max(state["lease_until"], renewed)
+            raise error(5)
+        renewed = original(*args, **kwargs)  # Next batch performs real fresh gates.
+        observed.set()
+        return renewed
+    monkeypatch.setattr(worker.store, "heartbeat", contended)
+    def completed(*_):
+        assert observed.wait(3)
+        return False
+    flow.process_job(worker, run, completed, _heartbeat_state=state)
+    deferred = [r for r in caplog.records if r.msg == "heartbeat_contention_deferred"]
+    assert len(calls) == 4 and len(deferred) == 1 and deferred[0].attempts == 3
+    assert deferred[0].fence == run["fence"] and done.is_set()
 
 
 def test_terminal_return_is_not_overwritten_by_late_background_error(env, monkeypatch):

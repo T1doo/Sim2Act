@@ -7,6 +7,7 @@ accepted. Goal, authorization, bytes, budget and ownership remain live gates.
 
 import copy
 import json
+import logging
 import sqlite3
 import threading
 import time
@@ -900,6 +901,8 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
 
     def beat():
         while not stopped.wait(worker.s.lease_seconds / 3):
+            with state["lock"]:
+                batch_lease = state["lease_until"]
             for attempt in range(3):
                 if stopped.is_set() or worker.stop.is_set():
                     return
@@ -917,14 +920,36 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                     renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
                         worker.s.lease_seconds, **options)
                 except Exception as exc:
-                    # Only an identified SQLite driver lock error, and only after
-                    # the original numeric deadline was fully verified, can retry.
-                    if (attempt < 2 and cutoff is not None
-                            and _sqlite_heartbeat_contention(worker.store, exc)
-                            and time.time() + 0.1 < cutoff):
-                        if stopped.wait(0.1):
-                            return
-                        continue
+                    # Re-read only numeric bounds after an identified lock
+                    # error: validation or a committed sync renewal may have
+                    # progressed while the driver was waiting.
+                    contention = _sqlite_heartbeat_contention(worker.store, exc)
+                    retry_cutoff = None
+                    if contention:
+                        with state["lock"]:
+                            latest_deadline = state["deadline"]
+                            latest_lease = state["lease_until"]
+                        if latest_deadline is not None:
+                            if deadline is not None:
+                                latest_deadline = min(deadline, latest_deadline)
+                            retry_cutoff = min(latest_lease, latest_deadline)
+                    if retry_cutoff is not None and time.time() + 0.1 < retry_cutoff:
+                        if attempt < 2:
+                            if stopped.wait(0.1):
+                                return
+                            continue
+                        if latest_lease > batch_lease:
+                            # This batch still failed. Already guarded sync
+                            # progress keeps the owner live; wait the original
+                            # cadence before a new bounded batch, never fabricate
+                            # heartbeat success or extend the interval locally.
+                            logging.getLogger(__name__).info("heartbeat_contention_deferred", extra=dict(
+                                run_id=run["id"], fence=run["fence"], attempts=3,
+                                heartbeat_lease_until=latest_lease,
+                                heartbeat_deadline=latest_deadline))
+                            break
+                    logging.getLogger(__name__).info("heartbeat_background_halted", extra=dict(
+                        run_id=run["id"], fence=run["fence"], error_type=type(exc).__name__))
                     failure.append(exc)
                     failed.set()
                     return
@@ -939,6 +964,8 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
     try:
         while True:
             if failed.is_set():
+                logging.getLogger(__name__).info("heartbeat_failure_observed", extra=dict(
+                    run_id=run["id"], fence=run["fence"]))
                 raise failure[0]
             again = (advance_fn or advance)(worker, run)
             # A completed terminal transaction wins over a late background
