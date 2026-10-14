@@ -1162,12 +1162,28 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     intent = intent_for(step, action, plan, outputs, proved)
     oid = new_id("op")
     commit_guard(worker, c, run, b, 1)
-    c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
-        fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
-    c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
     saved = intent["tool"] == SAVE
     from .natural_spec_runtime import ledger_digest
     runtime_audit = ledger_digest(c, job) if saved and natural.is_candidate(plan["definition"]) else None
+    if saved:
+        # Capture only public pointer/version fields in the fully authorized
+        # read segment. The exact data_version/revision CAS below and fresh
+        # final instance/typed-history readback validate this write target.
+        instance = c.execute(select(internal_instances.c.id,
+            internal_instances.c.principal_id, internal_instances.c.project_id,
+            internal_instances.c.runtime_id, internal_instances.c.source_app_id,
+            internal_instances.c.release_id, internal_instances.c.revision,
+            internal_instances.c.data_version).where(internal_instances.c.id == s["instance_id"],
+                internal_instances.c.principal_id == job["principal_id"],
+                internal_instances.c.project_id == job["project_id"],
+                internal_instances.c.runtime_id == job["runtime_id"])).mappings().one()
+        require(instance["source_app_id"] == b["draft"]["id"]
+            and instance["release_id"] == s["release_id"]
+            and instance["revision"] == s["expected_revision"]
+            and type(instance["data_version"]) is int and instance["data_version"] >= 0)
+    c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
+        fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
+    c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
     if saved:
         verify_saved(b["source"], intent["args"]["text"], plan["definition"])
         value = write_text_artifact(store, c, job["principal_id"], job["runtime_id"], job["project_id"], intent["args"]["text"], artifact_format="json")
@@ -1188,11 +1204,11 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     c.execute(update(runs).where(runs.c.id == job["id"]).values(context=context))
     c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(status="RUNNING"))
     store.event(c, job["id"], "SPEC_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=live["fence"]))
-    live = commit_guard(worker, c, run, b)
+    if not saved:
+        live = commit_guard(worker, c, run, b)
     outputs[step["step_id"]] = value
     proved.append(receipt)
     if saved:
-        instance = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"])).mappings().one()
         version = instance["data_version"] + 1
         output = output_for(plan, outputs)
         validate_value(plan["definition"]["manifest"]["output_schema"], output)
@@ -1209,7 +1225,31 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
         require(updated.rowcount == 1, "Instance data version competed")
         c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(
             output=output, result_version=version, status="SUCCEEDED", error=None))
-        live = commit_guard(worker, c, run, b)
+        # Typed/AppRun/terminal writes form one atomic group. No private
+        # source, binding or receipt is read between these writes and the fresh
+        # terminal scope + verify_job below. Check the public owner interval
+        # here without redundantly replaying the entire project inside the
+        # same 30-second locked SAVE transaction.
+        owner_fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id",
+            "fence", "version", "lease_until", "created_at", "fingerprint", "request_key")
+        owner = c.execute(select(*(getattr(runs.c, key) for key in owner_fields),
+            runs.c.status, runs.c.cancel_intent).where(runs.c.id == job["id"],
+                runs.c.principal_id == job["principal_id"],
+                runs.c.project_id == job["project_id"],
+                runs.c.runtime_id == job["runtime_id"])).mappings().one()
+        require(all(owner[key] == live[key] for key in owner_fields)
+            and owner["status"] == "RUNNING" and not owner["cancel_intent"]
+            and not worker.stop.is_set() and time.time() < owner["lease_until"],
+            "Terminal write ownership interval changed")
+        if worker.s.mode != "mock" or worker.s.live_enabled:
+            raise DomainError("PERMISSION_DENIED", "Spec family is offline only")
+        terminal_limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
+        declared_limits = plan["definition"]["manifest"]["runtime_limits"]
+        if (time.time() >= job["created_at"] + min(terminal_limits.run_seconds,
+                declared_limits["run_seconds"], s["limits"]["run_seconds"])
+                or context["tools"] > min(terminal_limits.max_tools,
+                    declared_limits["max_tools"], s["limits"]["max_tools"])):
+            raise DomainError("BUDGET_EXHAUSTED")
         state_write(store, c, live, a["id"], "SUCCEEDED", result=result_ref(b, proved, version))
         store.event(c, job["id"], "SPEC_COMMITTED", dict(result_version=version, artifact_resource=value["resource_id"]))
         # Recheck authority/lease after terminal writes without requiring RUNNING.
