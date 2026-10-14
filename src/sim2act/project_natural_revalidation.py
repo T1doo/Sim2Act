@@ -24,6 +24,7 @@ from .db import (
     fingerprint,
     internal_app_runs,
     internal_instances,
+    internal_releases,
     internal_run_bindings,
     runs,
 )
@@ -35,6 +36,8 @@ VERSION = "project-natural-check.v1"
 PLAN, START, JOB, PROOF, SOURCE = (
     VERSION + "." + x for x in ("plan", "start", "job", "proof", "source")
 )
+CLOSE = VERSION + ".close"
+CLOSE_CONSENT = "CLOSE_EXACT_UNSTARTED_PROJECT_ACCOUNT_RELEASE_OWN_RESERVATIONS"
 KEY = r"^[A-Za-z0-9_-]{1,80}$"
 CONSENT = "RUN_EXACT_ISOLATED_APPLICATION_CHECK_IN_FROZEN_PROJECT"
 
@@ -57,11 +60,20 @@ class Start(SafeInput):
     consent: Literal["RUN_EXACT_ISOLATED_APPLICATION_CHECK_IN_FROZEN_PROJECT"]
 
 
+class Close(SafeInput):
+    expected_plan_fingerprint: str = Field(pattern=graph.HASH)
+    consent: Literal["CLOSE_EXACT_UNSTARTED_PROJECT_ACCOUNT_RELEASE_OWN_RESERVATIONS"]
+
+
 class Reference(SafeInput):
     project_id: str = Field(pattern=r"^proj_[a-f0-9]{32}$")
     plan_key: str = Field(pattern=KEY)
     plan_fingerprint: str = Field(pattern=graph.HASH)
     app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
+
+
+class ReleasedSource(Reference):
+    instance_id: str = Field(pattern=r"^iinstance_[a-f0-9]{32}$")
 
 
 class Version(SafeInput):
@@ -358,6 +370,10 @@ def local_preview_segment(store, c, user, iid, key, limits):
 
 def _load_plan(store, c, user, pid, key, limits):
     current = members(store, c, user, pid, limits)
+    spec.require(
+        not close_present(c, user, pid, key),
+        "Project account is closed; explicitly create a new key",
+    )
     body, value = pair(c, user, pid, PLAN, key, Prepare)
     fp = {k: x for k, x in value.items() if k != "plan_fingerprint"}
     spec.require(
@@ -394,6 +410,334 @@ def _load_plan(store, c, user, pid, key, limits):
             "Independent source roles changed",
         )
     return body, value
+
+
+def close_present(c, user, pid, key):
+    return any(graph.lookup(c, user, pid, kind, key) for kind in (CLOSE, CLOSE + "_seal"))
+
+
+@graph.controlled
+def plan_metadata(c, user, pid, key):
+    """Only public selection identifiers and release pointers, never PLAN prose."""
+    columns = [
+        delivery_graph_requests.c.request_fingerprint,
+        delivery_graph_requests.c.snapshot["request"].label("request"),
+        delivery_graph_requests.c.snapshot["response"]["plan_fingerprint"].as_string().label("fp"),
+    ]
+    for field in ("project_id", "principal_id", "request_key"):
+        columns.append(
+            delivery_graph_requests.c.snapshot["response"][field].as_string().label(field)
+        )
+    for index in range(2):
+        for field in ("release_id", "app_id", "instance_id", "project_id", "principal_id"):
+            columns.append(
+                delivery_graph_requests.c.snapshot["response"]["applications"][index]["context"][
+                    field
+                ]
+                .as_string()
+                .label(f"context{index}_{field}")
+            )
+    rows = (
+        c.execute(
+            select(*columns).where(
+                delivery_graph_requests.c.principal_id == user,
+                delivery_graph_requests.c.app_id == pid,
+                delivery_graph_requests.c.kind.in_([PLAN, PLAN + "_seal"]),
+                delivery_graph_requests.c.request_key == key,
+            )
+        )
+        .mappings()
+        .all()
+    )
+    spec.require(
+        len(rows) == 2 and dict(rows[0]) == dict(rows[1]), "Independent PLAN metadata changed"
+    )
+    row = rows[0]
+    spec.require(
+        row["project_id"] == pid and row["principal_id"] == user and row["request_key"] == key
+    )
+    body = Prepare.model_validate(row["request"])
+    spec.require(
+        body.request_key == key and rows[0]["request_fingerprint"] == fingerprint(body.model_dump())
+    )
+    choices = sorted(body.selections, key=lambda x: x.app_id)
+    spec.require(
+        len({x.app_id for x in choices}) == len(choices)
+        and len({x.instance_id for x in choices}) == len(choices)
+    )
+    refs = [
+        ReleasedSource(
+            project_id=pid,
+            plan_key=key,
+            plan_fingerprint=rows[0]["fp"],
+            app_id=x.app_id,
+            instance_id=x.instance_id,
+        ).model_dump()
+        for x in choices
+    ]
+    releases = []
+    for index, choice in enumerate(choices):
+        spec.require(
+            row[f"context{index}_app_id"] == choice.app_id
+            and row[f"context{index}_instance_id"] == choice.instance_id
+            and row[f"context{index}_project_id"] == pid
+            and row[f"context{index}_principal_id"] == user,
+            "Public PLAN context identity changed",
+        )
+        releases.append(row[f"context{index}_release_id"])
+    if len(choices) == 1:
+        spec.require(
+            all(
+                row[f"context1_{field}"] is None
+                for field in ("release_id", "app_id", "instance_id", "project_id", "principal_id")
+            )
+        )
+    spec.require(all(isinstance(x, str) and x.startswith("irelease_") for x in releases))
+    return body, refs, releases
+
+
+@graph.controlled
+def close_receipt(c, user, pid, key):
+    """Public reservation proof only; no private PLAN body or live source replay."""
+    spec.require(
+        not account_consumed(c, user, pid, key), "Closed account has contradictory consumption"
+    )
+    body, value = pair(c, user, pid, CLOSE, key, Close)
+    refs = [ReleasedSource.model_validate(x) for x in value["released_sources"]]
+    _, sources, _ = plan_metadata(c, user, pid, key)
+    spec.require(value["released_sources"] == sources, "Complete closure source set changed")
+    for source in refs:
+        accepted, seal = pair(c, user, source.instance_id, SOURCE, key, Reference)
+        expected_ref = {k: v for k, v in source.model_dump().items() if k != "instance_id"}
+        spec.require(
+            accepted.model_dump() == seal == expected_ref, "Independent closure source changed"
+        )
+    expected = dict(
+        **flags(),
+        project_id=pid,
+        principal_id=user,
+        plan_key=key,
+        plan_fingerprint=body.expected_plan_fingerprint,
+        account_status="CLOSED_UNSTARTED",
+        check_execution_status="NOT_STARTED",
+        effect_known=True,
+        executed_model_requests=0,
+        isolated_check_instances_created=0,
+        released_sources=[x.model_dump() for x in refs],
+    )
+    spec.require(1 <= len(refs) <= 2 and len({x.app_id for x in refs}) == len(refs))
+    spec.require(
+        all(
+            x.project_id == pid
+            and x.plan_key == key
+            and x.plan_fingerprint == body.expected_plan_fingerprint
+            for x in refs
+        )
+    )
+    expected["close_fingerprint"] = fingerprint(expected)
+    spec.require(value == expected, "Exact closure receipt changed")
+    return body, value
+
+
+@graph.controlled
+def archived_plan(store, c, user, pid, key, limits):
+    # Closed history remains authorized, but never replays against new versions.
+    store.lock_project(c, user, pid)
+    metadata_body, sources, releases = plan_metadata(c, user, pid, key)
+    for source, rid in zip(sources, releases, strict=True):
+        graph.load_family(store, c, user, pid, source["app_id"], limits)
+        owned = lifecycle.owned_instance_pointer(store, c, user, source["instance_id"], pid)
+        spec.require(owned["source_app_id"] == source["app_id"])
+        lifecycle.read_release(store, c, user, rid, limits)
+    body, value = pair(c, user, pid, PLAN, key, Prepare)
+    spec.require(body == metadata_body)
+    spec.require(
+        value["project_id"] == pid
+        and value["principal_id"] == user
+        and value["request_key"] == key
+        and value["request"] == body.model_dump()
+        and value["plan_fingerprint"]
+        == fingerprint({k: v for k, v in value.items() if k != "plan_fingerprint"})
+    )
+    spec.require(len(value["applications"]) == len(body.selections))
+    for binding, choice, rid in zip(
+        value["applications"],
+        sorted(body.selections, key=lambda x: x.app_id),
+        releases,
+        strict=True,
+    ):
+        ctx = binding["context"]
+        spec.require(
+            ctx["release_id"] == rid
+            and ctx["app_id"] == choice.app_id
+            and ctx["instance_id"] == choice.instance_id
+            and ctx["project_id"] == pid
+            and ctx["principal_id"] == user
+        )
+        accepted, seal = pair(c, user, choice.instance_id, SOURCE, key, Reference)
+        expected = ref(pid, key, value, choice.app_id)
+        spec.require(accepted == expected and seal == expected.model_dump())
+    return body, value
+
+
+def validate_closed_plan(plan, receipt):
+    expected = [
+        dict(
+            **ref(
+                plan["project_id"], plan["request_key"], plan, x["context"]["app_id"]
+            ).model_dump(),
+            instance_id=x["context"]["instance_id"],
+        )
+        for x in plan["applications"]
+    ]
+    spec.require(
+        receipt["plan_fingerprint"] == plan["plan_fingerprint"]
+        and receipt["released_sources"] == expected,
+        "Closed account source set changed",
+    )
+
+
+def account_consumed(c, user, pid, key):
+    # Either independent discovery index is sufficient to reject. Never infer
+    # no execution from status or missing primary START alone.
+    from sqlalchemy import or_
+
+    markers = c.execute(
+        select(delivery_graph_requests.c.request_key).where(
+            delivery_graph_requests.c.principal_id == user,
+            or_(
+                (delivery_graph_requests.c.app_id == pid)
+                & delivery_graph_requests.c.kind.in_(
+                    [START, START + "_seal", PROOF, PROOF + "_seal"]
+                )
+                & or_(
+                    delivery_graph_requests.c.request_key.startswith(key + ":", autoescape=True),
+                    delivery_graph_requests.c.snapshot["response"]["plan_key"].as_string() == key,
+                ),
+                (delivery_graph_requests.c.app_id == pid)
+                & delivery_graph_requests.c.kind.in_(
+                    [VERSION + ".approval", VERSION + ".approval_seal"]
+                )
+                & (delivery_graph_requests.c.request_key == key),
+                delivery_graph_requests.c.kind.in_([JOB, JOB + "_seal"])
+                & (delivery_graph_requests.c.snapshot["request"]["project_id"].as_string() == pid)
+                & (delivery_graph_requests.c.snapshot["request"]["plan_key"].as_string() == key),
+            ),
+        )
+    ).first()
+    bound = c.execute(
+        select(internal_run_bindings.c.run_id).where(
+            internal_run_bindings.c.snapshot["project_check"]["project_id"].as_string() == pid,
+            internal_run_bindings.c.snapshot["project_check"]["plan_key"].as_string() == key,
+        )
+    ).first()
+    return bool(markers or bound)
+
+
+def require_unconsumed(c, user, pid, key, plan):
+    spec.require(
+        not account_consumed(c, user, pid, key), "Started or consumed project account cannot close"
+    )
+    for binding in plan["applications"]:
+        iid = binding["context"]["instance_id"]
+        local = c.execute(
+            select(delivery_graph_requests.c.request_key).where(
+                delivery_graph_requests.c.principal_id == user,
+                delivery_graph_requests.c.app_id == iid,
+                delivery_graph_requests.c.kind.in_(
+                    [
+                        logic.CHECK,
+                        logic.CHECK + "_seal",
+                        logic.APPROVAL,
+                        logic.APPROVAL + "_seal",
+                    ]
+                ),
+            )
+        ).first()
+        released = c.execute(
+            select(internal_releases.c.id).where(
+                internal_releases.c.principal_id == user,
+                internal_releases.c.project_id == pid,
+                internal_releases.c.snapshot["natural_logic_source"]["instance_id"].as_string()
+                == iid,
+            )
+        ).first()
+        # Accepted binding or JOB seal retains consumption if local CHECK indexes disappear.
+        local_bound = c.execute(
+            select(internal_run_bindings.c.run_id).where(
+                internal_run_bindings.c.snapshot["logic_check"]["instance_id"].as_string() == iid,
+            )
+        ).first()
+        local_job = c.execute(
+            select(delivery_graph_requests.c.app_id).where(
+                delivery_graph_requests.c.principal_id == user,
+                delivery_graph_requests.c.kind.in_([logic.JOB, logic.JOB + "_seal"]),
+                delivery_graph_requests.c.snapshot["response"]["instance_id"].as_string() == iid,
+            )
+        ).first()
+        spec.require(
+            not local and not released and not local_bound and not local_job,
+            "Source already supplies CHECK or derived version evidence",
+        )
+
+
+def close_account(store, user, pid, key, body, limits):
+    try:
+        return _close_account(store, user, pid, key, body, limits)
+    except OperationalError as exc:
+        # Only a failed transaction entrance is known to have made no writes.
+        # Do not retry, mask errors inside a transaction, or change its budget.
+        code = getattr(exc.orig, "sqlite_errorcode", None)
+        if (
+            store.engine.dialect.name == "sqlite"
+            and exc.statement == "BEGIN IMMEDIATE"
+            and isinstance(exc.orig, sqlite3.Error)
+            and isinstance(code, int)
+            and code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+        ):
+            raise DomainError(
+                "VERSION_CONFLICT",
+                "Project account is busy; read this plan with its original key "
+                "to resolve any concurrent request before another write.",
+            ) from exc
+        raise
+
+
+def _close_account(store, user, pid, key, body, limits):
+    with store.tx() as c:
+        store.lock_project(c, user, pid)
+        if close_present(c, user, pid, key):
+            _, plan = archived_plan(store, c, user, pid, key, limits)
+            old, value = close_receipt(c, user, pid, key)
+            spec.require(old == body)
+            validate_closed_plan(plan, value)
+            return value
+        _, plan = load_plan(store, c, user, pid, key, limits)
+        spec.require(body.expected_plan_fingerprint == plan["plan_fingerprint"])
+        require_unconsumed(c, user, pid, key, plan)
+        refs = [
+            dict(
+                **ref(pid, key, plan, x["context"]["app_id"]).model_dump(),
+                instance_id=x["context"]["instance_id"],
+            )
+            for x in plan["applications"]
+        ]
+        value = dict(
+            **flags(),
+            project_id=pid,
+            principal_id=user,
+            plan_key=key,
+            plan_fingerprint=plan["plan_fingerprint"],
+            account_status="CLOSED_UNSTARTED",
+            check_execution_status="NOT_STARTED",
+            effect_known=True,
+            executed_model_requests=0,
+            isolated_check_instances_created=0,
+            released_sources=refs,
+        )
+        value["close_fingerprint"] = fingerprint(value)
+        remember(c, user, pid, CLOSE, key, body, value)
+        return value
 
 
 def ref(pid, key, plan, aid):
@@ -737,7 +1081,19 @@ def pins(c, user, i):
         .scalars()
         .all()
     )
-    return [dict(role="project_source", plan_key=key) for key in sorted(set(source))] + [
+    active_sources = []
+    for key in sorted(set(source)):
+        if close_present(c, user, i["project_id"], key):
+            _, receipt = close_receipt(c, user, i["project_id"], key)
+            accepted, seal = pair(c, user, i["id"], SOURCE, key, Reference)
+            spec.require(
+                accepted.model_dump() == seal
+                and dict(**seal, instance_id=i["id"]) in receipt["released_sources"],
+                "Source closure binding changed",
+            )
+        else:
+            active_sources.append(key)
+    return [dict(role="project_source", plan_key=key) for key in active_sources] + [
         dict(role="project_check", run_id=jid)
         for jid in sorted(set(jobs) | set(indexed) | set(retained), key=str)
     ]
@@ -855,9 +1211,29 @@ def mount(app, store, limits, identity):
                 items.append(dict(request_key=key, plan_fingerprint=plan["plan_fingerprint"]))
             return dict(**flags(), project_id=pid, principal_id=user, items=items)
 
+    @app.post(base + "/plans/{key}/close")
+    def close(pid: str, key: str, body: Close, user=dep):
+        return close_account(store, user, pid, key, body, limits)
+
     @app.get(base + "/plans/{key}")
     def read(pid: str, key: str, user=dep):
         with store.tx() as c:
+            store.lock_project(c, user, pid)
+            if close_present(c, user, pid, key):
+                _, plan = archived_plan(store, c, user, pid, key, limits)
+                _, receipt = close_receipt(c, user, pid, key)
+                validate_closed_plan(plan, receipt)
+                return dict(
+                    **flags(),
+                    project_id=pid,
+                    principal_id=user,
+                    account_status="CLOSED_UNSTARTED",
+                    plan=plan,
+                    close_receipt=receipt,
+                    applications=[],
+                    local_checks_status="NOT_RUN",
+                    version_approval_present=False,
+                )
             _, plan = load_plan(store, c, user, pid, key, limits)
             items = [
                 outcome(store, c, user, pid, key, x["context"]["app_id"], limits)
