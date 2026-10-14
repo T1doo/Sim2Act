@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from test_natural_logic_patches import prepared
-from test_natural_spec_apps import COLD, material, ready, transport
+from test_natural_spec_apps import SOURCE, material, ready, transport
 from test_pb_natural_specs import drive_to_success
 from test_spec_app_operations import snapshot
 
@@ -28,7 +28,7 @@ from sim2act.worker import Worker
 def cohort(env):
     # Generate a separate existing app before freezing either project's graph.
     data, aid, release, inst, _, path, _, _ = prepared(env)
-    rid, goal = material(data[2], data[4], COLD, "Separate peer Goal")
+    rid, goal = material(data[2], data[4], SOURCE, "Separate peer Goal")
 
     class PeerClient:
         def __getattr__(self, name):
@@ -140,7 +140,7 @@ def test_two_apps_partial_then_complete_checks_and_cold_account(env, tmp_path):
     )
     checked = start(values, plan, peer)
     sent = []
-    drive_to_success(data, checked["run_id"], transport(sent, COLD))
+    drive_to_success(data, checked["run_id"], transport(sent, SOURCE))
     assert len(sent) == 2
     assert "prior_items" in json.loads(sent[1]["messages"][1]["content"])["current_inputs"]
     assert checked["check_instance_id"] not in {
