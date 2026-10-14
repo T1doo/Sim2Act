@@ -175,7 +175,7 @@ def test_close_exact_authority_version_and_lock_conflict_no_receipt(env, fault):
             c.execute(
                 update(grants)
                 .where(grants.c.principal_id == inst["runtime_id"])
-                .values(active=False)
+                .values(revoked=True)
             )
     elif fault == "source_revision":
         with data[0].tx() as c:

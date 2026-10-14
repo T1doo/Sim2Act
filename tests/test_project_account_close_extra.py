@@ -174,7 +174,7 @@ def test_closed_history_revocation_still_refuses_read_and_duplicate_close(env):
     assert close(data[2], base, plan).status_code == 200
     with data[0].tx() as c:
         c.execute(
-            update(grants).where(grants.c.principal_id == inst["runtime_id"]).values(active=False)
+            update(grants).where(grants.c.principal_id == inst["runtime_id"]).values(revoked=True)
         )
     response = data[2].get(base + "/plans/" + plan["request_key"])
     assert response.status_code in {400, 403}, response.text
@@ -228,7 +228,7 @@ def test_rehashed_public_pointer_context_mismatch_rejects_before_plan_body(env, 
     pair = project.pair
 
     def guarded(*args, **kwargs):
-        assert args[4] != project.PLAN, "No full PLAN body before public context identity guard"
+        assert args[3] != project.PLAN, "No full PLAN body before public context identity guard"
         return pair(*args, **kwargs)
 
     monkeypatch.setattr(project, "pair", guarded)
@@ -280,7 +280,7 @@ def test_exact_historical_array_shape_checked_before_plan_body(env, monkeypatch,
     pair = project.pair
 
     def guarded(*args, **kwargs):
-        assert args[4] != project.PLAN, "Array shape rejected before full historical PLAN body"
+        assert args[3] != project.PLAN, "Array shape rejected before full historical PLAN body"
         return pair(*args, **kwargs)
 
     monkeypatch.setattr(project, "pair", guarded)
@@ -296,7 +296,7 @@ def test_history_list_reads_public_metadata_never_private_plan_body(env, monkeyp
     pair = project.pair
 
     def guarded(*args, **kwargs):
-        assert args[4] != project.PLAN, "History discovery must never read private PLAN body"
+        assert args[3] != project.PLAN, "History discovery must never read private PLAN body"
         return pair(*args, **kwargs)
 
     monkeypatch.setattr(project, "pair", guarded)
