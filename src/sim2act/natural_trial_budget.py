@@ -8,7 +8,7 @@ transaction. A reservation is accounting only: dispatch must admit again.
 import hashlib
 import math
 import time
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import Field
 from sqlalchemy import select, update
@@ -142,8 +142,10 @@ def _ledger(c, scope):
                 _require(_recovery(history[0], history[1]) and not slot["accepted"]
                          and ledger["halted"])
             if slot["accepted"]:
-                _require(_known(settled.model_dump()) and settled.completion_tokens <= 1024
-                         and settled.total_tokens <= slot["reservation"]["wire_bytes"] + 1024
+                completion, total = settled.completion_tokens, settled.total_tokens
+                _require(_known(settled.model_dump()) and completion is not None
+                         and total is not None and completion <= 1024
+                         and total <= slot["reservation"]["wire_bytes"] + 1024
                          and settled.response_ascii_bytes <= 32768)
         else:
             _require(not slot["accepted"] and slot["settlement_history"] == [])
@@ -262,6 +264,7 @@ def settle(store, user, scope, contract, settlement, *, admission=None):
         slot = next((x for x in ledger["slots"] if
                      x["reservation"]["request_key"] == settlement.request_key), None)
         _require(slot is not None)
+        slot = cast(dict[str, Any], slot)
         if slot["settlement"] is not None:
             if slot["settlement"] == settlement.model_dump():
                 return _public(scope, ledger, duplicate=True)
