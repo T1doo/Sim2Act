@@ -275,15 +275,13 @@ def test_actual_admission_generate_worker_reservation_combination(env):
     import copy
 
     import httpx
+    import test_natural_live_admission as helper
     from test_natural_spec_apps import setup
 
     from sim2act import goal_applications
+    from sim2act import natural_live_admission as gate
     from sim2act.db import events
     from sim2act.worker import Worker
-
-    import test_natural_live_admission as helper
-
-    from sim2act import natural_live_admission as gate
 
     data = setup(env)
     try:
