@@ -8,6 +8,7 @@ from . import natural_live_admission as gate
 from . import natural_trial_budget as budget
 from .contracts import Strict
 from .db import delivery_graph_requests, fingerprint
+from .delivery_graph_apps import controlled
 from .errors import DomainError
 
 Contract = gate.PBTrialContract | gate.TrialContract
@@ -46,6 +47,7 @@ def _scope(user, pid, key, contract):
     gate.require(contract.trial_key == key)
 
 
+@controlled
 def original_contract(store, user, pid, key):
     """Original key lookup: scalar authorization gates before private JSON body."""
     eid = "naturaltrial_" + fingerprint(dict(user=user, project=pid, key=key))[:32]

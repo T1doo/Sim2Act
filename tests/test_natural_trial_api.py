@@ -123,3 +123,34 @@ def test_original_http_read_denies_revoked_resource_before_private_pair(env, mon
     response = client.get(path + "/approvals/" + body.request_key)
     assert response.status_code == 403 and not reads
     data[2].close()
+
+
+@pytest.mark.parametrize("pb", [False, True])
+def test_corrupt_paired_original_scope_http_conflict_has_no_partial_write(env, pb):
+    from sqlalchemy import update
+
+    data, contract, body = prepare(env, pb)
+    store, client = data[0], data[2]
+    path = f"/api/projects/{data[4]}/natural-trials/{contract.trial_key}"
+    assert client.post(path + "/approval", json=dict(contract=contract.model_dump(),
+        approval=body.model_dump())).status_code == 200
+    with store.tx() as c:
+        saved = c.execute(select(delivery_graph_requests).where(
+            delivery_graph_requests.c.kind == gate.SCOPE)).mappings().one()
+        snapshot = copy.deepcopy(saved["snapshot"])
+        snapshot["request"]["expires_at"] = "malformed-persisted-value"
+        snapshot["response"]["expires_at"] = "malformed-persisted-value"
+        c.execute(update(delivery_graph_requests).where(delivery_graph_requests.c.kind.in_(
+            [gate.SCOPE, gate.SCOPE + "_seal"])).values(snapshot=snapshot,
+                fingerprint=fingerprint(snapshot),
+                request_fingerprint=fingerprint(snapshot["request"])))
+        before = [dict(row) for row in c.execute(select(delivery_graph_requests)).mappings()]
+        run_before = [dict(row) for row in c.execute(select(runs)).mappings()]
+    for suffix in ("", "/budget", "/stages/cold/original-stage-key"):
+        response = client.get(path + "/approvals/" + body.request_key + suffix)
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "VERSION_CONFLICT"
+        with store.tx() as c:
+            assert [dict(row) for row in c.execute(select(delivery_graph_requests)).mappings()] == before
+            assert [dict(row) for row in c.execute(select(runs)).mappings()] == run_before
+    client.close()

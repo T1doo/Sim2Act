@@ -56,3 +56,13 @@ entitlement plus enforced nonchargeable authority, and reviewed sender wiring.
 Neither HTTP caller consent nor a quota label proves any of those. Real model,
 credentials, fees, PostgreSQL, Windows/native browser and human semantic
 acceptance are NOT RUN. Synthetic known usage is not proof of real zero cost.
+
+Independent review found a persisted-scope schema corruption counterexample on
+8ecf3f44: hash/seal-consistent but invalid expires_at escaped as ValidationError
+through original GET recovery. The counterexample remains separately preserved
+as a review finding, not a product PASS. `original_contract` now uses the existing
+`controlled` conversion. Fresh P-A and P-B HTTP regressions corrupt both complete
+paired scope copies consistently and assert VERSION_CONFLICT/409 on original
+approval, budget and stage receipt reads with all request/Run rows unchanged.
+The full short HTTP suite on this corrected source is 8 PASS / 0 FAIL / 0 SKIP.
+Scoped Ruff passes; full mypy remains only the same five existing errors.
