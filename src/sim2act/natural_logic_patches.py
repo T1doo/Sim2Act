@@ -226,8 +226,14 @@ def preview(store,user,iid,limits,body):
 
 
 @graph.controlled
-def load_preview(store,c,user,iid,key,limits,*,original=True,_verified_origin=None):
-    current = context(store,c,user,iid,limits,original=original,_verified_origin=_verified_origin)
+def load_preview(store,c,user,iid,key,limits,*,original=True,_verified_origin=None,_prepared=None):
+    if original and _verified_origin is None and _prepared is None:
+        from .project_natural_revalidation import local_preview_segment
+        segment=local_preview_segment(store,c,user,iid,key,limits)
+        if segment is not None:return segment
+    current = _prepared or context(store,c,user,iid,limits,original=original,_verified_origin=_verified_origin)
+    spec.require(current[0]['instance_id']==iid and current[0]['principal_id']==user
+        and current[0]['limits']==limits.model_dump())
     ctx,_,release,saved = current
     body,value = pair(c,user,iid,PREVIEW,key,Preview)
     frozen = copy.deepcopy(value["context"])

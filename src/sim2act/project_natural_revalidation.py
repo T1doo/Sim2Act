@@ -204,15 +204,22 @@ def calculate(store, c, user, pid, body, limits, *, catalog=None, _replay=False)
             not any(x["role"] == "project_check" for x in pins(c, user, owned)),
             "Project CHECK evidence cannot become a new account source",
         )
-        ctx, _, release, saved = logic.context(
+        current_context = logic.context(
             store, c, user, choice.instance_id, limits, _allow_last=True
         )
+        ctx, _, release, saved = current_context
         spec.require(ctx["project_id"] == pid and ctx["app_id"] == choice.app_id)
         candidate = saved.get("effective_candidate", release["snapshot"]["draft"]["candidate"])
         proposal = None
         if choice.preview_key is not None:
             _, proposal = logic.load_preview(
-                store, c, user, choice.instance_id, choice.preview_key, limits
+                store,
+                c,
+                user,
+                choice.instance_id,
+                choice.preview_key,
+                limits,
+                _prepared=current_context,
             )
             spec.require(proposal["preview_fingerprint"] == choice.expected_preview_fingerprint)
             spec.require(
@@ -312,6 +319,38 @@ def load_plan(store, c, user, pid, key, limits):
             plan=copy.deepcopy(value),
         )
     return body, value
+
+
+def local_preview_segment(store, c, user, iid, key, limits):
+    """Only an already verified selected proposal in the same project window."""
+    for identity, token in c.info.get("project_scope_segments", {}).items():
+        if (
+            identity[0] != user
+            or identity[3] != fingerprint(limits.model_dump())
+            or token["transaction"] is not c.get_transaction()
+            or token["epoch"] != c.info.get("source_proof_write_epoch", 0)
+        ):
+            continue
+        for binding in token["plan"]["applications"]:
+            proposal = binding["proposal"]
+            if (
+                proposal is None
+                or binding["context"]["instance_id"] != iid
+                or proposal["request_key"] != key
+            ):
+                continue
+            store.recheck_proof_authorities(c, {"_call_authorities": token["authorities"]})
+            ctx = proposal["context"]
+            body = logic.Preview(
+                request_key=key,
+                expected_revision=ctx["instance_revision"],
+                expected_release_fingerprint=ctx["release_fingerprint"],
+                expected_graph_fingerprint=ctx["graph_fingerprint"],
+                consume_prior_feedback="prior_items"
+                in proposal["effective_candidate"]["spec_recipe"]["steps"][2]["inputs"],
+            )
+            return body, copy.deepcopy(proposal)
+    return None
 
 
 def _load_plan(store, c, user, pid, key, limits):
@@ -799,10 +838,51 @@ def mount(app, store, limits, identity):
                 outcome(store, c, user, pid, key, x["context"]["app_id"], limits)
                 for x in plan["applications"]
             ]
+            modified = [x for x in plan["applications"] if x["role"] == "MODIFIED"]
+            approval_present = bool(
+                graph.lookup(c, user, pid, VERSION + ".approval", key)
+                or graph.lookup(c, user, pid, VERSION + ".approval_seal", key)
+            )
+            if modified:
+                local = modified[0]
+                from .db import internal_releases
+
+                approval_present = bool(
+                    approval_present
+                    or graph.lookup(
+                        c,
+                        user,
+                        local["context"]["instance_id"],
+                        logic.APPROVAL,
+                        local["proposal"]["request_key"],
+                    )
+                    or graph.lookup(
+                        c,
+                        user,
+                        local["context"]["instance_id"],
+                        logic.APPROVAL + "_seal",
+                        local["proposal"]["request_key"],
+                    )
+                    or c.execute(
+                        select(internal_releases.c.id).where(
+                            internal_releases.c.principal_id == user,
+                            internal_releases.c.project_id == pid,
+                            internal_releases.c.snapshot["natural_logic_source"][
+                                "instance_id"
+                            ].as_string()
+                            == local["context"]["instance_id"],
+                            internal_releases.c.snapshot["natural_logic_source"][
+                                "preview_key"
+                            ].as_string()
+                            == local["proposal"]["request_key"],
+                        )
+                    ).first()
+                )
             return dict(
                 **flags(),
                 project_id=pid,
                 principal_id=user,
+                version_approval_present=approval_present,
                 plan=plan,
                 applications=items,
                 local_checks_status="PASS"
