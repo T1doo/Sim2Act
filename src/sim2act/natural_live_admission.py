@@ -28,6 +28,7 @@ from .db import (
 from .delivery_graph_apps import controlled, lookup
 from .errors import DomainError
 from .goals import GoalCardInput, validate_card_version
+from .natural_specs import Recipe
 from .text_logic_reuse import pair, remember
 from .tools import authorized_read
 
@@ -132,6 +133,25 @@ class TrialContract(Strict):
                 and len({b.card_id for b in self.bindings}) == 2
                 and len({b.source_hash for b in self.bindings}) == 2,
                 "Two distinct complete materials and Goals are required")
+        return self
+
+
+class PBTrialContract(TrialContract):
+    """P-B reuses this trial's completed source task, then a frozen edited recipe.
+
+    Generate and source retain the original three/two slots. Only cold uses the
+    extracted application; no extra source Run or cached answer is admissible.
+    P-A's original serialized contract remains unchanged.
+    """
+
+    path: Literal["P-B"]
+    extraction_request_key: str = Field(pattern=KEY)
+    extraction_recipe: Recipe
+
+    @model_validator(mode="after")
+    def extraction_key_distinct(self):
+        require(self.extraction_request_key not in self.stage_keys.model_dump().values(),
+                "Extraction and model stage keys must be distinct")
         return self
 
 
@@ -286,8 +306,14 @@ def _stage_current(store, c, user, contract, stage, run_id):
             and frozen.request_model == contract.model,
             "Original Generate must be accepted under this precise trial approval")
     original = draft["candidate"]
-    require("spec_task" not in original, "This exact seven-slot proposal is P-A only")
-    if "spec_binding" in original:
+    pb_cold = isinstance(contract, PBTrialContract) and stage == "cold"
+    if pb_cold:
+        _pb_origin(store, c, user, contract, approval.request.request_key, draft)
+    else:
+        require("spec_task" not in original, "Only P-B cold may use an extracted task")
+    if pb_cold:
+        pass
+    elif "spec_binding" in original:
         origin = c.execute(select(task_extractions.c.task_id).where(
             task_extractions.c.app_id == draft["id"], task_extractions.c.principal_id == user)).scalar()
         require(origin == gen_id)
@@ -295,7 +321,9 @@ def _stage_current(store, c, user, contract, stage, run_id):
         require(original.get("goal_application", {}).get("run_id") == gen_id)
     # Existing bound/audit proves the whole app lineage. Additionally require its
     # actual graph to be exactly the original generated graph (no edited extras).
-    require(fingerprint(raw["spec_recipe"]) == fingerprint(draft["candidate"]["spec_recipe"]))
+    expected_recipe = (contract.extraction_recipe.model_dump(exclude_none=True)
+                       if pb_cold else raw["spec_recipe"])
+    require(fingerprint(expected_recipe) == fingerprint(draft["candidate"]["spec_recipe"]))
     _generation_accounted(store, c, user, contract, approval.request.request_key, gen_id)
     authority = StageAuthority(contract_fingerprint=fingerprint(contract.model_dump()),
         stage=stage, run_id=run_id, accepted_fingerprint=job["fingerprint"],
@@ -307,6 +335,47 @@ def _stage_current(store, c, user, contract, stage, run_id):
         authorization_fingerprint=authorization_fingerprint(c, user, contract.project_id,
             job["runtime_id"], [b.resource_id for b in contract.bindings]))
     return authority, job
+
+
+def _pb_origin(store, c, user, contract, approval_key, draft):
+    from . import natural_trial_budget as budget
+    from . import pb_natural_specs as pb
+
+    # Existing verifier proves complete source receipts, extraction review,
+    # independent metadata seals and current target before this extra trial gate.
+    pb.verify(store, c, user, draft, _limits(contract))
+    body, _ = pair(c, user, draft["id"], pb.EXTRACT,
+                   contract.extraction_request_key, pb.ExtractInput)
+    ledger = budget.audit(store, c, user, budget.scope_for(contract, approval_key))["ledger"]
+    source_id = ledger["stage_runs"].get("source")
+    slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
+    actual = c.execute(select(attempts).where(attempts.c.run_id == source_id)).mappings().all()
+    require(not ledger["halted"] and source_id is not None
+            and body.review.source_run_id == source_id
+            and body.review.request_key == contract.extraction_request_key
+            and body.review.recipe == contract.extraction_recipe
+            and len(slots) == len(actual) == 2
+            and {s["reservation"]["request_key"] for s in slots} == {a["id"] for a in actual},
+            "P-B requires this original trial's fully accounted successful source")
+    by_id = {a["id"]: a for a in actual}
+    for slot in slots:
+        attempt = by_id[slot["reservation"]["request_key"]]
+        settled, usage = slot["settlement"], attempt["usage"]
+        wire = attempt["parameters"].get("natural_spec_wire", {})
+        raw = attempt["response"].get("raw_evidence", {})
+        require(slot["accepted"] is True and settled is not None
+                and attempt["status"] == "VERIFIED" and attempt["mode"] == "MOCK"
+                and slot["reservation"]["run_id"] == source_id
+                and slot["reservation"]["wire_sha256"] == wire.get("sha256")
+                and slot["reservation"]["wire_bytes"] == wire.get("bytes")
+                and settled["response_sha256"] == raw.get("sha256")
+                and settled["response_ascii_bytes"] == raw.get("bytes")
+                and raw.get("status") == "COMPLETE"
+                and attempt["request_model"] == contract.model
+                and usage.get("status") == "known" and isinstance(usage.get("tokens"), dict)
+                and all(settled[k] == usage["tokens"].get(k) for k in
+                        ("prompt_tokens", "completion_tokens", "total_tokens")),
+                "P-B source cost evidence changed or is unknown")
 
 
 def _generation_accounted(store, c, user, contract, approval_key, gen_id):
@@ -490,7 +559,7 @@ def _approved(store, c, user, contract, approval_key, *, active=True):
     require(_keys(c, user, eid, SCOPE) == {"scope"}
             and _keys(c, user, eid, APPROVE) == {"approve"}
             and _keys(c, user, eid, REVOKE) <= {"revoke"})
-    saved = _saved(c, user, eid, SCOPE, "scope", TrialContract)
+    saved = _saved(c, user, eid, SCOPE, "scope", type(contract))
     approval = _saved(c, user, eid, APPROVE, "approve", Approval)
     fp = fingerprint(contract.model_dump())
     require(fingerprint(saved.model_dump()) == fp == approval.contract_fingerprint
