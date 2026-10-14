@@ -1145,11 +1145,11 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     """Internal same-transaction local dispatch, never persisted proof reuse."""
     from .app_jobs import load_binding, state_write, stop_state
     store = worker.store
+    limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
     if job["status"] != "RUNNING" or worker.stop.is_set() or job["cancel_intent"]:
-        s, a = load_binding(store, c, job["principal_id"], job, None, authorize=False)
+        s, a = load_binding(store, c, job["principal_id"], job, limits, authorize=False)
         state_write(store, c, job, a["id"], stop_state(job, store.has_unknown(c, job["id"])))
         return False
-    limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
     if b is None:
         b = bound(store, c, job["principal_id"], job, limits)
     if store.has_unknown(c, job["id"]):

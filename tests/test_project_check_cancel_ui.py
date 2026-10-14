@@ -20,7 +20,8 @@ from sim2act.worker import Worker
 
 
 @pytest.mark.parametrize(
-    "scenario", ["inflight", "lost", "unknown", "revoke", "fallback_fail", "fallback_badseal"]
+    "scenario",
+    ["inflight", "lost", "unknown", "revoke", "fallback_fail", "fallback_badseal", "late"],
 )
 def test_project_page_exact_cancel_unknown_cold_and_permission_recovery(env, tmp_path, scenario):
     data, aid, _, inst, _, base, _, _ = one(env, key="fixture-baseline")
@@ -31,6 +32,15 @@ def test_project_page_exact_cancel_unknown_cold_and_permission_recovery(env, tmp
         scenario=scenario,
         output=str(tmp_path / "result.json"),
     )
+    if scenario == "late":
+        made = data[2].post("/api/projects", json={"name": "Independent late receipt project"})
+        assert made.status_code == 201, made.text
+        peer_pid = made.json()["id"]
+        peer_data, peer_aid, _, peer_inst, _, _, _, _ = one(
+            (*env[:5], peer_pid, env[6]), key="peer-fixture-baseline"
+        )
+        info["peer"] = dict(project=peer_pid, app_id=peer_aid, instance_id=peer_inst["id"])
+        peer_data[2].close()
     path = tmp_path / "info.json"
     path.write_text(json.dumps(info))
     sent = []
