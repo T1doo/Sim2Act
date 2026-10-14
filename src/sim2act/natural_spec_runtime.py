@@ -56,10 +56,13 @@ def enabled(worker):
         )
 
 
-def renew(worker, job, deadline):
+def renew(worker, job, deadline, *, _heartbeat_state=None):
     if worker.stop.is_set() or time.time() >= deadline:
         raise DomainError("BUDGET_EXHAUSTED", "Original node deadline or stop reached")
-    worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds)
+    renewed = worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds)
+    if _heartbeat_state is not None:
+        with _heartbeat_state["lock"]:
+            _heartbeat_state["lease_until"] = max(_heartbeat_state["lease_until"], renewed)
 
 
 def effective(worker, c, job, binding, action, *, _scope_checked=False):
@@ -715,9 +718,9 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     wire = body(ctx["messages"], [], node_limits.max_output_tokens)
     if len(wire) > 32768:
         raise DomainError("BUDGET_EXHAUSTED", "Complete runtime wire exceeds bound")
-    renew(worker, job, meta["deadline"])
+    renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
     aid = worker.reserve(job["id"], job["fence"], ctx, request_tools=[], natural_spec_request=meta)
-    renew(worker, job, meta["deadline"])
+    renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
 
     held_attempt = {}
 
@@ -836,7 +839,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     try:
         if failure:
             raise failure
-        renew(worker, job, meta["deadline"])
+        renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
         with store.tx() as c:
             current = lock_live(store, c, run)
             require(

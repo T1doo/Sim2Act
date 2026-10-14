@@ -228,3 +228,23 @@ def test_background_renewal_rejects_cancel_intent(env):
         store.heartbeat("original-worker", rid, run["fence"], _running_only=True)
     with store.tx() as c:
         assert c.execute(select(runs.c.lease_until).where(runs.c.id == rid)).scalar_one() == run["lease_until"]
+
+
+def test_model_sync_renewal_publishes_committed_lease(env):
+    from sim2act.natural_spec_runtime import renew
+
+    store, settings = env[:2]
+    rid = enqueue(env, "model-heartbeat-publication")
+    run = store.claim("original-worker", 30)
+    state = dict(lock=threading.Lock(), lease_until=0)
+    worker = SimpleNamespace(store=store, s=settings, id="original-worker", stop=threading.Event())
+    renew(worker, run, run["created_at"] + settings.run_seconds, _heartbeat_state=state)
+    with store.tx() as c:
+        current = c.execute(select(runs.c.lease_until, runs.c.fence).where(runs.c.id == rid)).mappings().one()
+    assert state["lease_until"] == current["lease_until"]
+    assert current["fence"] == run["fence"]
+    # A stopped/expired model guard never publishes a fabricated renewal.
+    previous = state["lease_until"]
+    with pytest.raises(DomainError):
+        renew(worker, run, 0, _heartbeat_state=state)
+    assert state["lease_until"] == previous
