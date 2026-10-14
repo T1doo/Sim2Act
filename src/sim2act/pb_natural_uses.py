@@ -423,9 +423,16 @@ def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None):
     meta, seal_meta = pair(c, user, rid, family.meta, "accepted", RunScopeInput)
     snapshot = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == rid)).scalar_one()
     body, frozen = pair(c, user, meta.instance_id, family.use, snapshot[family.field]["review"]["request_key"], family.body_type)
-    require(("saved_logic_source" in frozen["reviewed"]) ==
-        (body.review.expected_recipe_fingerprint != fingerprint(base["candidate"]["spec_recipe"])),
-        "Changed recipe requires its independent logic source proof")
+    # A reverse R2 recipe can equal R0 while its independently checked version
+    # provenance remains mandatory. Discover the owned Release marker, never
+    # infer proof presence from recipe inequality. The branch below validates
+    # that exact Release and complete source/check chain afresh.
+    marker = c.execute(select(internal_releases.c.snapshot["natural_logic_source"]["namespace"].as_string())
+        .where(internal_releases.c.id == meta.release_id, internal_releases.c.principal_id == user)).scalar_one()
+    require(("saved_logic_source" in frozen["reviewed"]) == (marker is not None),
+        "Logic version requires its independent source proof")
+    if marker is None:
+        require(body.review.expected_recipe_fingerprint == fingerprint(base["candidate"]["spec_recipe"]))
     if "saved_logic_source" in frozen["reviewed"]:
         from .lifecycle import read_release
         current: dict[str, Any] = {}
