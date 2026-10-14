@@ -258,6 +258,7 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  if(typeof pnClear === "function")pnClear();
   invalidateResourcePreview();
   if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();
   if(typeof clearResourceMaterial === "function")clearResourceMaterial();

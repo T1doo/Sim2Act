@@ -273,7 +273,7 @@ def effective_bound(release,value,limits,*,original=True):
     return draft,manifest,report,value["context"]["source"],value["context"]["goal"]
 
 
-def checked(store,c,user,iid,key,limits,*,original=True):
+def checked(store,c,user,iid,key,limits,*,original=True,_project_partial=False):
     _,value = load_preview(store,c,user,iid,key,limits,original=original)
     body,started = pair(c,user,iid,CHECK,key,Check)
     spec.require(body.expected_preview_fingerprint == value["preview_fingerprint"])
@@ -284,6 +284,9 @@ def checked(store,c,user,iid,key,limits,*,original=True):
     job = c.execute(select(runs).where(runs.c.id == jid, runs.c.principal_id == user)).mappings().one()
     spec.require(job["status"] == "SUCCEEDED" and not job["cancel_intent"], "Actual local logic validation has not succeeded")
     bound,outputs,proved = spec.verify_job(store,c,user,job,limits)
+    if "project_check" in bound["snapshot"] and not _project_partial:
+        from .project_natural_revalidation import require_complete_checks
+        require_complete_checks(store,c,user,bound["snapshot"]["project_check"],limits)
     spec.require(bound["draft"]["candidate"] == value["effective_candidate"]
         and len(proved) == 6 and bound["snapshot"]["logic_check"] == reference(iid,key,value).model_dump())
     result = dict(namespace=VERSION,run_id=jid,check_instance_id=started["check_instance_id"],
@@ -317,6 +320,11 @@ def execution_digest(store,c,user,value,started):
     from .natural_spec_corrections import proof_digest
     from .tools import authorized_read
     ctx=value["context"]
+    from .db import internal_run_bindings as project_bindings
+    from .project_natural_revalidation import require_complete_checks
+    project_ref=c.execute(select(project_bindings.c.snapshot["project_check"]).where(project_bindings.c.run_id==started["run_id"])).scalar_one()
+    if project_ref is not None:
+        require_complete_checks(store,c,user,project_ref,Limits(**value["context"]["limits"]))
     owner.natural_scope(store,c,user,started["check_instance_id"],started["run_id"])
     owner.natural_authority(store,c,user,started["check_instance_id"],started["run_id"])
     expected=reference(ctx["instance_id"],value["request_key"],value)
@@ -376,6 +384,30 @@ def validate_snapshot(store,c,user,snapshot,limits,*,commit=False,_verified_orig
 
 def release_bound(store,c,user,release,limits):
     return effective_bound(release,validate_snapshot(store,c,user,release["snapshot"],limits),limits,original=False)
+
+
+
+def propose_version_tx(store,c,user,iid,body,limits):
+    value,proof=checked(store,c,user,iid,body.request_key,limits)
+    spec.require(body.expected_check_fingerprint == proof["check_fingerprint"])
+    if graph.lookup(c,user,iid,APPROVAL,body.request_key):
+        old,result=pair(c,user,iid,APPROVAL,body.request_key,Version)
+        spec.require(old == body)
+        return result
+    _,_,release,_=context(store,c,user,iid,limits)
+    snap=copy.deepcopy(release["snapshot"])
+    _,started=pair(c,user,iid,CHECK,body.request_key,Check)
+    snap["natural_logic_source"]=dict(namespace=VERSION,instance_id=iid,preview_key=body.request_key,
+        preview_fingerprint=value["preview_fingerprint"],check_fingerprint=proof["check_fingerprint"],
+        execution_digest=execution_digest(store,c,user,value,started))
+    snap["check_evidence"]={**proof,"original_draft_fingerprint":snap["draft"]["fingerprint"]}
+    result=lifecycle.new_approval(c,user,value["context"]["project_id"],"release",
+        dict(snapshot=snap,grant_version=lifecycle.grant_version(c,value["context"]["project_id"],user)))
+    result["snapshot_fingerprint"] = fingerprint(snap)
+    result["snapshot"] = snap
+    result["expires_at"] = lifecycle.approval(c,user,result["id"],result["fingerprint"],"release")["expires_at"]
+    remember(c,user,iid,APPROVAL,body.request_key,body,result)
+    return result
 
 
 def mount(app,store,limits,identity):
@@ -451,26 +483,7 @@ def mount(app,store,limits,identity):
     @app.post(base + "/version-approvals",status_code=201)
     def propose(iid:str,body:Version,user=dep):
         with proposal_tx(store,user,iid,"version-approvals",body,APPROVAL) as c:
-            value,proof=checked(store,c,user,iid,body.request_key,limits)
-            spec.require(body.expected_check_fingerprint == proof["check_fingerprint"])
-            if graph.lookup(c,user,iid,APPROVAL,body.request_key):
-                old,result=pair(c,user,iid,APPROVAL,body.request_key,Version)
-                spec.require(old == body)
-                return result
-            _,_,release,_=context(store,c,user,iid,limits)
-            snap=copy.deepcopy(release["snapshot"])
-            _,started=pair(c,user,iid,CHECK,body.request_key,Check)
-            snap["natural_logic_source"]=dict(namespace=VERSION,instance_id=iid,preview_key=body.request_key,
-                preview_fingerprint=value["preview_fingerprint"],check_fingerprint=proof["check_fingerprint"],
-                execution_digest=execution_digest(store,c,user,value,started))
-            snap["check_evidence"]={**proof,"original_draft_fingerprint":snap["draft"]["fingerprint"]}
-            result=lifecycle.new_approval(c,user,value["context"]["project_id"],"release",
-                dict(snapshot=snap,grant_version=lifecycle.grant_version(c,value["context"]["project_id"],user)))
-            result["snapshot_fingerprint"] = fingerprint(snap)
-            result["snapshot"] = snap
-            result["expires_at"] = lifecycle.approval(c,user,result["id"],result["fingerprint"],"release")["expires_at"]
-            remember(c,user,iid,APPROVAL,body.request_key,body,result)
-            return result
+            return propose_version_tx(store,c,user,iid,body,limits)
 
     @app.get(base + "/version-approvals/{key}")
     def recover(iid:str,key:str,user=dep):

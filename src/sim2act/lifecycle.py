@@ -521,7 +521,8 @@ def switch_preflight(store, c, user, iid, target_id, *, _state_out=None):
         raise DomainError("BUDGET_EXHAUSTED", "Logic source dependency exceeds finite depth")
     if current_trace["cyclic"] or target_trace["cyclic"]:
         raise DomainError("VERSION_CONFLICT", "Instance switch would create or retain a logic source cycle")
-    pins = logic_source_pins(store, c, user, i)
+    from .project_natural_revalidation import pins as project_pins
+    pins = logic_source_pins(store, c, user, i) + project_pins(c,user,i)
     if pins:
         raise DomainError("VERSION_CONFLICT", "Instance supplies immutable logic source or check evidence")
     state = dict(instance=i, current=current_trace, target=target_trace,
@@ -535,7 +536,9 @@ def switch_policy(store, c, user, i):
     # Role existence disables selection even if its proof is damaged. Preparing
     # a switch still verifies the full independent pairs and rejects corruption.
     hints = logic_source_hints(c, user, i)
+    from .project_natural_revalidation import pins as project_pins
     roles = (["check"] if hints["check_keys"] else []) + (["source"] if hints["source_ids"] else [])
+    roles += [x["role"] for x in project_pins(c,user,i)]
     targets = c.execute(select(internal_releases.c.id).where(
         internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
         internal_releases.c.snapshot["draft"]["id"].as_string() == i["source_app_id"])).scalars().all()

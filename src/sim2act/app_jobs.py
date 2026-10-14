@@ -99,7 +99,7 @@ def submission_tx(store, guard):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None, logic_check=None, logic_tx=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None, logic_check=None, logic_tx=None, project_check=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
@@ -111,6 +111,8 @@ def enqueue(
     use_field = "pa_use" if pa_use is not None else "pb_use"
     guard: dict = {}
     from contextlib import nullcontext
+    if project_check is not None and any(x is not None for x in (pa_use,pb_use,human_correction,offline_replay,owner_goal_fp)):
+        raise DomainError("INVALID_INPUT", "Project checks cannot change another execution mode")
     if logic_check is not None and any(x is not None for x in (pa_use,pb_use,human_correction,offline_replay,owner_goal_fp)):
         raise DomainError("INVALID_INPUT", "Local logic checks cannot change another execution mode")
     with (nullcontext(logic_tx) if logic_tx is not None else submission_tx(store, guard)) as c:
@@ -164,6 +166,12 @@ def enqueue(
             request["correction_request"] = correction_body.model_dump()
         if logic_check is not None:
             request["logic_check"] = logic_check.model_dump()
+        if project_check is not None:
+            from . import project_natural_revalidation as project
+            plan,member=project.guard(store,c,user,project_check.model_dump(),limits)
+            if release["id"] != member["context"]["release_id"] or iid == member["context"]["instance_id"]:
+                raise DomainError("VERSION_CONFLICT")
+            request["project_check"] = project_check.model_dump()
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -364,6 +372,8 @@ def enqueue(
             pa_spec_apps.seal_job_scope(c, user, draft, snapshot)
         if logic_check is not None:
             logic.remember(c,user,jid,logic.JOB,"accepted",logic_check,logic_check.model_dump())
+        if project_check is not None:
+            project.remember(c,user,jid,project.JOB,"accepted",project_check,project_check.model_dump())
         if use_body is not None:
             pb_natural_uses.seal(c, user, release["snapshot"]["draft"], snapshot, use_body, use_checked, family=use_family)
         store.event(
@@ -452,6 +462,10 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         raise DomainError("VERSION_CONFLICT", "Local logic check marker cannot be removed")
     if "logic_check" in s:
         request["logic_check"] = s["logic_check"]
+    from . import project_natural_revalidation as project
+    project.job_gate(store,c,user,job,s,limits)
+    if "project_check" in s:
+        request["project_check"] = s["project_check"]
     if "offline_replay" in s:
         request["offline_replay"] = s["offline_replay"]
     if "owner_goal_binding_fingerprint" in s:

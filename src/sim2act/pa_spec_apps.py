@@ -525,6 +525,18 @@ def _job_scope_gate(store, c, user, rid):
     require(scope_gate(store, c, user, meta.app_id))
     from . import natural_spec_corrections
     natural_spec_corrections.gate(store,c,user,rid)
+    from . import project_natural_revalidation as project
+    from .db import internal_run_bindings
+    project_meta = lookup(c,user,rid,project.JOB,"accepted") or lookup(c,user,rid,project.JOB+"_seal","accepted")
+    project_ref = c.execute(select(internal_run_bindings.c.snapshot["project_check"]).where(internal_run_bindings.c.run_id==rid)).scalar()
+    from .db import delivery_graph_requests
+    project_start = c.execute(select(delivery_graph_requests.c.request_key).where(delivery_graph_requests.c.principal_id==user,
+        delivery_graph_requests.c.kind.in_([project.START,project.START+"_seal"]),
+        delivery_graph_requests.c.snapshot["response"]["run_id"].as_string()==rid)).first()
+    if project_meta or project_ref is not None or project_start:
+        reference,sealed = pair(c,user,rid,project.JOB,"accepted",project.Reference)
+        require(reference.model_dump() == sealed == project_ref)
+        project.guard(store,c,user,reference.model_dump(),Limits(**c.execute(select(internal_run_bindings.c.snapshot["limits"]).where(internal_run_bindings.c.run_id==rid)).scalar_one()))
     return True
 
 
