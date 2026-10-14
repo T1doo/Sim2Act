@@ -5,11 +5,13 @@ unknown dependency completeness is never discharged by local mechanical PASS.
 """
 
 import copy
+import sqlite3
 from typing import Literal
 
 from fastapi import Depends
 from pydantic import Field
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from . import delivery_graph_apps as graph
 from . import lifecycle
@@ -454,6 +456,28 @@ def job_gate(store, c, user, job, snapshot, limits):
 
 
 def start(store, user, pid, key, aid, body, limits):
+    try:
+        return _start(store, user, pid, key, aid, body, limits)
+    except OperationalError as exc:
+        # Only a failed transaction entrance is known to have made no writes.
+        # Do not retry, mask errors inside a transaction, or change its budget.
+        code = getattr(exc.orig, "sqlite_errorcode", None)
+        if (
+            store.engine.dialect.name == "sqlite"
+            and exc.statement == "BEGIN IMMEDIATE"
+            and isinstance(exc.orig, sqlite3.Error)
+            and isinstance(code, int)
+            and code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+        ):
+            raise DomainError(
+                "VERSION_CONFLICT",
+                "Project account is busy; read this plan with its original key "
+                "to resolve any concurrent request before another write.",
+            ) from exc
+        raise
+
+
+def _start(store, user, pid, key, aid, body, limits):
     from .app_jobs import enqueue
 
     with store.tx() as c:
