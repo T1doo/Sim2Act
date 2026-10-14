@@ -621,7 +621,8 @@ def command_job(store, user, rid, command, version):
             raise DomainError("PERMISSION_DENIED")
         # Stop commands must remain possible after revocation. Resume requires current gateway.
         if metadata is None or command == "resume":
-            s, a = load_binding(store, c, user, job, None, authorize=False)
+            binding_limits = store.frozen_contract(c, job).limits if command == "resume" else None
+            s, a = load_binding(store, c, user, job, binding_limits, authorize=False)
         if job["version"] != version:
             raise DomainError("VERSION_CONFLICT")
         state = job["status"]
@@ -650,11 +651,11 @@ def command_job(store, user, rid, command, version):
         ):
             if unknown:
                 raise DomainError("OUTCOME_UNKNOWN")
-            _, _, release = load_binding(store, c, user, job, store.frozen_contract(c, job).limits,
+            _, _, release = load_binding(store, c, user, job, binding_limits,
                 return_release=True)
             from .text_continuations import execution
 
-            limits = store.frozen_contract(c, job).limits
+            limits = binding_limits
             instance_row = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"])).mappings().one()
             execution(store, c, user, instance_row, release, limits)
             state = "QUEUED"

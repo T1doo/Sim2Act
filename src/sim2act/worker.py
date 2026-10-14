@@ -629,6 +629,10 @@ class Worker:
 
     def once(self):
         self.store.heartbeat(self.id)
+        from .project_check_recovery import recover_cancelled_checks
+
+        if recover_cancelled_checks(self.store):
+            return True
         run = self.store.claim(self.id, self.s.lease_seconds)
         if run:
             original = self.s
