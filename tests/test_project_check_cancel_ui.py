@@ -70,7 +70,13 @@ def test_project_page_exact_cancel_unknown_cold_and_permission_recovery(env, tmp
                     break
                 if request.get("action"):
                     action = request["action"]
-                    if action == "revoke":
+                    if action == "pause_without_refresh":
+                        response = data[2].post(
+                            f"/api/internal/instances/{request['instance']}/runs/{request['run']}/commands",
+                            json={"command": "pause", "version": request["version"]},
+                        )
+                        assert response.status_code == 200, response.text
+                    elif action == "revoke":
                         with data[0].tx() as c:
                             c.execute(
                                 update(grants)
