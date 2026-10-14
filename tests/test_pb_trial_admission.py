@@ -49,8 +49,21 @@ def test_pb_exact_same_trial_source_extraction_and_cold_seven_slots(env, monkeyp
     raw_handle = httpx.MockTransport.handle_request
     fee = gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject)
 
+    def event(kind, **public):
+        with (tmp_path / "settlement-events.jsonl").open("a") as stream:
+            stream.write(json.dumps(dict(event=kind, at=time.time(), **public)) + "\n")
+
     def admitted(*args):
-        result = gate.admit(*args, fee_authority=fee)
+        identity = dict(stage=args[5], run_id=args[6], version=args[7], fence=args[8])
+        started = time.time()
+        try:
+            result = gate.admit(*args, fee_authority=fee)
+        except DomainError as error:
+            event("admission_refused", **identity, elapsed=time.time() - started,
+                  error=error.public())
+            raise
+        event("admission_returned", **identity, elapsed=time.time() - started,
+              permit=result.model_dump())
         permits.append(result)
         return result
 
@@ -79,6 +92,8 @@ def test_pb_exact_same_trial_source_extraction_and_cold_seven_slots(env, monkeyp
             response_ascii_bytes=archive["bytes"], **{k: usage["tokens"][k] for k in
                 ("prompt_tokens", "completion_tokens", "total_tokens")})
         result = budget.settle(data[0], data[3], scope, contract, settlement, admission=admitted)
+        event("settlement_returned", stage=stage, run_id=active["id"],
+              version=active["version"], fence=active["fence"], result=result)
         assert result["ledger"]["slots"][-1]["accepted"] is True
         slot_ids.append(actual["id"])
         return response
