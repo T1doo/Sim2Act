@@ -417,7 +417,7 @@ def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None):
     rid = draft[family.field + "_run_id"]
     header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id).where(runs.c.id == rid)).mappings().one()
     require(scope_gate(store, c, user, rid, header))
-    from .db import app_drafts
+    from .db import app_drafts, internal_releases
     base = c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"],
         app_drafts.c.project_id == draft["project_id"])).mappings().one()
     meta, seal_meta = pair(c, user, rid, family.meta, "accepted", RunScopeInput)
