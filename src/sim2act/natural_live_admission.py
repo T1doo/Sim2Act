@@ -308,7 +308,7 @@ def _stage_current(store, c, user, contract, stage, run_id):
     original = draft["candidate"]
     pb_cold = isinstance(contract, PBTrialContract) and stage == "cold"
     if pb_cold:
-        _pb_origin(store, c, user, contract, approval.request.request_key, draft)
+        _pb_origin(store, c, user, contract, approval.request.request_key, bound)
     else:
         require("spec_task" not in original, "Only P-B cold may use an extracted task")
     if pb_cold:
@@ -337,13 +337,19 @@ def _stage_current(store, c, user, contract, stage, run_id):
     return authority, job
 
 
-def _pb_origin(store, c, user, contract, approval_key, draft):
+def _pb_origin(store, c, user, contract, approval_key, bound):
     from . import natural_trial_budget as budget
     from . import pb_natural_specs as pb
 
-    # Existing verifier proves complete source receipts, extraction review,
-    # independent metadata seals and current target before this extra trial gate.
-    pb.verify(store, c, user, draft, _limits(contract))
+    draft, snapshot, release = bound["draft"], bound["snapshot"], bound["release"]
+    # In this same read-only call, ordinary bound() already ran verify_origin()
+    # -> pb.verify() with this exact draft, connection and limits. Alternative
+    # binding branches do not prove that path, so retain their complete check.
+    ordinary = ("spec_task" in draft["candidate"]
+        and not {"human_correction", "logic_check", "pb_use", "pa_use"}.intersection(snapshot)
+        and "natural_logic_source" not in release["snapshot"])
+    if not ordinary:
+        pb.verify(store, c, user, draft, _limits(contract))
     body, _ = pair(c, user, draft["id"], pb.EXTRACT,
                    contract.extraction_request_key, pb.ExtractInput)
     ledger = budget.audit(store, c, user, budget.scope_for(contract, approval_key))["ledger"]

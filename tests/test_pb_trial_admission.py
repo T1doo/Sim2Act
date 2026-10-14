@@ -53,6 +53,18 @@ def test_pb_exact_same_trial_source_extraction_and_cold_seven_slots(env, monkeyp
         with (tmp_path / "settlement-events.jsonl").open("a") as stream:
             stream.write(json.dumps(dict(event=kind, at=time.time(), **public)) + "\n")
 
+    original_active = budget._active
+
+    def active_checked(*args):
+        try:
+            return original_active(*args)
+        except DomainError as error:
+            event("budget_active_refused", stage=args[3].stage, run_id=args[3].run_id,
+                  version=args[3].expected_version, fence=args[3].fence, error=error.public())
+            raise
+
+    monkeypatch.setattr(budget, "_active", active_checked)
+
     def admitted(*args):
         identity = dict(stage=args[5], run_id=args[6], version=args[7], fence=args[8])
         started = time.time()
@@ -75,6 +87,9 @@ def test_pb_exact_same_trial_source_extraction_and_cold_seven_slots(env, monkeyp
                 attempts.c.status == "STARTED")).mappings().one()
         stage = "generate" if active["runtime_id"] == contract.runtime_id else (
             "source" if active["resource_refs"] == [contract.bindings[0].resource_id] else "cold")
+        event("dispatch_context", stage=stage, run_id=active["id"], version=active["version"],
+              fence=active["fence"], lease_until=active["lease_until"],
+              created_at=active["created_at"], deadline=active["created_at"] + contract.caps.run_seconds)
         reservation = budget.Reservation(request_key=actual["id"], stage=stage,
             run_id=active["id"], expected_version=active["version"], fence=active["fence"],
             wire_sha256=hashlib.sha256(request.content).hexdigest(), wire_bytes=len(request.content))
