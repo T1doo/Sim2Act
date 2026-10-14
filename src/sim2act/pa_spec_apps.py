@@ -1116,13 +1116,13 @@ def commit_guard(worker, c, run, b, delta=0):
 
 
 @controlled
-def advance(worker, run):
+def advance(worker, run, *, _heartbeat_state=None):
     from .app_jobs import lock_live
     from .natural_spec_runtime import advance_model
     if run["context"].get("spec_family") == natural.VERSION:
         # The runtime validates and selects both local and model nodes once,
         # on one connection/transaction before any write or external response.
-        return advance_model(worker, run)
+        return advance_model(worker, run, _heartbeat_state=_heartbeat_state)
     with worker.store.tx() as c:
         job = lock_live(worker.store, c, run)
         return _advance_local(worker, c, run, job)
@@ -1239,14 +1239,18 @@ def is_job(store, job):
 def process_job(worker, run):
     from .text_workflows import process_job as process
     if run["context"].get("spec_family") == natural.VERSION:
+        import threading
+        heartbeat_state = dict(lock=threading.Lock(), lease_until=run["lease_until"], deadline=None)
         def advance_and_renew(worker, current):
-            again = advance(worker, current)
+            again = advance(worker, current, _heartbeat_state=heartbeat_state)
             if again:
                 # Existing lease guard at a transaction boundary prevents SQLite
                 # writer starvation; it cannot renew an expired lease or deadline.
-                worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds)
+                renewed = worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds)
+                with heartbeat_state["lock"]:
+                    heartbeat_state["lease_until"] = max(heartbeat_state["lease_until"], renewed)
             return again
-        return process(worker, run, advance_fn=advance_and_renew)
+        return process(worker, run, advance_fn=advance_and_renew, _heartbeat_state=heartbeat_state)
     return process(worker, run, advance_fn=advance)
 
 

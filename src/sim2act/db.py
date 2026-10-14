@@ -586,7 +586,7 @@ class Store:
         self.test_only = test_only  # Explicit fixture guard; production entrypoints leave False.
 
     @contextmanager
-    def tx(self, *, wait_seconds=None):
+    def tx(self, *, wait_seconds=None, _cap_wait=False):
         with self.engine.connect() as c:
             prior_timeout = None
             raw = None
@@ -598,7 +598,10 @@ class Store:
                     if raw is None:
                         raise RuntimeError("Database connection unavailable")
                     prior_timeout = raw.execute("PRAGMA busy_timeout").fetchone()[0]
-                    raw.execute(f"PRAGMA busy_timeout = {int(wait_seconds * 1000)}")
+                    timeout_ms = int(wait_seconds * 1000)
+                    if _cap_wait:
+                        timeout_ms = min(prior_timeout, timeout_ms)
+                    raw.execute(f"PRAGMA busy_timeout = {timeout_ms}")
                 if self.sqlite:
                     c.exec_driver_sql("BEGIN IMMEDIATE")
                 else:
@@ -1148,8 +1151,12 @@ class Store:
             self.event(c, row["id"], "CLAIMED", {"fence": data["fence"]})
             return data
 
-    def heartbeat(self, worker_id, run_id=None, fence=None, lease_seconds=30):
-        with self.tx() as c:
+    def heartbeat(self, worker_id, run_id=None, fence=None, lease_seconds=30, *,
+                  _deadline=None, _wait_seconds=None, _running_only=False):
+        renewed_until = None
+        if _deadline is not None and time.time() >= _deadline:
+            raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
+        with self.tx(wait_seconds=_wait_seconds, _cap_wait=True) as c:
             if c.execute(select(heartbeats.c.id).where(heartbeats.c.id == worker_id)).first():
                 c.execute(
                     update(heartbeats).where(heartbeats.c.id == worker_id).values(at=time.time())
@@ -1159,16 +1166,25 @@ class Store:
             if run_id:
                 current = self.guard(c, run_id, fence)
                 now = time.time()
+                if _running_only and (current["status"] != "RUNNING" or current["cancel_intent"]):
+                    raise DomainError("VERSION_CONFLICT", "Heartbeat Run stopped")
+                if _deadline is not None and now >= _deadline:
+                    raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
+                renewed_until = now + lease_seconds
                 renewed = c.execute(
                     update(runs)
                     .where(runs.c.id == run_id, runs.c.worker_id == worker_id,
                         runs.c.fence == fence, runs.c.lease_until == current["lease_until"],
                         runs.c.lease_until > now,
                         runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]))
-                    .values(lease_until=now + lease_seconds)
+                    .values(lease_until=renewed_until)
                 )
                 if renewed.rowcount != 1:
                     raise DomainError("VERSION_CONFLICT", "Heartbeat ownership interval expired or changed")
+                if _deadline is not None and time.time() >= _deadline:
+                    raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
+        # Publish the exact renewed interval only after the transaction committed.
+        return renewed_until
 
     def require_run_owner(self, principal, run_id):
         """Authorize the public dispatcher before reading job markers or ledgers.

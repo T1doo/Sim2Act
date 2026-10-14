@@ -666,7 +666,7 @@ def fail_owned(worker, run, error):
         store.event(c, header["id"], "STATE", dict(status=state, error=error.public()))
 
 
-def advance_model(worker, run):
+def advance_model(worker, run, *, _heartbeat_state=None):
     from . import pa_spec_apps as spec
     from .app_jobs import lock_live
     from .db import new_id
@@ -681,6 +681,13 @@ def advance_model(worker, run):
         limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
         binding = spec.bound(store, c, job["principal_id"], job, limits)
         outputs, proved = spec.receipts(store, c, job, binding)
+        if _heartbeat_state is not None:
+            # Only numeric bounds from this completed full validation are
+            # published. Every renewal still performs its own fresh gates.
+            clock = binding["snapshot"]["natural_spec_clock"]
+            with _heartbeat_state["lock"]:
+                _heartbeat_state["lease_until"] = max(_heartbeat_state["lease_until"], job["lease_until"])
+                _heartbeat_state["deadline"] = min(clock["deadline"], job["created_at"] + worker.s.run_seconds)
         candidate = binding["plan"]["definition"]
         index = len(proved)
         require(index < len(candidate["actions"]))

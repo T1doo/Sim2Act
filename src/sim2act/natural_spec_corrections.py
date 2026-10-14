@@ -473,5 +473,6 @@ def mount(app,store,limits,identity):
             binding,_,_=spec.verify_job(store,c,user,job,limits)
             return dict(namespace=VERSION,principal_id=user,project_id=job["project_id"],instance_id=iid,
                 parent_run_id=rid,request_key=key,review=value,run_id=child,app_run_id=binding["app_run"]["id"],
-                status=job["status"],result_version=binding["app_run"]["result_version"],
+                status=job["status"],fence=job["fence"],accepted_at=job["created_at"],
+                result_version=binding["app_run"]["result_version"],
                 owner_acceptance="PENDING",semantic_status="UNKNOWN",formal_publication_enabled=False)

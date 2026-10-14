@@ -7,12 +7,14 @@ accepted. Goal, authorization, bytes, budget and ownership remain live gates.
 
 import copy
 import json
+import sqlite3
 import threading
 import time
 from typing import Literal
 
 from pydantic import Field
 from sqlalchemy import insert, select, update
+from sqlalchemy.exc import OperationalError
 
 from . import delivery_graph_apps as graph
 from . import text_logic_reuse as seals
@@ -881,22 +883,68 @@ def advance(worker, run):
         return True
 
 
-def process_job(worker, run, advance_fn=None):
+def _sqlite_heartbeat_contention(store, exc):
+    code = getattr(getattr(exc, "orig", None), "sqlite_errorcode", None)
+    return (store.sqlite and isinstance(exc, OperationalError)
+        and isinstance(exc.orig, sqlite3.Error) and type(code) is int
+        and code & 255 in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
+
+
+def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
     from .app_jobs import fail_job
     stopped = threading.Event()
+    failed = threading.Event()
+    failure = []
+    state = _heartbeat_state or dict(lock=threading.Lock(),
+        lease_until=run["lease_until"], deadline=None)
 
     def beat():
         while not stopped.wait(worker.s.lease_seconds / 3):
-            try:
-                worker.store.heartbeat(worker.id, run["id"], run["fence"], worker.s.lease_seconds)
-            except Exception:
-                stopped.set()
+            for attempt in range(3):
+                if stopped.is_set() or worker.stop.is_set():
+                    return
+                with state["lock"]:
+                    deadline = state["deadline"]
+                    cutoff = min(state["lease_until"], deadline) if deadline is not None else None
+                try:
+                    options = {}
+                    if cutoff is not None:
+                        remaining = cutoff - time.time()
+                        if remaining <= 0:
+                            raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
+                        options = dict(_deadline=cutoff, _wait_seconds=min(5.0, remaining),
+                            _running_only=True)
+                    renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
+                        worker.s.lease_seconds, **options)
+                except Exception as exc:
+                    # Only an identified SQLite driver lock error, and only after
+                    # the original numeric deadline was fully verified, can retry.
+                    if (attempt < 2 and cutoff is not None
+                            and _sqlite_heartbeat_contention(worker.store, exc)
+                            and time.time() + 0.1 < cutoff):
+                        if stopped.wait(0.1):
+                            return
+                        continue
+                    failure.append(exc)
+                    failed.set()
+                    return
+                else:
+                    if renewed is not None:
+                        with state["lock"]:
+                            state["lease_until"] = max(state["lease_until"], renewed)
+                    break
 
     thread = threading.Thread(target=beat, daemon=True)
     thread.start()
     try:
-        while (advance_fn or advance)(worker, run):
-            pass
+        while True:
+            if failed.is_set():
+                raise failure[0]
+            again = (advance_fn or advance)(worker, run)
+            # A completed terminal transaction wins over a late background
+            # error; existing settlement/commit guards remain authoritative.
+            if not again:
+                break
     except DomainError as exc:
         fail_job(worker, run, exc)
     finally:
