@@ -1,0 +1,33 @@
+# Bounded correction lease repair — current verification
+
+Parent blocked candidate: `c9d15e87930325bce8d822363af7d8c0a397da00`. Its 64 PASS / 9 FAIL / 1 SKIP and all failed histories remain unchanged and are not acceptance for this repair. Final implementation core: `48e6eb31a5b84bee66385b2a9558844c264d50aa`; exact qualified product freeze: `357526e0d3e4dcec4adb26c1f9e67516bf5f37c8`.
+
+## Bounded changes
+
+Store.guard performs the source scope gate once, then the complete typed/hash/resource/Goal frozen contract validation within the same read-only call segment. commit_guard retains lock_live/guard and current scope, permission, cancellation, instance/Goal/version, budget and clock checks; its redundant scope/audit re-entry is removed only before any intervening write or external callback.
+
+The correction load_binding/bound/audit/feedback chain may reuse read_release's existing ephemeral full proof only on the same SQLAlchemy Connection and RootTransaction, matching principal, historical source-validation profile, Release identity/fingerprint and write epoch. Every non-SELECT statement conservatively advances that epoch, including failed writes and CTEs. Only a complete successful spec scope gate marks a token reusable. The complete gate captures every successful authority, including the actual parent artifact/material/SAVE checks before read_release; reuse refreshes this full set before any binding/AppRun body. A direct correction gate token cannot skip spec scope. If intervening gates invalidate the read segment, load_binding re-enters complete job_gate before body reads. Each later transaction, write stage or external response re-enters the original gates. No proof is stored in a database, API response or cross-transaction cache. Source validation parameters remain separate from the minimum child execution quota.
+
+Heartbeat performs its existing current guard and complete contract validation. Its final UPDATE additionally requires the original worker/fence, exact original lease still greater than a fresh current time, and one of the existing renewable states; rowcount must be one. Expiry or changed ownership rolls back the entire heartbeat transaction. No lease length, run/node deadline, tool/token/model budget, source authority or write scope was enlarged.
+
+SQLite BEGIN IMMEDIATE and repeated complete source/CHECK history validation are a plausible contributor to the previous lease failures. This repair does not assert that writer-lock waiting was the entire root cause. Performance and correctness evidence comes from ordinary synthetic business runs and public counters/terminal receipts; no private diagnostic is used.
+
+## Verification status
+
+Current candidate is **BLOCKED**. Exact frozen-source suites total **104 PASS / 1 FAIL / 1 SKIP**, with one deselected heavy adoption case. These are unique current v3 cases, excluding all historical runs and JSDOM assertion counts. Lease/qualification50P; lifecycle39P/1PGskip; fresh PA1P; PA correction1P; PA HTTP/JSDOM page1P; fresh PB1P; six late faults6P; startup/base5P; PB correction1F. All nine suites retain their command, raw stdout/stderr, XML, fixture database and 465-file before/after closure with zero changes.
+
+PB correction remains a concrete normal business failure: three bounded actual Worker claims end RUNNING/fence5, context requests0/tools0, no VERIFIED event and no successful result. Original 30-second lease and 300-second accepted deadline are unchanged. PB full correction page is NOT RUN because the core prerequisite failed. PA new artifact starts PENDING, receives a fresh simulated independent rejected decision, retains history/criteria/Goal and rejects correction of a correction; PA page separately passes with a fresh simulated ACCEPT. These simulated decisions do not establish real semantic acceptance.
+
+Ruff passes. Current mypy reports6 errors: the previous5 status_report/tools baseline errors plus a new missing set annotation at db.py:716. It is retained as an explicit unresolved validation issue, rather than silently editing and relabeling the already qualified/tested freeze. No whole-root-cause claim is made for PB. Raw final receipts are indexed in [SUMMARY.json evidence archive](../evidence/logic-correction-lease-20261013/logic-correction-lease-evidence-20261013.tar.gz).
+
+Ordinary independent source review at the freeze found no new P0/P1 blocker in the finite call chain. It verified the 77-file qualification map/pin, unchanged original ANCHOR/CHANGED rules and 465 source/fixture/config files with zero before/after difference. This is static review, not an independently run Worker or proof that all deployments are accepted.
+
+The previously refused private-child UDF probe/diagnostic remains BLOCKED and is not attempted, reconstructed or replaced. PostgreSQL, Windows, native browser, real/paid models, real human semantic acceptance, complete P-A/P-B acceptance, remote CI and deployment remain NOT RUN. Actual pages use the current HTTP asset files in offline JSDOM; this does not substitute for a native browser.
+
+## Retained intermediate history
+
+At freeze93a64b28, PA actual correction and PA full page passed, but PB correction failed before its first step (0 requests, 0 verified steps, three claims ending fence5). Its six ordinary late tests passed, including two WAITING_RESOURCE permission faults, FAILED source/rejection/version faults and CANCELLED closure. Startup/base was4PASS/1FAIL: cold revoked CHECK waits for a resource instead of the fixture's predicted FAILED; no model requests/new typed result were made. The fixture now explicitly permits and reports WAITING_RESOURCE for that fault, never labels it successful execution. The original assertion failure and script version are retained.
+
+At freeze4b311064, independent review found static S1: Release-only authority capture missed the actual parent artifact authority checked before read_release. No private diagnostic was run and no actual leakage is claimed. This candidate was quarantined after its already started50/39 regression and fresh PA fixture ended; no dependent correction/PB acceptance was run there. Final full-spec authority capture fixes S1 and ordinary static v3 review confirms the finite call order; dynamic verification still determines final acceptance.
+
+Evidence archive: SHA256 `c5caf2da020e4a9ae3174883840f859d230ec7091a77ff71ba363c36e8967ca8`, 7,151 members individually hash-verified on readback, 40,681,559 compressed bytes. Full historical failures and all three independent static review closures are included. Final delivery contains documentation/evidence only after qualified freeze357526e0; product bytes remain unchanged.
