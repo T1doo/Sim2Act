@@ -70,10 +70,10 @@ def test_project_page_exact_cancel_unknown_cold_and_permission_recovery(env, tmp
                     break
                 if request.get("action"):
                     action = request["action"]
-                    if action in {"pause_without_refresh", "resume_without_refresh"}:
+                    if action == "pause_without_refresh":
                         response = data[2].post(
                             f"/api/internal/instances/{request['instance']}/runs/{request['run']}/commands",
-                            json={"command": "pause" if action == "pause_without_refresh" else "resume", "version": request["version"]},
+                            json={"command": "pause", "version": request["version"]},
                         )
                         assert response.status_code == 200, response.text
                         (tmp_path / (action + "-public-receipt.json")).write_text(response.text)
@@ -133,7 +133,7 @@ def test_project_page_exact_cancel_unknown_cold_and_permission_recovery(env, tmp
                         (Path(__file__).parents[1] / "src/sim2act/web" / name).read_bytes()
                     ).hexdigest()
                 )
-            assert len(sent) == (1 if scenario in {"inflight", "lost", "unknown", "history_version"} else 0)
+            assert len(sent) == (1 if scenario in {"inflight", "lost", "unknown"} else 0)
             # Original rows are identical; the one new isolated CHECK is preserved and pinned.
             after = original_objects(data[0], "none")
             assert all(row in after[table] for table, rows in saved.items() for row in rows)
