@@ -383,6 +383,37 @@ def approve_stage(store, user, contract: TrialContract, body: StageApproveInput)
             actual_model_requests=0, formal_publication_enabled=False)
 
 
+@controlled
+def recover_stage(store, user, contract: TrialContract, approval_key: str,
+                  stage: Literal["source", "cold"], request_key: str):
+    """Original consent receipt only, including after Run start or completion.
+
+    Current instance revision and lease are irrelevant to historical inspection.
+    This function neither calls admit nor issues a fresh StageAuthority.
+    """
+    from . import pa_spec_apps
+
+    with store.tx() as c:
+        _approved(store, c, user, contract, approval_key, active=False)
+        require(stage in ("source", "cold")
+                and _keys(c, user, entity(contract), PHASE) <= {"source", "cold"})
+        ids = c.execute(select(delivery_graph_requests.c.snapshot["request"]["authority"]["run_id"].as_string())
+            .where(delivery_graph_requests.c.principal_id == user,
+                   delivery_graph_requests.c.app_id == entity(contract),
+                   delivery_graph_requests.c.kind.in_([PHASE, PHASE + "_seal"]),
+                   delivery_graph_requests.c.request_key == stage)).scalars().all()
+        require(len(ids) == 2 and ids[0] == ids[1] and isinstance(ids[0], str))
+        require(pa_spec_apps.job_scope_gate(store, c, user, ids[0]))
+        accepted = _saved(c, user, entity(contract), PHASE, stage, StageApproveInput)
+        require(accepted.approval_key == approval_key and accepted.request_key == request_key
+                and accepted.authority.stage == stage and accepted.authority.run_id == ids[0]
+                and accepted.authority.contract_fingerprint == fingerprint(contract.model_dump())
+                and accepted.expected_authority_fingerprint == fingerprint(accepted.authority.model_dump()))
+        return dict(status="HISTORICAL_STAGE_BINDING_LIVE_BLOCKED", request=accepted.model_dump(),
+            authority_fingerprint=accepted.expected_authority_fingerprint, live_allowed=False,
+            fee_status="NOT_VERIFIED", dispatch_authorized=False, new_model_requests=0)
+
+
 def entity(contract):
     return "naturaltrial_" + fingerprint(dict(user=contract.principal_id,
         project=contract.project_id, key=contract.trial_key))[:32]

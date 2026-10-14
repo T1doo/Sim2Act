@@ -347,11 +347,17 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
         with data[0].tx() as c:
             job = c.execute(select(runs).where(runs.c.id == job_id)).mappings().one()
         observed.append(permit(data, contract, body, job, stage="source"))
+        history = gate.recover_stage(data[0], data[3], contract, body.request_key,
+                                     "source", stage_body.request_key)
+        assert history["request"] == stage_body.model_dump() and history["live_allowed"] is False
         return raw_handle(transport([], SOURCE), request)
 
     assert Worker(data[0], data[1], goal_planner_transport=httpx.MockTransport(guard)).once()
     assert data[2].get("/api/runs/" + job_id).json()["status"] == "SUCCEEDED"
     assert len(observed) == 2
+    source_history = gate.recover_stage(data[0], data[3], contract, body.request_key,
+                                        "source", stage_body.request_key)
+    assert source_history["request"] == stage_body.model_dump()
     assert all(p.runtime_id == accepted["authority"]["runtime_id"]
                and p.stage_authority_fingerprint == reviewed["authority_fingerprint"] for p in observed)
     # The same saved app's exact new-material use is an existing, independently confirmed intent.
@@ -392,6 +398,12 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
     assert Worker(data[0], data[1], goal_planner_transport=httpx.MockTransport(cold_guard)).once()
     assert data[2].get("/api/runs/" + cold_id).json()["status"] == "SUCCEEDED"
     assert len(cold_permits) == 2
+    saved_before = records(data[0])
+    history = gate.recover_stage(data[0], data[3], contract, body.request_key, "cold", consent.request_key)
+    assert history["request"] == consent.model_dump() and history["dispatch_authorized"] is False
+    with pytest.raises(DomainError):
+        gate.recover_stage(data[0], data[3], contract, body.request_key, "cold", "another-consent")
+    assert records(data[0]) == saved_before
     accounting = budget.read(data[0], data[3], scope.model_dump())
     assert accounting["reserved_requests"] == 7 and accounting["usage_status"] == "KNOWN"
     assert accounting["ledger"]["stage_runs"] == dict(generate=generation, source=job_id, cold=cold_id)
@@ -407,6 +419,14 @@ def test_actual_mock_generated_app_stage_binding_and_cold_per_use(env, monkeypat
                   .values(revision=current["revision"] + 1))
     with pytest.raises(DomainError):
         gate.approve_stage(data[0], data[3], contract, consent)
+    assert gate.recover_stage(data[0], data[3], contract, body.request_key,
+                             "cold", consent.request_key)["request"] == consent.model_dump()
+    with data[0].tx() as c:
+        c.execute(update(grants).where(grants.c.resource_id == contract.bindings[1].resource_id)
+                  .values(revoked=True))
+    with pytest.raises(DomainError) as revoked:
+        gate.recover_stage(data[0], data[3], contract, body.request_key, "cold", consent.request_key)
+    assert revoked.value.code == "GRANT_REVOKED"
     data[2].close()
 
 
