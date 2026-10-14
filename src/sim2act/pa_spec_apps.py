@@ -1176,7 +1176,9 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             internal_instances.c.data_version).where(internal_instances.c.id == s["instance_id"],
                 internal_instances.c.principal_id == job["principal_id"],
                 internal_instances.c.project_id == job["project_id"],
-                internal_instances.c.runtime_id == job["runtime_id"])).mappings().one()
+                internal_instances.c.runtime_id == job["runtime_id"])).mappings().first()
+        if instance is None:
+            raise DomainError("VERSION_CONFLICT", "SAVE instance ownership pointer changed")
         require(instance["source_app_id"] == b["draft"]["id"]
             and instance["release_id"] == s["release_id"]
             and instance["revision"] == s["expected_revision"]
@@ -1236,7 +1238,9 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             runs.c.status, runs.c.cancel_intent).where(runs.c.id == job["id"],
                 runs.c.principal_id == job["principal_id"],
                 runs.c.project_id == job["project_id"],
-                runs.c.runtime_id == job["runtime_id"])).mappings().one()
+                runs.c.runtime_id == job["runtime_id"])).mappings().first()
+        if owner is None:
+            raise DomainError("VERSION_CONFLICT", "Terminal write ownership pointer changed")
         require(all(owner[key] == live[key] for key in owner_fields)
             and owner["status"] == "RUNNING" and not owner["cancel_intent"]
             and not worker.stop.is_set() and time.time() < owner["lease_until"],

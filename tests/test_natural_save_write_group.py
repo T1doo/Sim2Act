@@ -5,7 +5,7 @@ import time
 from dataclasses import replace
 
 import pytest
-from sqlalchemy import event, select, update
+from sqlalchemy import delete, event, select, update
 from test_natural_spec_apps import enqueue, ready, setup, transport
 
 from sim2act import pa_spec_apps as spec
@@ -28,6 +28,7 @@ from sim2act.worker import Worker
 
 @pytest.mark.parametrize('fault', [
     'lease', 'fence', 'version', 'cancel', 'stop', 'deadline', 'worker_tools',
+    'owner_uid', 'owner_pid', 'owner_runtime', 'owner_worker', 'owner_deleted',
     'worker_deadline', 'live', 'read_revoke', 'save_revoke', 'read_expiry', 'save_expiry', 'goal', 'material',
     'context', 'typed', 'instance', 'receipt', 'audit', 'unknown', 'frozen_tools',
 ])
@@ -67,6 +68,14 @@ def test_typed_write_group_rechecks_owner_authority_budget_and_evidence(env, mon
                 'version': dict(version=run['version'] + 1),
                 'cancel': dict(cancel_intent=True)}[fault]
             c.execute(update(runs).where(runs.c.id == rid).values(**value))
+        elif fault in {'owner_uid', 'owner_pid', 'owner_runtime', 'owner_worker'}:
+            change = {'owner_uid': dict(principal_id=env[4]),
+                'owner_pid': dict(project_id='different_project'),
+                'owner_runtime': dict(runtime_id='different_runtime'),
+                'owner_worker': dict(worker_id='different_worker')}[fault]
+            c.execute(update(runs).where(runs.c.id == rid).values(**change))
+        elif fault == 'owner_deleted':
+            c.execute(delete(runs).where(runs.c.id == rid))
         elif fault == 'stop':
             worker.stop.set()
         elif fault == 'deadline':
@@ -116,7 +125,7 @@ def test_typed_write_group_rechecks_owner_authority_budget_and_evidence(env, mon
     assert reached == [fault]
     if fault in {"worker_tools", "worker_deadline"}:
         assert rejected.value.code == "BUDGET_EXHAUSTED"
-    elif fault == "frozen_tools":
+    elif fault == "frozen_tools" or fault.startswith("owner_"):
         assert rejected.value.code == "VERSION_CONFLICT"
     assert len(sent) == 1
     assert snapshot() == before
