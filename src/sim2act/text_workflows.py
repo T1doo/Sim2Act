@@ -901,8 +901,6 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
 
     def beat():
         while not stopped.wait(worker.s.lease_seconds / 3):
-            with state["lock"]:
-                batch_lease = state["lease_until"]
             for attempt in range(3):
                 if stopped.is_set() or worker.stop.is_set():
                     return
@@ -938,9 +936,10 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                             if stopped.wait(0.1):
                                 return
                             continue
-                        if latest_lease > batch_lease:
+                        if latest_lease > run["lease_until"]:
                             # This batch still failed. Already guarded sync
-                            # progress keeps the owner live; wait the original
+                            # progress in this invocation keeps the owner live;
+                            # it need not coincide with this retry batch. Wait the original
                             # cadence before a new bounded batch, never fabricate
                             # heartbeat success or extend the interval locally.
                             logging.getLogger(__name__).info("heartbeat_contention_deferred", extra=dict(

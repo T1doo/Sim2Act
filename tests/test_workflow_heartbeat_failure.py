@@ -107,12 +107,15 @@ def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch, publicati
     assert row["lease_until"] == state["lease_until"] > run["lease_until"]
 
 
-@pytest.mark.parametrize("fault", ["unknown", "other-sqlite", "revoked", "unverified", "expired", "exhausted", "unverified-progress", "deadline-progress", "foreign-progress"])
+@pytest.mark.parametrize("fault", ["unknown", "other-sqlite", "revoked", "unverified", "expired", "exhausted", "unverified-progress", "deadline-progress", "foreign-progress", "expired-progress"])
 def test_fatal_failure_is_seen_before_next_step(env, monkeypatch, fault):
     worker, run, state, done, observed = setup(env, monkeypatch)
     calls, advances = [], []
     exc = (DomainError("GRANT_REVOKED") if fault == "revoked" else RuntimeError("synthetic unknown")
         if fault in {"unknown", "foreign-progress"} else error(10 if fault == "other-sqlite" else 5))
+    if fault == "expired-progress":
+        renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"], 30)
+        state["lease_until"] = renewed
     if fault in {"unverified", "unverified-progress"}:
         state["deadline"] = None
     def failing(*_, **__):
@@ -122,7 +125,7 @@ def test_fatal_failure_is_seen_before_next_step(env, monkeypatch, fault):
                 state["lease_until"] = run["lease_until"] + 1
                 if fault == "deadline-progress":
                     state["deadline"] = 0
-        if fault == "expired":
+        if fault in {"expired", "expired-progress"}:
             state["lease_until"] = 0
             # The captured retry cutoff must also have elapsed.
             monkeypatch.setattr(flow, "time", SimpleNamespace(time=lambda: run["lease_until"] + 1))
@@ -142,19 +145,23 @@ def test_fatal_failure_is_seen_before_next_step(env, monkeypatch, fault):
     assert len(advances) == 1 and len(calls) == (3 if fault == "exhausted" else 1)
 
 
-def test_exhausted_batch_defers_only_with_committed_owned_progress(env, monkeypatch, caplog):
+@pytest.mark.parametrize("progress", ["during-batch", "before-batch"])
+def test_exhausted_batch_defers_only_with_committed_owned_progress(env, monkeypatch, caplog, progress):
     worker, run, state, done, observed = setup(env, monkeypatch)
     original = worker.store.heartbeat
     calls = []
     caplog.set_level("INFO", logger=flow.__name__)
+    if progress == "before-batch":
+        state["lease_until"] = original(worker.id, run["id"], run["fence"], 30)
     def contended(*args, **kwargs):
         calls.append(1)
         if len(calls) <= 3:
             # Schedule a separately committed same-owner synchronous renewal
             # between synthetic background driver failures.
-            renewed = original(worker.id, run["id"], run["fence"], 30)
-            with state["lock"]:
-                state["lease_until"] = max(state["lease_until"], renewed)
+            if progress == "during-batch":
+                renewed = original(worker.id, run["id"], run["fence"], 30)
+                with state["lock"]:
+                    state["lease_until"] = max(state["lease_until"], renewed)
             raise error(5)
         renewed = original(*args, **kwargs)  # Next batch performs real fresh gates.
         observed.set()
