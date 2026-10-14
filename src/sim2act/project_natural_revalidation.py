@@ -62,7 +62,8 @@ class Reference(SafeInput):
     app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
 
 
-class Version(Start):
+class Version(SafeInput):
+    expected_plan_fingerprint: str = Field(pattern=graph.HASH)
     consent: Literal["CREATE_EXACT_CHECKED_INTERNAL_LOGIC_VERSION"]
     expected_check_fingerprint: str = Field(pattern=graph.HASH)
 
@@ -525,7 +526,7 @@ def start(store, user, pid, key, aid, body, limits):
             confirmation = logic.Check(
                 request_key=local["request_key"],
                 expected_preview_fingerprint=local["preview_fingerprint"],
-                consent=logic.CHECK_CONSENT,
+                consent="RUN_EXACT_LOCAL_LOGIC_CHECK_KEEP_ORIGINAL",
             )
             remember(
                 c, user, ctx["instance_id"], logic.CHECK, local["request_key"], confirmation, value
