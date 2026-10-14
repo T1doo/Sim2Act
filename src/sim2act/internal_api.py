@@ -133,7 +133,7 @@ def mount(app, store, limits, identity):
                     raise DomainError("PERMISSION_DENIED")
                 snapshot, _ = value
             else:
-                snapshot, _ = app_jobs.load_binding(store, c, user, job, None, authorize=False)
+                snapshot, _ = app_jobs.load_binding(store, c, user, job, limits, authorize=False)
             if snapshot["instance_id"] != iid:
                 raise DomainError("PERMISSION_DENIED")
             return dict(job)

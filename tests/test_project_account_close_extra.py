@@ -97,7 +97,7 @@ def test_preexisting_manual_lock_preserved_by_unmodified_account_close(env):
         ),
     )
     assert response.status_code == 201, response.text
-    graph = response.json()
+    graph = client.get(f"/api/projects/{data[4]}/apps/{aid}/delivery-graph").json()
     options = client.get(base + "/options").json()
     next_body = copy.deepcopy(body)
     next_body.update(
@@ -111,7 +111,7 @@ def test_preexisting_manual_lock_preserved_by_unmodified_account_close(env):
     assert close(client, base, response.json()).status_code == 200
     with data[0].tx() as c:
         after = [dict(x) for x in c.execute(select(delivery_graph_locks)).mappings()]
-    assert before == after and before[0]["locked"]
+    assert before == after and before[0]["snapshot"]["locked"]
     assert client.get(f"/api/projects/{data[4]}/apps/{aid}/delivery-graph").json() == graph
     assert (
         "project_source"
