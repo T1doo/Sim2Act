@@ -16,6 +16,7 @@ import pytest
 import test_natural_spec_apps as apps
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
+from sqlalchemy.engine import RowMapping
 from test_natural_live_admission import frozen
 from test_natural_source_archives import snapshot
 
@@ -29,6 +30,36 @@ from sim2act.api import create_app
 from sim2act.db import Store, attempts, delivery_graph_requests, fingerprint, grants, runs
 from sim2act.errors import DomainError
 from sim2act.worker import Worker
+
+
+def failure_trace(error):
+    try:
+        frames, guard_values = [], []
+        trace = error.__traceback__
+        while trace is not None:
+            frame = trace.tb_frame
+            frames.append(dict(file=frame.f_code.co_filename,
+                function=frame.f_code.co_name, line=trace.tb_lineno))
+            if frame.f_code is Store.guard.__code__:
+                expected = frame.f_locals.get("fence")
+                row = frame.f_locals.get("r")
+                values = dict(expected_fence=expected if type(expected) is int else "Unknown",
+                    row_fence="Unknown", lease_until="Unknown", status="Unknown",
+                    original_comparison_time="Unknown")
+                if type(row) is RowMapping:
+                    for key in ("fence", "lease_until", "status"):
+                        try:
+                            value = row[key]
+                        except KeyError:
+                            continue
+                        allowed = (int,) if key == "fence" else (int, float) if key == "lease_until" else (str,)
+                        if type(value) in allowed:
+                            values["row_fence" if key == "fence" else key] = value
+                guard_values.append(dict(frame_index=len(frames) - 1, **values))
+            trace = trace.tb_next
+        return dict(frames=frames, store_guard_values=guard_values)
+    except Exception:
+        return dict(frames="Unknown", store_guard_values="Unknown")
 
 
 def approve_stage(data, binding, stage, rid):
@@ -140,6 +171,7 @@ def prefix(tmp_path_factory):
         source_once_result = None
         source_escaped_error = None
         source_public_errors = []
+        source_failure_traces = []
         original_once = Worker.once
         original_failure = app_jobs.fail_job
 
@@ -150,6 +182,7 @@ def prefix(tmp_path_factory):
 
         def source_failure(worker, run, error):
             source_public_errors.append(error.public())
+            source_failure_traces.append(failure_trace(error))
             return original_failure(worker, run, error)
 
         with pytest.MonkeyPatch.context() as patch:
@@ -168,6 +201,7 @@ def prefix(tmp_path_factory):
                         worker_once_return=source_once_result,
                         escaped_domain_error=source_escaped_error,
                         worker_public_errors=source_public_errors,
+                        worker_failure_traces=source_failure_traces,
                         captured_source_responses=len(captured)), indent=2))
                 except (OSError, TypeError, ValueError) as receipt_error:
                     if pending_error is None:
@@ -452,10 +486,12 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
 
     data = cloned
     public_errors = []
+    failure_traces = []
     original_failure = app_jobs.fail_job
 
     def failure(worker, run, error):
         public_errors.append(error.public())
+        failure_traces.append(failure_trace(error))
         return original_failure(worker, run, error)
 
     monkeypatch.setattr(app_jobs, "fail_job", failure)
@@ -529,7 +565,8 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
             (tmp_path / "actual-dispatch-boundary.json").write_text(json.dumps(dict(
                 fault=fault, injected=injected, actual_sends=len(sent),
                 worker_once_return=once_result, escaped_domain_error=escaped_domain_error,
-                worker_public_errors=public_errors), indent=2))
+                worker_public_errors=public_errors,
+                worker_failure_traces=failure_traces), indent=2))
         except (OSError, TypeError, ValueError) as receipt_error:
             if pending_error is None:
                 raise
