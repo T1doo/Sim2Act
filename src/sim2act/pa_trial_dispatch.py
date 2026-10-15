@@ -381,8 +381,30 @@ def _sent(worker, run, aid, wire):
         )
         budget._active(worker.store, c, scope, request, b.contract, _admission(worker))
         archived = budget._load(c, scope.principal_id, run["id"], REQUEST, aid)
-        gate.require(archived is not None)
+        gate.require(
+            archived is not None
+            and archived["request"]
+            == dict(
+                trial=scope.model_dump(),
+                attempt_id=aid,
+                family=REQUEST,
+                wire_sha256=request.wire_sha256,
+            )
+        )
         body = BodyArchive.model_validate(archived["response"])
+        anchors = (
+            c.execute(
+                select(events.c.data).where(
+                    events.c.run_id == run["id"],
+                    events.c.kind == "PA_TRIAL_BODY",
+                    events.c.data["attempt_id"].as_string() == aid,
+                    events.c.data["family"].as_string() == REQUEST,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        gate.require(anchors == [_body_event(aid, REQUEST, body)])
         if body.body_b64 is None:
             raise DomainError("OUTCOME_UNKNOWN", "Original request body unavailable")
         meta = _metadata(c, run, aid, REQUEST)
