@@ -219,37 +219,43 @@ def reserve(store, user, scope, contract, request, *, admission=None):
     scope = Scope.model_validate(scope.model_dump() if isinstance(scope, Scope) else scope)
     request = Reservation.model_validate(request.model_dump() if isinstance(request, Reservation) else request)
     with store.tx() as c:
-        _context(store, c, user, scope)
-        _require(scope == scope_for(contract, scope.approval_key), "PERMISSION_DENIED")
-        ledger = _ledger(c, scope)
-        for slot in ledger["slots"]:
-            if slot["reservation"]["request_key"] == request.request_key:
-                _require(slot["reservation"] == request.model_dump())
-                return _public(scope, ledger, duplicate=True)
-        _active(store, c, scope, request, contract, admission)
-        _require(not ledger["halted"] and all(x["settlement"] is not None
-            and x["accepted"] for x in ledger["slots"]), "OUTCOME_UNKNOWN")
-        own = [x for x in ledger["slots"] if x["reservation"]["stage"] == request.stage]
-        _require(len(own) < STAGES[request.stage]
-                 and len(ledger["slots"]) < 7
-                 and sum(x["reservation"]["wire_bytes"] + 1024 for x in own)
-                     + request.wire_bytes + 1024 <= 64000
-                 and sum(x["reservation"]["wire_bytes"] + 1024 for x in ledger["slots"])
-                     + request.wire_bytes + 1024 <= 192000, "BUDGET_EXHAUSTED")
-        bound = ledger["stage_runs"].get(request.stage)
-        _require(bound == request.run_id if bound else request.run_id not in ledger["stage_runs"].values())
-        entity, quota_request, last = _quota(c, scope.quota_subject)
-        now = time.time()
-        _require(last is None or now - last >= 60, "RATE_LIMITED")
-        _write(c, KIND, entity, KIND + ".quota", "quota", quota_request,
-               dict(last_reserved_at=now))
-        ledger["stage_runs"][request.stage] = request.run_id
-        ledger["last_reserved_at"] = now
-        ledger["slots"].append(dict(reservation=request.model_dump(), reserved_at=now,
-                                   settlement=None, settlement_history=[], accepted=False))
-        _write(c, user, scope.project_id, KIND, scope.trial_key, scope.model_dump(), ledger,
-               new=len(ledger["slots"]) == 1)
-        return _public(scope, ledger)
+        return _reserve(store, c, user, scope, contract, request, admission=admission)
+
+
+def _reserve(store, c, user, scope, contract, request, *, admission=None):
+    """Same ledger logic in the caller-owned transaction; no nested connection."""
+    _require(c.in_transaction(), "PERMISSION_DENIED")
+    _context(store, c, user, scope)
+    _require(scope == scope_for(contract, scope.approval_key), "PERMISSION_DENIED")
+    ledger = _ledger(c, scope)
+    for slot in ledger["slots"]:
+        if slot["reservation"]["request_key"] == request.request_key:
+            _require(slot["reservation"] == request.model_dump())
+            return _public(scope, ledger, duplicate=True)
+    _active(store, c, scope, request, contract, admission)
+    _require(not ledger["halted"] and all(x["settlement"] is not None
+        and x["accepted"] for x in ledger["slots"]), "OUTCOME_UNKNOWN")
+    own = [x for x in ledger["slots"] if x["reservation"]["stage"] == request.stage]
+    _require(len(own) < STAGES[request.stage]
+             and len(ledger["slots"]) < 7
+             and sum(x["reservation"]["wire_bytes"] + 1024 for x in own)
+                 + request.wire_bytes + 1024 <= 64000
+             and sum(x["reservation"]["wire_bytes"] + 1024 for x in ledger["slots"])
+                 + request.wire_bytes + 1024 <= 192000, "BUDGET_EXHAUSTED")
+    bound = ledger["stage_runs"].get(request.stage)
+    _require(bound == request.run_id if bound else request.run_id not in ledger["stage_runs"].values())
+    entity, quota_request, last = _quota(c, scope.quota_subject)
+    now = time.time()
+    _require(last is None or now - last >= 60, "RATE_LIMITED")
+    _write(c, KIND, entity, KIND + ".quota", "quota", quota_request,
+           dict(last_reserved_at=now))
+    ledger["stage_runs"][request.stage] = request.run_id
+    ledger["last_reserved_at"] = now
+    ledger["slots"].append(dict(reservation=request.model_dump(), reserved_at=now,
+                               settlement=None, settlement_history=[], accepted=False))
+    _write(c, user, scope.project_id, KIND, scope.trial_key, scope.model_dump(), ledger,
+           new=len(ledger["slots"]) == 1)
+    return _public(scope, ledger)
 
 
 def settle(store, user, scope, contract, settlement, *, admission=None):
@@ -258,45 +264,51 @@ def settle(store, user, scope, contract, settlement, *, admission=None):
     settlement = Settlement.model_validate(
         settlement.model_dump() if isinstance(settlement, Settlement) else settlement)
     with store.tx() as c:
-        _context(store, c, user, scope)
-        _require(scope == scope_for(contract, scope.approval_key), "PERMISSION_DENIED")
-        ledger = _ledger(c, scope)
-        slot = next((x for x in ledger["slots"] if
-                     x["reservation"]["request_key"] == settlement.request_key), None)
-        _require(slot is not None)
-        slot = cast(dict[str, Any], slot)
-        if slot["settlement"] is not None:
-            if slot["settlement"] == settlement.model_dump():
-                return _public(scope, ledger, duplicate=True)
-            _require(_recovery(slot["settlement"], settlement.model_dump())
-                     and len(slot["settlement_history"]) == 1
-                     and not slot["accepted"] and ledger["halted"])
-            # Accounting recovery only, never re-admit or re-enable this slot.
-            slot["settlement"] = settlement.model_dump()
-            slot["settlement_history"].append(settlement.model_dump())
-            _write(c, user, scope.project_id, KIND, scope.trial_key, scope.model_dump(), ledger)
-            return _public(scope, ledger)
+        return _settle(store, c, user, scope, contract, settlement, admission=admission)
+
+
+def _settle(store, c, user, scope, contract, settlement, *, admission=None):
+    """Same ledger logic in the caller-owned transaction; no nested connection."""
+    _require(c.in_transaction(), "PERMISSION_DENIED")
+    _context(store, c, user, scope)
+    _require(scope == scope_for(contract, scope.approval_key), "PERMISSION_DENIED")
+    ledger = _ledger(c, scope)
+    slot = next((x for x in ledger["slots"] if
+                 x["reservation"]["request_key"] == settlement.request_key), None)
+    _require(slot is not None)
+    slot = cast(dict[str, Any], slot)
+    if slot["settlement"] is not None:
+        if slot["settlement"] == settlement.model_dump():
+            return _public(scope, ledger, duplicate=True)
+        _require(_recovery(slot["settlement"], settlement.model_dump())
+                 and len(slot["settlement_history"]) == 1
+                 and not slot["accepted"] and ledger["halted"])
+        # Accounting recovery only, never re-admit or re-enable this slot.
         slot["settlement"] = settlement.model_dump()
         slot["settlement_history"].append(settlement.model_dump())
-        known = all(v is not None for v in (settlement.prompt_tokens,
-                    settlement.completion_tokens, settlement.total_tokens))
-        within = (known and settlement.total_tokens == settlement.prompt_tokens
-                  + settlement.completion_tokens and settlement.completion_tokens <= 1024
-                  and settlement.total_tokens <= slot["reservation"]["wire_bytes"] + 1024
-                  and settlement.response_ascii_bytes <= 32768)
-        output = sum(x["settlement"]["completion_tokens"] or 0 for x in ledger["slots"]
-                     if x["settlement"] is not None)
-        active = False
-        try:
-            _active(store, c, scope, Reservation.model_validate(slot["reservation"]),
-                    contract, admission)
-            active = True
-        except DomainError:
-            pass
-        slot["accepted"] = bool(active and within and output <= 7168 and not ledger["halted"])
-        ledger["halted"] = ledger["halted"] or not slot["accepted"]
         _write(c, user, scope.project_id, KIND, scope.trial_key, scope.model_dump(), ledger)
         return _public(scope, ledger)
+    slot["settlement"] = settlement.model_dump()
+    slot["settlement_history"].append(settlement.model_dump())
+    known = all(v is not None for v in (settlement.prompt_tokens,
+                settlement.completion_tokens, settlement.total_tokens))
+    within = (known and settlement.total_tokens == settlement.prompt_tokens
+              + settlement.completion_tokens and settlement.completion_tokens <= 1024
+              and settlement.total_tokens <= slot["reservation"]["wire_bytes"] + 1024
+              and settlement.response_ascii_bytes <= 32768)
+    output = sum(x["settlement"]["completion_tokens"] or 0 for x in ledger["slots"]
+                 if x["settlement"] is not None)
+    active = False
+    try:
+        _active(store, c, scope, Reservation.model_validate(slot["reservation"]),
+                contract, admission)
+        active = True
+    except DomainError:
+        pass
+    slot["accepted"] = bool(active and within and output <= 7168 and not ledger["halted"])
+    ledger["halted"] = ledger["halted"] or not slot["accepted"]
+    _write(c, user, scope.project_id, KIND, scope.trial_key, scope.model_dump(), ledger)
+    return _public(scope, ledger)
 
 
 def read(store, user, scope):

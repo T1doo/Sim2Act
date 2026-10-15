@@ -1128,6 +1128,9 @@ def commit_guard(worker, c, run, b, delta=0):
     frozen = worker.store._frozen_contract_after_scope(c, job).limits
     if time.time() >= job["created_at"] + min(limits.run_seconds, declared.run_seconds, frozen.run_seconds) or job["context"]["tools"] + delta > min(limits.max_tools, declared.max_tools, frozen.max_tools):
         raise DomainError("BUDGET_EXHAUSTED")
+    if getattr(worker, "pa_trial", None) is not None:
+        from .pa_trial_dispatch import check_commit
+        check_commit(worker, c, job)
     return job
 
 
@@ -1293,6 +1296,9 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
         require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
             "Original model audit bytes changed during the final save transaction")
+        if getattr(worker, "pa_trial", None) is not None:
+            from .pa_trial_dispatch import check_commit
+            check_commit(worker, c, job)
         require(not worker.stop.is_set() and time.time() < live["lease_until"]
             and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
         return False
@@ -1316,6 +1322,9 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     # authorities and time bounds after receipt readback, without reusing any
     # proof across a write, callback or transaction boundary.
     store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
+    if getattr(worker, "pa_trial", None) is not None:
+        from .pa_trial_dispatch import check_commit
+        check_commit(worker, c, job)
     require(not worker.stop.is_set() and time.time() < final["lease_until"]
         and time.time() < job["created_at"] + min(worker.s.run_seconds,
             plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]),

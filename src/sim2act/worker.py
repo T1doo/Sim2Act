@@ -28,7 +28,7 @@ from .tools import definitions, dispatch
 class Worker:
     def __init__(
         self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
-        goal_planner_transport=None,
+        goal_planner_transport=None, pa_trial=None,
     ):
         self.store, self.s = store, settings
         self.id = new_id("worker")
@@ -40,6 +40,10 @@ class Worker:
                     or not isinstance(goal_planner_transport, httpx.MockTransport)):
                 raise DomainError("PERMISSION_DENIED", "Planner injection requires offline MockTransport")
         self.goal_planner_transport = goal_planner_transport
+        self.pa_trial = pa_trial
+        if pa_trial is not None:
+            from .pa_trial_dispatch import validate
+            validate(self)
         if protocol_runner_factory is not None and (not store.test_only or settings.mode != "mock"):
             raise DomainError("PERMISSION_DENIED", "Protocol injection is test-only and offline")
         self.protocol_runner_factory = protocol_runner_factory
@@ -51,6 +55,9 @@ class Worker:
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
                 planner_request=False, generation_request=False, natural_spec_request=None):
+        if self.pa_trial is not None:
+            from .pa_trial_dispatch import wait_unreserved
+            wait_unreserved(self, run_id)
         s = self.s
         if natural_spec_request is not None:
             from .natural_spec_runtime import reservation_settings
@@ -100,6 +107,10 @@ class Worker:
                 )
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
+            if self.pa_trial is not None:
+                from .pa_trial_dispatch import preflight
+                preflight(self, c, run, generation=generation_request,
+                          natural=natural_spec_request is not None)
             if natural_spec_request is not None:
                 from .natural_spec_runtime import reservation_check
                 reservation_check(self, c, run, context, request_tools, natural_spec_request, s)
@@ -203,6 +214,11 @@ class Worker:
                         "adapter_version": "1",
                         "model_identity_policy_version": MODEL_IDENTITY_POLICY_VERSION,
                         "weight_version": "unknown",
+                        **({"pa_trial_binding": {
+                            "version": "pa-trial-dispatch.v1",
+                            "trial_fingerprint": self.pa_trial.contract_fingerprint,
+                            "approval_key": self.pa_trial.approval_key,
+                        }} if self.pa_trial is not None else {}),
                         "request_fingerprint": fingerprint(
                             {
                                 "messages": context["messages"],
@@ -252,6 +268,9 @@ class Worker:
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
             self.store.event(c, run_id, "MODEL_RESERVED", {"attempt_id": aid, "mode": s.mode,
                 **({"planning_fence": fence} if planner_request else {})})
+            if self.pa_trial is not None:
+                from .pa_trial_dispatch import reserved
+                reserved(self, c, run, aid, serialized)
             return aid
 
     def attempt_parameters(self, c, attempt_id, raw):
@@ -322,6 +341,9 @@ class Worker:
             if saved and saved.get("application_generation") and state != "PARTIAL":
                 result = None
             if state in {"SUCCEEDED", "PARTIAL"}:
+                if self.pa_trial is not None:
+                    from .pa_trial_dispatch import check_commit
+                    check_commit(self, c, run)
                 for rid in run["resource_refs"]:
                     self.store.authorize(
                         c,
@@ -344,6 +366,9 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
+            if self.pa_trial is not None and state in {"SUCCEEDED", "PARTIAL"}:
+                from .pa_trial_dispatch import check_commit
+                check_commit(self, c, run)
             if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and (frozen.application_generation.activation is not None or frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}):
                 check_active(self, c, run)
                 if run["lease_until"] <= time.time():

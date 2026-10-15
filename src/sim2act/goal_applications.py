@@ -726,7 +726,12 @@ def process(worker, run, contract):
             raw = None
             started = time.monotonic()
             try:
-                raw = configured_provider(worker).request_serialized(wire, guard)
+                if getattr(worker, "pa_trial", None) is None:
+                    raw = configured_provider(worker).request_serialized(wire, guard)
+                else:
+                    from .pa_trial_dispatch import request_captured
+                    raw = request_captured(worker, run, aid, wire, guard,
+                                           configured_provider(worker)).parsed
                 original, raw_metadata = response_archive(raw)
                 if original is None:
                     raise DomainError(
@@ -787,7 +792,7 @@ def process(worker, run, contract):
                         )
                     call = {**calls[0], "id": "ga_read"}
                     dispatch(worker.store, rid, fence, call)
-                    settle_generation(worker, contract, rid, aid)
+                    settle_generation(worker, contract, rid, aid, raw, fence)
                     continue
                 if calls:
                     if contract.application_generation.version in SPEC_GENERATIONS and len(prior) == 1 and len(calls) == 1:
@@ -801,6 +806,10 @@ def process(worker, run, contract):
                                 params["generation_rejected_raw"] = original
                                 c.execute(update(attempts).where(attempts.c.id == aid).values(parameters=params, error=report["diagnostic"]["code"]))
                                 worker.store.event(c, rid, "GA_DIAGNOSTIC", dict(attempt_id=aid, diagnostic=report["diagnostic"]))
+                            if getattr(worker, "pa_trial", None) is not None:
+                                from .pa_trial_dispatch import settle_verified
+                                settle_verified(worker, c, current, aid, raw)
+                                check_active(worker, c, locked(worker, c, rid, fence), aid)
                         continue
                     raise DomainError("PERMISSION_DENIED", "Candidate and repair cannot call tools")
                 if contract.application_generation.version in SPEC_GENERATIONS and len(prior) != 2:
@@ -849,6 +858,10 @@ def process(worker, run, contract):
                         from .generation_approvals import settle
 
                         settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
+                    if getattr(worker, "pa_trial", None) is not None:
+                        from .pa_trial_dispatch import settle_verified
+                        settle_verified(worker, c, current, aid, raw)
+                        check_active(worker, c, locked(worker, c, rid, fence), aid)
                 worker.finish(
                     rid,
                     fence,
@@ -891,6 +904,9 @@ def process(worker, run, contract):
                             # failure is a separate event, never another settlement.
                         else:
                             reject_unsettled(worker, c, run, contract, attempt, raw, failure, started)
+                        if getattr(worker, "pa_trial", None) is not None:
+                            from .pa_trial_dispatch import reject
+                            reject(worker, c, run, aid, raw)
                 raise
     except DomainError as exc:
         worker.finish(
@@ -949,12 +965,19 @@ def reject_unsettled(worker, c, run, contract, attempt, raw, failure, started):
 
         settle(worker.store, c, run["principal_id"], contract.application_generation.activation, aid)
 
-def settle_generation(worker, contract, rid, aid):
-    if contract.application_generation.activation is not None:
-        from .generation_approvals import settle
-
+def settle_generation(worker, contract, rid, aid, raw=None, fence=None):
+    if contract.application_generation.activation is not None or getattr(worker, "pa_trial", None) is not None:
         with worker.store.tx() as c:
-            settle(worker.store, c, contract.goal.owner_id, contract.application_generation.activation, aid)
+            if contract.application_generation.activation is not None:
+                from .generation_approvals import settle
+                settle(worker.store, c, contract.goal.owner_id, contract.application_generation.activation, aid)
+            if getattr(worker, "pa_trial", None) is not None:
+                from .pa_trial_dispatch import settle_verified
+                if type(fence) is not int:
+                    raise DomainError("VERSION_CONFLICT", "Original generation fence required")
+                current = locked(worker, c, rid, fence)
+                settle_verified(worker, c, current, aid, raw)
+                check_active(worker, c, current, aid)
 
 
 def check_active(worker, c, run, attempt_id=None):

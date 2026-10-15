@@ -795,7 +795,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     received_complete = False
     failure: DomainError | None = None
     try:
-        captured = InternModel(
+        provider = InternModel(
             replace(
                 worker.s,
                 **node_limits.model_dump(),
@@ -803,7 +803,12 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 token="synthetic-offline-natural-spec",
             ),
             transport=worker.goal_planner_transport,
-        ).request_serialized_captured(wire, sender_guard)
+        )
+        if getattr(worker, "pa_trial", None) is None:
+            captured = provider.request_serialized_captured(wire, sender_guard)
+        else:
+            from .pa_trial_dispatch import request_captured
+            captured = request_captured(worker, job, aid, wire, sender_guard, provider)
         require(type(captured) is CapturedResponse, "Adapter body capture is missing")
         raw, received_body, received_complete = captured.parsed, captured.body, True
     except DomainError as exc:
@@ -811,9 +816,13 @@ def advance_model(worker, run, *, _heartbeat_state=None):
         received_body = getattr(exc, "_received_body", None)
         received_complete = getattr(exc, "_received_body_complete", False)
         if raw is None:
-            if type(received_body) is bytes:
+            if type(received_body) is bytes or getattr(worker, "pa_trial", None) is not None:
                 with store.tx() as c:
-                    record_response(store, c, job, aid, received_body, received_complete, request_body=wire)
+                    if type(received_body) is bytes:
+                        record_response(store, c, job, aid, received_body, received_complete, request_body=wire)
+                    if getattr(worker, "pa_trial", None) is not None:
+                        from .pa_trial_dispatch import reject
+                        reject(worker, c, job, aid, None)
             # STARTED and nonrefundable reservation remain; never resend this node.
             raise
         failure = exc
@@ -977,8 +986,15 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             final_binding = spec.bound(store, c, fresh["principal_id"], fresh, limits)
             require(final_binding["audit_fingerprint"] == current_binding["audit_fingerprint"])
             spec.receipts(store, c, fresh, final_binding)
+            if getattr(worker, "pa_trial", None) is not None:
+                from .pa_trial_dispatch import settle_verified
+                settle_verified(worker, c, fresh, aid, raw)
+                spec.commit_guard(worker, c, run, final_binding)
     except DomainError as rejected:
         with store.tx() as c:
+            if getattr(worker, "pa_trial", None) is not None:
+                from .pa_trial_dispatch import reject
+                reject(worker, c, job, aid, raw)
             c.execute(
                 update(attempts)
                 .where(
