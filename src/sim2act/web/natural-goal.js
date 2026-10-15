@@ -409,7 +409,11 @@ async function refreshTrialCards() {
   if (stored) { $("trial-original-key").value = stored.key; stored.message = "已保留原键。重新读取范围和同意状态后再操作。"; stored.receipt = null; }
   else {
     const params = new URLSearchParams(location.hash.slice(1));
-    if (params.get("trial-project") === ctx.project) $("trial-original-key").value = params.get("trial-key") || "";
+    const key = params.get("trial-key");
+    if (params.get("trial-project") === ctx.project && /^[A-Za-z0-9_-]{1,100}$/.test(key || "")) {
+      $("trial-original-key").value = key;
+      trialEntries.set(trialIndex(ctx), {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, operation: 0, state: "unknown", receipt: null, message: "冷页保留原准备键；先只读取原键恢复，不能另建准备。"});
+    }
   }
   renderTrialConsent();
 }

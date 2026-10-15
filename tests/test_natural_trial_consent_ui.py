@@ -16,7 +16,7 @@ from sim2act.natural_trial_preparation import PREPARE
 
 
 @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
-    "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400"])
+    "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold"])
 def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
     data, body = prepared_data
     store, _, client, _, pid = data[:5]

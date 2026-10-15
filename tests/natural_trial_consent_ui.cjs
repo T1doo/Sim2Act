@@ -32,11 +32,18 @@ async function boot(hash = "") {
 }
 (async () => {
   await boot(); const originalScenario = info.scenario;
-  if (originalScenario === "lost-preparation") fault = "preparation";
+  if (["lost-preparation", "lost-cold"].includes(originalScenario)) fault = "preparation";
   await click("trial-prepare");
   const key = $("trial-original-key").value, hash = w.location.hash;
   check(/^[A-Za-z0-9_-]+$/.test(key), "server scope key generated without handwritten JSON or hash");
   if (originalScenario === "lost-preparation") { check($("trial-new").disabled && $("trial-consent").disabled, "unknown preparation locks new key and consent"); await click("trial-recover"); }
+  if (originalScenario === "lost-cold") {
+    check($("trial-new").disabled && $("trial-consent").disabled, "lost preparation remains unknown before reload");
+    await boot(hash);
+    check($("trial-original-key").value === key && $("trial-prepare").disabled && $("trial-new").disabled && $("trial-consent").disabled, "lost response cold page locks all new mutations under original URL key");
+    await click("trial-recover");
+    check(posts("/preparation") === 1, "lost response cold recovery never reposts preparation");
+  }
   check(posts("/preparation") === 1, "one original preparation POST");
   if (originalScenario === "unknown400") {
     check($("trial-new").disabled && $("trial-consent").disabled && $("trial-prepare").disabled, "actual API400 OUTCOME_UNKNOWN locks all new mutations");
@@ -53,6 +60,7 @@ async function boot(hash = "") {
   if (originalScenario === "cold") {
     await boot(hash); check($("trial-original-key").value === key, "cold page restores only original project and key from link");
     check($("trial-consent").disabled && $("trial-scope").textContent === "", "cold page has no cached scope or approval");
+    check($("trial-prepare").disabled && $("trial-new").disabled, "cold original-key intent locks all new preparation until GET recovery");
     await click("trial-recover"); check(posts("/preparation") === 1, "cold recovery only GETs original preparation");
   }
   if (["goal", "revoke-read", "expiry"].includes(originalScenario)) {
