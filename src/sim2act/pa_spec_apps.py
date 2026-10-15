@@ -1165,8 +1165,9 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     step, action = steps[len(proved)], plan["definition"]["actions"][len(proved)]
     intent = intent_for(step, action, plan, outputs, proved)
     oid = new_id("op")
-    commit_guard(worker, c, run, b, 1)
     saved = intent["tool"] == SAVE
+    if saved:
+        commit_guard(worker, c, run, b, 1)
     from .natural_spec_runtime import ledger_digest
     runtime_audit = ledger_digest(c, job) if saved and natural.is_candidate(plan["definition"]) else None
     if saved:
@@ -1187,10 +1188,10 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             and instance["release_id"] == s["release_id"]
             and instance["revision"] == s["expected_revision"]
             and type(instance["data_version"]) is int and instance["data_version"] >= 0)
-    c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
-        fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
-    c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
     if saved:
+        c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
+            fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
+        c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
         verify_saved(b["source"], intent["args"]["text"], plan["definition"])
         value = write_text_artifact(store, c, job["principal_id"], job["runtime_id"], job["project_id"], intent["args"]["text"], artifact_format="json")
         c.execute(insert(local_effects).values(operation_id=oid, resource_id=value["resource_id"], content_hash=value["hash"]))
@@ -1204,6 +1205,16 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     validate_value(action["output_schema"], value)
     receipt = receipt_for(oid, step, action, plan, intent, value)
     live = commit_guard(worker, c, run, b, 1)
+    if not saved:
+        require(live["version"] == job["version"], "Local write Run version changed")
+        if store.has_unknown(c, job["id"]):
+            raise DomainError("OUTCOME_UNKNOWN")
+        # Pure calculation has no database or external effects. Keep the
+        # PREPARED/intent/receipt/context writes in one atomic group after this
+        # fresh guard, with the full final guard below before transaction exit.
+        c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id=step["step_id"],
+            fingerprint=fingerprint(intent), tool_ref=intent["tool"], status="PREPARED"))
+        c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
     c.execute(update(operations).where(operations.c.id == oid).values(status="VERIFIED", receipt=receipt))
     context = copy.deepcopy(live["context"])
     context["tools"] += 1
@@ -1287,7 +1298,28 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
         return False
     # This final fresh guard covers all preceding receipt/context writes.
     # No protected effect occurs between it and the transaction return.
-    commit_guard(worker, c, run, b)
+    with store.proof_authorities(c) as authorities:
+        final = commit_guard(worker, c, run, b)
+        owner_fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id",
+            "fence", "version", "lease_until", "created_at", "fingerprint", "request_key")
+        require(all(final[key] == live[key] for key in owner_fields),
+            "Local write ownership interval changed")
+        if store.has_unknown(c, job["id"]):
+            raise DomainError("OUTCOME_UNKNOWN")
+        read_outputs, read_proved = receipts(store, c, final, b)
+        require(fingerprint(read_outputs) == fingerprint(outputs)
+            and fingerprint(read_proved) == fingerprint(proved)
+            and final["context"] == context, "Local write group readback changed")
+        require(c.execute(select(internal_app_runs.c.status).where(
+            internal_app_runs.c.id == a["id"])).scalar_one() == "RUNNING")
+    # Only reads occurred after the final full proof. Recheck its actual
+    # authorities and time bounds after receipt readback, without reusing any
+    # proof across a write, callback or transaction boundary.
+    store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
+    require(not worker.stop.is_set() and time.time() < final["lease_until"]
+        and time.time() < job["created_at"] + min(worker.s.run_seconds,
+            plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]),
+        "Local write final interval ended")
     return True
 
 
