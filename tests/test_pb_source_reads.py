@@ -206,3 +206,79 @@ def test_source_read_segment_complete_proof_and_invalidation(prefix, cloned, mon
         assert "pb_source_reads" not in outer_info
     finally:
         other.engine.dispose()
+
+
+@pytest.mark.parametrize("change", ["unchanged", "write", "failed_write", "limits",
+    "missing_origin", "wrong_user", "recheck_write", "recheck_revoke"])
+def test_complete_source_origin_read_boundary(prefix, cloned, monkeypatch, change):
+    """The real Release origin is local to one Source binding, never authority."""
+    from sqlalchemy import insert
+    from sqlalchemy.exc import IntegrityError
+    from test_natural_source_archives import snapshot
+
+    from sim2act import app_jobs
+    from sim2act import pa_spec_apps as spec
+    from sim2act.db import grants
+
+    store, user, pid = cloned[0], cloned[3], cloned[4]
+    limits = prefix.limits.model_copy(deep=True)
+    with store.tx() as c:
+        expected = pb.source(store, c, user, pid, prefix.source_id, limits)
+    before = snapshot(store)
+    original_read, original_origin = app_jobs.read_release, spec.verify_origin
+    original_recheck = store.recheck_proof_authorities
+    injected, origins, armed = [], [], []
+
+    def origin(*args, **kwargs):
+        origins.append(args[3]["id"])
+        return original_origin(*args, **kwargs)
+
+    def read(*args, **kwargs):
+        result = original_read(*args, **kwargs)
+        out = kwargs.get("_origin_out")
+        if out is None:
+            return result
+        armed.append(True)
+        if change.startswith("recheck_"):
+            return result
+        injected.append(change)
+        c = args[1]
+        if change == "write":
+            c.execute(update(runs).where(runs.c.id == prefix.source_id).values(version=runs.c.version))
+        elif change == "failed_write":
+            with pytest.raises(IntegrityError):
+                c.execute(insert(runs).from_select([col.name for col in runs.c],
+                    select(runs).where(runs.c.id == prefix.source_id)))
+        elif change == "limits":
+            args[4].max_requests += 1
+        elif change == "missing_origin":
+            out.clear()
+        elif change == "wrong_user":
+            out["principal_id"] = "different-owner"
+        return result
+
+    def recheck(c, proof):
+        if armed and not injected and change.startswith("recheck_"):
+            injected.append(change)
+            if change == "recheck_write":
+                c.execute(update(runs).where(runs.c.id == prefix.source_id).values(version=runs.c.version))
+            else:
+                c.execute(update(grants).where(grants.c.resource_id == cloned[5]).values(revoked=True))
+        return original_recheck(c, proof)
+
+    monkeypatch.setattr(app_jobs, "read_release", read)
+    monkeypatch.setattr(spec, "verify_origin", origin)
+    monkeypatch.setattr(store, "recheck_proof_authorities", recheck)
+    if change in {"unchanged", "missing_origin", "wrong_user"}:
+        with store.tx() as c:
+            assert pb.source(store, c, user, pid, prefix.source_id, limits) == expected
+        assert origins.count(expected[0]["draft"]["id"]) == (1 if change == "unchanged" else 2)
+    else:
+        with pytest.raises(DomainError) as error:
+            with store.tx() as c:
+                pb.source(store, c, user, pid, prefix.source_id, limits)
+        assert error.value.code in {"VERSION_CONFLICT", "PERMISSION_DENIED", "GRANT_REVOKED"}
+        if change == "recheck_revoke":
+            assert error.value.code in {"PERMISSION_DENIED", "GRANT_REVOKED"}
+    assert armed == [True] and injected == [change]
+    assert snapshot(store) == before
