@@ -468,15 +468,27 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
         return response
 
     worker = prefix.make_worker(data, httpx.MockTransport(handler))
+    once_result = None
+    escaped_domain_error = None
+    original_once = worker.once
+
+    def once():
+        nonlocal once_result
+        once_result = original_once()
+        return once_result
+
+    monkeypatch.setattr(worker, "once", once)
     try:
         assert worker.once()
-    except DomainError:
-        pass
+    except DomainError as error:
+        escaped_domain_error = error.public()
     except RuntimeError as error:
         assert fault == "lost_response" and str(error) == "Explicit lost P-B response"
-    (tmp_path / "actual-dispatch-boundary.json").write_text(json.dumps(dict(
-        fault=fault, injected=injected, actual_sends=len(sent),
-        worker_public_errors=public_errors), indent=2))
+    finally:
+        (tmp_path / "actual-dispatch-boundary.json").write_text(json.dumps(dict(
+            fault=fault, injected=injected, actual_sends=len(sent),
+            worker_once_return=once_result, escaped_domain_error=escaped_domain_error,
+            worker_public_errors=public_errors), indent=2))
     assert injected == [fault] and len(sent) == 1, public_errors
     response = data[2].get("/api/runs/" + cold)
     if fault == "source_revoke" or (fault == "source_version" and response.status_code != 200):
