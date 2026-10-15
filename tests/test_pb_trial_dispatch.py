@@ -409,7 +409,17 @@ def test_pb_trial_extraction_refusals_and_atomic_rollback(
 def test_pb_cold_actual_failure_never_accepts_or_retries(
     prefix, cloned, monkeypatch, tmp_path, fault
 ):
+    from sim2act import app_jobs
+
     data = cloned
+    public_errors = []
+    original_failure = app_jobs.fail_job
+
+    def failure(worker, run, error):
+        public_errors.append(error.public())
+        return original_failure(worker, run, error)
+
+    monkeypatch.setattr(app_jobs, "fail_job", failure)
     _, _, release, inst = extracted(prefix, data)
     cold = apps.enqueue(data, release, inst, key=prefix.binding.contract.stage_keys.cold)
     approve_stage(data, prefix.binding, "cold", cold)
@@ -464,7 +474,10 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
         pass
     except RuntimeError as error:
         assert fault == "lost_response" and str(error) == "Explicit lost P-B response"
-    assert injected == [fault] and len(sent) == 1
+    (tmp_path / "actual-dispatch-boundary.json").write_text(json.dumps(dict(
+        fault=fault, injected=injected, actual_sends=len(sent),
+        worker_public_errors=public_errors), indent=2))
+    assert injected == [fault] and len(sent) == 1, public_errors
     response = data[2].get("/api/runs/" + cold)
     if fault == "source_revoke" or (fault == "source_version" and response.status_code != 200):
         # Source scope still gates HTTP readback after the injected invalidation.
