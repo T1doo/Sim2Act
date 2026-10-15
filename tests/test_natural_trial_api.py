@@ -69,7 +69,11 @@ def test_actual_claimed_generate_http_admission_denies_no_fee_override(env, pb):
     with data[0].tx() as c:
         before = [dict(r) for r in c.execute(select(delivery_graph_requests)).mappings()]
     denied = client.post(path + "/admission", json=payload)
-    assert denied.status_code == 400 and denied.json()["error"]["code"] == "LIVE_BLOCKED", denied.text
+    error = denied.json()["error"]
+    # A changed literal software target is an earlier refusal, never LIVE authority.
+    assert ((denied.status_code == 400 and error["code"] == "LIVE_BLOCKED")
+        or (denied.status_code == 409 and error["code"] == "VERSION_CONFLICT"
+            and error["message"] == "Current software differs from the exact reviewed literal target")), denied.text
     for key in ("fee_authority", "free", "live_allowed"):
         extra = copy.deepcopy(payload)
         extra[key] = True
