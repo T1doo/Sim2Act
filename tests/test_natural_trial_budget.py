@@ -377,11 +377,25 @@ def test_seven_actual_reservations_stage_binding_nontransfer_no_refund(trial):
                     admission=admitted)
             rejected("BUDGET_EXHAUSTED", lambda req=req, stage=stage: budget.reserve(store, user, scope, contract,
                 req.model_copy(update={"request_key": "overflow-" + stage}), admission=admitted))
-            store.command(user, request.run_id, "cancel", request.expected_version)
         finally:
             stopped.set()
             thread.join(timeout=5)
+        assert not thread.is_alive()
         assert not failures
+        with store.tx() as c:
+            lease_before_cancel = c.execute(select(runs.c.lease_until).where(
+                runs.c.id == request.run_id)).scalar_one()
+        assert time.time() < lease_before_cancel
+        store.command(user, request.run_id, "cancel", request.expected_version)
+        with pytest.raises(DomainError, match="^Heartbeat Run stopped$") as stopped_heartbeat:
+            store.heartbeat("synthetic-worker" if stage == "generate" else "worker-" + stage,
+                request.run_id, request.fence, lease_seconds=30,
+                _deadline=deadline, _running_only=True)
+        assert stopped_heartbeat.value.code == "VERSION_CONFLICT"
+        with store.tx() as c:
+            assert c.execute(select(runs.c.lease_until).where(
+                runs.c.id == request.run_id)).scalar_one() == lease_before_cancel
+        assert time.time() < lease_before_cancel
     assert result["reserved_requests"] == 7 and result["reserved_envelope"] == 7868
     assert result["total_tokens"] == 14 and result["usage_status"] == "KNOWN"
     assert budget.read(store, user, scope)["reserved_requests"] == 7
