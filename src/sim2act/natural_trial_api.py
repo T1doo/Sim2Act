@@ -1,5 +1,7 @@
 """Authenticated trial consent interface; no sender or LIVE authority registered."""
 
+import re
+
 from fastapi import Depends
 from pydantic import Field
 from sqlalchemy import select
@@ -78,6 +80,29 @@ def original_contract(store, user, pid, key):
 def mount(app, store, identity):
     dependency = Depends(identity)
     base = "/api/projects/{pid}/natural-trials/{key}"
+
+    from . import natural_trial_preparation as preparation
+
+    @app.post(base + "/preparation")
+    def prepare(pid: str, key: str, body: preparation.PrepareInput, user=dependency):
+        gate.require(re.fullmatch(gate.KEY, key) is not None)
+        return preparation.prepare(store, user, pid, key, body)
+
+    @app.get(base + "/preparation")
+    def prepared(pid: str, key: str, user=dependency):
+        return preparation.recover(store, user, pid, key)
+
+    @app.get(base + "/consent-status")
+    def consent_status(pid: str, key: str, user=dependency):
+        return preparation.status(store, user, pid, key)
+
+    @app.post(base + "/consent")
+    def consent(pid: str, key: str, body: preparation.ConsentInput, user=dependency):
+        return preparation.approve(store, user, pid, key, body)
+
+    @app.post(base + "/withdrawal")
+    def withdrawal(pid: str, key: str, body: preparation.WithdrawInput, user=dependency):
+        return preparation.withdraw(store, user, pid, key, body)
 
     @app.post(base + "/approval")
     def approve(pid: str, key: str, body: ApprovalRequest, user=dependency):

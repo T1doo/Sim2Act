@@ -653,6 +653,7 @@ function updateGoalCardSave() {
   renderGoalRun();
 }
 function clearGoalCard() {
+  if(typeof clearTrialConsent === "function")clearTrialConsent();
   if(typeof clearNaturalGoal === "function")clearNaturalGoal();
   if(goalRunDisplayed && activeRun===goalRunDisplayed){activeRun=null;runSelectionGeneration++;clearRunDetail();}
   goalRunDisplayed=null;
@@ -723,6 +724,7 @@ $("goal-card-form").onsubmit=safe(async()=>{
 
 
 function selectWorkspace(id) {
+  if(typeof clearTrialConsent === "function")clearTrialConsent();
   workspaceSelectionGeneration++;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {

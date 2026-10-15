@@ -719,12 +719,17 @@ def recover(store, user, contract: TrialContract, approval_key: str):
 
 @controlled
 def revoke(store, user, contract: TrialContract, body: RevokeInput):
-    # Stop is metadata-only; no protected material body is needed after revocation.
+    if user != contract.principal_id:
+        raise DomainError("PERMISSION_DENIED")
+    return revoke_exact(store, user, contract.project_id, entity(contract),
+                        fingerprint(contract.model_dump()), body)
+
+
+@controlled
+def revoke_exact(store, user, project_id, eid, fp, body: RevokeInput):
+    """Metadata-only stop, including after source permissions have been withdrawn."""
     with store.tx() as c:
-        if user != contract.principal_id:
-            raise DomainError("PERMISSION_DENIED")
-        store.lock_project(c, user, contract.project_id)
-        eid, fp = entity(contract), fingerprint(contract.model_dump())
+        store.lock_project(c, user, project_id)
         require(body.expected_contract_fingerprint == fp)
         require(_keys(c, user, eid, SCOPE) == {"scope"}
                 and _keys(c, user, eid, APPROVE) == {"approve"})

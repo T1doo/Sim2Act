@@ -350,3 +350,138 @@ async function renderNaturalReceiptCandidate(r,id,current){
     if(current())await showRun(id);
   });section.append(button);
 }
+
+// P-A exact trial preparation and consent.
+"use strict";
+// Only original keys and transient page state; never model/Run submission.
+const trialEntries = new Map();
+let trialGeneration = 0, trialCards = [];
+const trialContext = () => ({identity: token, connection: identityConnectionGeneration, project: $("project-select").value, generation: trialGeneration});
+const trialCurrent = c => c.identity === token && c.connection === identityConnectionGeneration && c.project === $("project-select").value && c.generation === trialGeneration;
+const trialIndex = c => JSON.stringify([c.identity, c.project]);
+function clearTrialConsent() {
+  trialGeneration++; trialCards = [];
+  for (const entry of trialEntries.values()) { entry.operation = (entry.operation || 0) + 1; entry.receipt = null; if (["known", "sending"].includes(entry.state)) entry.state = "unknown"; }
+  $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false;
+  $("trial-scope").textContent = ""; $("trial-source").replaceChildren(); $("trial-cold").replaceChildren();
+  $("trial-status").textContent = "读取两张已保存的完整目标卡，准备七槽同意范围。LIVE 仍关闭。";
+  $("trial-original-key").value = trialEntry()?.key || "";
+  renderTrialConsent();
+}
+function trialEntry() { return trialEntries.get(trialIndex(trialContext())); }
+function trialValid(r, key) {
+  const c = r?.contract;
+  if (r?.status !== "PREPARED_LIVE_BLOCKED" || r.path !== "P-A" || r.live_allowed !== false || r.new_runs !== 0 || r.new_slots !== 0 || r.actual_model_requests !== 0 || !/^[a-f0-9]{64}$/.test(r.review_token) || c?.trial_key !== key || c.project_id !== $("project-select").value || !Array.isArray(c.bindings) || c.bindings.length !== 2 || !Number.isFinite(c.expires_at) || typeof r.approved !== "boolean" || typeof r.revoked !== "boolean" || typeof r.expired !== "boolean") throw Error("未知准备回执");
+  return r;
+}
+function renderTrialConsent() {
+  const entry = trialEntry(), r = entry?.receipt, busy = entry?.state === "sending", unknown = entry?.state === "unknown";
+  const expired = r?.expired || (r?.contract && Date.now() >= r.contract.expires_at * 1000);
+  $("trial-source").disabled = $("trial-cold").disabled = Boolean(entry);
+  $("trial-prepare").disabled = !token || !$("project-select").value || Boolean(entry) || trialCards.length < 2;
+  $("trial-consent").disabled = !r?.contract || !$("trial-ack").checked || r.approved || r.revoked || expired || busy || unknown;
+  $("trial-withdraw").disabled = !r?.approved || r.revoked || !$("trial-withdraw-ack").checked || busy || unknown;
+  $("trial-recover").disabled = busy || !token || !$("project-select").value;
+  $("trial-new").disabled = !entry || busy || unknown;
+  $("trial-refresh").disabled = busy || unknown;
+  if (entry) $("trial-status").textContent = entry.message;
+}
+function showTrialScope(r) {
+  const c = r.contract;
+  if (!c) { $("trial-scope").textContent = `仅恢复同意元数据。批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}。材料不可读取时不展示旧私有范围；仍可明确撤回。LIVE 关闭。`; return; }
+  const fields = {title: "名称", goal: "目标", known: "已知", assumptions: "假设", unresolved: "未决项", constraints: "硬条件", acceptance_checks: "验收检查", resource_refs: "绑定材料"};
+  const materials = c.bindings.map((b, i) => `${i === 0 ? "生成及 Source" : "未见输入 Cold"}：目标 ${b.card_id} v${b.goal_version}\n材料 ${b.resource_id}（TXT）\n${b.content}\n\n${Object.entries(fields).map(([field, label]) => `${label}：${Array.isArray(b.goal_snapshot.content[field]) ? b.goal_snapshot.content[field].join("\n") : b.goal_snapshot.content[field]}`).join("\n")}`).join("\n\n");
+  const cap = c.caps;
+  $("trial-scope").textContent = `P-A 精确准备与同意范围\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（尚未配置、未验证免费资格）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；lease ${cap.lease_seconds} 秒；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}\n\n此入口新增 Run / 槽 / 外发均为 0。LIVE 与正式发布保持关闭；不是实际运行或完整 P-A/P-B 验收。`;
+}
+async function refreshTrialCards() {
+  clearTrialConsent();
+  const ctx = trialContext(); if (!ctx.identity || !ctx.project) return;
+  const result = await api(`/api/projects/${ctx.project}/goal-cards`);
+  if (!trialCurrent(ctx)) return;
+  trialCards = result.items;
+  for (const [id, offset] of [["trial-source", 0], ["trial-cold", 1]]) {
+    $(id).replaceChildren(...trialCards.map(c => new Option(`${c.title} · v${c.version}`, c.id)));
+    if (trialCards[offset]) $(id).value = trialCards[offset].id;
+  }
+  $("trial-scope").textContent = ""; $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false;
+  const stored = trialEntry();
+  if (stored) { $("trial-original-key").value = stored.key; stored.message = "已保留原键。重新读取范围和同意状态后再操作。"; stored.receipt = null; }
+  else {
+    const params = new URLSearchParams(location.hash.slice(1));
+    if (params.get("trial-project") === ctx.project) $("trial-original-key").value = params.get("trial-key") || "";
+  }
+  renderTrialConsent();
+}
+async function trialRead(ctx, entry, operation) {
+  let receipt;
+  try { receipt = trialValid(await api(`${entry.base}/preparation`), entry.key); }
+  catch (error) {
+    if (!trialCurrent(ctx) || entry.operation !== operation) return;
+    if (![400,403,409].includes(error.httpStatus)) throw error;
+    const metadata = await api(`${entry.base}/consent-status`);
+    if (metadata.status !== "CONSENT_METADATA_ONLY_LIVE_BLOCKED" || metadata.approved !== true || metadata.live_allowed !== false || metadata.new_runs !== 0 || metadata.new_slots !== 0 || metadata.actual_model_requests !== 0 || !/^[a-f0-9]{64}$/.test(metadata.review_token) || typeof metadata.revoked !== "boolean" || typeof metadata.expired !== "boolean") throw error;
+    receipt = metadata;
+  }
+  if (!trialCurrent(ctx) || entry.operation !== operation) return;
+  entry.receipt = receipt; entry.state = "known";
+  entry.message = receipt.revoked ? "已恢复原键：批准已撤回，LIVE 关闭。" : receipt.approved ? "已恢复原键：精确批准已持久保存，LIVE 关闭。" : "准备已冻结，请阅读完整范围后明确确认。LIVE 关闭。";
+  if (trialCurrent(ctx)) { $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; showTrialScope(receipt); }
+}
+async function prepareTrial() {
+  const ctx = trialContext(); if (!ctx.identity || !ctx.project || trialEntry()) return;
+  const choices = [$("trial-source").value, $("trial-cold").value].map(id => trialCards.find(c => c.id === id));
+  if (choices.some(c => !c) || choices[0].id === choices[1].id) throw Error("请选择两张不同的完整目标卡");
+  const key = crypto.randomUUID(), entry = {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, state: "sending", operation: 1, message: "正在准备；不会新增 Run 或发送模型请求。"};
+  const operation = entry.operation;
+  trialEntries.set(trialIndex(ctx), entry); $("trial-original-key").value = key;
+  history.replaceState(null, "", `#${new URLSearchParams({"trial-project": ctx.project, "trial-key": key})}`);
+  renderTrialConsent();
+  try {
+    const receipt = await api(`${entry.base}/preparation`, "POST", {bindings: choices.map(c => ({card_id: c.id, expected_version: c.version}))});
+    if (entry.operation !== operation) return;
+    // Validate while current; late replies cannot acknowledge or enable another view.
+    if (!trialCurrent(ctx)) { entry.state = "unknown"; entry.message = "页面已切换；只读取原键恢复。"; return; }
+    entry.receipt = trialValid(receipt, key); entry.state = "known"; entry.message = "准备已冻结，请阅读完整范围后明确确认。LIVE 关闭。";
+    showTrialScope(entry.receipt);
+  } catch (error) { if (entry.operation !== operation) return; const rejected = error.message !== "OUTCOME_UNKNOWN" && Number.isInteger(error.httpStatus) && error.httpStatus >= 400 && error.httpStatus < 500 && ![408,425,429].includes(error.httpStatus); entry.state = rejected ? "rejected" : "unknown"; entry.receipt = null; entry.message = rejected ? `准备明确被拒绝：${error.message}。可修正目标或授权后明确开始另一份准备。` : `准备结果未确认：${error.message}。只读取原键恢复，不自动另建。`; }
+  finally { if (trialCurrent(ctx)) renderTrialConsent(); }
+}
+async function recoverTrial() {
+  const ctx = trialContext(), key = $("trial-original-key").value.trim();
+  if (!ctx.identity || !ctx.project || !/^[A-Za-z0-9_-]{1,100}$/.test(key)) throw Error("请输入原准备键");
+  let entry = trialEntry();
+  if (entry?.state === "sending") return;
+  if (entry?.state === "unknown" && entry.key !== key) throw Error("未知结果必须先读取原键");
+  if (!entry || entry.key !== key) entry = {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`};
+  const operation = entry.operation = (entry.operation || 0) + 1;
+  trialEntries.set(trialIndex(ctx), entry); entry.state = "sending"; entry.message = "只读取原键…"; entry.receipt = null;
+  $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; $("trial-scope").textContent = ""; renderTrialConsent();
+  try { await trialRead(ctx, entry, operation); }
+  catch (error) { if (entry.operation !== operation) return; entry.state = "unknown"; entry.message = `原键读取未确认：${error.message}。不提交新请求。`; }
+  finally { if (trialCurrent(ctx)) renderTrialConsent(); }
+}
+async function mutateTrial(withdraw = false) {
+  const ctx = trialContext(), entry = trialEntry(), r = entry?.receipt;
+  if (!r || entry.state !== "known" || (withdraw ? !$("trial-withdraw-ack").checked || !r.approved || r.revoked : !$("trial-ack").checked || !r.contract || r.approved || r.revoked || r.expired || Date.now() >= r.contract.expires_at * 1000)) return;
+  const operation = entry.operation = (entry.operation || 0) + 1;
+  entry.state = "sending"; entry.message = withdraw ? "正在撤回原批准…" : "正在保存此精确范围的批准；LIVE 关闭…"; renderTrialConsent();
+  try {
+    const response = await api(`${entry.base}/${withdraw ? "withdrawal" : "consent"}`, "POST", {review_token: r.review_token, [withdraw ? "confirm_withdrawal" : "confirm_exact_scope"]: true});
+    if (entry.operation !== operation) return;
+    if (response.live_allowed !== false || response.actual_model_requests !== 0 || response.status !== (withdraw ? "REVOKED" : "EXACT_APPROVAL_RECORDED_LIVE_BLOCKED") || (!withdraw && response.contract_fingerprint !== r.review_token)) throw Error("未知同意回执");
+    if (!trialCurrent(ctx)) { entry.receipt = null; entry.state = "unknown"; entry.message = "页面已切换；只读取原键恢复。"; return; }
+    await trialRead(ctx, entry, operation);
+  } catch (error) { if (entry.operation !== operation) return; entry.receipt = null; entry.state = "unknown"; entry.message = `结果未确认：${error.message}。只能读取原键，不重发批准或撤回。`; if (trialCurrent(ctx)) $("trial-scope").textContent = ""; }
+  finally { if (trialCurrent(ctx)) { $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; renderTrialConsent(); } }
+}
+$("trial-refresh").onclick = safe(refreshTrialCards);
+$("trial-prepare").onclick = safe(prepareTrial);
+$("trial-recover").onclick = safe(recoverTrial);
+$("trial-consent").onclick = safe(() => mutateTrial());
+$("trial-withdraw").onclick = safe(() => mutateTrial(true));
+$("trial-ack").onchange = renderTrialConsent;
+$("trial-withdraw-ack").onchange = renderTrialConsent;
+$("trial-source").onchange = $("trial-cold").onchange = () => { $("trial-ack").checked = false; renderTrialConsent(); };
+$("trial-new").onclick = () => { const entry = trialEntry(); if (!entry || ["sending", "unknown"].includes(entry.state)) return; trialEntries.delete(trialIndex(trialContext())); clearTrialConsent(); };
+setInterval(renderTrialConsent, 1000);
