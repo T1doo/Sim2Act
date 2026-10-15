@@ -1200,8 +1200,14 @@ def fail_job(worker, run, error):
 
 
 def process_job(worker, run):
-    from . import pa_spec_apps
-    if pa_spec_apps.is_job(worker.store, run):
+    from . import natural_specs, pa_spec_apps
+    # The frozen family is a routing hint. The first advance still checks the
+    # current owner, full source scope, binding and receipts before any effect.
+    # Start that validation under the existing heartbeat loop instead of doing
+    # a duplicate full-project classification before its thread exists.
+    natural_hint = (isinstance(run.get("context"), dict)
+                    and run["context"].get("spec_family") == natural_specs.VERSION)
+    if natural_hint or pa_spec_apps.is_job(worker.store, run):
         return pa_spec_apps.process_job(worker, run)
     from . import text_workflows
 
