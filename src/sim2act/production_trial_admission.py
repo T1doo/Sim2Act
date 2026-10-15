@@ -58,6 +58,12 @@ class OfflineSender:
     total_tokens: int | None = 2
     outcome_unknown: bool = False
 
+    def __post_init__(self):
+        if (type(self.response) is not bytes or type(self.outcome_unknown) is not bool
+                or any(v is not None and (type(v) is not int or v < 0) for v in
+                       (self.prompt_tokens, self.completion_tokens, self.total_tokens))):
+            raise DomainError("LIVE_BLOCKED", "Offline sender must contain fixed typed data only")
+
 
 @dataclass(frozen=True)
 class OfflineRegistry:
@@ -136,6 +142,18 @@ def _resolve(store, user, contract, registry):
     return account
 
 
+def _source_usage(attempt, slot, proof):
+    usage = attempt["usage"]
+    settlement = slot["settlement"]
+    gate.require(isinstance(usage, dict) and usage.get("status") == "known"
+                 and isinstance(usage.get("tokens"), dict)
+                 and isinstance(settlement, dict), "Source usage evidence is incomplete")
+    keys = ("prompt_tokens", "completion_tokens", "total_tokens")
+    gate.require(all(type(usage["tokens"].get(k)) is int
+                     and usage["tokens"][k] == settlement.get(k) == getattr(proof.usage, k)
+                     for k in keys), "Source usage evidence changed")
+
+
 def _source(store, c, user, contract, approval_key, stage, account, source_contract, resolver):
     if stage != "cold" or not isinstance(contract, gate.PBTrialContract):
         gate.require(source_contract is None and resolver is None)
@@ -172,25 +190,41 @@ def _source(store, c, user, contract, approval_key, stage, account, source_contr
     for proof in evidence.attempts:
         slot = next(s for s in slots if s["reservation"]["request_key"] == proof.attempt_id)
         attempt = next(a for a in actual if a["id"] == proof.attempt_id)
-        usage = attempt["usage"]
         gate.require(slot["accepted"] is True and slot["settlement"] is not None
                      and slot["reservation"]["wire_sha256"] == proof.wire_sha256
-                     and slot["settlement"]["response_sha256"] == proof.response_sha256
-                     and usage.get("status") == "known"
-                     and all(usage["tokens"][k] == slot["settlement"][k]
-                             == getattr(proof.usage, k) for k in
-                             ("prompt_tokens", "completion_tokens", "total_tokens")))
+                     and slot["settlement"]["response_sha256"] == proof.response_sha256)
+        parameters, response = attempt["parameters"], attempt["response"]
+        gate.require(attempt["mode"] == "LIVE" and attempt["status"] == "VERIFIED"
+                     and attempt["request_model"] == attempt["response_model"] == contract.model
+                     and isinstance(parameters, dict) and isinstance(response, dict),
+                     "Actual source Attempt is not verified LIVE provenance")
+        wire, raw = parameters.get("natural_spec_wire"), response.get("raw_evidence")
+        received = response.get("received_raw")
+        gate.require(isinstance(wire, dict) and isinstance(raw, dict)
+                     and type(received) is str and received.isascii()
+                     and received.encode("ascii") == proof.raw_response
+                     and wire.get("sha256") == proof.wire_sha256
+                     and wire.get("bytes") == len(proof.wire)
+                     and raw.get("status") == "COMPLETE"
+                     and raw.get("sha256") == proof.response_sha256
+                     and raw.get("bytes") == len(proof.raw_response)
+                     and parameters.get("provider") == proof.provider
+                     and parameters.get("account_id") == proof.account_id
+                     and parameters.get("provider_request_id") == proof.provider_request_id,
+                     "Actual provider/account/wire/raw archive pairing changed")
+        _source_usage(attempt, slot, proof)
 
 
 def _admission(registry, worker_id, source_contract, resolver):
     def admit(store, c, user, contract, approval_key, stage, run_id, version, fence):
         account = _resolve(store, user, contract, registry)
-        _source(store, c, user, contract, approval_key, stage, account, source_contract, resolver)
+        permit = gate.admit(store, c, user, contract, approval_key, stage, run_id, version, fence,
+            gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject))
         owner = c.execute(select(runs.c.worker_id).where(runs.c.id == run_id)).scalar()
         gate.require(type(worker_id) is str and bool(worker_id) and owner == worker_id,
                      "Worker owner changed")
-        return gate.admit(store, c, user, contract, approval_key, stage, run_id, version, fence,
-            gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject))
+        _source(store, c, user, contract, approval_key, stage, account, source_contract, resolver)
+        return permit
     return admit
 
 
@@ -222,10 +256,6 @@ def dispatch_offline(store, user, contract, approval_key, request, wire, *, regi
                 gate.require(slot["reservation"] == request.model_dump())
                 return budget._public(scope, ledger, duplicate=True)
     account = _resolve(store, user, contract, registry)
-    with store.tx() as c:
-        owner = c.execute(select(runs.c.worker_id).where(runs.c.id == request.run_id)).scalar()
-        gate.require(type(worker_id) is str and bool(worker_id) and owner == worker_id,
-                     "Worker owner changed")
     admission = _admission(registry, worker_id, pb_source_contract, pb_source_resolver)
     reserved = budget.reserve(store, user, scope, contract, request, admission=admission)
     if reserved["duplicate"]:

@@ -228,3 +228,87 @@ def test_duplicate_key_cannot_change_original_wire_or_create_another_slot(trial)
     with pytest.raises(DomainError):
         dispatch(altered)
     assert records(trial[0][0]) == before
+
+
+@pytest.mark.parametrize("damaged", [None, [], {"status": "known"},
+    {"status": "known", "tokens": {}}, {"status": "known", "tokens": None},
+    {"status": "known", "tokens": {"prompt_tokens": True}}])
+def test_corrupt_source_usage_during_settlement_halts_but_preserves_charge(trial, monkeypatch, damaged):
+    from types import SimpleNamespace
+
+    from sim2act import natural_trial_budget as budget
+    original = budget.settle
+    def corrupted(store, user, scope, contract, settlement, **kw):
+        def source_bridge_failure(*args):
+            production._source_usage({"usage": damaged}, {"settlement": {}}, SimpleNamespace())
+        return original(store, user, scope, contract, settlement, admission=source_bridge_failure)
+    monkeypatch.setattr(budget, "settle", corrupted)
+    result = dispatch(trial)
+    slot = result["ledger"]["slots"][0]
+    assert result["reserved_requests"] == 1 and result["ledger"]["halted"]
+    assert slot["settlement"]["total_tokens"] == 2 and slot["accepted"] is False
+
+
+@pytest.fixture
+def bridge_source(request):
+    # Deliberately isolated typed archive and SQLAlchemy-shaped synthetic rows.
+    # This is not a Worker LIVE origin or a production account resolver.
+    from test_pb_live_source_contract import source
+    return source.__wrapped__()
+
+
+@pytest.mark.parametrize("damage", ["MOCK", "other_source_run", "other_approval", "missing_usage",
+    "wire_hash", "raw_bytes", "provider_request_id", "account_id"])
+def test_pb_bridge_rejects_forged_actual_rows_and_cross_original_ledger(bridge_source, monkeypatch, damage):
+    from types import SimpleNamespace
+
+    from sim2act import natural_trial_budget as budget
+    from sim2act.pb_live_source_contract import SyntheticSourceResolver
+    contract, evidence = bridge_source
+    slots, rows = [], []
+    for p in evidence.attempts:
+        tokens = {k: getattr(p.usage, k) for k in
+                  ("prompt_tokens", "completion_tokens", "total_tokens")}
+        slots.append(dict(reservation=dict(stage="source", request_key=p.attempt_id,
+            wire_sha256=p.wire_sha256), settlement=dict(response_sha256=p.response_sha256, **tokens),
+            accepted=True))
+        rows.append(dict(id=p.attempt_id, usage=dict(status="known", tokens=tokens), mode="LIVE",
+            status="VERIFIED", request_model=contract.trial.model, response_model=contract.trial.model,
+            parameters=dict(natural_spec_wire=dict(sha256=p.wire_sha256, bytes=len(p.wire)),
+                provider=p.provider, account_id=p.account_id, provider_request_id=p.provider_request_id),
+            response=dict(received_raw=p.raw_response.decode("ascii"),
+                raw_evidence=dict(status="COMPLETE", sha256=p.response_sha256, bytes=len(p.raw_response)))))
+    ledger = dict(halted=False, stage_runs=dict(source=evidence.source_run_id), slots=slots)
+    approval_key = contract.approval_key
+    if damage == "MOCK":
+        rows[0]["mode"] = "MOCK"
+    elif damage == "other_source_run":
+        ledger["stage_runs"]["source"] = "run_" + "9" * 32
+    elif damage == "other_approval":
+        approval_key = "another-approval"
+    elif damage == "missing_usage":
+        rows[0]["usage"] = dict(status="known")
+    elif damage == "wire_hash":
+        rows[0]["parameters"]["natural_spec_wire"]["sha256"] = "0" * 64
+    elif damage == "raw_bytes":
+        rows[0]["response"]["received_raw"] = "different"
+    else:
+        rows[0]["parameters"][damage] = "wrong"
+    monkeypatch.setattr(budget, "audit", lambda *args: dict(ledger=ledger))
+    monkeypatch.setattr(gate, "_saved", lambda *args: SimpleNamespace(app_id=contract.source_app_id))
+    class Connection:
+        def execute(self, statement):
+            return SimpleNamespace(mappings=lambda: SimpleNamespace(all=lambda: rows))
+    account = SimpleNamespace(account_id=evidence.account_id, quota_subject=evidence.quota_subject,
+                              provider=evidence.provider)
+    with pytest.raises(DomainError):
+        production._source(None, Connection(), contract.trial.principal_id, contract.trial,
+            approval_key, "cold", account, contract, SyntheticSourceResolver(evidence))
+
+
+def test_sender_cannot_hide_executable_objects_inside_fixed_fields():
+    class Trap:
+        def __len__(self):
+            raise AssertionError("Executable data must not be inspected")
+    with pytest.raises(DomainError):
+        production.OfflineSender(response=Trap())
