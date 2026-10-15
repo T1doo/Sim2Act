@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="17" time="709.429" timestamp="2026-10-15T17:34:38.081434+00:00" hostname="REDACTED_HOST"><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_full_actual_worker_extraction_and_cold" time="532.091" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_source_stage_single_proof_and_read_boundaries[none]" time="8.147" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_source_stage_single_proof_and_read_boundaries[source_version]" time="1.801" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_source_stage_single_proof_and_read_boundaries[authority]" time="1.859" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_source_stage_single_proof_and_read_boundaries[instance]" time="1.517" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_source_stage_single_proof_and_read_boundaries[input]" time="1.817" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_source_stage_single_proof_and_read_boundaries[limits]" time="1.849" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[wrong_key]" time="0.824" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[wrong_recipe]" time="0.521" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[wrong_goal]" time="0.497" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[missing_ns_body]" time="3.114" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[missing_trial_body]" time="2.689" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[missing_marker]" time="3.026" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[source_version]" time="4.094" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[after_write_failure]" time="6.744" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_trial_extraction_refusals_and_atomic_rollback[revoke_after_write]" time="6.242" /><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_cold_actual_failure_never_accepts_or_retries[source_revoke]" time="131.979"><failure message="AssertionError: assert ([] == ['source_revoke']&#10;  &#10;  Right contains one more item: 'source_revoke'&#10;  Use -v to get more diff)">prefix = namespace(data=(&lt;sim2act.db.Store object at 0xREDACTED_MEMORY&gt;, Settings(database_url='sqlite:////workspace/pb-cold-commi...sport.handle_async_request at 0xREDACTED_MEMORY&gt;, original_sync=&lt;function MockTransport.handle_request at 0xREDACTED_MEMORY&gt;)
+cloned = (&lt;sim2act.db.Store object at 0xREDACTED_MEMORY&gt;, Settings(database_url='sqlite:////workspace/pb-cold-commit-proof-evidenc...[REDACTED_ID_SUFFIX]', 'proj_[REDACTED_ID]', 'res_[REDACTED_ID]', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0xREDACTED_MEMORY&gt;
+tmp_path = PosixPath('[PRIOR_EVIDENCE_ROOT]/observation/cold-and-faults-conservative/tmp/test_pb_cold_actual_failure_ne0')
+fault = 'source_revoke'
+
+    @pytest.mark.parametrize(
+        "fault", ["source_revoke", "source_version", "lost_response", "bad_result", "response_archive"]
+    )
+    def test_pb_cold_actual_failure_never_accepts_or_retries(
+        prefix, cloned, monkeypatch, tmp_path, fault
+    ):
+        data = cloned
+        _, _, release, inst = extracted(prefix, data)
+        cold = apps.enqueue(data, release, inst, key=prefix.binding.contract.stage_keys.cold)
+        approve_stage(data, prefix.binding, "cold", cold)
+        injected, sent = [], []
+        normal = apps.transport([], apps.COLD)
+        original_archive = trial._archive
+    
+        def fail_archive(*args):
+            result = original_archive(*args)
+            if fault == "response_archive" and args[-1] == trial.RESPONSE:
+                injected.append(fault)
+                raise DomainError("OUTCOME_UNKNOWN", "Explicit trial response archive rollback")
+            return result
+    
+        monkeypatch.setattr(trial, "_archive", fail_archive)
+    
+        def handler(request):
+            sent.append(request.content)
+            if fault == "lost_response":
+                injected.append(fault)
+                raise RuntimeError("Explicit lost P-B response")
+            if fault in ("source_revoke", "source_version"):
+                with data[0].tx() as c:
+                    if fault == "source_revoke":
+                        c.execute(
+                            update(grants).where(grants.c.resource_id == data[5]).values(revoked=True)
+                        )
+                    else:
+                        version = c.execute(
+                            select(runs.c.version).where(runs.c.id == prefix.source_id)
+                        ).scalar_one()
+                        c.execute(
+                            update(runs)
+                            .where(runs.c.id == prefix.source_id)
+                            .values(version=version + 1)
+                        )
+                injected.append(fault)
+            response = normal.handle_request(request)
+            if fault == "bad_result":
+                raw = response.json()
+                items = json.loads(raw["choices"][0]["message"]["content"])
+                items["items"][0]["citations"][0]["quote"] = "Wrong quote"
+                raw["choices"][0]["message"]["content"] = json.dumps(items)
+                injected.append(fault)
+                return httpx.Response(200, json=raw)
+            return response
+    
+        worker = prefix.make_worker(data, httpx.MockTransport(handler))
+        try:
+            assert worker.once()
+        except DomainError:
+            pass
+        except RuntimeError as error:
+            assert fault == "lost_response" and str(error) == "Explicit lost P-B response"
+&gt;       assert injected == [fault] and len(sent) == 1
+E       AssertionError: assert ([] == ['source_revoke']
+E         
+E         Right contains one more item: 'source_revoke'
+E         Use -v to get more diff)
+
+tests/test_pb_trial_dispatch.py:467: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,99 @@
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('[DIAGNOSTIC_EVIDENCE_ROOT]/observation/origin...agnostics-evidence-20261015/observation/original-order-reproduction/tmp'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def prefix(tmp_path_factory):
+        root = tmp_path_factory.mktemp("actual-pb-prefix")
+        environment = conftest.env.__wrapped__(root)
+        env = next(environment)
+        data = apps.setup(env)
+        subject = production.canonical_quota_subject("offline-pb-account")
+        data = (data[0], replace(data[1], quota_subject=subject), *data[2:])
+        data[0].initialize(quota_subject=subject)
+        pa, approval = frozen(data, ttl=1800.0)
+        contract = gate.PBTrialContract(
+            **{**pa.model_dump(), "quota_subject": subject},
+            path="P-B",
+            extraction_request_key="original-pb-trial-extraction",
+            extraction_recipe=apps.recipe("ordered"),
+        )
+        approval = approval.model_copy(
+            update=dict(expected_contract_fingerprint=fingerprint(contract.model_dump()))
+        )
+        gate.approve(data[0], data[3], contract, approval)
+        account = production.AccountEvidence(
+            principal_id=data[3],
+            project_id=data[4],
+            trial_key=contract.trial_key,
+            contract_fingerprint=fingerprint(contract.model_dump()),
+            account_id="offline-pb-account",
+            quota_subject=subject,
+            evidence_sha256="b" * 64,
+            checked_at=time.time(),
+            expires_at=contract.expires_at,
+            legal_free_entitlement=True,
+            enforced_non_chargeable=True,
+        )
+        binding = trial.PATrialBinding(
+            contract,
+            approval.request_key,
+            production.OfflineRegistry((account,), production.OfflineSender()),
+        )
+        workers, refresh_errors = [], []
+        stopped = threading.Event()
+    
+        def fresh_binding():
+            fresh = account.model_copy(update=dict(checked_at=time.time()))
+            return replace(binding, registry=replace(binding.registry, accounts=(fresh,)))
+    
+        def make_worker(data, transport):
+            worker = Worker(
+                data[0], data[1], goal_planner_transport=transport, pa_trial=fresh_binding()
+            )
+            workers.append(worker)
+            return worker
+    
+        def refresh():
+            try:
+                while not stopped.wait(0.25):
+                    for worker in tuple(workers):
+                        # Revocation injected by a test must remain revoked.
+                        old = worker.pa_trial.registry.accounts[0]
+                        fresh = old.model_copy(update=dict(checked_at=time.time()))
+                        worker.pa_trial = replace(
+                            worker.pa_trial,
+                            registry=replace(worker.pa_trial.registry, accounts=(fresh,)),
+                        )
+            except BaseException as error:
+                refresh_errors.append(error)
+    
+        refresher = threading.Thread(target=refresh, daemon=True)
+        refresher.start()
+        original_async = httpx.MockTransport.handle_async_request
+        original_sync = httpx.MockTransport.handle_request
+        captured = []
+        try:
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(
+                    apps, "Worker", lambda *a, **k: make_worker(data, k["goal_planner_transport"])
+                )
+                generation, _, release, inst, generated = apps.ready(data, style="ordered")
+            assert len(generated) == 3
+            source_id = apps.enqueue(data, release, inst)
+            approve_stage(data, binding, "source", source_id)
+            normal = apps.transport([], apps.SOURCE)
+    
+            def source_handler(request):
+                raw = normal.handle_request(request).json()
+                raw["archive_note"] = "实际离线原体"
+                payload = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode()
+                captured.append((request.content, payload))
+                return httpx.Response(200, content=payload)
+    
+            assert make_worker(data, httpx.MockTransport(source_handler)).once()
+>           assert data[2].get("/api/runs/" + source_id).json()["status"] == "SUCCEEDED"
+E           AssertionError: assert 'RUNNING' == 'SUCCEEDED'
+E             
+E             - SUCCEEDED
+E             + RUNNING
+
+tests/test_pb_trial_dispatch.py:139: AssertionError
