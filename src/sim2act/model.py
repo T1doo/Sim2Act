@@ -4,6 +4,8 @@ import asyncio
 import json
 import math
 import time
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -141,6 +143,30 @@ class _RequestDeadlineError(DomainError):
     _received_response: dict | None = None
 
 
+@dataclass(frozen=True)
+class CapturedResponse:
+    """Adapter-received decoded body, never headers or HTTP wire packets."""
+
+    parsed: Any
+    body: bytes
+
+
+def _body_failure(error, payload, complete):
+    # Private execution evidence; DomainError.public() never emits these bytes.
+    error._received_body = bytes(payload[:131072])
+    error._received_body_complete = complete and len(payload) <= 131072
+
+
+def _parsed_body(payload, capture):
+    try:
+        parsed = strict_json(payload, 131072)
+    except DomainError as error:
+        if capture:
+            _body_failure(error, payload, True)
+        raise
+    return CapturedResponse(parsed, payload) if capture else parsed
+
+
 class InternModel:
     ENDPOINT = "https://chat.intern-ai.org.cn/api/v1/chat/completions"
 
@@ -175,7 +201,13 @@ class InternModel:
             raise DomainError("PERMISSION_DENIED", "Frozen wire and validator required")
         return self._request_serialized(body, wire_guard)
 
-    def _request_serialized(self, body, wire_guard=None):
+    def request_serialized_captured(self, body, wire_guard):
+        """The same single send, additionally retaining its bounded body evidence."""
+        if not isinstance(body, bytes) or not callable(wire_guard):
+            raise DomainError("PERMISSION_DENIED", "Frozen wire and validator required")
+        return self._request_serialized(body, wire_guard, capture=True)
+
+    def _request_serialized(self, body, wire_guard=None, *, capture=False):
         s = self.settings
         if not s.live_enabled or not s.token:
             raise DomainError(
@@ -203,20 +235,27 @@ class InternModel:
                                 or type(envelope["deadline"]) not in {int, float}
                                 or not math.isfinite(envelope["deadline"])):
                             raise DomainError("PERMISSION_DENIED", "Invalid total request deadline")
-                        return asyncio.run(self._deadline_request(request, envelope["deadline"]))
+                        return asyncio.run(self._deadline_request(
+                            request, envelope["deadline"], capture=capture))
                 response = client.send(request)
                 if response.status_code == 429:
-                    raise DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
+                    error = DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
+                    if capture:
+                        _body_failure(error, response.content, True)
+                    raise error
                 if response.status_code != 200:
-                    raise DomainError("RESOURCE_UNAVAILABLE", "Upstream rejected request")
-                return strict_json(response.content, 131072)
+                    error = DomainError("RESOURCE_UNAVAILABLE", "Upstream rejected request")
+                    if capture:
+                        _body_failure(error, response.content, True)
+                    raise error
+                return _parsed_body(response.content, capture)
         except (httpx.TimeoutException, httpx.NetworkError) as e:
             raise DomainError(
                 "MODEL_TIMEOUT_OR_TRUNCATED", "Request failed; usage may be unknown"
             ) from e
 
 
-    async def _deadline_request(self, request, deadline):
+    async def _deadline_request(self, request, deadline, *, capture=False):
         remaining = deadline - time.time()
         if remaining <= 0:
             raise DomainError("MODEL_TIMEOUT_OR_TRUNCATED", "Total request deadline elapsed")
@@ -238,16 +277,28 @@ class InternModel:
                     if len(payload) + len(chunk) > 131072:
                         raise DomainError("MODEL_OUTPUT_INVALID", "Bounded response exceeded")
                     payload.extend(chunk)
-                return strict_json(bytes(payload), 131072)
-        except TimeoutError as error:
-            failure = _RequestDeadlineError("MODEL_TIMEOUT_OR_TRUNCATED", "Total request deadline elapsed; usage may be unknown")
-            try:
-                parsed = strict_json(bytes(payload), 131072)
-                if isinstance(parsed, dict):
-                    failure._received_response = parsed
-            except DomainError:
-                pass
+                return _parsed_body(bytes(payload), capture)
+        except (TimeoutError, httpx.TimeoutException, httpx.NetworkError) as error:
+            if not capture and not isinstance(error, TimeoutError):
+                raise
+            message = ("Total request deadline elapsed; usage may be unknown"
+                       if isinstance(error, TimeoutError)
+                       else "Request failed; usage may be unknown")
+            failure = _RequestDeadlineError("MODEL_TIMEOUT_OR_TRUNCATED", message)
+            if capture:
+                _body_failure(failure, payload, False)
+            if isinstance(error, TimeoutError):
+                try:
+                    parsed = strict_json(bytes(payload), 131072)
+                    if isinstance(parsed, dict):
+                        failure._received_response = parsed
+                except DomainError:
+                    pass
             raise failure from error
+        except DomainError as error:
+            if capture and not hasattr(error, "_received_body"):
+                _body_failure(error, payload, False)
+            raise
         finally:
             # Cleanup has its own small grace, outside the cancelled request context.
             # Only the trusted cancellation-cooperative HTTP transport is supported.

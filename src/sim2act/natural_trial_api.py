@@ -118,6 +118,13 @@ def mount(app, store, identity):
         gate.recover(store, user, contract, approval_key)
         return budget.read(store, user, budget.scope_for(contract, approval_key).model_dump())
 
+    @app.get(base + "/approvals/{approval_key}/source-archive")
+    def source_archive(pid: str, key: str, approval_key: str, user=dependency):
+        from .natural_source_archives import resolve_trial_source
+
+        contract = original_contract(store, user, pid, key)
+        return resolve_trial_source(store, user, contract, approval_key).public_receipt
+
     @app.post(base + "/admission")
     def admission(pid: str, key: str, body: AdmissionRequest, user=dependency):
         _scope(user, pid, key, body.contract)

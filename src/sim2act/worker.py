@@ -229,6 +229,8 @@ class Worker:
             if natural_spec_request is not None:
                 from .natural_spec_runtime import reserve_node
                 reserve_node(self, c, run, aid, natural_spec_request)
+                from .natural_source_archives import record_request
+                record_request(self.store, c, run, aid, serialized)
             if wire_seal is not None and not generation_request and natural_spec_request is None:
                 self.store.event(
                     c,

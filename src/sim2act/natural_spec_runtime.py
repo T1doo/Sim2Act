@@ -29,6 +29,7 @@ from .errors import DomainError
 from .goal_applications import body, response_archive
 from .goal_planner import checked_usage
 from .model import (
+    CapturedResponse,
     InternModel,
     normalize_usage,
     parse_response,
@@ -787,10 +788,14 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             return dict(deadline=job["created_at"] + node_limits.run_seconds)
 
     started = time.monotonic()
+    from .natural_source_archives import record_response
+
     raw = None
+    received_body = None
+    received_complete = False
     failure: DomainError | None = None
     try:
-        raw = InternModel(
+        captured = InternModel(
             replace(
                 worker.s,
                 **node_limits.model_dump(),
@@ -798,10 +803,17 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 token="synthetic-offline-natural-spec",
             ),
             transport=worker.goal_planner_transport,
-        ).request_serialized(wire, sender_guard)
+        ).request_serialized_captured(wire, sender_guard)
+        require(type(captured) is CapturedResponse, "Adapter body capture is missing")
+        raw, received_body, received_complete = captured.parsed, captured.body, True
     except DomainError as exc:
         raw = getattr(exc, "_received_response", None)
+        received_body = getattr(exc, "_received_body", None)
+        received_complete = getattr(exc, "_received_body_complete", False)
         if raw is None:
+            if type(received_body) is bytes:
+                with store.tx() as c:
+                    record_response(store, c, job, aid, received_body, received_complete, request_body=wire)
             # STARTED and nonrefundable reservation remain; never resend this node.
             raise
         failure = exc
@@ -809,6 +821,9 @@ def advance_model(worker, run, *, _heartbeat_state=None):
         failure = None
     original, evidence = response_archive(raw)
     if original is None:
+        if type(received_body) is bytes:
+            with store.tx() as c:
+                record_response(store, c, job, aid, received_body, received_complete, request_body=wire)
         raise DomainError(
             "BUDGET_EXHAUSTED", "Complete raw response cannot be retained; outcome unknown"
         )
@@ -835,6 +850,9 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             )
         )
         require(changed.rowcount == 1, "Received response has a competing owner")
+        require(type(received_body) is bytes, "Adapter received body is missing")
+        record_response(store, c, job, aid, received_body, received_complete, evidence["sha256"],
+                        request_body=wire)
         store.event(
             c,
             job["id"],
