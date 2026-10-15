@@ -304,7 +304,7 @@ def _source(store, c, user, pid, rid, limits):
     require(status == "SUCCEEDED", "Only a completed successful task is a P-B source")
     job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user,
                                      runs.c.project_id == pid)).mappings().one()
-    binding, _, proved = spec.verify_job(store, c, user, job, limits)
+    binding, _, proved = spec.verify_job(store, c, user, job, limits, _source_origin=True)
     draft, snap, app_run = binding["draft"], binding["snapshot"], binding["app_run"]
     require(natural.is_candidate(draft["candidate"]) and "spec_task" not in draft["candidate"])
     typed = c.execute(select(internal_instance_data).where(

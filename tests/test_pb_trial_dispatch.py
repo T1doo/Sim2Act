@@ -465,7 +465,19 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
     except RuntimeError as error:
         assert fault == "lost_response" and str(error) == "Explicit lost P-B response"
     assert injected == [fault] and len(sent) == 1
-    state = data[2].get("/api/runs/" + cold).json()
+    response = data[2].get("/api/runs/" + cold)
+    if fault == "source_revoke" or (fault == "source_version" and response.status_code != 200):
+        # Source scope still gates HTTP readback after the injected invalidation.
+        expected = 403 if fault == "source_revoke" else 409
+        assert response.status_code == expected
+        assert response.json()["error"]["code"] in (
+            {"PERMISSION_DENIED", "GRANT_REVOKED"} if expected == 403 else {"VERSION_CONFLICT"})
+        with data[0].tx() as c:
+            state = dict(c.execute(select(runs.c.status, runs.c.result)
+                .where(runs.c.id == cold)).mappings().one())
+    else:
+        assert response.status_code == 200
+        state = response.json()
     assert state["status"] != "SUCCEEDED" and state["result"] is None
     history = production.recover(
         data[0], data[3], prefix.binding.contract, prefix.binding.approval_key
@@ -497,6 +509,8 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
                 original_prefix_slots=5,
                 original_key_history=history,
                 status=state["status"],
+                http_readback_status=response.status_code,
+                http_readback_error=response.json().get("error"),
                 real_models=0,
                 raw_receipt="NOT_PERSISTED" if fault == "response_archive" else "SEE_BODY_FACTS",
             ),
@@ -515,12 +529,24 @@ def test_pb_source_stage_single_proof_and_read_boundaries(prefix, cloned, monkey
     data = cloned
     store, user = data[0], data[3]
     contract, key = prefix.binding.contract, prefix.binding.approval_key
-    original_source, original_bound = pb.source, spec.bound
-    sources, bounds, injected = [], [], []
+    original_source, original_bound, original_origin = pb.source, spec.bound, spec.verify_origin
+    sources, bounds, origins, injected = [], [], [], []
+    bound_depth = [0]
 
     def counted_bound(*args, **kwargs):
         bounds.append(True)
-        return original_bound(*args, **kwargs)
+        bound_depth[0] += 1
+        try:
+            return original_bound(*args, **kwargs)
+        finally:
+            bound_depth[0] -= 1
+
+    def counted_origin(*args, **kwargs):
+        # Count origin validation inside the actual binding proof; separate
+        # stage generation-source validation still executes independently.
+        if bound_depth[0]:
+            origins.append(args[3]["id"])
+        return original_origin(*args, **kwargs)
 
     def source(*args, **kwargs):
         result = original_source(*args, **kwargs)
@@ -546,13 +572,16 @@ def test_pb_source_stage_single_proof_and_read_boundaries(prefix, cloned, monkey
 
     monkeypatch.setattr(pb, "source", source)
     monkeypatch.setattr(spec, "bound", counted_bound)
+    monkeypatch.setattr(spec, "verify_origin", counted_origin)
     before = snapshot(store)
     if fault == "none":
         with store.tx() as c:
             first = archive._source_prefix(store, c, user, contract, key)
             assert len(sources) == len(bounds) == 1
+            assert origins.count(first[4]["source_app_id"]) == 1
             second = archive._source_prefix(store, c, user, contract, key)
             assert len(sources) == len(bounds) == 2  # No proof retained between roots.
+            assert origins.count(first[4]["source_app_id"]) == 2
             reference, job = gate._stage_current(store, c, user, contract, "source", prefix.source_id)
             assert first[2] == second[2] == reference
             assert dict(first[3]) == dict(second[3]) == dict(job)

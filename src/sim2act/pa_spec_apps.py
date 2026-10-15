@@ -745,17 +745,32 @@ def goal_unresolved(goal):
 
 
 @controlled
-def bound(store, c, user, job, limits, *, validate_input=True):
+def bound(store, c, user, job, limits, *, validate_input=True, _source_origin=False):
     from .pb_natural_specs import _source_reads
     with _source_reads(store, c):
-        return _bound(store, c, user, job, limits, validate_input=validate_input)
+        return _bound(store, c, user, job, limits, validate_input=validate_input,
+                      _source_origin=_source_origin)
 
 
-def _bound(store, c, user, job, limits, *, validate_input=True):
+def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=False):
+    from contextlib import nullcontext
+    from threading import get_ident
+
     from . import app_jobs
     from .db import attempts
+    from .pb_natural_specs import _source_transaction
+
     logic_out: dict[str, Any] = {}
-    snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits, return_release=True,_logic_out=logic_out)
+    origin_out: dict[str, Any] = {}
+    source_origin = (_source_origin is True and store.test_only and store.sqlite
+        and job["status"] == "SUCCEEDED" and job["context"].get("spec_family") == natural.VERSION)
+    segment = _source_transaction(store, c) if source_origin else None
+    epoch, thread = c.info.get("source_proof_write_epoch", 0), get_ident()
+    original_limits = limits.model_dump()
+    with (store.proof_authorities(c) if source_origin else nullcontext(set())) as authorities:
+        snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits,
+            return_release=True, _logic_out=logic_out,
+            **({"_origin_out": origin_out} if source_origin else {}))
     accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "ACCEPTED")).scalars().all()
     require(fingerprint(accepted) == fingerprint([dict(namespace=app_jobs.KIND, app_run_id=snapshot["app_run_id"],
         instance_id=snapshot["instance_id"], release_id=snapshot["release_id"], input_fingerprint=snapshot["request_fingerprint"])]))
@@ -777,7 +792,31 @@ def _bound(store, c, user, job, limits, *, validate_input=True):
         draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits,
             family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB,_logic_out=logic_out)
     else:
-        manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
+        # Only pb.source's complete successful original Source proof opts in.
+        # This empty local out was filled by the real read_release above; it is
+        # never caller evidence, a connection memo or a cross-guard capability.
+        ordinary_source = (source_origin and segment is not None
+            and "spec_task" not in draft["candidate"]
+            and not {"project_check", "offline_replay"}.intersection(snapshot)
+            and not {"natural_logic_origin", "correction_run_id", "pb_use_run_id", "pa_use_run_id"}.intersection(draft)
+            and "natural_logic_source" not in release["snapshot"])
+        exact_origin = (ordinary_source and origin_out.get("_call_connection") is c
+            and origin_out.get("_call_transaction") is c.get_transaction()
+            and origin_out.get("principal_id") == user and origin_out.get("draft") == draft
+            and origin_out.get("platform_limits") == original_limits and "origin" in origin_out)
+        if exact_origin:
+            require(segment == _source_transaction(store, c)
+                and epoch == c.info.get("source_proof_write_epoch", 0)
+                and thread == get_ident() and limits.model_dump() == original_limits,
+                "Source origin read segment changed")
+            store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
+            require(segment == _source_transaction(store, c)
+                and epoch == c.info.get("source_proof_write_epoch", 0)
+                and thread == get_ident() and limits.model_dump() == original_limits,
+                "Source origin read segment changed")
+            manifest, report, source, goal = origin_out["origin"]
+        else:
+            manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
     # load_binding/correction.bound proved current scope; this call chain only reads.
     contract = store._frozen_contract_after_scope(c, job)
     content = goal["snapshot"]["content"]
@@ -994,8 +1033,8 @@ def result_ref(binding, proved, version):
 
 
 @controlled
-def verify_job(store, c, user, job, limits):
-    b = bound(store, c, user, job, limits, validate_input=False)
+def verify_job(store, c, user, job, limits, *, _source_origin=False):
+    b = bound(store, c, user, job, limits, validate_input=False, _source_origin=_source_origin)
     outputs, proved = receipts(store, c, job, b, allow_pending=True)
     a, s = b["app_run"], b["snapshot"]
     rows = c.execute(select(internal_instance_data).where(internal_instance_data.c.instance_id == s["instance_id"],

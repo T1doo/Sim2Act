@@ -410,7 +410,7 @@ def enqueue(
         }
 
 
-def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None):
+def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None, _origin_out=None):
     if return_release and not authorize:
         raise DomainError("PERMISSION_DENIED", "Verified release requires authorization")
     from . import natural_spec_corrections as correction
@@ -508,7 +508,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
             logic_source.update(scope["logic"])
         else:
             r = read_release(store, c, user, s["release_id"], scope_limits,
-                archival_software=archival_software,_logic_out=logic_source)
+                archival_software=archival_software,_logic_out=logic_source,
+                **({"_origin_out": _origin_out} if _origin_out is not None else {}))
         from .app_owner_goals import verify_frozen_run
 
         verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
