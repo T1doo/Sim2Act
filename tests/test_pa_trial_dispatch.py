@@ -20,6 +20,7 @@ from sim2act import pa_trial_dispatch as trial
 from sim2act import pb_natural_uses as use
 from sim2act import production_trial_admission as production
 from sim2act.db import (
+    Store,
     attempts,
     delivery_graph_requests,
     events,
@@ -301,6 +302,7 @@ def test_changed_authority_or_request_before_marker_never_sends(prepared_trial, 
     rid = enqueue_generation(data, binding)
     sent = []
     original = trial._sent
+    injected = []
 
     def changed(worker, run, aid, request_wire):
         if fault == "account":
@@ -357,6 +359,7 @@ def test_changed_authority_or_request_before_marker_never_sends(prepared_trial, 
                         else {"lease_until": time.time() - 1}
                     )
                     c.execute(update(runs).where(runs.c.id == rid).values(**values))
+        injected.append(fault)
         return original(worker, run, aid, request_wire)
 
     monkeypatch.setattr(trial, "_sent", changed)
@@ -372,6 +375,7 @@ def test_changed_authority_or_request_before_marker_never_sends(prepared_trial, 
         assert worker.once()
     except DomainError:
         pass
+    assert injected == [fault]
     assert sent == []
     with data[0].tx() as c:
         assert (
@@ -498,6 +502,31 @@ def test_actual_adapter_failure_keeps_nonrefundable_slot_and_never_retries(
     else:
         history = production.recover(data[0], data[3], binding.contract, binding.approval_key)
         assert history["dispatch_authorized"] is False
+        if fault == "response_lost":
+            cold = Store(str(data[0].engine.url), test_only=True)
+            try:
+                assert (
+                    production.recover(cold, data[3], binding.contract, binding.approval_key)
+                    == history
+                )
+                cold_sent = []
+                fresh = binding.registry.accounts[0].model_copy(update=dict(checked_at=time.time()))
+                cold_binding = replace(
+                    binding, registry=replace(binding.registry, accounts=(fresh,))
+                )
+                assert not Worker(
+                    cold,
+                    data[1],
+                    pa_trial=cold_binding,
+                    goal_planner_transport=httpx.MockTransport(lambda r: cold_sent.append(r)),
+                ).once()
+                assert cold_sent == []
+                assert (
+                    production.recover(cold, data[3], binding.contract, binding.approval_key)
+                    == history
+                )
+            finally:
+                cold.engine.dispose()
     assert len(sent) == before
     (tmp_path / "actual-failure.json").write_text(
         json.dumps(
