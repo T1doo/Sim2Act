@@ -280,7 +280,9 @@ def source(store, c, user, pid, rid, limits):
         if (_source_reads_current(store, c, token)
                 and fingerprint(limits.model_dump()) == key[3]):
             return copy.deepcopy(value)
-        return _source(store, c, user, pid, rid, limits)
+        # A callback changed this segment or Limits. Recompute through the
+        # original full origin path, without starting another local reuse.
+        return _source(store, c, user, pid, rid, limits, _source_origin=False)
     token.inflight.add(key)
     try:
         with store.proof_authorities(c) as authorities:
@@ -296,7 +298,7 @@ def source(store, c, user, pid, rid, limits):
         token.inflight.discard(key)
 
 
-def _source(store, c, user, pid, rid, limits):
+def _source(store, c, user, pid, rid, limits, *, _source_origin=True):
     from . import pa_spec_apps as spec
 
     source_gate(store, c, user, pid, rid)
@@ -304,7 +306,7 @@ def _source(store, c, user, pid, rid, limits):
     require(status == "SUCCEEDED", "Only a completed successful task is a P-B source")
     job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user,
                                      runs.c.project_id == pid)).mappings().one()
-    binding, _, proved = spec.verify_job(store, c, user, job, limits, _source_origin=True)
+    binding, _, proved = spec.verify_job(store, c, user, job, limits, _source_origin=_source_origin)
     draft, snap, app_run = binding["draft"], binding["snapshot"], binding["app_run"]
     require(natural.is_candidate(draft["candidate"]) and "spec_task" not in draft["candidate"])
     typed = c.execute(select(internal_instance_data).where(
