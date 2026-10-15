@@ -22,6 +22,7 @@ from .db import (
     fingerprint,
     goal_cards,
     grants,
+    internal_instances,
     runs,
     task_extractions,
 )
@@ -259,6 +260,34 @@ def _limits(contract):
                   run_seconds=contract.caps.run_seconds)
 
 
+def _stage_instance_after_bound(store, c, user, project, job, snapshot, release, epoch):
+    """Recheck the current pointers after the caller's complete SQLite bound proof."""
+    from .lifecycle import immutable_release_pointer, owned_release_pointer
+
+    require(store.test_only and store.sqlite and c.in_transaction()
+            and c.connection.driver_connection is not None
+            and c.connection.driver_connection.in_transaction,
+            "Bound Release reuse requires an active offline SQLite transaction")
+    inst = c.execute(select(internal_instances).where(
+        internal_instances.c.id == snapshot["instance_id"]).with_for_update()).mappings().first()
+    if inst is None or inst["principal_id"] != user:
+        raise DomainError("PERMISSION_DENIED")
+    draft = release["snapshot"]["draft"]
+    require(inst["project_id"] == project == job["project_id"] == release["project_id"]
+            and inst["source_app_id"] == draft["id"]
+            and inst["runtime_id"] == job["runtime_id"] == draft["runtime_id"]
+            and inst["release_id"] == release["id"]
+            and type(inst["revision"]) is int and inst["revision"] >= 1
+            and epoch == c.info.get("source_proof_write_epoch", 0),
+            "Bound Instance or read segment changed")
+    current = owned_release_pointer(store, c, user, inst["release_id"])
+    immutable_release_pointer(c, user, current)
+    require(dict(current) == dict(release)
+            and epoch == c.info.get("source_proof_write_epoch", 0),
+            "Verified Release or read segment changed")
+    return inst, current
+
+
 def _stage_current(store, c, user, contract, stage, run_id):
     """Full existing lineage and accepted binding proofs; public hashes do not suffice."""
     from . import natural_specs, pa_spec_apps
@@ -269,10 +298,22 @@ def _stage_current(store, c, user, contract, stage, run_id):
     job = c.execute(select(runs).where(runs.c.id == run_id)).mappings().first()
     require(job is not None and job["principal_id"] == user
             and job["project_id"] == contract.project_id)
+    epoch = c.info.get("source_proof_write_epoch", 0)
     bound = pa_spec_apps.bound(store, c, user, job, _limits(contract))
     snapshot, draft, release = bound["snapshot"], bound["draft"], bound["release"]
     require(natural_specs.is_candidate(draft["candidate"]))
-    inst, current_release = instance(store, c, user, snapshot["instance_id"], _limits(contract), lock=True)
+    pb_cold = isinstance(contract, PBTrialContract) and stage == "cold"
+    ordinary = ("spec_task" in draft["candidate"]
+        and not {"human_correction", "logic_check", "pb_use", "pa_use"}.intersection(snapshot)
+        and "natural_logic_source" not in release["snapshot"])
+    if store.test_only and store.sqlite and pb_cold and ordinary:
+        # bound() just completed the full Release and P-B lineage proof. This
+        # uninterrupted SQLite transaction retains fresh identity/approval
+        # checks without recursively repeating that same Release proof.
+        inst, current_release = _stage_instance_after_bound(
+            store, c, user, contract.project_id, job, snapshot, release, epoch)
+    else:
+        inst, current_release = instance(store, c, user, snapshot["instance_id"], _limits(contract), lock=True)
     require(current_release["id"] == release["id"]
             and current_release["fingerprint"] == release["fingerprint"]
             and bound["app_run"]["request_key"] == getattr(contract.stage_keys, stage))
@@ -306,7 +347,6 @@ def _stage_current(store, c, user, contract, stage, run_id):
             and frozen.request_model == contract.model,
             "Original Generate must be accepted under this precise trial approval")
     original = draft["candidate"]
-    pb_cold = isinstance(contract, PBTrialContract) and stage == "cold"
     if pb_cold:
         _pb_origin(store, c, user, contract, approval.request.request_key, bound)
     else:
