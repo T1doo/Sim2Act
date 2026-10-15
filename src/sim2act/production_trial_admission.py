@@ -215,18 +215,25 @@ def _source(store, c, user, contract, approval_key, stage, account, source_contr
         _source_usage(attempt, slot, proof)
 
 
+def _account_admit(store, c, user, contract, approval_key, stage, run_id, version, fence,
+                   registry, worker_id):
+    """Original shared account, complete trial admission and current Worker owner."""
+    account = _resolve(store, user, contract, registry)
+    permit = gate.admit(store, c, user, contract, approval_key, stage, run_id, version, fence,
+        gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject))
+    owner = c.execute(select(runs.c.worker_id).where(runs.c.id == run_id)).scalar()
+    gate.require(type(worker_id) is str and bool(worker_id) and owner == worker_id,
+                 "Worker owner changed")
+    return account, permit
+
+
 def _admission(registry, worker_id, source_contract, resolver):
     def admit(store, c, user, contract, approval_key, stage, run_id, version, fence):
-        account = _resolve(store, user, contract, registry)
-        permit = gate.admit(store, c, user, contract, approval_key, stage, run_id, version, fence,
-            gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject))
-        owner = c.execute(select(runs.c.worker_id).where(runs.c.id == run_id)).scalar()
-        gate.require(type(worker_id) is str and bool(worker_id) and owner == worker_id,
-                     "Worker owner changed")
+        account, permit = _account_admit(store, c, user, contract, approval_key, stage,
+            run_id, version, fence, registry, worker_id)
         _source(store, c, user, contract, approval_key, stage, account, source_contract, resolver)
         return permit
     return admit
-
 
 def recover(store, user, contract, approval_key):
     """Original sealed accounting only, including unknown/late results; no send."""

@@ -176,34 +176,133 @@ class ResolvedSourceArchive:
     response_bodies: tuple[bytes, bytes]
 
 
+def _source_prefix(store, c, user, contract, approval_key):
+    from . import natural_live_admission as gate
+    from . import natural_trial_budget as budget
+    from . import pb_natural_specs as pb
+
+    approval = gate._approved(store, c, user, contract, approval_key)
+    ledger = budget.audit(store, c, user, budget.scope_for(contract, approval_key))["ledger"]
+    source_id = ledger["stage_runs"].get("source")
+    require(not ledger["halted"] and source_id is not None)
+    require(gate._keys(c, user, gate.entity(contract), gate.PHASE) <= {"source", "cold"})
+    current, job = gate._stage_current(store, c, user, contract, "source", source_id)
+    accepted = gate._saved(c, user, gate.entity(contract), gate.PHASE, "source", gate.StageApproveInput)
+    require(accepted.approval_key == approval_key and accepted.authority == current
+            and accepted.expected_authority_fingerprint == fingerprint(current.model_dump())
+            and job["status"] == "SUCCEEDED" and not job["cancel_intent"])
+    limits = gate._limits(contract)
+    _, source_proof = pb.source(store, c, user, contract.project_id, source_id, limits)
+    return approval, ledger, current, job, source_proof
+
+
+def _source_bodies(c, user, contract, job, ledger):
+    from . import natural_live_admission as gate
+    from .goal_applications import response_archive
+    from .model import normalize_usage
+
+    source_id = job["id"]
+    rows = c.execute(select(attempts).where(attempts.c.run_id == source_id)).mappings().all()
+    slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
+    require(len(rows) == len(slots) == 2
+            and {r["id"] for r in rows} == {s["reservation"]["request_key"] for s in slots})
+    expected_ids = {r["id"] for r in rows}
+    for kind in (REQUEST, RESPONSE):
+        keys = gate._keys(c, user, source_id, kind)
+        if not expected_ids <= keys:
+            raise DomainError("OUTCOME_UNKNOWN", "Original execution has no complete body archive")
+        require(keys == expected_ids, "Source archive contains an unrelated Attempt")
+    by_id = {r["id"]: r for r in rows}
+    requests, responses, public = [], [], []
+    for slot in slots:
+        row = by_id[slot["reservation"]["request_key"]]
+        require(row["mode"] == "MOCK" and row["status"] == "VERIFIED"
+                and row["request_model"] == row["response_model"] == contract.model
+                and slot["accepted"] is True and slot["settlement"] is not None)
+        request, wire = _read(c, user, job, row["id"], REQUEST)
+        response, received = _read(c, user, job, row["id"], RESPONSE)
+        raw = strict_json(received, MAX_BODY_BYTES)
+        original, canonical = response_archive(raw)
+        usage = normalize_usage(raw)
+        envelope = strict_json(wire, MAX_BODY_BYTES)
+        require(isinstance(envelope, dict) and envelope.get("model") == contract.model
+                and envelope.get("stream") is False
+                and type(envelope.get("max_tokens")) is int
+                and 0 < envelope["max_tokens"] <= contract.caps.max_output_tokens
+                and row["parameters"]["natural_spec_wire"] == dict(sha256=request.sha256,
+                    bytes=len(wire), characters=len(wire.decode("utf-8")))
+                and slot["reservation"]["wire_sha256"] == request.sha256
+                and slot["reservation"]["wire_bytes"] == len(wire)
+                and original is not None and row["response"] == dict(received_raw=original,
+                    raw_evidence=canonical)
+                and response.canonical_sha256 == canonical["sha256"]
+                and usage == row["usage"] and usage["status"] == "known"
+                and slot["settlement"]["response_sha256"] == canonical["sha256"]
+                and slot["settlement"]["response_ascii_bytes"] == canonical["bytes"]
+                and all(slot["settlement"][k] == usage["tokens"][k] for k in
+                    ("prompt_tokens", "completion_tokens", "total_tokens")))
+        requests.append(wire)
+        responses.append(received)
+        public.append(dict(attempt_id=row["id"], request_bytes=len(wire),
+            request_sha256=request.sha256, decoded_body_bytes=len(received),
+            decoded_body_sha256=response.sha256, canonical_ascii_bytes=canonical["bytes"],
+            canonical_ascii_sha256=canonical["sha256"]))
+    return requests, responses, public
+
+
+@controlled
+def _resolve_source_before_extraction(store, c, user, contract, approval_key):
+    """Full same-transaction successful source proof before an extraction exists."""
+    from . import natural_live_admission as gate
+    from . import pa_spec_apps as spec
+
+    require(store.test_only and store.sqlite and c.in_transaction())
+    require(type(contract) is gate.PBTrialContract
+            and gate.PBTrialContract.model_validate(contract.model_dump()) == contract)
+    with store.proof_authorities(c) as authorities:
+        approval, ledger, current, job, proof = _source_prefix(store, c, user, contract, approval_key)
+        requests, responses, public = _source_bodies(c, user, contract, job, ledger)
+        gate._approved(store, c, user, contract, approval_key)
+        require(spec.job_scope_gate(store, c, user, job["id"]))
+        store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
+        require(time.time() < contract.expires_at)
+        receipt = dict(verification="ACTUAL_MOCK_ARCHIVE_NOT_LIVE_VERIFIED",
+            trial_fingerprint=fingerprint(contract.model_dump()),
+            source_run_id=job["id"], source_app_id=current.app_id,
+            source_proof_fingerprint=fingerprint(proof),
+            source_recipe_fingerprint=proof["recipe_fingerprint"],
+            approval_fingerprint=fingerprint(approval.model_dump()), attempts=public,
+            live_allowed=False, dispatch_authorized=False)
+        return ResolvedSourceArchive(receipt, (requests[0], requests[1]), (responses[0], responses[1]))
+
+
 @controlled
 def resolve_trial_source(store, user, contract, approval_key):
     from . import natural_live_admission as gate
-    from . import natural_trial_budget as budget
+
+    require(store.test_only and store.sqlite, "Only offline source archive verification is implemented")
+    require(type(contract) is gate.PBTrialContract)
+    require(gate.PBTrialContract.model_validate(contract.model_dump()) == contract)
+    with store.tx() as c:
+        return _resolve_trial_source(store, c, user, contract, approval_key)
+
+
+@controlled
+def _resolve_trial_source(store, c, user, contract, approval_key):
+    from . import natural_live_admission as gate
     from . import pa_spec_apps as spec
     from . import pb_natural_specs as pb
-    from .goal_applications import response_archive
-    from .model import normalize_usage
 
     require(store.test_only and store.sqlite, "Only offline source archive verification is implemented")
     require(type(contract) is gate.PBTrialContract)
     exact = gate.PBTrialContract.model_validate(contract.model_dump())
     require(exact == contract)
-    with store.tx() as c, store.proof_authorities(c) as authorities:
+    require(c.in_transaction(), "Original source proof requires the caller transaction")
+    with store.proof_authorities(c) as authorities:
         # Active original approval, both current material/Goals and all identities
         # precede any private source or archive body. No caller evidence resolver.
-        approval = gate._approved(store, c, user, contract, approval_key)
-        ledger = budget.audit(store, c, user, budget.scope_for(contract, approval_key))["ledger"]
-        source_id = ledger["stage_runs"].get("source")
-        require(not ledger["halted"] and source_id is not None)
-        require(gate._keys(c, user, gate.entity(contract), gate.PHASE) <= {"source", "cold"})
-        current, job = gate._stage_current(store, c, user, contract, "source", source_id)
-        accepted = gate._saved(c, user, gate.entity(contract), gate.PHASE, "source", gate.StageApproveInput)
-        require(accepted.approval_key == approval_key and accepted.authority == current
-                and accepted.expected_authority_fingerprint == fingerprint(current.model_dump())
-                and job["status"] == "SUCCEEDED" and not job["cancel_intent"])
-        limits = gate._limits(contract)
-        _, source_proof = pb.source(store, c, user, contract.project_id, source_id, limits)
+        approval, ledger, current, job, source_proof = _source_prefix(store, c, user, contract, approval_key)
+        source_id, limits = job["id"], gate._limits(contract)
 
         # Select scalar identity first, then the existing full extraction gates.
         ids = c.execute(select(delivery_graph_requests.c.app_id).join(app_drafts,
@@ -227,51 +326,8 @@ def resolve_trial_source(store, user, contract, approval_key):
                 and target["content"] == cold.content
                 and goal == dict(card_id=cold.card_id, version=cold.goal_version,
                     fingerprint=cold.goal_fingerprint, snapshot=cold.goal_snapshot.model_dump()))
-        rows = c.execute(select(attempts).where(attempts.c.run_id == source_id)).mappings().all()
-        slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
-        require(len(rows) == len(slots) == 2
-                and {r["id"] for r in rows} == {s["reservation"]["request_key"] for s in slots})
-        expected_ids = {r["id"] for r in rows}
-        for kind in (REQUEST, RESPONSE):
-            keys = gate._keys(c, user, source_id, kind)
-            if not expected_ids <= keys:
-                raise DomainError("OUTCOME_UNKNOWN", "Original execution has no complete body archive")
-            require(keys == expected_ids, "Source archive contains an unrelated Attempt")
-        by_id = {r["id"]: r for r in rows}
-        requests, responses, public = [], [], []
-        for slot in slots:
-            row = by_id[slot["reservation"]["request_key"]]
-            require(row["mode"] == "MOCK" and row["status"] == "VERIFIED"
-                    and row["request_model"] == row["response_model"] == contract.model
-                    and slot["accepted"] is True and slot["settlement"] is not None)
-            request, wire = _read(c, user, job, row["id"], REQUEST)
-            response, received = _read(c, user, job, row["id"], RESPONSE)
-            raw = strict_json(received, MAX_BODY_BYTES)
-            original, canonical = response_archive(raw)
-            usage = normalize_usage(raw)
-            envelope = strict_json(wire, MAX_BODY_BYTES)
-            require(isinstance(envelope, dict) and envelope.get("model") == contract.model
-                    and envelope.get("stream") is False
-                    and type(envelope.get("max_tokens")) is int
-                    and 0 < envelope["max_tokens"] <= contract.caps.max_output_tokens
-                    and row["parameters"]["natural_spec_wire"] == dict(sha256=request.sha256,
-                        bytes=len(wire), characters=len(wire.decode("utf-8")))
-                    and slot["reservation"]["wire_sha256"] == request.sha256
-                    and slot["reservation"]["wire_bytes"] == len(wire)
-                    and original is not None and row["response"] == dict(received_raw=original,
-                        raw_evidence=canonical)
-                    and response.canonical_sha256 == canonical["sha256"]
-                    and usage == row["usage"] and usage["status"] == "known"
-                    and slot["settlement"]["response_sha256"] == canonical["sha256"]
-                    and slot["settlement"]["response_ascii_bytes"] == canonical["bytes"]
-                    and all(slot["settlement"][k] == usage["tokens"][k] for k in
-                        ("prompt_tokens", "completion_tokens", "total_tokens")))
-            requests.append(wire)
-            responses.append(received)
-            public.append(dict(attempt_id=row["id"], request_bytes=len(wire),
-                request_sha256=request.sha256, decoded_body_bytes=len(received),
-                decoded_body_sha256=response.sha256, canonical_ascii_bytes=canonical["bytes"],
-                canonical_ascii_sha256=canonical["sha256"]))
+        requests, responses, public = _source_bodies(c, user, contract, job, ledger)
+
         receipt = dict(version=VERSION, verification="ACTUAL_MOCK_ARCHIVE_NOT_LIVE_VERIFIED",
             trial_fingerprint=fingerprint(contract.model_dump()),
             approval_fingerprint=fingerprint(approval.model_dump()), source_run_id=source_id,

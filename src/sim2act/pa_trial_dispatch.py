@@ -1,4 +1,4 @@
-"""Server-owned P-A trial wiring for existing Worker/InternModel boundaries.
+"""Server-owned P-A/P-B trial wiring for existing Worker/InternModel boundaries.
 
 No real account/zero-charge resolver is installed. The only executable binding
 is an explicit isolated offline fixture; its records never authorize LIVE IO.
@@ -18,6 +18,7 @@ from . import production_trial_admission as production
 from .contracts import strict_json
 from .db import attempts, events, fingerprint, runs
 from .db import delivery_graph_requests as rows
+from .delivery_graph_apps import controlled
 from .errors import DomainError
 from .goal_applications import response_archive
 from .model import CapturedResponse, InternModel, normalize_usage
@@ -32,15 +33,14 @@ SENT = "pa_trial_dispatched.v1"
 class PATrialBinding:
     """Trusted controller configuration, never an HTTP request/fee override."""
 
-    contract: gate.TrialContract
+    contract: gate.TrialContract | gate.PBTrialContract
     approval_key: str
     registry: production.OfflineRegistry | None = None
     contract_fingerprint: str = field(init=False)
 
     def __post_init__(self):
-        gate.require(
-            type(self.contract) is gate.TrialContract, "P-A contract required; P-B unavailable"
-        )
+        gate.require(type(self.contract) in (gate.TrialContract, gate.PBTrialContract),
+                     "Exact original P-A or P-B contract required")
         object.__setattr__(self, "contract_fingerprint", fingerprint(self.contract.model_dump()))
         budget.scope_for(self.contract, self.approval_key)
 
@@ -79,9 +79,10 @@ def _admission(worker):
             and key == b.approval_key
             and user == b.contract.principal_id
         )
-        result = production._admission(b.registry, worker.id, None, None)(
-            store, c, user, contract, key, stage, rid, version, fence
-        )
+        _, result = production._account_admit(store, c, user, contract, key, stage,
+            rid, version, fence, b.registry, worker.id)
+        if type(contract) is gate.PBTrialContract and stage == "cold":
+            _pb_source(worker, c, b)
         current = _binding(worker)
         gate.require(
             current.contract_fingerprint == b.contract_fingerprint
@@ -119,7 +120,93 @@ def check_commit(worker, c, run):
         and run["project_id"] == b.contract.project_id
     )
     gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
+    if type(b.contract) is gate.PBTrialContract and _stage(b, run) == "cold":
+        _pb_source(worker, c, b)
     _account(worker, _binding(worker))
+
+
+def _pb_source(worker, c, b):
+    """Reprove original successful source, exact extraction and both actual chains.
+
+    The existing full resolver shares this transaction: its source consent,
+    complete Goals/Recipe and current authorities remain mandatory at every
+    admission/commit. Its read-only receipt never becomes reusable authority.
+    """
+    from . import natural_source_archives as archive
+
+    resolved = archive._resolve_trial_source(worker.store, c, b.contract.principal_id,
+        b.contract, b.approval_key)
+    _pb_archive_chain(worker, c, b, resolved)
+
+
+@controlled
+def _pb_archive_chain(worker, c, b, resolved):
+    """Join the existing actual NS archives to this controller's immutable sends."""
+    receipt = resolved.public_receipt
+    scope = budget.scope_for(b.contract, b.approval_key)
+    ledger = budget._ledger(c, scope)
+    source_id = ledger["stage_runs"].get("source")
+    gate.require(source_id == receipt["source_run_id"]
+                 and receipt["verification"] == "ACTUAL_MOCK_ARCHIVE_NOT_LIVE_VERIFIED"
+                 and receipt["live_allowed"] is False)
+    source = c.execute(select(runs).where(runs.c.id == source_id)).mappings().one()
+    slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
+    gate.require(len(slots) == len(receipt["attempts"]) == 2)
+    for slot, proof in zip(slots, receipt["attempts"], strict=True):
+        aid = slot["reservation"]["request_key"]
+        gate.require(aid == proof["attempt_id"])
+        _identity(worker, c, source, aid)
+        _full_chain(worker, c, source, aid, slot)
+        request = _metadata(c, source, aid, REQUEST)
+        response = _metadata(c, source, aid, RESPONSE)
+        gate.require(request is not None and response is not None
+            and request["sha256"] == proof["request_sha256"]
+            and request["byte_count"] == proof["request_bytes"]
+            and response["sha256"] == proof["decoded_body_sha256"]
+            and response["byte_count"] == proof["decoded_body_bytes"]
+            and response["canonical_sha256"] == proof["canonical_ascii_sha256"])
+
+
+@controlled
+def extract_pb(worker, user, source_id, body):
+    """Server-selected same-trial extraction, using the original write group.
+
+    No HTTP authority override or automatic trial selector is installed. The
+    generic extraction API remains generic; this explicit controller entry also
+    proves this trial's account, approved source, seven-slot ledger and bodies.
+    """
+    from . import natural_source_archives as archive
+    from . import pb_natural_specs as pb
+
+    b = _binding(worker)
+    gate.require(type(b.contract) is gate.PBTrialContract and user == b.contract.principal_id)
+    gate.require(type(body) is pb.ExtractInput
+        and pb.ExtractInput.model_validate(body.model_dump()) == body)
+    cold = b.contract.bindings[1]
+    review = body.review
+    gate.require(review.source_run_id == source_id
+        and review.request_key == b.contract.extraction_request_key
+        and review.recipe == b.contract.extraction_recipe
+        and review.card_id == cold.card_id
+        and review.expected_goal_version == cold.goal_version
+        and review.expected_goal_fingerprint == cold.goal_fingerprint
+        and review.expected_source_hash == cold.source_hash)
+    with worker.store.tx() as c, worker.store.proof_authorities(c) as authorities:
+        worker.store.lock_project(c, user, b.contract.project_id)
+        _account(worker, _binding(worker))
+        resolved = archive._resolve_source_before_extraction(worker.store, c, user,
+            b.contract, b.approval_key)
+        gate.require(resolved.public_receipt["source_run_id"] == source_id)
+        _pb_archive_chain(worker, c, b, resolved)
+        result = pb._extract(worker.store, c, user, b.contract.project_id, source_id,
+            body, gate._limits(b.contract))
+        _pb_source(worker, c, b)
+        _account(worker, _binding(worker))
+        gate._approved(worker.store, c, user, b.contract, b.approval_key)
+        worker.store.recheck_proof_authorities(c,
+            {"_call_authorities": tuple(sorted(authorities))})
+        gate.require(time.time() < b.contract.expires_at)
+        return result
 
 
 def _stage(b, run):
@@ -619,7 +706,7 @@ def _full_chain(worker, c, run, aid, slot):
         sent
         == dict(
             request=dict(
-                trial=scope.model_dump(), reservation=request.model_dump(), worker_id=worker.id
+                trial=scope.model_dump(), reservation=request.model_dump(), worker_id=run["worker_id"]
             ),
             response=dict(status="DISPATCHED", live_allowed=False),
         )

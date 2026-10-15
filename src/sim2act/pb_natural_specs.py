@@ -335,43 +335,49 @@ def receipt(body, checked, frozen):
 
 @controlled
 def extract(store, user, pid, rid, body, limits):
+    with store.tx() as c:
+        return _extract(store, c, user, pid, rid, body, limits)
+
+
+@controlled
+def _extract(store, c, user, pid, rid, body, limits):
+    """Original extraction write group, shared with the bounded trial controller."""
     from .apps import load_draft
 
-    with store.tx() as c:
-        store.lock_project(c, user, pid)
-        require(body.review.source_run_id == rid)
-        checked, material, _ = review(store, c, user, pid, body.review, limits)
-        require(checked["review_fingerprint"] == body.expected_review_fingerprint)
-        prior = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
-            task_extractions.c.principal_id == user, task_extractions.c.request_key == body.review.request_key)).scalar()
-        if prior:
-            draft, _, _, _ = load_draft(store, c, user, prior, limits)
-            old, frozen = pair(c, user, prior, EXTRACT, body.review.request_key, ExtractInput)
-            require(old.model_dump() == body.model_dump())
-            return receipt(body, checked, frozen)
-        if len(c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
-            task_extractions.c.principal_id == user)).all()) >= MAX:
-            raise DomainError("BUDGET_EXHAUSTED", "Finite P-B source extraction capacity exhausted")
-        aid, runtime = checked["app_id"], checked["runtime_id"]
-        frozen = frozen_for(user, pid, body, checked)
-        c.execute(insert(principals).values(id=runtime, name="P-B natural spec target runtime"))
-        for ref, tool in [(material["resource_id"], natural.READ), (pid, natural.SAVE)]:
-            c.execute(insert(grants).values(id=new_id("grant"), principal_id=runtime, project_id=pid,
-                resource_id=ref, tool_ref=tool, expires_at=time.time() + 86400, revision=1, revoked=False))
-        c.execute(insert(app_drafts).values(id=aid, project_id=pid, runtime_id=runtime, name=body.review.name,
-            candidate=checked["candidate"], fingerprint=checked["candidate_fingerprint"], created_at=time.time()))
-        c.execute(insert(task_extractions).values(task_id=rid, principal_id=user,
-            request_key=body.review.request_key, request_fingerprint=fingerprint(body.model_dump()),
-            app_id=aid, snapshot=frozen))
-        meta = Metadata(app_id=aid, principal_id=user, project_id=pid, runtime_id=runtime,
-                        resource_id=material["resource_id"], source_run_id=rid)
-        remember(c, user, aid, META, "scope", meta, meta.model_dump())
-        remember(c, user, aid, EXTRACT, body.review.request_key, body, frozen)
-        # Fresh final origin, target, seals, budget and exact candidate verification.
-        draft, _, _, _ = load_draft(store, c, user, aid, limits)
-        verify(store, c, user, draft, limits)
+    require(c.in_transaction())
+    store.lock_project(c, user, pid)
+    require(body.review.source_run_id == rid)
+    checked, material, _ = review(store, c, user, pid, body.review, limits)
+    require(checked["review_fingerprint"] == body.expected_review_fingerprint)
+    prior = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
+        task_extractions.c.principal_id == user, task_extractions.c.request_key == body.review.request_key)).scalar()
+    if prior:
+        draft, _, _, _ = load_draft(store, c, user, prior, limits)
+        old, frozen = pair(c, user, prior, EXTRACT, body.review.request_key, ExtractInput)
+        require(old.model_dump() == body.model_dump())
         return receipt(body, checked, frozen)
-
+    if len(c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
+        task_extractions.c.principal_id == user)).all()) >= MAX:
+        raise DomainError("BUDGET_EXHAUSTED", "Finite P-B source extraction capacity exhausted")
+    aid, runtime = checked["app_id"], checked["runtime_id"]
+    frozen = frozen_for(user, pid, body, checked)
+    c.execute(insert(principals).values(id=runtime, name="P-B natural spec target runtime"))
+    for ref, tool in [(material["resource_id"], natural.READ), (pid, natural.SAVE)]:
+        c.execute(insert(grants).values(id=new_id("grant"), principal_id=runtime, project_id=pid,
+            resource_id=ref, tool_ref=tool, expires_at=time.time() + 86400, revision=1, revoked=False))
+    c.execute(insert(app_drafts).values(id=aid, project_id=pid, runtime_id=runtime, name=body.review.name,
+        candidate=checked["candidate"], fingerprint=checked["candidate_fingerprint"], created_at=time.time()))
+    c.execute(insert(task_extractions).values(task_id=rid, principal_id=user,
+        request_key=body.review.request_key, request_fingerprint=fingerprint(body.model_dump()),
+        app_id=aid, snapshot=frozen))
+    meta = Metadata(app_id=aid, principal_id=user, project_id=pid, runtime_id=runtime,
+                    resource_id=material["resource_id"], source_run_id=rid)
+    remember(c, user, aid, META, "scope", meta, meta.model_dump())
+    remember(c, user, aid, EXTRACT, body.review.request_key, body, frozen)
+    # Fresh final origin, target, seals, budget and exact candidate verification.
+    draft, _, _, _ = load_draft(store, c, user, aid, limits)
+    verify(store, c, user, draft, limits)
+    return receipt(body, checked, frozen)
 
 def mount(app, store, limits, identity):
     user_dependency = Depends(identity)
