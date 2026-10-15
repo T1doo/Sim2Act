@@ -450,6 +450,10 @@ def scope_gate(store, c, user, aid):
     if not ((location and (location["family"] in FAMILIES or location["binding"] == KIND)) or kind == KIND or gen in GENERATIONS or ledger is not None):
         return False
     require(location is not None)
+    # Independent spec metadata cannot authorize a current unknown family.
+    # Check only after family classification so unrelated Goal apps still fall
+    # through; either supported draft family may coexist with a frozen Release.
+    require(location["family"] in FAMILIES, "Current spec application family is unsupported")
     store.own_project(c, user, location["project_id"])
     if kind == KIND:
         meta, sealed = pair(c, user, aid, META, "scope", Metadata)
