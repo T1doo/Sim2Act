@@ -135,8 +135,46 @@ def prefix(tmp_path_factory):
             captured.append((request.content, payload))
             return httpx.Response(200, content=payload)
 
-        assert make_worker(data, httpx.MockTransport(source_handler)).once()
-        assert data[2].get("/api/runs/" + source_id).json()["status"] == "SUCCEEDED"
+        from sim2act import app_jobs
+
+        source_once_result = None
+        source_escaped_error = None
+        source_public_errors = []
+        original_once = Worker.once
+        original_failure = app_jobs.fail_job
+
+        def source_once(worker):
+            nonlocal source_once_result
+            source_once_result = original_once(worker)
+            return source_once_result
+
+        def source_failure(worker, run, error):
+            source_public_errors.append(error.public())
+            return original_failure(worker, run, error)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(Worker, "once", source_once)
+            patch.setattr(app_jobs, "fail_job", source_failure)
+            try:
+                assert make_worker(data, httpx.MockTransport(source_handler)).once()
+                assert data[2].get("/api/runs/" + source_id).json()["status"] == "SUCCEEDED"
+            except DomainError as error:
+                source_escaped_error = error.public()
+                raise
+            finally:
+                pending_error = sys.exception()
+                try:
+                    (root / "actual-source-dispatch-boundary.json").write_text(json.dumps(dict(
+                        worker_once_return=source_once_result,
+                        escaped_domain_error=source_escaped_error,
+                        worker_public_errors=source_public_errors,
+                        captured_source_responses=len(captured)), indent=2))
+                except (OSError, TypeError, ValueError) as receipt_error:
+                    if pending_error is None:
+                        raise
+                    pending_error.add_note(
+                        f"Source receipt write failed: {type(receipt_error).__name__}"
+                    )
         assert len(captured) == 2
         route = f"/api/projects/{data[4]}/natural-spec-task-runs/{source_id}"
         options = data[2].get(route + "/extraction-options")
