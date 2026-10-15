@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import sqlite3
+import sys
 import threading
 import time
 from dataclasses import replace
@@ -485,10 +486,18 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
     except RuntimeError as error:
         assert fault == "lost_response" and str(error) == "Explicit lost P-B response"
     finally:
-        (tmp_path / "actual-dispatch-boundary.json").write_text(json.dumps(dict(
-            fault=fault, injected=injected, actual_sends=len(sent),
-            worker_once_return=once_result, escaped_domain_error=escaped_domain_error,
-            worker_public_errors=public_errors), indent=2))
+        pending_error = sys.exception()
+        try:
+            (tmp_path / "actual-dispatch-boundary.json").write_text(json.dumps(dict(
+                fault=fault, injected=injected, actual_sends=len(sent),
+                worker_once_return=once_result, escaped_domain_error=escaped_domain_error,
+                worker_public_errors=public_errors), indent=2))
+        except (OSError, TypeError, ValueError) as receipt_error:
+            if pending_error is None:
+                raise
+            pending_error.add_note(
+                f"Dispatch receipt write failed: {type(receipt_error).__name__}"
+            )
     assert injected == [fault] and len(sent) == 1, public_errors
     response = data[2].get("/api/runs/" + cold)
     if fault == "source_revoke" or (fault == "source_version" and response.status_code != 200):
