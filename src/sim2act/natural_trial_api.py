@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from . import natural_live_admission as gate
 from . import natural_trial_budget as budget
+from . import production_trial_admission as production
 from .contracts import Strict
 from .db import delivery_graph_requests, fingerprint
 from .delivery_graph_apps import controlled
@@ -120,7 +121,9 @@ def mount(app, store, identity):
     @app.post(base + "/admission")
     def admission(pid: str, key: str, body: AdmissionRequest, user=dependency):
         _scope(user, pid, key, body.contract)
-        with store.tx() as c:
-            # No fee-authority injection and no reserve/send. Production DENY.
-            return gate.admit(store, c, user, body.contract, body.approval_key,
-                              body.stage, body.run_id, body.expected_version, body.fence)
+        return production.production_preflight(store, user, body.contract, body.approval_key, body)
+
+    @app.post(base + "/production-admission")
+    def production_admission(pid: str, key: str, body: AdmissionRequest, user=dependency):
+        _scope(user, pid, key, body.contract)
+        return production.production_preflight(store, user, body.contract, body.approval_key, body)
