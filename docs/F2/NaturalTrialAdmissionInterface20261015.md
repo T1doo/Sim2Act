@@ -66,3 +66,16 @@ paired scope copies consistently and assert VERSION_CONFLICT/409 on original
 approval, budget and stage receipt reads with all request/Run rows unchanged.
 The full short HTTP suite on this corrected source is 8 PASS / 0 FAIL / 0 SKIP.
 Scoped Ruff passes; full mypy remains only the same five existing errors.
+
+## Parent integration terminal result
+
+Frozen source/test SHA `0b6a780c952fb6eeed5e545f0f6db5f8e64360e6` completed
+the single 199-case integration: 199 PASS / 0 FAIL / 0 ERROR / 0 SKIP,
+0 deselected, including all three seven-slot scenarios and this full eight-case
+HTTP suite. P-B's actual synthetic MOCK Worker Generate3/Source2/Cold2 chain
+passed with all seven accepted KNOWN settlements (7000 tokens, envelope48354),
+and no LIVE permit. Collection/XML bijection and all 488 source/test/config
+hashes close exactly. Earlier child NOT RUN and historical failures above remain
+separate history; this is the parent's new exact-source result.
+See [integration report](ProjectCompleteChecks20261015.md) for scope, independent
+review, preserved failures and remaining real-admission/acceptance gaps.
