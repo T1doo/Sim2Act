@@ -326,7 +326,48 @@ def test_pb_full_actual_worker_extraction_and_cold(prefix, cloned, tmp_path):
     cold = apps.enqueue(data, release, inst, key=prefix.binding.contract.stage_keys.cold)
     approve_stage(data, prefix.binding, "cold", cold)
     sent = []
-    assert prefix.make_worker(data, apps.transport(sent, apps.COLD)).once()
+    from sim2act import app_jobs
+
+    normal_errors, normal_traces = [], []
+    normal_once_result = None
+    direct_exception_trace = None
+    original_failure = app_jobs.fail_job
+    original_once = Worker.once
+
+    def normal_failure(worker, run, error):
+        normal_errors.append(error.public())
+        normal_traces.append(failure_trace(error))
+        return original_failure(worker, run, error)
+
+    def normal_once(worker):
+        nonlocal normal_once_result, direct_exception_trace
+        try:
+            normal_once_result = original_once(worker)
+        except Exception as error:
+            direct_exception_trace = failure_trace(error)
+            raise
+        return normal_once_result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(app_jobs, "fail_job", normal_failure)
+        patch.setattr(Worker, "once", normal_once)
+        try:
+            assert prefix.make_worker(data, apps.transport(sent, apps.COLD)).once()
+        finally:
+            pending_error = sys.exception()
+            try:
+                (tmp_path / "actual-normal-cold-dispatch-boundary.json").write_text(json.dumps(dict(
+                    worker_once_return=normal_once_result,
+                    fail_job_calls=len(normal_errors),
+                    worker_public_errors=normal_errors,
+                    worker_failure_traces=normal_traces,
+                    direct_exception_trace=direct_exception_trace), indent=2))
+            except (OSError, TypeError, ValueError) as receipt_error:
+                if pending_error is None:
+                    raise
+                pending_error.add_note(
+                    f"Normal Cold receipt write failed: {type(receipt_error).__name__}"
+                )
     state = data[2].get("/api/runs/" + cold).json()
     assert state["status"] == "SUCCEEDED", state
     assert len(sent) == 2 and apps.SOURCE not in json.dumps(sent)
