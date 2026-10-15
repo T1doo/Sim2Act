@@ -133,10 +133,12 @@ def _pb_source(worker, c, b):
     admission/commit. Its read-only receipt never becomes reusable authority.
     """
     from . import natural_source_archives as archive
+    from .pb_natural_specs import _source_reads
 
-    resolved = archive._resolve_trial_source(worker.store, c, b.contract.principal_id,
-        b.contract, b.approval_key)
-    _pb_archive_chain(worker, c, b, resolved)
+    with _source_reads(worker.store, c):
+        resolved = archive._resolve_trial_source(worker.store, c, b.contract.principal_id,
+            b.contract, b.approval_key)
+        _pb_archive_chain(worker, c, b, resolved)
 
 
 @controlled

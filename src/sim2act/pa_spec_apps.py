@@ -746,6 +746,12 @@ def goal_unresolved(goal):
 
 @controlled
 def bound(store, c, user, job, limits, *, validate_input=True):
+    from .pb_natural_specs import _source_reads
+    with _source_reads(store, c):
+        return _bound(store, c, user, job, limits, validate_input=validate_input)
+
+
+def _bound(store, c, user, job, limits, *, validate_input=True):
     from . import app_jobs
     from .db import attempts
     logic_out: dict[str, Any] = {}

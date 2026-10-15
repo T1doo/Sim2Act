@@ -237,7 +237,10 @@ def test_pb_full_actual_worker_extraction_and_cold(prefix, cloned, tmp_path):
     data = cloned
     worker, made, release, inst = extracted(prefix, data)
     before = snapshot(data[0])
-    assert trial.extract_pb(worker, data[3], prefix.source_id, prefix.body) == made
+    path = (f"/api/projects/{data[4]}/natural-spec-task-runs/{prefix.source_id}"
+        f"/extractions/by-key/{prefix.binding.contract.extraction_request_key}")
+    recovered = data[2].get(path)
+    assert recovered.status_code == 200 and recovered.json() == made
     assert snapshot(data[0]) == before  # Original-key recovery after a lost return.
     resolved = archive.resolve_trial_source(
         data[0], data[3], prefix.binding.contract, prefix.binding.approval_key
@@ -477,6 +480,11 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
             )
             == history
         )
+        if fault == "lost_response":
+            current = (restarted, *data[1:])
+            prefix.make_worker(current, httpx.MockTransport(no_send)).once()
+            assert production.recover(restarted, data[3], prefix.binding.contract,
+                prefix.binding.approval_key) == history
     finally:
         restarted.engine.dispose()
     assert len(sent) == 1
@@ -495,3 +503,126 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
             indent=2,
         )
     )
+
+
+@pytest.mark.parametrize("change", ["nested_copy", "write", "failed_write", "limits", "store", "authority", "recursion", "exit", "exception", "user", "project", "source", "thread", "limits_mutation"])
+def test_source_read_segment_complete_proof_and_invalidation(prefix, cloned, monkeypatch, change):
+    from sqlalchemy import insert
+    from sqlalchemy.exc import IntegrityError
+
+    store, user, pid = cloned[0], cloned[3], cloned[4]
+    limits = gate._limits(prefix.binding.contract)
+    original = pb._source
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(change)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pb, "_source", counted)
+    other = Store(cloned[1].database_url, test_only=True)
+    try:
+        with store.tx() as c:
+            info = c.info
+            with pb._source_reads(store, c):
+                first = pb.source(store, c, user, pid, prefix.source_id, limits)
+                assert len(calls) == 1
+                if change == "nested_copy":
+                    first[0]["segment_mutation"] = True
+                    with pb._source_reads(store, c):
+                        second = pb.source(store, c, user, pid, prefix.source_id, limits)
+                    assert "segment_mutation" not in second[0] and len(calls) == 1
+                elif change == "write":
+                    c.execute(update(runs).where(runs.c.id == prefix.source_id).values(version=runs.c.version))
+                    assert "pb_source_reads" not in c.info
+                    pb.source(store, c, user, pid, prefix.source_id, limits)
+                    assert len(calls) == 2
+                elif change == "failed_write":
+                    with pytest.raises(IntegrityError):
+                        c.execute(insert(runs).from_select([col.name for col in runs.c],
+                            select(runs).where(runs.c.id == prefix.source_id)))
+                    assert "pb_source_reads" not in c.info
+                    pb.source(store, c, user, pid, prefix.source_id, limits)
+                    assert len(calls) == 2
+                elif change == "limits":
+                    different = limits.model_copy(update=dict(max_total_tokens=limits.max_total_tokens + 1))
+                    try:
+                        pb.source(store, c, user, pid, prefix.source_id, different)
+                    except DomainError:
+                        pass
+                    assert len(calls) == 2
+                elif change == "store":
+                    pb.source(other, c, user, pid, prefix.source_id, limits)
+                    assert len(calls) == 2
+                elif change in ("user", "project", "source"):
+                    with pytest.raises(DomainError):
+                        pb.source(store, c, "user_" + "0" * 32 if change == "user" else user,
+                            "proj_" + "0" * 32 if change == "project" else pid,
+                            "run_" + "0" * 32 if change == "source" else prefix.source_id, limits)
+                    assert len(calls) == 2
+                elif change == "thread":
+                    checked = []
+                    token = c.info["pb_source_reads"]
+                    thread = threading.Thread(target=lambda: checked.append(
+                        pb._source_reads_current(store, c, token)))
+                    thread.start()
+                    thread.join(timeout=5)
+                    assert not thread.is_alive() and checked == [False]
+                    assert pb._source_reads_current(store, c, token) and len(calls) == 1
+                elif change == "limits_mutation":
+                    original_recheck = store.recheck_proof_authorities
+                    checked = []
+                    def changed(connection, proof):
+                        original_recheck(connection, proof)
+                        limits.max_total_tokens += 1
+                        checked.append(True)
+                    monkeypatch.setattr(store, "recheck_proof_authorities", changed)
+                    try:
+                        pb.source(store, c, user, pid, prefix.source_id, limits)
+                    except DomainError:
+                        pass
+                    assert checked == [True] and len(calls) == 2
+                elif change == "authority":
+                    checked = []
+                    def revoked(connection, proof):
+                        checked.append(proof["_call_authorities"])
+                        raise DomainError("GRANT_REVOKED")
+                    monkeypatch.setattr(store, "recheck_proof_authorities", revoked)
+                    with pytest.raises(DomainError, match="revoked|GRANT|权限|授权"):
+                        pb.source(store, c, user, pid, prefix.source_id, limits)
+                    assert len(checked) == 1 and checked[0] and len(calls) == 1
+                    assert not c.info["pb_source_reads"].results
+                elif change == "recursion":
+                    token = c.info["pb_source_reads"]
+                    token.results.clear()
+                    def recurse(*args, **kwargs):
+                        calls.append(change)
+                        return pb.source(*args, **kwargs)
+                    monkeypatch.setattr(pb, "_source", recurse)
+                    with pytest.raises(DomainError, match="Recursive source"):
+                        pb.source(store, c, user, pid, prefix.source_id, limits)
+                    assert len(calls) == 2 and not token.results and not token.inflight
+                elif change == "exception":
+                    with pytest.raises(RuntimeError, match="segment exit"):
+                        with pb._source_reads(store, c):
+                            raise RuntimeError("segment exit")
+                    # Caught nested exception leaves only the original outer read call.
+                    pb.source(store, c, user, pid, prefix.source_id, limits)
+                    assert len(calls) == 2
+            assert "pb_source_reads" not in c.info
+            if change == "exit":
+                pb.source(store, c, user, pid, prefix.source_id, limits)
+                assert len(calls) == 2
+        assert "pb_source_reads" not in info
+        with store.engine.connect() as connection:
+            with connection.begin():
+                assert pb._source_transaction(store, connection) is None
+                with pb._source_reads(store, connection):
+                    assert "pb_source_reads" not in connection.info
+        with pytest.raises(RuntimeError, match="outer segment"):
+            with store.tx() as connection, pb._source_reads(store, connection):
+                outer_info = connection.info
+                raise RuntimeError("outer segment")
+        assert "pb_source_reads" not in outer_info
+    finally:
+        other.engine.dispose()

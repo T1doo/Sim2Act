@@ -7,6 +7,9 @@ Source lineage remains authorized audit evidence, not runtime inference input.
 
 import copy
 import time
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from threading import get_ident
 from typing import Literal
 
 from fastapi import Depends
@@ -201,8 +204,99 @@ def scope_gate(store, c, user, aid, location):
     return True
 
 
+@dataclass
+class _SourceReads:
+    store: object
+    connection: object
+    transaction: object
+    driver: object
+    epoch: int
+    thread: int
+    results: dict = field(default_factory=dict)
+    inflight: set = field(default_factory=set)
+
+
+def _source_transaction(store, c):
+    if not store.test_only or not store.sqlite or c.closed or not c.in_transaction():
+        return None
+    driver = c.connection.driver_connection
+    if driver is None or not driver.in_transaction:
+        return None
+    return c.get_transaction(), driver
+
+
+def _source_reads_current(store, c, token):
+    current = _source_transaction(store, c)
+    return (type(token) is _SourceReads and current is not None
+        and token.store is store and token.connection is c
+        and token.transaction is current[0] and token.driver is current[1]
+        and token.thread == get_ident()
+        and token.epoch == c.info.get("source_proof_write_epoch", 0)
+        and c.info.get("pb_source_reads") is token)
+
+
+@contextmanager
+def _source_reads(store, c):
+    """Private synchronous read call; never retains authority across writes/exit."""
+    current = _source_transaction(store, c)
+    if current is None:
+        yield
+        return
+    old = c.info.get("pb_source_reads")
+    if _source_reads_current(store, c, old):
+        try:
+            yield
+        except BaseException:
+            old.results.clear()
+            raise
+        return
+    token = _SourceReads(store, c, current[0], current[1],
+        c.info.get("source_proof_write_epoch", 0), get_ident())
+    c.info["pb_source_reads"] = token
+    try:
+        yield
+    finally:
+        token.results.clear()
+        token.inflight.clear()
+        if c.info.get("pb_source_reads") is token:
+            c.info.pop("pb_source_reads", None)
+
+
 @controlled
 def source(store, c, user, pid, rid, limits):
+    """A complete first proof, with fresh authorities on every same-call reuse."""
+    token = c.info.get("pb_source_reads")
+    if not _source_reads_current(store, c, token):
+        return _source(store, c, user, pid, rid, limits)
+    key = (user, pid, rid, fingerprint(limits.model_dump()))
+    require(key not in token.inflight, "Recursive source proof cannot reuse an incomplete result")
+    if key in token.results:
+        value, authorities = token.results[key]
+        try:
+            store.recheck_proof_authorities(c, {"_call_authorities": authorities})
+        except BaseException:
+            token.results.clear()
+            raise
+        if (_source_reads_current(store, c, token)
+                and fingerprint(limits.model_dump()) == key[3]):
+            return copy.deepcopy(value)
+        return _source(store, c, user, pid, rid, limits)
+    token.inflight.add(key)
+    try:
+        with store.proof_authorities(c) as authorities:
+            value = _source(store, c, user, pid, rid, limits)
+        if (_source_reads_current(store, c, token)
+                and fingerprint(limits.model_dump()) == key[3]):
+            token.results[key] = (copy.deepcopy(value), tuple(sorted(authorities)))
+        return value
+    except BaseException:
+        token.results.clear()
+        raise
+    finally:
+        token.inflight.discard(key)
+
+
+def _source(store, c, user, pid, rid, limits):
     from . import pa_spec_apps as spec
 
     source_gate(store, c, user, pid, rid)
