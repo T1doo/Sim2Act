@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="425.532" timestamp="2026-10-15T22:22:24.246083+00:00" hostname="REDACTED_HOST"><testcase classname="tests.test_pb_trial_dispatch" name="test_pb_full_actual_worker_extraction_and_cold" time="424.843"><failure message="AssertionError: {'app_run_id': 'iapprun_[REDACTED_ID]', 'cancel_intent': False, 'citation_status': 'NOT_RUN', 'error': None, ...}&#10;assert 'RUNNING' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + RUNNING">prefix = namespace(data=(&lt;sim2act.db.Store object at 0xREDACTED_MEMORY&gt;, Settings(database_url='sqlite:////tmp/pb-stale-guard-fram...sport.handle_async_request at 0xREDACTED_MEMORY&gt;, original_sync=&lt;function MockTransport.handle_request at 0xREDACTED_MEMORY&gt;)
+cloned = (&lt;sim2act.db.Store object at 0xREDACTED_MEMORY&gt;, Settings(database_url='sqlite:////tmp/pb-stale-guard-frame-evidence-2026...[REDACTED_ID_SUFFIX]', 'proj_[REDACTED_ID]', 'res_[REDACTED_ID]', ...)
+tmp_path = PosixPath('[DIAGNOSTIC_EVIDENCE_ROOT]/observation/original-order-frame-confirmation/tmp/test_pb_full_actual_worker_ext0')
+
+    def test_pb_full_actual_worker_extraction_and_cold(prefix, cloned, tmp_path):
+        data = cloned
+        worker, made, release, inst = extracted(prefix, data)
+        before = snapshot(data[0])
+        path = (f"/api/projects/{data[4]}/natural-spec-task-runs/{prefix.source_id}"
+            f"/extractions/by-key/{prefix.binding.contract.extraction_request_key}")
+        recovered = data[2].get(path)
+        assert recovered.status_code == 200 and recovered.json() == made
+        assert snapshot(data[0]) == before  # Original-key recovery after a lost return.
+        resolved = archive.resolve_trial_source(
+            data[0], data[3], prefix.binding.contract, prefix.binding.approval_key
+        )
+        assert resolved.public_receipt["source_run_id"] == prefix.source_id
+        assert all(
+            a["decoded_body_sha256"] != a["canonical_ascii_sha256"]
+            for a in resolved.public_receipt["attempts"]
+        )
+        cold = apps.enqueue(data, release, inst, key=prefix.binding.contract.stage_keys.cold)
+        approve_stage(data, prefix.binding, "cold", cold)
+        sent = []
+        assert prefix.make_worker(data, apps.transport(sent, apps.COLD)).once()
+        state = data[2].get("/api/runs/" + cold).json()
+&gt;       assert state["status"] == "SUCCEEDED", state
+E       AssertionError: {'app_run_id': 'iapprun_[REDACTED_ID]', 'cancel_intent': False, 'citation_status': 'NOT_RUN', 'error': None, ...}
+E       assert 'RUNNING' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + RUNNING
+
+tests/test_pb_trial_dispatch.py:331: AssertionError</failure></testcase></testsuite></testsuites>

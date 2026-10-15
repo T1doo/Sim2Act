@@ -1,0 +1,108 @@
+prefix = namespace(data=(<sim2act.db.Store object at 0xREDACTED_MEMORY>, Settings(database_url='sqlite:////tmp/pb-cold-finally-dia...sport.handle_async_request at 0xREDACTED_MEMORY>, original_sync=<function MockTransport.handle_request at 0xREDACTED_MEMORY>)
+cloned = (<sim2act.db.Store object at 0xREDACTED_MEMORY>, Settings(database_url='sqlite:////tmp/pb-cold-finally-diagnostics-eviden...[REDACTED_ID_SUFFIX]', 'proj_[REDACTED_ID]', 'res_[REDACTED_ID]', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0xREDACTED_MEMORY>
+tmp_path = PosixPath('[PRIOR_EVIDENCE_ROOT]/observation/original-order-source-diagnostics/tmp/test_pb_cold_actual_failure_ne1')
+fault = 'source_version'
+
+    @pytest.mark.parametrize(
+        "fault", ["source_revoke", "source_version", "lost_response", "bad_result", "response_archive"]
+    )
+    def test_pb_cold_actual_failure_never_accepts_or_retries(
+        prefix, cloned, monkeypatch, tmp_path, fault
+    ):
+        from sim2act import app_jobs
+    
+        data = cloned
+        public_errors = []
+        original_failure = app_jobs.fail_job
+    
+        def failure(worker, run, error):
+            public_errors.append(error.public())
+            return original_failure(worker, run, error)
+    
+        monkeypatch.setattr(app_jobs, "fail_job", failure)
+        _, _, release, inst = extracted(prefix, data)
+        cold = apps.enqueue(data, release, inst, key=prefix.binding.contract.stage_keys.cold)
+        approve_stage(data, prefix.binding, "cold", cold)
+        injected, sent = [], []
+        normal = apps.transport([], apps.COLD)
+        original_archive = trial._archive
+    
+        def fail_archive(*args):
+            result = original_archive(*args)
+            if fault == "response_archive" and args[-1] == trial.RESPONSE:
+                injected.append(fault)
+                raise DomainError("OUTCOME_UNKNOWN", "Explicit trial response archive rollback")
+            return result
+    
+        monkeypatch.setattr(trial, "_archive", fail_archive)
+    
+        def handler(request):
+            sent.append(request.content)
+            if fault == "lost_response":
+                injected.append(fault)
+                raise RuntimeError("Explicit lost P-B response")
+            if fault in ("source_revoke", "source_version"):
+                with data[0].tx() as c:
+                    if fault == "source_revoke":
+                        c.execute(
+                            update(grants).where(grants.c.resource_id == data[5]).values(revoked=True)
+                        )
+                    else:
+                        version = c.execute(
+                            select(runs.c.version).where(runs.c.id == prefix.source_id)
+                        ).scalar_one()
+                        c.execute(
+                            update(runs)
+                            .where(runs.c.id == prefix.source_id)
+                            .values(version=version + 1)
+                        )
+                injected.append(fault)
+            response = normal.handle_request(request)
+            if fault == "bad_result":
+                raw = response.json()
+                items = json.loads(raw["choices"][0]["message"]["content"])
+                items["items"][0]["citations"][0]["quote"] = "Wrong quote"
+                raw["choices"][0]["message"]["content"] = json.dumps(items)
+                injected.append(fault)
+                return httpx.Response(200, json=raw)
+            return response
+    
+        worker = prefix.make_worker(data, httpx.MockTransport(handler))
+        once_result = None
+        escaped_domain_error = None
+        original_once = worker.once
+    
+        def once():
+            nonlocal once_result
+            once_result = original_once()
+            return once_result
+    
+        monkeypatch.setattr(worker, "once", once)
+        try:
+            assert worker.once()
+        except DomainError as error:
+            escaped_domain_error = error.public()
+        except RuntimeError as error:
+            assert fault == "lost_response" and str(error) == "Explicit lost P-B response"
+        finally:
+            pending_error = sys.exception()
+            try:
+                (tmp_path / "actual-dispatch-boundary.json").write_text(json.dumps(dict(
+                    fault=fault, injected=injected, actual_sends=len(sent),
+                    worker_once_return=once_result, escaped_domain_error=escaped_domain_error,
+                    worker_public_errors=public_errors), indent=2))
+            except (OSError, TypeError, ValueError) as receipt_error:
+                if pending_error is None:
+                    raise
+                pending_error.add_note(
+                    f"Dispatch receipt write failed: {type(receipt_error).__name__}"
+                )
+>       assert injected == [fault] and len(sent) == 1, public_errors
+E       AssertionError: [{'code': 'VERSION_CONFLICT', 'effect_known': True, 'message': 'Stale worker lease', 'safe_retry': False, ...}]
+E       assert ([] == ['source_version']
+E         
+E         Right contains one more item: 'source_version'
+E         Use -v to get more diff)
+
+tests/test_pb_trial_dispatch.py:539: AssertionError
