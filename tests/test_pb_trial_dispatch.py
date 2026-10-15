@@ -504,3 +504,65 @@ def test_pb_cold_actual_failure_never_accepts_or_retries(
         )
     )
 
+
+
+@pytest.mark.parametrize("fault", ["none", "source_version", "authority", "instance", "input", "limits"])
+def test_pb_source_stage_single_proof_and_read_boundaries(prefix, cloned, monkeypatch, fault):
+    """An actual successful source is reproved each call; stale continuations fail."""
+    from sim2act import pa_spec_apps as spec
+    from sim2act.db import internal_instances
+
+    data = cloned
+    store, user = data[0], data[3]
+    contract, key = prefix.binding.contract, prefix.binding.approval_key
+    original_source, original_bound = pb.source, spec.bound
+    sources, bounds, injected = [], [], []
+
+    def counted_bound(*args, **kwargs):
+        bounds.append(True)
+        return original_bound(*args, **kwargs)
+
+    def source(*args, **kwargs):
+        result = original_source(*args, **kwargs)
+        sources.append(True)
+        if fault == "none":
+            return result
+        c = args[1]
+        injected.append(fault)
+        if fault == "source_version":
+            c.execute(update(runs).where(runs.c.id == prefix.source_id)
+                .values(version=runs.c.version + 1))
+        elif fault == "authority":
+            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+        elif fault == "instance":
+            c.execute(update(internal_instances).where(
+                internal_instances.c.id == result[0]["snapshot"]["instance_id"])
+                .values(revision=internal_instances.c.revision + 1))
+        elif fault == "input":
+            result[0]["snapshot"]["input"]["unapproved_source_stage_field"] = True
+        elif fault == "limits":
+            args[5].max_requests += 1
+        return result
+
+    monkeypatch.setattr(pb, "source", source)
+    monkeypatch.setattr(spec, "bound", counted_bound)
+    before = snapshot(store)
+    if fault == "none":
+        with store.tx() as c:
+            first = archive._source_prefix(store, c, user, contract, key)
+            assert len(sources) == len(bounds) == 1
+            second = archive._source_prefix(store, c, user, contract, key)
+            assert len(sources) == len(bounds) == 2  # No proof retained between roots.
+            reference, job = gate._stage_current(store, c, user, contract, "source", prefix.source_id)
+            assert first[2] == second[2] == reference
+            assert dict(first[3]) == dict(second[3]) == dict(job)
+            assert first[4] == second[4]
+            _, complete = original_source(store, c, user, data[4], prefix.source_id, gate._limits(contract))
+            assert complete == first[4]
+        assert not injected
+    else:
+        with pytest.raises(DomainError):
+            with store.tx() as c:
+                archive._source_prefix(store, c, user, contract, key)
+        assert sources == [True] and injected == [fault]
+    assert snapshot(store) == before

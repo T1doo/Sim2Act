@@ -290,8 +290,7 @@ def _stage_instance_after_bound(store, c, user, project, job, snapshot, release,
 
 def _stage_current(store, c, user, contract, stage, run_id):
     """Full existing lineage and accepted binding proofs; public hashes do not suffice."""
-    from . import natural_specs, pa_spec_apps
-    from .lifecycle import instance
+    from . import pa_spec_apps
 
     require(stage in ("source", "cold"))
     require(pa_spec_apps.job_scope_gate(store, c, user, run_id))
@@ -300,13 +299,24 @@ def _stage_current(store, c, user, contract, stage, run_id):
             and job["project_id"] == contract.project_id)
     epoch = c.info.get("source_proof_write_epoch", 0)
     bound = pa_spec_apps.bound(store, c, user, job, _limits(contract))
+    return _stage_current_bound(store, c, user, contract, stage, job, bound, epoch)
+
+
+def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch):
+    """Continuation of a complete binding proof in this synchronous read call."""
+    from . import natural_specs, pa_spec_apps
+    from .lifecycle import instance
+
     snapshot, draft, release = bound["snapshot"], bound["draft"], bound["release"]
     require(natural_specs.is_candidate(draft["candidate"]))
     pb_cold = isinstance(contract, PBTrialContract) and stage == "cold"
-    ordinary = ("spec_task" in draft["candidate"]
-        and not {"human_correction", "logic_check", "pb_use", "pa_use"}.intersection(snapshot)
+    ordinary = (not {"human_correction", "logic_check", "pb_use", "pa_use",
+                        "project_check", "offline_replay"}.intersection(snapshot)
+        and not {"natural_logic_origin", "correction_run_id", "pb_use_run_id", "pa_use_run_id"}.intersection(draft)
         and "natural_logic_source" not in release["snapshot"])
-    if store.test_only and store.sqlite and pb_cold and ordinary:
+    original_pb_source = (type(contract) is PBTrialContract and stage == "source"
+        and "spec_task" not in draft["candidate"])
+    if store.test_only and store.sqlite and ordinary and ((pb_cold and "spec_task" in draft["candidate"]) or original_pb_source):
         # bound() just completed the full Release and P-B lineage proof. This
         # uninterrupted SQLite transaction retains fresh identity/approval
         # checks without recursively repeating that same Release proof.
@@ -366,7 +376,7 @@ def _stage_current(store, c, user, contract, stage, run_id):
     require(fingerprint(expected_recipe) == fingerprint(draft["candidate"]["spec_recipe"]))
     _generation_accounted(store, c, user, contract, approval.request.request_key, gen_id)
     authority = StageAuthority(contract_fingerprint=fingerprint(contract.model_dump()),
-        stage=stage, run_id=run_id, accepted_fingerprint=job["fingerprint"],
+        stage=stage, run_id=job["id"], accepted_fingerprint=job["fingerprint"],
         app_run_id=bound["app_run"]["id"], instance_id=inst["id"], instance_revision=inst["revision"],
         runtime_id=job["runtime_id"], app_id=draft["id"], candidate_fingerprint=draft["fingerprint"],
         recipe_fingerprint=fingerprint(draft["candidate"]["spec_recipe"]),
@@ -375,6 +385,52 @@ def _stage_current(store, c, user, contract, stage, run_id):
         authorization_fingerprint=authorization_fingerprint(c, user, contract.project_id,
             job["runtime_id"], [b.resource_id for b in contract.bindings]))
     return authority, job
+
+
+def _source_stage_current(store, c, user, contract, source_id):
+    """One fresh complete source proof, continued into exact trial stage checks.
+
+    No binding is supplied by the caller or retained past this function. Other
+    lineages use the original full stage path. Every guard calls this anew.
+    """
+    from threading import get_ident
+
+    from . import natural_specs, pa_spec_apps, pb_natural_specs
+    from .contracts import validate_value
+
+    require(type(contract) is PBTrialContract)
+    require(pa_spec_apps.job_scope_gate(store, c, user, source_id))
+    job = c.execute(select(runs).where(runs.c.id == source_id)).mappings().first()
+    require(job is not None and job["principal_id"] == user
+            and job["project_id"] == contract.project_id)
+    transaction = pb_natural_specs._source_transaction(store, c)
+    epoch, thread = c.info.get("source_proof_write_epoch", 0), get_ident()
+    limits = _limits(contract)
+    with store.proof_authorities(c) as authorities:
+        bound, proof = pb_natural_specs.source(store, c, user, contract.project_id, source_id, limits)
+        snapshot, draft, release = bound["snapshot"], bound["draft"], bound["release"]
+        ordinary = (transaction is not None
+            and not {"human_correction", "logic_check", "pb_use", "pa_use",
+                     "project_check", "offline_replay"}.intersection(snapshot)
+            and not {"natural_logic_origin", "correction_run_id", "pb_use_run_id", "pa_use_run_id"}.intersection(draft)
+            and "natural_logic_source" not in release["snapshot"]
+            and "spec_task" not in draft["candidate"])
+        if ordinary:
+            # verify_job intentionally used validate_input=False. Restore the
+            # original stage bound's input validation before continuing it.
+            manifest, _, _ = natural_specs.compile_candidate(draft["candidate"], limits)
+            validate_value(manifest.input_schema, snapshot["input"])
+            require(transaction == pb_natural_specs._source_transaction(store, c)
+                    and epoch == c.info.get("source_proof_write_epoch", 0)
+                    and thread == get_ident() and limits == _limits(contract), "Source stage read segment changed")
+            current, job = _stage_current_bound(store, c, user, contract, "source", job, bound, epoch)
+        else:
+            current, job = _stage_current(store, c, user, contract, "source", source_id)
+        store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
+        require(transaction == pb_natural_specs._source_transaction(store, c)
+                and epoch == c.info.get("source_proof_write_epoch", 0)
+                and thread == get_ident() and limits == _limits(contract), "Source stage read segment changed")
+        return current, job, proof
 
 
 def _pb_origin(store, c, user, contract, approval_key, bound):

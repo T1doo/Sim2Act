@@ -179,20 +179,17 @@ class ResolvedSourceArchive:
 def _source_prefix(store, c, user, contract, approval_key):
     from . import natural_live_admission as gate
     from . import natural_trial_budget as budget
-    from . import pb_natural_specs as pb
 
     approval = gate._approved(store, c, user, contract, approval_key)
     ledger = budget.audit(store, c, user, budget.scope_for(contract, approval_key))["ledger"]
     source_id = ledger["stage_runs"].get("source")
     require(not ledger["halted"] and source_id is not None)
     require(gate._keys(c, user, gate.entity(contract), gate.PHASE) <= {"source", "cold"})
-    current, job = gate._stage_current(store, c, user, contract, "source", source_id)
+    current, job, source_proof = gate._source_stage_current(store, c, user, contract, source_id)
     accepted = gate._saved(c, user, gate.entity(contract), gate.PHASE, "source", gate.StageApproveInput)
     require(accepted.approval_key == approval_key and accepted.authority == current
             and accepted.expected_authority_fingerprint == fingerprint(current.model_dump())
             and job["status"] == "SUCCEEDED" and not job["cancel_intent"])
-    limits = gate._limits(contract)
-    _, source_proof = pb.source(store, c, user, contract.project_id, source_id, limits)
     return approval, ledger, current, job, source_proof
 
 
