@@ -1210,8 +1210,6 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     c.execute(update(runs).where(runs.c.id == job["id"]).values(context=context))
     c.execute(update(internal_app_runs).where(internal_app_runs.c.id == a["id"]).values(status="RUNNING"))
     store.event(c, job["id"], "SPEC_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=live["fence"]))
-    if not saved:
-        live = commit_guard(worker, c, run, b)
     outputs[step["step_id"]] = value
     proved.append(receipt)
     if saved:
@@ -1287,6 +1285,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
         require(not worker.stop.is_set() and time.time() < live["lease_until"]
             and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
         return False
+    # This final fresh guard covers all preceding receipt/context writes.
+    # No protected effect occurs between it and the transaction return.
     commit_guard(worker, c, run, b)
     return True
 
