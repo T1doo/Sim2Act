@@ -151,6 +151,7 @@ function engineeringButtons(view) {
   $("internal-retry").disabled=!!view.busy || !!view.recoveryError;
   $("internal-retry").textContent=view.spec ? "仅用原请求键读取运行回执" : "恢复原请求回执";
   $("internal-new-intent").hidden=view.spec || $("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
+  renderNaturalFirstGuide();
 }
 async function engineeringAction(view,fn) {
   if(!view || !engineeringCurrent(view) || view.busy)return;
@@ -197,7 +198,7 @@ async function refreshInternal(view=engineering) {
     await refreshInternal(view);
     if(!engineeringCurrent(view) || selection!==view.instanceGeneration)return;
     await showInternalInstance(created.id,view);
-    if(engineeringCurrent(view) && view.instance?.id===created.id){engineeringInstanceKeys.delete(release.id);engineeringStatus(view,"已创建独立内部实例；结果和后台状态可重新读取。");}
+    if(engineeringCurrent(view) && view.instance?.id===created.id){engineeringInstanceKeys.delete(release.id);naturalFirstInstanceCreated(view,created);engineeringStatus(view,"已创建独立内部实例；结果和后台状态可重新读取。");}
   }),"创建独立实例")));
   $("internal-instances").replaceChildren(...instances.items.map(instance=>row(`${instance.id} · 版本 ${instance.revision} · 结果版本 ${instance.data_version}`,()=>showInternalInstance(instance.id,view),"打开 / 重开")));
   if(!releases.items.length)$("internal-releases").textContent="尚无内部 Release。先核查并查看精确快照。";
@@ -394,13 +395,14 @@ $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   if(detail.fingerprint!==prepared.fingerprint)throw Error("批准指纹不一致");
   view.approval=detail;$("internal-approval").hidden=false;$("internal-approval-label").textContent=`内部批准 ${detail.id} · 到期 ${new Date(detail.expires_at*1000).toLocaleString()} · ${detail.fingerprint}`;
   $("internal-approval-detail").textContent=JSON.stringify(detail.payload,null,2);engineeringStatus(view,"请检查精确冻结快照，勾选确认后保存内部 Release。");
+  renderNaturalFirstGuide();
 });
 $("internal-approval-ack").onchange=()=>{if(engineering)engineeringButtons(engineering);};
 $("internal-commit").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering,approval=view.approval;if(!approval || approval.expires_at*1000<=Date.now() || !$("internal-approval-ack").checked)return;
   const saved=await api(`/api/internal/approvals/${approval.id}/commit`,"POST",{fingerprint:approval.fingerprint});
   if(!engineeringCurrent(view))return;
-  view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;await refreshInternal(view);engineeringStatus(view,`已保存内部 Release ${saved.id}；正式发布关闭。`);
+  view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;await refreshInternal(view);if(!engineeringCurrent(view))return;naturalFirstReleaseSaved(view,saved);engineeringStatus(view,`已保存内部 Release ${saved.id}；正式发布关闭。`);
 });
 $("internal-refresh").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering,id=view.instance?.id,run=view.run?.id,selection=view.instanceGeneration,workspace=workspaceSelectionGeneration,connection=identityConnectionGeneration;

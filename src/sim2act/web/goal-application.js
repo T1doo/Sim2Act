@@ -28,6 +28,7 @@ const goalApplications=new Map();
 let goalApplicationDisplayed=null;
 let goalApplicationDraftGeneration=0;
 const goalProviderChoices=new Map();
+const naturalGenerationReads=new Map(),naturalGenerationAvailability=new Map();
 let paBindingState=null;
 let goalProviderReadGeneration=0,paBindingSourceReadGeneration=0;
 for(const id of [...goalCardFields.map(field=>"goal-card-"+field),"goal-card-resources"]){
@@ -40,7 +41,7 @@ function renderGoalApplicationControls(){
   const selection=JSON.stringify([identityConnectionGeneration,goalSelectionGeneration,key]);
   if(selection!==goalApplicationDisplayed){goalApplicationDisplayed=selection;$("goal-provider-select").replaceChildren(new Option("未选择；默认真实请求预算0",""));$("goal-provider-proof").textContent="";$("goal-provider-status").textContent="未选择模型批准。";paBindingState=null;$("pa-binding-source").replaceChildren();$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;$("goal-application-ack").checked=false;$("goal-application-write-ack").checked=false;if(entry)entry.result=null;}
   $("goal-application-panel").hidden=!activeGoalCard;
-  $("goal-application-start").disabled=!key||goalCardLoading||goalCardSaving||!!entry;
+  $("goal-application-start").disabled=!key||goalCardLoading||goalCardSaving||!!entry||naturalGenerationReads.has(key);
   $("goal-application-read").disabled=!entry||!!entry.busy;
   $("goal-application-confirm").disabled=!entry?.result||!!entry.busy||!!entry.confirmBody||!$("goal-application-ack").checked;
   $("goal-application-name").disabled=!!entry?.confirmBody;
@@ -48,13 +49,15 @@ function renderGoalApplicationControls(){
   $("goal-application-confirm-read").disabled=!!entry?.busy;
   $("goal-provider-refresh").disabled=!key||!!entry;
   $("goal-provider-select").disabled=!!entry||goalSpecFamily($("goal-application-family").value);
-  $("goal-application-family").disabled=!!entry;
+  $("goal-application-family").disabled=!!entry||(naturalFirstGuideCurrent(naturalFirstGuide)&&naturalFirstGuide.stage==="generate");
   const specFamily=goalSpecFamily(entry?.body.family)||(!entry&&goalSpecFamily($("goal-application-family").value));
   $("goal-application-write-label").hidden=!specFamily;
   if(specFamily&&!$("goal-application-write-ack").checked)$("goal-application-confirm").disabled=true;
   renderPaBinding();
   $("goal-application-proof").textContent=entry?.result ? JSON.stringify({run_id:entry.runId,version:entry.version,...entry.result,...(entry.sample ? {protected_sample_preview:entry.sample}: {})},null,2) : "";
-  $("goal-application-status").textContent=entry?.message||"使用已保存目标；未保存编辑不纳入生成。真实模型调用关闭，语义接受 NOT_RUN。";
+  const availability=naturalGenerationAvailability.get(key);
+  $("goal-application-status").textContent=entry?.message||(availability?.current()?availability.message:null)||"使用已保存目标；未保存编辑不纳入生成。真实模型调用关闭，语义接受 NOT_RUN。";
+  renderNaturalFirstGuide();
 }
 function goalApplicationCurrent(entry){return goalApplicationKey()===entry.key&&entry.connection===identityConnectionGeneration&&entry.selection===goalSelectionGeneration;}
 async function readGoalApplication(entry,acceptedRunId=null){
@@ -93,10 +96,13 @@ function goalApplicationHandoff(entry){
 async function openGoalApplication(entry,saved,context){
   if(!context.current())return;
   await refreshApps();if(!context.current())return;
-  const shown=await showApp(saved.id,entry.project,generation=>{context.app=generation;},context.current);
+  const guide=naturalFirstGuideForEntry(entry);
+  const shown=await showApp(saved.id,entry.project,generation=>{context.app=generation;if(guide&&naturalFirstGuide===guide)guide.appGeneration=generation;},context.current,null,guide);
   if(!shown||!context.current()||activeApp!==saved.id||activeAppProject!==entry.project)return;
   $("app-create-status").textContent=entry.message;$("app-create-status").dataset.state="success";
-  selectWorkspace("apps");if(engineering?.spec)$("internal-prepare").focus();else $("app-agent-term").focus();
+  naturalFirstCandidateOpened(guide,entry,saved);
+  if(engineering?.selectionCurrent===context.current)engineering.selectionCurrent=null;
+  selectWorkspace("apps",guide);renderNaturalFirstGuide();if(engineering?.spec)$("internal-prepare").focus();else $("app-agent-term").focus();
 }
 async function goalApplicationAction(entry,operation){
   if(!entry||entry.busy||!goalApplicationCurrent(entry))return;
@@ -105,8 +111,25 @@ async function goalApplicationAction(entry,operation){
   catch(error){if(goalApplicationCurrent(entry)){entry.result=null;$("goal-application-ack").checked=false;entry.message=`${error.message}；保留原请求键，只读恢复回执，不自动重发。`;}}
   finally{entry.busy=false;if(goalApplicationCurrent(entry))renderGoalApplicationControls();}
 }
-$("goal-application-start").onclick=()=>{
+$("goal-application-start").onclick=async()=>{
   const card=activeGoalCard,key=goalApplicationKey();if(!card||goalApplications.has(key)||goalCardLoading||goalCardSaving)return;
+  if($("goal-application-family").value==="natural_spec"){
+    if(naturalGenerationReads.has(key))return;
+    const connection=identityConnectionGeneration,selection=goalSelectionGeneration,workspace=workspaceSelectionGeneration,app=appSelectionGeneration,edit=goalApplicationDraftGeneration;
+    const gate={current:()=>goalApplicationKey()===key&&activeGoalCard===card&&connection===identityConnectionGeneration&&selection===goalSelectionGeneration&&workspace===workspaceSelectionGeneration&&app===appSelectionGeneration&&edit===goalApplicationDraftGeneration&&$("goal-application-family").value==="natural_spec"};
+    naturalGenerationReads.set(key,gate);renderGoalApplicationControls();
+    try{
+      const caps=await api("/api/capabilities");if(!gate.current())return;
+      const availability=caps?.natural_spec_generation;
+      const allowed=availability?.version==="natural-spec-generation-availability.v1"&&availability.availability==="OFFLINE_TEST_ONLY"&&availability.provider==="intern-s2"&&availability.live_request_allowance===0&&caps.connection?.mode==="MOCK";
+      gate.message=allowed?"仅离线测试配置可用；实际发送仍须原 MockTransport 校验。真实模型预算0，下一步仅本次明确生成。":"已停止：没有可用的自然生成批准/受限离线配置。当前自然家族没有 LIVE 批准路径；未提交生成任务或模型请求。";
+      naturalGenerationAvailability.set(key,gate);
+      const guide=naturalFirstGuide;if(naturalFirstGuideCurrent(guide)&&guide.stage==="generate")guide.gateMessage=gate.message;
+      if(!allowed)return;
+    }catch(error){if(gate.current()){gate.message=`读取生成条件失败：${error.message}。未提交生成任务或模型请求。`;naturalGenerationAvailability.set(key,gate);if(naturalFirstGuideCurrent(naturalFirstGuide))naturalFirstGuide.gateMessage=gate.message;}return;}
+    finally{if(naturalGenerationReads.get(key)===gate)naturalGenerationReads.delete(key);if(goalApplicationKey()===key)renderGoalApplicationControls();}
+    if(!gate.current()||goalApplications.has(key))return;
+  }
   const entry={key,project:$("project-select").value,card:card.id,snapshot:structuredClone(card.snapshot),connection:identityConnectionGeneration,selection:goalSelectionGeneration,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},busy:false,result:null,confirmBody:null,message:"正在接受冻结目标…"};
   const choice=goalProviderChoices.get(key)?.find(value=>value.activation.approval_id===$("goal-provider-select").value);
   if($("goal-provider-select").value&&!choice)return;

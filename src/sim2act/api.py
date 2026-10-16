@@ -864,6 +864,15 @@ def create_app(store=None, settings=None):
                 "mode": s.mode.upper(),
                 "status": "MOCK_ENGINEERING" if s.mode == "mock" else "LIVE_NOT_ACCEPTED",
             },
+            "natural_spec_generation": {
+                "version": "natural-spec-generation-availability.v1",
+                "availability": "OFFLINE_TEST_ONLY" if (
+                    db.test_only and s.mode == "mock" and not s.live_enabled
+                    and s.goal_planner_provider == "intern-s2"
+                ) else "BLOCKED",
+                "provider": s.goal_planner_provider,
+                "live_request_allowance": 0,
+            },
             "code_execution": "DISABLED",
         }
 

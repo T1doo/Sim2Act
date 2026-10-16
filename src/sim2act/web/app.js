@@ -1,5 +1,6 @@
 "use strict";
 let naturalUsePreparation=null;
+let naturalFirstGuide=null;
 const naturalPreparationGoalRequests=new Map();
 let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
@@ -260,6 +261,7 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearSpecRecoveryMemory === "function")clearSpecRecoveryMemory();
   if(typeof pnClear === "function")pnClear();
@@ -377,7 +379,8 @@ setInterval(async () => {
   finally {backgroundRefreshInFlight=false;}
 },2500);
 
-function clearApp() {
+function clearApp(preserveFirstGuide=null) {
+  if(naturalFirstGuide!==preserveFirstGuide)clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearAppOwnGoal === "function")clearAppOwnGoal();
   if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();
@@ -421,9 +424,9 @@ function showPreviewResult(r,history=false){
   $("app-output").dataset.state=r.status === "FAILED" ? "error" : "success";
   $("app-output").replaceChildren(row(`${history ? "历史记录 · " : ""}${previewText(r)} · ${r.id.slice(0,16)}`));
 }
-async function showApp(id,pid=$("project-select").value,onSelectionStart=null,selectionCurrent=()=>true,validateSelected=null) {
+async function showApp(id,pid=$("project-select").value,onSelectionStart=null,selectionCurrent=()=>true,validateSelected=null,preserveFirstGuide=null) {
   if(pid !== $("project-select").value || !selectionCurrent())return false;
-  clearApp();const generation=appSelectionGeneration;
+  clearApp(preserveFirstGuide);const generation=appSelectionGeneration;
   onSelectionStart?.(generation);
   const identity=token;
   const a=await api(`/api/apps/${id}`);
@@ -743,11 +746,13 @@ $("goal-card-form").onsubmit=safe(async()=>{
 });
 
 
-function selectWorkspace(id) {
+function selectWorkspace(id,preserveFirstGuide=null) {
+  if(naturalFirstGuide!==preserveFirstGuide)clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearInternalRunReread === "function")clearInternalRunReread();
   if(typeof clearTrialConsent === "function")clearTrialConsent();
   workspaceSelectionGeneration++;
+  if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
@@ -1011,6 +1016,7 @@ renderResourceMaterial();
 
 // Move the existing save forms into the selected app. Saving never executes it.
 function naturalPreparationCurrent(p) {
+  if(p?.firstCreation)return naturalFirstGuideCurrent(p.firstCreation)&&p.firstCreation.stage==="inputs"&&naturalUsePreparation===p;
   return !!p && naturalUsePreparation===p && p.identity===token && p.connection===identityConnectionGeneration && p.project===$("project-select").value && p.workspace===workspaceSelectionGeneration && engineering===p.view && engineeringCurrent(p.view) && p.appGeneration===appSelectionGeneration && (p.returning ? [p.selection,p.returnSelection].includes(p.view.instanceGeneration) : (p.view.instance===p.instance && p.selection===p.view.instanceGeneration));
 }
 function naturalPreparationMaterialError(body) {
@@ -1019,14 +1025,14 @@ function naturalPreparationMaterialError(body) {
   return !['txt','md'].includes(body.format)||!text.trim()||new TextEncoder().encode(text).length>2048||lines.length>40||/\p{C}/u.test(text.replace(/[\n\r\t]/g,"")) ? "本应用仅支持非空白 UTF-8 TXT/MD，最多2048字节、40行；不支持控制或格式字符（含 BOM，换行/制表符除外）。尚未保存。" : null;
 }
 function naturalPreparationControls(form,disabled) {for(const node of form.querySelectorAll("input,textarea,select,button"))node.disabled=disabled;}
-function clearNaturalUsePreparation() {
+function clearNaturalUsePreparation(preserveGoal=false) {
   const p=naturalUsePreparation;if(!p)return;naturalUsePreparation=null;
   for(const item of p.forms){item.anchor.replaceWith(item.form);for(const [node,hidden] of item.hidden)node.hidden=hidden;for(const [node,disabled] of item.controls)node.disabled=disabled;}
   $("resource-file").accept=p.accept;
   for(const [option,disabled] of p.formats)option.disabled=disabled;
   $("goal-card-resources").disabled=false;
   p.panel.remove();$("internal-panel").hidden=p.internalHidden;$("app-preview-form").hidden=p.previewHidden;
-  clearResourceMaterial();clearGoalCard(true);updateGoalCardSave();
+  clearResourceMaterial();if(!preserveGoal)clearGoalCard(true);updateGoalCardSave();
 }
 function naturalPreparationRender(p) {
   if(!naturalPreparationCurrent(p))return;
@@ -1040,16 +1046,20 @@ function naturalPreparationRender(p) {
   $("natural-prep-goal-reset").hidden=$("natural-prep-goal-read").hidden;
   naturalPreparationControls($("resource-form"),p.step!=="material"||blocked);renderResourceMaterial();
   if(p.step!=="material")naturalPreparationControls($("resource-form"),true);
-  $("natural-prep-status").textContent=pending ? pending.state==="saving" ? "正在保存本次 Goal；不提交运行。" : `原 Goal 保存${pending.id?`已接受：${pending.id}`:"回执 UNKNOWN"}。禁止重发；仅可读取原回执或列表核对，不能凭名称或内容认领。` : p.step==="ready" ? `材料 ${p.material.id} 与 Goal ${p.goal.id} 已保存并绑定。尚未运行；返回原实例后仍需预览与明确确认。` : p.step==="material-saved" ? "材料已保存；下一步填写只绑定此材料的新 Goal。尚未运行。" : "准备材料 → 保存并绑定 Goal → 返回原实例 → 预览确认运行；每一步均需明确点击。";
+  $("natural-prep-status").textContent=pending ? pending.state==="saving" ? "正在保存本次 Goal；不提交运行。" : `原 Goal 保存${pending.id?`已接受：${pending.id}`:"回执 UNKNOWN"}。禁止重发；仅可读取原回执或列表核对，不能凭名称或内容认领。` : p.step==="ready" ? `材料 ${p.material.id} 与 Goal ${p.goal.id} 已保存并绑定。${p.firstCreation?"尚未生成应用；继续到生成后仍需分别确认候选、版本和实例。":"尚未运行；返回原实例后仍需预览与明确确认。"}` : p.step==="material-saved" ? "材料已保存；下一步填写只绑定此材料的新 Goal。尚未运行。" : "准备材料 → 保存并绑定 Goal → 返回原实例 → 预览确认运行；每一步均需明确点击。";
 }
 function beginNaturalUsePreparation(s,isCurrent) {
   if(!isCurrent()||s.busy||s.view.busy||pbUseUnknown(s.instance.id)||engineeringPending.has(s.instance.id)||goalCardSaving||resourceFileReader||resourceSaveRequests.has(resourceSaveKey()))return;
-  clearNaturalUsePreparation();s.edit++;s.review=null;$("pb-use-ack").checked=false;$("pb-use-proof").textContent="";s.buttons();
+  s.edit++;s.review=null;$("pb-use-ack").checked=false;$("pb-use-proof").textContent="";s.buttons();
+  beginNaturalInputPreparation({view:s.view,instance:s.instance,selection:s.view.instanceGeneration,family:naturalUseFamily(s.view.draft)});
+}
+function beginNaturalInputPreparation(origin) {
+  clearNaturalUsePreparation();
   clearResourceMaterial();clearGoalCard(true);
   const panel=document.createElement("section");panel.id="natural-use-preparation";
   panel.innerHTML='<h3>准备本次新材料与 Goal</h3><p>仅非空白 UTF-8 TXT/MD，最多2048字节、40行；不支持控制/格式字符和 BOM（换行、制表符除外）。选择或编辑只在本页准备，点击保存才写入并沿用项目24小时授权。Goal 只绑定这一份新材料；保存不会运行或增加模型额度。</p><p id="natural-prep-status" role="status"></p><div id="natural-prep-material-host"></div><button id="natural-prep-goal-next" type="button" hidden>填写并绑定 Goal</button><div id="natural-prep-goal-host" hidden></div><button id="natural-prep-return" type="button" hidden>返回原应用与实例，预览确认运行</button><button id="natural-prep-goal-read" type="button" hidden>读取原 Goal 回执或列表（只读）</button><button id="natural-prep-goal-reset" type="button" hidden>我已核对，结束本页 Goal 保存意图</button><button id="natural-prep-cancel" type="button">结束准备，保留已保存材料与 Goal</button>';
   $("apps").append(panel);
-  const p={panel,view:s.view,instance:s.instance,selection:s.view.instanceGeneration,identity:token,connection:identityConnectionGeneration,project:s.view.project,workspace:workspaceSelectionGeneration,appGeneration:appSelectionGeneration,family:naturalUseFamily(s.view.draft),step:"material",key:resourceSaveKey(),forms:[],formats:[...$("format").options].map(o=>[o,o.disabled]),accept:$("resource-file").accept,internalHidden:$("internal-panel").hidden,previewHidden:$("app-preview-form").hidden};naturalUsePreparation=p;
+  const p={...origin,identity:token,connection:identityConnectionGeneration,project:$("project-select").value,workspace:workspaceSelectionGeneration,appGeneration:appSelectionGeneration,step:"material",key:resourceSaveKey(),forms:[],formats:[...$("format").options].map(o=>[o,o.disabled]),accept:$("resource-file").accept,internalHidden:$("internal-panel").hidden,previewHidden:$("app-preview-form").hidden,panel};naturalUsePreparation=p;
   for(const [id,host] of [["resource-form","natural-prep-material-host"],["goal-card-form","natural-prep-goal-host"]]){
     const form=$(id),anchor=document.createComment("saved form location"),hidden=[...form.children].map(node=>[node,node.hidden]);form.before(anchor);$(host).append(form);p.forms.push({form,anchor,hidden,controls:[...form.querySelectorAll("input,textarea,select,button")].map(node=>[node,node.disabled])});
     if(id==="resource-form")for(const child of form.children)if(child.tagName==="P"&&!child.id)child.hidden=true;
@@ -1058,7 +1068,7 @@ function beginNaturalUsePreparation(s,isCurrent) {
   $("resource-file").accept=".txt,.md,text/plain,text/markdown";$("format").value="txt";
   for(const option of $("format").options)option.disabled=!['txt','md'].includes(option.value);
   $("internal-panel").hidden=true;$("app-preview-form").hidden=true;
-  $("natural-prep-cancel").onclick=()=>clearNaturalUsePreparation();
+  $("natural-prep-cancel").onclick=()=>p.firstCreation?clearNaturalFirstGuide():clearNaturalUsePreparation();
   $("natural-prep-goal-next").onclick=()=>{
     if(!naturalPreparationCurrent(p)||p.step!=="material-saved")return;
     p.step="goal";clearGoalCard(true);
@@ -1070,13 +1080,14 @@ function beginNaturalUsePreparation(s,isCurrent) {
     if(pending.id&&pending===p.goalRequest)await readNaturalPreparationGoal(p,pending);
     else {const cards=await api(`/api/projects/${p.project}/goal-cards`);if(naturalPreparationCurrent(p))$("natural-prep-status").textContent=`只读核对列表：${cards.items.map(c=>`${c.title} · ${c.id}`).join("；")}。未重发或自动认领。`;}
   });
-  $("natural-prep-goal-reset").onclick=()=>{const pending=naturalPreparationGoalRequests.get(p.key);if(!naturalPreparationCurrent(p)||!pending||pending.state==="saving")return;naturalPreparationGoalRequests.delete(p.key);clearNaturalUsePreparation();};
-  $("natural-prep-return").onclick=safe(()=>returnNaturalPreparation(p));naturalPreparationRender(p);panel.scrollIntoView?.({block:"start"});
+  $("natural-prep-goal-reset").onclick=()=>{const pending=naturalPreparationGoalRequests.get(p.key);if(!naturalPreparationCurrent(p)||!pending||pending.state==="saving")return;naturalPreparationGoalRequests.delete(p.key);if(p.firstCreation)clearNaturalFirstGuide();else clearNaturalUsePreparation();};
+  if(p.firstCreation)$("natural-prep-return").textContent="继续到自然应用生成（不运行）";
+  $("natural-prep-return").onclick=safe(()=>p.firstCreation?continueNaturalFirstGoal(p):returnNaturalPreparation(p));naturalPreparationRender(p);panel.scrollIntoView?.({block:"start"});
 }
 async function readNaturalPreparationGoal(p,pending) {
   const card=await api(`/api/goal-cards/${pending.id}`);if(!naturalPreparationCurrent(p)||naturalPreparationGoalRequests.get(p.key)!==pending)return;
   if(card.id!==pending.id||card.project_id!==p.project||!Number.isInteger(card.version)||card.version!==1||!/^[a-f0-9]{64}$/.test(card.fingerprint)||goalRunCanonical(card.content)!==goalRunCanonical(pending.body)||card.content.resource_refs.length!==1||card.content.resource_refs[0]!==p.material.id)throw Error("VERSION_CONFLICT");
-  p.goal={id:card.id,version:card.version,fingerprint:card.fingerprint};p.step="ready";naturalPreparationGoalRequests.delete(p.key);naturalPreparationRender(p);
+  p.goal={id:card.id,version:card.version,fingerprint:card.fingerprint};p.savedCard=card;p.step="ready";naturalPreparationGoalRequests.delete(p.key);naturalPreparationRender(p);
 }
 async function saveNaturalPreparationGoal(p,body) {
   if(!naturalPreparationCurrent(p)||p.step!=="goal"||naturalPreparationGoalRequests.has(p.key))return;
@@ -1113,3 +1124,74 @@ async function returnNaturalPreparation(p) {
   } catch(error) {if(naturalPreparationCurrent(p))$("natural-prep-status").textContent=`返回核对失败：${error.detail||error.message}。已保存内容保留，请重新打开原应用和实例。`;}
   finally {if(naturalUsePreparation===p){p.returning=false;$("natural-prep-return").disabled=false;}}
 }
+
+function naturalFirstGuideCurrent(g) {
+  return !!g&&naturalFirstGuide===g&&g.identity===token&&g.connection===identityConnectionGeneration&&g.project===$("project-select").value&&g.workspace===workspaceSelectionGeneration&&g.appGeneration===appSelectionGeneration;
+}
+function clearNaturalFirstGuide() {
+  const g=naturalFirstGuide;if(!g)return;naturalFirstGuide=null;
+  if(naturalUsePreparation?.firstCreation===g)clearNaturalUsePreparation();
+  $("natural-first-guide").hidden=true;$("natural-first-status").textContent="";$("natural-first-directory").hidden=true;
+  // Invalidate any pending generation/confirmation handoff; accepted tasks remain saved.
+  clearGoalCard(true);if(g.view&&engineering===g.view)clearInternal();renderNaturalFirstGuide();
+}
+function renderNaturalFirstGuide() {
+  const g=naturalFirstGuide;$("natural-first-start").disabled=!!g||!$("project-select").value;
+  $("natural-first-guide").hidden=!g;if(!g)return;
+  if(!naturalFirstGuideCurrent(g))return;
+  let message;
+  if(g.stage==="inputs")message="第1–2步：准备新材料，分别点击材料保存、填写 Goal 和保存 Goal；本次尚未创建应用、实例或生成任务。";
+  else if(g.stage==="generate"){
+    const entry=goalApplications.get(goalApplicationKey());
+    message=`第3–4步：Goal ${g.card.id} · v${g.card.version}。${g.gateMessage||"先点击生成读取当前条件；自然生成没有 LIVE 批准路径，仅支持既有离线测试适配。"} ${entry?.message||"尚未创建生成任务；核对候选后分别勾选材料读取与项目 JSON 保存授权。"}`;
+  }else{
+    const view=g.view;
+    message=g.instance ? `第6步完成：应用 ${g.app} · Release ${g.release.id} · 实例 ${g.instance} 已保存。还没有运行此实例；返回目录后可为第二份材料单独准备 Goal、预览并确认运行。` : g.release ? `第6步：已保存精确内部版本 ${g.release.id}。点击该版本下的“创建独立实例”；不会自动创建或执行。` : view?.approval ? "第5步：核查下方精确内部快照与检查证据，另行勾选并确认保存内部 Release。" : "第5步：自然应用候选已保存。点击“核查并准备内部快照”，再明确确认保存内部版本；尚无实例。";
+  }
+  $("natural-first-status").textContent=message;
+  $("natural-first-directory").hidden=!g.instance;
+  $("natural-first-directory").disabled=!!g.busy;
+}
+function beginNaturalFirstGuide() {
+  if(naturalFirstGuide||!$("project-select").value||goalCardSaving||resourceFileReader||resourceSaveRequests.has(resourceSaveKey()))return;
+  clearApp();clearGoalCard();
+  const g={identity:token,connection:identityConnectionGeneration,project:$("project-select").value,workspace:workspaceSelectionGeneration,appGeneration:appSelectionGeneration,stage:"inputs"};naturalFirstGuide=g;
+  beginNaturalInputPreparation({firstCreation:g,family:"NATURAL_PA"});renderNaturalFirstGuide();
+}
+function continueNaturalFirstGoal(p) {
+  if(!naturalPreparationCurrent(p)||p.step!=="ready")return;
+  const g=p.firstCreation,card=p.savedCard,snapshot=card.history?.find(v=>v.version===card.version&&v.fingerprint===card.fingerprint)?.snapshot;
+  if(!snapshot||goalRunCanonical(snapshot.content)!==goalRunCanonical(card.content))throw Error("VERSION_CONFLICT");
+  clearNaturalUsePreparation(true);
+  activeGoalCard={id:card.id,version:card.version,fingerprint:card.fingerprint,project_id:card.project_id,snapshot};
+  g.stage="generate";g.card={...activeGoalCard};g.selection=goalSelectionGeneration;
+  $("goal-application-family").value="natural_spec";$("goal-application-family").onchange();
+  $("goal-application-name").value=Array.from(card.content.title).slice(0,100).join("");
+  renderGoalRun();renderGoalApplicationControls();selectWorkspace("projects",g);renderNaturalFirstGuide();
+  $("goal-application-panel").scrollIntoView?.({block:"start"});$("goal-application-name").focus();
+}
+function naturalFirstGuideForEntry(entry) {
+  const g=naturalFirstGuide;
+  return naturalFirstGuideCurrent(g)&&g.stage==="generate"&&g.selection===goalSelectionGeneration&&g.card.id===entry.card&&g.card.fingerprint===entry.body.expected_fingerprint&&entry.body.family==="natural_spec"?g:null;
+}
+function naturalFirstCandidateOpened(g,entry,saved) {
+  if(!g||!naturalFirstGuideCurrent(g)||!goalApplicationCurrent(entry)||saved.id!==entry.expectedAppId||!engineeringCurrent(engineering)||engineering.app!==saved.id)return;
+  g.stage="internal";g.app=saved.id;g.view=engineering;renderNaturalFirstGuide();
+}
+function naturalFirstReleaseSaved(view,saved) {
+  const g=naturalFirstGuide;if(!naturalFirstGuideCurrent(g)||g.stage!=="internal"||g.view!==view)return;
+  g.release={id:saved.id,fingerprint:saved.fingerprint};renderNaturalFirstGuide();
+}
+function naturalFirstInstanceCreated(view,created) {
+  const g=naturalFirstGuide;if(!naturalFirstGuideCurrent(g)||g.stage!=="internal"||g.view!==view||!g.release||view.instance?.id!==created.id||view.instance.release_id!==g.release.id||view.instance.release_fingerprint!==g.release.fingerprint)return;
+  g.instance=created.id;renderNaturalFirstGuide();
+}
+$("natural-first-start").onclick=beginNaturalFirstGuide;
+$("natural-first-cancel").onclick=()=>clearNaturalFirstGuide();
+$("natural-first-directory").onclick=safe(async()=>{
+  const g=naturalFirstGuide;if(!naturalFirstGuideCurrent(g)||!g.instance||g.busy)return;
+  g.busy=true;renderNaturalFirstGuide();
+  try{await refreshApps();if(!naturalFirstGuideCurrent(g))return;clearNaturalFirstGuide();clearApp();selectWorkspace("apps");$("application-use").scrollIntoView?.({block:"start"});}
+  finally{g.busy=false;if(naturalFirstGuideCurrent(g))renderNaturalFirstGuide();}
+});
+renderNaturalFirstGuide();

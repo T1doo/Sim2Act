@@ -47,7 +47,7 @@ async function refreshApplicationUse(apps){
    },"使用此本地实例"));
   }
  }
- if(current())$("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。先打开草案核查、保存内部版本并创建实例；此处不会自动创建或授权。") ]));
+ if(current()){$("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。可点击上方“从 Goal 创建自然应用”，逐步确认候选、内部版本和实例；此处不会自动创建或授权。") ]));renderNaturalFirstGuide();}
 }
 async function openSavedNaturalUse(appId,id,family,selectionCurrent=()=>true){
  const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,project=$("project-select").value;
