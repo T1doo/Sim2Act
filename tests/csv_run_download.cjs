@@ -144,7 +144,7 @@ async function navigation(){
 }
 async function revocation(){
  mode={before:true};button().click();await wait(()=>!!finishRead,'GET held before actual authorization');
- const response=await fetch(info.base+'/test-only-revoke',{method:'POST',headers:{Authorization:'Bearer synthetic-test-A'}});
+ const response=await fetch(info.base+'/test-only-revoke',{method:'POST',headers:{Authorization:'Bearer synthetic-test-A','Content-Type':'application/json'},body:'{}'});
  assert.equal(response.status,200);const release=finishRead;finishRead=null;release();await idle();
  check(blobs.length===0&&anchors.length===0,'real grant revocation yields no Blob or anchor');
  check(requests.at(-1).actual_status===403,'explicit download reauthorizes and receives real HTTP403');
