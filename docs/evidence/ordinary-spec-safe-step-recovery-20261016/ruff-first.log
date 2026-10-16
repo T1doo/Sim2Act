@@ -1,0 +1,16 @@
+E731 Do not assign a `lambda` expression, use a `def`
+   --> tests/test_safe_step_process_recovery.py:172:13
+    |
+170 |           rid = accepted["run_id"]
+171 |           with store.tx() as c:
+172 | /             rows = lambda table, predicate: sorted(
+173 | |                 (dict(row) for row in c.execute(select(table).where(predicate)).mappings()),
+174 | |                 key=lambda row: json.dumps(row, sort_keys=True))
+    | |________________________________________________________________^
+175 |               return dict(run=rows(runs, runs.c.id == rid)[0],
+176 |                   app_runs=rows(internal_app_runs, internal_app_runs.c.instance_id == instance["id"]),
+    |
+help: Rewrite `rows` as a `def`
+
+Found 1 error.
+No fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).
