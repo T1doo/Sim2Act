@@ -181,6 +181,7 @@ async function refreshInternal(view=engineering) {
   clearInternalRunReread(view);
   const workspace=workspaceSelectionGeneration,connection=identityConnectionGeneration,generation=(view.historyGeneration||0)+1;
   view.historyGeneration=generation;
+  view.historyReady=false;
   const current=()=>engineeringCurrent(view)&&workspace===workspaceSelectionGeneration&&connection===identityConnectionGeneration&&generation===view.historyGeneration;
   const latest=await api(`/api/apps/${view.app}`);
   if(!current())return;
@@ -203,10 +204,11 @@ async function refreshInternal(view=engineering) {
   $("internal-instances").replaceChildren(...instances.items.map(instance=>row(`${instance.id} · 版本 ${instance.revision} · 结果版本 ${instance.data_version}`,()=>showInternalInstance(instance.id,view),"打开 / 重开")));
   if(!releases.items.length)$("internal-releases").textContent="尚无内部 Release。先核查并查看精确快照。";
   if(!instances.items.length)$("internal-instances").textContent="尚无实例。内部 Release 已保存后可创建。";
+  view.historyReady=true;
   engineeringStatus(view,"内部历史已读回；正式发布与部署仍关闭。");
 }
 async function showInternalInstance(id,view=engineering) {
-  if(naturalUsePreparation && (!naturalUsePreparation.returning || naturalUsePreparation.instance.id!==id || naturalUsePreparation.view!==view))clearNaturalUsePreparation();
+  if(naturalUsePreparation && (!naturalUsePreparation.returning || !naturalUsePreparation.instance || naturalUsePreparation.instance.id!==id || naturalUsePreparation.view!==view))clearNaturalUsePreparation();
   if(typeof clearNaturalLogic==="function")clearNaturalLogic();
   clearPBUse();
   clearNaturalTaskExtraction();
@@ -542,7 +544,7 @@ function specResult(record,view){
   }
   if(run&&view.draft.candidate.namespace==="pa-natural-spec-app.v1"&&view.draft.candidate.manifest.origin==="goal"&&!view.draft.candidate.spec_task){
     const extract=document.createElement("button");extract.type="button";extract.textContent="从此成功任务提取应用（P-B）";extract.dataset.specAction="extract";
-    extract.onclick=()=>openNaturalTaskExtraction(view,run.id,node);node.append(extract);
+    extract.onclick=()=>{if(node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection)return openNaturalTaskExtraction(view,run.id,node);};node.append(extract);
   }
   if(run){
     const review=document.createElement("button");review.type="button";review.textContent="查看此运行与人工验收";review.dataset.specAction="review";
@@ -552,15 +554,17 @@ function specResult(record,view){
   node.append(body);return node;
 }
 
-function clearNaturalTaskExtraction(){if(naturalTaskExtraction)naturalTaskExtraction.panel.remove();naturalTaskExtraction=null;}
+function clearNaturalTaskExtraction(){const s=naturalTaskExtraction;if(s)s.panel.remove();naturalTaskExtraction=null;if(s&&naturalFirstGuide?.mode==="PB"&&naturalFirstGuide.extraction===s&&!naturalFirstGuide.opening&&naturalFirstGuide.stage!=="internal")clearNaturalFirstGuide();}
 function naturalTaskCurrent(s){return naturalTaskExtraction===s&&s.panel.isConnected&&engineeringCurrent(s.view)&&s.instance===s.view.instance&&s.selection===s.view.instanceGeneration&&s.connection===identityConnectionGeneration&&s.workspace===workspaceSelectionGeneration;}
 function naturalTaskButtons(s){
   if(!naturalTaskCurrent(s))return;
   const pending=naturalTaskRequests.get(s.scope);
-  s.preview.disabled=s.busy||!!pending||!s.source||!s.target.value;
-  s.commit.disabled=s.busy||!!pending||!s.review||!s.ack.checked;
+  s.prepare.disabled=s.busy||!!pending||!s.source||!!s.saved;
+  s.preview.disabled=s.busy||!!pending||!!s.saved||!s.source||!s.target.value;
+  s.commit.disabled=s.busy||!!pending||!!s.saved||!s.review||!s.ack.checked;
   s.recover.hidden=!pending;s.recover.disabled=s.busy||!pending;s.open.disabled=s.busy||!s.saved;
   for(const input of s.inputs)input.disabled=!!pending;
+  renderNaturalFirstGuide();
 }
 function naturalTaskEdited(s){if(!naturalTaskCurrent(s))return;s.edit++;s.review=null;s.saved=null;s.ack.checked=false;s.proof.textContent="逻辑或绑定已编辑，请重新审阅；不会沿用旧确认。";naturalTaskButtons(s);}
 function naturalTaskRecipe(s){
@@ -581,6 +585,7 @@ async function openNaturalTaskExtraction(view,rid,parent){
   s.status=element("p","pb-spec-status","正在核对完整成功任务来源…");s.status.setAttribute("role","status");
   s.editor=element("div","pb-spec-steps");
   const targetLabel=element("label",null,"自己的新目标与材料 ");s.target=document.createElement("select");s.target.id="pb-spec-target";targetLabel.append(s.target);s.inputs.push(s.target);
+  s.prepare=element("button","pb-spec-prepare","准备自己的新材料与 Goal");s.prepare.type="button";s.prepare.onclick=()=>beginNaturalPBTarget(s);
   const nameLabel=element("label",null,"新应用名称 ");s.name=document.createElement("input");s.name.id="pb-spec-name";s.name.maxLength=100;s.name.value="成功规范任务复用应用";nameLabel.append(s.name);s.inputs.push(s.name);
   const priorLabel=element("label",null," ");s.prior=document.createElement("input");s.prior.type="checkbox";s.prior.id="pb-spec-prior";priorLabel.prepend(s.prior);priorLabel.append(document.createTextNode("第二模型节点读取第一节点的实际结果和反馈"));s.inputs.push(s.prior);
   s.preview=element("button","pb-spec-preview","审阅编辑图与精确新绑定");s.preview.type="button";
@@ -611,6 +616,7 @@ async function openNaturalTaskExtraction(view,rid,parent){
     const goals=await api(`/api/projects/${view.project}/goal-cards`);if(!naturalTaskCurrent(s))return;
     s.target.add(new Option("请选择明确不同的已保存目标和材料",""));for(const goal of goals.items)if(goal.id!==view.draft.candidate.manifest.goal_ref)s.target.add(new Option(`${goal.title} · v${goal.version} · ${goal.id}`,goal.id));
     s.status.textContent="已核对成功来源；默认图来自实际回执。编辑图和新材料尚未运行。";
+    beginNaturalPBGuide(s);
   }catch(error){if(naturalTaskCurrent(s)){s.source=null;s.status.textContent=`来源未通过：${error.detail||error.message}`;}}
   finally{s.busy=false;naturalTaskButtons(s);}
   s.preview.onclick=async()=>{
@@ -642,7 +648,7 @@ async function openNaturalTaskExtraction(view,rid,parent){
   const action=async submit=>{
     if(!naturalTaskCurrent(s)||s.busy)return;
     let pending=naturalTaskRequests.get(s.scope);
-    if(submit){if(pending||!s.review||!s.ack.checked)return;pending={body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent,artifact_write_consent:s.review.artifact_write_consent},review:structuredClone(s.review)};naturalTaskRequests.set(s.scope,pending);}
+    if(submit){if(pending||s.saved||!s.review||!s.ack.checked)return;pending={body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent,artifact_write_consent:s.review.artifact_write_consent},review:structuredClone(s.review)};naturalTaskRequests.set(s.scope,pending);}
     if(!pending)return;s.busy=true;naturalTaskButtons(s);
     try{if(submit){await api(path+"/extractions","POST",pending.body);if(!naturalTaskCurrent(s)||naturalTaskRequests.get(s.scope)!==pending)return;}await recover(pending);}
     catch(error){if(naturalTaskCurrent(s))s.status.textContent=`回执未确认：${error.detail||error.message}。保留原意图，仅用原 key GET 恢复；不会重发。`;}
@@ -652,7 +658,19 @@ async function openNaturalTaskExtraction(view,rid,parent){
   s.open.onclick=async()=>{
     if(!naturalTaskCurrent(s)||s.busy||!s.saved)return;
     const saved=s.saved,identity=token,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
-    await showApp(saved.id,view.project,null,()=>token===identity&&identityConnectionGeneration===connection&&workspaceSelectionGeneration===workspace,app=>{if(app.fingerprint!==saved.candidate_fingerprint||goalRunCanonical(app.candidate)!==goalRunCanonical(saved.reviewed.candidate))throw Error("VERSION_CONFLICT");});
+    const guide=naturalFirstGuideCurrent(naturalFirstGuide)&&naturalFirstGuide.mode==="PB"&&naturalFirstGuide.extraction===s?naturalFirstGuide:null;
+    let generation=appSelectionGeneration;const current=()=>token===identity&&identityConnectionGeneration===connection&&workspaceSelectionGeneration===workspace&&$("project-select").value===view.project&&generation===appSelectionGeneration&&(!guide||naturalFirstGuide===guide);
+    const failed=message=>{if(!current())return;if(guide)clearNaturalFirstGuide();else clearApp();$("app-create-status").dataset.state="error";$("app-create-status").textContent=`已保存的 P-B 应用保留；打开核对未完成：${message}。请从应用目录重新选择并核对当前权限。`;};
+    s.busy=true;naturalTaskButtons(s);if(guide)guide.opening=true;
+    try{
+      const shown=await showApp(saved.id,view.project,g=>{generation=g;if(guide&&naturalFirstGuide===guide)guide.appGeneration=g;},current,app=>{if(app.fingerprint!==saved.candidate_fingerprint||goalRunCanonical(app.candidate)!==goalRunCanonical(saved.reviewed.candidate)||app.candidate.spec_task?.source_run_id!==rid)throw Error("VERSION_CONFLICT");},guide);
+      if(!current())return;
+      if(!shown||!engineeringCurrent(engineering)||engineering.app!==saved.id||engineering.historyReady!==true){failed("内部历史未完整读回");return;}
+      if(engineering.selectionCurrent===current)engineering.selectionCurrent=null;
+      if(guide){guide.stage="internal";guide.app=saved.id;guide.view=engineering;guide.opening=false;renderNaturalFirstGuide();}
+      $("internal-prepare").focus();
+    }catch(error){failed(error.detail||error.message);}
+    finally{s.busy=false;if(guide)guide.opening=false;naturalTaskButtons(s);}
   };
 }
 function renderSpecChecklist(node,value){
@@ -1017,7 +1035,18 @@ async function renderPBUse(view){
     pbUsePending.delete(scope);status.textContent=`已核对原 key ${value.request_key} 的独立运行 ${value.run_id}；不会重新提交。`;s.review=null;ack.checked=false;
     await showInternalInstance(instance.id,view);if(engineeringCurrent(view)&&view.instance?.id===instance.id&&workspaceSelectionGeneration===s.workspace)await showInternalRun(value.run_id,view,view.instance);
   };
-  const action=async commit=>{if(!current()||s.busy)return;let pending=pbUsePending.get(scope);if(commit){if(pending||pbUseUnknown(instance.id)||engineeringPending.has(instance.id)||!s.review||!ack.checked)return;pending={instance_id:instance.id,body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent},review:structuredClone(s.review)};pbUsePending.set(scope,pending);$("internal-run-submit").disabled=true;}if(!pending)return;s.busy=true;buttons();try{if(commit){try{await api(`/api/internal/instances/${instance.id}/${mode.route}-runs`,"POST",pending.body);}catch(error){
+  const action=async commit=>{if(!current()||s.busy)return;let pending=pbUsePending.get(scope);if(commit){if(pending||pbUseUnknown(instance.id)||engineeringPending.has(instance.id)||!s.review||!ack.checked)return;
+    if(isPB){
+      const reviewed=s.review,edit=s.edit;s.busy=true;buttons();
+      try{const caps=await api("/api/capabilities");if(!current()||s.review!==reviewed||s.edit!==edit)return;
+        const available=caps.natural_spec_generation;
+        if(available?.version!=="natural-spec-generation-availability.v1"||available.availability!=="OFFLINE_TEST_ONLY"||available.provider!=="intern-s2"||available.live_request_allowance!==0||caps.connection?.mode!=="MOCK"||caps.connection?.model!=="intern-s2"){status.textContent="已停止：当前没有可用的受限自然执行配置；真实模型额度0，未提交本次 Run。";return;}
+      }catch(error){if(current())status.textContent=`执行配置读取失败：${error.message}；未提交本次 Run。`;return;}
+      finally{s.busy=false;buttons();}
+      if(!current()||s.review!==reviewed||s.edit!==edit)return;
+      if(pbUseUnknown(instance.id)||engineeringPending.has(instance.id)||view.busy){status.textContent="此实例已有正在处理或回执未确认的操作；未提交本次 Run。请先核对原操作。";return;}
+    }
+    pending={instance_id:instance.id,body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent},review:structuredClone(s.review)};pbUsePending.set(scope,pending);$("internal-run-submit").disabled=true;}if(!pending)return;s.busy=true;buttons();try{if(commit){try{await api(`/api/internal/instances/${instance.id}/${mode.route}-runs`,"POST",pending.body);}catch(error){
       if(await internalSubmissionRejected(error,view,instance,pending,mode.route+"-runs",pending.body)&&pbUsePending.get(scope)===pending){pbUsePending.delete(scope);s.review=null;if(current()){edit();status.textContent="明确未受理；可修正材料/Goal并重新预览确认。原成功结果保留，不会自动提交。";engineeringButtons(view);}if(pbUseView?.scope===scope&&pbUseView!==s)pbUseView.buttons();if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;}throw error;
     }if(!current()||pbUsePending.get(scope)!==pending)return;}await receipt(pending);}catch(error){if(current())status.textContent=`回执未确认：${error.detail||error.message}。仅原 key GET 恢复；不重发。`;}finally{s.busy=false;buttons();}};
   submit.onclick=()=>action(true);recover.onclick=()=>action(false);

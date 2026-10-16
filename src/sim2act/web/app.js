@@ -1036,7 +1036,7 @@ function clearNaturalUsePreparation(preserveGoal=false) {
 }
 function naturalPreparationRender(p) {
   if(!naturalPreparationCurrent(p))return;
-  const pending=naturalPreparationGoalRequests.get(p.key),blocked=!!pending;
+  const pending=naturalPreparationGoalRequests.get(p.key),blocked=!!pending,pbExtraction=p.firstCreation?.mode==="PB";
   $("natural-prep-material-host").hidden=!["material","material-saved"].includes(p.step)||blocked;
   $("natural-prep-goal-host").hidden=p.step!=="goal"||blocked;
   $("natural-prep-goal-next").hidden=p.step!=="material-saved"||blocked;
@@ -1046,7 +1046,7 @@ function naturalPreparationRender(p) {
   $("natural-prep-goal-reset").hidden=$("natural-prep-goal-read").hidden;
   naturalPreparationControls($("resource-form"),p.step!=="material"||blocked);renderResourceMaterial();
   if(p.step!=="material")naturalPreparationControls($("resource-form"),true);
-  $("natural-prep-status").textContent=pending ? pending.state==="saving" ? "正在保存本次 Goal；不提交运行。" : `原 Goal 保存${pending.id?`已接受：${pending.id}`:"回执 UNKNOWN"}。禁止重发；仅可读取原回执或列表核对，不能凭名称或内容认领。` : p.step==="ready" ? `材料 ${p.material.id} 与 Goal ${p.goal.id} 已保存并绑定。${p.firstCreation?"尚未生成应用；继续到生成后仍需分别确认候选、版本和实例。":"尚未运行；返回原实例后仍需预览与明确确认。"}` : p.step==="material-saved" ? "材料已保存；下一步填写只绑定此材料的新 Goal。尚未运行。" : "准备材料 → 保存并绑定 Goal → 返回原实例 → 预览确认运行；每一步均需明确点击。";
+  $("natural-prep-status").textContent=pending ? pending.state==="saving" ? "正在保存本次 Goal；不提交运行。" : `原 Goal 保存${pending.id?`已接受：${pending.id}`:"回执 UNKNOWN"}。禁止重发；仅可读取原回执或列表核对，不能凭名称或内容认领。` : p.step==="ready" ? `材料 ${p.material.id} 与 Goal ${p.goal.id} 已保存并绑定。${pbExtraction?"尚未提取应用；返回此成功成果后，另行审阅和确认提取、版本与实例。":p.firstCreation?"尚未生成应用；继续到生成后仍需分别确认候选、版本和实例。":"尚未运行；返回原实例后仍需预览与明确确认。"}` : p.step==="material-saved" ? "材料已保存；下一步填写只绑定此材料的新 Goal。尚未运行。" : pbExtraction ? "准备材料 → 保存并绑定 Goal → 返回此成功成果 → 审阅确认提取；每一步均需明确点击。" : "准备材料 → 保存并绑定 Goal → 返回原实例 → 预览确认运行；每一步均需明确点击。";
 }
 function beginNaturalUsePreparation(s,isCurrent) {
   if(!isCurrent()||s.busy||s.view.busy||pbUseUnknown(s.instance.id)||engineeringPending.has(s.instance.id)||goalCardSaving||resourceFileReader||resourceSaveRequests.has(resourceSaveKey()))return;
@@ -1131,16 +1131,21 @@ function naturalFirstGuideCurrent(g) {
 function clearNaturalFirstGuide() {
   const g=naturalFirstGuide;if(!g)return;naturalFirstGuide=null;
   if(naturalUsePreparation?.firstCreation===g)clearNaturalUsePreparation();
+  if(g.mode==="PB"&&naturalTaskExtraction===g.extraction)clearNaturalTaskExtraction();
   $("natural-first-guide").hidden=true;$("natural-first-status").textContent="";$("natural-first-directory").hidden=true;
   // Invalidate any pending generation/confirmation handoff; accepted tasks remain saved.
-  clearGoalCard(true);if(g.view&&engineering===g.view)clearInternal();renderNaturalFirstGuide();
+  clearGoalCard(true);if(g.view&&engineering===g.view)clearInternal();if(g.mode==="PB"&&g.opening)clearApp();renderNaturalFirstGuide();
 }
 function renderNaturalFirstGuide() {
   const g=naturalFirstGuide;$("natural-first-start").disabled=!!g||!$("project-select").value;
   $("natural-first-guide").hidden=!g;if(!g)return;
   if(!naturalFirstGuideCurrent(g))return;
+  $("natural-first-title").textContent=g.mode==="PB"?"从成功成果保存可复用的 P-B 应用":"从 Goal 创建自然应用";
+  const steps=g.mode==="PB"?["核对这份成功成果的 Run、版本与来源","准备或选择自己的新材料与 Goal","审阅来源、编辑图及精确绑定，另行确认提取","核查内部快照，另行确认保存版本","明确创建独立实例，返回目录","从目录选择新材料，预览并确认受限运行"]:["准备并保存新 TXT/MD 材料","保存只绑定本次材料的 Goal","读取可用性后明确生成，查看精确候选","分别确认候选与本项目 JSON 保存授权","核查内部快照，另行确认保存版本","明确创建独立实例，返回应用目录"];
+  $("natural-first-guide").querySelector("ol").replaceChildren(...steps.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
   let message;
-  if(g.stage==="inputs")message="第1–2步：准备新材料，分别点击材料保存、填写 Goal 和保存 Goal；本次尚未创建应用、实例或生成任务。";
+  if(g.stage==="inputs")message=g.mode==="PB"?`来源 Run ${g.sourceRun} · 成果 v${g.sourceVersion} 保留。分别保存自己的新材料和 Goal，再返回此成果的精确提取审阅；保存不会提取或运行。`:"第1–2步：准备新材料，分别点击材料保存、填写 Goal 和保存 Goal；本次尚未创建应用、实例或生成任务。";
+  else if(g.stage==="extract")message=`来源 Run ${g.sourceRun} · Release ${g.sourceRelease} · 成果 v${g.sourceVersion}。${g.extraction.saved?"P-B 草案已核对；点击打开后另行保存内部版本和实例。":naturalTaskRequests.has(g.extraction.scope)?"保存回执未确认；仅按原 key 读取，不能再次提交。":"准备或选择自己的新材料与 Goal，再预览来源与编辑图，明确确认提取。"} 不改变原应用、版本或成果，不自动运行或发布。`;
   else if(g.stage==="generate"){
     const entry=goalApplications.get(goalApplicationKey());
     message=`第3–4步：Goal ${g.card.id} · v${g.card.version}。${g.gateMessage||"先点击生成读取当前条件；自然生成没有 LIVE 批准路径，仅支持既有离线测试适配。"} ${entry?.message||"尚未创建生成任务；核对候选后分别勾选材料读取与项目 JSON 保存授权。"}`;
@@ -1162,6 +1167,7 @@ function continueNaturalFirstGoal(p) {
   if(!naturalPreparationCurrent(p)||p.step!=="ready")return;
   const g=p.firstCreation,card=p.savedCard,snapshot=card.history?.find(v=>v.version===card.version&&v.fingerprint===card.fingerprint)?.snapshot;
   if(!snapshot||goalRunCanonical(snapshot.content)!==goalRunCanonical(card.content))throw Error("VERSION_CONFLICT");
+  if(g.mode==="PB")return returnNaturalPBTarget(p);
   clearNaturalUsePreparation(true);
   activeGoalCard={id:card.id,version:card.version,fingerprint:card.fingerprint,project_id:card.project_id,snapshot};
   g.stage="generate";g.card={...activeGoalCard};g.selection=goalSelectionGeneration;
@@ -1195,3 +1201,35 @@ $("natural-first-directory").onclick=safe(async()=>{
   finally{g.busy=false;if(naturalFirstGuideCurrent(g))renderNaturalFirstGuide();}
 });
 renderNaturalFirstGuide();
+
+function beginNaturalPBGuide(s) {
+  if(!naturalTaskCurrent(s)||!s.source)return;
+  if(naturalFirstGuide?.mode==="PB"&&naturalFirstGuide.extraction===s)return;
+  if(naturalFirstGuide?.view===s.view)naturalFirstGuide.view=null;
+  clearNaturalFirstGuide();
+  const proof=s.source.source_proof;
+  naturalFirstGuide={mode:"PB",stage:"extract",extraction:s,sourceRun:s.rid,sourceVersion:proof.result_version,sourceRelease:proof.release_id,identity:token,connection:identityConnectionGeneration,project:s.view.project,workspace:workspaceSelectionGeneration,appGeneration:appSelectionGeneration};
+  renderNaturalFirstGuide();
+}
+function beginNaturalPBTarget(s) {
+  if(!naturalTaskCurrent(s)||!s.source||s.busy||naturalTaskRequests.has(s.scope)||goalCardSaving||resourceFileReader||resourceSaveRequests.has(resourceSaveKey()))return;
+  beginNaturalPBGuide(s);const g=naturalFirstGuide;if(!naturalFirstGuideCurrent(g)||g.extraction!==s)return;
+  naturalTaskEdited(s);g.stage="inputs";beginNaturalInputPreparation({firstCreation:g,family:"NATURAL_PB"});
+  $("natural-prep-return").textContent="返回此成功成果的 P-B 提取审阅";renderNaturalFirstGuide();
+}
+async function returnNaturalPBTarget(p) {
+  const g=p.firstCreation,s=g.extraction;if(!naturalPreparationCurrent(p)||!naturalTaskCurrent(s)||p.returning)return;
+  p.returning=true;naturalPreparationRender(p);
+  const current=()=>naturalPreparationCurrent(p)&&naturalTaskCurrent(s);
+  try{
+    const source=await api(`/api/projects/${s.view.project}/natural-spec-task-runs/${s.rid}/extraction-options`);if(!current())return;
+    const proofHash=await paHash(source.source_proof);if(!current())return;
+    if(source.source_run_id!==s.rid||source.source_proof_fingerprint!==s.source.source_proof_fingerprint||source.recipe_fingerprint!==s.source.recipe_fingerprint||proofHash!==source.source_proof_fingerprint||goalRunCanonical(source.source_proof)!==goalRunCanonical(s.source.source_proof))throw Error("VERSION_CONFLICT");
+    const card=await api(`/api/goal-cards/${p.goal.id}`);if(!current())return;
+    if(card.id!==p.goal.id||card.project_id!==p.project||card.version!==p.goal.version||card.fingerprint!==p.goal.fingerprint||goalRunCanonical(card.content.resource_refs)!==goalRunCanonical([p.material.id]))throw Error("VERSION_CONFLICT");
+    const material=p.material.id,goal=p.goal.id;clearNaturalUsePreparation();g.stage="extract";
+    s.target.add(new Option(`${card.content.title} · v${card.version} · ${goal}`,goal));s.target.value=goal;naturalTaskEdited(s);
+    s.status.textContent=`已返回同一来源 Run ${s.rid}，选中刚保存的 Goal ${goal} 与材料 ${material}。尚未提取或运行；请另行预览和明确确认。`;renderNaturalFirstGuide();s.panel.scrollIntoView?.({block:"start"});
+  }catch(error){if(current())$("natural-prep-status").textContent=`来源或新 Goal 核对失败：${error.detail||error.message}。已保存内容保留；未提取或运行。`;}
+  finally{if(naturalUsePreparation===p){p.returning=false;$("natural-prep-return").disabled=false;}}
+}
