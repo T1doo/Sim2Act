@@ -205,6 +205,7 @@ async function refreshInternal(view=engineering) {
   engineeringStatus(view,"内部历史已读回；正式发布与部署仍关闭。");
 }
 async function showInternalInstance(id,view=engineering) {
+  if(naturalUsePreparation && (!naturalUsePreparation.returning || naturalUsePreparation.instance.id!==id || naturalUsePreparation.view!==view))clearNaturalUsePreparation();
   if(typeof clearNaturalLogic==="function")clearNaturalLogic();
   clearPBUse();
   clearNaturalTaskExtraction();
@@ -974,13 +975,15 @@ async function renderPBUse(view){
   const mode=isPB?{route:"pb-use",namespace:"pb-natural-per-run.v1",consent:"RUN_THIS_SAVED_PB_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"}:{route:"pa-use",namespace:"pa-natural-per-run.v1",consent:"RUN_THIS_SAVED_PA_LOGIC_WITH_THIS_EXACT_GOAL_MATERIAL_AND_READ_GRANT"};
   const instance=view.instance,scope=goalRunCanonical([token,view.project,view.app,instance.id,instance.release_id,mode.route]);
   const panel=document.createElement("section");panel.id="pb-use-panel";
-  panel.innerHTML='<h3>使用同一保存逻辑处理新材料</h3><p>每个运行单独选择材料和自己的 Goal，核对精确预览后确认。原应用、版本和历史保持；自然规范模型默认关闭，语义 UNKNOWN，人工 PENDING。</p><label>本次材料<select id="pb-use-material"></select></label><label>本次 Goal<select id="pb-use-goal"></select></label><button type="button" id="pb-use-preview">预览本次绑定</button><pre id="pb-use-proof"></pre><label><input type="checkbox" id="pb-use-ack">确认上述材料、Goal、逻辑、预算与仅本次材料读取授权</label><button type="button" id="pb-use-submit">确认并运行</button><button type="button" id="pb-use-recover">仅读原 key 回执</button><p id="pb-use-status" role="status"></p>';
+  panel.innerHTML='<h3>使用同一保存逻辑处理新材料</h3><p>每个运行单独选择材料和自己的 Goal，核对精确预览后确认。原应用、版本和历史保持；自然规范模型默认关闭，语义 UNKNOWN，人工 PENDING。</p><button type="button" id="pb-use-prepare">准备本次新材料与 Goal</button><label>本次材料<select id="pb-use-material"></select></label><label>本次 Goal<select id="pb-use-goal"></select></label><button type="button" id="pb-use-preview">预览本次绑定</button><pre id="pb-use-proof"></pre><label><input type="checkbox" id="pb-use-ack">确认上述材料、Goal、逻辑、预算与仅本次材料读取授权</label><button type="button" id="pb-use-submit">确认并运行</button><button type="button" id="pb-use-recover">仅读原 key 回执</button><p id="pb-use-status" role="status"></p>';
   $("internal-panel").append(panel);
   const s={view,instance,scope,panel,edit:0,review:null,busy:false,workspace:workspaceSelectionGeneration,connection:identityConnectionGeneration,selection:view.instanceGeneration};pbUseView=s;
   const current=()=>pbUseView===s&&panel.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===s.selection&&s.workspace===workspaceSelectionGeneration&&s.connection===identityConnectionGeneration;
   const material=panel.querySelector('#pb-use-material'),goal=panel.querySelector('#pb-use-goal'),preview=panel.querySelector('#pb-use-preview'),ack=panel.querySelector('#pb-use-ack'),submit=panel.querySelector('#pb-use-submit'),recover=panel.querySelector('#pb-use-recover'),status=panel.querySelector('#pb-use-status'),proof=panel.querySelector('#pb-use-proof');
-  const buttons=()=>{if(!current())return;const pending=pbUsePending.get(scope),other=engineeringPending.has(instance.id)||(!pending&&pbUseUnknown(instance.id));material.disabled=goal.disabled=!!pending||other||s.busy;preview.disabled=!!pending||other||s.busy||!material.value||!goal.value;ack.disabled=!!pending||other||s.busy||!s.review;submit.disabled=!!pending||other||s.busy||!s.review||!ack.checked;recover.disabled=!pending||s.busy;};
+  const buttons=()=>{if(!current())return;const pending=pbUsePending.get(scope),other=engineeringPending.has(instance.id)||(!pending&&pbUseUnknown(instance.id));material.disabled=goal.disabled=!!pending||other||s.busy;preview.disabled=!!pending||other||s.busy||!material.value||!goal.value;ack.disabled=!!pending||other||s.busy||!s.review;submit.disabled=!!pending||other||s.busy||!s.review||!ack.checked;recover.disabled=!pending||s.busy;panel.querySelector('#pb-use-prepare').disabled=!!pending||other||s.busy||view.busy;};
   s.buttons=buttons;
+  const prepare=panel.querySelector('#pb-use-prepare');
+  prepare.onclick=()=>beginNaturalUsePreparation(s,current);
   const edit=()=>{s.edit++;s.review=null;ack.checked=false;proof.textContent="";buttons();};material.onchange=goal.onchange=edit;ack.onchange=buttons;buttons();
   try{const [materials,cards]=await Promise.all([api(`/api/projects/${view.project}/resources`),api(`/api/projects/${view.project}/goal-cards`)]);if(!current())return;
     material.replaceChildren(new Option("明确选择本次 TXT/MD",""),...materials.filter(x=>['txt','md'].includes(x.format)).map(x=>new Option(`${x.name} · ${x.id}`,x.id)));

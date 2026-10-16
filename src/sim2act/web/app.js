@@ -1,4 +1,6 @@
 "use strict";
+let naturalUsePreparation=null;
+const naturalPreparationGoalRequests=new Map();
 let token = "", activeRun = null, refs = [];
 let reconcileVersion = null, unresolvedAttempts = [];
 let runSelectionGeneration = 0;
@@ -258,6 +260,7 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearSpecRecoveryMemory === "function")clearSpecRecoveryMemory();
   if(typeof pnClear === "function")pnClear();
   invalidateResourcePreview();
@@ -375,6 +378,7 @@ setInterval(async () => {
 },2500);
 
 function clearApp() {
+  if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearAppOwnGoal === "function")clearAppOwnGoal();
   if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();
   if(typeof clearDeliveryGraph === "function")clearDeliveryGraph();
@@ -665,12 +669,12 @@ function updateGoalCardSave() {
   updateCandidateCreate();
   renderGoalRun();
 }
-function clearGoalCard() {
+function clearGoalCard(preserveApp=false) {
   if(typeof clearTrialConsent === "function")clearTrialConsent();
   if(typeof clearNaturalGoal === "function")clearNaturalGoal();
   if(goalRunDisplayed && activeRun===goalRunDisplayed){activeRun=null;runSelectionGeneration++;clearRunDetail();}
   goalRunDisplayed=null;
-  clearApp(); // A goal selection also invalidates in-flight app readback/recovery.
+  if(!preserveApp)clearApp(); // A goal selection also invalidates in-flight app readback/recovery.
   goalSelectionGeneration++;candidateSelectionGeneration++;candidatePanelReady=false;
   $("goal-candidate-form").hidden=true;$("goal-candidate-list").replaceChildren();
   $("goal-candidate-status").textContent="先打开已保存目标卡。";
@@ -717,7 +721,8 @@ async function showGoalCard(id, pid=$("project-select").value) {
   if(!current())return;
   await refreshGoalCandidates(id,pid,generation);
 }
-$("goal-card-new").onclick=clearGoalCard;
+$("goal-card-new").onclick=()=>clearGoalCard();
+const saveGoalCardBody=(pid,card,body)=>card ? api(`/api/goal-cards/${card.id}`,"PUT",{...body,expected_version:card.version}) : api(`/api/projects/${pid}/goal-cards`,"POST",body);
 $("goal-card-form").onsubmit=safe(async()=>{
   const pid=$("project-select").value;if(!pid)throw Error("先选择项目");
   if(goalCardLoading || goalCardSaving)return;
@@ -725,18 +730,21 @@ $("goal-card-form").onsubmit=safe(async()=>{
   if(selectedCard && selectedCard.project_id !== pid)throw Error("目标卡不属于当前项目，请重新选择");
   const body={resource_refs:Array.from($("goal-card-resources").selectedOptions).map(o=>o.value)};
   goalCardFields.forEach(f=>{body[f]=["title","goal"].includes(f) ? $(`goal-card-${f}`).value : $(`goal-card-${f}`).value.split("\n").map(s=>s.trim()).filter(Boolean);});
+  if(naturalUsePreparation){await saveNaturalPreparationGoal(naturalUsePreparation,body);return;}
+  const identity=token,connection=identityConnectionGeneration;
   goalCardSaving=true;updateGoalCardSave();
   try {
-    const result=selectedCard ? await api(`/api/goal-cards/${selectedCard.id}`,"PUT",{...body,expected_version:selectedCard.version}) : await api(`/api/projects/${pid}/goal-cards`,"POST",body);
-    if(generation !== goalSelectionGeneration || pid !== $("project-select").value)return;
+    const result=await saveGoalCardBody(pid,selectedCard,body);
+    if(identity!==token || connection!==identityConnectionGeneration || generation !== goalSelectionGeneration || pid !== $("project-select").value)return;
     await refreshGoalCards(pid);
-    if(generation !== goalSelectionGeneration || pid !== $("project-select").value)return;
+    if(identity!==token || connection!==identityConnectionGeneration || generation !== goalSelectionGeneration || pid !== $("project-select").value)return;
     await showGoalCard(result.id,pid);
   } finally {goalCardSaving=false;updateGoalCardSave();}
 });
 
 
 function selectWorkspace(id) {
+  if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearInternalRunReread === "function")clearInternalRunReread();
   if(typeof clearTrialConsent === "function")clearTrialConsent();
   workspaceSelectionGeneration++;
@@ -931,6 +939,7 @@ function selectResourceFile() {
   if(files.length!==1){fail("一次只能选择一个文本文件。");return;}
   const file=files[0];
   const format = /\.(txt|md|csv|json)$/i.exec(file.name)?.[1].toLowerCase();
+  if(naturalPreparationCurrent(naturalUsePreparation) && (!['txt','md'].includes(format)||file.size>2048)){fail("本应用仅支持 UTF-8 TXT/MD，最多2048字节、40行；文件尚未保存。");return;}
   if(!format || file.name.length>200){fail("请选择名称不超过200字的 .txt、.md、.csv 或 .json 文件。");return;}
   if(file.size===0 || file.size>32768){fail("文本文件须为1–32768字节。");return;}
   const reader=new FileReader();resourceFileReader=reader;
@@ -949,6 +958,7 @@ function selectResourceFile() {
         try {JSON.parse(content);}
         catch (_) {throw Error("JSON 语法无效；请修正文件后重新选择，文件尚未保存。");}
       }
+      if(naturalPreparationCurrent(naturalUsePreparation)){const error=naturalPreparationMaterialError({format,content});if(error)throw Error(error);}
       $("resource-name").value=file.name;$("format").value=format;$("content").value=content;
       resourceFileSnapshot={...c,content,displayContent:$("content").value,name:file.name,bytes:file.size};
       $("resource-file-preview").textContent=format === "csv" ? content : $("content").value;$("resource-file-preview").hidden=false;
@@ -967,6 +977,8 @@ async function saveResourceMaterial() {
   const file=resourceFileSnapshot;
   const original=file && resourceContextCurrent(file) && $("resource-name").value===file.name && $("format").value==="csv" && $("content").value===file.displayContent;
   const body={name:$("resource-name").value,format:$("format").value,content:original ? file.content : $("content").value};
+  const preparation=naturalUsePreparation;
+  if(preparation){if(!naturalPreparationCurrent(preparation)||preparation.step!=="material")return;const error=naturalPreparationMaterialError(body);if(error){$("resource-file-status").textContent=error;return;}}
   const pending={body:Object.freeze(body),state:"saving"};resourceSaveRequests.set(key,pending);renderResourceMaterial();
   let saved;
   try {saved=await api(`/api/projects/${c.project}/resources`,"POST",body);if(typeof saved?.id!=="string" || !/^res_[a-f0-9]{32}$/.test(saved.id))throw Error("保存回执缺失");}
@@ -977,6 +989,12 @@ async function saveResourceMaterial() {
   }
   if(!resourceContextCurrent(c)){pending.state="accepted";pending.saved=saved;if(c.identity===token && c.project===$("project-select").value)renderResourceMaterial();return;}
   resourceSaveRequests.delete(key);
+  if(preparation){
+    if(!naturalPreparationCurrent(preparation))return;
+    preparation.material={id:saved.id,body};preparation.step="material-saved";
+    $("resource-file-status").textContent=`已保存本次材料 ${saved.id}；尚未创建 Goal 或运行。`;
+    naturalPreparationRender(preparation);return;
+  }
   clearResourceMaterial();$("resource-file-status").textContent=`已保存并授权当前项目：${body.name} · ${saved.id}。可在应用中选择此 CSV；创建草案仍需单独确认授权。`;
   const readContext=resourceContext();
   try {await refresh();}
@@ -989,3 +1007,108 @@ $("resource-form").onsubmit=safe(saveResourceMaterial);
 $("resource-save-read").onclick=safe(async()=>{const c=resourceContext();await refresh();if(resourceContextCurrent(c) && resourceSaveRequests.get(resourceSaveKey(c))?.state==="unknown")$("resource-file-status").textContent+=" 已重新读取材料列表；请手动核对，读取不会确认原保存或重发。";});
 $("resource-save-reset").onclick=()=>{const key=resourceSaveKey();if(!["unknown","accepted"].includes(resourceSaveRequests.get(key)?.state))return;resourceSaveRequests.delete(key);clearResourceMaterial();$("resource-file-status").textContent="已结束本页原意图核对；没有新增保存、删除材料或重新发送。新材料仍需重新选择并显式保存。";};
 renderResourceMaterial();
+
+// Move the existing save forms into the selected app. Saving never executes it.
+function naturalPreparationCurrent(p) {
+  return !!p && naturalUsePreparation===p && p.identity===token && p.connection===identityConnectionGeneration && p.project===$("project-select").value && p.workspace===workspaceSelectionGeneration && engineering===p.view && engineeringCurrent(p.view) && p.appGeneration===appSelectionGeneration && (p.returning ? [p.selection,p.returnSelection].includes(p.view.instanceGeneration) : (p.view.instance===p.instance && p.selection===p.view.instanceGeneration));
+}
+function naturalPreparationMaterialError(body) {
+  const text=body.content,lines=text.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/);
+  if(lines.at(-1)==="")lines.pop();
+  return !['txt','md'].includes(body.format)||!text.trim()||new TextEncoder().encode(text).length>2048||lines.length>40||/\p{C}/u.test(text.replace(/[\n\r\t]/g,"")) ? "本应用仅支持非空白 UTF-8 TXT/MD，最多2048字节、40行；不支持控制或格式字符（含 BOM，换行/制表符除外）。尚未保存。" : null;
+}
+function naturalPreparationControls(form,disabled) {for(const node of form.querySelectorAll("input,textarea,select,button"))node.disabled=disabled;}
+function clearNaturalUsePreparation() {
+  const p=naturalUsePreparation;if(!p)return;naturalUsePreparation=null;
+  for(const item of p.forms){item.anchor.replaceWith(item.form);for(const [node,hidden] of item.hidden)node.hidden=hidden;for(const [node,disabled] of item.controls)node.disabled=disabled;}
+  $("resource-file").accept=p.accept;
+  for(const [option,disabled] of p.formats)option.disabled=disabled;
+  $("goal-card-resources").disabled=false;
+  p.panel.remove();$("internal-panel").hidden=p.internalHidden;$("app-preview-form").hidden=p.previewHidden;
+  clearResourceMaterial();clearGoalCard(true);updateGoalCardSave();
+}
+function naturalPreparationRender(p) {
+  if(!naturalPreparationCurrent(p))return;
+  const pending=naturalPreparationGoalRequests.get(p.key),blocked=!!pending;
+  $("natural-prep-material-host").hidden=!["material","material-saved"].includes(p.step)||blocked;
+  $("natural-prep-goal-host").hidden=p.step!=="goal"||blocked;
+  $("natural-prep-goal-next").hidden=p.step!=="material-saved"||blocked;
+  $("natural-prep-return").hidden=p.step!=="ready"||blocked;
+  $("natural-prep-return").disabled=!!p.returning;
+  $("natural-prep-goal-read").hidden=!(pending&&pending.state!=="saving");
+  $("natural-prep-goal-reset").hidden=$("natural-prep-goal-read").hidden;
+  naturalPreparationControls($("resource-form"),p.step!=="material"||blocked);renderResourceMaterial();
+  if(p.step!=="material")naturalPreparationControls($("resource-form"),true);
+  $("natural-prep-status").textContent=pending ? pending.state==="saving" ? "正在保存本次 Goal；不提交运行。" : `原 Goal 保存${pending.id?`已接受：${pending.id}`:"回执 UNKNOWN"}。禁止重发；仅可读取原回执或列表核对，不能凭名称或内容认领。` : p.step==="ready" ? `材料 ${p.material.id} 与 Goal ${p.goal.id} 已保存并绑定。尚未运行；返回原实例后仍需预览与明确确认。` : p.step==="material-saved" ? "材料已保存；下一步填写只绑定此材料的新 Goal。尚未运行。" : "准备材料 → 保存并绑定 Goal → 返回原实例 → 预览确认运行；每一步均需明确点击。";
+}
+function beginNaturalUsePreparation(s,isCurrent) {
+  if(!isCurrent()||s.busy||s.view.busy||pbUseUnknown(s.instance.id)||engineeringPending.has(s.instance.id)||goalCardSaving||resourceFileReader||resourceSaveRequests.has(resourceSaveKey()))return;
+  clearNaturalUsePreparation();s.edit++;s.review=null;$("pb-use-ack").checked=false;$("pb-use-proof").textContent="";s.buttons();
+  clearResourceMaterial();clearGoalCard(true);
+  const panel=document.createElement("section");panel.id="natural-use-preparation";
+  panel.innerHTML='<h3>准备本次新材料与 Goal</h3><p>仅非空白 UTF-8 TXT/MD，最多2048字节、40行；不支持控制/格式字符和 BOM（换行、制表符除外）。选择或编辑只在本页准备，点击保存才写入并沿用项目24小时授权。Goal 只绑定这一份新材料；保存不会运行或增加模型额度。</p><p id="natural-prep-status" role="status"></p><div id="natural-prep-material-host"></div><button id="natural-prep-goal-next" type="button" hidden>填写并绑定 Goal</button><div id="natural-prep-goal-host" hidden></div><button id="natural-prep-return" type="button" hidden>返回原应用与实例，预览确认运行</button><button id="natural-prep-goal-read" type="button" hidden>读取原 Goal 回执或列表（只读）</button><button id="natural-prep-goal-reset" type="button" hidden>我已核对，结束本页 Goal 保存意图</button><button id="natural-prep-cancel" type="button">结束准备，保留已保存材料与 Goal</button>';
+  $("apps").append(panel);
+  const p={panel,view:s.view,instance:s.instance,selection:s.view.instanceGeneration,identity:token,connection:identityConnectionGeneration,project:s.view.project,workspace:workspaceSelectionGeneration,appGeneration:appSelectionGeneration,family:naturalUseFamily(s.view.draft),step:"material",key:resourceSaveKey(),forms:[],formats:[...$("format").options].map(o=>[o,o.disabled]),accept:$("resource-file").accept,internalHidden:$("internal-panel").hidden,previewHidden:$("app-preview-form").hidden};naturalUsePreparation=p;
+  for(const [id,host] of [["resource-form","natural-prep-material-host"],["goal-card-form","natural-prep-goal-host"]]){
+    const form=$(id),anchor=document.createComment("saved form location"),hidden=[...form.children].map(node=>[node,node.hidden]);form.before(anchor);$(host).append(form);p.forms.push({form,anchor,hidden,controls:[...form.querySelectorAll("input,textarea,select,button")].map(node=>[node,node.disabled])});
+    if(id==="resource-form")for(const child of form.children)if(child.tagName==="P"&&!child.id)child.hidden=true;
+    if(id==="goal-card-form")for(const child of form.children)if(!['LABEL'].includes(child.tagName)&&!['goal-card-save','goal-card-status'].includes(child.id))child.hidden=true;
+  }
+  $("resource-file").accept=".txt,.md,text/plain,text/markdown";$("format").value="txt";
+  for(const option of $("format").options)option.disabled=!['txt','md'].includes(option.value);
+  $("internal-panel").hidden=true;$("app-preview-form").hidden=true;
+  $("natural-prep-cancel").onclick=()=>clearNaturalUsePreparation();
+  $("natural-prep-goal-next").onclick=()=>{
+    if(!naturalPreparationCurrent(p)||p.step!=="material-saved")return;
+    p.step="goal";clearGoalCard(true);
+    $("goal-card-resources").replaceChildren(new Option(`${p.material.body.name} · ${p.material.id}`,p.material.id,true,true));$("goal-card-resources").disabled=true;
+    naturalPreparationRender(p);
+  };
+  $("natural-prep-goal-read").onclick=safe(async()=>{
+    if(!naturalPreparationCurrent(p))return;const pending=naturalPreparationGoalRequests.get(p.key);if(!pending||pending.state==="saving")return;
+    if(pending.id&&pending===p.goalRequest)await readNaturalPreparationGoal(p,pending);
+    else {const cards=await api(`/api/projects/${p.project}/goal-cards`);if(naturalPreparationCurrent(p))$("natural-prep-status").textContent=`只读核对列表：${cards.items.map(c=>`${c.title} · ${c.id}`).join("；")}。未重发或自动认领。`;}
+  });
+  $("natural-prep-goal-reset").onclick=()=>{const pending=naturalPreparationGoalRequests.get(p.key);if(!naturalPreparationCurrent(p)||!pending||pending.state==="saving")return;naturalPreparationGoalRequests.delete(p.key);clearNaturalUsePreparation();};
+  $("natural-prep-return").onclick=safe(()=>returnNaturalPreparation(p));naturalPreparationRender(p);panel.scrollIntoView?.({block:"start"});
+}
+async function readNaturalPreparationGoal(p,pending) {
+  const card=await api(`/api/goal-cards/${pending.id}`);if(!naturalPreparationCurrent(p)||naturalPreparationGoalRequests.get(p.key)!==pending)return;
+  if(card.id!==pending.id||card.project_id!==p.project||!Number.isInteger(card.version)||card.version!==1||!/^[a-f0-9]{64}$/.test(card.fingerprint)||goalRunCanonical(card.content)!==goalRunCanonical(pending.body)||card.content.resource_refs.length!==1||card.content.resource_refs[0]!==p.material.id)throw Error("VERSION_CONFLICT");
+  p.goal={id:card.id,version:card.version,fingerprint:card.fingerprint};p.step="ready";naturalPreparationGoalRequests.delete(p.key);naturalPreparationRender(p);
+}
+async function saveNaturalPreparationGoal(p,body) {
+  if(!naturalPreparationCurrent(p)||p.step!=="goal"||naturalPreparationGoalRequests.has(p.key))return;
+  if(body.resource_refs.length!==1||body.resource_refs[0]!==p.material.id)throw Error("本次 Goal 必须且只能绑定刚保存的材料");
+  const pending={body:structuredClone(body),state:"saving"};naturalPreparationGoalRequests.set(p.key,pending);p.goalRequest=pending;goalCardSaving=true;updateGoalCardSave();naturalPreparationRender(p);
+  try {
+    const result=await saveGoalCardBody(p.project,null,pending.body);
+    if(!/^goal_[a-f0-9]{32}$/.test(result?.id))throw Error("保存回执缺失");
+    pending.id=result.id;pending.state="accepted";
+    if(naturalPreparationCurrent(p))await readNaturalPreparationGoal(p,pending);
+  } catch(error) {
+    if(!pending.id&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus))naturalPreparationGoalRequests.delete(p.key);
+    else pending.state=pending.id?"accepted":"unknown";
+    if(naturalPreparationCurrent(p)){$("goal-card-status").textContent=error.detail||error.message;naturalPreparationRender(p);}
+  } finally {goalCardSaving=false;updateGoalCardSave();if(naturalPreparationCurrent(p))naturalPreparationRender(p);}
+}
+async function returnNaturalPreparation(p) {
+  if(!naturalPreparationCurrent(p)||p.step!=="ready"||p.returning||pbUseUnknown(p.instance.id)||engineeringPending.has(p.instance.id))return;
+  p.returnSelection=p.view.instanceGeneration+1;p.returning=true;naturalPreparationRender(p);
+  try {
+    const app=await api(`/api/apps/${p.view.app}`);if(!naturalPreparationCurrent(p))return;
+    if(app.fingerprint!==p.view.draft.fingerprint||naturalUseFamily(app)!==p.family)throw Error("VERSION_CONFLICT");
+    const card=await api(`/api/goal-cards/${p.goal.id}`);if(!naturalPreparationCurrent(p))return;
+    if(card.project_id!==p.project||card.id!==p.goal.id||card.version!==p.goal.version||card.fingerprint!==p.goal.fingerprint||goalRunCanonical(card.content.resource_refs)!==goalRunCanonical([p.material.id]))throw Error("VERSION_CONFLICT");
+    const selection=p.view.instanceGeneration+1;
+    await showInternalInstance(p.instance.id,p.view);if(!naturalPreparationCurrent(p)||p.view.instanceGeneration!==selection)return;
+    const instance=p.view.instance;
+    if(!instance||instance.id!==p.instance.id||instance.release_id!==p.instance.release_id||instance.release_fingerprint!==p.instance.release_fingerprint||instance.revision!==p.instance.revision||instance.data_version!==p.instance.data_version)throw Error("VERSION_CONFLICT");
+    const use=pbUseView;
+    if(!use||use.view!==p.view||use.instance!==instance||!$("pb-use-material").querySelector(`option[value="${p.material.id}"]`)||!$("pb-use-goal").querySelector(`option[value="${p.goal.id}"]`))throw Error("VERSION_CONFLICT");
+    const material=p.material.id,goal=p.goal.id;clearNaturalUsePreparation();
+    $("pb-use-material").value=material;$("pb-use-goal").value=goal;$("pb-use-material").dispatchEvent(new Event("change"));$("pb-use-goal").dispatchEvent(new Event("change"));
+    $("pb-use-status").textContent="已返回原应用与精确实例，并选中刚保存的材料和 Goal。尚未运行；请点击预览、核对后明确确认。";$("pb-use-panel").scrollIntoView?.({block:"start"});
+  } catch(error) {if(naturalPreparationCurrent(p))$("natural-prep-status").textContent=`返回核对失败：${error.detail||error.message}。已保存内容保留，请重新打开原应用和实例。`;}
+  finally {if(naturalUsePreparation===p){p.returning=false;$("natural-prep-return").disabled=false;}}
+}
