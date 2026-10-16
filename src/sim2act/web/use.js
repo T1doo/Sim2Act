@@ -2,6 +2,7 @@
 // Saved instances share the existing controllers and current authorization checks.
 let applicationUse=null,applicationUseGeneration=0,applicationUseListGeneration=0,applicationUseContextGeneration=0;
 const applicationUseRequests=new Map();
+const applicationUseDownloads=new Set();
 const csvUseApp=a=>a?.candidate?.manifest?.validation_suite_ref==="receipt.readback.v1" && a.candidate.actions?.length===1 && a.candidate.actions[0].executor?.kind==="registered_tool" && a.candidate.actions[0].executor.ref==="data.aggregate_csv";
 const naturalUseFamily=a=>{
  const c=a?.candidate;if(a?.input_guidance?.mode!=="MODEL_SPEC_CHECKLIST"||c?.namespace!=="pa-natural-spec-app.v1")return null;
@@ -127,6 +128,48 @@ function renderApplicationAcceptance(v,release,run){
   row("适用范围：固定CSV材料，仅数值列参数可变；当前模型请求0。")
  );
 }
+function csvRunDownloadValue(instanceId,run,records){
+ const result=run?.result;
+ const record=records?.find(r=>r.instance_id===instanceId&&r.run_id===run.app_run_id&&r.release_id===run.release_id&&r.version===run.result_version);
+ if(run?.status!=="SUCCEEDED"||run.instance_id!==instanceId||!Number.isSafeInteger(run.result_version)||run.result_version<1||
+  !result||typeof result.resource_id!=="string"||typeof result.column!=="string"||typeof result.sum!=="string"||!Number.isSafeInteger(result.count)||result.count<0||
+  !record||!["resource_id","column","sum","count"].every(key=>record.data?.result?.[key]===result[key]))return null;
+ return {instance_id:instanceId,run_id:run.id,release_id:run.release_id,result_version:run.result_version,
+  result:{resource_id:result.resource_id,column:result.column,sum:result.sum,count:result.count}};
+}
+function csvRunDownloadControl(v,run){
+ const instance=v.instance,read=v.readGeneration,appRunId=run.app_run_id,expected=csvRunDownloadValue(v.id,run,instance.data);
+ if(!expected)return;
+ const node=document.createElement("div"),button=document.createElement("button"),status=document.createElement("p");
+ button.type="button";button.textContent="下载此运行结果 JSON";status.setAttribute("role","status");status.setAttribute("aria-live","polite");
+ node.append(button,status);let downloading=false;
+ const selected=()=>node.isConnected&&applicationUseCurrent(v)&&v.instance===instance&&v.readGeneration===read&&v.selected===expected.run_id;
+ button.onclick=async()=>{
+  if(downloading||v.busy||!selected())return;
+  const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+  const key=JSON.stringify([connection,v.project,v.id,expected.run_id,expected.result_version]);
+  if(applicationUseDownloads.has(key))return;
+  const current=()=>selected()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
+  applicationUseDownloads.add(key);
+  downloading=true;button.disabled=true;status.textContent="正在重新核对此运行的权限与结果…";
+  try{
+   const saved=await api(`/api/internal/instances/${encodeURIComponent(v.id)}/runs/${encodeURIComponent(expected.run_id)}`);
+   if(!current())return;
+   const value=csvRunDownloadValue(v.id,saved,saved.known_effects);
+   if(saved.app_run_id!==appRunId||!value||JSON.stringify(value)!==JSON.stringify(expected))throw Error("VERSION_CONFLICT");
+   const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
+   const link=document.createElement("a");link.href=url;link.download=`sim2act-${v.id}-${expected.run_id}-v${expected.result_version}.json`;link.hidden=true;
+   try{document.body.append(link);link.click();status.textContent=`已生成所选运行结果 v${value.result_version} 的 JSON 下载。`;}
+   finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),0);}
+  }catch(error){
+   if(current()){
+    if(error.httpStatus===403)clearApplicationUseData(v);
+    else status.textContent=`结果读取未通过：${error.message}。未下载文件。`;
+   }
+  }finally{applicationUseDownloads.delete(key);downloading=false;button.disabled=false;}
+ };
+ return node;
+}
 async function readApplicationUse(v){
  const generation=++v.readGeneration,current=()=>applicationUseCurrent(v)&&generation===v.readGeneration;
  try{
@@ -150,7 +193,10 @@ async function readApplicationUse(v){
    if(run.instance_id!==v.id)throw Error("VERSION_CONFLICT");
    const label=v.historical?"已选择的历史运行":"本次运行";
    $("use-output").append(row(`${label} ${run.id} · ${run.status} · 结果版本 ${run.result_version??"尚无"}`));
-   if(run.status==="SUCCEEDED"&&run.result)$("use-output").append(row(`${run.result.column} 合计 ${run.result.sum}，共 ${run.result.count} 条。工具结果已核验；目标语义验收未执行。`));
+   if(run.status==="SUCCEEDED"&&run.result){
+    $("use-output").append(row(`${run.result.column} 合计 ${run.result.sum}，共 ${run.result.count} 条。工具结果已核验；目标语义验收未执行。`));
+    const download=csvRunDownloadControl(v,run);if(download)$("use-output").append(download);
+   }
    else $("use-output").append(row(run.error?.code?`本次没有可展示的新结果：${run.error.code}。` : "尚无本次新结果；下方历史成功不表示本次成功。"));
   }else $("use-output").append(row("本页尚未选择或发起运行；下方仅为持久历史，不是本次新结果。"));
   $("use-history").replaceChildren(...instance.runs.map(r=>row(`${r.id.slice(0,18)} · ${r.status} · 结果版本 ${r.result_version??"无"}`,async()=>{
