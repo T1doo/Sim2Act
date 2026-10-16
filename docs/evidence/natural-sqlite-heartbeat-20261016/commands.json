@@ -1,0 +1,43 @@
+{
+  "base": "87c1f0d0726f95270255a311983181ae1241bd09",
+  "product_freeze": "99f878a83387a7ef1b2e8734aef3e015dff3020e",
+  "test_only_commit": "8b0f74d101a9fb8843304f346e5390694eaafeae",
+  "python": "/workspace/sim2act-venv/bin/pytest",
+  "baseline": [
+    "tests/test_natural_sqlite_heartbeat.py (old diagnostic file preserved separately)",
+    "--basetemp=/workspace/heartbeat-lock-baseline",
+    "--junitxml=/workspace/heartbeat-lock-baseline.xml"
+  ],
+  "final_natural": [
+    "tests/test_natural_sqlite_heartbeat.py",
+    "--basetemp=/workspace/heartbeat-lock-final-natural",
+    "--junitxml=/workspace/heartbeat-lock-final-natural.xml"
+  ],
+  "final_safety": [
+    "tests/test_natural_heartbeat_recovery.py",
+    "tests/test_workflow_heartbeat_failure.py",
+    "tests/test_heartbeat_ownership.py",
+    "--basetemp=/workspace/heartbeat-lock-final-safety",
+    "--junitxml=/workspace/heartbeat-lock-final-safety.xml"
+  ],
+  "test_only_targeted": [
+    "tests/test_workflow_heartbeat_failure.py::test_real_sqlite_busy_recovers_without_new_claim",
+    "--basetemp=/workspace/heartbeat-lock-final-test-adjustment",
+    "--junitxml=/workspace/heartbeat-lock-final-test-adjustment.xml"
+  ],
+  "static": [
+    "ruff check src tests/test_natural_sqlite_heartbeat.py tests/test_natural_heartbeat_recovery.py tests/test_workflow_heartbeat_failure.py",
+    "git diff --check"
+  ],
+  "independent": "python -m pytest -q tests/test_natural_heartbeat_recovery.py --basetemp=/tmp/f2-hb-independent-99f878 --junitxml=/tmp/f2-hb-independent-99f878.xml",
+  "not_run": [
+    "PG",
+    "Windows",
+    "native browser",
+    "remote CI",
+    "deployment",
+    "real models/human semantics",
+    "full repository",
+    "outer recovery matrix"
+  ]
+}

@@ -1,0 +1,166 @@
+......F.                                                                 [100%]
+=================================== FAILURES ===================================
+_____ test_new_committed_sync_renewal_and_restarted_sender[repeat-failure] _____
+
+env = (<sim2act.db.Store object at 0x7fe056d447d0>, Settings(database_url='sqlite:////workspace/heartbeat-lock-wip-light/tes...f4f65a535f450e972ad8afa4017dcf', 'user_0256b3e9bd9f4bfaaa4f7828614a27c4', 'proj_3979e47f80bc4bf1ac1c326688d8b0a4', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe055a19a60>
+tmp_path = PosixPath('/workspace/heartbeat-lock-wip-light/test_new_committed_sync_renewa6')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fe056f06b10>
+case = 'repeat-failure'
+
+    @pytest.mark.parametrize("case", ["real-lock", "numeric-only", "old-marker", "wrong-scope",
+                                      "deadline", "non-busy", "repeat-failure"])
+    def test_new_committed_sync_renewal_and_restarted_sender(env, monkeypatch, tmp_path, caplog, case):
+        worker, run, state, first_done, observed = setup(env, monkeypatch)
+        state.update(deadline=None, sync_contention_recovery=True)
+        caplog.set_level("INFO", logger=flow.__name__)
+        original = worker.store.heartbeat
+        calls, advances, exits = [], [], []
+        second_done = threading.Event()
+        base_thread = flow.threading.Thread
+    
+        class TrackedThread(base_thread):
+            def run(self):
+                try:
+                    return super().run()
+                finally:
+                    exits.append(threading.get_ident())
+                    if len(exits) == 2:
+                        second_done.set()
+    
+        monkeypatch.setattr(flow, "threading", SimpleNamespace(
+            Event=flow.threading.Event, Thread=TrackedThread, Lock=threading.Lock))
+        if case == "old-marker":
+            renewed = original(worker.id, run["id"], run["fence"], worker.s.lease_seconds)
+            flow.publish_sync_renewal(worker, run, state, renewed)
+    
+        background_calls = [0]
+    
+        def heartbeat(*args, **kwargs):
+            row = dict(thread=threading.current_thread().name, start=time.monotonic(), options=kwargs)
+            calls.append(row)
+            if threading.current_thread() is not threading.main_thread():
+                background_calls[0] += 1
+                if case != "real-lock" and (background_calls[0] == 1 or case == "repeat-failure"):
+                    row.update(error_code=10 if case == "non-busy" else 5, synthetic=True)
+                    raise error(row["error_code"])
+            try:
+                renewed = original(*args, **kwargs)
+            except OperationalError as exc:
+                row.update(end=time.monotonic(), error_code=exc.orig.sqlite_errorcode,
+                           statement=exc.statement, synthetic=False)
+                raise
+            row.update(end=time.monotonic(), committed_lease_until=renewed)
+            if threading.current_thread() is not threading.main_thread():
+                observed.set()
+            return renewed
+    
+        monkeypatch.setattr(worker.store, "heartbeat", heartbeat)
+        held = worker.store.tx()
+        connection = held.__enter__()
+        closed = False
+        current = worker.store.guard(connection, run["id"], run["fence"])
+        contract = worker.store.frozen_contract(connection, current)
+        timeout = connection.connection.driver_connection.execute("PRAGMA busy_timeout").fetchone()[0]
+        assert timeout == 5000 and worker.s.lease_seconds == 30 and worker.s.run_seconds == 300
+    
+        def advance(*_):
+            nonlocal closed
+            advances.append(time.monotonic())
+            if len(advances) == 1:
+                assert first_done.wait(8), "Original sender did not stop within its original driver wait"
+                assert len(calls) == 1 and calls[0]["error_code"] == (10 if case == "non-busy" else 5)
+                held.__exit__(None, None, None)
+                closed = True
+                renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"], worker.s.lease_seconds)
+                state["deadline"] = run["created_at"] + contract.limits.run_seconds
+                if case in {"numeric-only", "old-marker"}:
+                    with state["lock"]:
+                        state["lease_until"] = renewed
+                else:
+                    flow.publish_sync_renewal(worker, run, state, renewed)
+                    if case == "wrong-scope":
+                        state["sync_renewal"]["run_id"] = "another-run"
+                    elif case == "deadline":
+                        state["deadline"] = time.time() - 1
+                return True
+            assert len(advances) == 2
+            if case == "repeat-failure":
+                assert second_done.wait(3), "Restarted sender did not report its new failure"
+                return True
+            assert case == "real-lock" and observed.wait(3), "No actual restarted background renewal"
+            return False
+    
+        try:
+            if case == "non-busy":
+                with pytest.raises(OperationalError):
+                    flow.process_job(worker, run, advance, _heartbeat_state=state)
+            else:
+>               flow.process_job(worker, run, advance, _heartbeat_state=state)
+
+tests/test_natural_heartbeat_recovery.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/text_workflows.py:1014: in process_job
+    again = (advance_fn or advance)(worker, run)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_ = (namespace(store=<sim2act.db.Store object at 0x7fe056d447d0>, s=Settings(database_url='sqlite:////workspace/heartbeat-...es': [], 'repairs': 0, 'requests': 0, 'reserved_tokens': 0, ...}, 'created_at': 1792179128.445492, 'error': None, ...})
+@py_assert1 = <bound method Event.wait of <threading.Event at 0x7fe055512ba0: set>>
+@py_assert3 = 3, @py_assert5 = False
+
+    def advance(*_):
+        nonlocal closed
+        advances.append(time.monotonic())
+        if len(advances) == 1:
+            assert first_done.wait(8), "Original sender did not stop within its original driver wait"
+            assert len(calls) == 1 and calls[0]["error_code"] == (10 if case == "non-busy" else 5)
+            held.__exit__(None, None, None)
+            closed = True
+            renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"], worker.s.lease_seconds)
+            state["deadline"] = run["created_at"] + contract.limits.run_seconds
+            if case in {"numeric-only", "old-marker"}:
+                with state["lock"]:
+                    state["lease_until"] = renewed
+            else:
+                flow.publish_sync_renewal(worker, run, state, renewed)
+                if case == "wrong-scope":
+                    state["sync_renewal"]["run_id"] = "another-run"
+                elif case == "deadline":
+                    state["deadline"] = time.time() - 1
+            return True
+        assert len(advances) == 2
+        if case == "repeat-failure":
+>           assert second_done.wait(3), "Restarted sender did not report its new failure"
+E           AssertionError: Restarted sender did not report its new failure
+E           assert False
+E            +  where False = wait(3)
+E            +    where wait = <threading.Event at 0x7fe055512ba0: unset>.wait
+
+tests/test_natural_heartbeat_recovery.py:95: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     sim2act.text_workflows:text_workflows.py:961 heartbeat_background_halted
+INFO     sim2act.text_workflows:text_workflows.py:993 heartbeat_contention_recovered
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+INFO     sim2act.text_workflows:text_workflows.py:956 heartbeat_contention_deferred
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_heartbeat_recovery.py::test_new_committed_sync_renewal_and_restarted_sender[repeat-failure]
+1 failed, 7 passed, 1 warning in 18.02s

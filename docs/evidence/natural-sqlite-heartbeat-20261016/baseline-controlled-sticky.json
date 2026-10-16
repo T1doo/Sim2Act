@@ -1,0 +1,233 @@
+{
+  "status": "PASS_BASELINE_STICKY_FAILURE_REPRODUCED",
+  "classification": "ACTUAL_BASIC_RUN_STORE_TX_DEFAULT_5S_BUSY_FRESH_SYNC_RENEW_THEN_OLD_FLOW_WAITING_RESOURCE",
+  "base": "87c1f0d0726f95270255a311983181ae1241bd09",
+  "directory": "/tmp/f2-sticky-owned-87c1-g4nku3x2",
+  "scheduling": "ONLY Event.wait(10) shortened to .001; foreground tx acquired before flow start",
+  "lease_seconds": 30,
+  "run_seconds": 300,
+  "driver_busy_timeout_ms": 5000,
+  "advance_count": 1,
+  "initial_run": {
+    "id": "run_b20eedf8c4d64f16b851f24d69448a4c",
+    "project_id": "proj_bfa08e4d1ab0489e8c842e1acd44a622",
+    "principal_id": "user_4f403983c9d84d42814e5c8624b5650b",
+    "runtime_id": "runtime_42e4f29eee8b4de9a55846fcdc32424c",
+    "goal": "Synthetic heartbeat lock observation",
+    "resource_refs": [
+      "res_fdc6f3b5259b4d4c9d6e4450d16e4e90"
+    ],
+    "status": "RUNNING",
+    "request_key": "sticky-original",
+    "fingerprint": "9f96f52aa9151a884be38cb1cfbf646afa24ad887a874f034bd6bd4c5f30c22d",
+    "created_at": 1792178880.2915351,
+    "lease_until": 1792178910.3739529,
+    "fence": 1,
+    "worker_id": "synthetic-original-worker",
+    "context": {
+      "messages": [],
+      "requests": 0,
+      "tools": 0,
+      "repairs": 0,
+      "reserved_tokens": 0
+    },
+    "result": null,
+    "error": null,
+    "cancel_intent": false,
+    "version": 1
+  },
+  "final_run": {
+    "id": "run_b20eedf8c4d64f16b851f24d69448a4c",
+    "project_id": "proj_bfa08e4d1ab0489e8c842e1acd44a622",
+    "principal_id": "user_4f403983c9d84d42814e5c8624b5650b",
+    "runtime_id": "runtime_42e4f29eee8b4de9a55846fcdc32424c",
+    "goal": "Synthetic heartbeat lock observation",
+    "resource_refs": [
+      "res_fdc6f3b5259b4d4c9d6e4450d16e4e90"
+    ],
+    "status": "WAITING_RESOURCE",
+    "request_key": "sticky-original",
+    "fingerprint": "9f96f52aa9151a884be38cb1cfbf646afa24ad887a874f034bd6bd4c5f30c22d",
+    "created_at": 1792178880.2915351,
+    "lease_until": 0.0,
+    "fence": 1,
+    "worker_id": "synthetic-original-worker",
+    "context": {
+      "messages": [],
+      "requests": 0,
+      "tools": 0,
+      "repairs": 0,
+      "reserved_tokens": 0
+    },
+    "result": null,
+    "error": {
+      "code": "RESOURCE_UNAVAILABLE",
+      "message": "Heartbeat renewal could not acquire the database lock",
+      "safe_retry": false,
+      "effect_known": true,
+      "user_action": "Check status, configuration and permissions"
+    },
+    "cancel_intent": false,
+    "version": 2
+  },
+  "heartbeat_calls": [
+    {
+      "thread": "Thread-4 (beat)",
+      "args": [
+        "synthetic-original-worker",
+        "run_b20eedf8c4d64f16b851f24d69448a4c",
+        1,
+        30
+      ],
+      "kwargs": {},
+      "start": 8467.76709839,
+      "end": 8472.791094248,
+      "error_type": "OperationalError",
+      "sqlite_code": 5,
+      "statement": "BEGIN IMMEDIATE"
+    },
+    {
+      "thread": "MainThread",
+      "args": [
+        "synthetic-original-worker",
+        "run_b20eedf8c4d64f16b851f24d69448a4c",
+        1,
+        30
+      ],
+      "kwargs": {},
+      "start": 8472.793765605,
+      "end": 8472.827220681,
+      "committed_lease_until": 1792178915.4770265
+    }
+  ],
+  "trace": [
+    {
+      "event": "begin_attempt",
+      "monotonic": 8467.726301859,
+      "wall": 1792178880.378456,
+      "thread": "MainThread",
+      "connection": 140576621203024,
+      "statement": "BEGIN IMMEDIATE"
+    },
+    {
+      "event": "begin_acquired",
+      "monotonic": 8467.726333824,
+      "wall": 1792178880.3784878,
+      "thread": "MainThread",
+      "connection": 140576621203024
+    },
+    {
+      "event": "foreground_read_only_transaction_held",
+      "monotonic": 8467.765542657,
+      "wall": 1792178880.4176967,
+      "thread": "MainThread",
+      "connection": 140576621203024,
+      "claimed_lease": 1792178910.3739529,
+      "busy_timeout_ms": 5000
+    },
+    {
+      "event": "heartbeat_call",
+      "monotonic": 8467.767278161,
+      "wall": 1792178880.4194324,
+      "thread": "Thread-4 (beat)",
+      "kwargs": {}
+    },
+    {
+      "event": "begin_attempt",
+      "monotonic": 8467.76899711,
+      "wall": 1792178880.4211512,
+      "thread": "Thread-4 (beat)",
+      "connection": 140576603412640,
+      "statement": "BEGIN IMMEDIATE"
+    },
+    {
+      "event": "heartbeat_error",
+      "monotonic": 8472.791165816,
+      "wall": 1792178885.4433203,
+      "thread": "Thread-4 (beat)",
+      "error_type": "OperationalError",
+      "sqlite_code": 5,
+      "statement": "BEGIN IMMEDIATE"
+    },
+    {
+      "event": "background_returned",
+      "monotonic": 8472.792483959,
+      "wall": 1792178885.4446385,
+      "thread": "Thread-4 (beat)"
+    },
+    {
+      "event": "foreground_commit_return",
+      "monotonic": 8472.79373364,
+      "wall": 1792178885.445888,
+      "thread": "MainThread"
+    },
+    {
+      "event": "heartbeat_call",
+      "monotonic": 8472.793768385,
+      "wall": 1792178885.4459224,
+      "thread": "MainThread",
+      "kwargs": {}
+    },
+    {
+      "event": "begin_attempt",
+      "monotonic": 8472.794830743,
+      "wall": 1792178885.446985,
+      "thread": "MainThread",
+      "connection": 140576603412640,
+      "statement": "BEGIN IMMEDIATE"
+    },
+    {
+      "event": "begin_acquired",
+      "monotonic": 8472.794865625,
+      "wall": 1792178885.4470196,
+      "thread": "MainThread",
+      "connection": 140576603412640
+    },
+    {
+      "event": "heartbeat_commit_return",
+      "monotonic": 8472.827224907,
+      "wall": 1792178885.479379,
+      "thread": "MainThread",
+      "renewed": 1792178915.4770265
+    },
+    {
+      "event": "sync_committed_interval_published",
+      "monotonic": 8472.827241066,
+      "wall": 1792178885.4793952,
+      "thread": "MainThread",
+      "lease_until": 1792178915.4770265,
+      "deadline": 1792179180.2915351
+    },
+    {
+      "event": "return_true_after_actual_owned_sync_commit",
+      "monotonic": 8472.828471056,
+      "wall": 1792178885.4806252,
+      "thread": "MainThread"
+    },
+    {
+      "event": "begin_attempt",
+      "monotonic": 8472.829498726,
+      "wall": 1792178885.4816527,
+      "thread": "MainThread",
+      "connection": 140576603412640,
+      "statement": "BEGIN IMMEDIATE"
+    },
+    {
+      "event": "begin_acquired",
+      "monotonic": 8472.829535949,
+      "wall": 1792178885.48169,
+      "thread": "MainThread",
+      "connection": 140576603412640
+    }
+  ],
+  "new_model_attempts": 0,
+  "tool_operations": 0,
+  "natural_business_fixture": "NOT_RUN",
+  "real_model": "NOT_RUN",
+  "source_sha256": {
+    "db.py": "d1f9172118e8058d4bd38dbf52e5cb2eb9fa1fe9e0f7567669b5e32a88f3b116",
+    "text_workflows.py": "76b214e8f3ef10e23ca2984fde3c68cba9abd9f9b6dcc257dfeecd9bf5dee4fd",
+    "natural_spec_runtime.py": "ced4711e76d0ca7cc89c5d78132a5562871ce2abf33f0735fe216675cbae7cfe",
+    "pa_spec_apps.py": "9949239b6b5d4c0e3f86ac41cc1adc7bc2ba3569f36d02bb85ba61cd9321aec2"
+  }
+}

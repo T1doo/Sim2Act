@@ -1,0 +1,66 @@
+..............F...............................                           [100%]
+=================================== FAILURES ===================================
+____________ test_real_sqlite_busy_recovers_without_new_claim[late] ____________
+
+env = (<sim2act.db.Store object at 0x7eff8c1259d0>, Settings(database_url='sqlite:////workspace/heartbeat-lock-final-safety/...244e781ad84fc3bfde6d72af8ac4ef', 'user_e6c7dedea3684f6ab0abde26d5e10714', 'proj_236dcc852773427a88c27fb21378f7b9', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff877b3d70>
+publication = 'late'
+
+    @pytest.mark.parametrize("publication", ["known", "late"])
+    def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch, publication):
+        worker, run, state, done, observed = setup(env, monkeypatch)
+        if publication == "late":
+            state["deadline"] = None
+        ready, release = threading.Event(), threading.Event()
+        original = worker.store.heartbeat
+        calls, codes = [], []
+    
+        def hold():
+            with worker.store.tx():
+                ready.set()
+                assert release.wait(5)
+    
+        holder = threading.Thread(target=hold)
+        holder.start()
+        assert ready.wait(2)
+    
+        def monitored(*args, **kwargs):
+            calls.append(1)
+            kwargs["_wait_seconds"] = 0.01  # Only lower the synthetic driver wait.
+            try:
+                result = original(*args, **kwargs)
+            except OperationalError as exc:
+                codes.append(exc.orig.sqlite_errorcode)
+                with state["lock"]:
+                    state["deadline"] = run["created_at"] + worker.s.run_seconds
+                release.set()
+                holder.join(timeout=2)
+                raise
+            observed.set()
+            return result
+    
+        monkeypatch.setattr(worker.store, "heartbeat", monitored)
+        def advance(*_):
+            assert observed.wait(3)
+            return False
+        try:
+            flow.process_job(worker, run, advance, _heartbeat_state=state)
+        finally:
+            release.set()
+            holder.join(timeout=2)
+>       assert codes == [sqlite3.SQLITE_BUSY] and len(calls) == 2 and done.is_set()
+E       assert ([5] == [5]
+E         
+E         Use -v to get more diff and 3 == 2)
+E        +  where 3 = len([1, 1, 1])
+
+tests/test_workflow_heartbeat_failure.py:102: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_workflow_heartbeat_failure.py::test_real_sqlite_busy_recovers_without_new_claim[late]
+1 failed, 45 passed, 1 warning in 96.53s (0:01:36)

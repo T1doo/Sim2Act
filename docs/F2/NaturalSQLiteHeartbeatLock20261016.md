@@ -16,3 +16,5 @@
 - 无新回执、旧序列、错误 scope、截止时间过期、非 BUSY 错误及后续新错误仍走原拒绝/传播路径。原 guarded defer、未知效果和状态结算合同不变。
 
 没有修改 Store.tx、SQLite timeout、lease/run/model 预算、fence、幂等、权限、executor 或 Grant；没有用等待更久、重领任务或忽略所有心跳失败求绿。真实模型、Windows、PG、原生浏览器、远端 CI 和部署均不在本轮已执行范围。最终冻结与原始证据另存本轮证据目录。
+
+生产冻结 `99f878a83387a7ef1b2e8734aef3e015dff3020e`：自然双 Run 1 PASS / 210.07 秒，原 Run/AppRun/v1 typed/artifact/app/Release 行保持，instance 仅 data_version 1→2。自然流程未命中新恢复分支；该分支由真实默认 SQLite 竞争控制器用例证明。相关安全批为45 PASS / 1 FAIL（旧测试硬编码心跳调用次数）；只修正这个测试的真实提交回执断言后，known/late 定向2 PASS，普通 test-only 提交 `8b0f74d101a9fb8843304f346e5390694eaafeae`。不声称一次47项全绿批。独立新增模块9 PASS / 29.71 秒，有限范围无未修阻断。完整阶段、失败原件、SQL时序、两Run身份和保留行见 [证据](../evidence/natural-sqlite-heartbeat-20261016/README.md)。

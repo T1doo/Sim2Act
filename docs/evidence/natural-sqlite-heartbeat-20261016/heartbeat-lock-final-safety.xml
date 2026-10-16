@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="46" time="96.525" timestamp="2026-10-16T19:37:14.297110+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[real-lock]" time="7.128" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[numeric-only]" time="1.528" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[old-marker]" time="1.382" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[wrong-scope]" time="1.354" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[deadline]" time="1.393" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[non-busy]" time="1.841" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[repeat-failure]" time="1.300" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_new_committed_sync_renewal_and_restarted_sender[repeat-busy]" time="2.280" /><testcase classname="tests.test_natural_heartbeat_recovery" name="test_failed_sync_renewal_does_not_publish_recovery_marker" time="3.689" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_driver_allowlist_is_specific[5-True]" time="0.002" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_driver_allowlist_is_specific[6-True]" time="0.002" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_driver_allowlist_is_specific[517-True]" time="0.001" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_driver_allowlist_is_specific[10-False]" time="0.001" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_real_sqlite_busy_recovers_without_new_claim[known]" time="3.618" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_real_sqlite_busy_recovers_without_new_claim[late]" time="4.788"><failure message="assert ([5] == [5]&#10;  &#10;  Use -v to get more diff and 3 == 2)&#10; +  where 3 = len([1, 1, 1])">env = (&lt;sim2act.db.Store object at 0x7eff8c1259d0&gt;, Settings(database_url='sqlite:////workspace/heartbeat-lock-final-safety/...244e781ad84fc3bfde6d72af8ac4ef', 'user_e6c7dedea3684f6ab0abde26d5e10714', 'proj_236dcc852773427a88c27fb21378f7b9', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7eff877b3d70&gt;
+publication = 'late'
+
+    @pytest.mark.parametrize("publication", ["known", "late"])
+    def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch, publication):
+        worker, run, state, done, observed = setup(env, monkeypatch)
+        if publication == "late":
+            state["deadline"] = None
+        ready, release = threading.Event(), threading.Event()
+        original = worker.store.heartbeat
+        calls, codes = [], []
+    
+        def hold():
+            with worker.store.tx():
+                ready.set()
+                assert release.wait(5)
+    
+        holder = threading.Thread(target=hold)
+        holder.start()
+        assert ready.wait(2)
+    
+        def monitored(*args, **kwargs):
+            calls.append(1)
+            kwargs["_wait_seconds"] = 0.01  # Only lower the synthetic driver wait.
+            try:
+                result = original(*args, **kwargs)
+            except OperationalError as exc:
+                codes.append(exc.orig.sqlite_errorcode)
+                with state["lock"]:
+                    state["deadline"] = run["created_at"] + worker.s.run_seconds
+                release.set()
+                holder.join(timeout=2)
+                raise
+            observed.set()
+            return result
+    
+        monkeypatch.setattr(worker.store, "heartbeat", monitored)
+        def advance(*_):
+            assert observed.wait(3)
+            return False
+        try:
+            flow.process_job(worker, run, advance, _heartbeat_state=state)
+        finally:
+            release.set()
+            holder.join(timeout=2)
+&gt;       assert codes == [sqlite3.SQLITE_BUSY] and len(calls) == 2 and done.is_set()
+E       assert ([5] == [5]
+E         
+E         Use -v to get more diff and 3 == 2)
+E        +  where 3 = len([1, 1, 1])
+
+tests/test_workflow_heartbeat_failure.py:102: AssertionError</failure></testcase><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[unknown]" time="2.821" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[other-sqlite]" time="1.822" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[revoked]" time="1.789" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[unverified]" time="2.156" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[expired]" time="2.196" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[exhausted]" time="4.738" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[unverified-progress]" time="3.215" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[deadline-progress]" time="3.515" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[foreign-progress]" time="1.894" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_fatal_failure_is_seen_before_next_step[expired-progress]" time="1.422" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_batch_defers_only_with_committed_owned_progress[during-batch]" time="1.512" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_batch_defers_only_with_committed_owned_progress[before-batch]" time="1.335" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_terminal_return_is_not_overwritten_by_late_background_error" time="1.451" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_deadline_after_guard_rolls_back_all_heartbeat_writes" time="1.299" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_capped_transaction_wait_never_increases_configured_timeout" time="1.354" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_background_renewal_rejects_cancel_intent" time="1.192" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_model_sync_renewal_publishes_committed_lease" time="1.415" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[owned-WAITING_RESOURCE]" time="1.563" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[unknown-WAITING_RESOURCE]" time="1.772" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[unknown-cancel-RECONCILING]" time="1.970" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[pause-PAUSED]" time="2.629" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[cancel-CANCELLED]" time="2.373" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[expired-RUNNING]" time="2.446" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[new-owner-RUNNING]" time="1.964" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_exhausted_background_contention_keeps_worker_and_owned_boundaries[settlement-busy-RUNNING]" time="2.007" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_unexpected_settlement_failure_still_propagates[fault0]" time="2.437" /><testcase classname="tests.test_workflow_heartbeat_failure" name="test_unexpected_settlement_failure_still_propagates[fault1]" time="2.529" /><testcase classname="tests.test_heartbeat_ownership" name="test_heartbeat_final_write_requires_live_original_ownership[elapsed]" time="2.251" /><testcase classname="tests.test_heartbeat_ownership" name="test_heartbeat_final_write_requires_live_original_ownership[wrong-worker]" time="2.080" /><testcase classname="tests.test_heartbeat_ownership" name="test_live_heartbeat_extends_only_same_interval" time="2.851" /><testcase classname="tests.test_heartbeat_ownership" name="test_authority_refresh_detects_expiry_without_a_write" time="1.441" /></testsuite></testsuites>
