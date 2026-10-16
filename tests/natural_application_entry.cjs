@@ -33,16 +33,20 @@ async function boot(){
 }
 async function openEntry(){
  await nav("apps");
- const selector=`[data-use-family="${familyCode}"][data-instance-id="${info.instance}"]`;
+ const selector=`[data-use-family="${familyCode}"][data-app-id="${info.app}"]`;
  await wait(()=>!!$("use-list").querySelector(selector),"saved natural instance in unified directory");
  const entry=$("use-list").querySelector(selector),text=entry.textContent;
  check(text.includes(info.name)&&text.includes(familyLabel),"directory names saved app and exact natural family");
- check(text.includes(info.release)&&text.includes("pa-natural-spec-app.v1")&&text.includes("结果版本"),"directory shows exact saved Release definition and result version");
+ check(text.includes("pa-natural-spec-app.v1")&&text.includes("打开后读取并选择"),"directory shows definition version and requires explicit current Release/instance selection");
  check(text.includes("逐次")&&text.includes("TXT/MD")&&text.includes("Goal"),"directory shows per-use TXT/MD material and saved Goal scope");
- check(text.includes("受限")&&text.includes("未发布")&&text.includes("真实模型关闭"),"directory shows restricted unpublished state and closed real model boundary");
+ check(text.includes("受限")&&text.includes("未发布")&&text.includes("真实模型默认关闭"),"directory shows restricted unpublished state and closed real model boundary");
  const button=[...entry.querySelectorAll("button")].find(el=>el.textContent==="使用此自然规范应用");
  check(!!button&&visible(button),"unified directory offers visible natural-app use action");
- await click(button);await wait(()=>visible($("pb-use-panel")),"existing per-use controller visible");
+ await click(button);
+ const instanceRow=[...$("internal-instances").children].find(el=>el.textContent.includes(info.instance));
+ check(!!instanceRow&&visible(instanceRow),"explicit application open lists authorized saved instances");
+ await click(instanceRow.querySelector("button"));await wait(()=>visible($("pb-use-panel")),"existing per-use controller visible");
+ check($("internal-instance-info").textContent.includes(info.release),"explicit selection displays exact saved Release and result version");
  check(w.eval("activeApp")===info.app&&w.eval("engineering.instance.id")===info.instance,"directory selection opens exact saved app and instance");
 }
 async function selectRun(){
@@ -56,7 +60,7 @@ async function selectRun(){
  return contract;
 }
 (async()=>{let status="FAIL",error=null;try{
- await boot();await openEntry();check(postCount()===0,"cold connect directory and instance opening issue GET only");await rpc({command:"readonly-checkpoint"});
+ await boot();check(requests.every(r=>!/^\/api\/apps\/app_/.test(r.path)&&!/^\/api\/internal\/apps\//.test(r.path)),"cold directory discovery reads no natural application detail or private instance history");await openEntry();check(postCount()===0,"cold connect directory and instance opening issue GET only");await rpc({command:"readonly-checkpoint"});
  check($("pb-use-material").value===""&&$("pb-use-goal").value==="","per-use material and Goal require explicit selection");
  await edit("pb-use-material",info.resource);await edit("pb-use-goal",info.goal);await click("pb-use-preview");
  const review=JSON.parse($("pb-use-proof").textContent);
@@ -93,7 +97,7 @@ async function selectRun(){
  for(const version of [...info.old_versions,info.expected_version])check($("internal-data").textContent.includes(`规范成果 v${version}`),`cold page retains result version ${version}`);
  await selectRun();check($("owner-status").textContent.includes("ACCEPTED")&&postCount()===beforeCold,"cold selected same Run reads persisted manual declaration without new write");
  if(info.revoke_after){
-  await nav("apps");const savedEntry=$("use-list").querySelector(`[data-use-family="${familyCode}"][data-instance-id="${info.instance}"]`),staleButton=savedEntry?.querySelector("button");
+  await nav("apps");const savedEntry=$("use-list").querySelector(`[data-use-family="${familyCode}"][data-app-id="${info.app}"]`),staleButton=savedEntry?.querySelector("button");
   check(!!staleButton&&visible(staleButton),"authorized directory entry is available before explicit revocation");
   const revoked=await rpc({command:"revoke-original"});check(revoked.status===200,"exact original-bound read Grant explicitly revoked through authorized API");revocationReceipt=JSON.parse(revoked.text);
   const beforeOpen=requests.length,beforePosts=postCount();await click(staleButton);

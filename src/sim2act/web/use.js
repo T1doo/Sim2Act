@@ -26,22 +26,10 @@ async function refreshApplicationUse(apps){
  for(const summary of apps){
   // Family metadata only routes discovery; opening always reauthorizes the selection.
   if(["NATURAL_PA","NATURAL_PB"].includes(summary.use_family)){
-   let app,reply;
-   try{
-    app=await api(`/api/apps/${summary.id}`);if(!current())return;
-    if(app.id!==summary.id||app.project_id!==project||naturalUseFamily(app)!==summary.use_family)throw Error("VERSION_CONFLICT");
-    reply=await api(`/api/internal/apps/${app.id}/instances`);if(!current())return;
-    for(const instance of reply.items){
-     if(instance.project_id!==project||instance.source_app_id!==app.id)throw Error("VERSION_CONFLICT");
-     const item=row(`${app.name} · ${summary.use_family==="NATURAL_PA"?"P-A 目标生成":"P-B 成功任务提取"} · 定义 ${app.candidate.namespace} · Release ${instance.release_id} · 实例修订 ${instance.revision} · 结果版本 ${instance.data_version} · 适用范围：逐次 TXT/MD 材料 + 已保存 Goal · 受限内部版本，未发布；真实模型关闭，语义 UNKNOWN，新运行人工 PENDING`,async()=>{
-      if(selectable())await openSavedNaturalUse(app.id,instance.id,summary.use_family,selectable);
-     },"使用此自然规范应用");
-     item.dataset.useFamily=summary.use_family;item.dataset.instanceId=instance.id;rows.push(item);
-    }
-    if(!reply.items.length)rows.push(row(`${app.name} · ${summary.use_family==="NATURAL_PA"?"P-A":"P-B"} · ${app.candidate.namespace} · 尚无保存的实例；先打开草案核查并明确保存内部版本。`,async()=>{
-     if(selectable())await openSavedNaturalUse(app.id,null,summary.use_family,selectable);
-    },"打开自然规范草案"));
-   }catch(error){if(!current())return;rows.push(row(`${summary.name} · ${summary.use_family==="NATURAL_PA"?"P-A":"P-B"} 自然规范 · 受限：当前权限、来源或版本不可读取；请重新核查。`));}
+   const item=row(`${summary.name} · ${summary.use_family==="NATURAL_PA"?"P-A 目标生成":"P-B 成功任务提取"} · 定义 ${summary.definition_version} · 适用范围：逐次 TXT/MD 材料 + 已保存 Goal · 受限内部应用，未发布；真实模型默认关闭，语义 UNKNOWN，新运行人工 PENDING。Release、实例修订、结果版本和当前权限在打开后读取并选择。`,async()=>{
+    if(selectable())await openSavedNaturalUse(summary.id,null,summary.use_family,selectable);
+   },"使用此自然规范应用");
+   item.dataset.useFamily=summary.use_family;item.dataset.appId=summary.id;rows.push(item);
    continue;
   }
   if(summary.csv_instance_candidate===false){
