@@ -62,8 +62,8 @@ def renew(worker, job, deadline, *, _heartbeat_state=None):
         raise DomainError("BUDGET_EXHAUSTED", "Original node deadline or stop reached")
     renewed = worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds)
     if _heartbeat_state is not None:
-        with _heartbeat_state["lock"]:
-            _heartbeat_state["lease_until"] = max(_heartbeat_state["lease_until"], renewed)
+        from .text_workflows import publish_sync_renewal
+        publish_sync_renewal(worker, job, _heartbeat_state, renewed)
 
 
 def effective(worker, c, job, binding, action, *, _scope_checked=False):

@@ -891,11 +891,21 @@ def _sqlite_heartbeat_contention(store, exc):
         and code & 255 in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
 
 
+def publish_sync_renewal(worker, run, state, renewed):
+    """Publish only after the original heartbeat transaction returned committed."""
+    with state["lock"]:
+        sequence = state.get("sync_renewal", {}).get("sequence", 0) + 1
+        state["lease_until"] = max(state["lease_until"], renewed)
+        state["sync_renewal"] = dict(sequence=sequence, worker_id=worker.id,
+            run_id=run["id"], fence=run["fence"], lease_until=renewed)
+
+
 def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
     from .app_jobs import fail_job
     stopped = threading.Event()
     failed = threading.Event()
     failure = []
+    failure_sequence = [0]
     state = _heartbeat_state or dict(lock=threading.Lock(),
         lease_until=run["lease_until"], deadline=None)
 
@@ -949,8 +959,10 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                             break
                     logging.getLogger(__name__).info("heartbeat_background_halted", extra=dict(
                         run_id=run["id"], fence=run["fence"], error_type=type(exc).__name__))
-                    failure.append(exc)
-                    failed.set()
+                    with state["lock"]:
+                        failure_sequence[0] = state.get("sync_renewal", {}).get("sequence", 0)
+                        failure.append(exc)
+                        failed.set()
                     return
                 else:
                     if renewed is not None:
@@ -964,6 +976,31 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
     try:
         while True:
             if failed.is_set():
+                # A SQLite lock failure can precede the foreground boundary's
+                # actual, same-owner committed renewal. Numeric bounds alone
+                # are insufficient: require its newer explicit commit marker.
+                with state["lock"]:
+                    renewed = dict(state.get("sync_renewal", {}))
+                    deadline = state["deadline"]
+                recovered = (worker.store.sqlite and state.get("sync_contention_recovery") is True
+                    and _sqlite_heartbeat_contention(worker.store, failure[0])
+                    and renewed.get("sequence", 0) > failure_sequence[0]
+                    and renewed.get("worker_id") == worker.id
+                    and renewed.get("run_id") == run["id"] and renewed.get("fence") == run["fence"]
+                    and deadline is not None and not worker.stop.is_set()
+                    and time.time() < min(renewed.get("lease_until", 0), deadline))
+                if recovered:
+                    logging.getLogger(__name__).info("heartbeat_contention_recovered", extra=dict(
+                        run_id=run["id"], fence=run["fence"],
+                        sync_renewal_sequence=renewed["sequence"],
+                        heartbeat_lease_until=renewed["lease_until"]))
+                    # The failed sender has no work after setting failed. A new
+                    # sender starts with the original cadence, not another retry.
+                    failure.clear()
+                    failed.clear()
+                    thread = threading.Thread(target=beat, daemon=True)
+                    thread.start()
+                    continue
                 logging.getLogger(__name__).info("heartbeat_failure_observed", extra=dict(
                     run_id=run["id"], fence=run["fence"]))
                 if _sqlite_heartbeat_contention(worker.store, failure[0]):
