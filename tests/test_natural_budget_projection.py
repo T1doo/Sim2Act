@@ -210,10 +210,15 @@ def test_real_natural_contract_refusal_has_no_new_reservation(env, monkeypatch, 
         if failure != "missing":
             gate.approve(store, user, contract, approval)
         job = started(data, contract)
+        drift_receipt = None
         if failure == "goal_drift":
-            changed = copy.deepcopy(contract.model_dump())
-            changed["bindings"][0]["goal_version"] += 1
-            contract = gate.parse_contract(changed)
+            changed = copy.deepcopy(data[6]["content"])
+            changed["goal"] += " Changed after exact approval"
+            response = client.put(f"/api/goal-cards/{data[6]['id']}",
+                json=dict(changed, expected_version=data[6]["version"]))
+            assert response.status_code == 200, response.text
+            drift_receipt = response.json()
+            assert drift_receipt["version"] == contract.bindings[0].goal_version + 1
         elif failure == "expired":
             expired_at = contract.expires_at
             monkeypatch.setattr(time, "time", lambda: expired_at)
@@ -231,6 +236,7 @@ def test_real_natural_contract_refusal_has_no_new_reservation(env, monkeypatch, 
         assert records(store) == before
         save(tmp_path, "REAL_CONTRACT_REFUSAL", kind="REAL_NATURAL_ADMISSION_WITH_SYNTHETIC_FEE_ONLY",
              family=family, failure=failure, error=error.value.public(),
-             contract=contract.model_dump(), accounting_rows_unchanged=True, transport_calls=0)
+             contract=contract.model_dump(), actual_goal_drift=drift_receipt,
+             accounting_rows_unchanged=True, transport_calls=0)
     finally:
         client.close()
