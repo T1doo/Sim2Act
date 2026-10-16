@@ -1,0 +1,26 @@
+diff --git a/tests/test_natural_first_creation.py b/tests/test_natural_first_creation.py
+index c6616624..a8661d69 100644
+--- a/tests/test_natural_first_creation.py
++++ b/tests/test_natural_first_creation.py
+@@ -213,3 +213,21 @@ def test_empty_directory_natural_creation_and_second_input(env, tmp_path, availa
+             if cold:
+                 cold.engine.dispose()
+             client.close()
++
++
++def test_natural_first_creation_navigation_synthesized_api(tmp_path):
++    output = tmp_path / "navigation.json"
++    outcome = subprocess.run(
++        ["node", str(Path(__file__).with_name("natural_first_creation_navigation.cjs")), str(output)],
++        capture_output=True, text=True, timeout=60,
++        env={**os.environ, "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules")},
++    )
++    (tmp_path / "driver.log").write_text(outcome.stdout + outcome.stderr, encoding="utf-8")
++    assert outcome.returncode == 0, outcome.stdout + outcome.stderr
++    proof = json.loads(output.read_text(encoding="utf-8"))
++    assert proof["status"] == "PASS" and len(proof["checks"]) >= 25, proof
++    web = Path.cwd() / "src/sim2act/web"
++    assert proof["assets"] == {
++        name: hashlib.sha256((web / name).read_bytes()).hexdigest()
++        for name in proof["assets"]
++    }
