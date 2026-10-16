@@ -64,7 +64,7 @@ def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch, publicati
         state["deadline"] = None
     ready, release = threading.Event(), threading.Event()
     original = worker.store.heartbeat
-    calls, codes = [], []
+    calls, codes, renewals = [], [], []
 
     def hold():
         with worker.store.tx():
@@ -87,6 +87,7 @@ def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch, publicati
             release.set()
             holder.join(timeout=2)
             raise
+        renewals.append(result)
         observed.set()
         return result
 
@@ -99,12 +100,15 @@ def test_real_sqlite_busy_recovers_without_new_claim(env, monkeypatch, publicati
     finally:
         release.set()
         holder.join(timeout=2)
-    assert codes == [sqlite3.SQLITE_BUSY] and len(calls) == 2 and done.is_set()
+    # The accelerated scheduler may commit another heartbeat before the main
+    # thread observes success. Every call beyond the one BUSY must have committed.
+    assert codes == [sqlite3.SQLITE_BUSY] and renewals and done.is_set()
+    assert len(calls) == 1 + len(renewals)
     with worker.store.tx() as c:
         row = c.execute(select(runs.c.fence, runs.c.worker_id, runs.c.lease_until)
             .where(runs.c.id == run["id"])).mappings().one()
     assert row["fence"] == run["fence"] and row["worker_id"] == worker.id
-    assert row["lease_until"] == state["lease_until"] > run["lease_until"]
+    assert row["lease_until"] == state["lease_until"] == max(renewals) > run["lease_until"]
 
 
 @pytest.mark.parametrize("fault", ["unknown", "other-sqlite", "revoked", "unverified", "expired", "exhausted", "unverified-progress", "deadline-progress", "foreign-progress", "expired-progress"])
