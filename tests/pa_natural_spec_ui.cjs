@@ -143,7 +143,7 @@ async function boot(app){
  const instance=w.eval("engineering.instance.id"),app=w.eval("activeApp");count=posts();await boot(app);
  await click([...$("internal-instances").querySelectorAll("button")].find(button=>button.closest(".row").textContent.includes(instance)));
  check(posts()===count,"cold page resumes exact instance with reads only");
- check($("owner-status").textContent.includes("PENDING")&&!requests.some(r=>r.path.endsWith("/owner-review")),"spec states pending human acceptance without unsupported owner API");
+ check($("owner-status").textContent.includes("请选择具体成功结果")&&$("owner-prepare").disabled&&$("owner-submit").disabled&&!requests.some(r=>r.path.endsWith("/owner-review")||r.path.endsWith("/spec-owner-review")),"spec requires explicit successful-result selection before any human acceptance or owner API read");
  if(["run-lost","run-late","run-receipt-poison"].includes(info.scenario))fault=info.scenario;
  if(info.scenario==="run-late"){
   const action=click("internal-run-submit");await wait(()=>hold);const release=hold;hold=null;await nav("projects");const reads=requests.length;release();await action;

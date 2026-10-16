@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 from dataclasses import replace
 from pathlib import Path
@@ -160,7 +161,7 @@ def test_natural_spec_page_actual_nodes_and_cold_material(env, tmp_path, scenari
             4 if scenario.startswith("sample-") else 22
         )
         web = Path(__file__).parents[1] / "src/sim2act/web"
-        assert len(proof["loaded_source_sha256"]) == 20
+        assert set(proof["loaded_source_sha256"]) == {"index.html", "app.css", *re.findall(r'<script\b[^>]*\bsrc="/([^"]+)"', (web / "index.html").read_text())}
         assert proof["loaded_source_sha256"] == {
             name: hashlib.sha256((web / name).read_bytes()).hexdigest()
             for name in proof["loaded_source_sha256"]
