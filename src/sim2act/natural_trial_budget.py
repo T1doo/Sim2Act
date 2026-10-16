@@ -351,10 +351,38 @@ def _known(settlement):
                 + settlement["completion_tokens"])
 
 
+def _projection(slots):
+    """Read-only finite trial accounting, never a dispatch or pricing permit.
+
+    Every original slot remains held, including failures and unknown outcomes.
+    Synthetic usage cannot establish real monetary cost or a currency rate.
+    """
+    held = sum(slot["reservation"]["wire_bytes"] + 1024 for slot in slots)
+    stages = {}
+    for stage, limit in STAGES.items():
+        own = [slot for slot in slots if slot["reservation"]["stage"] == stage]
+        envelope = sum(slot["reservation"]["wire_bytes"] + 1024 for slot in own)
+        stages[stage] = dict(request_limit=limit, held_requests=len(own),
+            unreserved_request_capacity=limit - len(own), token_envelope_limit=64000,
+            held_token_envelope=envelope, unreserved_token_capacity=64000 - envelope,
+            run_id=own[0]["reservation"]["run_id"] if own else None)
+    known = [slot for slot in slots if _known(slot["settlement"])]
+    return dict(contract_kind="EXACT_SEVEN_SLOT_SYNTHETIC_TRIAL", dispatch_authorized=False,
+        request_limit=7, held_requests=len(slots), unreserved_request_capacity=7 - len(slots),
+        token_envelope_limit=192000, held_token_envelope=held,
+        unreserved_token_capacity=192000 - held, output_token_limit=7168,
+        unresolved_usage_requests=len(slots) - len(known),
+        known_unaccepted_tokens=sum(slot["settlement"]["total_tokens"] for slot in known
+            if not slot["accepted"]),
+        stages=stages, money=dict(paid_cap=0, actual_paid=None, currency=None,
+            status="UNKNOWN", fee_verification="NOT_LIVE_VERIFIED", live_allowed=False))
+
+
 def _public(scope, ledger, duplicate=False):
     slots = ledger["slots"]
     known = all(_known(x["settlement"]) for x in slots)
     return dict(scope=scope.model_dump(), ledger=ledger, duplicate=duplicate,
+        budget_projection=_projection(slots),
         dispatch_authorized=False, live_admission="NOT_VERIFIED",
         reserved_requests=len(slots), reserved_envelope=sum(
             x["reservation"]["wire_bytes"] + 1024 for x in slots),
