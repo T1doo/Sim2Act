@@ -60,6 +60,9 @@ def _scope(store, c, user, binding, *, active=True, qualified=True):
     gate._approved(store, c, user, contract, binding.approval_key, active=active)
     if qualified:
         production._qualified()
+        # File qualification can consume the final execution interval. Reprove
+        # the complete original approval after that work, before accepting it.
+        gate._approved(store, c, user, contract, binding.approval_key, active=active)
     return contract
 
 

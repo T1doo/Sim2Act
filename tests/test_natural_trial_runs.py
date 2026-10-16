@@ -537,3 +537,28 @@ def test_claim_proof_or_write_cannot_cross_or_extend_original_deadline(
     else:
         assert store.claim("bound", 30, trial_binding=binding) is None
     assert snapshot(store) == before
+
+
+@pytest.mark.parametrize("stage,late_call", [("generate", 2), ("source", 3)])
+def test_final_qualification_crossing_expiry_cannot_commit(
+    synthetic, monkeypatch, stage, late_call
+):
+    data, binding, _, _ = synthetic
+    calls = []
+    body = None
+    if stage == "source":
+        body, _ = synthetic_stage(synthetic, monkeypatch)
+    before = snapshot(data[0])
+
+    def qualified():
+        calls.append(1)
+        if len(calls) == late_call:
+            monkeypatch.setattr(time, "time", lambda: binding.contract.expires_at)
+
+    monkeypatch.setattr(production, "_qualified", qualified)
+    with pytest.raises(DomainError):
+        if stage == "generate":
+            service.submit_generate(data[0], data[3], binding)
+        else:
+            service.submit_stage(data[0], data[3], binding, stage, body)
+    assert snapshot(data[0]) == before
