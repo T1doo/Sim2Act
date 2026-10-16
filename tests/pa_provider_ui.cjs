@@ -1,4 +1,5 @@
 "use strict";
+const durableBrowser=require("./durable_browser.cjs")();
 const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
 const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],hashes={},pending=new Map(),userActions=[],staticResourceLoads=[];
 let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null,heldOwnerState=null,readOrderEvidence=null;
@@ -44,7 +45,7 @@ async function boot(app){
  const load=async asset=>{const response=await rpc({path:asset,method:"GET"});staticResourceLoads.push({boot:pageBoot,path:asset,status:response.status,content_type:response.content_type,bytes:Buffer.byteLength(response.text,"utf8"),sha256:crypto.createHash("sha256").update(response.text).digest("hex")});assert.equal(response.status,200,`Actual HTTP asset ${asset} must be available`);return response.text;};
  const html=await load("/");
  hashes["index.html"]=crypto.createHash("sha256").update(html).digest("hex");
- dom=new JSDOM(html,{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
+ dom=new JSDOM(html,{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;durableBrowser.install(w);$=id=>w.document.getElementById(id);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
  const css=await load("/app.css");hashes["app.css"]=crypto.createHash("sha256").update(css).digest("hex");const style=w.document.createElement("style");style.textContent=css;w.document.head.append(style);
  w.fetch=async(url,options={})=>{

@@ -3,6 +3,7 @@
 No TestClient, Trial qualification, native browser or real provider is used.
 """
 
+import gzip
 import hashlib
 import json
 import os
@@ -24,8 +25,11 @@ from sim2act.db import Store, attempts, internal_instance_data
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Ownership proof requires Linux /proc")
-def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path):
+@pytest.mark.parametrize("durable", [False, True])
+def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path, durable):
     root = Path(os.environ.get("SIM2ACT_PROCESS_EVIDENCE", str(tmp_path / "process-evidence")))
+    if durable:
+        root = root.with_name(root.name + "-new-dom")
     root.mkdir()  # Atomic: an existing/UNKNOWN execution is never reused.
     repo = Path(__file__).parents[1]
     token = uuid.uuid4().hex
@@ -142,6 +146,7 @@ def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path):
     store = Store("sqlite:///" + str(root / "fixture.db"), test_only=True)
     store.initialize()
     store.user("isolated process fixture", "synthetic-test-A")
+    store.user("isolated alternate identity", "synthetic-test-B")
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -162,7 +167,8 @@ def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path):
         info = root / "info.json"
         info.write_text(json.dumps(dict(base_url=base, project=project, card=card["id"],
                                        target_card=target_card["id"], target_resource=target,
-                                       output=str(root / "page.json"), http_log=str(root / "page-http.jsonl"), token=token)))
+                                       output=str(root / "page.json.gz"), http_log=str(root / "page-http.jsonl.gz"),
+                                       storage_path=str(root / "browser-storage.json"), durable=durable, token=token)))
         page = start("page", ["node", str(repo / "tests/ordinary_process_ui.cjs"), str(info), token])
         process = page["process"]
         selector = selectors.DefaultSelector()
@@ -208,7 +214,7 @@ def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path):
         else:
             raise AssertionError("Page workflow timed out; no retry")
         assert process.wait(timeout=10) == 0
-        proof = json.loads((root / "page.json").read_text())
+        proof = json.loads(gzip.decompress((root / "page.json.gz").read_bytes()))
         assert proof["status"] == "PASS" and len(proof["checks"]) >= 23
         class Assets(HTMLParser):
             def __init__(self):
@@ -222,7 +228,7 @@ def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path):
 
         expected_assets = Assets()
         expected_assets.feed((repo / "src/sim2act/web/index.html").read_text())
-        assert [asset["path"] for asset in proof["assets"]] == expected_assets.paths
+        assert [asset["path"] for asset in proof["assets"]] == expected_assets.paths * (3 if durable else 1)
         for asset in proof["assets"]:
             path = repo / "src/sim2act/web" / ("index.html" if asset["path"] == "/" else asset["path"].lstrip("/"))
             assert asset["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
@@ -232,7 +238,8 @@ def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path):
         assert SOURCE not in json.dumps(calls["cold"]) and COLD in json.dumps(calls["cold"])
         (root / "RESULT.json").write_text(json.dumps(dict(status="PASS", page_checks=len(proof["checks"]),
             dispatches={role: len(values) for role, values in calls.items()}, source_history_unchanged=True,
-            browser="JSDOM_NOT_NATIVE", same_document=True, native_browser="NOT_RUN", postgres="NOT_RUN",
+            browser="JSDOM_NOT_NATIVE", same_document=not durable, new_dom_count=3 if durable else 1,
+            platform_storage_locks="TEST_ADAPTER_NOT_NATIVE", native_browser="NOT_RUN", postgres="NOT_RUN",
             windows="NOT_RUN", real_provider="NOT_RUN", semantic_acceptance="NOT_RUN"), indent=2))
     finally:
         cleanup_errors = []

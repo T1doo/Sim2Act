@@ -2,6 +2,64 @@
 // Each view and request carries its own identity/selection generation; no browser execution.
 let engineering = null, engineeringGeneration = 0;
 const engineeringPending = new Map();
+const specRecoveryPrefix="sim2act.spec-run-recovery.v1:";
+const specRecoveryMetadata=new WeakMap();
+function clearSpecRecoveryMemory(){
+  for(const [id,pending] of engineeringPending)if(specRecoveryMetadata.has(pending))engineeringPending.delete(id);
+}
+function specRecoveryScope(view,instance){
+  return {principal_id:instance.principal_id,project_id:view.project,app_id:view.app,instance_id:instance.id};
+}
+function specRecoveryKey(view,instance){return specRecoveryPrefix+JSON.stringify(Object.values(specRecoveryScope(view,instance)));}
+function specRecoveryCheck(record,view,instance){
+  const fields=["namespace","principal_id","project_id","app_id","instance_id","release_id","expected_revision","expected_release_fingerprint","request_key"];
+  if(Object.hasOwn(record||{},"expected_owner_goal_binding_fingerprint"))fields.push("expected_owner_goal_binding_fingerprint");
+  if(!record||Object.keys(record).sort().join()!==fields.sort().join()||record.namespace!=="spec-run-recovery.v1"||Object.entries(specRecoveryScope(view,instance)).some(([key,value])=>record[key]!==value)||!/^irelease_[a-f0-9]{32}$/.test(record.release_id)||!Number.isSafeInteger(record.expected_revision)||record.expected_revision<1||! /^[a-f0-9]{64}$/.test(record.expected_release_fingerprint)||! /^[a-f0-9-]{36}$/.test(record.request_key)||(record.expected_owner_goal_binding_fingerprint!==undefined&&! /^[a-f0-9]{64}$/.test(record.expected_owner_goal_binding_fingerprint)))throw Error("RECOVERY_RECORD_INVALID");
+  return record;
+}
+function specRecoveryRead(view,instance){
+  try{
+    const raw=localStorage.getItem(specRecoveryKey(view,instance));
+    return raw===null?null:{raw,record:specRecoveryCheck(JSON.parse(raw),view,instance)};
+  }catch(error){if(error.message==="RECOVERY_RECORD_INVALID")throw error;throw Error("RECOVERY_STORAGE_UNAVAILABLE");}
+}
+function specRecoveryRestore(view,instance){
+  if(!navigator.locks?.request)throw Error("RECOVERY_LOCK_UNAVAILABLE");
+  const saved=specRecoveryRead(view,instance),pending=engineeringPending.get(instance.id),metadata=pending&&specRecoveryMetadata.get(pending);
+  if(metadata&&metadata.key!==specRecoveryKey(view,instance))engineeringPending.delete(instance.id);
+  if(!saved)return metadata?.key===specRecoveryKey(view,instance)?pending:null;
+  if(metadata?.key===specRecoveryKey(view,instance)&&metadata.raw===saved.raw)return pending;
+  const record=saved.record;
+  const body={expected_revision:record.expected_revision,expected_release_fingerprint:record.expected_release_fingerprint,input:{},request_key:record.request_key,...(record.expected_owner_goal_binding_fingerprint!==undefined?{expected_owner_goal_binding_fingerprint:record.expected_owner_goal_binding_fingerprint}:{})};
+  specRecoveryMetadata.set(body,{...saved,key:specRecoveryKey(view,instance)});
+  engineeringPending.set(instance.id,body);return body;
+}
+function specRecoverySave(view,instance,pending){
+  const key=specRecoveryKey(view,instance);
+  if(specRecoveryRead(view,instance))throw Error("RECOVERY_RECORD_CONFLICT");
+  const record=specRecoveryCheck({namespace:"spec-run-recovery.v1",...specRecoveryScope(view,instance),release_id:instance.release_id,expected_revision:pending.expected_revision,expected_release_fingerprint:pending.expected_release_fingerprint,request_key:pending.request_key,...(pending.expected_owner_goal_binding_fingerprint!==undefined?{expected_owner_goal_binding_fingerprint:pending.expected_owner_goal_binding_fingerprint}:{})},view,instance);
+  const raw=JSON.stringify(record);
+  try{localStorage.setItem(key,raw);if(localStorage.getItem(key)!==raw)throw Error();}
+  catch{throw Error("RECOVERY_STORAGE_UNAVAILABLE");}
+  specRecoveryMetadata.set(pending,{key,record,raw});engineeringPending.set(instance.id,pending);
+}
+function specRecoveryForget(view,instance,pending){
+  const metadata=specRecoveryMetadata.get(pending),saved=specRecoveryRead(view,instance);
+  // Called only while holding this scope's Web Lock. Never delete a newer intent.
+  if(!metadata||metadata.key!==specRecoveryKey(view,instance)||(saved&&saved.raw!==metadata.raw))throw Error("RECOVERY_RECORD_CONFLICT");
+  if(saved){try{localStorage.removeItem(metadata.key);if(localStorage.getItem(metadata.key)!==null)throw Error();}catch{throw Error("RECOVERY_STORAGE_UNAVAILABLE");}}
+  if(engineeringPending.get(instance.id)===pending)engineeringPending.delete(instance.id);
+}
+function specRecoveryRefresh(view,instance){
+  view.recoveryError=null;
+  try{specRecoveryRestore(view,instance);}catch(error){view.recoveryError=error.message;}
+}
+window.addEventListener("storage",event=>{
+  const view=engineering,instance=view?.instance;
+  if(!view?.spec||!instance||!engineeringCurrent(view)||!(event.key===null||event.key===specRecoveryKey(view,instance)))return;
+  specRecoveryRefresh(view,instance);engineeringButtons(view);
+  $("internal-run-status").textContent=view.recoveryError||"恢复记录已变化；已有原请求时仅可读取回执，不会自动提交。";
+});
 const engineeringInstanceKeys = new Map();
 const registeredExtractionRequests = new Map();
 const naturalTaskRequests = new Map();
@@ -51,9 +109,9 @@ function engineeringButtons(view) {
   $("internal-refresh").disabled=!!view.busy;
   $("internal-commit").disabled=!!view.busy || !view.approval || approvalExpired || !$("internal-approval-ack").checked;
   if(approvalExpired)engineeringStatus(view,"批准已到期，请重新核查；不会自动确认。","error");
-  $("internal-run-submit").disabled=!!view.busy || !view.instance || engineeringPending.has(view.instance.id) || pbUseUnknown(view.instance.id) || (view.agent && (!view.offlineReplay || !$("internal-term").value.trim()));
+  $("internal-run-submit").disabled=!!view.busy || !!view.recoveryError || !view.instance || engineeringPending.has(view.instance.id) || pbUseUnknown(view.instance.id) || (view.agent && (!view.offlineReplay || !$("internal-term").value.trim()));
   $("internal-retry").hidden=!view.instance || !engineeringPending.has(view.instance.id);
-  $("internal-retry").disabled=!!view.busy;
+  $("internal-retry").disabled=!!view.busy || !!view.recoveryError;
   $("internal-retry").textContent=view.spec ? "仅用原请求键读取运行回执" : "恢复原请求回执";
   $("internal-new-intent").hidden=view.spec || $("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
 }
@@ -62,7 +120,7 @@ async function engineeringAction(view,fn) {
   const selection=view.instanceGeneration;
   view.busy=true;engineeringButtons(view);
   try {await fn();}
-  catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");}}
+  catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message==="RECOVERY_REQUEST_BUSY"?"另一个页面正在处理此实例。本次没有排队提交；请稍后手动刷新或读取原请求回执。":error.message,"error");}}
   finally {view.busy=false;engineeringButtons(view);}
 }
 async function openInternal(app,appGeneration) {
@@ -118,7 +176,7 @@ async function showInternalInstance(id,view=engineering) {
     const instance=await api(`/api/internal/instances/${id}`);
     if(!engineeringCurrent(view) || selection!==view.instanceGeneration)return;
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
-    view.instance=instance;renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
+    view.instance=instance;if(view.spec)specRecoveryRefresh(view,instance);renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
     $("internal-column-label").hidden=view.agent||view.literal||view.workflow||view.spec;$("internal-column").required=!(view.agent||view.literal||view.workflow||view.spec);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
@@ -130,6 +188,7 @@ async function showInternalInstance(id,view=engineering) {
     if(view.workflow)$("internal-run-status").textContent="填写两次独立检索词，明确选择报告分支。报告未选时保留 PARTIAL 与三步回执；只用原请求 key 读取未知结果。";
     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
     if(view.spec)$("internal-run-status").textContent=engineeringPending.has(id) ? "本次提交结果尚未确认。仅用原请求键读取回执；不会重发或开始重复运行。" : "运行已保存材料与目标，完成后可读取此版本清单或下载成果。自然规范模型默认关闭；出处核验不代表语义验收。";
+    if(view.spec&&view.recoveryError)$("internal-run-status").textContent=`${view.recoveryError}：无法安全保存或读取原请求恢复信息，未提交运行。请检查浏览器存储能力后手动刷新。`;
     await renderPBUse(view);
     if(typeof openNaturalLogic==="function")await openNaturalLogic(view);
     if(typeof openOwnerReview==="function")await openOwnerReview(view);
@@ -180,10 +239,10 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
 async function submitInternal(view,retry=false) {
   const instance=view.instance;if(!instance)return;
   if(pbUseUnknown(instance.id))return;
+  if(view.spec)return submitPersistentSpecRun(view,instance,retry);
   let pending=engineeringPending.get(instance.id);
   if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.spec ? {} : view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
-  if(view.spec)return submitSpecRun(view,instance,pending,retry);
   const requestKey=pending.request_key;
   const generation=view.instanceGeneration;
   $("internal-run-status").textContent="正在提交持久任务…";
@@ -210,7 +269,7 @@ async function submitSpecRun(view,instance,pending,retry){
     try{accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);}
     catch(error){
       if(await internalSubmissionRejected(error,view,instance,pending,"runs",pending)&&engineeringPending.get(instance.id)===pending){
-        const live=current();engineeringPending.delete(instance.id);
+        const live=current();if(!live)return;specRecoveryForget(view,instance,pending);
         if(live){$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";}if(pbUseView?.instance.id===instance.id&&pbUseView.view.token===view.token&&pbUseView.view.project===view.project)pbUseView.buttons();if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;
       }
       throw error;
@@ -220,13 +279,32 @@ async function submitSpecRun(view,instance,pending,retry){
   const receipt=await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}`);
   if(!current())return;
   const expected={instance_id:instance.id,expected_revision:pending.expected_revision,expected_release_fp:pending.expected_release_fingerprint,input:pending.input};
+  if(pending.expected_owner_goal_binding_fingerprint!==undefined)expected.owner_goal_binding_fingerprint=pending.expected_owner_goal_binding_fingerprint;
   const requestHash=await paHash(expected);
   if(!current())return;
-  if(receipt.namespace!=="spec-run-request.v1"||receipt.principal_id!==instance.principal_id||receipt.project_id!==view.project||receipt.app_id!==view.app||receipt.instance_id!==instance.id||receipt.release_id!==instance.release_id||receipt.request_key!==pending.request_key||receipt.request_fingerprint!==requestHash||goalRunCanonical(receipt.request)!==goalRunCanonical(pending)||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||!/^iapprun_[a-f0-9]{32}$/.test(receipt.app_run_id)||receipt.new_model_requests!==0||receipt.project_writes!==0||(accepted&&(accepted.run_id!==receipt.run_id||accepted.app_run_id!==receipt.app_run_id)))throw Error("VERSION_CONFLICT");
-  engineeringPending.delete(instance.id);
+  if(receipt.namespace!=="spec-run-request.v1"||receipt.principal_id!==instance.principal_id||receipt.project_id!==view.project||receipt.app_id!==view.app||receipt.instance_id!==instance.id||receipt.release_id!==specRecoveryMetadata.get(pending)?.record.release_id||receipt.request_key!==pending.request_key||receipt.request_fingerprint!==requestHash||goalRunCanonical(receipt.request)!==goalRunCanonical(pending)||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||!/^iapprun_[a-f0-9]{32}$/.test(receipt.app_run_id)||receipt.new_model_requests!==0||receipt.project_writes!==0||(accepted&&(accepted.run_id!==receipt.run_id||accepted.app_run_id!==receipt.app_run_id)))throw Error("VERSION_CONFLICT");
+  specRecoveryForget(view,instance,pending);
   $("internal-run-status").textContent=`已核对原请求 ${pending.request_key} · ${receipt.status}；回执读取没有重新执行。`;
   await showInternalInstance(instance.id,view);
   if(engineeringCurrent(view)&&view.instance?.id===instance.id&&workspaceSelectionGeneration===workspace)await showInternalRun(receipt.run_id,view,view.instance);
+}
+async function submitPersistentSpecRun(view,instance,retry){
+  const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,selection=view.instanceGeneration;
+  const current=()=>engineeringCurrent(view)&&view.instance===instance&&selection===view.instanceGeneration&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
+  if(!navigator.locks?.request)throw Error("RECOVERY_LOCK_UNAVAILABLE");
+  return navigator.locks.request(specRecoveryKey(view,instance),{mode:"exclusive",ifAvailable:true},async lock=>{
+    if(!current())return;
+    if(!lock)throw Error("RECOVERY_REQUEST_BUSY");
+    let pending=specRecoveryRestore(view,instance);view.recoveryError=null;
+    const recovering=!!pending;
+    if(!pending&&!retry){
+      pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:{},request_key:crypto.randomUUID(),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current?{expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint}:{})};
+      specRecoverySave(view,instance,pending);
+    }
+    if(!pending)return;
+    // Any durable intent, including OUTCOME_UNKNOWN, is read-only on subsequent actions.
+    return submitSpecRun(view,instance,pending,retry||recovering);
+  });
 }
 $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;

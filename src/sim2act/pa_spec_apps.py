@@ -1435,7 +1435,9 @@ def mount(app, store, limits, identity):
                 request_key=key, request_fingerprint=snapshot["request_fingerprint"],
                 request=dict(expected_revision=snapshot["expected_revision"],
                     expected_release_fingerprint=snapshot["expected_release_fp"],
-                    input=snapshot["input"], request_key=key),
+                    input=snapshot["input"], request_key=key,
+                    **(dict(expected_owner_goal_binding_fingerprint=snapshot["owner_goal_binding_fingerprint"])
+                        if "owner_goal_binding_fingerprint" in snapshot else {})),
                 status=job["status"], new_model_requests=0, project_writes=0)
 
     @app.get("/api/projects/{pid}/spec-model-candidates")

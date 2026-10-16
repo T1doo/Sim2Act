@@ -3,6 +3,7 @@ const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require(
 const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],hashes={},pending=new Map(),userActions=[],staticResourceLoads=[];
 let serial=0,bootCount=0,dom,w,$,fault="",hold=null,expectedApp=null,heldOwnerState=null,readOrderEvidence=null;
 const downloads=[],downloadWork=[];
+const durableBrowser=require("./durable_browser.cjs")();
 readline.createInterface({input:process.stdin}).on("line",line=>{const result=JSON.parse(line),resolve=pending.get(result.id);pending.delete(result.id);resolve(result);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
 const check=(value,label)=>{assert(value,label);checks.push(label);};
@@ -46,6 +47,7 @@ async function boot(app){
  const html=await load("/");
  hashes["index.html"]=crypto.createHash("sha256").update(html).digest("hex");
  dom=new JSDOM(html,{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
+ durableBrowser.install(w);
  const blobs=new Map();w.URL.createObjectURL=blob=>{const key=`blob:offline-${blobs.size}`;blobs.set(key,blob);return key;};w.URL.revokeObjectURL=key=>blobs.delete(key);
  w.document.addEventListener("click",event=>{const link=event.target.closest("a[download]");if(!link)return;event.preventDefault();const blob=blobs.get(link.href),name=link.download;assert(blob);downloadWork.push(new Promise((resolve,reject)=>{const reader=new w.FileReader();reader.onload=()=>{downloads.push({name,content:reader.result,type:blob.type});resolve();};reader.onerror=reject;reader.readAsText(blob);}));},true);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;

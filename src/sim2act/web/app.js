@@ -258,6 +258,7 @@ async function loadProjects() {
   await refresh();
 }
 function clearIdentityView() {
+  if(typeof clearSpecRecoveryMemory === "function")clearSpecRecoveryMemory();
   if(typeof pnClear === "function")pnClear();
   invalidateResourcePreview();
   if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();
@@ -284,9 +285,14 @@ $("connect").onclick = safe(async () => {
   try {
     await loadProjects();if(!current())return;
     $("token").value="";$("login").hidden=true;
+    $("identity-switch").hidden=false;
     const capabilities=await api("/api/capabilities");if(current())renderResourceCatalog(capabilities);
   } catch(error) {if(current())throw error;}
 });
+$("identity-switch").onclick=()=>{
+  token="";identityConnectionGeneration++;clearIdentityView();
+  $("token").value="";$("login").hidden=false;$("identity-switch").hidden=true;$("token").focus();
+};
 $("project-form").onsubmit = safe(async () => {await api("/api/projects","POST",{name:$("project-name").value}); await loadProjects();});
 $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").value;if(!pid)throw new Error("先选择项目");await api(`/api/projects/${pid}/resources`,"POST",{name:$("resource-name").value,format:$("format").value,content:$("content").value}); await refresh();});
 $("run-form").onsubmit = safe(async () => submitOrdinaryRun());

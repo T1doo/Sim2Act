@@ -3,6 +3,10 @@
 const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
 const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],assets=[],actions=[],pending=new Map();
 let serial=0,dom,w,$,loseSource=false,sourceAccepted=null;
+let holdReceipt=false,heldReceipt=null;
+const zlib=require("node:zlib");
+const evidenceBytes=(path,text)=>path.endsWith(".gz")?zlib.gzipSync(text):text;
+const durableBrowser=require("./durable_browser.cjs")(info.storage_path);
 readline.createInterface({input:process.stdin}).on("line",line=>{const result=JSON.parse(line),resolve=pending.get(result.id);pending.delete(result.id);resolve(result);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
 const check=(value,label)=>{assert(value,label);checks.push(label);};
@@ -28,21 +32,24 @@ const edit=(id,value)=>{const element=$(id);return gesture(element,()=>{element.
 const nav=id=>click(w.document.querySelector(`#workspace-nav [data-tab=${id}]`));
 async function http(path,options={}){
  const url=new URL(path,info.base_url);assert.equal(url.origin,info.base_url);
- fs.appendFileSync(info.http_log,JSON.stringify({phase:"REQUEST",path:url.pathname+url.search,method:options.method||"GET",body:options.body?JSON.parse(options.body):null})+"\n");
+ fs.appendFileSync(info.http_log,evidenceBytes(info.http_log,JSON.stringify({phase:"REQUEST",path:url.pathname+url.search,method:options.method||"GET",body:options.body?JSON.parse(options.body):null})+"\n"));
  const response=await fetch(url,options),text=await response.text();
  requests.push({path:url.pathname+url.search,method:options.method||"GET",body:options.body?JSON.parse(options.body):null,status:response.status,text});
- fs.appendFileSync(info.http_log,JSON.stringify({phase:"RESPONSE",...requests.at(-1)})+"\n");
+ fs.appendFileSync(info.http_log,evidenceBytes(info.http_log,JSON.stringify({phase:"RESPONSE",...requests.at(-1)})+"\n"));
  return {status:response.status,text,content_type:response.headers.get("content-type")};
 }
-async function boot(){
+async function boot(app,instance){
+ if(dom)dom.window.close();
  const load=async path=>{const r=await http(path);assert.equal(r.status,200);assets.push({path,sha256:crypto.createHash("sha256").update(r.text).digest("hex"),bytes:Buffer.byteLength(r.text)});return r.text;};
  const html=await load("/");dom=new JSDOM(html,{url:info.base_url+"/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
+ durableBrowser.install(w);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();
  // Explicit polling boundary: all refreshes below are visible user actions.
  w.setInterval=()=>0;
  const style=w.document.createElement("style");style.textContent=await load("/app.css");w.document.head.append(style);
  w.fetch=async(path,options={})=>{
   const r=await http(path,options);
+  if(holdReceipt&&path.includes("/spec-run-requests/")){holdReceipt=false;await new Promise(resolve=>heldReceipt=resolve);}
   if(loseSource&&options.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(path)){
    loseSource=false;assert.equal(r.status,202);sourceAccepted=JSON.parse(r.text);
    throw Error("controlled delivery loss AFTER actual HTTP 202 acceptance");
@@ -52,7 +59,8 @@ async function boot(){
  for(const script of [...w.document.querySelectorAll("script[src]")]){const node=w.document.createElement("script");node.textContent=await load(script.getAttribute("src"));w.document.body.append(node);}
  await edit("token","synthetic-test-A");await click("connect");
  check($("login").hidden&&$("project-select").value===info.project,"actual HTTP login selects exact isolated project");
- await click([...$("goal-card-list").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes("Operating notes")));
+ if(app){await nav("apps");await click([...$("app-list").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(app)));await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(instance)));}
+ else await click([...$("goal-card-list").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes("Operating notes")));
 }
 async function release(){
  await click("internal-prepare");check($("internal-commit").disabled,"release needs explicit acknowledgement");
@@ -66,7 +74,7 @@ async function viewSaved(phrase){
  check(posts()===count&&saved.textContent.includes(phrase),"authorized GET renders actual saved material");
  check(saved.textContent.includes("语义 UNKNOWN")&&saved.textContent.includes("Human question 15"),"semantic and all unresolved human questions remain pending");
 }
-function write(status,error){fs.writeFileSync(info.output,JSON.stringify({status,error,checks,requests,assets,actions,source_accepted:sourceAccepted,browser:"JSDOM_NOT_NATIVE",api:"REAL_LOOPBACK_HTTP_SEPARATE_API_WORKER",same_document:true,automatic_polling:false,model:"EXPLICIT_MOCK_TRANSPORT_ONLY",text:error?dom?.window.document.body.textContent:undefined},null,2));}
+function write(status,error){fs.writeFileSync(info.output,evidenceBytes(info.output,JSON.stringify({status,error,checks,requests,assets,actions,source_accepted:sourceAccepted,platform_lock_events:durableBrowser.events,browser:"JSDOM_NOT_NATIVE",api:"REAL_LOOPBACK_HTTP_SEPARATE_API_WORKER",same_document:!info.durable,storage_adapter:"FILE_BACKED_STORAGE_AND_WEB_LOCKS_TEST_PLATFORM",automatic_polling:false,model:"EXPLICIT_MOCK_TRANSPORT_ONLY",text:error?dom?.window.document.body.textContent:undefined},null,2)));}
 (async()=>{try{
  await boot();await edit("goal-application-family","natural_spec");await click("goal-application-start");
  check($("goal-application-confirm").disabled,"queued generation cannot be saved");
@@ -82,11 +90,34 @@ function write(status,error){fs.writeFileSync(info.output,JSON.stringify({status
  const count=posts(),beforeRestart=requests.length;
  await rpc({command:"source-restart",instance:sourceInstance,accepted:sourceAccepted,key:sourceSubmit.body.request_key});
  check(posts()===count&&requests.length===beforeRestart,"backend restart performs no page submit or hidden recovery");
+ if(info.durable){
+  const storage=durableBrowser.values(info.base_url);
+  fs.writeFileSync(info.storage_path+".before-reopen.json",JSON.stringify(storage,null,2));
+  check(storage.length===1&&!JSON.stringify(storage).includes("synthetic-test-A")&&!JSON.stringify(storage).includes("desk lamp"),"only one minimal durable metadata record, no credential or source body");
+  await boot("Source process app",sourceInstance);
+  check(!$("internal-retry").hidden&&$("internal-run-submit").disabled,"new DOM reload restores original key and disables duplicate submit");
+  await boot("Source process app",sourceInstance);
+  check(posts()===count&&!$("internal-retry").hidden,"closing and reopening another DOM recovers durable metadata with GETs only");
+ }
+ if(info.durable){
+  holdReceipt=true;const action=click("internal-retry");
+  const until=Date.now()+30000;while(!heldReceipt&&Date.now()<until)await new Promise(resolve=>setTimeout(resolve,10));assert(heldReceipt,"bounded late receipt wait");
+  await click("identity-switch");await edit("token","synthetic-test-B");await click("connect");
+  const foreignText=w.document.body.textContent,foreignReads=requests.length,storageBefore=JSON.stringify(durableBrowser.values(info.base_url));
+  check(!foreignText.includes(sourceSubmit.body.request_key)&&!foreignText.includes("Source process app"),"different authenticated identity does not expose original request or app");
+  heldReceipt();heldReceipt=null;await action;
+  check(w.document.body.textContent===foreignText&&requests.length===foreignReads&&JSON.stringify(durableBrowser.values(info.base_url))===storageBefore,"late successful original receipt cannot paint or erase durable record after identity switch");
+  await click("identity-switch");await edit("token","synthetic-test-A");await click("connect");await nav("apps");
+  await click([...$("app-list").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes("Source process app")));
+  await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(sourceInstance)));
+  check(!$("internal-retry").hidden&&$("internal-run-submit").disabled,"returning original identity restores its pending intent");
+ }
  await click("internal-retry");
- const recovery=requests.slice(beforeRestart).find(r=>r.path.includes("/spec-run-requests/"));
- check(posts()===count&&recovery?.path.endsWith("/"+sourceSubmit.body.request_key)&&recovery.status===200,"same document recovers original key with GET only after actual process restart");
+ const recovery=requests.slice(beforeRestart).filter(r=>r.path.includes("/spec-run-requests/")).at(-1);
+ check(posts()===count&&recovery?.path.endsWith("/"+sourceSubmit.body.request_key)&&recovery.status===200,info.durable?"new DOM recovers original key with GET only after actual process restart":"same document recovers original key with GET only after actual process restart");
  const receipt=JSON.parse(recovery.text);
  check(receipt.run_id===sourceAccepted.run_id&&receipt.app_run_id===sourceAccepted.app_run_id&&receipt.status==="SUCCEEDED","recovery matches original Run and AppRun saved by separate Worker");
+ if(info.durable)check(durableBrowser.values(info.base_url).length===0,"only exact validated receipt removes its durable record");
  await viewSaved("desk lamp");
  await nav("projects");await click([...$("goal-card-list").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes("Cold operating notes")));
  await edit("pa-binding-family","natural");await click("pa-binding-sources");await edit("pa-binding-source",proof.run_id);await click("pa-binding-preview");

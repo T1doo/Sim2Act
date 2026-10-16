@@ -1,4 +1,5 @@
 "use strict";
+const durableBrowser=require("./durable_browser.cjs")();
 const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require("node:crypto"),readline=require("node:readline"),{JSDOM}=require("jsdom");
 const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],loaded={},actions=[],loads=[],pending=new Map();
 let serial=0,dom,w,$,fault="",hold=null;
@@ -19,7 +20,7 @@ const nav=tab=>click(w.document.querySelector(`#workspace-nav [data-tab=${tab}]`
 const countPost=suffix=>requests.filter(request=>request.method==="POST"&&request.path.endsWith(suffix)).length;
 async function boot(){
  if(dom)dom.window.close();const load=async path=>{const response=await rpc({path,method:"GET"});assert.equal(response.status,200);const name=path==="/"?"index.html":path.slice(1),sha=crypto.createHash("sha256").update(response.text).digest("hex");loaded[name]=sha;loads.push({path,status:response.status,sha256:sha,bytes:Buffer.byteLength(response.text)});return response.text;};
- dom=new JSDOM(await load("/"),{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
+ dom=new JSDOM(await load("/"),{url:"http://offline.test/",runScripts:"dangerously",pretendToBeVisual:true});w=dom.window;durableBrowser.install(w);$=id=>w.document.getElementById(id);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
  const style=w.document.createElement("style");style.textContent=await load("/app.css");w.document.head.append(style);
  w.fetch=async(path,options={})=>{const request={path,method:options.method||"GET",body:options.body&&JSON.parse(options.body),headers:options.headers};requests.push(request);const result=await rpc(request);
