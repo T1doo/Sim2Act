@@ -901,8 +901,9 @@ function resourceContextCurrent(c) {return c.identity===token && c.connection===
 function resourceSaveKey(c=resourceContext()) {return JSON.stringify([c.identity,c.project]);}
 function renderResourceMaterial() {
   const pending=resourceSaveRequests.get(resourceSaveKey());
-  for(const id of ["resource-file","resource-name","format","content","resource-file-clear"])$(id).disabled=!!pending;
-  $("resource-save").disabled=!!resourceFileReader || !!pending || !$("project-select").value;
+  const preparation=naturalUsePreparation,locked=!!preparation&&(preparation.step!=="material"||naturalPreparationGoalRequests.has(preparation.key));
+  for(const id of ["resource-file","resource-name","format","content","resource-file-clear"])$(id).disabled=!!pending||locked;
+  $("resource-save").disabled=!!resourceFileReader || !!pending || locked || !$("project-select").value;
   $("resource-save-read").hidden=!["unknown","accepted"].includes(pending?.state);
   $("resource-save-reset").hidden=$("resource-save-read").hidden;
   if(pending){
