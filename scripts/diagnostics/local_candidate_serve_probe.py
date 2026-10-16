@@ -5,6 +5,7 @@ Import timestamps are parent line-receipt upper bounds, not child wall times.
 """
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -237,7 +238,11 @@ def probe(candidate, data, output):
                 parsed = urlsplit(origin)
                 with socket.socket() as connection:
                     connection.settimeout(2)
-                    report["port_closed"] = connection.connect_ex((parsed.hostname, parsed.port)) != 0
+                    result = connection.connect_ex((parsed.hostname, parsed.port))
+                    report["port_connect_errno"] = result
+                    report["port_connect_error_name"] = errno.errorcode.get(result, "UNKNOWN")
+                    report["port_closed"] = result == errno.ECONNREFUSED
+                    require(report["port_closed"], "Port closure unavailable or open; errno=" + str(result))
             except BaseException as error:
                 report["port_check_error"] = dict(type=type(error).__name__, message=str(error), **stamp())
         try:
