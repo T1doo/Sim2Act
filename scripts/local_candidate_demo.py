@@ -8,7 +8,9 @@ Prepare keeps its new directory for a later, separate-process read-only verify.
 import argparse
 import hashlib
 import json
+import os
 import socket
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -37,7 +39,23 @@ def require(ok, message):
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    require(not path.is_symlink(), "Refuse linked demo output: " + path.name)
+    # Replace the directory entry atomically; never open/follow an output link.
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                     prefix=".owned-demo-", delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    try:
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)  # Only our own unique temporary file.
+
+
+def unlinked_path(path):
+    absolute = Path(os.path.abspath(path))
+    require(not any(part.is_symlink() for part in [absolute, *absolute.parents]),
+            "Demo directory and its parents cannot be symlinks")
+    return absolute
 
 
 def settings_for(root):
@@ -47,13 +65,13 @@ def settings_for(root):
 
 
 def checked_directory(path):
-    require(not path.is_symlink(), "Demo directory cannot be a symlink")
-    root = path.resolve()
+    root = unlinked_path(path)
     for name in ["fixture.json", DATABASE, "demo-receipt.json"]:
         require((root / name).is_file() and not (root / name).is_symlink(),
                 "Expected owned synthetic fixture file: " + name)
     require(json.loads((root / "fixture.json").read_text(encoding="utf-8")) == MARKER,
             "Directory is not this explicit synthetic fixture")
+    require(not (root / "cold-read-receipt.json").is_symlink(), "Refuse linked cold-read output")
     return root
 
 
@@ -85,7 +103,14 @@ def loopback(store, settings, *, port=0, read_only=False):
                 require(thread.is_alive() and time.monotonic() < deadline,
                         "Owned loopback API failed to start")
                 time.sleep(.02)
+            origin = httpx.URL(url)
+
+            def owned_origin(request):
+                require((request.url.scheme, request.url.host, request.url.port) ==
+                        (origin.scheme, origin.host, origin.port), "Only the owned loopback origin is permitted")
+
             with httpx.Client(base_url=url, timeout=60, trust_env=False,
+                              event_hooks={"request": [owned_origin]},
                               headers={"Authorization": "Bearer " + PUBLIC_TOKEN}) as client:
                 yield client, url
         finally:
@@ -289,6 +314,7 @@ class Demo:
 
 
 def prepare(path):
+    path = unlinked_path(path)
     require(not path.exists() and not path.is_symlink(), "Prepare requires a NEW directory; existing data preserved")
     path.mkdir(parents=True, exist_ok=False)
     root = path.resolve()

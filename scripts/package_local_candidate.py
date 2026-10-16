@@ -36,9 +36,9 @@ def main():
     args = parser.parse_args()
     if git("status", "--porcelain").strip():
         parser.error("Commit all candidate source before packaging; clean checkout required")
-    if args.output.exists() or args.output.is_symlink():
+    output = Path(os.path.abspath(args.output))
+    if output.exists() or any(part.is_symlink() for part in [output, *output.parents]):
         parser.error("Output must be a new directory; existing files are preserved")
-    output = args.output.resolve()
     output.mkdir(parents=True)
     commit = git("rev-parse", "HEAD").decode().strip()
     names = git("ls-tree", "-r", "--name-only", commit, "src").decode().splitlines() + FILES

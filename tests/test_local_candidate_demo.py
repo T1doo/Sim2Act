@@ -37,7 +37,8 @@ def test_settings_ignore_real_environment(tmp_path, monkeypatch):
         Store(settings.database_url)  # Ordinary Store still refuses SQLite.
 
 
-@pytest.mark.parametrize("fault", ["marker", "database_link", "receipt_link", "root_link"])
+@pytest.mark.parametrize("fault", ["marker", "database_link", "receipt_link", "root_link",
+                                  "parent_link", "output_link"])
 def test_cold_open_rejects_unknown_or_linked_data(tmp_path, fault):
     root = tmp_path / "fixture"
     root.mkdir()
@@ -52,6 +53,12 @@ def test_cold_open_rejects_unknown_or_linked_data(tmp_path, fault):
         link = tmp_path / "linked"
         link.symlink_to(root, target_is_directory=True)
         root = link
+    elif fault == "parent_link":
+        link = tmp_path / "linked-parent"
+        link.symlink_to(tmp_path, target_is_directory=True)
+        root = link / "fixture"
+    elif fault == "output_link":
+        (root / "cold-read-receipt.json").symlink_to(target)
     else:
         name = demo.DATABASE if fault == "database_link" else "demo-receipt.json"
         (root / name).unlink()
@@ -59,6 +66,16 @@ def test_cold_open_rejects_unknown_or_linked_data(tmp_path, fault):
     with pytest.raises(RuntimeError):
         demo.checked_directory(root)
     assert target.read_text() == "private data preserved"
+
+
+def test_output_writer_does_not_follow_foreign_link(tmp_path):
+    target = tmp_path / "foreign.txt"
+    target.write_text("preserve")
+    output = tmp_path / "receipt.json"
+    output.symlink_to(target)
+    with pytest.raises(RuntimeError, match="linked demo output"):
+        demo.write_json(output, {"status": "PASS"})
+    assert output.is_symlink() and target.read_text() == "preserve"
 
 
 def test_cold_server_real_loopback_only_get_and_no_database_writes(tmp_path):
@@ -72,6 +89,10 @@ def test_cold_server_real_loopback_only_get_and_no_database_writes(tmp_path):
             assert url.startswith("http://127.0.0.1:")
             assert client.get("/").status_code == 200
             assert client.get("/api/projects").json() == []
+            for foreign in ["https://example.invalid/private", "http://localhost:1/",
+                            "http://127.0.0.1:1/", url.replace("http:", "https:")]:
+                with pytest.raises(RuntimeError, match="owned loopback origin"):
+                    client.get(foreign)
             for method in ["POST", "PUT", "PATCH", "DELETE"]:
                 assert client.request(method, "/api/projects", json={"name": "blocked"}).status_code == 405
         assert demo.snapshot(store) == before
