@@ -39,7 +39,8 @@ from sim2act.db import (
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="PID/starttime ownership requires Linux /proc")
-def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
+@pytest.mark.parametrize("cancel", [False, True], ids=["resume", "cancel"])
+def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path, cancel):
     root = tmp_path / "owned-safe-step"
     root.mkdir()
     repo = Path(__file__).parents[1]
@@ -150,7 +151,7 @@ def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     config = root / "config.json"
-    config.write_text(json.dumps(dict(token=token, database_url=url, port=port)))
+    config.write_text(json.dumps(dict(token=token, database_url=url, port=port, cancel=cancel)))
     base = f"http://127.0.0.1:{port}"
     client = httpx.Client(base_url=base, timeout=20, trust_env=False,
                           headers={"Authorization": "Bearer synthetic-test-A"})
@@ -181,6 +182,7 @@ def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
                 attempts=rows(attempts, attempts.c.run_id == rid),
                 reservations=rows(reservations, reservations.c.run_id == rid),
                 data=rows(internal_instance_data, internal_instance_data.c.instance_id == instance["id"]),
+                project_run_ids=sorted(c.execute(select(runs.c.id).where(runs.c.project_id == project)).scalars()),
                 effects=rows(local_effects, local_effects.c.operation_id.in_(
                     select(operations.c.id).where(operations.c.run_id == rid))),
                 unknown=store.has_unknown(c, rid))
@@ -209,10 +211,11 @@ def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
             raise AssertionError("Owned API readiness timed out")
         info = root / "info.json"
         info.write_text(json.dumps(dict(base_url=base, project=project, app_name=app_name,
+            cancel=cancel,
             instance=instance["id"], storage_path=str(root / "browser-storage.json"),
             output=str(root / "page.json.gz"), http_log=str(root / "page-http.jsonl.gz"))))
         page = start("page", ["node", str(repo / "tests/safe_step_process_ui.cjs"), str(info), token])
-        for _ in range(5):
+        for _ in range(6):
             message = receive(page, timeout=240)
             if message.get("done"):
                 break
@@ -259,6 +262,39 @@ def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
                 assert not receive(new, "IDLE_AFTER_DOM")["claimed"]
                 assert snapshot() == paused
                 dump("new-dom-and-worker-before-resume", snapshot())
+            elif command == "verify-explicit-cancel":
+                assert cancel and message["accepted"] == accepted and message["request"] == original_request
+                final = snapshot()
+                safe(final)
+                assert final["run"]["status"] == final["app_runs"][0]["status"] == "CANCELLED"
+                assert final["run"]["cancel_intent"] and final["run"]["version"] == paused["run"]["version"] + 1
+                assert final["run"]["lease_until"] == 0
+                for key in ("binding", "operations", "attempts", "reservations", "data", "effects", "project_run_ids"):
+                    assert final[key] == paused[key]
+                changed = {key for key in final["run"] if final["run"][key] != paused["run"][key]}
+                assert changed == {"status", "version", "cancel_intent"}
+                assert len(final["app_runs"]) == 1
+                assert {k: v for k, v in final["app_runs"][0].items() if k != "status"} == {
+                    k: v for k, v in paused["app_runs"][0].items() if k != "status"}
+                dump("explicit-cancel-terminal", final)
+                send(new, dict(command="probe-after-cancel"))
+                assert not receive(new, "IDLE_AFTER_CANCEL")["claimed"]
+                assert snapshot() == final
+            elif command == "verify-stale-resume-rejected":
+                assert cancel and final is not None
+                assert message["accepted"] == accepted and message["request"] == original_request
+                send(new, dict(command="probe-after-stale-resume"))
+                assert not receive(new, "CANCELLED_DONE")["claimed"]
+                assert new["process"].wait(timeout=10) == 0 and snapshot() == final
+                # Even a fresh terminal version cannot resume; keep this separate
+                # from the actual stale-page gesture and its recorded HTTP 409.
+                response = client.post(prefix + "/runs/" + accepted["run_id"] + "/commands",
+                    json=dict(command="resume", version=final["run"]["version"]))
+                record(dict(event="CURRENT_VERSION_TERMINAL_RESUME", status=response.status_code,
+                    response=response.json(), run_id=accepted["run_id"], version=final["run"]["version"]))
+                assert response.status_code == 409 and response.json()["error"]["code"] == "VERSION_CONFLICT"
+                assert snapshot() == final
+                dump("stable-cancel-after-stale-and-current-resume", final)
             elif command == "finish-same-run":
                 assert message["accepted"] == accepted and message["request"] == original_request
                 queued = snapshot()
@@ -289,7 +325,8 @@ def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
                 assert command == "verify-no-duplicate" and final is not None
                 receipt = get(prefix + "/spec-run-requests/" + original_request["request_key"])
                 assert receipt["run_id"] == accepted["run_id"] and receipt["app_run_id"] == accepted["app_run_id"]
-                assert receipt["request"] == original_request and receipt["status"] == "SUCCEEDED"
+                assert receipt["request"] == original_request
+                assert receipt["status"] == ("CANCELLED" if cancel else "SUCCEEDED")
                 assert snapshot() == final
                 dump("stable-final-after-readback", snapshot())
             send(page, dict(id=message["id"], status=200))
@@ -297,7 +334,9 @@ def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
             raise AssertionError("Page exceeded finite command budget")
         assert page["process"].wait(timeout=10) == 0 and final is not None
         proof = json.loads(gzip.decompress((root / "page.json.gz").read_bytes()))
-        assert proof["status"] == "PASS" and proof["documents"] == 2 and len(proof["checks"]) >= 17
+        document_count = 3 if cancel else 2
+        assert proof["status"] == "PASS" and proof["documents"] == document_count
+        assert len(proof["checks"]) >= (24 if cancel else 17)
 
         class Assets(HTMLParser):
             def __init__(self):
@@ -312,17 +351,22 @@ def test_safe_step_pause_new_worker_and_new_dom_resume_same_run(tmp_path):
         expected_assets = Assets()
         expected_assets.feed((repo / "src/sim2act/web/index.html").read_text())
         assert [(asset["document"], asset["path"]) for asset in proof["assets"]] == [
-            (document, path) for document in (1, 2) for path in expected_assets.paths]
+            (document, path) for document in range(1, document_count + 1) for path in expected_assets.paths]
         for asset in proof["assets"]:
             path = repo / "src/sim2act/web" / ("index.html" if asset["path"] == "/" else asset["path"].lstrip("/"))
             assert asset["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
         assert [len((root / (role + "-wire.jsonl")).read_text().splitlines())
-                for role in ("old-worker", "new-worker")] == [1, 1]
+                if (root / (role + "-wire.jsonl")).exists() else 0
+                for role in ("old-worker", "new-worker")] == [1, 0 if cancel else 1]
         (root / "RESULT.json").write_text(json.dumps(dict(status="PASS", accepted=accepted,
             original_request=original_request, old_worker=old["identity"], new_worker=new["identity"],
-            page_checks=len(proof["checks"]), documents=2, model_calls=dict(fixture=3, old_worker=1, new_worker=1),
+            page_checks=len(proof["checks"]), documents=document_count,
+            model_calls=dict(fixture=3, old_worker=1, new_worker=0 if cancel else 1),
             safe_pause_no_inflight=True, no_execution_before_resume=True, prefix_unchanged=True,
-            data_versions=1, artifact_effects=1, duplicate_append=False, source_count=len(before),
+            data_versions=0 if cancel else 1, artifact_effects=0 if cancel else 1,
+            final_status=final["run"]["status"], stale_resume_rejected=cancel,
+            no_execution_after_cancel=cancel, current_version_terminal_resume_rejected=cancel,
+            duplicate_append=False, source_count=len(before),
             configured_worker_limits=dict(lease_seconds=30, run_seconds=300), frozen_clock=clock,
             exact_assets=len(proof["assets"]), closure_scope="src/tests + pyproject.toml",
             browser="JSDOM_NOT_NATIVE", database="SQLITE", real_model="NOT_RUN",

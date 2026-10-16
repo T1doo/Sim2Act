@@ -104,6 +104,15 @@ def main():
         assert json.loads(sys.stdin.readline()) == {"command": "probe-before-resume"}
         assert not worker.once() and not sent
         emit("IDLE_AFTER_DOM", worker_id=worker.id, claimed=False, calls=0)
+        if config.get("cancel"):
+            assert json.loads(sys.stdin.readline()) == {"command": "probe-after-cancel"}
+            assert not worker.once() and not sent and active[0] == 0
+            emit("IDLE_AFTER_CANCEL", worker_id=worker.id, claimed=False, calls=0)
+            assert json.loads(sys.stdin.readline()) == {"command": "probe-after-stale-resume"}
+            assert not worker.once() and not sent and active[0] == 0
+            emit("CANCELLED_DONE", worker_id=worker.id, claimed=False, calls=0)
+            store.engine.dispose()
+            return
         assert json.loads(sys.stdin.readline()) == {"command": "run-after-resume"}
         assert worker.once() and len(sent) == 1 and active[0] == 0
         assert not worker.once() and len(sent) == 1
