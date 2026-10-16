@@ -10,6 +10,33 @@ function visible(e) { for (let n = e; n; n = n.parentElement) if (n.hidden || w.
 async function click(id) { const e = typeof id === "string" ? $(id) : id; check(visible(e) && !e.disabled, `visible enabled gesture ${e.id || e.textContent}`); const original = e.onclick; let work; e.onclick = function (event) { return work = original.call(this, event); }; e.click(); e.onclick = original; await work; }
 function tick(id) { check(visible($(id)) && !$(id).disabled, `checkbox ${id} visible`); $(id).checked = true; $(id).dispatchEvent(new w.Event("change", {bubbles: true})); }
 const posts = suffix => requests.filter(r => r.method === "POST" && r.path.endsWith(suffix)).length;
+async function restartPreparation(oldKey, pendingHistory = false) {
+  const length = w.history.length, state = JSON.stringify(w.history.state);
+  await click("trial-new");
+  check($("trial-original-key").value !== oldKey, "explicit new clears old visible key");
+  check(w.history.length === length && JSON.stringify(w.history.state) === state && new URLSearchParams(w.location.search).get("kept") === "query" && new URLSearchParams(w.location.hash.slice(1)).get("kept") === "fragment", "explicit new replaces current address while preserving query unrelated fragment and history state");
+  await click("trial-refresh");
+  check(!$("trial-prepare").disabled, "explicit new followed by refresh enables preparation");
+  check(w.eval("trialEntry() === undefined"), "explicit new refresh has no revived old UNKNOWN entry");
+  check($("trial-original-key").value !== oldKey && new URLSearchParams(w.location.hash.slice(1)).get("trial-key") !== oldKey, "new view and URL no longer contain old key");
+  $("trial-source").value = info.source; $("trial-cold").value = info.cold;
+  if (pendingHistory) fault = "late-preparation";
+  const work = click("trial-prepare");
+  if (pendingHistory) {
+    await wait(() => held);
+    const pendingKey = $("trial-original-key").value;
+    w.history.back();
+    await new Promise(resolve => setTimeout(resolve, 40));
+    check($("trial-original-key").value === pendingKey && new URLSearchParams(w.location.hash.slice(1)).get("trial-key") === pendingKey && $("trial-new").disabled && $("trial-prepare").disabled, "back history cannot replace a different pending original key");
+    await click("trial-recover");
+    const scope = $("trial-scope").textContent;
+    release(); await work;
+    check($("trial-original-key").value === pendingKey && $("trial-scope").textContent === scope && !$("trial-new").disabled, "held preparation reply cannot overwrite newer original-key GET");
+  } else await work;
+  const prepared = requests.filter(r => r.method === "POST" && r.path.endsWith("/preparation"));
+  check(prepared.length === 2 && prepared[0].path !== prepared[1].path, "second actual preparation POST uses a different fresh key");
+  check($("trial-original-key").value !== oldKey && $("trial-scope").textContent.includes("共 7 槽"), "second exact scope displayed under new key");
+}
 async function boot(hash = "") {
   if (dom) dom.window.close(); boots++;
   const load = async path => { const r = await rpc({path, method: "GET"}); assert.equal(r.status, 200); loads.push({boot: boots, path, status: r.status, sha256: crypto.createHash("sha256").update(r.text).digest("hex")}); return r.text; };
@@ -21,6 +48,7 @@ async function boot(hash = "") {
     const request = {path, method: options.method || "GET", body: options.body && JSON.parse(options.body), headers: options.headers}; requests.push(request);
     const result = await rpc(request);
     if (request.method === "POST" && path.endsWith("/" + fault)) { fault = ""; check(result.status === 200, "lost response follows actual server commit"); throw Error("controlled response loss after real HTTP commit"); }
+    if (fault === "late-preparation" && request.method === "POST" && path.endsWith("/preparation")) { fault = ""; check(result.status === 200, "held second preparation actually committed"); held = true; await new Promise(resolve => release = resolve); }
     if (fault === "late" && request.method === "POST" && path.endsWith("/consent")) { fault = ""; check(result.status === 200, "held consent actually committed"); held = true; await new Promise(resolve => release = resolve); }
     return new Response(result.text, {status: result.status, headers: {"Content-Type": result.content_type || "application/json"}});
   };
@@ -32,6 +60,10 @@ async function boot(hash = "") {
 }
 (async () => {
   await boot(); const originalScenario = info.scenario;
+  if (originalScenario.startsWith("new-")) {
+    const url = new URL(w.location.href); url.search = "?kept=query"; url.hash = "kept=fragment";
+    w.history.replaceState({marker: "kept"}, "", url);
+  }
   if (["lost-preparation", "lost-cold"].includes(originalScenario)) fault = "preparation";
   await click("trial-prepare");
   const key = $("trial-original-key").value, hash = w.location.hash;
@@ -57,6 +89,39 @@ async function boot(hash = "") {
   check($("trial-scope").textContent.includes("共 7 槽") && $("trial-scope").textContent.includes("192000") && $("trial-scope").textContent.includes("7168"), "full original budget visible");
   check(info.goalTexts.every(text => $("trial-scope").textContent.includes(text)), "both complete goals and materials visible");
   check($("trial-consent").disabled && !$("trial-ack").checked, "no implicit consent after preparation");
+  if (originalScenario === "new-prepared") await restartPreparation(key);
+  if (["new-history", "new-history-pending"].includes(originalScenario)) {
+    w.history.pushState(w.history.state, "", w.location.href);
+    await restartPreparation(key, originalScenario === "new-history-pending");
+    if (originalScenario === "new-history") {
+      const secondKey = $("trial-original-key").value, count = requests.length;
+      w.history.back();
+      await wait(() => $("trial-original-key").value === key); await new Promise(resolve => setTimeout(resolve, 40));
+      check($("trial-scope").textContent === "" && $("trial-new").disabled && $("trial-consent").disabled && requests.length === count, "back restores old key as read-only UNKNOWN without automatic HTTP");
+      await click("trial-recover");
+      const afterBack = requests.length;
+      w.history.forward();
+      await wait(() => $("trial-original-key").value === secondKey); await new Promise(resolve => setTimeout(resolve, 40));
+      check($("trial-scope").textContent === "" && $("trial-new").disabled && $("trial-consent").disabled && requests.length === afterBack, "forward restores second key as read-only UNKNOWN without automatic HTTP");
+      await click("trial-recover");
+      check(posts("/preparation") === 2 && $("trial-original-key").value === secondKey, "history recovery only GETs exact keys without another preparation");
+    }
+  }
+  if (originalScenario === "new-late") {
+    fault = "late"; tick("trial-ack"); const work = click("trial-consent");
+    await wait(() => held);
+    await click(w.document.querySelector('[data-tab="resources"]')); await click(w.document.querySelector('[data-tab="projects"]')); await click("trial-recover");
+    check($("trial-status").textContent.includes("精确批准已持久保存"), "old consent is known through GET before explicit new");
+    await restartPreparation(key);
+    const secondKey = $("trial-original-key").value, scope = $("trial-scope").textContent;
+    release(); await work;
+    check($("trial-original-key").value === secondKey && $("trial-scope").textContent === scope && !$("trial-new").disabled && !$("trial-ack").checked, "late abandoned consent cannot contaminate new key scope state or acknowledgement");
+    check(posts("/consent") === 1 && posts("/preparation") === 2, "new intent never retries old consent");
+    check(!requests.some(r => /\/application-runs|\/runs(?:$|\/)|\/admission|\/stage-approval/.test(r.path) && r.method === "POST"), "new intent never creates Run or dispatches");
+    fs.writeFileSync(info.output, JSON.stringify({status: "PASS", scenario: info.scenario, checks, requests, static_resource_loads: loads, loaded_source_sha256: hashes, boots}, null, 2));
+    dom.window.close(); process.stdout.write(JSON.stringify({done: true}) + "\n"); process.exit(0);
+  }
+
   if (originalScenario === "cold") {
     await boot(hash); check($("trial-original-key").value === key, "cold page restores only original project and key from link");
     check($("trial-consent").disabled && $("trial-scope").textContent === "", "cold page has no cached scope or approval");
@@ -90,8 +155,9 @@ async function boot(hash = "") {
     if (originalScenario === "lost-withdrawal") { check($("trial-new").disabled, "lost withdrawal stays unknown"); await click("trial-recover"); }
     check(posts("/withdrawal") === 1, "withdrawal posted once");
     check($("trial-status").textContent.includes("已撤回") && $("trial-consent").disabled, "withdrawn approval cannot be reused");
+    if (originalScenario === "new-revoked") await restartPreparation(key);
   }
   check(!requests.some(r => /\/application-runs|\/runs(?:$|\/)|\/admission|\/stage-approval/.test(r.path) && r.method === "POST"), "page never creates Run reserves slot or asks for LIVE admission");
   fs.writeFileSync(info.output, JSON.stringify({status: "PASS", scenario: info.scenario, checks, requests, static_resource_loads: loads, loaded_source_sha256: hashes, boots}, null, 2));
   dom.window.close(); process.stdout.write(JSON.stringify({done: true}) + "\n"); process.exit(0);
-})().catch(error => { fs.writeFileSync(info.output, JSON.stringify({status: "FAIL", error: error.stack, checks, requests}, null, 2)); if (dom) dom.window.close(); console.error(error.stack); process.exit(1); });
+})().catch(error => { fs.writeFileSync(info.output, JSON.stringify({status: "FAIL", error: error.stack, checks, requests, static_resource_loads: loads, loaded_source_sha256: hashes, boots}, null, 2)); if (dom) dom.window.close(); console.error(error.stack); process.exit(1); });

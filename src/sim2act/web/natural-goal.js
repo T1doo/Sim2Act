@@ -359,6 +359,32 @@ let trialGeneration = 0, trialCards = [];
 const trialContext = () => ({identity: token, connection: identityConnectionGeneration, project: $("project-select").value, generation: trialGeneration});
 const trialCurrent = c => c.identity === token && c.connection === identityConnectionGeneration && c.project === $("project-select").value && c.generation === trialGeneration;
 const trialIndex = c => JSON.stringify([c.identity, c.project]);
+function updateTrialAddress(project, key, expectedKey = null) {
+  const url = new URL(location.href), params = new URLSearchParams(url.hash.slice(1));
+  if (key) { params.set("trial-project", project); params.set("trial-key", key); }
+  else {
+    if (params.get("trial-project") !== project || params.get("trial-key") !== expectedKey) return;
+    params.delete("trial-project"); params.delete("trial-key");
+  }
+  url.hash = params.toString();
+  history.replaceState(history.state, "", url);
+}
+function trialHistoryChanged() {
+  const ctx = trialContext(), entry = trialEntry(), params = new URLSearchParams(location.hash.slice(1));
+  const key = params.get("trial-project") === ctx.project ? params.get("trial-key") : null;
+  const valid = /^[A-Za-z0-9_-]{1,100}$/.test(key || "");
+  const preserve = entry && (!valid || (["sending", "unknown"].includes(entry.state) && entry.key !== key));
+  clearTrialConsent();
+  if (!ctx.identity || !ctx.project) return;
+  if (preserve) {
+    updateTrialAddress(ctx.project, entry.key);
+    entry.message = "历史地址不能替换未恢复的原键；只读取当前原键恢复。";
+  } else if (valid) {
+    trialEntries.set(trialIndex(ctx), {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, operation: 0, state: "unknown", receipt: null, message: "历史地址仅恢复原键意图；先只读取原键，不自动提交。"});
+  }
+  $("trial-original-key").value = trialEntry()?.key || "";
+  renderTrialConsent();
+}
 function clearTrialConsent() {
   trialGeneration++; trialCards = [];
   for (const entry of trialEntries.values()) { entry.operation = (entry.operation || 0) + 1; entry.receipt = null; if (["known", "sending"].includes(entry.state)) entry.state = "unknown"; }
@@ -439,7 +465,7 @@ async function prepareTrial() {
   const key = crypto.randomUUID(), entry = {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, state: "sending", operation: 1, message: "正在准备；不会新增 Run 或发送模型请求。"};
   const operation = entry.operation;
   trialEntries.set(trialIndex(ctx), entry); $("trial-original-key").value = key;
-  history.replaceState(null, "", `#${new URLSearchParams({"trial-project": ctx.project, "trial-key": key})}`);
+  updateTrialAddress(ctx.project, key);
   renderTrialConsent();
   try {
     const receipt = await api(`${entry.base}/preparation`, "POST", {bindings: choices.map(c => ({card_id: c.id, expected_version: c.version}))});
@@ -459,6 +485,7 @@ async function recoverTrial() {
   if (entry?.state === "unknown" && entry.key !== key) throw Error("未知结果必须先读取原键");
   if (!entry || entry.key !== key) entry = {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`};
   const operation = entry.operation = (entry.operation || 0) + 1;
+  updateTrialAddress(ctx.project, key);
   trialEntries.set(trialIndex(ctx), entry); entry.state = "sending"; entry.message = "只读取原键…"; entry.receipt = null;
   $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; $("trial-scope").textContent = ""; renderTrialConsent();
   try { await trialRead(ctx, entry, operation); }
@@ -487,5 +514,14 @@ $("trial-withdraw").onclick = safe(() => mutateTrial(true));
 $("trial-ack").onchange = renderTrialConsent;
 $("trial-withdraw-ack").onchange = renderTrialConsent;
 $("trial-source").onchange = $("trial-cold").onchange = () => { $("trial-ack").checked = false; renderTrialConsent(); };
-$("trial-new").onclick = () => { const entry = trialEntry(); if (!entry || ["sending", "unknown"].includes(entry.state)) return; trialEntries.delete(trialIndex(trialContext())); clearTrialConsent(); };
+$("trial-new").onclick = safe(() => {
+  const ctx = trialContext(), entry = trialEntry();
+  if (!entry || !["known", "rejected"].includes(entry.state)) return;
+  entry.operation = (entry.operation || 0) + 1;
+  updateTrialAddress(ctx.project, null, entry.key);
+  trialEntries.delete(trialIndex(ctx));
+  clearTrialConsent();
+});
+window.addEventListener("popstate", trialHistoryChanged);
+window.addEventListener("hashchange", trialHistoryChanged);
 setInterval(renderTrialConsent, 1000);
