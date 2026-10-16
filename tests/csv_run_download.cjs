@@ -2,7 +2,7 @@
 // Real loopback API + loaded product JS. Blob/anchor capture is a DOM adapter,
 // never native browser download, PG, or the four-step ordinary-user acceptance.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const {createHash,randomUUID}=require('node:crypto'),{JSDOM}=require('jsdom');
+const {createHash,randomUUID}=require('node:crypto'),{performance}=require('node:perf_hooks'),{JSDOM}=require('jsdom');
 const root=process.argv[2],info=JSON.parse(fs.readFileSync(path.join(root,'info.json')));
 const checks=[],requests=[],blobs=[],anchors=[];let w,$,dom,mode=null,finishRead=null,failClick=false;
 const state={pending:0,actions:new Set(),errors:[]};
@@ -47,9 +47,9 @@ async function setup(){
  w.URL.revokeObjectURL=url=>{const record=blobs.find(r=>r.url===url);assert(record);record.revoked=true;};
  w.HTMLAnchorElement.prototype.click=function(){if(failClick)throw Error('synthetic anchor failure');anchors.push({url:this.href,filename:this.download});};
  w.fetch=async(url,options={})=>{
-  state.pending++;try{
+  state.pending++;let entry;const started=performance.now();try{
    const target=new URL(url,info.base);assert.equal(target.origin,info.base);
-   const entry={method:options.method||'GET',path:target.pathname,no_body:options.body===undefined,cache:options.cache};requests.push(entry);
+   entry={method:options.method||'GET',path:target.pathname,no_body:options.body===undefined,cache:options.cache,started_ms:started};requests.push(entry);
    const exact=/^\/api\/internal\/instances\/[^/]+\/runs\/[^/]+$/.test(target.pathname);
    const action=exact?mode:null;if(action)mode=null;
    if(action?.before)await new Promise(resolve=>{finishRead=resolve;});
@@ -59,7 +59,7 @@ async function setup(){
    if(action?.transport)throw TypeError('synthetic network failure after actual GET');
    if(action?.mutate){const value=JSON.parse(body);action.mutate(value);body=JSON.stringify(value);}
    return new Response(body,{status:action?.status||response.status,headers:response.headers});
-  }finally{state.pending--;}
+  }finally{if(entry)entry.finished_ms=performance.now(),entry.elapsed_ms=entry.finished_ms-started;state.pending--;}
  };
  for(const name of ['app.js','internal.js','protocol.js','use.js']){
   const text=await(await fetch(info.base+'/'+name)).text();
@@ -164,8 +164,11 @@ async function revocation(){
    anchors,browser_download:'NOT_RUN',pg:'NOT_RUN',four_step_acceptance:'NOT_RUN',model_requests:0,adapter:'JSDOM + Node Blob byte capture, actual synthetic loopback HTTP',loaded_source_sha256:info.web_hashes};
  }catch(error){result={status:'FAIL',case:info.case,error:error.stack,checks,requests,browser_download:'NOT_RUN',pg:'NOT_RUN'};process.exitCode=1;}
  finally{
-  fs.writeFileSync(path.join(root,'results.json'),JSON.stringify(result,null,2)+'\n');
-  if(finishRead){finishRead();finishRead=null;}try{await idle();}finally{dom?.window.close();}
+  if(finishRead){finishRead();finishRead=null;}
+  try{await idle();}catch(error){result.cleanup_error=error.stack;process.exitCode=1;}
+  result.final_state={pending:state.pending,actions:state.actions.size,page_errors:state.errors.map(e=>e.message),
+   selected:w?.eval('typeof applicationUse!=="undefined"?applicationUse?.selected:null'),output:$?.('use-output')?.textContent,error:$?.('error')?.textContent};
+  fs.writeFileSync(path.join(root,'results.json'),JSON.stringify(result,null,2)+'\n');dom?.window.close();
  }
  console.log(JSON.stringify(result));
 })();
