@@ -244,12 +244,13 @@ async function showInternalInstance(id,view=engineering) {
 async function showInternalRun(id,view=engineering,instance=view?.instance) {
   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;
   clearInternalRunReread(view);
-  if(view.spec&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
   const previousStatus=view.run?.status;
   const selection=++view.runGeneration,iSelection=view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
   $("internal-controls").replaceChildren();$("internal-run-detail").textContent="";view.run=null;
   const selectedCurrent=()=>engineeringCurrent(view) && selection===view.runGeneration && iSelection===view.instanceGeneration && view.instance?.id===instance.id && connection===identityConnectionGeneration;
   const current=()=>selectedCurrent() && workspace===workspaceSelectionGeneration;
+  if(view.spec&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
+  if(!current())return;
   try {
     let run;
     try {run=await api(`/api/internal/instances/${instance.id}/runs/${id}`);}

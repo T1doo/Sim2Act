@@ -190,7 +190,7 @@ def test_natural_entry_navigation_synthesized_api(tmp_path):
     (tmp_path / "driver.log").write_text(outcome.stdout + outcome.stderr)
     assert outcome.returncode == 0, outcome.stdout + outcome.stderr
     proof = json.loads(output.read_text())
-    assert proof["status"] == "PASS" and len(proof["checks"]) == 35, proof
+    assert proof["status"] == "PASS" and len(proof["checks"]) == 36, proof
     assert proof["followup_instance_workspace_aba"]["isolated"]
     assert proof["owner_clear_stale_status"]["cleared"]
     web = Path.cwd() / "src/sim2act/web"
