@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="198.011" timestamp="2026-10-16T18:10:03.219776+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_natural_input_preparation" name="test_natural_app_prepare_material_goal_then_explicit_run[pa]" time="138.283"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7fc046fa9f70&gt;, Settings(database_url='sqlite:////workspace/prep-pa-first/test_natural_a...5bcfea1a1e4484ba311147ceece4ca', 'user_1018dc7cdf554191815453e3f1beb029', 'proj_518c9fe5fa464e189d531b23d360617b', ...)
+tmp_path = PosixPath('/workspace/prep-pa-first/test_natural_app_prepare_mater0')
+family = 'pa'
+
+    @pytest.mark.parametrize("family", ["pa", "pb"])
+    def test_natural_app_prepare_material_goal_then_explicit_run(env, tmp_path, family):
+        if family == "pa":
+            data, app, release, instance, _, old_resource, old_goal, _, route = prepared_pa(env, history=False)
+        else:
+            data, app, release, instance, old_resource, old_goal, _, route = prepared_use(env, run_base=True)
+        assert data[0].test_only and data[1].mode == "mock"
+        original_reply = data[2].get(route)
+        assert original_reply.status_code == 200, original_reply.text
+        original = original_reply.json()
+        assert [row["version"] for row in original["data"]] == [1]
+        initial = snapshot(data[0])
+        readonly_baseline = initial
+        info = dict(
+            family=family, project=data[4], app=app["id"], name=app["name"],
+            release=release["id"], instance=instance["id"],
+            original_resource=old_resource, original_goal=old_goal["id"],
+            original_runs=[row["id"] for row in original["runs"]],
+            content=THIRD, expected_version=2, output=str(tmp_path / "result.json"),
+        )
+        info_path = tmp_path / "info.json"
+        info_path.write_text(json.dumps(info), encoding="utf-8")
+        cold = cold_client = None
+        sent = []
+        checkpoints = []
+        stderr = tmp_path / "node.stderr"
+    
+        def assert_old_state_unchanged(current, *, goal_saved=False):
+            for table in ["app_drafts", "internal_releases", "principals", "runs", "internal_app_runs",
+                          "internal_instance_data", "natural_owner_records", "natural_owner_seals"]:
+                assert current[table] == initial[table], table
+            for table in ["goal_cards", "goal_card_versions"]:
+                assert all(row in current[table] for row in initial[table]), table
+                assert len(current[table]) == len(initial[table]) + int(goal_saved), table
+    
+        with stderr.open("w", encoding="utf-8") as err:
+            process = subprocess.Popen(
+                ["node", str(Path(__file__).with_name("natural_input_preparation.cjs")), str(info_path)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True,
+                env={**os.environ, "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules")},
+            )
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    command = request.get("command")
+                    if command == "readonly-checkpoint":
+                        assert snapshot(cold or data[0]) == readonly_baseline
+                        checkpoints.append(dict(phase=request["phase"], readonly=True))
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    elif command == "saved-input-checkpoint":
+                        current = snapshot(data[0])
+                        goal_saved = "goal_id" in request
+                        assert_old_state_unchanged(current, goal_saved=goal_saved)
+                        material = next(row for row in current["resources"] if row["id"] == request["resource_id"])
+                        assert material["project_id"] == data[4] and material["format"] == "txt"
+                        assert material["content"] == THIRD and request["resource_id"] != old_resource
+                        assert len(current["resources"]) == len(initial["resources"]) + 1
+                        if goal_saved:
+                            card = next(row for row in current["goal_cards"] if row["id"] == request["goal_id"])
+                            assert card["project_id"] == data[4] and card["version"] == 1
+&gt;                           assert card["content"]["resource_refs"] == [request["resource_id"]]
+                                   ^^^^^^^^^^^^^^^
+E                           KeyError: 'content'
+
+tests/test_natural_input_preparation.py:83: KeyError</failure></testcase><testcase classname="tests.test_natural_input_preparation" name="test_natural_app_prepare_material_goal_then_explicit_run[pb]" time="51.850"><failure message="sqlalchemy.exc.PendingRollbackError: Can't reconnect until invalid transaction is rolled back.  Please rollback() fully before proceeding (Background on this error at: https://sqlalche.me/e/20/8s2b)">store = &lt;sim2act.db.Store object at 0x7fc0451b5d90&gt;
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7fc0469d2b40&gt;
+
+    @contextmanager
+    def _source_reads(store, c):
+        """Private synchronous read call; never retains authority across writes/exit."""
+        current = _source_transaction(store, c)
+        if current is None:
+            yield
+            return
+        old = c.info.get("pb_source_reads")
+        if _source_reads_current(store, c, old):
+            try:
+                yield
+            except BaseException:
+                old.results.clear()
+                raise
+            return
+        token = _SourceReads(store, c, current[0], current[1],
+            c.info.get("source_proof_write_epoch", 0), get_ident())
+        c.info["pb_source_reads"] = token
+        try:
+&gt;           yield
+
+src/sim2act/pb_natural_specs.py:257: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/pa_spec_apps.py:751: in bound
+    return _bound(store, c, user, job, limits, validate_input=validate_input,
+src/sim2act/pa_spec_apps.py:819: in _bound
+    manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:614: in verify_origin
+    verify_confirmation(store, c, user, draft, limits)
+src/sim2act/text_apps.py:152: in verify_origin
+    raw = verified_candidate(store, c, run, limits)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/goal_applications.py:567: in verified_candidate
+    value = parse_candidate(store, c, run, rows[-1]["response"], limits or contract.limits)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/goal_applications.py:529: in parse_candidate
+    receipt = check_receipt(store, c, run, call)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:370: in check_receipt
+    report = check_report(store, c, run, args["candidate"])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:339: in check_report
+    compiled = from_response(store, c, run, candidate)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:315: in from_response
+    return natural.from_response(store, c, run, value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_specs.py:759: in from_response
+    contract, material = source(store, c, run)
+                         ^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/goal_applications.py:182: in source
+    source_scope_gate(store, c, run["id"])
+src/sim2act/goal_applications.py:177: in source_scope_gate
+    store.authorize(c, metadata["principal_id"], metadata["runtime_id"], metadata["project_id"], metadata["project_id"], "artifact.save_text")
+src/sim2act/db.py:749: in authorize
+    self.own_project(c, principal, project_id)
+src/sim2act/db.py:704: in own_project
+    c.execute(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1983: in _exec_single_context
+    result = context._setup_result_proxy()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:1882: in _setup_result_proxy
+    and cast(SQLCompiler, compiled).has_out_parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+typ = &lt;class 'sqlalchemy.sql.compiler.SQLCompiler'&gt;
+val = &lt;sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7fc037cdb680&gt;
+
+&gt;   def cast(typ, val):
+E   KeyboardInterrupt
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/typing.py:2187: KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+env = (&lt;sim2act.db.Store object at 0x7fc0451b5d90&gt;, Settings(database_url='sqlite:////workspace/prep-pa-first/test_natural_a...1ce2c8d2e547a78961fc6cc239f23b', 'user_6668de3ba05b49b89bc56ee344c6f6ab', 'proj_769ac34b71174bf3b18133faf550c48b', ...)
+tmp_path = PosixPath('/workspace/prep-pa-first/test_natural_app_prepare_mater1')
+family = 'pb'
+
+    @pytest.mark.parametrize("family", ["pa", "pb"])
+    def test_natural_app_prepare_material_goal_then_explicit_run(env, tmp_path, family):
+        if family == "pa":
+            data, app, release, instance, _, old_resource, old_goal, _, route = prepared_pa(env, history=False)
+        else:
+&gt;           data, app, release, instance, old_resource, old_goal, _, route = prepared_use(env, run_base=True)
+                                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_input_preparation.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_pb_natural_uses.py:20: in prepared_use
+    prepared = prepare(env)
+               ^^^^^^^^^^^^
+tests/test_pb_natural_specs.py:85: in prepare
+    drive_to_success(data, rid, transport(sent))
+tests/test_pb_natural_specs.py:58: in drive_to_success
+    claimed = worker.once()
+              ^^^^^^^^^^^^^
+src/sim2act/worker.py:680: in once
+    self.process(run)
+src/sim2act/worker.py:413: in process
+    process_job(self, run)
+src/sim2act/app_jobs.py:1218: in process_job
+    return pa_spec_apps.process_job(worker, run)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:1405: in process_job
+    return process(worker, run, advance_fn=advance_and_renew, _heartbeat_state=heartbeat_state)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_workflows.py:977: in process_job
+    again = (advance_fn or advance)(worker, run)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:1397: in advance_and_renew
+    again = advance(worker, current, _heartbeat_state=heartbeat_state)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:1191: in advance
+    return advance_model(worker, run, _heartbeat_state=_heartbeat_state)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:908: in advance_model
+    current_binding = spec.bound(store, c, current["principal_id"], current, limits)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:750: in bound
+    with _source_reads(store, c):
+         ^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+src/sim2act/pb_natural_specs.py:261: in _source_reads
+    if c.info.get("pb_source_reads") is token:
+       ^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:690: in info
+    return self.connection.info
+           ^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:581: in connection
+    return self._revalidate_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:673: in _revalidate_connection
+    self._invalid_transaction()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.engine.base.Connection object at 0x7fc0469d2b40&gt;
+
+    def _invalid_transaction(self) -&gt; NoReturn:
+&gt;       raise exc.PendingRollbackError(
+            "Can't reconnect until invalid %stransaction is rolled "
+            "back.  Please rollback() fully before proceeding"
+            % ("savepoint " if self._nested_transaction is not None else ""),
+            code="8s2b",
+        )
+E       sqlalchemy.exc.PendingRollbackError: Can't reconnect until invalid transaction is rolled back.  Please rollback() fully before proceeding (Background on this error at: https://sqlalche.me/e/20/8s2b)
+
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:663: PendingRollbackError</failure></testcase></testsuite></testsuites>

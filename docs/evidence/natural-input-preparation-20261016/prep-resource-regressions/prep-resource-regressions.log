@@ -1,0 +1,154 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+__________________ test_local_csv_file_actual_http[business] ___________________
+
+env = (<sim2act.db.Store object at 0x7f2919ba8050>, Settings(database_url='sqlite:////workspace/prep-resource-regressions/te...52605618e84e77ae0c9a490f01a566', 'user_a1d2c87f11544e00b486528363c32208', 'proj_967eb00c85264309802e15a3f6818d9d', ...)
+tmp_path = PosixPath('/workspace/prep-resource-regressions/test_local_csv_file_actual_htt0')
+case = 'business'
+
+    @pytest.mark.parametrize("case", ["business", "guards", "lost-save", "read-after-save", "manual", "save-ABA", "uncertain-response", "read-ABA"])
+    def test_local_csv_file_actual_http(env, tmp_path, case):
+        store, settings, _, owner, other_owner, project, _ = env
+        if not shutil.which("node") or subprocess.run(
+            ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
+        ).returncode:
+            pytest.skip("Developer Node/jsdom required")
+        other = store.project(owner, "Other owned project")
+        store.project(other_owner, "Other identity project")
+        fixture = "city,amount,quantity\r\n杭州,1.25,4\r\n成都,19,5\r\n"
+        fixture_bytes = fixture.encode("utf-8")
+        (tmp_path / "真实 合成.csv").write_bytes(fixture_bytes)
+        web = Path("src/sim2act/web")
+        with store.tx() as c:
+            before = {
+                t.name: len(c.execute(select(t)).all())
+                for t in (resources, grants, principals, internal_app_runs, internal_instance_data)
+            }
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps({"base": f"http://127.0.0.1:{port}", "project": project,
+                        "other": other, "case": case,
+                        "web_hashes": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                       for p in web.iterdir() if p.is_file()}})
+        )
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-worker")
+        def work():
+            class NoProvider:
+                def complete(self, *_args, **_kwargs):
+                    raise AssertionError("No model allowed")
+    
+                request = complete
+    
+            assert Worker(store, settings, NoProvider()).once()
+            return {"test_only": True}
+    
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            outcome = subprocess.run(
+                ["node", "tests/resource_file_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(outcome.stdout + outcome.stderr)
+>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+E             + actual - expected
+E             
+E             + '5aa09f95f5ec84aaea138e331fb724fed2d29cfa2dc21853238bb9085dee6f0a'
+E             - '59e0e5634831ebe6e91f3842d4316cb9837a7b6f6dfc18159a2fc36f6576e5c4'
+E             
+E                 at setup (/workspace/Sim2Act/tests/resource_file_ui.cjs:47:171)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act/tests/resource_file_ui.cjs:84:124
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/resource_file_ui.cjs', '/workspace/prep-resource-regressions/test_local_csv_file...ctions (node:internal/process/task_queues:104:5)\n    at async /workspace/Sim2Act/tests/resource_file_ui.cjs:84:124\n").returncode
+
+tests/test_resource_file_ui.py:84: AssertionError
+___________________ test_local_csv_file_actual_http[guards] ____________________
+
+env = (<sim2act.db.Store object at 0x7f29133752e0>, Settings(database_url='sqlite:////workspace/prep-resource-regressions/te...6461dbaefc413e8f5e18e95ac5831a', 'user_3f1e06615f8d4e7197b1d3501fa16a0f', 'proj_77ec9ba0cc1743f4ba58dbd6677f4cdb', ...)
+tmp_path = PosixPath('/workspace/prep-resource-regressions/test_local_csv_file_actual_htt1')
+case = 'guards'
+
+    @pytest.mark.parametrize("case", ["business", "guards", "lost-save", "read-after-save", "manual", "save-ABA", "uncertain-response", "read-ABA"])
+    def test_local_csv_file_actual_http(env, tmp_path, case):
+        store, settings, _, owner, other_owner, project, _ = env
+        if not shutil.which("node") or subprocess.run(
+            ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
+        ).returncode:
+            pytest.skip("Developer Node/jsdom required")
+        other = store.project(owner, "Other owned project")
+        store.project(other_owner, "Other identity project")
+        fixture = "city,amount,quantity\r\n杭州,1.25,4\r\n成都,19,5\r\n"
+        fixture_bytes = fixture.encode("utf-8")
+        (tmp_path / "真实 合成.csv").write_bytes(fixture_bytes)
+        web = Path("src/sim2act/web")
+        with store.tx() as c:
+            before = {
+                t.name: len(c.execute(select(t)).all())
+                for t in (resources, grants, principals, internal_app_runs, internal_instance_data)
+            }
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps({"base": f"http://127.0.0.1:{port}", "project": project,
+                        "other": other, "case": case,
+                        "web_hashes": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                       for p in web.iterdir() if p.is_file()}})
+        )
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-worker")
+        def work():
+            class NoProvider:
+                def complete(self, *_args, **_kwargs):
+                    raise AssertionError("No model allowed")
+    
+                request = complete
+    
+            assert Worker(store, settings, NoProvider()).once()
+            return {"test_only": True}
+    
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            outcome = subprocess.run(
+                ["node", "tests/resource_file_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(outcome.stdout + outcome.stderr)
+>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: invalid x.txt rejected before Save
+E                 at check (/workspace/Sim2Act/tests/resource_file_ui.cjs:6:25)
+E                 at /workspace/Sim2Act/tests/resource_file_ui.cjs:90:44
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/resource_file_ui.cjs', '/workspace/prep-resource-regressions/test_local_csv_file...ck (/workspace/Sim2Act/tests/resource_file_ui.cjs:6:25)\n    at /workspace/Sim2Act/tests/resource_file_ui.cjs:90:44\n').returncode
+
+tests/test_resource_file_ui.py:84: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_resource_file_ui.py::test_local_csv_file_actual_http[business]
+FAILED tests/test_resource_file_ui.py::test_local_csv_file_actual_http[guards]
+2 failed, 1 passed, 5 deselected, 1 warning in 49.32s
