@@ -80,7 +80,10 @@ def test_natural_app_prepare_material_goal_then_explicit_run(env, tmp_path, fami
                     if goal_saved:
                         card = next(row for row in current["goal_cards"] if row["id"] == request["goal_id"])
                         assert card["project_id"] == data[4] and card["version"] == 1
-                        assert card["content"]["resource_refs"] == [request["resource_id"]]
+                        version = next(row for row in current["goal_card_versions"]
+                            if row["card_id"] == request["goal_id"] and row["version"] == 1)
+                        assert version["snapshot"]["content"]["resource_refs"] == [request["resource_id"]]
+                        assert [row["resource_id"] for row in version["snapshot"]["resource_snapshots"]] == [request["resource_id"]]
                         assert request["goal_id"] != old_goal["id"]
                     readonly_baseline = current
                     checkpoints.append(dict(phase="saved-goal" if goal_saved else "saved-material",
@@ -140,3 +143,22 @@ def test_natural_app_prepare_material_goal_then_explicit_run(env, tmp_path, fami
                 cold_client.close()
             if cold:
                 cold.engine.dispose()
+
+
+def test_natural_preparation_navigation_synthesized_api(tmp_path):
+    """Actual form scripts with synthetic API; no HTTP or Worker evidence."""
+    output = tmp_path / "navigation.json"
+    outcome = subprocess.run(
+        ["node", str(Path(__file__).with_name("natural_input_preparation_navigation.cjs")), str(output)],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules")},
+    )
+    (tmp_path / "driver.log").write_text(outcome.stdout + outcome.stderr, encoding="utf-8")
+    assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+    proof = json.loads(output.read_text(encoding="utf-8"))
+    assert proof["status"] == "PASS" and len(proof["checks"]) >= 25, proof
+    web = Path.cwd() / "src/sim2act/web"
+    assert proof["assets"] == {
+        name: hashlib.sha256((web / name).read_bytes()).hexdigest()
+        for name in proof["assets"]
+    }

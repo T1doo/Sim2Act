@@ -86,7 +86,7 @@ function clear(){ $('resource-file-clear').click(); }
     check($('use-history').textContent.includes('v1')&&posts().length===coldPosts,'cold page retains both durable results with zero POST');check($('use-info').textContent.includes('未发布内部版本'),'formal publication remains closed');
     Object.assign(info,{project_id:pid,app_id:aid,resource_id:saved.accepted.id,instance_id:instance,release_id:release,results});
   } else if(info.case==='guards'){
-    for(const [data,name,count,prompt] of [[Buffer.from([0xc3,0x28]),'bad.csv',1,'UTF-8'],[Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),bytes]),'bom.csv',1,'BOM'],[Buffer.alloc(32769,97),'big.csv',1,'32768'],[bytes,'x.txt',1,'.csv'],[bytes,'two.csv',2,'一个'],[Buffer.alloc(0),'empty.csv',1,'32768'],[Buffer.from('a\0,b'),'nul.csv',1,'空字节']]){
+    for(const [data,name,count,prompt] of [[Buffer.from([0xc3,0x28]),'bad.csv',1,'UTF-8'],[Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),bytes]),'bom.csv',1,'BOM'],[Buffer.alloc(32769,97),'big.csv',1,'32768'],[bytes,'x.bin',1,'.csv'],[bytes,'two.csv',2,'一个'],[Buffer.alloc(0),'empty.csv',1,'32768'],[Buffer.from('a\0,b'),'nul.csv',1,'空字节']]){
       choose(data,name,count);await idle();check(!w.eval('resourceFileSnapshot')&&$('resource-file-status').textContent.includes(prompt)&&!$('content').value,'invalid '+name+' rejected before Save');
     }
     choose(Buffer.alloc(32768,97),'limit.csv');await selected();check(w.eval('resourceFileSnapshot.bytes')===32768,'exact byte limit can be read without saving');clear();
