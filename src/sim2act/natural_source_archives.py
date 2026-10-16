@@ -69,25 +69,35 @@ def _body(job, aid, payload, complete, canonical_sha256, kind):
         canonical_sha256=canonical_sha256)
 
 
-def _write(store, c, job, aid, payload, complete, canonical_sha256, kind, request_body):
-    require(store.test_only and store.sqlite and type(payload) is bytes
-            and type(request_body) is bytes and type(complete) is bool,
-            "Body capture requires isolated offline SQLite")
+def receipt_owner(c, job, aid, request_body, *, reserved=False):
     # Scalar ownership and the original reserved wire precede any append. Late
     # receipt facts need no live lease, but may not follow a moved Run/Attempt.
-    identity = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
+    query = (select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
         attempts.c.mode, attempts.c.status,
         attempts.c.parameters["natural_spec_wire"]["sha256"].as_string().label("wire_sha256"),
         attempts.c.parameters["natural_spec_wire"]["bytes"].as_integer().label("wire_bytes"))
         .select_from(runs)
         .join(attempts, attempts.c.run_id == runs.c.id)
-        .join(reservations, (reservations.c.id == attempts.c.id) & (reservations.c.run_id == runs.c.id))
-        .where(runs.c.id == job["id"], attempts.c.id == aid)).mappings().first()
+        .where(runs.c.id == job["id"], attempts.c.id == aid))
+    # A response is an already received fact, not new reservation authority.
+    # Losing a slot must still block verification, but cannot erase that fact.
+    if reserved:
+        query = query.join(reservations,
+            (reservations.c.id == attempts.c.id) & (reservations.c.run_id == runs.c.id))
+    identity = c.execute(query).mappings().first()
     require(identity is not None and identity["principal_id"] == job["principal_id"]
             and identity["project_id"] == job["project_id"]
             and identity["runtime_id"] == job["runtime_id"] and identity["mode"] == "MOCK"
             and identity["wire_sha256"] == hashlib.sha256(request_body).hexdigest()
             and identity["wire_bytes"] == len(request_body), "Body receipt owner or reserved wire changed")
+    return identity
+
+
+def _write(store, c, job, aid, payload, complete, canonical_sha256, kind, request_body):
+    require(store.test_only and store.sqlite and type(payload) is bytes
+            and type(request_body) is bytes and type(complete) is bool,
+            "Body capture requires isolated offline SQLite")
+    identity = receipt_owner(c, job, aid, request_body, reserved=kind == REQUEST)
     body = _body(job, aid, payload, complete, canonical_sha256, kind)
     if kind == RESPONSE:
         request = _body(job, aid, request_body, True, None, REQUEST).model_dump()

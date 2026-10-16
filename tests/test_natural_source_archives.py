@@ -348,16 +348,18 @@ def test_received_failure_facts_survive_without_business_success(env, tmp_path, 
             return
         row = c.execute(select(attempts).where(attempts.c.run_id == source_id)).mappings().one()
         if fault == "response_write_failure":
-            assert row["status"] == "STARTED" and row["response"] is None
-            assert row["usage"] == dict(status="unknown", tokens=None)
+            assert row["status"] == "REJECTED_KNOWN" and row["response"]["received_raw"]
+            assert row["usage"]["status"] == "known"
+            assert c.execute(select(events.c.id).where(events.c.run_id == source_id,
+                events.c.kind == "NS_RECEIVED")).first()
             assert not c.execute(select(delivery_graph_requests.c.request_key).where(
                 delivery_graph_requests.c.app_id == source_id,
                 delivery_graph_requests.c.kind.in_([archive.RESPONSE, archive.RESPONSE + "_seal"]))).first()
             assert c.execute(select(reservations.c.id).where(reservations.c.id == row["id"])).first()
             assert len(sent) == 1 and job["status"] != "SUCCEEDED"
             (tmp_path / "response-rollback.json").write_text(json.dumps(dict(
-                response_transaction_rolled_back=True, preserved_reservation=True, actual_sends=1,
-                state="UNKNOWN", raw_receipt="NOT_PERSISTED_IN_EXPLICIT_WRITE_FAILURE")))
+                archive_transaction_rolled_back=True, preserved_reservation=True, actual_sends=1,
+                state="REJECTED_KNOWN", raw_receipt="PRESERVED_BEFORE_ARCHIVE_FAILURE")))
             client.close()
             return
         body, _ = archive.pair(c, data[3], source_id, archive.RESPONSE, row["id"], archive.BodyArchive)

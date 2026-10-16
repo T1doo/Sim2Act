@@ -788,7 +788,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             return dict(deadline=job["created_at"] + node_limits.run_seconds)
 
     started = time.monotonic()
-    from .natural_source_archives import record_response
+    from .natural_source_archives import receipt_owner, record_response
 
     raw = None
     received_body = None
@@ -842,6 +842,9 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     elapsed = time.monotonic() - started
     received_usage = normalize_usage(raw)
     with store.tx() as c:
+        # Preserve only this original Run/Attempt's receipt. This scalar guard
+        # needs no current material permission or lease for late received facts.
+        receipt_owner(c, job, aid, wire)
         changed = c.execute(
             update(attempts)
             .where(
@@ -860,8 +863,6 @@ def advance_model(worker, run, *, _heartbeat_state=None):
         )
         require(changed.rowcount == 1, "Received response has a competing owner")
         require(type(received_body) is bytes, "Adapter received body is missing")
-        record_response(store, c, job, aid, received_body, received_complete, evidence["sha256"],
-                        request_body=wire)
         store.event(
             c,
             job["id"],
@@ -881,7 +882,18 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 ),
             ),
         )
+        receipt_owner(c, job, aid, wire)
+        require(c.execute(select(attempts.c.id).where(
+            attempts.c.id == aid, attempts.c.run_id == job["id"],
+            attempts.c.status == "RECEIVED", attempts.c.response == response,
+            attempts.c.usage == received_usage)).first() is not None,
+            "Received response changed before reception commit")
     try:
+        # Archive/verification failure cannot roll back an already received raw
+        # response. The original reservation and all success gates stay strict.
+        with store.tx() as c:
+            record_response(store, c, job, aid, received_body, received_complete, evidence["sha256"],
+                            request_body=wire)
         if failure:
             raise failure
         renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
@@ -992,18 +1004,24 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 spec.commit_guard(worker, c, run, final_binding)
     except DomainError as rejected:
         with store.tx() as c:
+            # The receive transaction has already committed. A later owner,
+            # wire or response change cannot authorize writes to that history.
+            receipt_owner(c, job, aid, wire)
             if getattr(worker, "pa_trial", None) is not None:
                 from .pa_trial_dispatch import reject
                 reject(worker, c, job, aid, raw)
-            c.execute(
+            changed = c.execute(
                 update(attempts)
                 .where(
                     attempts.c.id == aid,
                     attempts.c.run_id == job["id"],
                     attempts.c.status == "RECEIVED",
+                    attempts.c.response == response,
+                    attempts.c.usage == received_usage,
                 )
                 .values(status="REJECTED_KNOWN")
             )
+            require(changed.rowcount == 1, "Received rejection has a competing owner")
             c.execute(
                 update(operations)
                 .where(
