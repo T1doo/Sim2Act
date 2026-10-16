@@ -18,7 +18,7 @@ python3.12 -m venv .venv
 
 Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `requirements-windows.lock`；本轮未执行 Windows。安装需要既有网络或预备好的本地 wheelhouse，候选不捆绑第三方依赖，不是完全离线安装包。演示本身只访问 loopback HTTP，模型响应固定为 `httpx.MockTransport`；不需要 Node、浏览器自动化或测试目录。
 
-`prepare` 只能写入不存在的新目录，现有目录会拒绝，不删除数据。明确调用一次后依次完成：CSV 数字列求和 30 → 内部 Release/实例/真实 AppRun；自然 P-A mock 生成与明确保存 → 新材料和已保存 Goal 的逐次 review/提交；从成功 P-A Run 审阅提取 P-B → 保存内部 Release/实例 → 第三份材料和 Goal 的逐次 review/提交。各 Run 只执行一次原 claim；没有恢复或重新提交失败任务的循环。自然生成共 3 条、P-A/P-B 运行各 1 条固定 mock 响应；真实模型请求为 0。
+`prepare` 只能写入不存在的新目录，现有目录会拒绝，不删除数据。明确调用一次后依次完成：CSV 数字列求和 30 → 内部 Release/实例/真实 AppRun；自然 P-A mock 生成与明确保存 → 原保存材料和 Goal 的首个运行；从成功 P-A Run 审阅提取 P-B → 保存内部 Release/实例 → 第三份材料和 Goal 的逐次 review/提交。各 Run 只执行一次原 claim；没有恢复或重新提交失败任务的循环。自然生成共 3 条、P-A/P-B 运行各 1 条固定 mock 响应；真实模型请求为 0。本候选不验证 P-A 新材料逐次使用。
 
 `verify` 在独立进程重新打开同一目录，只 GET 已有 CSV/P-A/P-B 结果和同一 Run 人工验收状态，比较全库持久行保持不变；不启动 Worker。原始合成回执保存在该演示目录：`http-receipts.json`、`worker-receipts.json`、`mock-receipts.json`、`demo-receipt.json`、`cold-read-receipt.json`。失败时保留当次数据，不覆盖后重试。
 
@@ -35,6 +35,8 @@ Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `re
 ## 验证范围
 
 本候选的实际执行结果由交付报告另行记录；说明文字不代替执行回执。未执行 Windows、PostgreSQL、原生浏览器、真实模型/场景/人工语义验收、远端 CI 或部署。
+
+前一个 `0f0819a6` 包的首次全链尝试失败：P-A 新材料逐次运行一次 claim 后仍 `RUNNING`，只有 resource.read 完成、没有模型 attempt；原数据和回执保留，具体原因未定。本包仅收窄演示到上述原材料 P-A + 新材料 P-B 最短链；这不是对该失败的产品修复，也不能把后续成功记作前包通过。
 
 此前 `986799d` 的锁验证保持原分期：安全批次 45 PASS / 1 FAIL，随后定向 2 PASS（含重叠）及独立新增模块 9 PASS；不能称一次整批全绿。自然双 Run 成功但没有触发新恢复分支，旧 F9 具体失败时序没有复现。本候选不重跑或扩展该故障矩阵，也不补称旧满盘环境未落盘的独审报告。
 

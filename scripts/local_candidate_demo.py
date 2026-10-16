@@ -25,7 +25,7 @@ from sim2act import pb_natural_specs as pb
 from sim2act import pb_natural_uses as uses
 from sim2act.api import create_app
 from sim2act.config import Settings
-from sim2act.db import Store, events, fingerprint, meta, runs
+from sim2act.db import Store, events, meta, runs
 from sim2act.worker import Worker
 
 MARKER = {"version": "sim2act-local-candidate.v1", "mode": "SYNTHETIC_MOCK_ONLY"}
@@ -216,24 +216,32 @@ class Demo:
 
         return httpx.MockTransport(handler)
 
-    def natural_use(self, project, app, release, instance, family, material):
-        resource, card = self.material(project, material)
-        graph_fp = (fingerprint(app["candidate"]["spec_recipe"]) if family == "pa" else
-                    app["candidate"]["spec_task"]["edited_recipe_fingerprint"])
-        body = dict(expected_revision=instance["revision"],
-            expected_release_fingerprint=release["fingerprint"],
-            expected_app_fingerprint=app["fingerprint"], expected_recipe_fingerprint=graph_fp,
-            resource_id=resource, card_id=card["id"], expected_goal_version=card["version"],
-            expected_goal_fingerprint=card["fingerprint"],
-            expected_source_hash=hashlib.sha256(self.fixtures["materials"][material]["content"].encode()).hexdigest(),
-            request_key="mock-" + family + "-use")
+    def natural_run(self, project, app, release, instance, family, material):
         route = "/api/internal/instances/" + instance["id"]
-        review = self.request("POST", route + f"/{family}-use-reviews", body)
-        commit = dict(review=body, expected_review_fingerprint=review["review_fingerprint"],
-                      consent=uses.PA_CONSENT if family == "pa" else uses.CONSENT)
-        queued = self.request("POST", route + f"/{family}-use-runs", commit, 202)
+        if family == "pa":
+            # Smallest existing P-A demonstration: original saved material/Goal.
+            # This candidate does NOT claim P-A new-material per-use validation.
+            submit = route + "/runs"
+            commit = dict(expected_revision=instance["revision"],
+                expected_release_fingerprint=release["fingerprint"], input={}, request_key="mock-pa-source")
+            submission = "ORIGINAL_SAVED_MATERIAL_AND_GOAL"
+        else:
+            resource, card = self.material(project, material)
+            body = dict(expected_revision=instance["revision"],
+                expected_release_fingerprint=release["fingerprint"],
+                expected_app_fingerprint=app["fingerprint"],
+                expected_recipe_fingerprint=app["candidate"]["spec_task"]["edited_recipe_fingerprint"],
+                resource_id=resource, card_id=card["id"], expected_goal_version=card["version"],
+                expected_goal_fingerprint=card["fingerprint"],
+                expected_source_hash=hashlib.sha256(self.fixtures["materials"][material]["content"].encode()).hexdigest(),
+                request_key="mock-pb-use")
+            review = self.request("POST", route + "/pb-use-reviews", body)
+            commit = dict(review=body, expected_review_fingerprint=review["review_fingerprint"], consent=uses.CONSENT)
+            submit = route + "/pb-use-runs"
+            submission = "EXPLICIT_NEW_MATERIAL_GOAL_PER_USE_REVIEW"
+        queued = self.request("POST", submit, commit, 202)
         # An identical original intent is idempotent, never a second Run.
-        duplicate = self.request("POST", route + f"/{family}-use-runs", commit, 202)
+        duplicate = self.request("POST", submit, commit, 202)
         require(queued["run_id"] == duplicate["run_id"], "Duplicate submit changed Run")
         run_id = queued["run_id"]
         result = self.once(run_id, self.mock(family, material))
@@ -248,6 +256,7 @@ class Demo:
         require(owner["owner_acceptance"] == "PENDING" and owner["content_access"],
                 "Same-Run manual review unavailable")
         return dict(app_id=app["id"], instance_id=instance["id"], run_id=run_id,
+            submission=submission,
             artifact_sha256=hashlib.sha256(artifact["resource"]["content"].encode()).hexdigest(),
             result_version=artifact["result_version"], manual_review=owner_path,
             owner_acceptance="PENDING", semantic_acceptance="NOT_RUN")
@@ -283,24 +292,24 @@ class Demo:
             candidate_fingerprint=generation["result"]["candidate_fingerprint"],
             request_key="mock-confirm-pa", name="MOCK natural P-A", artifact_write_consent=natural.CONSENT))
         pa_app, pa_release, pa_instance = self.release(saved["id"], {})
-        pa_result = self.natural_use(project, pa_app, pa_release, pa_instance, "pa", "pa_use")
-        print("PASS MOCK P-A saved app + explicit per-use material/Goal; starting P-B extraction", flush=True)
+        pa_result = self.natural_run(project, pa_app, pa_release, pa_instance, "pa", "source")
+        print("PASS MOCK P-A original saved material/Goal; starting P-B extraction", flush=True)
 
-        resource, card = self.material(project, "source")
+        resource, card = self.material(project, "pb_target")
         path = f"/api/projects/{project}/natural-spec-task-runs/{pa_result['run_id']}"
         options = self.request("GET", path + "/extraction-options")
         body = dict(source_run_id=pa_result["run_id"],
             expected_source_proof_fingerprint=options["source_proof_fingerprint"],
             expected_source_recipe_fingerprint=options["recipe_fingerprint"], card_id=card["id"],
             expected_goal_version=card["version"], expected_goal_fingerprint=card["fingerprint"],
-            expected_source_hash=hashlib.sha256(self.fixtures["materials"]["source"]["content"].encode()).hexdigest(),
+            expected_source_hash=hashlib.sha256(self.fixtures["materials"]["pb_target"]["content"].encode()).hexdigest(),
             recipe=options["recipe"], name="MOCK natural P-B", request_key="mock-pb-extraction")
         review = self.request("POST", path + "/extraction-reviews", body)
         saved = self.request("POST", path + "/extractions", dict(review=body,
             expected_review_fingerprint=review["review_fingerprint"], consent=pb.CONSENT,
             artifact_write_consent=natural.CONSENT), 201)
         app, release, instance = self.release(saved["id"], {})
-        pb_result = self.natural_use(project, app, release, instance, "pb", "pb_use")
+        pb_result = self.natural_run(project, app, release, instance, "pb", "pb_use")
         directory = self.request("GET", "/api/apps?metadata_only=true")
         families = {item["id"]: item.get("use_family") for item in directory["items"]}
         require(families[pa_app["id"]] == "NATURAL_PA" and families[app["id"]] == "NATURAL_PB",
@@ -308,6 +317,7 @@ class Demo:
         require(len(self.mock_calls) == 5, "Unexpected mock response count")
         return dict(**MARKER, status="PASS", project_id=project, deterministic=deterministic,
             natural_pa=pa_result, natural_pb=pb_result, worker_claims=self.claims,
+            pa_new_material_per_use="NOT_RUN_IN_THIS_CANDIDATE",
             mock_responses=len(self.mock_calls), real_model_requests=0,
             formal_publication_enabled=False, windows="NOT_RUN", postgres="NOT_RUN",
             real_semantics="NOT_RUN", prior_lock_validation="Separate historical staged evidence")
