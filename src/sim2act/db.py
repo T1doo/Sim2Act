@@ -829,6 +829,19 @@ class Store:
         )
 
     def submit(self, principal, project_id, goal, refs, key, *, policy=None, goal_source=None):
+        try:
+            with self.tx() as c:
+                return self.submit_tx(c, principal, project_id, goal, refs, key,
+                                      policy=policy, goal_source=goal_source)
+        except IntegrityError:
+            # Concurrent duplicate: retry only after this transaction rolled back.
+            return self.submit(principal, project_id, goal, refs, key,
+                               policy=policy, goal_source=goal_source)
+
+    def submit_tx(self, c, principal, project_id, goal, refs, key, *, policy=None, goal_source=None):
+        """Accept within the caller's transaction; never commit or retry it here."""
+        if c.engine is not self.engine or not c.in_transaction():
+            raise DomainError("VERSION_CONFLICT", "Active store transaction required")
         policy = policy or {
             "limits": Limits(
                 max_requests=4,
@@ -843,133 +856,128 @@ class Store:
         }
         if len(set(refs)) != len(refs):
             raise DomainError("INVALID_INPUT", "Duplicate input resource")
-        try:
-            with self.tx() as c:
-                p = self.lock_project(c, principal, project_id)
-                prior = c.execute(select(runs).where(
-                    runs.c.principal_id == principal, runs.c.project_id == project_id,
-                    runs.c.request_key == key,
-                )).mappings().first()
-                source = None
-                if goal_source is not None:
-                    from .goal_runs import resolve_source
+        p = self.lock_project(c, principal, project_id)
+        prior = c.execute(select(runs).where(
+            runs.c.principal_id == principal, runs.c.project_id == project_id,
+            runs.c.request_key == key,
+        )).mappings().first()
+        source = None
+        if goal_source is not None:
+            from .goal_runs import resolve_source
 
-                    source = resolve_source(self, c, principal, p, goal_source, prior)
-                    goal = source.snapshot["content"]["goal"]
-                    refs = source.snapshot["content"]["resource_refs"]
-                    if len(set(refs)) != len(refs):
-                        raise DomainError("INVALID_INPUT", "Duplicate input resource")
-                request = {"goal": goal, "resource_refs": refs, "policy": policy}
-                if source is not None:
-                    request["goal_source"] = source.model_dump()
-                fp = fingerprint(request)
-                for rid in refs:
-                    self.authorize(c, principal, p["runtime_id"], project_id, rid, "resource.read")
-                    if c.execute(
-                        select(resource_retirements.c.resource_id).where(
-                            resource_retirements.c.resource_id == rid
-                        )
-                    ).first():
-                        raise DomainError("RESOURCE_UNAVAILABLE", "退休来源不能成为新的任务输入")
-                old = (
-                    c.execute(
-                        select(runs).where(
-                            runs.c.principal_id == principal,
-                            runs.c.project_id == project_id,
-                            runs.c.request_key == key,
-                        )
-                    )
-                    .mappings()
-                    .first()
+            source = resolve_source(self, c, principal, p, goal_source, prior)
+            goal = source.snapshot["content"]["goal"]
+            refs = source.snapshot["content"]["resource_refs"]
+            if len(set(refs)) != len(refs):
+                raise DomainError("INVALID_INPUT", "Duplicate input resource")
+        request = {"goal": goal, "resource_refs": refs, "policy": policy}
+        if source is not None:
+            request["goal_source"] = source.model_dump()
+        fp = fingerprint(request)
+        for rid in refs:
+            self.authorize(c, principal, p["runtime_id"], project_id, rid, "resource.read")
+            if c.execute(
+                select(resource_retirements.c.resource_id).where(
+                    resource_retirements.c.resource_id == rid
                 )
-                if old:
-                    if old["fingerprint"] != fp:
-                        raise DomainError(
-                            "VERSION_CONFLICT", "Idempotency key reused with changed input"
-                        )
-                    return old["id"]
-                rid = new_id("run")
-                created_at = time.time()
-                snapshot = FrozenRunContract(
-                    run_id=rid,
-                    runtime_id=p["runtime_id"],
-                    contract_version="F1.3",
-                    goal=GoalSpec(
-                        goal_id=source.card_id if source else new_id("goal"),
-                        project_id=project_id,
-                        owner_id=principal,
-                        goal=goal,
-                        constraints=source.snapshot["content"]["constraints"] if source else [],
-                        acceptance_version="F1-tool-chain.v1",
-                        resource_refs=refs,
-                        unresolved=source.snapshot["content"]["unresolved"] if source else ["Semantic goal acceptance NOT_RUN"],
-                    ),
-                    resources=[
-                        ResourceSnapshot(
-                            resource_id=r["id"],
-                            revision=1,
-                            content_hash=r["hash"],
-                            format=r["format"],
-                        )
-                        for r in c.execute(
-                            select(resources).where(resources.c.id.in_(refs))
-                        ).mappings()
-                    ],
-                    source_goal_card=source,
-                    **policy,
-                ).model_dump(exclude_none=True)
-                c.execute(
-                    insert(run_contracts).values(
-                        run_id=rid, snapshot=snapshot, fingerprint=fingerprint(snapshot)
-                    )
+            ).first():
+                raise DomainError("RESOURCE_UNAVAILABLE", "退休来源不能成为新的任务输入")
+        old = (
+            c.execute(
+                select(runs).where(
+                    runs.c.principal_id == principal,
+                    runs.c.project_id == project_id,
+                    runs.c.request_key == key,
                 )
-                c.execute(
-                    insert(runs).values(
-                        id=rid,
-                        project_id=project_id,
-                        principal_id=principal,
-                        runtime_id=p["runtime_id"],
-                        goal=goal,
-                        resource_refs=refs,
-                        request_key=key,
-                        fingerprint=fp,
-                        status="QUEUED",
-                        created_at=created_at,
-                        lease_until=0,
-                        fence=0,
-                        context={
-                            "messages": [],
-                            "requests": 0,
-                            "tools": 0,
-                            "repairs": 0,
-                            "reserved_tokens": 0,
-                            **({"saved_goal_input": fp} if source is not None else {}),
-                        },
-                        version=1,
-                        cancel_intent=False,
-                    )
+            )
+            .mappings()
+            .first()
+        )
+        if old:
+            if old["fingerprint"] != fp:
+                raise DomainError(
+                    "VERSION_CONFLICT", "Idempotency key reused with changed input"
                 )
-                if snapshot.get("natural_planning") is not None:
-                    deadline = {"run_id": rid, "contract_fingerprint": fingerprint(snapshot),
-                                "created_at": created_at,
-                                "deadline": created_at + snapshot["limits"]["run_seconds"]}
-                    self.event(c, rid, "NL_RUN_DEADLINE_FROZEN", deadline)
-                    context = c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one()
-                    c.execute(update(runs).where(runs.c.id == rid).values(
-                        context={**context, "natural_run_deadline": deadline}))
-                self.event(c, rid, "ACCEPTED", {
-                    "input_fingerprint": fp,
-                    **({"goal_source": {"card_id": source.card_id, "version": source.version,
-                                        "fingerprint": source.fingerprint}} if source else {}),
-                    **({"natural_planning": policy["natural_planning"]}
-                       if policy.get("natural_planning") is not None else {}),
-                    **({"application_generation": policy["application_generation"]}
-                       if policy.get("application_generation") is not None else {}),
-                })
-                return rid
-        except IntegrityError:
-            # Concurrent duplicate submit: read winner; never create a second operation.
-            return self.submit(principal, project_id, goal, refs, key, policy=policy, goal_source=goal_source)
+            return old["id"]
+        rid = new_id("run")
+        created_at = time.time()
+        snapshot = FrozenRunContract(
+            run_id=rid,
+            runtime_id=p["runtime_id"],
+            contract_version="F1.3",
+            goal=GoalSpec(
+                goal_id=source.card_id if source else new_id("goal"),
+                project_id=project_id,
+                owner_id=principal,
+                goal=goal,
+                constraints=source.snapshot["content"]["constraints"] if source else [],
+                acceptance_version="F1-tool-chain.v1",
+                resource_refs=refs,
+                unresolved=source.snapshot["content"]["unresolved"] if source else ["Semantic goal acceptance NOT_RUN"],
+            ),
+            resources=[
+                ResourceSnapshot(
+                    resource_id=r["id"],
+                    revision=1,
+                    content_hash=r["hash"],
+                    format=r["format"],
+                )
+                for r in c.execute(
+                    select(resources).where(resources.c.id.in_(refs))
+                ).mappings()
+            ],
+            source_goal_card=source,
+            **policy,
+        ).model_dump(exclude_none=True)
+        c.execute(
+            insert(run_contracts).values(
+                run_id=rid, snapshot=snapshot, fingerprint=fingerprint(snapshot)
+            )
+        )
+        c.execute(
+            insert(runs).values(
+                id=rid,
+                project_id=project_id,
+                principal_id=principal,
+                runtime_id=p["runtime_id"],
+                goal=goal,
+                resource_refs=refs,
+                request_key=key,
+                fingerprint=fp,
+                status="QUEUED",
+                created_at=created_at,
+                lease_until=0,
+                fence=0,
+                context={
+                    "messages": [],
+                    "requests": 0,
+                    "tools": 0,
+                    "repairs": 0,
+                    "reserved_tokens": 0,
+                    **({"saved_goal_input": fp} if source is not None else {}),
+                },
+                version=1,
+                cancel_intent=False,
+            )
+        )
+        if snapshot.get("natural_planning") is not None:
+            deadline = {"run_id": rid, "contract_fingerprint": fingerprint(snapshot),
+                        "created_at": created_at,
+                        "deadline": created_at + snapshot["limits"]["run_seconds"]}
+            self.event(c, rid, "NL_RUN_DEADLINE_FROZEN", deadline)
+            context = c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one()
+            c.execute(update(runs).where(runs.c.id == rid).values(
+                context={**context, "natural_run_deadline": deadline}))
+        self.event(c, rid, "ACCEPTED", {
+            "input_fingerprint": fp,
+            **({"goal_source": {"card_id": source.card_id, "version": source.version,
+                                "fingerprint": source.fingerprint}} if source else {}),
+            **({"natural_planning": policy["natural_planning"]}
+               if policy.get("natural_planning") is not None else {}),
+            **({"application_generation": policy["application_generation"]}
+               if policy.get("application_generation") is not None else {}),
+        })
+        return rid
 
     def guard(self, c, run_id, fence):
         from .goal_applications import source_scope_gate
@@ -1054,7 +1062,7 @@ class Store:
             verify_source(self, c, run, contract)
         return contract
 
-    def claim(self, worker_id, lease_seconds):
+    def claim(self, worker_id, lease_seconds, *, trial_binding=None):
         from .protocol_jobs import protocol_run_ids
         from .protocol_recovery import recover_expired_protocols
 
@@ -1114,10 +1122,44 @@ class Store:
                     )
                 )
                 self.event(c, r["id"], "RECONCILED", {"status": state, "receipts_preserved": True})
+            from .natural_trial_runs import associated_sql, check_claim
+
+            # Ordinary workers never acquire trial ownership, even before phase
+            # approval. Association and Run become visible in the same commit.
+            eligibility = ~associated_sql()
+            if trial_binding is not None:
+                from sqlalchemy import and_, exists, or_
+
+                from .natural_live_admission import PHASE, TrialContractV2, entity
+                from .natural_trial_runs import MARKER
+                from .pa_trial_dispatch import PATrialBinding
+
+                if type(trial_binding) is not PATrialBinding:
+                    raise DomainError("PERMISSION_DENIED")
+                phase = delivery_graph_requests.alias("trial_phase")
+                phase_ready = exists(select(phase.c.app_id).where(
+                    phase.c.app_id == entity(trial_binding.contract),
+                    phase.c.principal_id == trial_binding.contract.principal_id,
+                    phase.c.kind == PHASE,
+                    phase.c.snapshot["request"]["authority"]["run_id"].as_string() == runs.c.id))
+                eligibility = and_(
+                    runs.c.context[MARKER]["contract_fingerprint"].as_string() == trial_binding.contract_fingerprint,
+                    runs.c.context[MARKER]["approval_key"].as_string() == trial_binding.approval_key,
+                    or_(runs.c.context[MARKER]["stage"].as_string() == "generate", phase_ready))
+                if type(trial_binding.contract) is not TrialContractV2:
+                    # Original V1 controller fixtures predate associations. Keep
+                    # only their exact frozen Generate/approved phase identities.
+                    legacy = and_(~associated_sql(),
+                        runs.c.principal_id == trial_binding.contract.principal_id,
+                        runs.c.project_id == trial_binding.contract.project_id,
+                        or_(and_(runs.c.runtime_id == trial_binding.contract.runtime_id,
+                                 runs.c.request_key == trial_binding.contract.stage_keys.generate),
+                            phase_ready))
+                    eligibility = or_(eligibility, legacy)
             row = (
                 c.execute(
                     select(runs.c.id)
-                    .where(runs.c.status == "QUEUED")
+                    .where(runs.c.status == "QUEUED", eligibility)
                     .order_by(runs.c.created_at)
                     .with_for_update(skip_locked=True)
                     .limit(1)
@@ -1128,6 +1170,14 @@ class Store:
                 return None
             from .goal_applications import source_scope_gate
 
+            trial_deadline = None
+            if c.execute(select(runs.c.id).where(runs.c.id == row, associated_sql())).first():
+                # Failed trial proof must leave QUEUED/fence/attempts untouched.
+                # It must never become an ordinary-worker fallback.
+                try:
+                    trial_deadline = check_claim(self, c, row, trial_binding)
+                except DomainError:
+                    return None
             try:
                 source_scope_gate(self, c, row)
             except DomainError as exc:
@@ -1139,12 +1189,15 @@ class Store:
             # payload, never the private fields of other queued/history rows.
             row = c.execute(select(runs).where(runs.c.id == row)).mappings().one()
             data = dict(row)
+            claimed_at = time.time()
+            if trial_deadline is not None and claimed_at >= trial_deadline:
+                return None
             data.update(
                 status="RUNNING",
                 fence=row["fence"] + 1,
                 # Reconciliation/row acquisition may consume the scan's entire lease.
                 # Start this new ownership interval only after that work completes.
-                lease_until=time.time() + lease_seconds,
+                lease_until=claimed_at + lease_seconds,
                 worker_id=worker_id,
             )
             c.execute(
@@ -1153,6 +1206,8 @@ class Store:
                 .values(**{k: data[k] for k in ["status", "fence", "lease_until", "worker_id"]})
             )
             self.event(c, row["id"], "CLAIMED", {"fence": data["fence"]})
+            if trial_deadline is not None and time.time() >= trial_deadline:
+                raise DomainError("VERSION_CONFLICT", "Original associated Run deadline ended")
             return data
 
     def heartbeat(self, worker_id, run_id=None, fence=None, lease_seconds=30, *,

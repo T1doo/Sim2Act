@@ -55,6 +55,8 @@ class Worker:
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
                 planner_request=False, generation_request=False, natural_spec_request=None):
+        from .natural_trial_runs import check_worker
+        check_worker(self, run_id)
         if self.pa_trial is not None:
             from .pa_trial_dispatch import wait_unreserved
             wait_unreserved(self, run_id)
@@ -107,6 +109,8 @@ class Worker:
                 )
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
+            from .natural_trial_runs import check_worker_tx
+            check_worker_tx(self, c, run_id)
             if self.pa_trial is not None:
                 from .pa_trial_dispatch import preflight
                 preflight(self, c, run, generation=generation_request,
@@ -341,6 +345,8 @@ class Worker:
             if saved and saved.get("application_generation") and state != "PARTIAL":
                 result = None
             if state in {"SUCCEEDED", "PARTIAL"}:
+                from .natural_trial_runs import check_worker_tx
+                check_worker_tx(self, c, run_id)
                 if self.pa_trial is not None:
                     from .pa_trial_dispatch import check_commit
                     check_commit(self, c, run)
@@ -366,6 +372,9 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
+            if state in {"SUCCEEDED", "PARTIAL"}:
+                from .natural_trial_runs import check_worker_tx
+                check_worker_tx(self, c, run_id)
             if self.pa_trial is not None and state in {"SUCCEEDED", "PARTIAL"}:
                 from .pa_trial_dispatch import check_commit
                 check_commit(self, c, run)
@@ -380,6 +389,8 @@ class Worker:
                         raise DomainError("VERSION_CONFLICT", "Spec generation terminal ownership changed")
 
     def process(self, run):
+        from .natural_trial_runs import check_worker
+        check_worker(self, run["id"])
         from .csv_dag import is_job as is_csv_dag
         from .csv_dag import process_job as process_csv_dag
 
@@ -661,7 +672,8 @@ class Worker:
 
         if recover_cancelled_checks(self.store, scan=self._project_cancel_scan):
             return True
-        run = self.store.claim(self.id, self.s.lease_seconds)
+        run = self.store.claim(self.id, self.s.lease_seconds,
+                               **({"trial_binding": self.pa_trial} if self.pa_trial is not None else {}))
         if run:
             original = self.s
             try:

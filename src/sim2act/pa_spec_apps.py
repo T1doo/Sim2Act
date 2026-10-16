@@ -1173,6 +1173,8 @@ def commit_guard(worker, c, run, b, delta=0):
     frozen = worker.store._frozen_contract_after_scope(c, job).limits
     if time.time() >= job["created_at"] + min(limits.run_seconds, declared.run_seconds, frozen.run_seconds) or job["context"]["tools"] + delta > min(limits.max_tools, declared.max_tools, frozen.max_tools):
         raise DomainError("BUDGET_EXHAUSTED")
+    from .natural_trial_runs import check_worker_tx
+    check_worker_tx(worker, c, job["id"])
     if getattr(worker, "pa_trial", None) is not None:
         from .pa_trial_dispatch import check_commit
         check_commit(worker, c, job)
@@ -1341,6 +1343,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
         require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
             "Original model audit bytes changed during the final save transaction")
+        from .natural_trial_runs import check_worker_tx
+        check_worker_tx(worker, c, job["id"])
         if getattr(worker, "pa_trial", None) is not None:
             from .pa_trial_dispatch import check_commit
             check_commit(worker, c, job)
@@ -1367,6 +1371,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     # authorities and time bounds after receipt readback, without reusing any
     # proof across a write, callback or transaction boundary.
     store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
+    from .natural_trial_runs import check_worker_tx
+    check_worker_tx(worker, c, job["id"])
     if getattr(worker, "pa_trial", None) is not None:
         from .pa_trial_dispatch import check_commit
         check_commit(worker, c, job)
