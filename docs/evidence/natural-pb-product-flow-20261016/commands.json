@@ -1,0 +1,56 @@
+{
+  "freeze": "e039e0e3ec3add3e23eeb75fc9085ea017780c6d",
+  "python": "/workspace/sim2act-venv/bin/pytest",
+  "common_environment": {
+    "NODE_PATH": "/workspace/node-tools/node_modules"
+  },
+  "runs": [
+    {
+      "name": "final-product",
+      "selectors": [
+        "tests/test_pb_natural_product_flow.py"
+      ],
+      "basetemp": "/workspace/pb-guide-final-product",
+      "junit": "/workspace/pb-guide-final-product.xml",
+      "stdout_stderr": "/workspace/pb-guide-final-product.log"
+    },
+    {
+      "name": "final-first",
+      "selectors": [
+        "tests/test_natural_first_creation.py"
+      ],
+      "basetemp": "/workspace/pb-guide-final-first",
+      "junit": "/workspace/pb-guide-final-first.xml",
+      "stdout_stderr": "/workspace/pb-guide-final-first.log"
+    },
+    {
+      "name": "final-shared",
+      "selectors": [
+        "tests/test_natural_input_preparation.py::test_natural_preparation_navigation_synthesized_api",
+        "tests/test_natural_application_entry.py::test_natural_entry_navigation_synthesized_api",
+        "tests/test_catalog_use_routing_ui.py",
+        "tests/test_goal_card_run_ui.py"
+      ],
+      "basetemp": "/workspace/pb-guide-final-shared",
+      "junit": "/workspace/pb-guide-final-shared.xml",
+      "stdout_stderr": "/workspace/pb-guide-final-shared.log"
+    }
+  ],
+  "static": [
+    "ruff check src tests/test_pb_natural_product_flow.py",
+    "node --check for all 19 src/sim2act/web/*.js",
+    "git diff --check"
+  ],
+  "not_run": [
+    "full repository pytest",
+    "legacy multi-fixture P-A/P-B UI/recovery matrix",
+    "real models",
+    "native browser",
+    "real human semantic acceptance",
+    "Windows",
+    "PG",
+    "remote CI",
+    "deployment"
+  ],
+  "known_open": "old multiple-history fixture heartbeat/SQLite lock issue NOT_RETESTED; old full-disk instance last independent report not recovered"
+}

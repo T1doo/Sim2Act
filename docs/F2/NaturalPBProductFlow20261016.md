@@ -12,3 +12,5 @@
 不新增 executor、后端协议、授权种类、模型批准或来源退休许可。提取仍依赖原成功来源的当前权限；旧来源撤权时保守拒绝。原应用、Goal、Release、实例及成果保持。语义 UNKNOWN、人工 PENDING、未发布分别保留，不把引用/结构检查当成真实语义验收。
 
 本轮验收使用合成数据、实际 TestClient HTTP、生产页面脚本和 JSDOM、真实 Worker 加 httpx.MockTransport。实际结果、失败轮次、源码冻结与独审范围以同轮证据为准；不重做旧恢复矩阵，不宣称原生浏览器、Windows、PG、远端 CI、真实模型或真实场景通过。
+
+实现和测试冻结于 `e039e0e3ec3add3e23eeb75fc9085ea017780c6d`：新 P-B 产品模块完整 2 PASS（575.45 秒），受影响首次创建模块完整 4 PASS（357.60 秒），共享入口 5 PASS（41.75 秒），合计 11 唯一节点、0 FAIL、0 SKIP。P-B 正例 63 checks、68 次可见交互；原成功来源与新 P-B 逐次 Run 各一次 claim 实际成功。新 P-B 是首次 v1，原 P-A 的 app/Goal/version/Release/instance/typed-v1/artifact 行保留；没有宣称所有原 Run 账本逐字比对或 P-B v2 保留验收。独立审查同冻结字节的 21 隔离检查和 38 DOM 检查通过，其有限范围无未修阻断。原始日志、JUnit、mock wire、页面请求、撤权回执、失败轮次及冻结校验见 [证据](../evidence/natural-pb-product-flow-20261016/README.md)。
