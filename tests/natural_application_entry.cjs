@@ -63,8 +63,14 @@ async function selectRun(){
  check(review.namespace===info.family+"-natural-per-run.v1","existing distinct per-use family contract retained");
  check(review.app_id===info.app&&review.release_id===info.release&&review.instance_id===info.instance,"preview preserves saved app Release and instance");
  check(review.target_goal.card_id===info.goal&&review.variable_bindings.resource_id===info.resource,"preview displays exact explicitly selected Goal and material");
- check(review.preview.source_content===info.content&&review.instance_data_version===info.expected_version-1,"preview displays new source with preserved old result version");
- check(review.real_model_allowance===0&&review.new_model_requests===0,"preview grants no real model allowance");
+ check(review.preview.source_content===info.content,"preview displays this new source");
+ if(info.family==="pa"){
+  check(review.instance_data_version===info.expected_version-1,"P-A preview preserves exact old result version");
+  check(review.real_model_allowance===0,"P-A preview has zero real model allowance");
+ }else{
+  check(review.effective_candidate.manifest.runtime_limits.max_requests>0&&review.required_permissions.every(p=>["resource.read","artifact.save_text"].includes(p.tool_ref)),"P-B preview retains bounded saved limits and declared permissions");
+ }
+ check(review.new_model_requests===0&&review.artifact_writes===0&&review.formal_publication_enabled===false,"binding preview performs zero model requests or artifact writes and cannot publish");
  check($("pb-use-submit").disabled&&!$("pb-use-ack").checked,"explicit per-use consent is required and starts blank");
  await confirm("pb-use-ack");
  const submit=$("pb-use-submit");await gesture(submit,()=>{submit.click();submit.click();},[[submit,"onclick"]]);
