@@ -11,18 +11,24 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip install --no-deps --only-binary=:all: -r requirements.lock
 .venv/bin/python -m pip install --no-deps wheels/sim2act-0.1.0-py3-none-any.whl
 .venv/bin/python -m pip check
-.venv/bin/python scripts/local_candidate_demo.py prepare --data-dir ./synthetic-demo
+.venv/bin/python scripts/local_candidate_demo.py prepare-pa --data-dir ./synthetic-demo
 .venv/bin/python scripts/local_candidate_demo.py verify --data-dir ./synthetic-demo
 .venv/bin/python scripts/local_candidate_demo.py serve --data-dir ./synthetic-demo --port 8000
 ```
 
 Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `requirements-windows.lock`；本轮未执行 Windows。安装需要既有网络或预备好的本地 wheelhouse，候选不捆绑第三方依赖，不是完全离线安装包。演示本身只访问 loopback HTTP，模型响应固定为 `httpx.MockTransport`；不需要 Node、浏览器自动化或测试目录。
 
-`prepare` 只能写入不存在的新目录，现有目录会拒绝，不删除数据。明确调用一次后依次完成：CSV 数字列求和 30 → 内部 Release/实例/真实 AppRun；自然 P-A mock 生成与明确保存 → 原保存材料和 Goal 的首个运行；从成功 P-A Run 审阅提取 P-B → 保存内部 Release/实例 → 第三份材料和 Goal 的逐次 review/提交。各 Run 只执行一次原 claim；没有恢复或重新提交失败任务的循环。自然生成共 3 条、P-A/P-B 运行各 1 条固定 mock 响应；真实模型请求为 0。本候选不验证 P-A 新材料逐次使用。
+`prepare-pa` 只能写入不存在的新目录，现有目录会拒绝，不删除数据。明确调用一次后依次完成：CSV 数字列求和 30 → 内部 Release/实例/真实 AppRun；自然 P-A mock 生成与明确保存；在空实例以第一份新材料和已保存 Goal 经逐次 review/commit 运行得 v1，再在同一应用/Release/实例提交另一材料和 Goal 得 v2，保留首份 typed 行及 artifact。首次使用材料、Goal 和 recipe 固定为首包 0f 的合成案例，未先执行原材料 Run。共 3 条生成、2 条 P-A 运行固定 mock 响应，真实请求为 0。
 
-`verify` 在独立进程重新打开同一目录，只 GET 已有 CSV/P-A/P-B 结果和同一 Run 人工验收状态，比较全库持久行保持不变；不启动 Worker。原始合成回执保存在该演示目录：`http-receipts.json`、`worker-receipts.json`、`mock-receipts.json`、`demo-receipt.json`、`cold-read-receipt.json`。失败时保留当次数据，不覆盖后重试。
+候选按正常 Worker 服务生命周期等实际终态，`Worker.once()` 的布尔值仅是进度，不代表完成。服务只调用既有 Worker/Store.claim，保持每 Run 原接受时钟及最多 300 秒预算、30 秒 lease 和普通 1 秒服务间隔；到绝对截止、出现失败/阻塞/未知状态或意外异常即停止。它不会重发提交、resume、清除 unknown 或修改 Run 状态。若原机制合法回收过期 owner 后重领，每次 claim/fence/WORKER_LOST/RECONCILED 都在回执中公开，不再限定只一次 claim，也不将它冒充旧 F9 的复现或修复。每个 `worker-service-<Run>.json` 保存原接受时钟与逐次服务状态，`worker-receipts.json` 保存真实 ledger。运行中仅观测已知合成 Run 的 metadata 标量，终态才执行完整 HTTP 结果读取。
 
-`serve` 只向 `127.0.0.1` 提供已有结果的只读普通页面，不能生成新任务或提交人工决定。公开合成登录值：`public-synthetic-local-candidate`。选择 `SYNTHETIC MOCK local candidate` 项目，在已保存应用目录选择 CSV、自然 P-A 或 P-B，再选实例和已有 Run 查看结果及人工验收状态。自然语义仍 `NOT_RUN`，人工验收仍 `PENDING`。Ctrl+C 只停止本服务器并保留数据。重新运行 `serve` 不重新生成结果。需要新一次演示时选择另一个新目录。
+每轮服务前后检查隔离库中没有其他 active Run，并核实际本 Worker 领取过的全部 Run ID；发现非目标任务立即停止并保留回执，不私改 claim 选择器或隐藏旁路工作。这个入口只用于自己全新创建的合成数据目录。
+
+旧 `prepare` 命令仍提供此前范围的原材料 P-A → 提取 P-B → 新材料逐次 P-B 演示，使用另一个全新目录；它不代替 `prepare-pa` 的新材料 P-A 验证。二者原始执行范围由各自交付报告记录，不把另一条链的成功改签为本条通过。
+
+`verify` 在独立进程重新打开同一目录，只 GET 已有三个结果和同一 Run 人工验收状态；对于 `prepare-pa` 逐项核对同实例 v1/v2 artifact 和原 typed 行摘要，比较全库持久行保持不变；不启动 Worker。原始合成回执保存在该演示目录：`http-receipts.json`、`worker-receipts.json`、`worker-service-<Run>.json`、`mock-receipts.json`、`demo-receipt.json`、`cold-read-receipt.json`。失败时保留当次数据，不覆盖后重试。
+
+`serve` 只向 `127.0.0.1` 提供已有结果的只读普通页面，不能生成新任务或提交人工决定。公开合成登录值：`public-synthetic-local-candidate`。选择 `SYNTHETIC MOCK local candidate` 项目，在已保存应用目录选择应用，再选实例和已有 Run 查看结果及人工验收状态。自然语义仍 `NOT_RUN`，人工验收仍 `PENDING`。Ctrl+C 只停止本服务器并保留数据。重新运行 `serve` 不重新生成结果。需要新一次演示时选择另一个新目录。
 
 ## 普通安装及真实模型边界
 
@@ -36,7 +42,7 @@ Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `re
 
 本候选的实际执行结果由交付报告另行记录；说明文字不代替执行回执。未执行 Windows、PostgreSQL、原生浏览器、真实模型/场景/人工语义验收、远端 CI 或部署。
 
-前一个 `0f0819a6` 包的首次全链尝试失败：P-A 新材料逐次运行一次 claim 后仍 `RUNNING`，只有 resource.read 完成、没有模型 attempt；原数据和回执保留，具体原因未定。本包仅收窄演示到上述原材料 P-A + 新材料 P-B 最短链；这不是对该失败的产品修复，也不能把后续成功记作前包通过。
+前一个 `0f0819a6` 包的首次全链尝试失败：P-A 新材料逐次运行一次 claim 后仍 `RUNNING`，只有 resource.read 完成、没有模型 attempt；原数据和回执保留，最初异常/长事务原因未定。此前 `c9` 包仅验证原材料 P-A + 新材料 P-B，不能当作该功能完成。本轮精确 0f 新库对照首次 per-use 自然成功、一次 Worker.once 22.48 秒，因此未自然复现原失败。本候选恢复明确的新材料 P-A 路径并调整正常 Worker 服务生命周期；不是生产 lease/guard 修改或已确定原最初异常的修复，不把后续成功改签为旧包通过。实际新候选执行结果仍以交付报告和原件为准。
 
 此前 `986799d` 的锁验证保持原分期：安全批次 45 PASS / 1 FAIL，随后定向 2 PASS（含重叠）及独立新增模块 9 PASS；不能称一次整批全绿。自然双 Run 成功但没有触发新恢复分支，旧 F9 具体失败时序没有复现。本候选不重跑或扩展该故障矩阵，也不补称旧满盘环境未落盘的独审报告。
 

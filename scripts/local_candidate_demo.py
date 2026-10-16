@@ -25,7 +25,16 @@ from sim2act import pb_natural_specs as pb
 from sim2act import pb_natural_uses as uses
 from sim2act.api import create_app
 from sim2act.config import Settings
-from sim2act.db import Store, events, meta, runs
+from sim2act.db import (
+    Store,
+    events,
+    fingerprint,
+    internal_instance_data,
+    internal_run_bindings,
+    meta,
+    run_contracts,
+    runs,
+)
 from sim2act.worker import Worker
 
 MARKER = {"version": "sim2act-local-candidate.v1", "mode": "SYNTHETIC_MOCK_ONLY"}
@@ -126,6 +135,53 @@ class NeverModel:
     complete = request
 
 
+def serve_accepted_run(worker, read_header, observe):
+    """Ordinary Worker service, bounded by the original accepted Run deadline.
+
+    once() reports progress, not completion. Only Store.claim may reclaim an
+    expired owner. This controller never submits, resumes or changes a Run.
+    """
+    accepted = read_header()
+    require(accepted["status"] == "QUEUED", "Expected the just accepted synthetic Run")
+    identity = {key: accepted[key] for key in ("id", "principal_id", "project_id", "created_at", "deadline")}
+    turns = []
+    try:
+        # Matches worker.main's original one-second service cadence, not a
+        # tightened heartbeat schedule or an enlarged business budget.
+        for number in range(worker.s.run_seconds + 1):
+            before = read_header()
+            require(all(before[key] == value for key, value in identity.items()), "Accepted Run identity or deadline changed")
+            require(not before["unexpected_active_run_ids"], "Unexpected active Run in isolated synthetic fixture")
+            require(set(before["service_claimed_run_ids"]) <= {accepted["id"]}, "Worker claimed an unexpected synthetic Run")
+            require(before["status"] in {"QUEUED", "RUNNING"}, "Synthetic Run is blocked or stopped: " + before["status"])
+            require(time.time() < accepted["deadline"] and not worker.stop.is_set(), "Original accepted Run deadline or stop reached")
+            turn = dict(number=number + 1, before=before, started_at=time.time())
+            try:
+                turn["claimed_work"] = worker.once()
+                after = read_header()
+            except BaseException as error:
+                turn.update(finished_at=time.time(), error_type=type(error).__name__, error=str(error))
+                turns.append(turn)
+                observe(turns)
+                raise  # No restart after an unexpected exception.
+            turn.update(finished_at=time.time(), after=after)
+            turns.append(turn)
+            observe(turns)
+            require(all(after[key] == value for key, value in identity.items()), "Accepted Run identity or deadline changed")
+            require(not after["unexpected_active_run_ids"], "Unexpected active Run in isolated synthetic fixture")
+            require(set(after["service_claimed_run_ids"]) <= {accepted["id"]}, "Worker claimed an unexpected synthetic Run")
+            if after["status"] in {"SUCCEEDED", "PARTIAL"}:
+                require(set(after["service_claimed_run_ids"]) == {accepted["id"]}, "Expected actual target claim by this service")
+                return after
+            require(after["status"] in {"QUEUED", "RUNNING"}, "Synthetic Run is blocked or stopped: " + after["status"])
+            remaining = accepted["deadline"] - time.time()
+            require(remaining > 0, "Original accepted Run deadline reached")
+            worker.stop.wait(min(1.0, remaining))
+        raise RuntimeError("Bounded ordinary Worker service ended without a terminal result")
+    finally:
+        worker.stop.set()
+
+
 class Demo:
     def __init__(self, store, settings, client, root):
         self.store, self.settings, self.client, self.root = store, settings, client, root
@@ -164,20 +220,60 @@ class Demo:
             dict(expected_release_fingerprint=release["fingerprint"], request_key="mock-instance"), 201)
         return app, release, instance
 
-    def once(self, run_id, transport=None):
+    def serve_run(self, run_id, transport=None):
         worker = Worker(self.store, self.settings, NeverModel(), goal_planner_transport=transport)
-        require(worker.once(), "Expected one queued Run")
-        result = self.request("GET", "/api/runs/" + run_id)
-        with self.store.engine.connect() as connection:
-            row = connection.execute(select(runs.c.fence).where(runs.c.id == run_id)).scalar_one()
-            claimed = list(connection.execute(select(events.c.data).where(
-                events.c.run_id == run_id, events.c.kind == "CLAIMED")).scalars())
-        receipt = dict(run_id=run_id, worker_id=worker.id, fence=row,
-                       claim_count=len(claimed), status=result["status"])
-        self.claims.append(receipt)
-        write_json(self.root / "worker-receipts.json", self.claims)
-        require(row == 1 and len(claimed) == 1, "Expected exactly one original claim")
-        return result
+        turns = []
+
+        def header():
+            # Only owned synthetic identifiers and scheduling scalars. Avoid
+            # repeatedly opening full HTTP proof transactions while it runs.
+            with self.store.engine.connect() as connection:
+                row = dict(connection.execute(select(runs.c.id, runs.c.principal_id,
+                    runs.c.project_id, runs.c.created_at, runs.c.status, runs.c.fence,
+                    runs.c.worker_id, runs.c.lease_until,
+                    run_contracts.c.snapshot["limits"]["run_seconds"].as_integer().label("seconds"),
+                    internal_run_bindings.c.snapshot["natural_spec_clock"].label("clock"))
+                    .join(run_contracts, run_contracts.c.run_id == runs.c.id)
+                    .outerjoin(internal_run_bindings, internal_run_bindings.c.run_id == runs.c.id)
+                    .where(runs.c.id == run_id)).mappings().one())
+                row["unexpected_active_run_ids"] = list(connection.execute(select(runs.c.id).where(
+                    runs.c.id != run_id, runs.c.status.in_(["QUEUED", "RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]))
+                    .order_by(runs.c.id)).scalars())
+                row["service_claimed_run_ids"] = list(connection.execute(select(runs.c.id).where(
+                    runs.c.worker_id == worker.id).order_by(runs.c.id)).scalars())
+            clock = row.pop("clock")
+            row["deadline"] = row["created_at"] + min(self.settings.run_seconds, row.pop("seconds"))
+            if clock is not None:
+                require(clock["created_at"] == row["created_at"], "Original natural clock changed")
+                row["deadline"] = min(row["deadline"], clock["deadline"])
+            return row
+
+        def observe(value):
+            turns[:] = value
+            write_json(self.root / ("worker-service-" + run_id + ".json"), turns)
+
+        try:
+            completed = serve_accepted_run(worker, header, observe)
+            require(completed["worker_id"] == worker.id, "Unexpected worker completed this isolated synthetic Run")
+            return self.request("GET", "/api/runs/" + run_id)
+        finally:
+            with self.store.engine.connect() as connection:
+                current = dict(connection.execute(select(runs.c.fence, runs.c.status, runs.c.worker_id)
+                    .where(runs.c.id == run_id)).mappings().one())
+                ledger = [dict(row) for row in connection.execute(select(events.c.kind, events.c.created_at,
+                    events.c.data).where(events.c.run_id == run_id,
+                    events.c.kind.in_(["CLAIMED", "WORKER_LOST", "RECONCILED"]))
+                    .order_by(events.c.created_at, events.c.id)).mappings()]
+                service_ledger = [dict(row) for row in connection.execute(select(events.c.run_id,
+                    events.c.kind, events.c.created_at, events.c.data).join(runs, runs.c.id == events.c.run_id)
+                    .where(runs.c.worker_id == worker.id, events.c.kind == "CLAIMED")
+                    .order_by(events.c.created_at, events.c.id)).mappings()]
+            self.claims.append(dict(run_id=run_id, service_worker_id=worker.id, **current,
+                claim_count=sum(row["kind"] == "CLAIMED" for row in ledger),
+                service_turns=len(turns), service_ledger=ledger, service_all_claims=service_ledger,
+                last_observation=header(),
+                service="NORMAL_WORKER_WITH_ORIGINAL_ACCEPTED_DEADLINE"))
+            write_json(self.root / "worker-receipts.json", self.claims)
 
     def mock(self, stage, material="source"):
         count = 0
@@ -216,11 +312,11 @@ class Demo:
 
         return httpx.MockTransport(handler)
 
-    def natural_run(self, project, app, release, instance, family, material):
+    def natural_run(self, project, app, release, instance, family, material, *, per_use=False, request_key=None):
         route = "/api/internal/instances/" + instance["id"]
-        if family == "pa":
-            # Smallest existing P-A demonstration: original saved material/Goal.
-            # This candidate does NOT claim P-A new-material per-use validation.
+        if family == "pa" and not per_use:
+            # Legacy prepare branch: original saved material/Goal only.
+            # prepare-pa below explicitly selects the per-use branch instead.
             submit = route + "/runs"
             commit = dict(expected_revision=instance["revision"],
                 expected_release_fingerprint=release["fingerprint"], input={}, request_key="mock-pa-source")
@@ -230,21 +326,23 @@ class Demo:
             body = dict(expected_revision=instance["revision"],
                 expected_release_fingerprint=release["fingerprint"],
                 expected_app_fingerprint=app["fingerprint"],
-                expected_recipe_fingerprint=app["candidate"]["spec_task"]["edited_recipe_fingerprint"],
+                expected_recipe_fingerprint=(app["candidate"]["spec_task"]["edited_recipe_fingerprint"]
+                    if family == "pb" else fingerprint(app["candidate"]["spec_recipe"])),
                 resource_id=resource, card_id=card["id"], expected_goal_version=card["version"],
                 expected_goal_fingerprint=card["fingerprint"],
                 expected_source_hash=hashlib.sha256(self.fixtures["materials"][material]["content"].encode()).hexdigest(),
-                request_key="mock-pb-use")
-            review = self.request("POST", route + "/pb-use-reviews", body)
-            commit = dict(review=body, expected_review_fingerprint=review["review_fingerprint"], consent=uses.CONSENT)
-            submit = route + "/pb-use-runs"
+                request_key=request_key or "mock-" + family + "-use")
+            review = self.request("POST", route + f"/{family}-use-reviews", body)
+            commit = dict(review=body, expected_review_fingerprint=review["review_fingerprint"],
+                consent=uses.CONSENT if family == "pb" else uses.PA_CONSENT)
+            submit = route + f"/{family}-use-runs"
             submission = "EXPLICIT_NEW_MATERIAL_GOAL_PER_USE_REVIEW"
         queued = self.request("POST", submit, commit, 202)
         # An identical original intent is idempotent, never a second Run.
         duplicate = self.request("POST", submit, commit, 202)
         require(queued["run_id"] == duplicate["run_id"], "Duplicate submit changed Run")
         run_id = queued["run_id"]
-        result = self.once(run_id, self.mock(family, material))
+        result = self.serve_run(run_id, self.mock(family, material))
         require(result["status"] == "SUCCEEDED", "Natural mock Run did not succeed")
         artifact = self.request("GET", f"/api/internal/app-run-jobs/{run_id}/spec-artifact")
         checklist = json.loads(artifact["resource"]["content"])
@@ -261,7 +359,7 @@ class Demo:
             result_version=artifact["result_version"], manual_review=owner_path,
             owner_acceptance="PENDING", semantic_acceptance="NOT_RUN")
 
-    def run(self):
+    def run(self, *, pa_new_material=False):
         require(self.request("GET", "/health")["database"] == "UP", "Database unavailable")
         require(self.client.get("/").status_code == 200, "Normal page unavailable")
         project = self.request("POST", "/api/projects", dict(name="SYNTHETIC MOCK local candidate"), 201)["id"]
@@ -273,7 +371,7 @@ class Demo:
         queued = self.request("POST", f"/api/internal/instances/{instance['id']}/runs", dict(
             expected_release_fingerprint=release["fingerprint"], expected_revision=instance["revision"],
             input=dict(column="amount"), request_key="mock-csv-run"), 202)
-        require(self.once(queued["run_id"])["status"] == "SUCCEEDED", "CSV Run failed")
+        require(self.serve_run(queued["run_id"])["status"] == "SUCCEEDED", "CSV Run failed")
         detail_path = f"/api/internal/instances/{instance['id']}/runs/{queued['run_id']}"
         result = self.request("GET", detail_path)
         require(result["result"]["sum"] == "30" and result["result_version"] == 1, "Wrong CSV result")
@@ -285,13 +383,35 @@ class Demo:
         generated = self.request("POST", f"/api/projects/{project}/goal-cards/{card['id']}/application-runs",
             dict(expected_version=card["version"], expected_fingerprint=card["fingerprint"],
                  request_key="mock-pa-generation", family="natural_spec"), 202)
-        generation = self.once(generated["run_id"], self.mock("generation"))
+        generation = self.serve_run(generated["run_id"], self.mock("generation"))
         require(generation["status"] == "PARTIAL", "Expected reviewable mock candidate")
         saved = self.request("POST", f"/api/runs/{generated['run_id']}/confirm-application-candidate", dict(
             expected_version=generation["version"],
             candidate_fingerprint=generation["result"]["candidate_fingerprint"],
             request_key="mock-confirm-pa", name="MOCK natural P-A", artifact_write_consent=natural.CONSENT))
         pa_app, pa_release, pa_instance = self.release(saved["id"], {})
+        if pa_new_material:
+            first = self.natural_run(project, pa_app, pa_release, pa_instance, "pa", "pa_use", per_use=True)
+            with self.store.engine.connect() as connection:
+                first_row = dict(connection.execute(select(internal_instance_data).where(
+                    internal_instance_data.c.instance_id == pa_instance["id"], internal_instance_data.c.version == 1)).mappings().one())
+            second = self.natural_run(project, pa_app, pa_release, pa_instance, "pa", "pb_use",
+                per_use=True, request_key="mock-pa-use-second")
+            with self.store.engine.connect() as connection:
+                rows = [dict(row) for row in connection.execute(select(internal_instance_data).where(
+                    internal_instance_data.c.instance_id == pa_instance["id"]).order_by(internal_instance_data.c.version)).mappings()]
+            require([row["version"] for row in rows] == [1, 2] and rows[0] == first_row,
+                    "First PA result changed or same-instance version did not advance")
+            require(first["result_version"] == 1 and second["result_version"] == 2,
+                    "Expected first two results from explicit PA per-use")
+            require(len(self.mock_calls) == 5, "Expected three generation and two PA runtime mock responses")
+            return dict(**MARKER, status="PASS", scenario="PA_NEW_MATERIAL_TWICE", project_id=project,
+                deterministic=deterministic, natural_pa_previous=first, natural_pa=second,
+                natural_pa_history=[dict(version=row["version"], fingerprint=row["fingerprint"],
+                    row_sha256=hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()) for row in rows],
+                worker_claims=self.claims, mock_responses=len(self.mock_calls), real_model_requests=0,
+                pa_new_material_per_use="PASS_TWO_ACTUAL_RUNS_V1_V2", formal_publication_enabled=False,
+                windows="NOT_RUN", postgres="NOT_RUN", real_semantics="NOT_RUN")
         pa_result = self.natural_run(project, pa_app, pa_release, pa_instance, "pa", "source")
         print("PASS MOCK P-A original saved material/Goal; starting P-B extraction", flush=True)
 
@@ -323,7 +443,7 @@ class Demo:
             real_semantics="NOT_RUN", prior_lock_validation="Separate historical staged evidence")
 
 
-def prepare(path):
+def prepare(path, *, pa_new_material=False):
     path = unlinked_path(path)
     require(not path.exists() and not path.is_symlink(), "Prepare requires a NEW directory; existing data preserved")
     path.mkdir(parents=True, exist_ok=False)
@@ -335,7 +455,7 @@ def prepare(path):
         store.initialize()  # Only this explicitly created fresh synthetic SQLite fixture.
         store.user("PUBLIC synthetic mock identity", PUBLIC_TOKEN)
         with loopback(store, settings) as (client, _):
-            result = Demo(store, settings, client, root).run()
+            result = Demo(store, settings, client, root).run(pa_new_material=pa_new_material)
         write_json(root / "demo-receipt.json", result)
         print("PASS saved synthetic mock fixture; run verify in a separate process for cold reads", flush=True)
     finally:
@@ -359,7 +479,9 @@ def verify(path):
         with loopback(store, settings, read_only=True) as (client, _):
             csv = client.get(receipt["deterministic"]["detail"])
             require(csv.status_code == 200 and csv.json()["result"]["sum"] == "30", "Cold CSV failed")
-            for key in ["natural_pa", "natural_pb"]:
+            keys = (["natural_pa_previous", "natural_pa"] if receipt.get("scenario") == "PA_NEW_MATERIAL_TWICE"
+                    else ["natural_pa", "natural_pb"])
+            for key in keys:
                 result = receipt[key]
                 response = client.get(f"/api/internal/app-run-jobs/{result['run_id']}/spec-artifact")
                 require(response.status_code == 200, "Cold artifact denied")
@@ -371,6 +493,14 @@ def verify(path):
                         "Cold same-Run manual review failed")
             require(client.post("/api/projects", json={"name": "must not write"}).status_code == 405,
                     "Cold demo permits writes")
+        if receipt.get("scenario") == "PA_NEW_MATERIAL_TWICE":
+            with store.engine.connect() as connection:
+                rows = [dict(row) for row in connection.execute(select(internal_instance_data).where(
+                    internal_instance_data.c.instance_id == receipt["natural_pa"]["instance_id"])
+                    .order_by(internal_instance_data.c.version)).mappings()]
+            history = [dict(version=row["version"], fingerprint=row["fingerprint"],
+                row_sha256=hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()) for row in rows]
+            require(history == receipt["natural_pa_history"], "Cold first/second PA typed rows changed")
         require(snapshot(store) == before, "Cold reads changed persisted rows")
         report = dict(**MARKER, status="PASS", cold_process=True, persisted_rows_unchanged=True,
                       existing_results=3, workers_started=0, model_requests=0)
@@ -400,15 +530,15 @@ def serve(path, port):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["prepare", "verify", "serve"])
+    parser.add_argument("command", choices=["prepare", "prepare-pa", "verify", "serve"])
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--port", type=int, default=8000, help="serve only; loopback, 0 for dynamic port")
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("port must be between 0 and 65535")
     try:
-        if args.command == "prepare":
-            prepare(args.data_dir)
+        if args.command in {"prepare", "prepare-pa"}:
+            prepare(args.data_dir, pa_new_material=args.command == "prepare-pa")
         elif args.command == "verify":
             verify(args.data_dir)
         else:
