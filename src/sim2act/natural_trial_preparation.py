@@ -87,7 +87,7 @@ def _load(store, c, user, pid, key, *, current=True):
         store.authorize(c, user, project["runtime_id"], pid, rid, "resource.read")
     store.authorize(c, user, project["runtime_id"], pid, pid, "artifact.save_text")
     request, value = pair(c, user, eid, PREPARE, "prepare", PrepareInput)
-    contract = gate.TrialContract.model_validate(value)
+    contract = gate.parse_contract(value)
     gate.require(contract.principal_id == user and contract.project_id == pid
         and contract.trial_key == key and entity(user, pid, key) == gate.entity(contract)
         and contract.stage_keys == stage_keys(user, pid, key)
@@ -112,6 +112,8 @@ def _receipt(store, c, user, contract):
         expired=time.time() >= contract.expires_at, live_allowed=False,
         new_runs=0, new_slots=0, actual_model_requests=0,
         fee_status="NOT_VERIFIED", formal_publication_enabled=False)
+    if isinstance(contract, gate.TrialContractV2):
+        receipt["review_expired"] = time.time() >= contract.review_expires_at
     if approved:
         approval = gate._approved(store, c, user, contract, approval_key(contract), active=False)
         receipt["approval"] = gate._receipt(approval)
@@ -208,12 +210,15 @@ def prepare(store, user, pid, key, body: PrepareInput):
                 goal_version=choice.expected_version, goal_fingerprint=saved["fingerprint"],
                 goal_snapshot=saved["snapshot"]))
             gate.require(material["format"] == "txt", "Only finite TXT is supported")
-        contract = gate.TrialContract(trial_key=key, project_id=pid, principal_id=user,
+        prepared_at = time.time()
+        contract = gate.TrialContractV2(prepared_at=prepared_at,
+            review_expires_at=prepared_at + 300, execution_expires_at=prepared_at + 3600,
+            trial_key=key, project_id=pid, principal_id=user,
             runtime_id=project["runtime_id"], quota_subject="unconfigured:" + user,
             software_fingerprint=gate.implementation(),
             authorization_fingerprint=gate.authorization_fingerprint(c, user, pid,
                 project["runtime_id"], sources), bindings=bindings,
-            stage_keys=stage_keys(user, pid, key), expires_at=time.time() + 300)
+            stage_keys=stage_keys(user, pid, key), expires_at=prepared_at + 3600)
         gate._current(store, c, user, contract)
         remember(c, user, eid, PREPARE, "prepare", body, contract.model_dump())
         gate._current(store, c, user, contract)

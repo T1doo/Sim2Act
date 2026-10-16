@@ -24,7 +24,7 @@ def test_close_after_goal_revision_blocks_old_contract(prepared_data, tmp_path):
     assert closed.json()['status'] == 'PREPARATION_CLOSED_NO_APPROVAL'
     assert client.post(base+'/end-preparation', json={'confirm_end':True}).json() == closed.json()
     assert client.get(base+'/consent-status').json() == closed.json()
-    old = client.post(base+'/approval', json=dict(contract=r['contract'], approval=dict(expected_contract_fingerprint=r['review_token'], request_key=prep.approval_key(gate.TrialContract.model_validate(r['contract'])), consent='APPROVE_ONLY_THIS_EXACT_SEVEN_SLOT_ZERO_PAID_NATURAL_TRIAL')))
+    old = client.post(base+'/approval', json=dict(contract=r['contract'], approval=dict(expected_contract_fingerprint=r['review_token'], request_key=prep.approval_key(gate.parse_contract(r['contract'])), consent='APPROVE_ONLY_THIS_EXACT_SEVEN_SLOT_ZERO_PAID_NATURAL_TRIAL')))
     assert old.status_code == 409 and 'closed' in old.text.lower(), old.text
     assert business(store) == before
     (tmp_path/'CLOSE_HTTP.json').write_text(json.dumps(dict(closed=closed.json(), old=old.json(), no_business_change=True),indent=2))

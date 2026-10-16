@@ -108,7 +108,8 @@ def test_exact_drift_refuses_consent_without_partial_approval(prepared_data, mon
         at = time.time() + 301
         monkeypatch.setattr(gate.time, "time", lambda: at)
         read = client.get(base + "/preparation")
-        assert read.json()["expired"] is True
+        assert read.json()["review_expired"] is True
+        assert read.json()["expired"] is False
         assert read.json()["contract"] == r["contract"]
     response = client.post(base + "/consent", json=consent(r))
     assert response.status_code == ({"resource": 400, "project": 400, "permission": 403, "identity": 403}.get(drift, 409)), response.text

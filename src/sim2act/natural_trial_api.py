@@ -14,7 +14,7 @@ from .db import delivery_graph_requests, fingerprint
 from .delivery_graph_apps import controlled
 from .errors import DomainError
 
-Contract = gate.PBTrialContract | gate.TrialContract
+Contract = gate.TrialContractV2 | gate.PBTrialContract | gate.TrialContract
 
 
 class ApprovalRequest(Strict):
@@ -70,7 +70,7 @@ def original_contract(store, user, pid, key):
             store.authorize(c, user, project["runtime_id"], pid, resource, "resource.read")
         store.authorize(c, user, project["runtime_id"], pid, pid, "artifact.save_text")
         value = c.execute(query).mappings().one()["snapshot"]["request"]
-        model = gate.PBTrialContract if value.get("path") == "P-B" else gate.TrialContract
+        model = gate.contract_model(value)
         contract = gate._saved(c, user, eid, gate.SCOPE, "scope", model)
         _scope(user, pid, key, contract)
         gate._current(store, c, user, contract, active=False)

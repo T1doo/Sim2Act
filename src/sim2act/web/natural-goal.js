@@ -395,14 +395,16 @@ function clearTrialConsent() {
   renderTrialConsent();
 }
 function trialEntry() { return trialEntries.get(trialIndex(trialContext())); }
+const trialReviewDeadline = c => c?.namespace === "natural-live-trial.v2" ? c.review_expires_at : c?.expires_at;
 function trialValid(r, key) {
   const c = r?.contract;
   if (r?.status !== "PREPARED_LIVE_BLOCKED" || r.path !== "P-A" || r.live_allowed !== false || r.new_runs !== 0 || r.new_slots !== 0 || r.actual_model_requests !== 0 || !/^[a-f0-9]{64}$/.test(r.review_token) || c?.trial_key !== key || c.project_id !== $("project-select").value || !Array.isArray(c.bindings) || c.bindings.length !== 2 || !Number.isFinite(c.expires_at) || typeof r.approved !== "boolean" || typeof r.revoked !== "boolean" || typeof r.expired !== "boolean") throw Error("未知准备回执");
+  if (c.namespace === "natural-live-trial.v2" && (!Number.isFinite(c.prepared_at) || c.review_expires_at !== c.prepared_at + 300 || c.execution_expires_at !== c.prepared_at + 3600 || c.expires_at !== c.execution_expires_at || c.stage_handoff_seconds !== 900 || typeof r.review_expired !== "boolean")) throw Error("未知期限合同");
   return r;
 }
 function renderTrialConsent() {
   const entry = trialEntry(), r = entry?.receipt, busy = entry?.state === "sending", unknown = ["unknown", "unapproved"].includes(entry?.state);
-  const expired = r?.expired || (r?.contract && Date.now() >= r.contract.expires_at * 1000);
+  const expired = r?.expired || r?.review_expired || (r?.contract && Date.now() >= trialReviewDeadline(r.contract) * 1000);
   $("trial-source").disabled = $("trial-cold").disabled = Boolean(entry);
   $("trial-prepare").disabled = !token || !$("project-select").value || Boolean(entry) || trialCards.length < 2;
   $("trial-consent").disabled = !r?.contract || !$("trial-ack").checked || r.approved || r.revoked || expired || busy || unknown;
@@ -419,7 +421,8 @@ function showTrialScope(r) {
   const fields = {title: "名称", goal: "目标", known: "已知", assumptions: "假设", unresolved: "未决项", constraints: "硬条件", acceptance_checks: "验收检查", resource_refs: "绑定材料"};
   const materials = c.bindings.map((b, i) => `${i === 0 ? "生成及 Source" : "未见输入 Cold"}：目标 ${b.card_id} v${b.goal_version}\n材料 ${b.resource_id}（TXT）\n${b.content}\n\n${Object.entries(fields).map(([field, label]) => `${label}：${Array.isArray(b.goal_snapshot.content[field]) ? b.goal_snapshot.content[field].join("\n") : b.goal_snapshot.content[field]}`).join("\n")}`).join("\n\n");
   const cap = c.caps;
-  $("trial-scope").textContent = `P-A 精确准备与同意范围\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（尚未配置、未验证免费资格）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；lease ${cap.lease_seconds} 秒；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}\n\n此入口新增 Run / 槽 / 外发均为 0。LIVE 与正式发布保持关闭；不是实际运行或完整 P-A/P-B 验收。`;
+  const deadlines = c.namespace === "natural-live-trial.v2" ? `V2 审阅截止 ${new Date(c.review_expires_at * 1000).toISOString()}；执行截止 ${new Date(c.execution_expires_at * 1000).toISOString()}。均从准备时冻结，恢复、批准、重放不续期。总时窗60分钟含5分钟审阅；每个后继阶段须在前序 Run 受理后15分钟内明确批准（含前序最多300秒、排队及人工交接）。每 Run 的300秒含额度等待、模型延迟和工具工作；人工迟到或剩余时间不足即拒绝。不是七槽完成保证。` : "V1 原单一期限保持，不迁移或续期。";
+  $("trial-scope").textContent = `P-A 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（尚未配置、未验证免费资格）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；lease ${cap.lease_seconds} 秒；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}\n\n此入口新增 Run / 槽 / 外发均为 0。LIVE 与正式发布保持关闭；不是实际运行或完整 P-A/P-B 验收。`;
 }
 async function refreshTrialCards() {
   clearTrialConsent();
@@ -500,7 +503,7 @@ async function recoverTrial() {
 }
 async function mutateTrial(withdraw = false) {
   const ctx = trialContext(), entry = trialEntry(), r = entry?.receipt;
-  if (!r || entry.state !== "known" || (withdraw ? !$("trial-withdraw-ack").checked || !r.approved || r.revoked : !$("trial-ack").checked || !r.contract || r.approved || r.revoked || r.expired || Date.now() >= r.contract.expires_at * 1000)) return;
+  if (!r || entry.state !== "known" || (withdraw ? !$("trial-withdraw-ack").checked || !r.approved || r.revoked : !$("trial-ack").checked || !r.contract || r.approved || r.revoked || r.expired || r.review_expired || Date.now() >= trialReviewDeadline(r.contract) * 1000)) return;
   const operation = entry.operation = (entry.operation || 0) + 1;
   entry.state = "sending"; entry.message = withdraw ? "正在撤回原批准…" : "正在保存此精确范围的批准；LIVE 关闭…"; renderTrialConsent();
   try {

@@ -33,13 +33,13 @@ SENT = "pa_trial_dispatched.v1"
 class PATrialBinding:
     """Trusted controller configuration, never an HTTP request/fee override."""
 
-    contract: gate.TrialContract | gate.PBTrialContract
+    contract: gate.TrialContractV2 | gate.TrialContract | gate.PBTrialContract
     approval_key: str
     registry: production.OfflineRegistry | None = None
     contract_fingerprint: str = field(init=False)
 
     def __post_init__(self):
-        gate.require(type(self.contract) in (gate.TrialContract, gate.PBTrialContract),
+        gate.require(type(self.contract) in (gate.TrialContractV2, gate.TrialContract, gate.PBTrialContract),
                      "Exact original P-A or P-B contract required")
         object.__setattr__(self, "contract_fingerprint", fingerprint(self.contract.model_dump()))
         budget.scope_for(self.contract, self.approval_key)

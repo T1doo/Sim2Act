@@ -138,6 +138,26 @@ class TrialContract(Strict):
         return self
 
 
+class TrialContractV2(TrialContract):
+    """New exact consent only. V1 is never inferred, migrated or extended."""
+
+    namespace: Literal["natural-live-trial.v2"] = "natural-live-trial.v2"
+    prepared_at: float = Field(gt=0, allow_inf_nan=False)
+    review_expires_at: float = Field(gt=0, allow_inf_nan=False)
+    execution_expires_at: float = Field(gt=0, allow_inf_nan=False)
+    # Previous Run acceptance -> next explicit stage approval, including prior
+    # Run (<=300s), queueing and human handoff. Not a completion-time guarantee.
+    stage_handoff_seconds: Literal[900] = 900
+
+    @model_validator(mode="after")
+    def deadlines(self):
+        require(self.review_expires_at == self.prepared_at + 300
+            and self.execution_expires_at == self.prepared_at + 3600
+            and self.expires_at == self.execution_expires_at,
+            "Exact V2 review and execution deadlines changed")
+        return self
+
+
 class PBTrialContract(TrialContract):
     """P-B reuses this trial's completed source task, then a frozen edited recipe.
 
@@ -155,6 +175,23 @@ class PBTrialContract(TrialContract):
         require(self.extraction_request_key not in self.stage_keys.model_dump().values(),
                 "Extraction and model stage keys must be distinct")
         return self
+
+
+def contract_model(value):
+    if value.get("namespace") == "natural-live-trial.v2":
+        return TrialContractV2
+    require(value.get("namespace", VERSION) == VERSION, "Unknown trial contract version")
+    return PBTrialContract if value.get("path") == "P-B" else TrialContract
+
+
+def parse_contract(value):
+    return contract_model(value).model_validate(value)
+
+
+def _review_window(contract):
+    if isinstance(contract, TrialContractV2):
+        require(contract.prepared_at <= time.time() < contract.review_expires_at,
+                "Original review deadline expired or not yet active")
 
 
 class ApproveInput(Strict):
@@ -247,8 +284,61 @@ class StageAuthority(Strict):
     authorization_fingerprint: str = Field(pattern=HASH)
 
 
+class StageAuthorityV2(StageAuthority):
+    predecessor_run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
+    predecessor_created_at: float = Field(gt=0, allow_inf_nan=False)
+    stage_approval_expires_at: float = Field(gt=0, allow_inf_nan=False)
+
+
+def _stage_deadlines(c, user, contract, stage, generation_run_id):
+    if not isinstance(contract, TrialContractV2):
+        return {}
+    if stage == "source":
+        predecessor_id, runtime = generation_run_id, contract.runtime_id
+        # Generation is an accepted candidate, still semantically PARTIAL.
+        statuses = {"SUCCEEDED", "PARTIAL"}
+    else:
+        require(stage == "cold")
+        require(_keys(c, user, entity(contract), PHASE) <= {"source", "cold"})
+        source = _saved(c, user, entity(contract), PHASE, "source", StageApproveInput)
+        original = _saved(c, user, entity(contract), APPROVE, "approve", Approval)
+        generation_at = c.execute(select(runs.c.created_at).where(runs.c.id == generation_run_id)).scalar()
+        require(type(generation_at) in (int, float) and math.isfinite(generation_at))
+        require(isinstance(source.authority, StageAuthorityV2)
+            and source.approval_key == original.request.request_key
+            and source.authority.predecessor_run_id == generation_run_id
+            and source.authority.predecessor_created_at == generation_at
+            and source.authority.stage_approval_expires_at == min(generation_at + contract.stage_handoff_seconds, contract.execution_expires_at)
+            and source.authority.stage == "source"
+            and source.authority.contract_fingerprint == fingerprint(contract.model_dump())
+            and source.authority.generation_run_id == generation_run_id
+            and source.expected_authority_fingerprint == fingerprint(source.authority.model_dump()))
+        predecessor_id, runtime = source.authority.run_id, source.authority.runtime_id
+        statuses = {"SUCCEEDED"}
+    # Only scalar timing/identity metadata; no private result/context body.
+    previous = c.execute(select(runs.c.id, runs.c.created_at, runs.c.principal_id,
+        runs.c.project_id, runs.c.runtime_id, runs.c.status, runs.c.cancel_intent).where(
+        runs.c.id == predecessor_id)).mappings().first()
+    require(previous is not None and previous["principal_id"] == user
+        and previous["project_id"] == contract.project_id and previous["runtime_id"] == runtime
+        and previous["status"] in statuses and previous["cancel_intent"] is False
+        and type(previous["created_at"]) in (int, float) and math.isfinite(previous["created_at"])
+        and contract.prepared_at <= previous["created_at"] <= time.time(),
+        "Exact previous stage timing or identity changed")
+    return dict(predecessor_run_id=predecessor_id,
+        predecessor_created_at=previous["created_at"],
+        stage_approval_expires_at=min(previous["created_at"] + contract.stage_handoff_seconds,
+                                      contract.execution_expires_at))
+
+
+def _stage_review_window(authority):
+    if isinstance(authority, StageAuthorityV2):
+        require(authority.predecessor_created_at <= time.time() < authority.stage_approval_expires_at,
+                "Original stage handoff deadline expired")
+
+
 class StageApproveInput(Strict):
-    authority: StageAuthority
+    authority: StageAuthorityV2 | StageAuthority
     expected_authority_fingerprint: str = Field(pattern=HASH)
     approval_key: str = Field(pattern=KEY)
     request_key: str = Field(pattern=KEY)
@@ -376,7 +466,9 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch):
                        if pb_cold else raw["spec_recipe"])
     require(fingerprint(expected_recipe) == fingerprint(draft["candidate"]["spec_recipe"]))
     _generation_accounted(store, c, user, contract, approval.request.request_key, gen_id)
-    authority = StageAuthority(contract_fingerprint=fingerprint(contract.model_dump()),
+    timing = _stage_deadlines(c, user, contract, stage, gen_id)
+    authority_model = StageAuthorityV2 if isinstance(contract, TrialContractV2) else StageAuthority
+    authority = authority_model(**timing, contract_fingerprint=fingerprint(contract.model_dump()),
         stage=stage, run_id=job["id"], accepted_fingerprint=job["fingerprint"],
         app_run_id=bound["app_run"]["id"], instance_id=inst["id"], instance_revision=inst["revision"],
         runtime_id=job["runtime_id"], app_id=draft["id"], candidate_fingerprint=draft["fingerprint"],
@@ -524,6 +616,7 @@ def stage_review(store, user, contract: TrialContract, approval_key: str,
     with store.tx() as c:
         _approved(store, c, user, contract, approval_key)
         authority, _ = _stage_current(store, c, user, contract, stage, run_id)
+        _stage_review_window(authority)
         return dict(authority=authority.model_dump(), authority_fingerprint=fingerprint(authority.model_dump()),
                     live_allowed=False, fee_status="NOT_VERIFIED", actual_model_requests=0)
 
@@ -532,8 +625,10 @@ def stage_review(store, user, contract: TrialContract, approval_key: str,
 def approve_stage(store, user, contract: TrialContract, body: StageApproveInput):
     with store.tx() as c:
         _approved(store, c, user, contract, body.approval_key)
+        require(isinstance(body.authority, StageAuthorityV2) == isinstance(contract, TrialContractV2))
         stage = body.authority.stage
         current, job = _stage_current(store, c, user, contract, stage, body.authority.run_id)
+        _stage_review_window(current)
         require(current == body.authority
                 and fingerprint(current.model_dump()) == body.expected_authority_fingerprint)
         keys, eid = _keys(c, user, entity(contract), PHASE), entity(contract)
@@ -550,6 +645,7 @@ def approve_stage(store, user, contract: TrialContract, body: StageApproveInput)
         _approved(store, c, user, contract, body.approval_key)
         fresh, _ = _stage_current(store, c, user, contract, stage, body.authority.run_id)
         require(fresh == current)
+        _stage_review_window(fresh)
         return dict(status="EXACT_STAGE_BOUND_LIVE_BLOCKED", authority=current.model_dump(),
             authority_fingerprint=fingerprint(current.model_dump()), live_allowed=False,
             actual_model_requests=0, formal_publication_enabled=False)
@@ -617,6 +713,8 @@ def _authorize(store, c, user, contract):
 
 def _current(store, c, user, contract, *, active=True):
     _authorize(store, c, user, contract)
+    if isinstance(contract, TrialContractV2):
+        require(TrialContractV2.model_validate(contract.model_dump()) == contract)
     for binding in contract.bindings:
         material = authorized_read(store, c, user, contract.runtime_id,
             contract.project_id, "resource.read", {"resource_id": binding.resource_id})
@@ -633,6 +731,8 @@ def _current(store, c, user, contract, *, active=True):
     if active:
         require(contract.software_fingerprint == implementation(), "Trial software changed")
         require(time.time() < contract.expires_at, "Trial approval expired")
+        if isinstance(contract, TrialContractV2):
+            require(time.time() >= contract.prepared_at, "Trial not yet active")
 
 
 def _keys(c, user, eid, kind):
@@ -673,6 +773,9 @@ def _approved(store, c, user, contract, approval_key, *, active=True):
             and math.isfinite(approval.approved_at) and approval.approved_at > 0
             and approval.expires_at == contract.expires_at
             and approval.approved_at < approval.expires_at)
+    if isinstance(contract, TrialContractV2):
+        require(contract.prepared_at <= approval.approved_at < contract.review_expires_at,
+                "Original approval outside reviewed window")
     if active:
         require(not _keys(c, user, eid, REVOKE), "Natural trial irreversibly revoked")
         require(approval.approved_at <= time.time() < approval.expires_at)
@@ -688,6 +791,7 @@ def approve(store, user, contract: TrialContract, body: ApproveInput):
         require(not _keys(c, user, entity(contract), CLOSED),
                 "Natural trial preparation irreversibly closed")
         _current(store, c, user, contract)
+        _review_window(contract)
         fp, eid = fingerprint(contract.model_dump()), entity(contract)
         require(body.expected_contract_fingerprint == fp)
         require(not _keys(c, user, eid, REVOKE), "Natural trial irreversibly revoked")
@@ -704,6 +808,7 @@ def approve(store, user, contract: TrialContract, body: ApproveInput):
             require(accepted.approved_at < accepted.expires_at)
             _save(c, user, eid, SCOPE, "scope", contract)
             _save(c, user, eid, APPROVE, "approve", accepted)
+        _review_window(contract)
         return _receipt(accepted)
 
 

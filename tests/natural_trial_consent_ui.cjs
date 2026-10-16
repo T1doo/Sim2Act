@@ -91,6 +91,7 @@ async function boot(hash = "") {
   }
 
   check($("trial-scope").textContent.includes("共 7 槽") && $("trial-scope").textContent.includes("192000") && $("trial-scope").textContent.includes("7168"), "full original budget visible");
+  check($("trial-scope").textContent.includes("V2 审阅截止") && $("trial-scope").textContent.includes("执行截止") && $("trial-scope").textContent.includes("不是七槽完成保证"), "both frozen deadlines and finite handoff limits visible without a completion guarantee");
   check(info.goalTexts.every(text => $("trial-scope").textContent.includes(text)), "both complete goals and materials visible");
   check($("trial-consent").disabled && !$("trial-ack").checked, "no implicit consent after preparation");
   if (originalScenario.startsWith("manual-b-")) {
