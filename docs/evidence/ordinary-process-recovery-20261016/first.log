@@ -1,0 +1,178 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_same_page_recovers_saved_source_after_owned_process_restart _______
+
+tmp_path = PosixPath('/tmp/pa-cross-process-pytest-20261016/test_same_page_recovers_saved_0')
+
+    def test_same_page_recovers_saved_source_after_owned_process_restart(tmp_path):
+        root = Path(os.environ.get("SIM2ACT_PROCESS_EVIDENCE", str(tmp_path / "process-evidence")))
+        root.mkdir()  # Atomic: an existing/UNKNOWN execution is never reused.
+        repo = Path(__file__).parents[1]
+        token = uuid.uuid4().hex
+        config = root / "config.json"
+        events = root / "processes.jsonl"
+        children = []
+        handles = []
+        child_env = {key: os.environ[key] for key in ("PATH", "LANG", "TMPDIR") if key in os.environ}
+        child_env.update(PYTHONPATH=str(repo / "src"), NODE_PATH="/workspace/node-tools/node_modules")
+    
+        def record(value):
+            with events.open("a") as output:
+                output.write(json.dumps(value) + "\n")
+    
+        def identity(process):
+            stat = Path(f"/proc/{process.pid}/stat").read_text().rsplit(")", 1)[1].split()
+            argv = Path(f"/proc/{process.pid}/cmdline").read_bytes().rstrip(b"\0").decode().split("\0")
+            return dict(pid=process.pid, starttime=stat[19], argv=argv, token=token)
+    
+        def start(role, argv):
+            log = (root / f"{role}-{len(children)}.log").open("w")
+            handles.append(log)
+            process = subprocess.Popen(argv, cwd=repo, env=child_env, stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE if role == "page" else log,
+                                       stderr=log, text=True)
+            owned = identity(process)
+            assert owned["argv"] == argv and (token in argv or role == "page")
+            child = dict(process=process, identity=owned, role=role)
+            children.append(child)
+            record(dict(event="START", role=role, **owned))
+            return child
+    
+        def stop(child):
+            process = child["process"]
+            if process.poll() is None:
+                assert identity(process) == child["identity"], "UNKNOWN ownership: will not signal"
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    assert identity(process) == child["identity"], "UNKNOWN ownership: will not kill"
+                    process.kill()
+                    process.wait(timeout=5)
+            record(dict(event="STOP", role=child["role"], exit=process.returncode, **child["identity"]))
+    
+        def api_start():
+            child = start("api", [sys.executable, str(repo / "tests/ordinary_process_child.py"), str(config), "api", token])
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                assert child["process"].poll() is None, "API exited before readiness"
+                try:
+                    if client.get("/").status_code == 200:
+                        return child
+                except httpx.TransportError:
+                    pass
+                time.sleep(0.05)
+            raise AssertionError("Owned API readiness timed out")
+    
+        def worker(role):
+            child = start(role, [sys.executable, str(repo / "tests/ordinary_process_child.py"), str(config), role, token])
+            deadline = time.monotonic() + 180
+            while time.monotonic() < deadline:
+                assert child["process"].poll() is None, f"{role} Worker exited before completion"
+                if (root / f"{role}-done.json").exists():
+                    return child
+                time.sleep(0.05)
+            raise AssertionError(f"{role} Worker timed out; no retry")
+    
+        def snapshot(instance, run_id):
+            with store.tx() as connection:
+                data = [dict(row) for row in connection.execute(select(internal_instance_data).where(
+                    internal_instance_data.c.instance_id == instance)).mappings()]
+                history = [dict(row) for row in connection.execute(select(attempts).where(
+                    attempts.c.run_id == run_id)).mappings()]
+            assert len(data) == 1 and len(history) == 2
+            assert all(row["status"] == "VERIFIED" for row in history)
+            return dict(data=data, attempts=history)
+    
+        def http_get(path):
+            response = client.get(path)
+            record(dict(event="HARNESS_HTTP_READ", path=path, status=response.status_code, text=response.text))
+            assert response.status_code == 200, response.text
+            return response.json()
+    
+        closure_paths = sorted([*repo.glob("src/**/*.py"), *repo.glob("src/sim2act/web/*"),
+                                *repo.glob("tests/**/*.py"), *repo.glob("tests/**/*.cjs"), repo / "pyproject.toml"])
+    
+        def closure():
+            return {str(path.relative_to(repo)): hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in closure_paths if path.is_file()}
+    
+        before = closure()
+        (root / "source-before.json").write_text(json.dumps(before, indent=2))
+        store = Store("sqlite:///" + str(root / "fixture.db"), test_only=True)
+        store.initialize()
+        store.user("isolated process fixture", "synthetic-test-A")
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        config.write_text(json.dumps(dict(port=port, token=token)))
+        base = f"http://127.0.0.1:{port}"
+        client = httpx.Client(base_url=base, headers={"Authorization": "Bearer synthetic-test-A"}, timeout=15,
+                              trust_env=False)
+        source_snapshot = None
+        source_artifact = None
+        try:
+            api = api_start()
+            made = client.post("/api/projects", json={"name": "Owned cross-process proof"})
+            assert made.status_code == 201, made.text
+            project = made.json()["id"]
+            resource, card = material(client, project, SOURCE)
+            target, target_card = material(client, project, COLD, "Cold operating notes")
+            config.write_text(json.dumps(dict(port=port, token=token, resource=resource)))
+            info = root / "info.json"
+            info.write_text(json.dumps(dict(base_url=base, project=project, card=card["id"],
+                                           target_card=target_card["id"], target_resource=target,
+                                           output=str(root / "page.json"), token=token)))
+            page = start("page", ["node", str(repo / "tests/ordinary_process_ui.cjs"), str(info)])
+            process = page["process"]
+            selector = selectors.DefaultSelector()
+            selector.register(process.stdout, selectors.EVENT_READ)
+            deadline = time.monotonic() + 600
+            while time.monotonic() < deadline:
+                if not selector.select(timeout=1):
+                    assert process.poll() is None, "Page exited without completion receipt"
+                    continue
+                line = process.stdout.readline()
+                assert line, "Page output ended without completion receipt"
+                request = json.loads(line)
+                if request.get("done"):
+                    break
+                command = request["command"]
+                if command == "generation":
+>                   stop(worker("generation"))
+                         ^^^^^^^^^^^^^^^^^^^^
+
+tests/test_ordinary_process_recovery.py:159: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_ordinary_process_recovery.py:85: in worker
+    child = start(role, [sys.executable, str(repo / "tests/ordinary_process_child.py"), str(config), role, token])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+role = 'generation'
+argv = ['/workspace/Sim2Act/.venv/bin/python', '/workspace/Sim2Act-pa-provider/tests/ordinary_process_child.py', '/workspace/pa-cross-process-20261016/config.json', 'generation', '7b2a478461584f769bc0d3c27a9bcc3b']
+
+    def start(role, argv):
+        log = (root / f"{role}-{len(children)}.log").open("w")
+        handles.append(log)
+        process = subprocess.Popen(argv, cwd=repo, env=child_env, stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE if role == "page" else log,
+                                   stderr=log, text=True)
+        owned = identity(process)
+>       assert owned["argv"] == argv and (token in argv or role == "page")
+E       AssertionError: assert ([''] == ['/workspace/...d3c27a9bcc3b']
+E         
+E         At index 0 diff: '' != '/workspace/Sim2Act/.venv/bin/python'
+E         Right contains 4 more items, first extra item: '/workspace/Sim2Act-pa-provider/tests/ordinary_process_child.py'
+E         Use -v to get more diff)
+
+tests/test_ordinary_process_recovery.py:52: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ordinary_process_recovery.py::test_same_page_recovers_saved_source_after_owned_process_restart
+1 failed, 1 warning in 5.30s
