@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="1.867" timestamp="2026-10-16T20:00:49.402522+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_local_candidate_demo" name="test_existing_directory_never_initialized_or_deleted" time="0.005" /><testcase classname="tests.test_local_candidate_demo" name="test_settings_ignore_real_environment" time="0.002" /><testcase classname="tests.test_local_candidate_demo" name="test_cold_open_rejects_unknown_or_linked_data[marker]" time="0.002" /><testcase classname="tests.test_local_candidate_demo" name="test_cold_open_rejects_unknown_or_linked_data[database_link]" time="0.001" /><testcase classname="tests.test_local_candidate_demo" name="test_cold_open_rejects_unknown_or_linked_data[receipt_link]" time="0.001" /><testcase classname="tests.test_local_candidate_demo" name="test_cold_open_rejects_unknown_or_linked_data[root_link]" time="0.002" /><testcase classname="tests.test_local_candidate_demo" name="test_cold_server_real_loopback_only_get_and_no_database_writes" time="1.554"><failure message="AssertionError: assert [] == {'items': []}&#10;  &#10;  Use -v to get more diff">tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-1/test_cold_server_real_loopback0')
+
+    def test_cold_server_real_loopback_only_get_and_no_database_writes(tmp_path):
+        settings = demo.settings_for(tmp_path)
+        store = Store(settings.database_url, test_only=True)
+        try:
+            store.initialize()
+            store.user("public synthetic", demo.PUBLIC_TOKEN)
+            before = demo.snapshot(store)
+            with demo.loopback(store, settings, read_only=True) as (client, url):
+                assert url.startswith("http://127.0.0.1:")
+                assert client.get("/").status_code == 200
+&gt;               assert client.get("/api/projects").json() == {"items": []}
+E               AssertionError: assert [] == {'items': []}
+E                 
+E                 Use -v to get more diff
+
+tests/test_local_candidate_demo.py:74: AssertionError</failure></testcase></testsuite></testsuites>
