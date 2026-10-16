@@ -4,7 +4,7 @@ const fs=require("node:fs"),assert=require("node:assert/strict"),crypto=require(
 const info=JSON.parse(fs.readFileSync(process.argv[2])),checks=[],requests=[],assets=[],actions=[],pending=new Map();
 const browser=require("./durable_browser.cjs")(info.storage_path,{storageEvents:false});
 const documentNumbers=new WeakMap(),observations=[];
-let serial=0,dom,w,$,documents=0,lose=true,accepted,originalRequest,staleDom;
+let serial=0,dom,w,$,documents=0,lose=true,accepted,originalRequest,staleDom,holdRead,releaseRead,readHeld;
 readline.createInterface({input:process.stdin}).on("line",line=>{const value=JSON.parse(line),resolve=pending.get(value.id);pending.delete(value.id);resolve(value);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+"\n");});
 const check=(value,label)=>{assert(value,label);checks.push(label);};
@@ -36,7 +36,7 @@ async function boot(keepPrevious=false){
  check(!previous||previous!==w,"fresh document object "+documents);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,"subtle",{value:crypto.webcrypto.subtle});w.crypto.randomUUID=()=>crypto.randomUUID();w.setInterval=()=>0;
  const style=w.document.createElement("style");style.textContent=await load("/app.css");w.document.head.append(style);
- w.fetch=async(path,options={})=>{const r=await http(path,options,documentNumber);if(lose&&options.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(path)){lose=false;assert.equal(r.status,202);accepted=JSON.parse(r.text);originalRequest=JSON.parse(options.body);throw Error("controlled loss AFTER actual accepted response");}return new Response(r.text,{status:r.status,headers:{"Content-Type":r.content_type||"application/json"}});};
+ w.fetch=async(path,options={})=>{const r=await http(path,options,documentNumber);if(holdRead&&options.method==="GET"&&path.endsWith("/runs/"+accepted.run_id)){holdRead=false;readHeld();await new Promise(resolve=>releaseRead=resolve);}if(lose&&options.method==="POST"&&/\/internal\/instances\/[^/]+\/runs$/.test(path)){lose=false;assert.equal(r.status,202);accepted=JSON.parse(r.text);originalRequest=JSON.parse(options.body);throw Error("controlled loss AFTER actual accepted response");}return new Response(r.text,{status:r.status,headers:{"Content-Type":r.content_type||"application/json"}});};
  for(const script of [...w.document.querySelectorAll("script[src]")]){const node=w.document.createElement("script");node.textContent=await load(script.getAttribute("src"));w.document.body.append(node);}
  await edit("token","synthetic-test-A");await click("connect");check($("login").hidden&&$("project-select").value===info.project,"authenticated own project in document "+documents);
  await click(w.document.querySelector('#workspace-nav [data-tab="apps"]'));
@@ -87,11 +87,20 @@ function write(status,error){fs.writeFileSync(info.output,zlib.gzipSync(JSON.str
   check(visible($("internal-status"))&&$("internal-status").dataset.state==="error"&&$("internal-status").textContent.includes("VERSION_CONFLICT"),"old page visibly renders resume rejection");
   observations.push({document:2,phase:"stale-resume-rejected",status:$("internal-status").textContent,state:$("internal-status").dataset.state});
   await rpc({command:"verify-stale-resume-rejected",accepted,request:originalRequest});
-  await click("internal-refresh");
-  await click([...$("internal-instances").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(info.instance)));
-  await click([...$("internal-runs").querySelectorAll("button")].find(b=>b.closest(".row").textContent.includes(accepted.run_id)));
+  const rereadButton=$("internal-run-reread"),readStart=requests.length;
+  check(rereadButton&&visible(rereadButton)&&!rereadButton.disabled&&rereadButton.textContent==="重新读取这个原任务","conflict offers explicit original-task reread entry");
+  await click(rereadButton);
+  const rereadRequests=requests.slice(readStart);
+  check(rereadRequests.length===2&&rereadRequests.every(r=>r.method==="GET"&&r.authenticated&&r.status===200)&&rereadRequests[0].path==="/api/internal/instances/"+info.instance&&rereadRequests[1].path.endsWith("/runs/"+accepted.run_id),"explicit original-task reread only reauthorizes instance and GETs exact Run");
   const reread=JSON.parse($("internal-run-detail").textContent);
   check(reread.id===accepted.run_id&&reread.status==="CANCELLED"&&reread.cancel_intent,"old page manual read recovers same cancelled terminal");
+  observations.push({document:2,phase:"explicit-original-task-reread",run:reread,status:$("internal-run-status").textContent});
+  check($("internal-controls").querySelectorAll("button").length===1&&!$("internal-controls").querySelectorAll("button")[0].textContent.includes("继续"),"readback exposes only reread action without automatic resume");
+  holdRead=true;const entered=new Promise(resolve=>readHeld=resolve),reading=click(rereadButton);await entered;
+  await click(w.document.querySelector('#workspace-nav [data-tab="resources"]'));
+  await click(w.document.querySelector('#workspace-nav [data-tab="apps"]'));
+  const afterSwitch=$("internal-run-detail").textContent,afterSwitchStatus=$("internal-status").textContent;releaseRead();await reading;
+  check(!$("internal-run-reread")&&$("internal-run-detail").textContent===afterSwitch&&afterSwitch===""&&$("internal-status").textContent===afterSwitchStatus&&afterSwitchStatus==="","actual late GET after workspace leave-and-return cannot restore old task or loading state");
   check(submissions().length===1&&!$("internal-data").querySelector(".spec-result"),"cancel and stale resume never submit another Run or render a result");
   await rpc({command:"verify-no-duplicate",accepted,request:originalRequest});
   latestDom.window.close();

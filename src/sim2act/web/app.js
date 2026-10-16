@@ -730,6 +730,7 @@ $("goal-card-form").onsubmit=safe(async()=>{
 
 
 function selectWorkspace(id) {
+  if(typeof clearInternalRunReread === "function")clearInternalRunReread();
   if(typeof clearTrialConsent === "function")clearTrialConsent();
   workspaceSelectionGeneration++;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);

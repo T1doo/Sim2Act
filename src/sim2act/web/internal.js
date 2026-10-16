@@ -77,7 +77,44 @@ function engineeringStatus(view,text,state="") {
   if(!engineeringCurrent(view))return;
   $("internal-status").textContent=text;$("internal-status").dataset.state=state;
 }
+function clearInternalRunReread(view=engineering) {
+  if(view?.runReread && engineeringCurrent(view)){$("internal-run-detail").textContent="";$("internal-run-status").textContent="";engineeringStatus(view,"");}
+  if(view)view.runReread=null;
+  $("internal-run-reread")?.remove();
+}
+function offerInternalRunReread(view,instance,run,connection,workspace) {
+  clearInternalRunReread(view);
+  const target={principal:instance.principal_id,project:view.project,app:view.app,
+    instance:instance.id,run:run.id,appRun:run.app_run_id,connection,workspace,
+    selection:view.instanceGeneration,runSelection:view.runGeneration,busy:false};
+  view.runReread=target;
+  const current=()=>engineeringCurrent(view) && view.runReread===target
+    && target.connection===identityConnectionGeneration && target.workspace===workspaceSelectionGeneration
+    && target.selection===view.instanceGeneration && target.runSelection===view.runGeneration;
+  const button=document.createElement("button");button.id="internal-run-reread";
+  button.type="button";button.textContent="重新读取这个原任务";
+  button.onclick=async()=>{
+    if(!current()||target.busy)return;
+    target.busy=true;button.disabled=true;$("internal-run-detail").textContent="";$("internal-run-status").textContent="";
+    engineeringStatus(view,`正在重新鉴权并读取原任务 ${target.run}…`,"loading");
+    try {
+      const fresh=await api(`/api/internal/instances/${encodeURIComponent(target.instance)}`);
+      if(!current())return;
+      if(fresh.id!==target.instance || fresh.principal_id!==target.principal
+        || fresh.project_id!==target.project || fresh.source_app_id!==target.app)throw Error("运行绑定与当前身份不符");
+      const latest=await api(`/api/internal/instances/${encodeURIComponent(target.instance)}/runs/${encodeURIComponent(target.run)}`);
+      if(!current())return;
+      if(latest.id!==target.run || latest.instance_id!==target.instance || latest.app_run_id!==target.appRun)throw Error("运行绑定与当前身份不符");
+      $("internal-run-detail").textContent=JSON.stringify(latest,null,2);
+      $("internal-run-status").textContent=`原任务 ${latest.id}：${latest.status} · 取消意图 ${latest.cancel_intent ? "已保留" : "无"}`;
+      engineeringStatus(view,"已重新读取这个原任务的当前状态。","success");
+    } catch(error){if(current()){$("internal-run-detail").textContent="";engineeringStatus(view,error.message,"error");}}
+    finally {if(current()){target.busy=false;button.disabled=false;}}
+  };
+  $("internal-controls").append(button);
+}
 function clearInternal() {
+  clearInternalRunReread();
   if(typeof clearNaturalLogic==="function")clearNaturalLogic();
   clearPBUse();
   clearNaturalTaskExtraction();
@@ -117,10 +154,10 @@ function engineeringButtons(view) {
 }
 async function engineeringAction(view,fn) {
   if(!view || !engineeringCurrent(view) || view.busy)return;
-  const selection=view.instanceGeneration;
+  const selection=view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
   view.busy=true;engineeringButtons(view);
   try {await fn();}
-  catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message==="RECOVERY_REQUEST_BUSY"?"另一个页面正在处理此实例。本次没有排队提交；请稍后手动刷新或读取原请求回执。":error.message,"error");}}
+  catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration && connection===identityConnectionGeneration && workspace===workspaceSelectionGeneration){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message==="RECOVERY_REQUEST_BUSY"?"另一个页面正在处理此实例。本次没有排队提交；请稍后手动刷新或读取原请求回执。":error.message,"error");}}
   finally {view.busy=false;engineeringButtons(view);}
 }
 async function openInternal(app,appGeneration) {
@@ -139,6 +176,7 @@ async function openInternal(app,appGeneration) {
 }
 async function refreshInternal(view=engineering) {
   if(!view || !engineeringCurrent(view))return;
+  clearInternalRunReread(view);
   const latest=await api(`/api/apps/${view.app}`);
   if(!engineeringCurrent(view))return;
   if(latest.project_id!==view.project || latest.fingerprint!==view.draft.fingerprint)throw Error("VERSION_CONFLICT");
@@ -167,6 +205,7 @@ async function showInternalInstance(id,view=engineering) {
   clearPBUse();
   clearNaturalTaskExtraction();
   if(!view || !engineeringCurrent(view))return;
+  clearInternalRunReread(view);
   if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
   clearSwitch(view);$("internal-switch").hidden=true;
@@ -197,10 +236,12 @@ async function showInternalInstance(id,view=engineering) {
 }
 async function showInternalRun(id,view=engineering,instance=view?.instance) {
   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;
+  clearInternalRunReread(view);
   const previousStatus=view.run?.status;
-  const selection=++view.runGeneration,iSelection=view.instanceGeneration;
+  const selection=++view.runGeneration,iSelection=view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
   $("internal-controls").replaceChildren();$("internal-run-detail").textContent="";view.run=null;
-  const current=()=>engineeringCurrent(view) && selection===view.runGeneration && iSelection===view.instanceGeneration && view.instance?.id===instance.id;
+  const selectedCurrent=()=>engineeringCurrent(view) && selection===view.runGeneration && iSelection===view.instanceGeneration && view.instance?.id===instance.id && connection===identityConnectionGeneration;
+  const current=()=>selectedCurrent() && workspace===workspaceSelectionGeneration;
   try {
     let run;
     try {run=await api(`/api/internal/instances/${instance.id}/runs/${id}`);}
@@ -222,9 +263,20 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
     $("internal-controls").replaceChildren(...commands.map(command=>{
       const button=document.createElement("button");button.textContent={pause:"暂停",cancel:"取消后台任务",resume:"继续"}[command];
       button.onclick=()=>engineeringAction(view,async()=>{
-        if(!current())return;
-        const response=await api(`/api/internal/instances/${instance.id}/runs/${id}/commands`,"POST",{command,version:run.version});
-        if(!current())return;
+        const actionWorkspace=workspaceSelectionGeneration;
+        const actionCurrent=()=>selectedCurrent() && actionWorkspace===workspaceSelectionGeneration;
+        if(!actionCurrent())return;
+        let response;
+        try {response=await api(`/api/internal/instances/${instance.id}/runs/${id}/commands`,"POST",{command,version:run.version});}
+        catch(error){
+          if(!actionCurrent())return;
+          if(error.message!=="VERSION_CONFLICT")throw error;
+          invalidateInternalContent(view);
+          offerInternalRunReread(view,instance,run,connection,actionWorkspace);
+          engineeringStatus(view,"VERSION_CONFLICT：任务状态已变化，可重新读取这个原任务。","error");
+          return;
+        }
+        if(!actionCurrent())return;
         // The accepted stop receipt remains visible even if current grants prevent GET afterward.
         $("internal-run-status").textContent=`已接受${button.textContent}：${response.status}`;$("internal-controls").replaceChildren();view.run=null;
         try {await showInternalRun(id,view,instance);}catch(error){engineeringStatus(view,error.message,"error");}
@@ -410,6 +462,7 @@ function clearReleaseApproval(view) {
   $("internal-approval-detail").textContent="";$("internal-approval-label").textContent="";
 }
 function invalidateInternalContent(view) {
+  clearInternalRunReread(view);
   clearNaturalTaskExtraction();
   if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
