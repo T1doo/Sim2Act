@@ -1,0 +1,64 @@
+F.....                                                                   [100%]
+=================================== FAILURES ===================================
+_____________ test_saved_natural_app_visible_use_entry[pa-normal] ______________
+
+env = (<sim2act.db.Store object at 0x7f89f9a88650>, Settings(database_url='sqlite:////workspace/f2-entry-final-metadata/test...3aa944f12842c0ba9b2b82b312c28f', 'user_cba7876f2cca4bd3b39e4cfa2cc975c6', 'proj_b5ba18c1fb1b40a79a06e0d1153a62f3', ...)
+tmp_path = PosixPath('/workspace/f2-entry-final-metadata/test_saved_natural_app_visible0')
+family = 'pa', scenario = 'normal'
+
+    @pytest.mark.parametrize("family,scenario", [("pa", "normal"), ("pb", "normal"), ("pa", "lost")])
+    def test_saved_natural_app_visible_use_entry(env, tmp_path, family, scenario):
+        if family == "pa":
+>           data, app, release, inst, _, resource, goal, _, route = prepared_pa(env, history=True)
+                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_natural_application_entry.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_pa_natural_uses.py:85: in prepared_pa
+    drive_to_success(data, second.json()["run_id"], transport([], COLD))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = (<sim2act.db.Store object at 0x7f89f9a88650>, Settings(database_url='sqlite:////workspace/f2-entry-final-metadata/test...c3aa944f12842c0ba9b2b82b312c28f', 'proj_b5ba18c1fb1b40a79a06e0d1153a62f3', 'res_a878286025ba475a865c3428bc4cb361', ...)
+rid = 'run_f84938d5ad05425280d986f2284c2324'
+backend = <httpx.MockTransport object at 0x7f89f34c7860>
+
+    def drive_to_success(data, rid, backend):
+        """Finite real worker claims; once() is progress, never a success receipt."""
+        import time
+    
+        from sim2act.db import events, internal_run_bindings
+    
+        store, settings = data[:2]
+        worker = Worker(store, settings, goal_planner_transport=backend)
+        claims = []
+        with store.tx() as c:
+            header = dict(c.execute(select(runs.c.status, runs.c.fence, runs.c.lease_until,
+                runs.c.created_at, runs.c.cancel_intent, runs.c.principal_id, runs.c.project_id)
+                .where(runs.c.id == rid)).mappings().one())
+            clock = c.execute(select(internal_run_bindings.c.snapshot["natural_spec_clock"])
+                .where(internal_run_bindings.c.run_id == rid)).scalar_one()
+        original = header["created_at"]
+        assert header["principal_id"] == data[3] and header["project_id"] == data[4]
+        deadline = min(clock["deadline"], original + settings.run_seconds)
+        assert clock["created_at"] == original and header["status"] == "QUEUED"
+        assert not header["cancel_intent"]
+        try:
+            for index in range(3):
+                before = header
+                if index:
+>                   assert before["status"] == "RUNNING" and not before["cancel_intent"]
+E                   AssertionError: assert ('WAITING_RESOURCE' == 'RUNNING'
+E                     
+E                     - RUNNING
+E                     + WAITING_RESOURCE)
+
+tests/test_pb_natural_specs.py:54: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_application_entry.py::test_saved_natural_app_visible_use_entry[pa-normal]
+1 failed, 5 passed, 1 warning in 919.16s (0:15:19)

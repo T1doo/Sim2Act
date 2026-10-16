@@ -1,0 +1,112 @@
+[
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "stdout": "bfb3c6c3c1ef8f45fb8cce8cc53dc53c44b86169\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "worktree",
+      "list",
+      "--porcelain"
+    ],
+    "exit_code": 0,
+    "stdout": "worktree /workspace/Sim2Act\nHEAD bfb3c6c3c1ef8f45fb8cce8cc53dc53c44b86169\nbranch refs/heads/dev/f2-t05-natural-app-entry-20261016\n\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "remote",
+      "-v"
+    ],
+    "exit_code": 0,
+    "stdout": "origin\thttps://github.com/T1doo/Sim2Act.git (fetch)\norigin\thttps://github.com/T1doo/Sim2Act.git (push)\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "ls-remote",
+      "origin",
+      "refs/heads/dev/ordinary-spec-paused-revoke-20261016",
+      "refs/heads/dev/f2-t05-natural-app-entry-20261016",
+      "refs/heads/main"
+    ],
+    "exit_code": 0,
+    "stdout": "f9adaae3b34ef498854e2ac57f955679ee7c1ef8\trefs/heads/dev/f2-t05-natural-app-entry-20261016\n8fc70cc43a6ac81cd522249e8a3d367cd66c9238\trefs/heads/dev/ordinary-spec-paused-revoke-20261016\n6f688e4dd80b5c81d41aecde90e360d3629f9c21\trefs/heads/main\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "merge-base",
+      "--is-ancestor",
+      "8fc70cc43a6ac81cd522249e8a3d367cd66c9238",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "merge-base",
+      "--is-ancestor",
+      "2b290038a9f85417e3ed43187b0989c907e969f6",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "f9adaae3",
+      "HEAD",
+      "--",
+      "src"
+    ],
+    "exit_code": 0,
+    "stdout": "diff --git a/src/sim2act/web/internal.js b/src/sim2act/web/internal.js\nindex e5047d30..9e915da9 100644\n--- a/src/sim2act/web/internal.js\n+++ b/src/sim2act/web/internal.js\n@@ -244,12 +244,13 @@ async function showInternalInstance(id,view=engineering) {\n async function showInternalRun(id,view=engineering,instance=view?.instance) {\n   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;\n   clearInternalRunReread(view);\n-  if(view.spec&&typeof selectOwnerRun===\"function\"&&ownerView?.rid!==id)await selectOwnerRun(\"\",view);\n   const previousStatus=view.run?.status;\n   const selection=++view.runGeneration,iSelection=view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;\n   $(\"internal-controls\").replaceChildren();$(\"internal-run-detail\").textContent=\"\";view.run=null;\n   const selectedCurrent=()=>engineeringCurrent(view) && selection===view.runGeneration && iSelection===view.instanceGeneration && view.instance?.id===instance.id && connection===identityConnectionGeneration;\n   const current=()=>selectedCurrent() && workspace===workspaceSelectionGeneration;\n+  if(view.spec&&typeof selectOwnerRun===\"function\"&&ownerView?.rid!==id)await selectOwnerRun(\"\",view);\n+  if(!current())return;\n   try {\n     let run;\n     try {run=await api(`/api/internal/instances/${instance.id}/runs/${id}`);}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "8fc70cc4",
+      "HEAD",
+      "--",
+      "src/sim2act/status_report.py",
+      "src/sim2act/tools.py",
+      "src/sim2act/natural_live_admission.py",
+      "src/sim2act/natural_trial_runs.py",
+      "src/sim2act/text_software_anchors.json",
+      "src/sim2act/text_software_qualification.json"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "df",
+      "-h",
+      ".",
+      "/tmp"
+    ],
+    "exit_code": 0,
+    "stdout": "Filesystem      Size  Used Avail Use% Mounted on\noverlay          32G  3.6G   27G  12% /workspace\nnone            8.9G  5.5M  8.9G   1% /tmp\n",
+    "stderr": ""
+  }
+]

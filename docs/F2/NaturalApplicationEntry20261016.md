@@ -13,3 +13,5 @@
 验收使用当前仓库 fixture、SQLite、实际 TestClient HTTP/JSDOM 页面点击和正常 Worker 的显式 MockTransport；另以合成 GET API 细测导航。没有复制源码树到每个子例。最终执行结果、精确 XML、关键请求回执、独审和前后字节核对另存 `../evidence/natural-application-entry-20261016/`。
 
 Windows、原生浏览器、PG、真实模型、真实材料场景/人工语义、远端 CI 和部署不在本轮执行证明内。底层 Worker 重启/取消矩阵未重复运行。旧环境最后独审未落盘和作者历史 1P XML 独立核实不足仍是原有证据缺口，本轮不声称补回。
+
+最终源码冻结为 `bfb3c6c3c1ef8f45fb8cce8cc53dc53c44b86169`。实际结果按阶段保存：f9六节点1FAIL/5PASS（PA额外多历史准备DB锁失败）、b788最小PA补测1PASS、最终薄UI守卫36检查及独立复验通过；未把它们合成单次全绿批。原始XML、关键请求与独审见 [交付证据](../evidence/natural-application-entry-20261016/README.md)。多历史准备的原失败保持未解决限制，未改运行器或租约；完整真实产品/语义门仍未签收。

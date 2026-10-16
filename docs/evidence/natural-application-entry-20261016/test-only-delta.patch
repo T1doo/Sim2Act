@@ -1,0 +1,22 @@
+diff --git a/tests/test_natural_application_entry.py b/tests/test_natural_application_entry.py
+index 513bd4e5..aa505792 100644
+--- a/tests/test_natural_application_entry.py
++++ b/tests/test_natural_application_entry.py
+@@ -21,7 +21,7 @@ from sim2act.db import Store
+ @pytest.mark.parametrize("family,scenario", [("pa", "normal"), ("pb", "normal"), ("pa", "lost")])
+ def test_saved_natural_app_visible_use_entry(env, tmp_path, family, scenario):
+     if family == "pa":
+-        data, app, release, inst, _, resource, goal, _, route = prepared_pa(env, history=True)
++        data, app, release, inst, _, resource, goal, _, route = prepared_pa(env, history=False)
+     else:
+         data, app, release, inst, resource, goal, _, route = prepared_use(env, run_base=True)
+     assert data[0].test_only and data[1].mode == "mock"
+@@ -29,7 +29,7 @@ def test_saved_natural_app_visible_use_entry(env, tmp_path, family, scenario):
+     assert original.status_code == 200, original.text
+     original = original.json()
+     old_versions = sorted(row["version"] for row in original["data"])
+-    assert old_versions == ([1, 2] if family == "pa" else [1])
++    assert old_versions == [1]
+     initial = snapshot(data[0])
+     readonly_baseline = initial
+     catalog = data[2].get("/api/apps?metadata_only=true")
