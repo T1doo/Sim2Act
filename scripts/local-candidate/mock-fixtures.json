@@ -1,0 +1,284 @@
+{
+  "version": "sim2act-local-mock-fixtures.v1",
+  "notice": "Handwritten synthetic model outputs. No real model or semantic acceptance.",
+  "recipe": {
+    "version": "natural-spec-recipe.v1",
+    "steps": [
+      {
+        "step_id": "read_pick",
+        "operator": "resource.read",
+        "depends_on": [],
+        "inputs": {
+          "resource_id": {
+            "source": "data",
+            "ref": "source",
+            "field": "resource_id"
+          }
+        }
+      },
+      {
+        "step_id": "infer_pick",
+        "operator": "model.spec.all",
+        "depends_on": [
+          "read_pick"
+        ],
+        "inputs": {
+          "resource_id": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "resource_id"
+          },
+          "content": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "content"
+          },
+          "hash": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "hash"
+          },
+          "format": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "format"
+          }
+        }
+      },
+      {
+        "step_id": "check_pick",
+        "operator": "spec.verify_citations",
+        "depends_on": [
+          "read_pick",
+          "infer_pick"
+        ],
+        "inputs": {
+          "resource_id": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "resource_id"
+          },
+          "content": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "content"
+          },
+          "hash": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "hash"
+          },
+          "format": {
+            "source": "step",
+            "ref": "read_pick",
+            "field": "format"
+          },
+          "items": {
+            "source": "step",
+            "ref": "infer_pick",
+            "field": "items"
+          }
+        }
+      },
+      {
+        "step_id": "save_pick",
+        "operator": "artifact.save_text",
+        "depends_on": [
+          "check_pick"
+        ],
+        "inputs": {
+          "text": {
+            "source": "step",
+            "ref": "check_pick",
+            "field": "text"
+          }
+        }
+      }
+    ]
+  },
+  "materials": {
+    "source": {
+      "content": "The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.",
+      "items": [
+        {
+          "item_id": "fact_0",
+          "kind": "requirement",
+          "summary": "The desk lamp dims after five idle minutes when battery powered.",
+          "citations": [
+            {
+              "start": 0,
+              "end": 64,
+              "quote": "The desk lamp dims after five idle minutes when battery powered."
+            }
+          ],
+          "targets": []
+        },
+        {
+          "item_id": "qualifier",
+          "kind": "condition",
+          "summary": "when battery powered",
+          "citations": [
+            {
+              "start": 43,
+              "end": 63,
+              "quote": "when battery powered"
+            }
+          ],
+          "targets": [
+            "fact_0"
+          ]
+        },
+        {
+          "item_id": "fact_1",
+          "kind": "exception",
+          "summary": "During a software update it stays bright.",
+          "citations": [
+            {
+              "start": 65,
+              "end": 106,
+              "quote": "During a software update it stays bright."
+            }
+          ],
+          "targets": [
+            "fact_0"
+          ]
+        },
+        {
+          "item_id": "fact_2",
+          "kind": "open_question",
+          "summary": "The default brightness for visitors remains undecided.",
+          "citations": [
+            {
+              "start": 107,
+              "end": 161,
+              "quote": "The default brightness for visitors remains undecided."
+            }
+          ],
+          "targets": []
+        }
+      ]
+    },
+    "pa_use": {
+      "content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+      "items": [
+        {
+          "item_id": "fact_0",
+          "kind": "requirement",
+          "summary": "The garden sensor samples each hour while solar power is available.",
+          "citations": [
+            {
+              "start": 0,
+              "end": 67,
+              "quote": "The garden sensor samples each hour while solar power is available."
+            }
+          ],
+          "targets": []
+        },
+        {
+          "item_id": "qualifier",
+          "kind": "condition",
+          "summary": "while solar power is available",
+          "citations": [
+            {
+              "start": 36,
+              "end": 66,
+              "quote": "while solar power is available"
+            }
+          ],
+          "targets": [
+            "fact_0"
+          ]
+        },
+        {
+          "item_id": "fact_1",
+          "kind": "exception",
+          "summary": "On a rainy day it waits until noon.",
+          "citations": [
+            {
+              "start": 68,
+              "end": 103,
+              "quote": "On a rainy day it waits until noon."
+            }
+          ],
+          "targets": [
+            "fact_0"
+          ]
+        },
+        {
+          "item_id": "fact_2",
+          "kind": "open_question",
+          "summary": "The winter interval has yet to be agreed.",
+          "citations": [
+            {
+              "start": 104,
+              "end": 145,
+              "quote": "The winter interval has yet to be agreed."
+            }
+          ],
+          "targets": []
+        }
+      ]
+    },
+    "pb_use": {
+      "content": "The field beacon transmits twice per day while solar power is available. During a storm it keeps a cached signal. The beacon night policy has yet to be agreed.",
+      "items": [
+        {
+          "item_id": "fact_0",
+          "kind": "requirement",
+          "summary": "The field beacon transmits twice per day while solar power is available.",
+          "citations": [
+            {
+              "start": 0,
+              "end": 72,
+              "quote": "The field beacon transmits twice per day while solar power is available."
+            }
+          ],
+          "targets": []
+        },
+        {
+          "item_id": "qualifier",
+          "kind": "condition",
+          "summary": "while solar power is available",
+          "citations": [
+            {
+              "start": 41,
+              "end": 71,
+              "quote": "while solar power is available"
+            }
+          ],
+          "targets": [
+            "fact_0"
+          ]
+        },
+        {
+          "item_id": "fact_1",
+          "kind": "exception",
+          "summary": "During a storm it keeps a cached signal.",
+          "citations": [
+            {
+              "start": 73,
+              "end": 113,
+              "quote": "During a storm it keeps a cached signal."
+            }
+          ],
+          "targets": [
+            "fact_0"
+          ]
+        },
+        {
+          "item_id": "fact_2",
+          "kind": "open_question",
+          "summary": "The beacon night policy has yet to be agreed.",
+          "citations": [
+            {
+              "start": 114,
+              "end": 159,
+              "quote": "The beacon night policy has yet to be agreed."
+            }
+          ],
+          "targets": []
+        }
+      ]
+    }
+  }
+}
