@@ -96,6 +96,10 @@ def mount(app, store, identity):
     def consent_status(pid: str, key: str, user=dependency):
         return preparation.status(store, user, pid, key)
 
+    @app.post(base + "/end-preparation")
+    def end_preparation(pid: str, key: str, body: preparation.EndInput, user=dependency):
+        return preparation.end_preparation(store, user, pid, key, body)
+
     @app.post(base + "/consent")
     def consent(pid: str, key: str, body: preparation.ConsentInput, user=dependency):
         return preparation.approve(store, user, pid, key, body)

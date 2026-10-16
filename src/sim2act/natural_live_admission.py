@@ -34,6 +34,7 @@ from .text_logic_reuse import pair, remember
 from .tools import authorized_read
 
 VERSION: Literal["natural-live-trial.v1"] = "natural-live-trial.v1"
+CLOSED = VERSION + ".preparation-closed"
 SCOPE, APPROVE, REVOKE, PHASE = (VERSION + "." + s for s in ("scope", "approve", "revoke", "phase"))
 CONSENT = "APPROVE_ONLY_THIS_EXACT_SEVEN_SLOT_ZERO_PAID_NATURAL_TRIAL"
 HASH = r"^[a-f0-9]{64}$"
@@ -658,6 +659,7 @@ def _save(c, user, eid, kind, key, body):
 def _approved(store, c, user, contract, approval_key, *, active=True):
     _current(store, c, user, contract, active=active)
     eid = entity(contract)
+    require(not _keys(c, user, eid, CLOSED), "Natural trial preparation irreversibly closed")
     require(_keys(c, user, eid, SCOPE) == {"scope"}
             and _keys(c, user, eid, APPROVE) == {"approve"}
             and _keys(c, user, eid, REVOKE) <= {"revoke"})
@@ -680,6 +682,11 @@ def _approved(store, c, user, contract, approval_key, *, active=True):
 @controlled
 def approve(store, user, contract: TrialContract, body: ApproveInput):
     with store.tx() as c:
+        if user != contract.principal_id:
+            raise DomainError("PERMISSION_DENIED")
+        store.lock_project(c, user, contract.project_id)
+        require(not _keys(c, user, entity(contract), CLOSED),
+                "Natural trial preparation irreversibly closed")
         _current(store, c, user, contract)
         fp, eid = fingerprint(contract.model_dump()), entity(contract)
         require(body.expected_contract_fingerprint == fp)

@@ -16,7 +16,7 @@ from sim2act.natural_trial_preparation import PREPARE
 
 
 @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
-    "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending"])
+    "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
 def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
     data, body = prepared_data
     store, _, client, _, pid = data[:5]
@@ -28,6 +28,10 @@ def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tm
         (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
         with store.tx() as c:
             c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+    if scenario.startswith('manual-b-'):
+        seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+        assert seeded.status_code == 200
+        (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
     info = tmp_path / 'info.json'
     info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
         cold=body['bindings'][1]['card_id'], scenario=scenario,

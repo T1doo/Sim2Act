@@ -12,6 +12,10 @@ function tick(id) { check(visible($(id)) && !$(id).disabled, `checkbox ${id} vis
 const posts = suffix => requests.filter(r => r.method === "POST" && r.path.endsWith(suffix)).length;
 async function restartPreparation(oldKey, pendingHistory = false) {
   const length = w.history.length, state = JSON.stringify(w.history.state);
+  if ($("trial-new").disabled) {
+    if (w.eval("Boolean(trialEntry()?.receipt?.approved)")) { tick("trial-withdraw-ack"); await click("trial-withdraw"); }
+    else { tick("trial-end-ack"); await click("trial-end"); }
+  }
   await click("trial-new");
   check($("trial-original-key").value !== oldKey, "explicit new clears old visible key");
   check(w.history.length === length && JSON.stringify(w.history.state) === state && new URLSearchParams(w.location.search).get("kept") === "query" && new URLSearchParams(w.location.hash.slice(1)).get("kept") === "fragment", "explicit new replaces current address while preserving query unrelated fragment and history state");
@@ -31,7 +35,7 @@ async function restartPreparation(oldKey, pendingHistory = false) {
     await click("trial-recover");
     const scope = $("trial-scope").textContent;
     release(); await work;
-    check($("trial-original-key").value === pendingKey && $("trial-scope").textContent === scope && !$("trial-new").disabled, "held preparation reply cannot overwrite newer original-key GET");
+    check($("trial-original-key").value === pendingKey && $("trial-scope").textContent === scope && $("trial-new").disabled, "held preparation reply cannot overwrite newer original-key GET");
   } else await work;
   const prepared = requests.filter(r => r.method === "POST" && r.path.endsWith("/preparation"));
   check(prepared.length === 2 && prepared[0].path !== prepared[1].path, "second actual preparation POST uses a different fresh key");
@@ -89,6 +93,21 @@ async function boot(hash = "") {
   check($("trial-scope").textContent.includes("共 7 槽") && $("trial-scope").textContent.includes("192000") && $("trial-scope").textContent.includes("7168"), "full original budget visible");
   check(info.goalTexts.every(text => $("trial-scope").textContent.includes(text)), "both complete goals and materials visible");
   check($("trial-consent").disabled && !$("trial-ack").checked, "no implicit consent after preparation");
+  if (originalScenario.startsWith("manual-b-")) {
+    $("trial-original-key").value = "manual-B"; await click("trial-recover");
+    check(new URLSearchParams(w.location.hash.slice(1)).get("trial-key") === "manual-B", "manual recovery synchronizes B into reload URL");
+    if (originalScenario === "manual-b-consent") fault = "consent";
+    tick("trial-ack"); await click("trial-consent");
+    if (originalScenario === "manual-b-withdrawal") { fault = "withdrawal"; tick("trial-withdraw-ack"); await click("trial-withdraw"); }
+    check($("trial-new").disabled && $("trial-consent").disabled, "lost manual B mutation remains UNKNOWN");
+    const boundary = requests.length, savedHash = w.location.hash;
+    await boot(savedHash); await click("trial-recover");
+    const recovery = requests.slice(boundary).filter(r => r.path.includes("/natural-trials/"));
+    check(recovery.length > 0 && recovery.every(r => r.method === "GET" && r.path.includes("/manual-B/")), "reload recovery only GETs B, never A or another POST");
+    check($("trial-original-key").value === "manual-B" && $("trial-status").textContent.includes(originalScenario === "manual-b-consent" ? "精确批准已持久保存" : "已撤回"), "B durable mutation recovered after lost response and reload");
+    fs.writeFileSync(info.output, JSON.stringify({status: "PASS", scenario: info.scenario, checks, requests, static_resource_loads: loads, loaded_source_sha256: hashes, boots}, null, 2));
+    dom.window.close(); process.stdout.write(JSON.stringify({done: true}) + "\n"); process.exit(0);
+  }
   if (originalScenario === "new-prepared") await restartPreparation(key);
   if (["new-history", "new-history-pending"].includes(originalScenario)) {
     w.history.pushState(w.history.state, "", w.location.href);
@@ -115,7 +134,7 @@ async function boot(hash = "") {
     await restartPreparation(key);
     const secondKey = $("trial-original-key").value, scope = $("trial-scope").textContent;
     release(); await work;
-    check($("trial-original-key").value === secondKey && $("trial-scope").textContent === scope && !$("trial-new").disabled && !$("trial-ack").checked, "late abandoned consent cannot contaminate new key scope state or acknowledgement");
+    check($("trial-original-key").value === secondKey && $("trial-scope").textContent === scope && $("trial-new").disabled && !$("trial-ack").checked, "late abandoned consent cannot contaminate new key scope state or acknowledgement");
     check(posts("/consent") === 1 && posts("/preparation") === 2, "new intent never retries old consent");
     check(!requests.some(r => /\/application-runs|\/runs(?:$|\/)|\/admission|\/stage-approval/.test(r.path) && r.method === "POST"), "new intent never creates Run or dispatches");
     fs.writeFileSync(info.output, JSON.stringify({status: "PASS", scenario: info.scenario, checks, requests, static_resource_loads: loads, loaded_source_sha256: hashes, boots}, null, 2));
@@ -128,11 +147,26 @@ async function boot(hash = "") {
     check($("trial-prepare").disabled && $("trial-new").disabled, "cold original-key intent locks all new preparation until GET recovery");
     await click("trial-recover"); check(posts("/preparation") === 1, "cold recovery only GETs original preparation");
   }
-  if (["goal", "revoke-read", "expiry"].includes(originalScenario)) {
-    await rpc({command: originalScenario}); tick("trial-ack"); await click("trial-consent");
+  if (["goal", "goal-close-lost", "revoke-read", "expiry"].includes(originalScenario)) {
+    await rpc({command: originalScenario === "goal-close-lost" ? "goal" : originalScenario}); tick("trial-ack"); await click("trial-consent");
     check($("trial-consent").disabled && $("trial-new").disabled, "changed version authority or expiry cannot be approved or silently replaced");
     await click("trial-recover"); check(posts("/consent") === 1, "failed consent recovery never reposts consent");
     check(!$("trial-status").textContent.includes("精确批准已持久保存"), "refusal never displayed as approval");
+    if (["goal", "goal-close-lost"].includes(originalScenario)) {
+      check($("trial-new").disabled && $("trial-end").disabled, "transient unapproved metadata cannot unlock new or end without confirmation");
+      if (originalScenario === "goal-close-lost") fault = "end-preparation";
+      tick("trial-end-ack"); await click("trial-end");
+      if (originalScenario === "goal-close-lost") {
+        check($("trial-new").disabled, "lost close receipt stays UNKNOWN");
+        const at = requests.length; await boot(w.location.hash); await click("trial-recover");
+        check(requests.slice(at).filter(r => r.path.includes("/natural-trials/")).every(r => r.method === "GET" && r.path.includes(`/${key}/`)), "lost close reload only GETs original key");
+      }
+      check(!$("trial-new").disabled && $("trial-status").textContent.includes("永久结束"), "durable closed proof unlocks explicit new intent");
+      check(posts("/end-preparation") === 1, "end never automatically retried");
+      await click("trial-new"); await click("trial-refresh");
+      check(!$("trial-prepare").disabled, "Goal revision no longer strands old preparation");
+    }
+
   } else {
     if (originalScenario === "lost-consent") fault = "consent";
     if (originalScenario === "late-navigation") fault = "late";

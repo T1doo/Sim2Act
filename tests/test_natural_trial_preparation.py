@@ -41,7 +41,7 @@ def business(store):
                     ledger=[dict(r) for r in c.execute(select(delivery_graph_requests).where(
                         ~delivery_graph_requests.c.kind.in_([prep.PREPARE, prep.PREPARE + "_seal",
                             gate.SCOPE, gate.SCOPE + "_seal", gate.APPROVE, gate.APPROVE + "_seal",
-                            gate.REVOKE, gate.REVOKE + "_seal"]))).mappings()])
+                            gate.REVOKE, gate.REVOKE + "_seal", gate.CLOSED, gate.CLOSED + "_seal"]))).mappings()])
 
 
 def scope(prepared_data, key="original-preparation"):

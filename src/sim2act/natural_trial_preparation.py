@@ -1,5 +1,6 @@
 """Server-authored P-A consent scope. Preparation never creates or dispatches Runs."""
 
+import math
 import time
 from typing import Literal
 
@@ -42,6 +43,20 @@ class WithdrawInput(Strict):
     confirm_withdrawal: Literal[True]
 
 
+class EndInput(Strict):
+    confirm_end: Literal[True]
+
+
+class Closure(Strict):
+    principal_id: str
+    project_id: str
+    trial_key: str = Field(pattern=gate.KEY)
+    review_token: str = Field(pattern=gate.HASH)
+    preparation_fingerprint: str = Field(pattern=gate.HASH)
+    closed_at: float
+    request: EndInput
+
+
 def entity(user, pid, key):
     return "naturaltrial_" + fingerprint(dict(user=user, project=pid, key=key))[:32]
 
@@ -55,7 +70,7 @@ def approval_key(contract):
     return contract.stage_keys.generate + "_approval"
 
 
-def _load(store, c, user, pid, key):
+def _load(store, c, user, pid, key, *, current=True):
     project = store.lock_project(c, user, pid)
     eid = entity(user, pid, key)
     query = select(delivery_graph_requests).where(
@@ -78,11 +93,19 @@ def _load(store, c, user, pid, key):
         and contract.stage_keys == stage_keys(user, pid, key)
         and request.bindings == [GoalChoice(card_id=b.card_id,
             expected_version=b.goal_version) for b in contract.bindings])
-    gate._current(store, c, user, contract, active=False)
+    if current:
+        gate._current(store, c, user, contract, active=False)
+    else:
+        # Ending grants no execution authority; only current project/READ/SAVE
+        # authority and the original immutable pair are needed after Goal drift.
+        gate._authorize(store, c, user, contract)
     return request, contract
 
 
 def _receipt(store, c, user, contract):
+    closed = _closed(c, user, contract.project_id, contract.trial_key)
+    if closed:
+        return closed
     approved = bool(gate._keys(c, user, gate.entity(contract), gate.APPROVE))
     receipt = dict(status="PREPARED_LIVE_BLOCKED", path="P-A", contract=contract.model_dump(),
         review_token=fingerprint(contract.model_dump()), approved=approved,
@@ -96,6 +119,51 @@ def _receipt(store, c, user, contract):
     else:
         receipt["revoked"] = False
     return receipt
+
+
+def _closed(c, user, pid, key):
+    eid = entity(user, pid, key)
+    keys = gate._keys(c, user, eid, gate.CLOSED)
+    if not keys:
+        return None
+    gate.require(keys == {"close"} and gate._keys(c, user, eid, PREPARE) == {"prepare"})
+    record = gate._saved(c, user, eid, gate.CLOSED, "close", Closure)
+    gate.require(record.principal_id == user and record.project_id == pid
+        and record.trial_key == key and math.isfinite(record.closed_at) and record.closed_at > 0)
+    # Metadata-only recovery checks original pair fingerprints without TXT/Goal JSON.
+    prepared_fps = c.execute(select(delivery_graph_requests.c.request_fingerprint).where(
+        delivery_graph_requests.c.principal_id == user,
+        delivery_graph_requests.c.app_id == eid,
+        delivery_graph_requests.c.kind.in_([PREPARE, PREPARE + "_seal"]),
+        delivery_graph_requests.c.request_key == "prepare")).scalars().all()
+    gate.require(len(prepared_fps) == 2
+        and all(fp == record.preparation_fingerprint for fp in prepared_fps))
+    for kind in (gate.SCOPE, gate.APPROVE, gate.PHASE, gate.REVOKE):
+        gate.require(not gate._keys(c, user, eid, kind), "Closed preparation has conflicting records")
+    return dict(status="PREPARATION_CLOSED_NO_APPROVAL", approved=False,
+        review_token=record.review_token, closed_at=record.closed_at, live_allowed=False,
+        new_runs=0, new_slots=0, actual_model_requests=0)
+
+
+@controlled
+def end_preparation(store, user, pid, key, body: EndInput):
+    with store.tx() as c:
+        store.lock_project(c, user, pid)
+        # Complete pair + fresh authority, without requiring obsolete Goal head equality.
+        request, contract = _load(store, c, user, pid, key, current=False)
+        closed = _closed(c, user, pid, key)
+        if closed:
+            gate.require(closed["review_token"] == fingerprint(contract.model_dump()))
+            return closed
+        eid = entity(user, pid, key)
+        for kind in (gate.SCOPE, gate.APPROVE, gate.PHASE, gate.REVOKE):
+            gate.require(not gate._keys(c, user, eid, kind), "Approved preparation must be withdrawn")
+        record = Closure(principal_id=user, project_id=pid, trial_key=key,
+            review_token=fingerprint(contract.model_dump()),
+            preparation_fingerprint=fingerprint(request.model_dump()),
+            closed_at=time.time(), request=body)
+        gate._save(c, user, eid, gate.CLOSED, "close", record)
+        return _closed(c, user, pid, key)
 
 
 @controlled
@@ -155,6 +223,10 @@ def prepare(store, user, pid, key, body: PrepareInput):
 @controlled
 def recover(store, user, pid, key):
     with store.tx() as c:
+        store.lock_project(c, user, pid)
+        closed = _closed(c, user, pid, key)
+        if closed:
+            return closed
         _, contract = _load(store, c, user, pid, key)
         return _receipt(store, c, user, contract)
 
@@ -185,6 +257,9 @@ def status(store, user, pid, key):
         store.lock_project(c, user, pid)
         eid = entity(user, pid, key)
         gate.require(gate._keys(c, user, eid, PREPARE) == {"prepare"})
+        closed = _closed(c, user, pid, key)
+        if closed:
+            return closed
         approved = gate._keys(c, user, eid, gate.APPROVE)
         if not approved:
             return dict(status="PREPARED_NOT_APPROVED", approved=False, live_allowed=False,
