@@ -189,8 +189,12 @@ def _active(store, c, scope, request, contract, admission):
                   and all(x in "0123456789abcdef" for x in permit.stage_authority_fingerprint))
              and run["version"] == request.expected_version
              and run["status"] == "RUNNING" and not run["cancel_intent"])
-    _require(time.time() < run["created_at"] + contract.model_dump()["caps"]["run_seconds"],
-             "BUDGET_EXHAUSTED")
+    _require(all(type(run[k]) in (int, float) and math.isfinite(run[k])
+                 for k in ("created_at", "lease_until")), "PERMISSION_DENIED")
+    deadline = min(scope.expires_at, permit.expires_at, run["lease_until"],
+                   run["created_at"] + contract.model_dump()["caps"]["run_seconds"])
+    _require(time.time() < deadline, "BUDGET_EXHAUSTED")
+    return deadline
 
 
 def _quota(c, subject):
@@ -232,7 +236,7 @@ def _reserve(store, c, user, scope, contract, request, *, admission=None):
         if slot["reservation"]["request_key"] == request.request_key:
             _require(slot["reservation"] == request.model_dump())
             return _public(scope, ledger, duplicate=True)
-    _active(store, c, scope, request, contract, admission)
+    original_deadline = _active(store, c, scope, request, contract, admission)
     _require(not ledger["halted"] and all(x["settlement"] is not None
         and x["accepted"] for x in ledger["slots"]), "OUTCOME_UNKNOWN")
     own = [x for x in ledger["slots"] if x["reservation"]["stage"] == request.stage]
@@ -245,7 +249,11 @@ def _reserve(store, c, user, scope, contract, request, *, admission=None):
     bound = ledger["stage_runs"].get(request.stage)
     _require(bound == request.run_id if bound else request.run_id not in ledger["stage_runs"].values())
     entity, quota_request, last = _quota(c, scope.quota_subject)
+    # Account locking can wait past the initially admitted interval. Recheck
+    # authority after that wait, without renewing the first permit/Run/lease.
+    deadline = min(original_deadline, _active(store, c, scope, request, contract, admission))
     now = time.time()
+    _require(now < deadline, "PERMISSION_DENIED")
     _require(last is None or now - last >= 60, "RATE_LIMITED")
     _write(c, KIND, entity, KIND + ".quota", "quota", quota_request,
            dict(last_reserved_at=now))
@@ -255,6 +263,8 @@ def _reserve(store, c, user, scope, contract, request, *, admission=None):
                                settlement=None, settlement_history=[], accepted=False))
     _write(c, user, scope.project_id, KIND, scope.trial_key, scope.model_dump(), ledger,
            new=len(ledger["slots"]) == 1)
+    # A write-side wait must also roll back the complete accounting transaction.
+    _require(time.time() < deadline, "PERMISSION_DENIED")
     return _public(scope, ledger)
 
 
