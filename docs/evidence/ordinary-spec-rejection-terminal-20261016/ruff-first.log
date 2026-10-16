@@ -1,0 +1,173 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/spec_run_terminals.py:7:1
+   |
+ 5 |   """
+ 6 |
+ 7 | / from pydantic import Field
+ 8 | | from sqlalchemy import insert, select
+ 9 | |
+10 | | from .contracts import Strict
+11 | | from .db import (delivery_graph_requests, fingerprint, internal_app_runs,
+12 | |     internal_instances, internal_releases, internal_run_bindings,
+13 | |     internal_spec_run_terminals as journal, runs)
+14 | | from .errors import DomainError
+   | |_______________________________^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_spec_run_terminals.py:3:1
+   |
+ 1 |   """SQLite authenticated API/actual Worker proof, no real model or private diagnostics."""
+ 2 |
+ 3 | / from concurrent.futures import ThreadPoolExecutor
+ 4 | | from threading import Event
+ 5 | | import json
+ 6 | | import os
+ 7 | | from pathlib import Path
+ 8 | | import subprocess
+ 9 | |
+10 | | import pytest
+11 | | from fastapi.testclient import TestClient
+12 | | from sqlalchemy import event, func, select
+13 | |
+14 | | from sim2act.api import create_app
+15 | | from sim2act.db import (Store, fingerprint, internal_app_runs, internal_run_bindings,
+16 | |     internal_spec_run_terminals, runs)
+17 | | from sim2act.worker import Worker
+18 | | from test_pa_spec_apps import setup, generate, confirm, instance
+   | |________________________________________________________________^
+   |
+help: Organize imports
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_spec_run_terminals.py:83:37
+   |
+81 |         assert close(request("wrong-owner"), foreign).status_code == 403
+82 |         assert read("rolled-back", foreign).status_code == 403
+83 |     invalid = request("unsupported"); invalid["input"] = {"x": "not empty"}
+   |                                     ^
+84 |     assert close(invalid).status_code == 400
+85 |     malformed = request("bad-wire"); malformed["expected_revision"] = "invalid"
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/test_spec_run_terminals.py:85:36
+   |
+83 |     invalid = request("unsupported"); invalid["input"] = {"x": "not empty"}
+84 |     assert close(invalid).status_code == 400
+85 |     malformed = request("bad-wire"); malformed["expected_revision"] = "invalid"
+   |                                    ^
+86 |     assert close(malformed).status_code == 422
+87 |     assert read("bad-wire").json()["error"]["code"] == "OUTCOME_UNKNOWN"
+   |
+
+B023 Function definition does not bind loop variable `original_lock`
+   --> tests/test_spec_run_terminals.py:110:21
+    |
+109 |         def gate(c, principal, project):
+110 |             value = original_lock(c, principal, project)
+    |                     ^^^^^^^^^^^^^
+111 |             if first[0]:
+112 |                 first[0] = False; entered.set()
+    |
+
+B023 Function definition does not bind loop variable `first`
+   --> tests/test_spec_run_terminals.py:111:16
+    |
+109 |         def gate(c, principal, project):
+110 |             value = original_lock(c, principal, project)
+111 |             if first[0]:
+    |                ^^^^^
+112 |                 first[0] = False; entered.set()
+113 |                 assert release_lock.wait(10)
+    |
+
+B023 Function definition does not bind loop variable `first`
+   --> tests/test_spec_run_terminals.py:112:17
+    |
+110 |             value = original_lock(c, principal, project)
+111 |             if first[0]:
+112 |                 first[0] = False; entered.set()
+    |                 ^^^^^
+113 |                 assert release_lock.wait(10)
+114 |             return value
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_spec_run_terminals.py:112:33
+    |
+110 |             value = original_lock(c, principal, project)
+111 |             if first[0]:
+112 |                 first[0] = False; entered.set()
+    |                                 ^
+113 |                 assert release_lock.wait(10)
+114 |             return value
+    |
+
+B023 Function definition does not bind loop variable `entered`
+   --> tests/test_spec_run_terminals.py:112:35
+    |
+110 |             value = original_lock(c, principal, project)
+111 |             if first[0]:
+112 |                 first[0] = False; entered.set()
+    |                                   ^^^^^^^
+113 |                 assert release_lock.wait(10)
+114 |             return value
+    |
+
+B023 Function definition does not bind loop variable `release_lock`
+   --> tests/test_spec_run_terminals.py:113:24
+    |
+111 |             if first[0]:
+112 |                 first[0] = False; entered.set()
+113 |                 assert release_lock.wait(10)
+    |                        ^^^^^^^^^^^^
+114 |             return value
+    |
+
+B023 Function definition does not bind loop variable `body`
+   --> tests/test_spec_run_terminals.py:118:30
+    |
+116 |         def action(kind):
+117 |             if kind == "close":
+118 |                 return close(body)
+    |                              ^^^^
+119 |             return client.post(prefix + "/runs", json=body)
+    |
+
+B023 Function definition does not bind loop variable `body`
+   --> tests/test_spec_run_terminals.py:119:55
+    |
+117 |             if kind == "close":
+118 |                 return close(body)
+119 |             return client.post(prefix + "/runs", json=body)
+    |                                                       ^^^^
+120 |
+121 |         monkeypatch.setattr(store, "lock_project", gate)
+    |
+
+B023 Function definition does not bind loop variable `second_started`
+   --> tests/test_spec_run_terminals.py:127:21
+    |
+125 |                 assert entered.wait(10)
+126 |                 def second():
+127 |                     second_started.set()
+    |                     ^^^^^^^^^^^^^^
+128 |                     return action("enqueue" if winner == "close" else "close")
+129 |                 b = pool.submit(second)
+    |
+
+B023 Function definition does not bind loop variable `winner`
+   --> tests/test_spec_run_terminals.py:128:48
+    |
+126 |                 def second():
+127 |                     second_started.set()
+128 |                     return action("enqueue" if winner == "close" else "close")
+    |                                                ^^^^^^
+129 |                 b = pool.submit(second)
+130 |                 assert second_started.wait(10)
+    |
+
+Found 14 errors.
+[*] 2 fixable with the `--fix` option.

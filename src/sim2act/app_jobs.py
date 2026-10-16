@@ -57,6 +57,9 @@ SUBMISSION_REJECTION = "internal-run-rejection.v1"
 
 def rejection_proof(c, user, iid, pid, key, submission, phase):
     from .db import delivery_graph_requests
+    from .spec_run_terminals import fenced
+    if fenced(c, user, iid, key):
+        return None
     # Project lock is held; scalar existence reads never inspect accepted bodies.
     owned = c.execute(select(internal_instances.c.id).where(
         internal_instances.c.id == iid, internal_instances.c.principal_id == user,
@@ -120,6 +123,9 @@ def enqueue(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
         ).scalar()
         store.lock_project(c, user, pid)
+        from .spec_run_terminals import fenced
+        if fenced(c, user, iid, key):
+            raise DomainError("VERSION_CONFLICT", "Original spec request key permanently closed")
         if submission is not None:
             guard["proof"] = rejection_proof(c, user, iid, pid, key, submission, "TX_ROLLED_BACK")
         if human_correction is not None:

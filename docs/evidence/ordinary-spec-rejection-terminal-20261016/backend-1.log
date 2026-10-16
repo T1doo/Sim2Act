@@ -1,0 +1,27 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________________ test_original_key_permanent_terminal _____________________
+
+env = (<sim2act.db.Store object at 0x7f7aacdd6d80>, Settings(database_url='sqlite:////workspace/ordinary-rejection-cases-1/t...53e15e6fb44b4f9869771f6c334953', 'user_1c23c51be32e4dcca34ec49a7e84357e', 'proj_beb466ce9333402793ac828eed93feb1', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7aac9fb2c0>
+
+    def test_original_key_permanent_terminal(env, monkeypatch):
+        data = setup(env)
+        store, settings, client, user, pid, *_ = data
+        rid, result, sent = generate(data)
+        made = confirm(data, rid, result)
+>       assert made.status_code == 201, made.text
+E       AssertionError: {"id":"app_fe4a997a9b5b0c287dd283c911477306","state":"PREVIEW_ONLY","publishable":false,"cached":false}
+E       assert 200 == 201
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/test_spec_run_terminals.py:22: AssertionError
+=============================== warnings summary ===============================
+../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_spec_run_terminals.py::test_original_key_permanent_terminal
+1 failed, 1 warning in 4.47s

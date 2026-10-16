@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="7.419" timestamp="2026-10-16T09:22:59.444480+00:00" hostname="9809f76d2248"><testcase classname="tests.test_spec_run_terminals" name="test_original_key_permanent_terminal" time="7.255"><failure message="AssertionError: assert 400 == 409&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code&#10; +    where &lt;Response [400 Bad Request]&gt; = &lt;function test_original_key_permanent_terminal.&lt;locals&gt;.read at 0x7fbad0963060&gt;('rolled-back')">env = (&lt;sim2act.db.Store object at 0x7fbad29c6d20&gt;, Settings(database_url='sqlite:////workspace/ordinary-rejection-cases-2/t...ca7b6e3b9f42929d497ae0f76ea161', 'user_3c86c124bf174669a03d170cdcd2a25d', 'proj_b90c20f8424c429ea884e56354d1d915', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fbad211fa40&gt;
+
+    def test_original_key_permanent_terminal(env, monkeypatch):
+        data = setup(env)
+        store, settings, client, user, pid, *_ = data
+        rid, result, sent = generate(data)
+        made = confirm(data, rid, result)
+        assert made.status_code == 200, made.text
+        release, inst = instance(data, made.json()["id"])
+        prefix = f"/api/internal/instances/{inst['id']}"
+    
+        def request(key, revision=None):
+            return dict(expected_revision=inst["revision"] if revision is None else revision,
+                expected_release_fingerprint=release["fingerprint"], input={}, request_key=key)
+    
+        def close(body, actor=client):
+            return actor.post(prefix + f"/spec-run-requests/{body['request_key']}/close",
+                json=dict(release_id=release["id"], request=body))
+    
+        def read(key, actor=client):
+            return actor.get(prefix + f"/spec-run-requests/{key}")
+    
+        def counts():
+            with store.engine.connect() as c:
+                return [c.execute(select(func.count()).select_from(t)).scalar_one()
+                    for t in (runs, internal_app_runs, internal_run_bindings)]
+    
+        baseline = counts()
+        for key, revision, phase in [("rolled-back", 999, "TX_ROLLED_BACK"),
+                ("validation", 0, "VALIDATION_NOT_STARTED")]:
+            body = request(key, revision)
+            rejected = client.post(prefix + "/runs", json=body)
+            proof = rejected.json().get("submission_rejection") or rejected.json()["error"]["submission_rejection"]
+            assert proof["phase"] == phase and proof["request_fingerprint"] == fingerprint(body)
+&gt;           assert read(key).status_code == 409
+E           AssertionError: assert 400 == 409
+E            +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+E            +    where &lt;Response [400 Bad Request]&gt; = &lt;function test_original_key_permanent_terminal.&lt;locals&gt;.read at 0x7fbad0963060&gt;('rolled-back')
+
+tests/test_spec_run_terminals.py:49: AssertionError</failure></testcase></testsuite></testsuites>

@@ -269,15 +269,27 @@ async function submitSpecRun(view,instance,pending,retry){
     try{accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);}
     catch(error){
       if(await internalSubmissionRejected(error,view,instance,pending,"runs",pending)&&engineeringPending.get(instance.id)===pending){
-        const live=current();if(!live)return;specRecoveryForget(view,instance,pending);
-        if(live){$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";}if(pbUseView?.instance.id===instance.id&&pbUseView.view.token===view.token&&pbUseView.view.project===view.project)pbUseView.buttons();if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;
+        if(!current())return;
+        // The transient proof is not a fence. Persist owner-authorized closure,
+        // then authenticate the original-key GET before clearing either cache.
+        // A lost close response leaves UNKNOWN; subsequent recovery is GET only.
+        await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}/close`,"POST",{release_id:specRecoveryMetadata.get(pending)?.record.release_id,request:pending});
+      }else{
+        throw error;
       }
-      throw error;
     }
     if(!current())return;
   }
   const receipt=await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}`);
   if(!current())return;
+  if(receipt.namespace==="spec-run-terminal.v1"){
+    const wireHash=await paHash(pending);
+    if(!current())return;
+    if(accepted||receipt.status!=="CLOSED_NOT_ACCEPTED"||receipt.principal_id!==instance.principal_id||receipt.project_id!==view.project||receipt.app_id!==view.app||receipt.instance_id!==instance.id||receipt.release_id!==specRecoveryMetadata.get(pending)?.record.release_id||receipt.request_key!==pending.request_key||receipt.wire_request_fingerprint!==wireHash||goalRunCanonical(receipt.request)!==goalRunCanonical(pending)||receipt.new_model_requests!==0||receipt.project_writes!==0||receipt.run_id!==undefined||receipt.app_run_id!==undefined)throw Error("VERSION_CONFLICT");
+    specRecoveryForget(view,instance,pending);
+    $("internal-run-status").textContent="原请求键已由服务端永久关闭且未受理；请刷新版本后手动重新运行。关闭仅写恢复元数据。";
+    engineeringButtons(view);return;
+  }
   const expected={instance_id:instance.id,expected_revision:pending.expected_revision,expected_release_fp:pending.expected_release_fingerprint,input:pending.input};
   if(pending.expected_owner_goal_binding_fingerprint!==undefined)expected.owner_goal_binding_fingerprint=pending.expected_owner_goal_binding_fingerprint;
   const requestHash=await paHash(expected);

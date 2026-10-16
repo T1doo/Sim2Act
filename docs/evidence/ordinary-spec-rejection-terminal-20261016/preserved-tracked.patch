@@ -1,0 +1,107 @@
+diff --git a/src/sim2act/app_jobs.py b/src/sim2act/app_jobs.py
+index 939ae92c..4a08735c 100644
+--- a/src/sim2act/app_jobs.py
++++ b/src/sim2act/app_jobs.py
+@@ -57,6 +57,9 @@ SUBMISSION_REJECTION = "internal-run-rejection.v1"
+ 
+ def rejection_proof(c, user, iid, pid, key, submission, phase):
+     from .db import delivery_graph_requests
++    from .spec_run_terminals import fenced
++    if fenced(c, user, iid, key):
++        return None
+     # Project lock is held; scalar existence reads never inspect accepted bodies.
+     owned = c.execute(select(internal_instances.c.id).where(
+         internal_instances.c.id == iid, internal_instances.c.principal_id == user,
+@@ -120,6 +123,9 @@ def enqueue(
+             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
+         ).scalar()
+         store.lock_project(c, user, pid)
++        from .spec_run_terminals import fenced
++        if fenced(c, user, iid, key):
++            raise DomainError("VERSION_CONFLICT", "Original spec request key permanently closed")
+         if submission is not None:
+             guard["proof"] = rejection_proof(c, user, iid, pid, key, submission, "TX_ROLLED_BACK")
+         if human_correction is not None:
+diff --git a/src/sim2act/db.py b/src/sim2act/db.py
+index 4dc9ee74..49119964 100644
+--- a/src/sim2act/db.py
++++ b/src/sim2act/db.py
+@@ -379,6 +379,18 @@ internal_app_runs = Table(
+     Column("result_version", Integer),
+     UniqueConstraint("instance_id", "principal_id", "request_key"),
+ )
++# Permanent original-key fence. Explicit Store.initialize migration only.
++internal_spec_run_terminals = Table(
++    "internal_spec_run_terminals", meta,
++    Column("instance_id", String, primary_key=True),
++    Column("principal_id", String, primary_key=True),
++    Column("request_key", String, primary_key=True),
++    Column("project_id", String, nullable=False),
++    Column("app_id", String, nullable=False),
++    Column("release_id", String, nullable=False),
++    Column("request", JSON, nullable=False),
++    Column("fingerprint", String, nullable=False),
++)
+ internal_instance_data = Table(
+     "internal_instance_data",
+     meta,
+diff --git a/src/sim2act/pa_spec_apps.py b/src/sim2act/pa_spec_apps.py
+index 935f42c1..adfa288b 100644
+--- a/src/sim2act/pa_spec_apps.py
++++ b/src/sim2act/pa_spec_apps.py
+@@ -1408,12 +1408,20 @@ def process_job(worker, run):
+ 
+ def mount(app, store, limits, identity):
+     from fastapi import Depends
++    from . import spec_run_terminals as terminals
+     user_dependency = Depends(identity)
+ 
++    @app.post("/api/internal/instances/{iid}/spec-run-requests/{key}/close")
++    def close_run_request(iid: str, key: str, body: terminals.CloseInput, user=user_dependency):
++        return terminals.close(store, user, iid, key, body)
++
+     @app.get("/api/internal/instances/{iid}/spec-run-requests/{key}")
+     def read_run_request(iid: str, key: str, user=user_dependency):
+         from . import lifecycle
+         with store.tx() as c:
++            terminal = terminals.read(store, c, user, iid, key)
++            if terminal is not None:
++                return terminal
+             instance, release = lifecycle.instance(store, c, user, iid, limits)
+             require(is_candidate(release["snapshot"]["draft"]["candidate"]))
+             rid = c.execute(select(internal_run_bindings.c.run_id)
+diff --git a/src/sim2act/web/internal.js b/src/sim2act/web/internal.js
+index 3e2bc8df..711cfcf8 100644
+--- a/src/sim2act/web/internal.js
++++ b/src/sim2act/web/internal.js
+@@ -269,15 +269,27 @@ async function submitSpecRun(view,instance,pending,retry){
+     try{accepted=await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);}
+     catch(error){
+       if(await internalSubmissionRejected(error,view,instance,pending,"runs",pending)&&engineeringPending.get(instance.id)===pending){
+-        const live=current();if(!live)return;specRecoveryForget(view,instance,pending);
+-        if(live){$("internal-run-status").textContent="明确未受理；请修正或刷新当前版本后手动重新运行。原成功结果保留。";}if(pbUseView?.instance.id===instance.id&&pbUseView.view.token===view.token&&pbUseView.view.project===view.project)pbUseView.buttons();if(engineering&&engineeringCurrent(engineering)&&engineering.instance?.id===instance.id)engineeringButtons(engineering);return;
++        if(!current())return;
++        // The transient proof is not a fence. Persist owner-authorized closure,
++        // then authenticate the original-key GET before clearing either cache.
++        // A lost close response leaves UNKNOWN; subsequent recovery is GET only.
++        await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}/close`,"POST",{release_id:specRecoveryMetadata.get(pending)?.record.release_id,request:pending});
++      }else{
++        throw error;
+       }
+-      throw error;
+     }
+     if(!current())return;
+   }
+   const receipt=await api(`/api/internal/instances/${instance.id}/spec-run-requests/${encodeURIComponent(pending.request_key)}`);
+   if(!current())return;
++  if(receipt.namespace==="spec-run-terminal.v1"){
++    const wireHash=await paHash(pending);
++    if(!current())return;
++    if(accepted||receipt.status!=="CLOSED_NOT_ACCEPTED"||receipt.principal_id!==instance.principal_id||receipt.project_id!==view.project||receipt.app_id!==view.app||receipt.instance_id!==instance.id||receipt.release_id!==specRecoveryMetadata.get(pending)?.record.release_id||receipt.request_key!==pending.request_key||receipt.wire_request_fingerprint!==wireHash||goalRunCanonical(receipt.request)!==goalRunCanonical(pending)||receipt.new_model_requests!==0||receipt.project_writes!==0||receipt.run_id!==undefined||receipt.app_run_id!==undefined)throw Error("VERSION_CONFLICT");
++    specRecoveryForget(view,instance,pending);
++    $("internal-run-status").textContent="原请求键已由服务端永久关闭且未受理；请刷新版本后手动重新运行。关闭仅写恢复元数据。";
++    engineeringButtons(view);return;
++  }
+   const expected={instance_id:instance.id,expected_revision:pending.expected_revision,expected_release_fp:pending.expected_release_fingerprint,input:pending.input};
+   if(pending.expected_owner_goal_binding_fingerprint!==undefined)expected.owner_goal_binding_fingerprint=pending.expected_owner_goal_binding_fingerprint;
+   const requestHash=await paHash(expected);

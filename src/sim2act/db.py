@@ -379,6 +379,18 @@ internal_app_runs = Table(
     Column("result_version", Integer),
     UniqueConstraint("instance_id", "principal_id", "request_key"),
 )
+# Permanent original-key fence. Explicit Store.initialize migration only.
+internal_spec_run_terminals = Table(
+    "internal_spec_run_terminals", meta,
+    Column("instance_id", String, primary_key=True),
+    Column("principal_id", String, primary_key=True),
+    Column("request_key", String, primary_key=True),
+    Column("project_id", String, nullable=False),
+    Column("app_id", String, nullable=False),
+    Column("release_id", String, nullable=False),
+    Column("request", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+)
 internal_instance_data = Table(
     "internal_instance_data",
     meta,

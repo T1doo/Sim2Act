@@ -1408,12 +1408,21 @@ def process_job(worker, run):
 
 def mount(app, store, limits, identity):
     from fastapi import Depends
+
+    from . import spec_run_terminals as terminals
     user_dependency = Depends(identity)
+
+    @app.post("/api/internal/instances/{iid}/spec-run-requests/{key}/close")
+    def close_run_request(iid: str, key: str, body: terminals.CloseInput, user=user_dependency):
+        return terminals.close(store, user, iid, key, body)
 
     @app.get("/api/internal/instances/{iid}/spec-run-requests/{key}")
     def read_run_request(iid: str, key: str, user=user_dependency):
         from . import lifecycle
         with store.tx() as c:
+            terminal = terminals.read(store, c, user, iid, key)
+            if terminal is not None:
+                return terminal
             instance, release = lifecycle.instance(store, c, user, iid, limits)
             require(is_candidate(release["snapshot"]["draft"]["candidate"]))
             rid = c.execute(select(internal_run_bindings.c.run_id)
