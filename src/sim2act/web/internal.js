@@ -71,7 +71,7 @@ for(const id of ["registered-extraction-target","registered-extraction-name"]){
   $(id).addEventListener("change",()=>{registeredExtractionEditGeneration++;});
 }
 function engineeringCurrent(view) {
-  return engineering === view && view.token === token && view.project === $("project-select").value && view.app === activeApp && view.appGeneration === appSelectionGeneration;
+  return engineering === view && view.token === token && view.project === $("project-select").value && view.app === activeApp && view.appGeneration === appSelectionGeneration && (!view.selectionCurrent || view.selectionCurrent());
 }
 function engineeringStatus(view,text,state="") {
   if(!engineeringCurrent(view))return;
@@ -160,9 +160,10 @@ async function engineeringAction(view,fn) {
   catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration && connection===identityConnectionGeneration && workspace===workspaceSelectionGeneration){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message==="RECOVERY_REQUEST_BUSY"?"另一个页面正在处理此实例。本次没有排队提交；请稍后手动刷新或读取原请求回执。":error.message,"error");}}
   finally {view.busy=false;engineeringButtons(view);}
 }
-async function openInternal(app,appGeneration) {
-  const view={app:app.id,project:app.project_id,token,appGeneration,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",spec:app.input_guidance.mode === "MODEL_SPEC_CHECKLIST",offlineReplay:null,inputGeneration:0,workflow:app.input_guidance.mode === "CLOSED_TEXT_WORKFLOW"};
+async function openInternal(app,appGeneration,selectionCurrent=null) {
+  const view={app:app.id,project:app.project_id,token,appGeneration,selectionCurrent,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",spec:app.input_guidance.mode === "MODEL_SPEC_CHECKLIST",offlineReplay:null,inputGeneration:0,workflow:app.input_guidance.mode === "CLOSED_TEXT_WORKFLOW"};
   engineering=view;$("apps").append($("internal-panel"));$("internal-panel").hidden=false;
+  $("internal-title").textContent="内部版本与实例 · 只读运行";
   $("internal-agent").hidden=!view.agent;
   $("internal-replay-status").textContent=view.agent ? "尚未加载离线响应；审批与新运行暂不可提交。" : "";
   $("internal-prepare-hint").textContent=view.agent ? "使用上方样例字面检索词与已加载的离线响应核查当前材料。先查看精确快照，再手动确认保存内部版本；语义仍为 UNKNOWN。" : "使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。";
@@ -177,11 +178,14 @@ async function openInternal(app,appGeneration) {
 async function refreshInternal(view=engineering) {
   if(!view || !engineeringCurrent(view))return;
   clearInternalRunReread(view);
+  const workspace=workspaceSelectionGeneration,connection=identityConnectionGeneration,generation=(view.historyGeneration||0)+1;
+  view.historyGeneration=generation;
+  const current=()=>engineeringCurrent(view)&&workspace===workspaceSelectionGeneration&&connection===identityConnectionGeneration&&generation===view.historyGeneration;
   const latest=await api(`/api/apps/${view.app}`);
-  if(!engineeringCurrent(view))return;
+  if(!current())return;
   if(latest.project_id!==view.project || latest.fingerprint!==view.draft.fingerprint)throw Error("VERSION_CONFLICT");
   const [releases,instances]=await Promise.all([api(`/api/internal/apps/${view.app}/releases`),api(`/api/internal/apps/${view.app}/instances`)]);
-  if(!engineeringCurrent(view))return;
+  if(!current())return;
   view.releases=releases.items;
   $("internal-releases").replaceChildren(...releases.items.map(release=>row(`内部 Release ${release.id} · 指纹 ${release.fingerprint.slice(0,16)} · 正式发布关闭`,()=>engineeringAction(view,async()=>{
     const selection=view.instanceGeneration;
@@ -209,11 +213,13 @@ async function showInternalInstance(id,view=engineering) {
   if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
   clearSwitch(view);$("internal-switch").hidden=true;
-  const selection=++view.instanceGeneration;view.runGeneration++;view.instance=null;view.run=null;
+  const selection=++view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+  const current=()=>engineeringCurrent(view)&&selection===view.instanceGeneration&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
+  view.runGeneration++;view.instance=null;view.run=null;
   $("internal-run-form").hidden=true;$("internal-controls").replaceChildren();$("internal-run-detail").textContent="";$("internal-run-status").textContent="正在读取实例…";$("internal-data").replaceChildren();$("internal-runs").replaceChildren();engineeringButtons(view);
   try {
     const instance=await api(`/api/internal/instances/${id}`);
-    if(!engineeringCurrent(view) || selection!==view.instanceGeneration)return;
+    if(!current())return;
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
     view.instance=instance;if(view.spec)specRecoveryRefresh(view,instance);renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
@@ -228,15 +234,17 @@ async function showInternalInstance(id,view=engineering) {
     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
     if(view.spec)$("internal-run-status").textContent=engineeringPending.has(id) ? "本次提交结果尚未确认。仅用原请求键读取回执；不会重发或开始重复运行。" : "运行已保存材料与目标，完成后可读取此版本清单或下载成果。自然规范模型默认关闭；出处核验不代表语义验收。";
     if(view.spec&&view.recoveryError)$("internal-run-status").textContent=`${view.recoveryError}：无法安全保存或读取原请求恢复信息，未提交运行。请检查浏览器存储能力后手动刷新。`;
-    await renderPBUse(view);
+    await renderPBUse(view);if(!current())return;
     if(typeof openNaturalLogic==="function")await openNaturalLogic(view);
+    if(!current())return;
     if(typeof openOwnerReview==="function")await openOwnerReview(view);
-  } catch(error){if(engineeringCurrent(view) && selection===view.instanceGeneration){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
-  engineeringButtons(view);
+  } catch(error){if(current()){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
+  if(current())engineeringButtons(view);
 }
 async function showInternalRun(id,view=engineering,instance=view?.instance) {
   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;
   clearInternalRunReread(view);
+  if(view.spec&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
   const previousStatus=view.run?.status;
   const selection=++view.runGeneration,iSelection=view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
   $("internal-controls").replaceChildren();$("internal-run-detail").textContent="";view.run=null;
@@ -285,7 +293,9 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
     if(run.content_access!==false && previousStatus && previousStatus!==run.status && ["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(run.status)){
       await showInternalInstance(instance.id,view);
       if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(id,view,view.instance);
+      return;
     }
+    if(current()&&view.spec&&typeof selectOwnerRun==="function")await selectOwnerRun(run.status==="SUCCEEDED"&&run.content_access!==false?id:"",view);
   } catch(error){if(current()){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");$("internal-run-status").textContent+=" · 无法读取当前详情";}}
 }
 async function submitInternal(view,retry=false) {
@@ -390,7 +400,15 @@ $("internal-commit").onclick=()=>engineeringAction(engineering,async()=>{
   if(!engineeringCurrent(view))return;
   view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;await refreshInternal(view);engineeringStatus(view,`已保存内部 Release ${saved.id}；正式发布关闭。`);
 });
-$("internal-refresh").onclick=()=>engineeringAction(engineering,async()=>{const view=engineering,id=view.instance?.id,selection=view.instanceGeneration;await refreshInternal(view);if(id && engineeringCurrent(view) && selection===view.instanceGeneration)await showInternalInstance(id,view);});
+$("internal-refresh").onclick=()=>engineeringAction(engineering,async()=>{
+  const view=engineering,id=view.instance?.id,run=view.run?.id,selection=view.instanceGeneration,workspace=workspaceSelectionGeneration,connection=identityConnectionGeneration;
+  const current=()=>engineeringCurrent(view)&&workspace===workspaceSelectionGeneration&&connection===identityConnectionGeneration;
+  await refreshInternal(view);
+  if(id&&current()&&selection===view.instanceGeneration){
+    await showInternalInstance(id,view);
+    if(run&&current()&&view.instance?.id===id&&view.instanceGeneration===selection+1)await showInternalRun(run,view,view.instance);
+  }
+});
 $("internal-back").onclick=()=>{clearInternal();};
 $("internal-run-form").onsubmit=event=>{event.preventDefault();const view=engineering;return engineeringAction(view,()=>submitInternal(view));};
 $("internal-new-intent").onclick=()=>{const view=engineering,id=view?.instance?.id;return engineeringAction(view,async()=>{
@@ -521,6 +539,11 @@ function specResult(record,view){
   if(run&&view.draft.candidate.namespace==="pa-natural-spec-app.v1"&&view.draft.candidate.manifest.origin==="goal"&&!view.draft.candidate.spec_task){
     const extract=document.createElement("button");extract.type="button";extract.textContent="从此成功任务提取应用（P-B）";extract.dataset.specAction="extract";
     extract.onclick=()=>openNaturalTaskExtraction(view,run.id,node);node.append(extract);
+  }
+  if(run){
+    const review=document.createElement("button");review.type="button";review.textContent="查看此运行与人工验收";review.dataset.specAction="review";
+    review.onclick=()=>{if(node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection)return showInternalRun(run.id,view,instance);};
+    node.append(review);
   }
   node.append(body);return node;
 }

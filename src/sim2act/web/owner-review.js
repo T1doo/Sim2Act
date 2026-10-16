@@ -176,17 +176,22 @@ for(const [id,command] of [["owner-cancel","CANCEL"],["owner-revoke","REVOKE"]])
   return ownerAction({command,target_id:last.id,target_fingerprint:last.fingerprint,reason:$("owner-stop-reason").value});
 });
 for(const id of ["owner-run","owner-ack","owner-stop-reason","owner-key"]){$(id).oninput=ownerEdited;$(id).onchange=ownerEdited;}
-$("owner-run").onchange=safe(async()=>{
-  ownerEdited();const view=ownerView;if(!view?.spec || !ownerCurrent(view))return;
-  clearCorrectionView();ownerGeneration++;view.readGeneration++;view.rid=$("owner-run").value;view.state=null;
+async function selectOwnerRun(id,engineeringView=engineering){
+  const view=ownerView;if(!view?.spec || !ownerCurrent(view)||view.engineering!==engineeringView)return;
+  if(id&&![...$("owner-run").options].some(option=>option.value===id))throw Error("运行不属于当前人工验收范围");
+  if(view.rid===id)return;
+  ownerEdited();$("owner-run").value=id;
+  clearCorrectionView();ownerGeneration++;view.readGeneration++;view.rid=id;view.state=null;
   $("owner-form").hidden=true;$("owner-criteria").replaceChildren();$("owner-proof").textContent="";
   $("owner-history").textContent="";$("owner-natural-evidence").replaceChildren();$("owner-ack").checked=false;
+  $("owner-status").textContent=id?`正在重新鉴权并读取 ${id} 的人工状态…`:"当前未选择可验收的成功运行；历史人工声明不代表本次运行。";
   $("owner-key").value=ownerPending.get(ownerKey(view))?.request_key||"";
   $("correction-key").value=correctionPending.get(ownerKey(view))?.key||"";
   ownerButtons(view);if(!view.rid)return;
   const current=ownerFence(view),reading=ownerRead(view),generation=view.readGeneration;
   try{await reading;}catch(error){if(current()&&generation===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail||error.message}`;}
-});
+}
+$("owner-run").onchange=safe(()=>selectOwnerRun($("owner-run").value));
 for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id).onclick=safe(async()=>{
   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy)return;
   const current=ownerFence(view);view.busy=true;ownerButtons(view);

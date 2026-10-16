@@ -395,7 +395,14 @@ async function refreshApps() {
   const list=await api("/api/apps?metadata_only=true");
   if(pid!==$("project-select").value || identity!==token || generation!==appSelectionGeneration)return;
   const items=list.items.filter(x=>x.project_id === $("project-select").value);
-  $("app-list").replaceChildren(...items.map(x=>row(`${x.name} · 未发布草案`,()=>showApp(x.id),"打开预览")));
+  const connection=identityConnectionGeneration;
+  $("app-list").replaceChildren(...items.map(x=>{
+    const natural=["NATURAL_PA","NATURAL_PB"].includes(x.use_family);
+    const family=natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(x.use_family==="CSV"?"CSV 固定材料":"其他应用");
+    return row(`${x.name} · ${family} · 未发布草案；当前授权需打开核查`,()=>{
+      if(identity===token&&connection===identityConnectionGeneration&&pid===$("project-select").value)return showApp(x.id,pid);
+    },natural?"查看应用与保存实例":"打开预览");
+  }));
   if(!items.length)$("app-list").textContent="先保存 CSV 材料，再创建一个草案。";
   if(typeof refreshApplicationUse === "function")await refreshApplicationUse(items);
   if(typeof refreshReportApps === "function")await refreshReportApps();
@@ -428,7 +435,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,recipe:a.candidate.spec_recipe,fingerprint:a.fingerprint},null,2);
     $("app-preview-form").hidden=false;$("app-preview-submit").hidden=false;$("app-preview-submit").disabled=appPreviewRequests.has(id);$("app-input-hint").textContent=a.candidate.namespace==="pa-natural-spec-app.v1"?"新材料抽取需模型执行，默认关闭；预览保留原文和完整目标，不生成答案，不保存制品。":"预览不保存业务制品；实际内部实例运行保存一个 JSON 清单。";$("app-column-label").hidden=true;$("app-column").required=false;
     $("app-agent-term-label").hidden=true;$("app-agent-term").required=false;$("csv-extraction-panel").hidden=true;
-    await openInternal(a,generation);return generation===appSelectionGeneration&&selectionCurrent();
+    await openInternal(a,generation,selectionCurrent);return generation===appSelectionGeneration&&selectionCurrent();
   }
   if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation);
   if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);

@@ -97,6 +97,17 @@ def _csv_instance_candidate(candidate):
     return None
 
 
+def _natural_use_family(namespace, task, binding, generated):
+    """Non-authoritative navigation metadata; never an authorization decision."""
+    if namespace != "pa-natural-spec-app.v1":
+        return None
+    if task == "pb_natural_spec_task.v1":
+        return "NATURAL_PB"
+    if task is None and (generated or binding == "pa_model_spec_material_binding.v1"):
+        return "NATURAL_PA"
+    return None
+
+
 class ResourceInput(Strict):
     name: str = Field(min_length=1, max_length=200)
     format: str
@@ -736,8 +747,8 @@ def create_app(store=None, settings=None):
     def apps(metadata_only: bool = False, user=user_dependency):
         with db.tx() as c:
             if metadata_only:
-                # Cold discovery never evaluates historical candidate/goal bytes.
-                # This Grant hint routes discovery only; open/execute still inspect.
+                # Cold discovery projects only family scalars, never candidate/Goal bodies.
+                # Hints route discovery only; open/execute still fully inspect.
                 from .db import goal_application_candidates, task_extractions
 
                 literal_ids = set(c.execute(select(goal_application_candidates.c.app_id).where(
@@ -746,7 +757,11 @@ def create_app(store=None, settings=None):
                     task_extractions.c.principal_id == user,
                     task_extractions.c.snapshot["kind"].as_string() == CONDITIONAL_APP_NAMESPACE)
                 rows = c.execute(select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id,
-                    app_drafts.c.runtime_id).join(projects, projects.c.id == app_drafts.c.project_id)
+                    app_drafts.c.runtime_id,
+                    app_drafts.c.candidate["namespace"].as_string().label("namespace"),
+                    app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task"),
+                    app_drafts.c.candidate["spec_binding"]["kind"].as_string().label("binding"))
+                    .join(projects, projects.c.id == app_drafts.c.project_id)
                     .where(projects.c.owner_id == user, app_drafts.c.id.not_in(conditional_ids))
                     .order_by(app_drafts.c.created_at.desc())).mappings().all()
                 items = []
@@ -754,7 +769,12 @@ def create_app(store=None, settings=None):
                     hint = r["id"] not in literal_ids and bool(c.execute(select(grants.c.id).where(
                         grants.c.principal_id == r["runtime_id"], grants.c.project_id == r["project_id"],
                         grants.c.tool_ref == "data.aggregate_csv")).first())
-                    items.append({k: r[k] for k in ("id", "name", "project_id")} | {"csv_instance_candidate": hint})
+                    family = _natural_use_family(r["namespace"], r["task"], r["binding"], r["id"] in literal_ids)
+                    items.append({k: r[k] for k in ("id", "name", "project_id")} | {
+                        "csv_instance_candidate": hint,
+                        "use_family": family or ("CSV" if hint else "OTHER"),
+                        **({"definition_version": r["namespace"]} if family else {}),
+                    })
                 return {"items": items, "state": "PREVIEW_ONLY", "publishable": False, "discovery_only": True}
             rows = (
                 c.execute(

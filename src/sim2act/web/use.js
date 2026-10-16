@@ -1,8 +1,13 @@
 "use strict";
-// Existing authorized CSV instances only; no publication, grants, or model adapter.
+// Saved instances share the existing controllers and current authorization checks.
 let applicationUse=null,applicationUseGeneration=0,applicationUseListGeneration=0,applicationUseContextGeneration=0;
 const applicationUseRequests=new Map();
 const csvUseApp=a=>a?.candidate?.manifest?.validation_suite_ref==="receipt.readback.v1" && a.candidate.actions?.length===1 && a.candidate.actions[0].executor?.kind==="registered_tool" && a.candidate.actions[0].executor.ref==="data.aggregate_csv";
+const naturalUseFamily=a=>{
+ const c=a?.candidate;if(a?.input_guidance?.mode!=="MODEL_SPEC_CHECKLIST"||c?.namespace!=="pa-natural-spec-app.v1")return null;
+ if(c.spec_task?.kind==="pb_natural_spec_task.v1")return "NATURAL_PB";
+ return !c.spec_task&&(c.goal_application||c.spec_binding?.kind==="pa_model_spec_material_binding.v1")?"NATURAL_PA":null;
+};
 const applicationUseCurrent=v=>!!v && applicationUse===v && v.identity===token && v.project===$("project-select").value && v.generation===applicationUseGeneration;
 const applicationUseKey=v=>JSON.stringify([v.identity,v.project,v.id]);
 function clearApplicationUse(clearList=false){
@@ -13,12 +18,32 @@ function clearApplicationUse(clearList=false){
  if(clearList){applicationUseListGeneration++;applicationUseContextGeneration++;$("use-list").replaceChildren();}
 }
 async function refreshApplicationUse(apps){
- const identity=token,project=$("project-select").value,generation=++applicationUseListGeneration,context=applicationUseContextGeneration;
- const current=()=>identity===token&&project===$("project-select").value&&generation===applicationUseListGeneration;
+ const identity=token,connection=identityConnectionGeneration,project=$("project-select").value,generation=++applicationUseListGeneration,context=applicationUseContextGeneration;
+ const current=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&generation===applicationUseListGeneration;
+ const selectable=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&context===applicationUseContextGeneration;
  const rows=[];
  if(applicationUseCurrent(applicationUse)&&!apps.some(summary=>summary.id===applicationUse.appId))clearApplicationUseData(applicationUse);
  for(const summary of apps){
-  // A family hint skips discovery only; opening an instance still fully inspects it.
+  // Family metadata only routes discovery; opening always reauthorizes the selection.
+  if(["NATURAL_PA","NATURAL_PB"].includes(summary.use_family)){
+   let app,reply;
+   try{
+    app=await api(`/api/apps/${summary.id}`);if(!current())return;
+    if(app.id!==summary.id||app.project_id!==project||naturalUseFamily(app)!==summary.use_family)throw Error("VERSION_CONFLICT");
+    reply=await api(`/api/internal/apps/${app.id}/instances`);if(!current())return;
+    for(const instance of reply.items){
+     if(instance.project_id!==project||instance.source_app_id!==app.id)throw Error("VERSION_CONFLICT");
+     const item=row(`${app.name} · ${summary.use_family==="NATURAL_PA"?"P-A 目标生成":"P-B 成功任务提取"} · 定义 ${app.candidate.namespace} · Release ${instance.release_id} · 实例修订 ${instance.revision} · 结果版本 ${instance.data_version} · 适用范围：逐次 TXT/MD 材料 + 已保存 Goal · 受限内部版本，未发布；真实模型关闭，语义 UNKNOWN，新运行人工 PENDING`,async()=>{
+      if(selectable())await openSavedNaturalUse(app.id,instance.id,summary.use_family,selectable);
+     },"使用此自然规范应用");
+     item.dataset.useFamily=summary.use_family;item.dataset.instanceId=instance.id;rows.push(item);
+    }
+    if(!reply.items.length)rows.push(row(`${app.name} · ${summary.use_family==="NATURAL_PA"?"P-A":"P-B"} · ${app.candidate.namespace} · 尚无保存的实例；先打开草案核查并明确保存内部版本。`,async()=>{
+     if(selectable())await openSavedNaturalUse(app.id,null,summary.use_family,selectable);
+    },"打开自然规范草案"));
+   }catch(error){if(!current())return;rows.push(row(`${summary.name} · ${summary.use_family==="NATURAL_PA"?"P-A":"P-B"} 自然规范 · 受限：当前权限、来源或版本不可读取；请重新核查。`));}
+   continue;
+  }
   if(summary.csv_instance_candidate===false){
    if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);
    continue;
@@ -30,12 +55,38 @@ async function refreshApplicationUse(apps){
   for(const instance of reply.items){
    if(instance.project_id!==project||instance.source_app_id!==app.id)throw Error("VERSION_CONFLICT");
    rows.push(row(`${app.name} · 未发布内部版本 · 结果版本 ${instance.data_version} · ${instance.id.slice(0,18)}`,async()=>{
-    if(identity===token&&project===$("project-select").value&&context===applicationUseContextGeneration)await openApplicationUse(app.id,instance.id);
+    if(selectable())await openApplicationUse(app.id,instance.id);
    },"使用此本地实例"));
   }
  }
- if(current())$("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的CSV实例。先在草案中核查、保存内部版本并创建实例；此处不会自动创建或授权。") ]));
+ if(current())$("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。先打开草案核查、保存内部版本并创建实例；此处不会自动创建或授权。") ]));
 }
+async function openSavedNaturalUse(appId,id,family,selectionCurrent=()=>true){
+ const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,project=$("project-select").value;
+ let generation=null,view=null;
+ const current=()=>selectionCurrent()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&project===$("project-select").value&&(generation===null||generation===appSelectionGeneration);
+ try{
+  const opened=await showApp(appId,project,g=>{generation=g;},current,app=>{
+   if(naturalUseFamily(app)!==family)throw Error("VERSION_CONFLICT");
+  });
+  if(!opened||!current())return;
+  view=engineering;
+  if(!view||!engineeringCurrent(view)||view.app!==appId)throw Error("VERSION_CONFLICT");
+  if(id)await showInternalInstance(id,view);
+  if(!current()||!engineeringCurrent(view)||(id&&view.instance?.id!==id))return;
+  $("internal-title").textContent=`使用自然规范应用 · ${family==="NATURAL_PA"?"P-A":"P-B"}`;
+  $("pb-use-panel")?.scrollIntoView?.({block:"start"});
+ }catch(error){if(current())throw error;}
+ finally{
+  // The opening fence lasts through every chained read. Later explicit instance
+  // selections use the original controller's own per-action navigation fences.
+  if(engineering?.selectionCurrent===current){
+   if(current())engineering.selectionCurrent=null;
+   else clearApp();
+  }
+ }
+}
+
 function applicationUseButtons(v){
  if(!applicationUseCurrent(v))return;
  const pending=applicationUseRequests.get(applicationUseKey(v));
