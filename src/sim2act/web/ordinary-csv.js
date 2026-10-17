@@ -62,7 +62,7 @@ async function submitCsvReport(recover=false){
 }
 function csvReportPassed(r){
  const spec=r.contract?.snapshot?.ordinary_csv_report,report=r.result?.task_acceptance;
- return spec?.version==='ordinary-csv-report.v1'&&r.status==='SUCCEEDED'&&r.result?.goal_acceptance==='PASS_CSV_REPORT_CONTRACT'&&r.result.model_requests===0&&
+ return spec?.version==='ordinary-csv-report.v1'&&spec.checker==='csv-report-independent.v1'&&/^[a-f0-9]{64}$/.test(r.contract?.fingerprint)&&/^[a-f0-9]{64}$/.test(report?.contract_fingerprint)&&r.status==='SUCCEEDED'&&r.result?.goal_acceptance==='PASS_CSV_REPORT_CONTRACT'&&r.result.model_requests===0&&
   report?.version===spec.version&&report.checker===spec.checker&&report.contract_fingerprint===r.contract.fingerprint&&report.status==='PASS'&&report.whole_task_accepted===true&&
   report.scope==='EXPLICIT_CSV_REPORT_CONTRACT_ONLY'&&report.general_semantic_acceptance==='NOT_RUN'&&report.owner_acceptance==='PENDING'&&report.formal_publication_enabled===false;
 }

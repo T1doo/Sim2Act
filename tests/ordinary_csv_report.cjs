@@ -75,6 +75,10 @@ async function main(){
  }
  const reply=await rpc({command:'worker',run:rid});assert.equal(reply.status,200);const actual=JSON.parse(reply.text);
  await w.showRun(rid);
+ const noFingerprints=structuredClone(actual.run);delete noFingerprints.contract.fingerprint;delete noFingerprints.result.task_acceptance.contract_fingerprint;
+ check(!w.csvReportPassed(noFingerprints),'pure display predicate refuses paired missing contract fingerprints');
+ const noCheckers=structuredClone(actual.run);delete noCheckers.contract.snapshot.ordinary_csv_report.checker;delete noCheckers.result.task_acceptance.checker;
+ check(!w.csvReportPassed(noCheckers),'pure display predicate refuses paired missing checker versions');
  check($('run-goal-acceptance').textContent.includes('合同 PASS')&&$('run-goal-acceptance').textContent.includes('0模型请求')&&$('run-goal-acceptance').textContent.includes('人工 PENDING'),'independent full contract PASS is visible with zero-model/general/human boundaries');
  check($('run-artifacts')?.textContent.includes(actual.artifact.id),'actual saved artifact is offered inside the same Run');
  const button=label=>[...$('run-artifacts').querySelectorAll('button')].find(b=>b.textContent===label);
