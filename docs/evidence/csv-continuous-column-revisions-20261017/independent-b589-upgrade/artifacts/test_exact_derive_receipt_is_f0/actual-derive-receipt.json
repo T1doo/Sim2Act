@@ -1,0 +1,1555 @@
+{
+  "fixture": "ready(env, prior=False)",
+  "worker_started": false,
+  "model_requests": 0,
+  "actual_original_derive": {
+    "path": "/api/projects/proj_84485e0af7d94d0785b7927cfbfc1e21/apps/app_812dc6965be948c4a51dd2e9ab7a12ad/delivery-graph/derive",
+    "request": {
+      "request_key": "baseline",
+      "expected_candidate_fingerprint": "1a5b1d40d316ccfe31ab4bb659031fd580269e1ceec6bbc171df7b21c9f9149c"
+    },
+    "status": 201,
+    "response": {
+      "namespace": "delivery-graph-apps.v1",
+      "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+      "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+      "runtime_id": "appruntime_8627c37eea994c0c9632e4fc9e5790c6",
+      "candidate_fingerprint": "1a5b1d40d316ccfe31ab4bb659031fd580269e1ceec6bbc171df7b21c9f9149c",
+      "graph_revision": 1,
+      "authorization_revision": 1,
+      "current_authorization_fingerprint": "e82dff8c853c4a58215a96f11ac1b9ae381193e200393c221ffba56fd22398e6",
+      "graph_fingerprint": "00f16e9a16a2e43ec42b2dd2d6c9cc2f02351fc3b620e8cedca7c70750ddd126",
+      "state": "PLANNING_ONLY",
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING",
+      "patch_executed": false,
+      "business_write_performed": false,
+      "publishable": false,
+      "formal_publication_enabled": false,
+      "graph": {
+        "schema_version": "delivery-graph.v1",
+        "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+        "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+        "authorization_revision": 1,
+        "context_fingerprint": "4a13b75775bcb71b8f1e307b1475d4a997f92d608ee423b490717c8ca9be391f",
+        "resource_ids": [
+          "res_341f90834c524632b7f448e7cf451b51"
+        ],
+        "nodes": [
+          {
+            "id": "action_15a2edc429e847c9a2512d9346a2c825",
+            "key": "action:aggregate",
+            "kind": "ACTION",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "action": {
+                "action_id": "action_15a2edc429e847c9a2512d9346a2c825",
+                "allowed_tool_refs": [],
+                "dependencies": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_341f90834c524632b7f448e7cf451b51",
+                    "version": "1"
+                  }
+                ],
+                "effect": "read",
+                "error_contract": [
+                  "INVALID_INPUT",
+                  "PERMISSION_DENIED",
+                  "GRANT_REVOKED"
+                ],
+                "executor": {
+                  "kind": "registered_tool",
+                  "ref": "data.aggregate_csv",
+                  "version": "1"
+                },
+                "idempotency": "read_only",
+                "input_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "resource_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "column"
+                  ],
+                  "type": "object"
+                },
+                "limits": {
+                  "max_output_tokens": 1,
+                  "max_repairs": 0,
+                  "max_requests": 1,
+                  "max_tools": 1,
+                  "max_total_tokens": 1,
+                  "run_seconds": 1
+                },
+                "output_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "resource_id": {
+                      "type": "string"
+                    },
+                    "source_hash": {
+                      "type": "string"
+                    },
+                    "sum": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "column",
+                    "count",
+                    "sum",
+                    "source_hash"
+                  ],
+                  "type": "object"
+                },
+                "permission_requirements": [
+                  {
+                    "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                    "tool_ref": "resource.read"
+                  },
+                  {
+                    "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                    "tool_ref": "data.aggregate_csv"
+                  }
+                ],
+                "postcheck_refs": [
+                  "receipt.readback.v1"
+                ],
+                "preconditions": [],
+                "reconcile_ref": "operation.lookup.v1",
+                "revision": 1,
+                "schema_version": "1.0-draft"
+              },
+              "step": {
+                "binding_id": "csv_sum",
+                "depends_on": [],
+                "inputs": {
+                  "column": {
+                    "field": "column",
+                    "ref": null,
+                    "source": "input"
+                  },
+                  "resource_id": {
+                    "field": "resource_id",
+                    "ref": "source",
+                    "source": "data"
+                  }
+                },
+                "step_id": "aggregate"
+              }
+            },
+            "content_fingerprint": "d3a1fa9809e1094db7bb1194b78fba65510806d5241fe6297bcea89f6d9e191a"
+          },
+          {
+            "id": "node_ffd935b4a55b44438d37bc289418cc50",
+            "key": "artifact:column",
+            "kind": "ARTIFACT",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "column",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "column",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "63e9262462e69a702e2aee54bc2dd7fdee6125da0ffe466c231face8668dae5b"
+          },
+          {
+            "id": "node_48aeec3476a841b084e8d1c882c3b400",
+            "key": "artifact:count",
+            "kind": "ARTIFACT",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "count",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "count",
+              "schema": {
+                "type": "integer"
+              }
+            },
+            "content_fingerprint": "f28aca7580cef5be91702bcca4935b7f1a3b87980390c580c08a889dcae79722"
+          },
+          {
+            "id": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+            "key": "artifact:resource_id",
+            "kind": "ARTIFACT",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "resource_id",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "resource_id",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "409b9e178f9b55d58ba5b6d640203316aa1b9268e9b94fd9d41ed52e4bb2aafe"
+          },
+          {
+            "id": "node_c2ea4cc96f524887b04407227053b8fa",
+            "key": "artifact:source_hash",
+            "kind": "ARTIFACT",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "source_hash",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "source_hash",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "aea6609f61d2d07aa64fcaed3b138befeb066fc837ead993cae1ad32e06abe46"
+          },
+          {
+            "id": "node_4d3308709f5d4a76b135753c7bf87345",
+            "key": "artifact:sum",
+            "kind": "ARTIFACT",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "sum",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "sum",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "210365dd28e8697311cef2918be572fd17226bb73a04333f8d63f13d0f5a23c0"
+          },
+          {
+            "id": "node_c081670179f14187bc21e63dc11e0b9b",
+            "key": "check:receipt.readback.v1",
+            "kind": "CHECK",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "check_ref": "receipt.readback.v1",
+              "source_version": {
+                "content_fingerprint": "07dad5c7e1eeba32405a7385517229f83c29ef86900fe250c71bfd010dc4f348",
+                "revision": 1
+              }
+            },
+            "content_fingerprint": "1f2e2342daaba50e19ad2fb6a37306be982bc96c5c5820cdad7b7524b6813536"
+          },
+          {
+            "id": "goal_848212f882154f2588d11fa5469e8836",
+            "key": "goal:goal_848212f882154f2588d11fa5469e8836",
+            "kind": "GOAL",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "goal_ref": "goal_848212f882154f2588d11fa5469e8836",
+              "source_version": {
+                "content_fingerprint": "2af1b3fea7d810f70804bddbe2d3f3bb92a3214815d184684a9933edd681429a",
+                "revision": 1
+              }
+            },
+            "content_fingerprint": "76bb79633698ed1081bbefd2b51ed59574a0857aaad00c0e4c3dcd4b2a38e3a8"
+          },
+          {
+            "id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "key": "manifest:app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "kind": "MANIFEST",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "action_bindings": [
+                {
+                  "action_id": "action_15a2edc429e847c9a2512d9346a2c825",
+                  "binding_id": "csv_sum",
+                  "revision": 1
+                }
+              ],
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "data_bindings": [
+                {
+                  "binding_id": "source",
+                  "resource_ref": "res_341f90834c524632b7f448e7cf451b51"
+                }
+              ],
+              "data_schema_version": 1,
+              "dependency_lock": [
+                {
+                  "kind": "resource",
+                  "ref": "res_341f90834c524632b7f448e7cf451b51",
+                  "version": "1"
+                },
+                {
+                  "kind": "tool",
+                  "ref": "data.aggregate_csv",
+                  "version": "1"
+                },
+                {
+                  "kind": "check",
+                  "ref": "receipt.readback.v1",
+                  "version": "1"
+                }
+              ],
+              "goal_ref": "goal_848212f882154f2588d11fa5469e8836",
+              "input_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "column"
+                ],
+                "type": "object"
+              },
+              "origin": "goal",
+              "output_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer"
+                  },
+                  "resource_id": {
+                    "type": "string"
+                  },
+                  "source_hash": {
+                    "type": "string"
+                  },
+                  "sum": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "resource_id",
+                  "column",
+                  "count",
+                  "sum",
+                  "source_hash"
+                ],
+                "type": "object"
+              },
+              "outputs": {
+                "column": {
+                  "field": "column",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "count": {
+                  "field": "count",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "resource_id": {
+                  "field": "resource_id",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "source_hash": {
+                  "field": "source_hash",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "sum": {
+                  "field": "sum",
+                  "ref": "aggregate",
+                  "source": "step"
+                }
+              },
+              "permission_requirements": [
+                {
+                  "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                  "tool_ref": "resource.read"
+                },
+                {
+                  "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                  "tool_ref": "data.aggregate_csv"
+                }
+              ],
+              "revision": 1,
+              "runtime_identity_requirements": {
+                "mode": "user_and_app_intersection"
+              },
+              "runtime_limits": {
+                "max_output_tokens": 1,
+                "max_repairs": 0,
+                "max_requests": 1,
+                "max_tools": 1,
+                "max_total_tokens": 1,
+                "run_seconds": 1
+              },
+              "schema_version": "1.0-draft",
+              "source_run_ref": null,
+              "validation_suite_ref": "receipt.readback.v1",
+              "views": [
+                {
+                  "component_ref": "text",
+                  "output_field": "sum"
+                }
+              ],
+              "workflow": [
+                {
+                  "binding_id": "csv_sum",
+                  "depends_on": [],
+                  "inputs": {
+                    "column": {
+                      "field": "column",
+                      "ref": null,
+                      "source": "input"
+                    },
+                    "resource_id": {
+                      "field": "resource_id",
+                      "ref": "source",
+                      "source": "data"
+                    }
+                  },
+                  "step_id": "aggregate"
+                }
+              ]
+            },
+            "content_fingerprint": "6fcbbcacba3b98a0a47fdf207f30b1380246fc7702267458f38ce019ae292304"
+          },
+          {
+            "id": "node_04b8acc9bfc7418e893fc1d3e3fc4ef1",
+            "key": "rule:check:receipt.readback.v1",
+            "kind": "REQUIREMENT",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "source_version": {
+                "content_fingerprint": "972b2f64ebf9a6e6fe794959cedd5fcc864e1883467f8f26494383571b0971ee",
+                "revision": 1
+              },
+              "version": "1"
+            },
+            "content_fingerprint": "e5450903d7ce907c8537d65d3e4609016443179af286896c4ba7cff265839af7"
+          },
+          {
+            "id": "node_1d0beee5fdba48c7aa446217fe14b2a6",
+            "key": "rule:tool:data.aggregate_csv",
+            "kind": "REQUIREMENT",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "kind": "tool",
+              "ref": "data.aggregate_csv",
+              "source_version": {
+                "content_fingerprint": "b32df8a7f0b0a896b386e3921d3550c439a3ffa51894716447e26f96ee7a35c5",
+                "revision": 1
+              },
+              "version": "1"
+            },
+            "content_fingerprint": "9843f4245180de5cc418e2e6e1f9be759ee4366a7c502965112d8cfbbc72fc1f"
+          },
+          {
+            "id": "res_341f90834c524632b7f448e7cf451b51",
+            "key": "source:res_341f90834c524632b7f448e7cf451b51",
+            "kind": "SOURCE",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+              "source_version": {
+                "content_fingerprint": "4d9db02dc6a66b27e34c6e1153b4e4984c011f418b4562e176571e1654b8ccc3",
+                "revision": 1
+              }
+            },
+            "content_fingerprint": "e22c2f7c0ea8aa92f2dd9091bd5f1ae2ad18ef7e0c81fa0c5e6efdc7f4042ac0"
+          },
+          {
+            "id": "node_b35d50c9d1eb47099bde139062452a7c",
+            "key": "view:text:sum",
+            "kind": "VIEW",
+            "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+            "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "component_ref": "text",
+              "output_field": "sum"
+            },
+            "content_fingerprint": "99511701c2545c1b44d3e56b4883ca1d50c078f673bb93bceb9309eca132557c"
+          }
+        ],
+        "edges": [
+          {
+            "upstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_04b8acc9bfc7418e893fc1d3e3fc4ef1",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "downstream": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_1d0beee5fdba48c7aa446217fe14b2a6",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_ffd935b4a55b44438d37bc289418cc50",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_4d3308709f5d4a76b135753c7bf87345",
+            "downstream": "node_b35d50c9d1eb47099bde139062452a7c",
+            "type": "PRESENTATION",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "downstream": "node_48aeec3476a841b084e8d1c882c3b400",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_48aeec3476a841b084e8d1c882c3b400",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "goal_848212f882154f2588d11fa5469e8836",
+            "downstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "type": "RULE",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "res_341f90834c524632b7f448e7cf451b51",
+            "downstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "downstream": "node_c2ea4cc96f524887b04407227053b8fa",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "downstream": "node_ffd935b4a55b44438d37bc289418cc50",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_1d0beee5fdba48c7aa446217fe14b2a6",
+            "downstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "type": "RULE",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "res_341f90834c524632b7f448e7cf451b51",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_4d3308709f5d4a76b135753c7bf87345",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "goal_848212f882154f2588d11fa5469e8836",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_48aeec3476a841b084e8d1c882c3b400",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_c2ea4cc96f524887b04407227053b8fa",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_b35d50c9d1eb47099bde139062452a7c",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_4d3308709f5d4a76b135753c7bf87345",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_ffd935b4a55b44438d37bc289418cc50",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_c2ea4cc96f524887b04407227053b8fa",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "downstream": "node_4d3308709f5d4a76b135753c7bf87345",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_04b8acc9bfc7418e893fc1d3e3fc4ef1",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "RULE",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_b35d50c9d1eb47099bde139062452a7c",
+            "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+            "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          }
+        ],
+        "unknown_dependencies": [
+          {
+            "node_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+            "scope": "APP",
+            "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+          }
+        ],
+        "graph_fingerprint": "00f16e9a16a2e43ec42b2dd2d6c9cc2f02351fc3b620e8cedca7c70750ddd126"
+      },
+      "source_versions": {
+        "check:receipt.readback.v1": {
+          "revision": 1,
+          "content_fingerprint": "07dad5c7e1eeba32405a7385517229f83c29ef86900fe250c71bfd010dc4f348"
+        },
+        "goal:goal_848212f882154f2588d11fa5469e8836": {
+          "revision": 1,
+          "content_fingerprint": "2af1b3fea7d810f70804bddbe2d3f3bb92a3214815d184684a9933edd681429a"
+        },
+        "rule:check:receipt.readback.v1": {
+          "revision": 1,
+          "content_fingerprint": "972b2f64ebf9a6e6fe794959cedd5fcc864e1883467f8f26494383571b0971ee"
+        },
+        "rule:tool:data.aggregate_csv": {
+          "revision": 1,
+          "content_fingerprint": "b32df8a7f0b0a896b386e3921d3550c439a3ffa51894716447e26f96ee7a35c5"
+        },
+        "source:res_341f90834c524632b7f448e7cf451b51": {
+          "revision": 1,
+          "content_fingerprint": "4d9db02dc6a66b27e34c6e1153b4e4984c011f418b4562e176571e1654b8ccc3"
+        }
+      },
+      "cached": false
+    }
+  },
+  "exact_accepted_key": {
+    "path": "/api/projects/proj_84485e0af7d94d0785b7927cfbfc1e21/apps/app_812dc6965be948c4a51dd2e9ab7a12ad/delivery-graph/derive-requests/baseline",
+    "status": 200,
+    "body": {
+      "namespace": "delivery-graph-derive-request.v1",
+      "principal_id": "user_067e3cf36bb24861bb37a4bd108b4a05",
+      "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+      "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+      "request_key": "baseline",
+      "request": {
+        "expected_candidate_fingerprint": "1a5b1d40d316ccfe31ab4bb659031fd580269e1ceec6bbc171df7b21c9f9149c",
+        "request_key": "baseline"
+      },
+      "request_fingerprint": "2f6f3921e19cbbaacf4465b8163b84aea369d95da6a5c25f91ac4f8665e258da",
+      "response": {
+        "namespace": "delivery-graph-apps.v1",
+        "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+        "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+        "runtime_id": "appruntime_8627c37eea994c0c9632e4fc9e5790c6",
+        "candidate_fingerprint": "1a5b1d40d316ccfe31ab4bb659031fd580269e1ceec6bbc171df7b21c9f9149c",
+        "graph_revision": 1,
+        "authorization_revision": 1,
+        "current_authorization_fingerprint": "e82dff8c853c4a58215a96f11ac1b9ae381193e200393c221ffba56fd22398e6",
+        "graph_fingerprint": "00f16e9a16a2e43ec42b2dd2d6c9cc2f02351fc3b620e8cedca7c70750ddd126",
+        "state": "PLANNING_ONLY",
+        "semantic_status": "UNKNOWN",
+        "owner_acceptance": "PENDING",
+        "patch_executed": false,
+        "business_write_performed": false,
+        "publishable": false,
+        "formal_publication_enabled": false,
+        "graph": {
+          "schema_version": "delivery-graph.v1",
+          "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+          "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+          "authorization_revision": 1,
+          "context_fingerprint": "4a13b75775bcb71b8f1e307b1475d4a997f92d608ee423b490717c8ca9be391f",
+          "resource_ids": [
+            "res_341f90834c524632b7f448e7cf451b51"
+          ],
+          "nodes": [
+            {
+              "id": "action_15a2edc429e847c9a2512d9346a2c825",
+              "key": "action:aggregate",
+              "kind": "ACTION",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action": {
+                  "action_id": "action_15a2edc429e847c9a2512d9346a2c825",
+                  "allowed_tool_refs": [],
+                  "dependencies": [
+                    {
+                      "kind": "resource",
+                      "ref": "res_341f90834c524632b7f448e7cf451b51",
+                      "version": "1"
+                    }
+                  ],
+                  "effect": "read",
+                  "error_contract": [
+                    "INVALID_INPUT",
+                    "PERMISSION_DENIED",
+                    "GRANT_REVOKED"
+                  ],
+                  "executor": {
+                    "kind": "registered_tool",
+                    "ref": "data.aggregate_csv",
+                    "version": "1"
+                  },
+                  "idempotency": "read_only",
+                  "input_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "column": {
+                        "type": "string"
+                      },
+                      "resource_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "column"
+                    ],
+                    "type": "object"
+                  },
+                  "limits": {
+                    "max_output_tokens": 1,
+                    "max_repairs": 0,
+                    "max_requests": 1,
+                    "max_tools": 1,
+                    "max_total_tokens": 1,
+                    "run_seconds": 1
+                  },
+                  "output_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "column": {
+                        "type": "string"
+                      },
+                      "count": {
+                        "type": "integer"
+                      },
+                      "resource_id": {
+                        "type": "string"
+                      },
+                      "source_hash": {
+                        "type": "string"
+                      },
+                      "sum": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "column",
+                      "count",
+                      "sum",
+                      "source_hash"
+                    ],
+                    "type": "object"
+                  },
+                  "permission_requirements": [
+                    {
+                      "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                      "tool_ref": "resource.read"
+                    },
+                    {
+                      "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                      "tool_ref": "data.aggregate_csv"
+                    }
+                  ],
+                  "postcheck_refs": [
+                    "receipt.readback.v1"
+                  ],
+                  "preconditions": [],
+                  "reconcile_ref": "operation.lookup.v1",
+                  "revision": 1,
+                  "schema_version": "1.0-draft"
+                },
+                "step": {
+                  "binding_id": "csv_sum",
+                  "depends_on": [],
+                  "inputs": {
+                    "column": {
+                      "field": "column",
+                      "ref": null,
+                      "source": "input"
+                    },
+                    "resource_id": {
+                      "field": "resource_id",
+                      "ref": "source",
+                      "source": "data"
+                    }
+                  },
+                  "step_id": "aggregate"
+                }
+              },
+              "content_fingerprint": "d3a1fa9809e1094db7bb1194b78fba65510806d5241fe6297bcea89f6d9e191a"
+            },
+            {
+              "id": "node_ffd935b4a55b44438d37bc289418cc50",
+              "key": "artifact:column",
+              "kind": "ARTIFACT",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "column",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "column",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "63e9262462e69a702e2aee54bc2dd7fdee6125da0ffe466c231face8668dae5b"
+            },
+            {
+              "id": "node_48aeec3476a841b084e8d1c882c3b400",
+              "key": "artifact:count",
+              "kind": "ARTIFACT",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "count",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "count",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "content_fingerprint": "f28aca7580cef5be91702bcca4935b7f1a3b87980390c580c08a889dcae79722"
+            },
+            {
+              "id": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+              "key": "artifact:resource_id",
+              "kind": "ARTIFACT",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "resource_id",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "resource_id",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "409b9e178f9b55d58ba5b6d640203316aa1b9268e9b94fd9d41ed52e4bb2aafe"
+            },
+            {
+              "id": "node_c2ea4cc96f524887b04407227053b8fa",
+              "key": "artifact:source_hash",
+              "kind": "ARTIFACT",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "source_hash",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "source_hash",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "aea6609f61d2d07aa64fcaed3b138befeb066fc837ead993cae1ad32e06abe46"
+            },
+            {
+              "id": "node_4d3308709f5d4a76b135753c7bf87345",
+              "key": "artifact:sum",
+              "kind": "ARTIFACT",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "sum",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "sum",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "210365dd28e8697311cef2918be572fd17226bb73a04333f8d63f13d0f5a23c0"
+            },
+            {
+              "id": "node_c081670179f14187bc21e63dc11e0b9b",
+              "key": "check:receipt.readback.v1",
+              "kind": "CHECK",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "check_ref": "receipt.readback.v1",
+                "source_version": {
+                  "content_fingerprint": "07dad5c7e1eeba32405a7385517229f83c29ef86900fe250c71bfd010dc4f348",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "1f2e2342daaba50e19ad2fb6a37306be982bc96c5c5820cdad7b7524b6813536"
+            },
+            {
+              "id": "goal_848212f882154f2588d11fa5469e8836",
+              "key": "goal:goal_848212f882154f2588d11fa5469e8836",
+              "kind": "GOAL",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "goal_ref": "goal_848212f882154f2588d11fa5469e8836",
+                "source_version": {
+                  "content_fingerprint": "2af1b3fea7d810f70804bddbe2d3f3bb92a3214815d184684a9933edd681429a",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "76bb79633698ed1081bbefd2b51ed59574a0857aaad00c0e4c3dcd4b2a38e3a8"
+            },
+            {
+              "id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "key": "manifest:app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "kind": "MANIFEST",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action_bindings": [
+                  {
+                    "action_id": "action_15a2edc429e847c9a2512d9346a2c825",
+                    "binding_id": "csv_sum",
+                    "revision": 1
+                  }
+                ],
+                "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+                "data_bindings": [
+                  {
+                    "binding_id": "source",
+                    "resource_ref": "res_341f90834c524632b7f448e7cf451b51"
+                  }
+                ],
+                "data_schema_version": 1,
+                "dependency_lock": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_341f90834c524632b7f448e7cf451b51",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "data.aggregate_csv",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "receipt.readback.v1",
+                    "version": "1"
+                  }
+                ],
+                "goal_ref": "goal_848212f882154f2588d11fa5469e8836",
+                "input_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "column"
+                  ],
+                  "type": "object"
+                },
+                "origin": "goal",
+                "output_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "resource_id": {
+                      "type": "string"
+                    },
+                    "source_hash": {
+                      "type": "string"
+                    },
+                    "sum": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "column",
+                    "count",
+                    "sum",
+                    "source_hash"
+                  ],
+                  "type": "object"
+                },
+                "outputs": {
+                  "column": {
+                    "field": "column",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "count": {
+                    "field": "count",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "resource_id": {
+                    "field": "resource_id",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "source_hash": {
+                    "field": "source_hash",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "sum": {
+                    "field": "sum",
+                    "ref": "aggregate",
+                    "source": "step"
+                  }
+                },
+                "permission_requirements": [
+                  {
+                    "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                    "tool_ref": "resource.read"
+                  },
+                  {
+                    "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                    "tool_ref": "data.aggregate_csv"
+                  }
+                ],
+                "revision": 1,
+                "runtime_identity_requirements": {
+                  "mode": "user_and_app_intersection"
+                },
+                "runtime_limits": {
+                  "max_output_tokens": 1,
+                  "max_repairs": 0,
+                  "max_requests": 1,
+                  "max_tools": 1,
+                  "max_total_tokens": 1,
+                  "run_seconds": 1
+                },
+                "schema_version": "1.0-draft",
+                "source_run_ref": null,
+                "validation_suite_ref": "receipt.readback.v1",
+                "views": [
+                  {
+                    "component_ref": "text",
+                    "output_field": "sum"
+                  }
+                ],
+                "workflow": [
+                  {
+                    "binding_id": "csv_sum",
+                    "depends_on": [],
+                    "inputs": {
+                      "column": {
+                        "field": "column",
+                        "ref": null,
+                        "source": "input"
+                      },
+                      "resource_id": {
+                        "field": "resource_id",
+                        "ref": "source",
+                        "source": "data"
+                      }
+                    },
+                    "step_id": "aggregate"
+                  }
+                ]
+              },
+              "content_fingerprint": "6fcbbcacba3b98a0a47fdf207f30b1380246fc7702267458f38ce019ae292304"
+            },
+            {
+              "id": "node_04b8acc9bfc7418e893fc1d3e3fc4ef1",
+              "key": "rule:check:receipt.readback.v1",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "check",
+                "ref": "receipt.readback.v1",
+                "source_version": {
+                  "content_fingerprint": "972b2f64ebf9a6e6fe794959cedd5fcc864e1883467f8f26494383571b0971ee",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "e5450903d7ce907c8537d65d3e4609016443179af286896c4ba7cff265839af7"
+            },
+            {
+              "id": "node_1d0beee5fdba48c7aa446217fe14b2a6",
+              "key": "rule:tool:data.aggregate_csv",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "tool",
+                "ref": "data.aggregate_csv",
+                "source_version": {
+                  "content_fingerprint": "b32df8a7f0b0a896b386e3921d3550c439a3ffa51894716447e26f96ee7a35c5",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "9843f4245180de5cc418e2e6e1f9be759ee4366a7c502965112d8cfbbc72fc1f"
+            },
+            {
+              "id": "res_341f90834c524632b7f448e7cf451b51",
+              "key": "source:res_341f90834c524632b7f448e7cf451b51",
+              "kind": "SOURCE",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "resource_ref": "res_341f90834c524632b7f448e7cf451b51",
+                "source_version": {
+                  "content_fingerprint": "4d9db02dc6a66b27e34c6e1153b4e4984c011f418b4562e176571e1654b8ccc3",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "e22c2f7c0ea8aa92f2dd9091bd5f1ae2ad18ef7e0c81fa0c5e6efdc7f4042ac0"
+            },
+            {
+              "id": "node_b35d50c9d1eb47099bde139062452a7c",
+              "key": "view:text:sum",
+              "kind": "VIEW",
+              "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+              "app_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "component_ref": "text",
+                "output_field": "sum"
+              },
+              "content_fingerprint": "99511701c2545c1b44d3e56b4883ca1d50c078f673bb93bceb9309eca132557c"
+            }
+          ],
+          "edges": [
+            {
+              "upstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_04b8acc9bfc7418e893fc1d3e3fc4ef1",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "downstream": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_1d0beee5fdba48c7aa446217fe14b2a6",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_ffd935b4a55b44438d37bc289418cc50",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_4d3308709f5d4a76b135753c7bf87345",
+              "downstream": "node_b35d50c9d1eb47099bde139062452a7c",
+              "type": "PRESENTATION",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "downstream": "node_48aeec3476a841b084e8d1c882c3b400",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_48aeec3476a841b084e8d1c882c3b400",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_848212f882154f2588d11fa5469e8836",
+              "downstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_341f90834c524632b7f448e7cf451b51",
+              "downstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "downstream": "node_c2ea4cc96f524887b04407227053b8fa",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "downstream": "node_ffd935b4a55b44438d37bc289418cc50",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_1d0beee5fdba48c7aa446217fe14b2a6",
+              "downstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_341f90834c524632b7f448e7cf451b51",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_4d3308709f5d4a76b135753c7bf87345",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_848212f882154f2588d11fa5469e8836",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_48aeec3476a841b084e8d1c882c3b400",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_c2ea4cc96f524887b04407227053b8fa",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_b35d50c9d1eb47099bde139062452a7c",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_f9fd7eb63a6e462faffc7d2906aa600d",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_4d3308709f5d4a76b135753c7bf87345",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_ffd935b4a55b44438d37bc289418cc50",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_c2ea4cc96f524887b04407227053b8fa",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "downstream": "node_4d3308709f5d4a76b135753c7bf87345",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_04b8acc9bfc7418e893fc1d3e3fc4ef1",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_b35d50c9d1eb47099bde139062452a7c",
+              "downstream": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_15a2edc429e847c9a2512d9346a2c825",
+              "downstream": "node_c081670179f14187bc21e63dc11e0b9b",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            }
+          ],
+          "unknown_dependencies": [
+            {
+              "node_id": "app_812dc6965be948c4a51dd2e9ab7a12ad",
+              "scope": "APP",
+              "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+            }
+          ],
+          "graph_fingerprint": "00f16e9a16a2e43ec42b2dd2d6c9cc2f02351fc3b620e8cedca7c70750ddd126"
+        },
+        "source_versions": {
+          "check:receipt.readback.v1": {
+            "revision": 1,
+            "content_fingerprint": "07dad5c7e1eeba32405a7385517229f83c29ef86900fe250c71bfd010dc4f348"
+          },
+          "goal:goal_848212f882154f2588d11fa5469e8836": {
+            "revision": 1,
+            "content_fingerprint": "2af1b3fea7d810f70804bddbe2d3f3bb92a3214815d184684a9933edd681429a"
+          },
+          "rule:check:receipt.readback.v1": {
+            "revision": 1,
+            "content_fingerprint": "972b2f64ebf9a6e6fe794959cedd5fcc864e1883467f8f26494383571b0971ee"
+          },
+          "rule:tool:data.aggregate_csv": {
+            "revision": 1,
+            "content_fingerprint": "b32df8a7f0b0a896b386e3921d3550c439a3ffa51894716447e26f96ee7a35c5"
+          },
+          "source:res_341f90834c524632b7f448e7cf451b51": {
+            "revision": 1,
+            "content_fingerprint": "4d9db02dc6a66b27e34c6e1153b4e4984c011f418b4562e176571e1654b8ccc3"
+          }
+        }
+      }
+    },
+    "private_journal_body_selects": [
+      {
+        "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+        "parameters": "('app_812dc6965be948c4a51dd2e9ab7a12ad', 'user_067e3cf36bb24861bb37a4bd108b4a05', 'derive', 'baseline')"
+      },
+      {
+        "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+        "parameters": "('app_812dc6965be948c4a51dd2e9ab7a12ad', 'user_067e3cf36bb24861bb37a4bd108b4a05', 'derive', 'baseline')"
+      }
+    ],
+    "database_before_fingerprint": "2551abbbca063074acd3a13ca7ca943fa104d821d826355f56d52bce6c6a7573",
+    "database_after_fingerprint": "2551abbbca063074acd3a13ca7ca943fa104d821d826355f56d52bce6c6a7573"
+  },
+  "missing_original_key": {
+    "path": "/api/projects/proj_84485e0af7d94d0785b7927cfbfc1e21/apps/app_812dc6965be948c4a51dd2e9ab7a12ad/delivery-graph/derive-requests/never-accepted-key",
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "VERSION_CONFLICT",
+        "message": "Original derive receipt is not available",
+        "safe_retry": false,
+        "effect_known": true,
+        "user_action": "Check status, configuration and permissions"
+      }
+    },
+    "private_journal_body_selects": [
+      {
+        "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+        "parameters": "('app_812dc6965be948c4a51dd2e9ab7a12ad', 'user_067e3cf36bb24861bb37a4bd108b4a05', 'derive', 'baseline')"
+      },
+      {
+        "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+        "parameters": "('app_812dc6965be948c4a51dd2e9ab7a12ad', 'user_067e3cf36bb24861bb37a4bd108b4a05', 'derive', 'never-accepted-key')"
+      }
+    ],
+    "database_before_fingerprint": "2551abbbca063074acd3a13ca7ca943fa104d821d826355f56d52bce6c6a7573",
+    "database_after_fingerprint": "2551abbbca063074acd3a13ca7ca943fa104d821d826355f56d52bce6c6a7573"
+  },
+  "explicit_exact_grant_revocation": {
+    "grant": {
+      "id": "grant_705f61c15d484e53bf0dccbd37adc85d",
+      "principal_id": "appruntime_8627c37eea994c0c9632e4fc9e5790c6",
+      "project_id": "proj_84485e0af7d94d0785b7927cfbfc1e21",
+      "resource_id": "res_341f90834c524632b7f448e7cf451b51",
+      "tool_ref": "resource.read",
+      "expires_at": 1792331843.7509117,
+      "revision": 1,
+      "revoked": false
+    },
+    "status": 200,
+    "body": {
+      "status": "REVOKED"
+    }
+  },
+  "revoked_current_authority": {
+    "path": "/api/projects/proj_84485e0af7d94d0785b7927cfbfc1e21/apps/app_812dc6965be948c4a51dd2e9ab7a12ad/delivery-graph/derive-requests/baseline",
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "GRANT_REVOKED",
+        "message": "GRANT_REVOKED",
+        "safe_retry": false,
+        "effect_known": true,
+        "user_action": "Check status, configuration and permissions"
+      }
+    },
+    "private_journal_body_selects": [],
+    "database_before_fingerprint": "b6d95c3782e8b0e578689f061287f9bb20e6b4237bd231a56ba121de0c8f1ed4",
+    "database_after_fingerprint": "b6d95c3782e8b0e578689f061287f9bb20e6b4237bd231a56ba121de0c8f1ed4"
+  }
+}
