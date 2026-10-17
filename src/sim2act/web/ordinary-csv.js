@@ -1,6 +1,6 @@
 // Explicit finite task; arbitrary ordinary Goal drafts remain independent.
 const csvReportIntents=new Map(),csvReportConfirmations=new Map();
-let csvReportMaterials=[],csvReportGeneration=0,csvReportOptionsReady=false;
+let csvReportMaterials=[],csvReportGeneration=0,csvReportOptionsReady=false,csvReportContractView=null;
 function csvReportIdentity(){return JSON.stringify([token,identityConnectionGeneration,$('project-select').value,projectSelectionGeneration]);}
 function csvReportOwner(){return JSON.stringify([token,$('project-select').value]);}
 function csvReportCurrent(scope){return scope===csvReportIdentity()&&!$('projects').hidden;}
@@ -66,27 +66,53 @@ function csvReportPassed(r){
   report?.version===spec.version&&report.checker===spec.checker&&report.contract_fingerprint===r.contract.fingerprint&&report.status==='PASS'&&report.whole_task_accepted===true&&
   report.scope==='EXPLICIT_CSV_REPORT_CONTRACT_ONLY'&&report.general_semantic_acceptance==='NOT_RUN'&&report.owner_acceptance==='PENDING'&&report.formal_publication_enabled===false;
 }
+function csvReportContractOwner(id){return JSON.stringify([csvReportIdentity(),runUserSelectionGeneration,id]);}
+function clearCsvReportContract(){csvReportContractView=null;}
+function resumeCsvReportContract(){
+ const previous=csvReportContractView;
+ if(!previous||activeRun!==previous.run||previous.owner!==csvReportContractOwner(previous.run))return;
+ const owner=previous.owner,id=previous.run;
+ $('csv-report-contract')?.remove();
+ renderCsvReportContract(previous.result,id,()=>activeRun===id&&owner===csvReportContractOwner(id));
+}
 function renderCsvReportContract(r,id,current){
- const spec=r.contract?.snapshot?.ordinary_csv_report;if(!spec)return;
- const scope=csvReportIdentity(),workspace=workspaceSelectionGeneration,userSelection=runUserSelectionGeneration;
- const ownerCurrent=()=>activeRun===id&&csvReportCurrent(scope)&&workspace===workspaceSelectionGeneration&&userSelection===runUserSelectionGeneration;
- const stillCurrent=()=>current()&&csvReportCurrent(scope)&&workspace===workspaceSelectionGeneration&&userSelection===runUserSelectionGeneration;
+ const spec=r.contract?.snapshot?.ordinary_csv_report;if(!spec){clearCsvReportContract();return;}
+ const scope=csvReportIdentity(),workspace=workspaceSelectionGeneration,owner=csvReportContractOwner(id),viewScope=owner+':'+workspace;
+ const sameView=csvReportContractView?.scope===viewScope;
+ const view=sameView?csvReportContractView:{scope:viewScope,owner,run:id,ackGeneration:0};csvReportContractView=view;view.result=r;
+ const ownerCurrent=()=>csvReportContractView===view&&activeRun===id&&csvReportCurrent(scope)&&workspace===workspaceSelectionGeneration&&owner===csvReportContractOwner(id);
+ const stillCurrent=()=>current()&&ownerCurrent();
  const section=document.createElement('section');section.id='csv-report-contract';
  const heading=document.createElement('h3');heading.textContent='本次完整事前合同（只读）';section.append(heading);
- const proof=document.createElement('pre');proof.id='csv-report-proof';proof.textContent=JSON.stringify({run:id,version:r.version,contract_fingerprint:r.contract.fingerprint,
+ const proof=document.createElement('pre');proof.id='csv-report-proof';proof.textContent=JSON.stringify({run:id,run_version:r.version,contract_fingerprint:r.contract.fingerprint,
   deadline:r.ordinary_csv?.deadline,rules:r.ordinary_csv?.rules,...spec},null,2);section.append(proof);
  section.append(row(r.ordinary_csv?.confirmed?'此精确合同已确认；通用语义 NOT_RUN，人工 PENDING。':'以下为冻结报告预览，尚未保存成果。确认前不会执行工具或调用模型。'));
  const preview=document.createElement('pre');preview.id='csv-report-preview';preview.textContent=spec.report_text;section.append(preview);
  if(r.status==='WAITING_APPROVAL'&&!r.ordinary_csv?.confirmed){
   const key=JSON.stringify([token,$('project-select').value,id]);let entry=csvReportConfirmations.get(key);
   if(!entry){entry={body:{version:r.version,contract_fingerprint:r.contract.fingerprint,request_key:crypto.randomUUID()},state:'ready',ack:false};csvReportConfirmations.set(key,entry);}
-  const label=document.createElement('label'),ack=document.createElement('input');ack.type='checkbox';ack.id='csv-report-ack';ack.checked=entry.ack;
+  if(!sameView&&entry.state==='ready'){entry.ack=false;entry.message='请核对当前完整合同并重新明确勾选。';}
+  const label=document.createElement('label'),ack=document.createElement('input');ack.type='checkbox';ack.id='csv-report-ack';ack.checked=sameView&&entry.ack;
   label.append(ack,document.createTextNode('已核对来源版本/hash、列与数值规则、记录数、完整MD及保存回读要求，明确执行此合同。'));
   const button=document.createElement('button');button.id='csv-report-confirm';button.type='button';
   const status=document.createElement('p');status.id='csv-report-confirm-status';status.setAttribute('role','status');
   const render=()=>{ack.disabled=entry.state==='sending'||entry.state==='unknown';button.disabled=!entry.ack||entry.state==='sending'||entry.state==='accepted'||entry.state==='rejected';button.textContent=entry.state==='unknown'?'恢复同一确认的回执':'确认此合同并提交后台执行';status.textContent=entry.message||'尚未确认执行';};
   entry.renderCurrent=()=>{if(stillCurrent())render();};
-  ack.onchange=()=>{if(!stillCurrent()||ack.disabled)return;entry.ack=ack.checked;render();};
+  ack.onchange=safe(async()=>{
+   if(!stillCurrent()||ack.disabled)return;
+   const generation=++view.ackGeneration;entry.ack=false;render();if(!ack.checked)return;
+   entry.message='正在重新核验原Run的完整合同…';render();
+   try{
+    const fresh=await api(`/api/runs/${id}`);
+    if(!stillCurrent()||generation!==view.ackGeneration||!ack.checked)return;
+    if(fresh?.id!==id||fresh.status!=='WAITING_APPROVAL'||fresh.version!==entry.body.version||fresh.ordinary_csv?.confirmed!==false||fresh.contract?.fingerprint!==entry.body.contract_fingerprint||JSON.stringify(fresh.contract?.snapshot)!==JSON.stringify(r.contract.snapshot))throw Error('合同状态已改变；请重新读取完整合同后核对。');
+    entry.ack=true;entry.message='完整合同回读一致；可明确提交本次确认。';
+   }catch(error){
+    if(!stillCurrent()||generation!==view.ackGeneration)return;
+    ack.checked=false;entry.ack=false;entry.message=error.message;
+    if(error.httpStatus===403){clearRunDetail();activeRun=null;$('result').append(row('原Run读取授权不可用，已清除合同；未发送确认。'));return;}
+   }finally{if(stillCurrent()&&generation===view.ackGeneration)render();}
+  });
   button.onclick=safe(async()=>{
    if(!stillCurrent()||!entry.ack||['sending','accepted','rejected'].includes(entry.state))return;
    entry.state='sending';entry.message='正在提交本次明确确认…';render();
@@ -96,7 +122,10 @@ function renderCsvReportContract(r,id,current){
     entry.state='accepted';entry.message='合同已确认；只运行原有工具，0模型请求。';if(ownerCurrent())await showRun(id,false,ownerCurrent);
    }catch(error){entry.state=!entry.wasUncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus)?'rejected':'unknown';if(entry.state==='unknown')entry.wasUncertain=true;entry.message=entry.state==='unknown'?'确认结果未知；仅用原key恢复，不自动重发。':error.message;}
    finally{if(ownerCurrent())entry.renderCurrent?.();}
-  });render();section.append(label,button,status);
+  });
+  const read=document.createElement('button');read.type='button';read.id='csv-report-confirm-read';read.textContent='重新读取原Run完整合同（只读）';
+  read.onclick=safe(async()=>{if(stillCurrent())await showRun(id,false,ownerCurrent);});
+  render();section.append(label,button,read,status);
  }
  $('result').append(section);
 }

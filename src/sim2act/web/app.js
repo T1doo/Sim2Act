@@ -325,6 +325,7 @@ function resumeOrdinaryOutcome() {
 }
 function clearRunDetail() {
   ordinaryOutcomeView=null;
+  if(typeof clearCsvReportContract === "function")clearCsvReportContract();
   if(typeof invalidateNaturalGoalAcknowledgements === "function")invalidateNaturalGoalAcknowledgements();
   unresolvedAttempts=[];reconcileVersion=null;
   for(const name of ["result","events","raw-result","commands","reconcile-attempt"])$(name).replaceChildren();
@@ -934,7 +935,7 @@ function selectWorkspace(id,preserveFirstGuide=null) {
   workspaceSelectionGeneration++;
   if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
-  if(id === "projects")resumeOrdinaryOutcome();
+  if(id === "projects"){resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();}
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
     else button.removeAttribute("aria-current");
