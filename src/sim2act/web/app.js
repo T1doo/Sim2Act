@@ -905,7 +905,7 @@ function renderOrdinaryRunMaterials(entry,locked) {
     for(const id of entry.body.resource_refs)if(!Array.from(select.options).some(o=>o.value===id))select.append(new Option(`原提交材料 · ${id}`,id));
     for(const option of select.options)option.selected=entry.body.resource_refs.includes(option.value);
   }
-  select.disabled=Boolean(locked)||!ordinaryRunMaterialsReady;
+  select.disabled=Boolean(locked);
   const state=ordinaryRunMaterialSelection();
   $("run-materials-status").textContent=locked
     ? `原提交已冻结 ${state.selected.length} 份材料；恢复沿用原集合和请求键。${state.unavailable.length?`其中 ${state.unavailable.length} 份当前列表不可用。`:""}`

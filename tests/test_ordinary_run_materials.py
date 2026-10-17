@@ -96,7 +96,18 @@ def test_ordinary_run_explicit_materials_actual_http(env, tmp_path, case):
                     else:
                         assert set(before["grants"]).issubset(after["grants"])
                         assert len(after["resources"]) == len(before["resources"]) + 1
-                    assert len(after["runs"]) - len(before["runs"]) == (case != "refresh")
+                    assert len(after["runs"]) - len(before["runs"]) == {"use": 3, "refresh": 0, "frozen": 1}[case]
+                    with store.tx() as c:
+                        accepted = c.execute(select(runs.c.id, runs.c.resource_refs, runs.c.status)).mappings().all()
+                        for row in accepted:
+                            snapshot = c.execute(select(run_contracts.c.snapshot).where(
+                                run_contracts.c.run_id == row["id"])).scalar_one()
+                            assert snapshot["goal"]["resource_refs"] == row["resource_refs"]
+                            assert {r["resource_id"] for r in snapshot["resources"]} == set(row["resource_refs"])
+                    if case == "use":
+                        assert sorted(len(row["resource_refs"]) for row in accepted) == [0, 1, 8]
+                        assert sorted(row["status"] for row in accepted) == ["PARTIAL", "QUEUED", "QUEUED"]
+                    proof.append({"accepted_runs": [dict(row) for row in accepted]})
                     assert worked == (case == "use")
                     assert mock_requests == (2 if case == "use" else 0)
                     checkpoints += 1
