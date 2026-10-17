@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
-const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),requests=[],checks=[],assets=[];let serial=0,dom,w,$,drop=false,hold=null,release=null;
+const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),requests=[],checks=[],assets=[];let serial=0,dom,w,$,drop=false,hold=null,release=null,directoryAudit=null;
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
 const check=(ok,label)=>{assert(ok,label);checks.push(label);};
@@ -63,7 +63,18 @@ async function checkRun(){
  const accepted=posts('/csv-goal-revisions/checks').find(x=>x.status===202),jid=accepted.response.run_id;
  await rpc({command:'worker',run:jid});await action('csv-goal-outcome');
  check($('csv-goal-revision-proof').textContent.includes('"status": "PASS"')&&$('csv-goal-revision-status').textContent.includes('人工 PENDING'),'actual original Worker check passes separately from human acceptance');
- check(![...$('use-list').children].some(x=>x.dataset.instanceId===accepted.response.check_instance_id),'CHECK is excluded from business use directory');
+ if(info.case==='deliver'){
+  // Refresh through visible project selection after CHECK really exists. The
+  // old list predates CHECK and cannot prove its business-directory exclusion.
+  await nav('projects');await project(info.other);await project(info.project);await nav('apps');
+  const fresh=requests.filter(x=>x.method==='GET'&&x.path===`/api/internal/apps/${info.app}/instances`&&x.status===200).at(-1),checkId=accepted.response.check_instance_id;
+  const serverCheck=fresh.response.items.find(x=>x.id===checkId),visibleIds=[...$('use-list').children].map(x=>x.dataset.instanceId).filter(Boolean);
+  directoryAudit={check_instance_id:checkId,server_items:fresh.response.items,visible_instance_ids:visibleIds};
+  check(serverCheck?.switch_policy?.roles?.includes('csv_goal_check'),'fresh actual server list includes isolated CHECK with role pin');
+  check(visibleIds.includes(info.instance)&&visibleIds.includes(info.instance2)&&!visibleIds.includes(checkId),'fresh business directory includes both business instances and filters actual CHECK');
+  await action([...$('use-list').children].find(x=>x.dataset.instanceId===info.instance).querySelector('button'));
+  check(w.eval('applicationUse.id')===info.instance&&visible($('csv-goal-version')),'explicit original business selection restores same checked intent before release approval');
+ }
 }
 (async()=>{try{
  await boot();await revise();
@@ -103,5 +114,5 @@ async function checkRun(){
   const record=await rpc({command:'proof',run});check(record.status===200,'cold server proof verifies same app runtime, original provenance, old result and Goal v2');
  }
  await wait(()=>requests.every(x=>Number.isInteger(x.status)),'all actual API replies settle');
- fs.writeFileSync(info.output,JSON.stringify({status:'PASS',checks,requests,assets},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');process.exit(0);
-}catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:error.stack,checks,requests,assets},null,2));if(dom)dom.window.close();process.stderr.write(error.stack+'\n');process.stdout.write(JSON.stringify({done:true})+'\n');process.exit(1);}})();
+ fs.writeFileSync(info.output,JSON.stringify({status:'PASS',checks,requests,assets,directoryAudit},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');process.exit(0);
+}catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:error.stack,checks,requests,assets,directoryAudit},null,2));if(dom)dom.window.close();process.stderr.write(error.stack+'\n');process.stdout.write(JSON.stringify({done:true})+'\n');process.exit(1);}})();
