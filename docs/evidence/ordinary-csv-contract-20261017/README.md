@@ -43,3 +43,5 @@
 `raw/independent-599/`是28例预验证与展示BLOCK原件；`raw/independent-402/`是最终有限接受与3页复验原件。完整命令、RC、日志、XML、source before/after/delta、合成SQLite、请求/回执JSON及原MD均可检查。scope-summary中一个看似legacy SUCCEEDED是“移除合同”负例刻意改写的坏snapshot，实际冷读取被拒绝，绝不代表任意普通Goal被接受；见scope-summary-explanation.json。
 
 仅实际运行Linux/Python3.12/SQLite test_only、FastAPI TestClient真实ASGI、本页服务资产、Node/JSDOM与Blob捕获；未运行原生浏览器/Windows、PostgreSQL、真实模型、真实语义/真实场景、人工语义签收、远端CI、部署或正式发布。未扩展相邻故障/恢复矩阵。旧满盘环境未访问；其最后独审报告未落盘的证据缺口仍未补回。本环境为唯一写入者，独审只读；17条受保护远端引用保持原值。
+
+归档元数据补充：首次归档diff检查RC2，原因仅为原始失败日志/XML及基线patch自带行尾空格。原始诊断及命令另存raw/packaging；已仅对raw证据设置保留字节及允许原始行尾空格的属性，产品/测试检查规则不变，后续归档diff检查通过。原始执行文件411份，另附2份此归档诊断，不改动原件。
