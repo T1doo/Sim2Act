@@ -1,9 +1,12 @@
 """Explicit ordinary correction; synthetic reasons, users and models only."""
 
 import copy
+import hashlib
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,17 +17,23 @@ from test_ordinary_owner_review import decision, prepare, review
 
 from sim2act.api import create_app
 from sim2act.db import (
+    attempts,
+    events,
     fingerprint,
     goal_card_versions,
     grants,
+    local_effects,
+    operation_intents,
     operations,
     ordinary_correction_links,
     ordinary_owner_records,
     ordinary_owner_seals,
+    reservations,
     resources,
     run_contracts,
     runs,
 )
+from sim2act.errors import DomainError
 from sim2act.model import MockModel
 from sim2act.worker import Worker
 
@@ -574,7 +583,8 @@ def test_final_commit_rechecks_rejection_and_preserves_already_saved_child_file(
             .mappings()
             .one()
         )
-        assert run["status"] != "PARTIAL" and run["result"] is None
+        # The rejected final commit has not itself made this Run terminal.
+        assert run["status"] == "RUNNING" and run["result"] is None and run["error"] is None
         assert saved["status"] == "VERIFIED"
         artifact = saved["receipt"]["artifact_refs"][0]
         assert len(c.execute(select(grants).where(grants.c.resource_id == artifact)).all()) == 2
@@ -593,3 +603,112 @@ def test_final_commit_rechecks_rejection_and_preserves_already_saved_child_file(
             indent=2,
         )
     )
+
+    def preserved():
+        with env[0].tx() as c:
+            return {
+                "parent": dict(c.execute(select(runs).where(runs.c.id == parent)).mappings().one()),
+                "tables": {
+                    table.name: [
+                        dict(row)
+                        for row in c.execute(select(table).order_by(*table.primary_key.columns)).mappings()
+                    ]
+                    for table in (
+                        attempts, reservations, operations, operation_intents, local_effects,
+                        resources, grants, run_contracts, goal_card_versions,
+                        ordinary_correction_links, ordinary_owner_records, ordinary_owner_seals,
+                    )
+                },
+            }
+
+    frozen_evidence = preserved()
+    with env[0].tx() as c:
+        prior_event_ids = set(c.execute(select(events.c.id).where(events.c.run_id == child)).scalars())
+        assert not c.execute(select(attempts.c.id).where(
+            attempts.c.run_id == child, attempts.c.status == "STARTED",
+        )).first()
+        assert not env[0].has_unknown(c, child)
+
+    # Advance only the clocks used by existing lease/Worker code; never edit the
+    # lease, state, receipt or context, and never wait for wall time to elapse.
+    clock = [run["lease_until"] - 0.01]
+
+    def controlled_time():
+        clock[0] += 0.000001  # Keep the real recovery events strictly ordered.
+        return clock[0]
+
+    fake_time = SimpleNamespace(time=controlled_time, monotonic=time.monotonic)
+    monkeypatch.setattr("sim2act.db.time", fake_time)
+    monkeypatch.setattr("sim2act.worker.time", fake_time)
+
+    class NoRecoveryRequests:
+        calls = 0
+
+        def request(self, messages, tools):
+            self.calls += 1
+            raise AssertionError("Invalid correction must stop before any new model request")
+
+    recovering = Worker(env[0], env[1], NoRecoveryRequests())
+    assert recovering.once() is False
+    with env[0].tx() as c:
+        assert dict(c.execute(select(runs).where(runs.c.id == child)).mappings().one()) == run
+    assert preserved() == frozen_evidence
+    before_expiry = clock[0]
+    clock[0] = run["lease_until"] + 0.01
+    assert recovering.once() is True
+    with env[0].tx() as c:
+        terminal = dict(c.execute(select(runs).where(runs.c.id == child)).mappings().one())
+        recovery_events = [dict(row) for row in c.execute(select(events).where(
+            events.c.run_id == child, events.c.id.not_in(prior_event_ids),
+        ).order_by(events.c.created_at)).mappings()]
+    (tmp_path / "lease-recovery.json").write_text(json.dumps(dict(
+        initial=run, terminal=terminal, recovery_events=recovery_events,
+        before_expiry=before_expiry, after_expiry=clock[0],
+        original_worker=worker.id, recovering_worker=recovering.id,
+        original_mock_requests=worker.model.calls, recovery_mock_requests=recovering.model.calls,
+        real_model_requests=0, preserved_before=frozen_evidence, preserved_after=preserved(),
+        clock_scope="Only db/worker module time, after original heartbeat joined; no Run row edits",
+    ), ensure_ascii=False, indent=2))
+    assert terminal["status"] == "FAILED" and terminal["result"] is None
+    assert terminal["error"]["code"] == "VERSION_CONFLICT" and terminal["lease_until"] == 0
+    assert terminal["fence"] == run["fence"] + 2 and terminal["worker_id"] == recovering.id
+    assert terminal["context"] == run["context"] and terminal["cancel_intent"] is False
+    assert [entry["kind"] for entry in recovery_events] == [
+        "WORKER_LOST", "RECONCILED", "CLAIMED", "CONTRACT_REJECTED",
+    ]
+    assert recovery_events[1]["data"] == {"status": "QUEUED", "receipts_preserved": True}
+    assert preserved() == frozen_evidence and recovering.model.calls == 0
+
+    # The existing metadata history exposes the terminal state, while the full
+    # invalidated contract remains rejected. The known artifact is still readable.
+    history = env[2].get(f"/api/projects/{env[5]}/runs?metadata_only=true")
+    detail = env[2].get(f"/api/runs/{child}")
+    resource = env[2].get(f"/api/resources/{artifact}")
+    (tmp_path / "terminal-http.json").write_text(json.dumps(dict(
+        history={"status": history.status_code, "body": history.json()},
+        detail={"status": detail.status_code, "body": detail.json()},
+        artifact={"status": resource.status_code, "body": resource.json()},
+    ), ensure_ascii=False, indent=2))
+    assert history.status_code == 200
+    assert next(row for row in history.json() if row["id"] == child)["status"] == "FAILED"
+    assert detail.status_code == 409 and detail.json()["error"]["code"] == "VERSION_CONFLICT"
+    assert resource.status_code == 200
+    assert resource.json()["content"] == REPORT + "SIMULATED correction; not semantic proof\n"
+    assert hashlib.sha256(resource.json()["content"].encode()).hexdigest() == resource.json()["hash"]
+
+    # Neither a stale original finalizer nor later polling may overwrite the
+    # terminal state, create a sibling or repeat the known save.
+    with pytest.raises(DomainError) as stale:
+        original(child, run["fence"], "FAILED", {"code": "STALE_FINALIZER"})
+    assert stale.value.code == "VERSION_CONFLICT"
+    clock[0] += env[1].lease_seconds * 2
+    assert recovering.once() is False
+    with env[0].tx() as c:
+        assert dict(c.execute(select(runs).where(runs.c.id == child)).mappings().one()) == terminal
+        assert len(c.execute(select(runs)).all()) == 2
+    assert preserved() == frozen_evidence and recovering.model.calls == 0
+    (tmp_path / "terminal-stability.json").write_text(json.dumps(dict(
+        status=terminal["status"], no_later_work=True, stale_finalizer=stale.value.public(),
+        preserved=fingerprint(frozen_evidence), recovering_model_requests=recovering.model.calls,
+        real_model_requests=0,
+    ), ensure_ascii=False, indent=2))
