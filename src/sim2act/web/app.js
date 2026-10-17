@@ -185,6 +185,7 @@ function fixedGoalAcceptancePassed(r) {
   // Projection of the existing server-verified prospective contract, not a new checker.
   const spec=r.contract?.snapshot?.natural_planning?.goal_acceptance,source=r.contract?.snapshot?.source_goal_card,report=r.result?.task_acceptance;
   if(!spec || spec.version !== "fixed-csv-goal-acceptance.v1" || !["read_preview","sum_quantity_z"].includes(spec.kind))return false;
+  if(!/^res_[a-f0-9]{32}$/.test(spec.resource_id) || !/^[a-f0-9]{64}$/.test(spec.source_hash) || !/^[a-f0-9]{64}$/.test(spec.goal_fingerprint) || !Array.isArray(source?.snapshot?.content?.resource_refs) || source.snapshot.content.resource_refs.length !== 1 || !Array.isArray(source?.snapshot?.resource_snapshots) || source.snapshot.resource_snapshots.length !== 1)return false;
   return r.status === "SUCCEEDED" && r.result?.goal_acceptance === "PASS_FIXED_CONTRACT" &&
     spec.goal_fingerprint === source?.fingerprint && spec.resource_id === source?.snapshot?.content?.resource_refs?.[0] && spec.source_hash === source?.snapshot?.resource_snapshots?.[0]?.hash &&
     spec.check === (spec.kind === "read_preview" ? "csv.complete_preview.v1" : "csv.exact_integer_sum.v1") &&

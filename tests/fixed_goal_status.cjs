@@ -18,6 +18,11 @@ async function action(id){const el=typeof id==='string'?$(id):id;assert(el?.isCo
  check(progress.includes('固定合成目标契约 PASS')&&!progress.includes('当前普通任务尚未实现'),'progress states actual fixed-contract PASS without claiming no evaluator ran');
  check(progress.includes('通用语义 NOT_RUN')&&progress.includes('人工 PENDING')&&progress.includes('正式发布关闭'),'fixed goal success remains separate from general semantics, owner and publication');
  check($('natural-goal-plan').textContent.includes('限定整体 PASS')&&!$('result').textContent.includes('完整目标验收尚未执行'),'canvas and exact existing plan agree about scoped fixed acceptance');
+ const missing=structuredClone(actual),spec=missing.contract.snapshot.natural_planning.goal_acceptance,source=missing.contract.snapshot.source_goal_card;
+ delete spec.resource_id;delete spec.source_hash;delete spec.goal_fingerprint;delete source.fingerprint;delete source.snapshot.content.resource_refs[0];delete source.snapshot.resource_snapshots[0].hash;
+ check(!w.fixedGoalAcceptancePassed(missing),'in-memory projection rejects both sides missing binding fields; no server response mutation');
+ const extra=structuredClone(actual);extra.contract.snapshot.source_goal_card.snapshot.content.resource_refs.push(info.run);
+ check(!w.fixedGoalAcceptancePassed(extra),'in-memory projection rejects a non-singleton source; existing evaluator unchanged');
  check(!w.document.querySelector('#run-artifacts'),'read-only preview/sum receipt is not presented as a saved artifact');
  check(requests.every(r=>r.method==='GET'),'status viewing only reads actual APIs, never submits a new goal or provider request');
  assert.equal((await rpc({command:'verify-readonly'})).status,200);status='PASS';
