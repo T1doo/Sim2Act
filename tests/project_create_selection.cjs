@@ -42,12 +42,19 @@ async function chooseAndSave(){
 async function flow(){
  const name='新建 B 合成项目';$('project-name').value=name;hold={method:'POST',path:'/api/projects'};const started=action(createButton());await wait(()=>!!release,'accepted project-create reply held');
  if(info.case==='create-save'){
-  createButton().click();await new Promise(r=>setImmediate(r));
+  createButton().click();$('project-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setImmediate(r));
   const count=posts().filter(r=>r.path==='/api/projects').length;observations.push({kind:'pending_duplicate',post_count:count,disabled:createButton().disabled});
  }
  if(info.case==='late-manual'){await project(info.other);await project(info.project);}
  if(info.case==='late-identity'){await action('identity-switch');await connect('synthetic-test-B');}
- const deliver=release;release=null;deliver();await started;await wait(()=>active===0,'create action drained');
+ const deliver=release;release=null;
+ if(info.case==='late-manual')hold={method:'GET',path:'/api/projects'};
+ deliver();
+ if(info.case==='late-manual'){
+  await wait(()=>!!release,'post-create project list reply held');await project(info.other);await project(info.project);
+  const deliverList=release;release=null;deliverList();
+ }
+ await started;await wait(()=>active===0,'create action drained');
  const created=posts().find(r=>r.path==='/api/projects').response.id;
  observations.push({kind:'after_create',created,current:$('project-select').value,context:$('project-context-status').textContent,options:[...$('project-select').options].map(o=>({id:o.value,name:o.textContent}))});
  if(info.case==='create-save'){
@@ -56,6 +63,7 @@ async function flow(){
   check(saved.path===`/api/projects/${created}/resources`,'new material Save targets B exact returned project ID');
   check($('project-context-status').textContent.includes(name)&&$('materials').textContent.includes('B 合成.csv')&&!$('materials').textContent.includes('data.csv'),'B context and refreshed materials visible; A material absent');
   check(posts().filter(r=>r.path==='/api/projects').length===1,'pending duplicate gesture creates exactly one project');
+  check(observations.find(o=>o.kind==='pending_duplicate').disabled,'create button remains disabled while accepted reply is pending');
   check(saved.body.content==='city,amount\r\n杭州,9.25\r\n','actual file Save preserves exact UTF8/CRLF');
   check((await rpc({command:'verify',created,resource:saved.response.id})).status===200,'all original rows including project A remain unchanged');
  }else if(info.case==='late-manual'){

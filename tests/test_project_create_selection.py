@@ -46,14 +46,25 @@ def test_project_create_selection_actual_http(env, tmp_path, case):
                     if case == "create-save":
                         expected.add("resources")
                     assert changed == expected
+                    additions = {k: [json.loads(r) for r in sorted(set(after[k]) - set(before[k]))]
+                                 for k in changed}
+                    for name in before:
+                        old_scope = [r for r in before[name] if json.loads(r).get("project_id") == project]
+                        new_scope = [r for r in after[name] if json.loads(r).get("project_id") == project]
+                        assert old_scope == new_scope
                     with store.tx() as c:
                         created = c.execute(select(projects).where(projects.c.id == request["created"])).mappings().one()
                         assert created["owner_id"] == owner and created["name"] == "新建 B 合成项目"
+                        assert [r["id"] for r in additions["projects"]] == [created["id"]]
+                        assert [r["id"] for r in additions["principals"]] == [created["runtime_id"]]
+                        assert all(r["project_id"] == created["id"] for r in additions["grants"])
                         if case == "create-save":
                             material = c.execute(select(resources).where(resources.c.id == request["resource"])).mappings().one()
                             assert material["project_id"] == created["id"]
                             assert material["content"] == "city,amount\r\n杭州,9.25\r\n"
+                            assert [r["id"] for r in additions["resources"]] == [material["id"]]
                     proof.append(dict(changed_tables=sorted(changed), original_rows_all_unchanged=True,
+                        additions=additions, project_a_scope_exactly_unchanged=True,
                         created_project=dict(created), project_a=project,
                         project_a_resources=[json.loads(r) for r in after["resources"] if json.loads(r)["project_id"] == project]))
                     verified += 1

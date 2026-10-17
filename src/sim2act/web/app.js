@@ -9,6 +9,8 @@ let foregroundRunRead = null;
 let runUserSelectionGeneration = 0;
 let runHistoryGeneration = 0;
 let identityConnectionGeneration = 0;
+let projectListGeneration = 0, projectSelectionGeneration = 0;
+let projectSelectionRefresh = Promise.resolve(), projectCreatePending = null;
 let activeApp = null, activeGoalCard = null;
 let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false;
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
@@ -283,15 +285,24 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   const commands = ["QUEUED","RUNNING"].includes(r.status) ? ["pause","cancel"] : ["PAUSED","WAITING_RESOURCE"].includes(r.status) ? (unresolvedAttempts.length ? ["cancel"] : ["resume","cancel"]) : [];
   $("commands").replaceChildren(...commands.map(command => {const b = document.createElement("button"); b.textContent = {pause:"暂停",cancel:"取消",resume:"继续"}[command]; b.onclick = safe(async () => {if(!current())return;await api(`/api/runs/${id}/commands`, "POST", {command,version:r.version}); if(current())await showRun(id);}); return b;}));
 }
-async function loadProjects() {
-  const identity=token,connection=identityConnectionGeneration;
-  const ps = await api("/api/projects"); if(identity!==token || connection!==identityConnectionGeneration)return; const old = $("project-select").value;
+async function loadProjects(preferred=null) {
+  const identity=token,connection=identityConnectionGeneration,list=++projectListGeneration;
+  const ps = await api("/api/projects"); if(identity!==token || connection!==identityConnectionGeneration || list!==projectListGeneration)return; const old = $("project-select").value;
+  const adopt=preferred && preferred.selection===projectSelectionGeneration;
+  if(adopt && !ps.some(p=>p.id===preferred.id))throw Error("新项目已创建，列表尚未包含其回执；请重新读取项目列表。");
+  const selected=adopt?preferred.id:old;
   $("project-select").replaceChildren(...ps.map(p => {const o = document.createElement("option"); o.value=p.id; o.textContent=p.name; return o;}));
-  if (ps.some(p => p.id === old)) $("project-select").value = old;
+  if (ps.some(p => p.id === selected)) $("project-select").value = selected;
+  if(adopt && selected!==old){
+    $("project-select").dispatchEvent(new Event("change"));
+    await projectSelectionRefresh;
+    return;
+  }
   renderRunSubmission();
   await refresh();
 }
 function clearIdentityView() {
+  projectCreatePending=null;$("project-form").querySelector("button").disabled=false;
   clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearSpecRecoveryMemory === "function")clearSpecRecoveryMemory();
@@ -329,12 +340,25 @@ $("identity-switch").onclick=()=>{
   token="";identityConnectionGeneration++;clearIdentityView();
   $("token").value="";$("login").hidden=false;$("identity-switch").hidden=true;$("token").focus();
 };
-$("project-form").onsubmit = safe(async () => {await api("/api/projects","POST",{name:$("project-name").value}); await loadProjects();});
+$("project-form").onsubmit = safe(async () => {
+  if(projectCreatePending)return;
+  if(!token)throw Error("先连接本机 API");
+  const attempt={identity:token,connection:identityConnectionGeneration,selection:projectSelectionGeneration};
+  const current=()=>attempt.identity===token && attempt.connection===identityConnectionGeneration;
+  projectCreatePending=attempt;$("project-form").querySelector("button").disabled=true;
+  try {
+    const created=await api("/api/projects","POST",{name:$("project-name").value});
+    if(!current())return;
+    if(typeof created?.id!=="string" || !/^proj_[a-f0-9]{32}$/.test(created.id))throw Error("创建项目回执缺失；请读取项目列表核对，勿重复创建。");
+    await loadProjects({id:created.id,selection:attempt.selection});
+  } catch(error) {if(current())throw error;}
+  finally {if(projectCreatePending===attempt){projectCreatePending=null;$("project-form").querySelector("button").disabled=false;}}
+});
 $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").value;if(!pid)throw new Error("先选择项目");await api(`/api/projects/${pid}/resources`,"POST",{name:$("resource-name").value,format:$("format").value,content:$("content").value}); await refresh();});
 $("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("run-history-refresh").onclick=safe(async()=>refresh());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";await refresh();});
+$("project-select").onchange = safe(async () => {projectSelectionGeneration++;if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";projectSelectionRefresh=refresh();await projectSelectionRefresh;});
 document.querySelectorAll("#workspace-nav [data-tab]").forEach(b => b.onclick = () => selectWorkspace(b.dataset.tab));
 selectWorkspace("projects");
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
