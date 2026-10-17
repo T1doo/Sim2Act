@@ -181,10 +181,26 @@ async function refresh() {
   if (!current()) return;
   $("grants").replaceChildren(...grants.map(g => row(`${g.tool_ref} · ${g.principal_id.startsWith("runtime_") ? "项目运行身份" : g.principal_id.startsWith("appruntime_") ? "应用预览身份" : "当前使用者"} · ${g.revoked ? "已撤回" : "有效至 " + new Date(g.expires_at * 1000).toLocaleString()}`, g.revoked ? null : async () => {await api(`/api/grants/${g.id}/revoke`, "POST", {command:"revoke",version:g.revision});activeRun=null;clearApp();$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";invalidateResourcePreview();await refresh();}, "撤回")));
 }
+function fixedGoalAcceptancePassed(r) {
+  // Projection of the existing server-verified prospective contract, not a new checker.
+  const spec=r.contract?.snapshot?.natural_planning?.goal_acceptance,source=r.contract?.snapshot?.source_goal_card,report=r.result?.task_acceptance;
+  if(!spec || spec.version !== "fixed-csv-goal-acceptance.v1" || !["read_preview","sum_quantity_z"].includes(spec.kind))return false;
+  return r.status === "SUCCEEDED" && r.result?.goal_acceptance === "PASS_FIXED_CONTRACT" &&
+    spec.goal_fingerprint === source?.fingerprint && spec.resource_id === source?.snapshot?.content?.resource_refs?.[0] && spec.source_hash === source?.snapshot?.resource_snapshots?.[0]?.hash &&
+    spec.check === (spec.kind === "read_preview" ? "csv.complete_preview.v1" : "csv.exact_integer_sum.v1") &&
+    report?.version === spec.version && report.objective === spec.kind && report.check === spec.check && report.source_hash === spec.source_hash &&
+    report.status === "PASS" && report.whole_task_accepted === true && report.scope === "EXACT_FIXED_SYNTHETIC_GOAL_ONLY" && report.single_step_status === "VERIFIED" &&
+    report.general_semantic_acceptance === "NOT_RUN" && report.owner_acceptance === "PENDING" && report.formal_publication_enabled === false;
+}
 function renderOrdinaryProgress(r, attempts) {
   const section=document.createElement("section");section.id="run-progress";
   const heading=document.createElement("h3");heading.textContent="执行记录（只读）";section.append(heading);
-  section.append(row("目标验收：当前普通任务尚未实现（NOT_RUN）。技术状态与工具核验不代表目标已完成。"));
+  const acceptance=row(fixedGoalAcceptancePassed(r)
+    ? "目标验收：本次冻结的固定合成目标契约 PASS。仅限精确冻结目标；通用语义 NOT_RUN，人工 PENDING，正式发布关闭。"
+    : r.contract?.snapshot?.natural_planning?.goal_acceptance
+      ? "目标验收：本次固定合成合同尚未通过全部检查（NOT_RUN）。技术状态与单步核验不代表整体验收。"
+      : "目标验收：当前普通任务未提供已冻结的整体验收路径（NOT_RUN）。技术状态与工具核验不代表目标已完成。");
+  acceptance.id="run-goal-acceptance";section.append(acceptance);
   const reasons={GRANT_REVOKED:"读取授权已撤回，请先核对授权。",RESOURCE_UNAVAILABLE:"所需资源当前不可用，请先核对材料。",RATE_LIMITED:"请求额度或速率受限，任务已停止等待。",OUTCOME_UNKNOWN:"已有请求或效果结果未知，请先核对既有回执，避免重复发送。"};
   if(["WAITING_RESOURCE","RECONCILING"].includes(r.status)) {
     const unknown=attempts.length>0 || r.error?.code==="OUTCOME_UNKNOWN";
@@ -210,8 +226,11 @@ function renderOrdinaryProgress(r, attempts) {
 }
 let ordinaryOutcomeView = null;
 const ordinaryArtifactRequests = new Set();
+function ordinaryOutcomeOwner(id) {
+  return JSON.stringify([token,identityConnectionGeneration,$("project-select").value,projectSelectionGeneration,runUserSelectionGeneration,id]);
+}
 function ordinaryOutcomeScope(id) {
-  return JSON.stringify([token,identityConnectionGeneration,$("project-select").value,projectSelectionGeneration,workspaceSelectionGeneration,runUserSelectionGeneration,id]);
+  return ordinaryOutcomeOwner(id)+":"+workspaceSelectionGeneration;
 }
 function ordinaryOutcomeCurrent(view) {
   return ordinaryOutcomeView === view && activeRun === view.run && !$("projects").hidden && view.scope === ordinaryOutcomeScope(view.run);
@@ -268,7 +287,8 @@ async function readOrdinaryArtifact(view, binding, download) {
 }
 function renderOrdinaryOutcome(r) {
   const scope=ordinaryOutcomeScope(r.id);
-  if(!ordinaryOutcomeView || ordinaryOutcomeView.scope !== scope)ordinaryOutcomeView={scope,run:r.id,project:$("project-select").value,previews:new Map(),messages:new Map()};
+  if(!ordinaryOutcomeView || ordinaryOutcomeView.scope !== scope)ordinaryOutcomeView={scope,owner:ordinaryOutcomeOwner(r.id),run:r.id,project:$("project-select").value,previews:new Map(),messages:new Map()};
+  ordinaryOutcomeView.result=r;
   const view=ordinaryOutcomeView,section=document.createElement("section");section.id="run-outcome";
   if(typeof r.result?.answer === "string" && r.result.answer) {
     const heading=document.createElement("h3");heading.textContent="本次回答";
@@ -290,6 +310,13 @@ function renderOrdinaryOutcome(r) {
   }
   if(section.childNodes.length)$("result").append(section);
   updateOrdinaryArtifactNodes(view);
+}
+function resumeOrdinaryOutcome() {
+  const previous=ordinaryOutcomeView;
+  if(!previous || activeRun !== previous.run || previous.owner !== ordinaryOutcomeOwner(previous.run))return;
+  $("run-outcome")?.remove();
+  // New workspace scope creates a new view. Old closures and pending reads stay invalid.
+  renderOrdinaryOutcome(previous.result);
 }
 function clearRunDetail() {
   ordinaryOutcomeView=null;
@@ -353,7 +380,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   }
   if(!internal)renderOrdinaryProgress(r,attempts);
   if (r.result && !internal) {
-    $("result").append(row(r.result.task_acceptance?.whole_task_accepted===true?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
+    $("result").append(row(fixedGoalAcceptancePassed(r)?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
     for (const receipt of r.result.receipts || []) {
       const data = receipt.data;
       if (typeof data.content === "string") {$("result").append(row("工具读取的材料（来源回执）"));const pre=document.createElement("pre");pre.textContent=data.content;$("result").append(pre);}
@@ -900,6 +927,7 @@ function selectWorkspace(id,preserveFirstGuide=null) {
   workspaceSelectionGeneration++;
   if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
+  if(id === "projects")resumeOrdinaryOutcome();
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
     else button.removeAttribute("aria-current");
