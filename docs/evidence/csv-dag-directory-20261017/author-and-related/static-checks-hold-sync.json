@@ -1,0 +1,60 @@
+{
+  "source": "84d0f923a7706da84baf010a4e217e28cae48f5e",
+  "scope": "Only changed DAG driver rechecked; exact product+related source equality verified; synthetic-clock helper probes are supporting checks, not new product acceptance nodes.",
+  "checks": [
+    {
+      "command": [
+        "node",
+        "--check",
+        "tests/csv_dag_directory.cjs"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-c",
+        "core.fsmonitor=false",
+        "diff",
+        "--check"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-c",
+        "core.fsmonitor=false",
+        "diff",
+        "--quiet",
+        "8800aa800d71a2d389a4283796e8a62271e06b4d",
+        "84d0f923a7706da84baf010a4e217e28cae48f5e",
+        "--",
+        "src/",
+        "tests/test_application_use.py",
+        "tests/application_use.cjs",
+        "tests/test_literal_directory.py",
+        "tests/literal_directory.cjs",
+        "tests/test_closed_text_directory.py",
+        "tests/closed_text_directory.cjs",
+        "tests/conftest.py"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "node",
+        "/workspace/csv-dag-directory-evidence-20261017/hold-sync-boundary-probe.cjs"
+      ],
+      "returncode": 0,
+      "stdout": "{\n  \"scope\": \"Synthetic-clock validation of exact actual driver helper; no product/HTTP/Worker/browser/model execution\",\n  \"driver_sha256\": \"debb20f083c37fbef1a5e0ca0d932640ca444df2857960fefaae5b6b793158ee\",\n  \"results\": [\n    {\n      \"name\": \"exact gate with reply at 1s\",\n      \"status\": \"PASS\",\n      \"records\": [\n        {\n          \"label\": \"exact gate with reply at 1s\",\n          \"outcome\": \"exact gate reached\",\n          \"elapsed_ms\": 1000,\n          \"http_reply_offsets_ms\": [\n            1000\n          ],\n          \"idle_limit_ms\": 12000,\n          \"total_limit_ms\": 60000\n        }\n      ]\n    },\n    {\n      \"name\": \"late gate cannot renew a 13s reply gap\",\n      \"status\": \"PASS\",\n      \"error\": \"bounded wait: late gate cannot renew a 13s reply gap (12s HTTP reply gap)\",\n      \"records\": [\n        {\n          \"label\": \"late gate cannot renew a 13s reply gap\",\n          \"outcome\": \"HTTP reply gap\",\n          \"elapsed_ms\": 13000,\n          \"http_reply_offsets_ms\": [\n            13000\n          ],\n          \"idle_limit_ms\": 12000,\n          \"total_limit_ms\": 60000\n        }\n      ]\n    },\n    {\n      \"name\": \"12s exact gap rejects gate\",\n      \"status\": \"PASS\",\n      \"error\": \"bounded wait: 12s exact gap rejects gate (12s HTTP reply gap)\",\n      \"records\": [\n        {\n          \"label\": \"12s exact gap rejects gate\",\n          \"outcome\": \"HTTP reply gap\",\n          \"elapsed_ms\": 12000,\n          \"http_reply_offsets_ms\": [\n            12000\n          ],\n          \"idle_limit_ms\": 12000,\n          \"total_limit_ms\": 60000\n        }\n      ]\n    },\n    {\n      \"name\": \"13s without reply rejects\",\n      \"status\": \"PASS\",\n      \"error\": \"bounded wait: 13s without reply rejects (12s without HTTP progress)\",\n      \"records\": [\n        {\n          \"label\": \"13s without reply rejects\",\n          \"outcome\": \"no HTTP progress\",\n          \"elapsed_ms\": 13000,\n          \"http_reply_offsets_ms\": [],\n          \"idle_limit_ms\": 12000,\n          \"total_limit_ms\": 60000\n        }\n      ]\n    },\n    {\n      \"name\": \"60s total rejects despite sub12s replies\",\n      \"status\": \"PASS\",\n      \"error\": \"bounded wait: 60s total rejects despite sub12s replies (60s total)\",\n      \"records\": [\n        {\n          \"label\": \"60s total rejects despite sub12s replies\",\n          \"outcome\": \"total limit\",\n          \"elapsed_ms\": 60000,\n          \"http_reply_offsets_ms\": [\n            10000,\n            20000,\n            30000,\n            40000,\n            50000,\n            60000\n          ],\n          \"idle_limit_ms\": 12000,\n          \"total_limit_ms\": 60000\n        }\n      ]\n    }\n  ]\n}\n",
+      "stderr": ""
+    }
+  ]
+}

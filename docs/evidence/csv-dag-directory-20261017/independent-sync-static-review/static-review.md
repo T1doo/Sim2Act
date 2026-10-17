@@ -1,0 +1,11 @@
+# Independent static review of DAG hold synchronization
+
+Base: `8800aa800d71a2d389a4283796e8a62271e06b4d`. Reviewed driver SHA256: `debb20f083c37fbef1a5e0ca0d932640ca444df2857960fefaae5b6b793158ee`. Snapshot and exact diff are retained here. HEAD at proof recording was `84d0f923a7706da84baf010a4e217e28cae48f5e`; the review itself covered the preceding uncommitted driver bytes. Product diff from 880 is empty.
+
+First prototype: **STATIC BLOCK, never dynamically executed by this reviewer.** It accepted `releaseRead` before checking idle time, and a changed reply counter assigned the latest polling time to `last`. If polling was delayed across a reply gap exceeding 12 seconds, a late reply could erase the expired interval or enter directly through the gate. That did not strictly retain the requested no-real-HTTP-progress boundary. This finding was reported before freezing; root retained the first prototype's exact original diff/hash. This independent record does not claim an unrecorded prototype file hash.
+
+Revised driver: **STATIC ACCEPT for a new frozen dynamic run.** Each parsed actual HTTP RPC reply appends its observed timestamp. `waitHeld` checks total elapsed >=60 seconds first, then every new observed reply gap >=12 seconds, then current idle >=12 seconds, and only then the exact `releaseRead` gate. Polling time never renews progress. Per-gate results include outcome, elapsed time, and actual reply time offsets. Readonly/worker commands and asset loading do not increment the product HTTP reply list.
+
+The exact path/remaining hold selection is unchanged. All check-containing lines in `guards` match the 880 base; ten static check calls expand to 17 checks when the three-case and two-case loops and `open()` helper complete. The generic 12-second wait line is byte-identical. Only the five opening hold waits use the new helper. No product code, private controller state, stub, permission contract, or result assertion was changed by this synchronization patch.
+
+No test batch, HTTP call, browser/model/PG action, or repository mutation was performed for this static review. It does not supersede 880's independently observed 1FAIL/5PASS result. The 880 failed evidence directory was not modified. Dynamic closure remains pending a separately authorized frozen-source run.

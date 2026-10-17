@@ -1,0 +1,32 @@
+{
+  "base": "8800aa800d71a2d389a4283796e8a62271e06b4d",
+  "head_at_record": "84d0f923a7706da84baf010a4e217e28cae48f5e",
+  "reviewed_driver_sha256": "debb20f083c37fbef1a5e0ca0d932640ca444df2857960fefaae5b6b793158ee",
+  "diff_sha256": "00b24db82bf300075934011f3e942966fb63e43e21ac425fa2b254ece28b363b",
+  "product_diff_from_base": "",
+  "guards_check_source_lines_unchanged": true,
+  "guards_check_source_calls": 10,
+  "guards_complete_runtime_checks": 17,
+  "guards_runtime_count_basis": "10 static calls +4 from three-way opening loop +1 from two-way late-response loop +2 from open() helper",
+  "original_wait_byte_line_unchanged": true,
+  "first_prototype": {
+    "verdict": "STATIC_BLOCK_NOT_EXECUTED",
+    "finding": "Gate accepted before idle check; response-count change renewed last with polling time, allowing a late reply to erase a >12s real reply gap if polling was delayed.",
+    "observed_from": "Earlier read-only git diff in this subthread; no independent prototype file hash captured. Root separately retained the original prototype diff/hash."
+  },
+  "revised": {
+    "verdict": "STATIC_ACCEPT_FOR_FROZEN_TEST_RUN",
+    "checks": [
+      "Actual parsed HTTP RPC replies append timestamps.",
+      "Total >=60000ms checked first.",
+      "Each new reply gap >=12000ms fails before updating last.",
+      "Current idle >=12000ms fails before exact releaseRead accepted.",
+      "Polling time does not renew last.",
+      "Exact hold path/remaining selection and all 17 runtime assertions retained.",
+      "Only the five opening hold waits use waitHeld; other waits unchanged.",
+      "Per-gate actual reply time offsets and elapsed time retained in heldWaits."
+    ]
+  },
+  "tests_executed": "NONE: static inspection only; not evidence that new driver passes dynamic gates",
+  "old_880_failed_directory_modified": false
+}
