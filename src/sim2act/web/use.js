@@ -14,6 +14,7 @@ const naturalUseFamily=a=>{
 const applicationUseCurrent=v=>!!v && applicationUse===v && v.identity===token && v.project===$("project-select").value && v.generation===applicationUseGeneration;
 const applicationUseKey=v=>JSON.stringify([v.identity,v.project,v.id]);
 function clearApplicationUse(clearList=false){
+ if(typeof clearCsvFullReport === "function")clearCsvFullReport();
  applicationUseGeneration++;applicationUse=null;
  if(clearList)clearConditionalChecks(true);
  for(const id of ["use-info","use-output","use-history","use-provenance","use-column","use-acceptance"])$(id).replaceChildren();
@@ -36,6 +37,12 @@ async function refreshApplicationUse(apps){
     },"使用此四步文本应用");
     item.dataset.useFamily="CLOSED_TEXT_WORKFLOW";item.dataset.appId=summary.id;rows.push(item);continue;
    }
+  if(summary.use_family==="CSV_FULL_REPORT"){
+   const item=row(`${summary.name} · 完整CSV报告流程 · 定义版本1 · 每次明确选择已有授权CSV及列，另行确认新合同，保存并下载完整MD · 0模型请求，未发布；语义 NOT_RUN，人工 PENDING。`,async()=>{
+    if(selectable())await showApp(summary.id,project,null,selectable);
+   },"使用完整CSV报告流程");
+   item.dataset.useFamily="CSV_FULL_REPORT";item.dataset.appId=summary.id;rows.push(item);continue;
+  }
   if(summary.use_family==="LITERAL_TEXT"){
    const item=row(`${summary.name} · 文本字面检索 · 固定 TXT/MD 材料，检索词可变 · 0 模型请求 · 内部应用未发布；语义 UNKNOWN，人工签收需单独核查。打开后明确选择已有实例与运行。`,async()=>{
     if(selectable())await openSavedInternalUse(summary.id,null,"LITERAL_TEXT",selectable);

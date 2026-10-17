@@ -463,6 +463,37 @@ natural_owner_seals = Table(
     UniqueConstraint("run_id", "record_id"),
 )
 
+# Saved complete CSV report recipes use the existing project runtime and ordinary
+# three-tool Run. They are neither internal releases nor single-step CSV apps.
+csv_report_workflows = Table(
+    "csv_report_workflows", meta,
+    Column("id", String, primary_key=True),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("runtime_id", String, nullable=False),
+    Column("source_run_id", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("definition", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+    UniqueConstraint("principal_id", "source_run_id", "request_key"),
+)
+csv_report_workflow_uses = Table(
+    "csv_report_workflow_uses", meta,
+    Column("run_id", String, primary_key=True),
+    Column("workflow_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("resource_id", String, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("binding", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    UniqueConstraint("principal_id", "workflow_id", "request_key"),
+)
+
 # Prospective single-step CSV sum declarations; separate exact-Run ledger.
 csv_owner_records = Table(
     "csv_owner_records", meta,

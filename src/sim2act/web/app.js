@@ -324,6 +324,7 @@ function resumeOrdinaryOutcome() {
   renderOrdinaryOutcome(previous.result);
 }
 function clearRunDetail() {
+  if(typeof clearCsvFullReportExtraction === "function")clearCsvFullReportExtraction();
   if(typeof clearOrdinaryOwnerReview === "function")clearOrdinaryOwnerReview();
   ordinaryOutcomeView=null;
   if(typeof clearCsvReportContract === "function")clearCsvReportContract();
@@ -403,6 +404,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   if(r.artifact_delivery){const status=row(`单份MD交付：${r.artifact_delivery.status} · 自动语义 NOT_RUN · 人工声明另行提交`);status.id="ordinary-md-status";$("result").append(status);}
   if(typeof renderCsvReportContract === "function")renderCsvReportContract(r,id,current);
   if(typeof renderCsvSumExtraction === "function")renderCsvSumExtraction(r,id,current);
+  if(typeof renderCsvFullReportExtraction === "function")renderCsvFullReportExtraction(r,id,current);
   if(typeof renderOrdinaryOwnerReview === "function")renderOrdinaryOwnerReview(r);
   if (r.error) $("result").append(row(`需要处理：${r.error.message || r.error.code}`));
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
@@ -564,6 +566,7 @@ setInterval(async () => {
 },2500);
 
 function clearApp(preserveFirstGuide=null) {
+  if(typeof clearCsvFullReport === "function")clearCsvFullReport();
   if(naturalFirstGuide!==preserveFirstGuide)clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearAppOwnGoal === "function")clearAppOwnGoal();
@@ -590,7 +593,7 @@ async function refreshApps() {
   $("app-list").replaceChildren(...items.map(x=>{
     const natural=["NATURAL_PA","NATURAL_PB"].includes(x.use_family);
     const literal=x.use_family==="LITERAL_TEXT";
-    const family=natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(literal?"文本字面检索 · 固定 TXT/MD，检索词可变":x.use_family==="CLOSED_TEXT_WORKFLOW"?"四步文本流程 · 固定 TXT/MD，两检索词 + 报告开关":(x.use_family==="CSV"?"CSV 固定材料":"其他应用"));
+    const family=x.use_family==="CSV_FULL_REPORT"?"完整CSV报告流程 · 版本1 · 逐次CSV + 列 → 独立合同与Run":natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(literal?"文本字面检索 · 固定 TXT/MD，检索词可变":x.use_family==="CLOSED_TEXT_WORKFLOW"?"四步文本流程 · 固定 TXT/MD，两检索词 + 报告开关":(x.use_family==="CSV"?"CSV 固定材料":"其他应用"));
     return row(`${x.name} · ${family} · 未发布草案；当前授权需打开核查`,()=>{
       if(identity===token&&connection===identityConnectionGeneration&&pid===$("project-select").value)return showApp(x.id,pid);
     },natural||literal?"查看应用与保存实例":"打开预览");
@@ -620,6 +623,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   if(validateSelected)await validateSelected(a);
   if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
   activeApp=id;activeAppProject=pid;
+  if(a.input_guidance.mode === "CSV_FULL_REPORT")return openCsvFullReport(a,generation,selectionCurrent);
   if(a.input_guidance.mode === "MODEL_SPEC_CHECKLIST"){
     $("app-title").textContent=a.name+(a.candidate.namespace==="pa-natural-spec-app.v1"?" · 未标注规范待验清单 · 未发布":" · 合成标记规范清单 · 未发布");
     $("app-origin").textContent=a.candidate.spec_task?`P-B 成功任务 ${a.candidate.spec_task.source_run_id} 的独立提取；来源图与人工编辑图分别冻结。新材料运行需模型、默认关闭；语义 UNKNOWN，人工 PENDING，未发布。`:"模型选择的有限步骤图；出处核查与语义完整性分开。真实模型关闭，语义 NOT_RUN。";
@@ -952,12 +956,13 @@ function selectWorkspace(id,preserveFirstGuide=null) {
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearInternalRunReread === "function")clearInternalRunReread();
   if(typeof clearTrialConsent === "function")clearTrialConsent();
+  if(typeof clearCsvFullReport === "function")clearCsvFullReport();
   workspaceSelectionGeneration++;
   if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
   if(typeof resetOrdinaryRubricAcknowledgement === "function")resetOrdinaryRubricAcknowledgement();
   if(id === "apps" && typeof resumeCsvOwnerReview === "function")resumeCsvOwnerReview();
-  if(id === "projects"){if(typeof resumeOrdinaryOwnerReview === "function")resumeOrdinaryOwnerReview();resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();if(typeof resumeCsvSumExtraction === "function")resumeCsvSumExtraction();}
+  if(id === "projects"){if(typeof resumeOrdinaryOwnerReview === "function")resumeOrdinaryOwnerReview();resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();if(typeof resumeCsvSumExtraction === "function")resumeCsvSumExtraction();if(typeof resumeCsvFullReportExtraction === "function")resumeCsvFullReportExtraction();}
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
     else button.removeAttribute("aria-current");

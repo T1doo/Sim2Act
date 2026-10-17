@@ -842,6 +842,9 @@ def create_app(store=None, settings=None):
                         "use_family": family or ("CSV" if hint else "OTHER"),
                         **({"definition_version": r["namespace"]} if family in {"NATURAL_PA", "NATURAL_PB"} else {}),
                     })
+                from .csv_full_report import summaries as report_workflow_summaries
+
+                items.extend(report_workflow_summaries(c, user))
                 return {"items": items, "state": "PREVIEW_ONLY", "publishable": False, "discovery_only": True}
             rows = (
                 c.execute(
@@ -863,6 +866,10 @@ def create_app(store=None, settings=None):
             if hint is not None:
                 summary["csv_instance_candidate"] = hint
             items.append(summary)
+        from .csv_full_report import summaries as report_workflow_summaries
+
+        with db.tx() as c:
+            items.extend(report_workflow_summaries(c, user))
         return {"items": items, "state": "PREVIEW_ONLY", "publishable": False}
 
     @app.post("/api/projects/{pid}/apps/csv-preview", status_code=201)
@@ -873,6 +880,13 @@ def create_app(store=None, settings=None):
 
     @app.get("/api/apps/{aid}")
     def get_app_draft(aid: str, user=user_dependency):
+        from .csv_full_report import inspect as inspect_report_workflow
+        from .db import csv_report_workflows
+
+        with db.tx() as c:
+            workflow = c.execute(select(csv_report_workflows.c.id).where(csv_report_workflows.c.id == aid)).first()
+        if workflow:
+            return inspect_report_workflow(db, user, aid, platform_limits)
         return inspect_draft(db, user, aid, platform_limits)
 
     @app.post("/api/apps/{aid}/previews")
@@ -959,6 +973,9 @@ def create_app(store=None, settings=None):
     from .ordinary_csv_extraction import mount as mount_ordinary_csv_extraction
 
     mount_ordinary_csv_extraction(app, db, platform_limits, identity)
+    from .csv_full_report import mount as mount_csv_full_report
+
+    mount_csv_full_report(app, db, platform_limits, identity, s)
     from .app_owner_goals import mount as mount_app_owner_goals
 
     mount_app_owner_goals(app, db, platform_limits, identity)
@@ -1027,6 +1044,10 @@ def create_app(store=None, settings=None):
     @app.get("/ordinary-owner.js")
     def ordinary_owner_script():
         return FileResponse(web / "ordinary-owner.js", media_type="text/javascript")
+
+    @app.get("/csv-full-report.js")
+    def csv_full_report_script():
+        return FileResponse(web / "csv-full-report.js", media_type="text/javascript")
 
     @app.get("/ordinary-csv.js")
     def ordinary_csv_js():

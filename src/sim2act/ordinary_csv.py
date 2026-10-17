@@ -63,80 +63,81 @@ def report_text(spec):
 
 
 def prepare(store, user, project, body, policy):
+    with store.tx() as c:
+        return prepare_tx(store, c, user, project, body, policy)
+
+
+def prepare_tx(store, c, user, project, body, policy):
+    """Shared original contract builder; callers may atomically bind saved workflows."""
     from .extraction import exact_sum_oracle
     from .tools import aggregate_csv_content, authorized_read, definitions, validate_call
 
-    with store.tx() as c:
-        p = store.lock_project(c, user, project)
-        source = authorized_read(
-            store,
-            c,
-            user,
-            p["runtime_id"],
-            project,
-            "resource.read",
-            {"resource_id": body.resource_id},
+    p = store.lock_project(c, user, project)
+    source = authorized_read(
+        store,
+        c,
+        user,
+        p["runtime_id"],
+        project,
+        "resource.read",
+        {"resource_id": body.resource_id},
+    )
+    if source["format"] != "csv" or len(source["content"].encode()) > 32768:
+        raise DomainError("INVALID_INPUT", "本合同只接受至多32768字节的CSV材料")
+    store.authorize(c, user, p["runtime_id"], project, body.resource_id, "data.aggregate_csv")
+    store.authorize(c, user, p["runtime_id"], project, project, "artifact.save_text")
+    data = aggregate_csv_content(source["content"], body.resource_id, body.column)
+    exact_sum_oracle(source["content"], body.column, data)
+    spec = dict(
+        version=VERSION,
+        checker="csv-report-independent.v1",
+        resource_id=body.resource_id,
+        revision=1,
+        source_hash=source["hash"],
+        column=body.column,
+        csv_rule="utf8-no-bom-strict-unique-header-rectangular-1000.v1",
+        numeric_rule="finite-decimal-exact-1000-digits-exponent.v1",
+        count=data["count"],
+        sum=data["sum"],
+        report_format="md",
+        save_rule="same-run-transactional-save-and-exact-readback.v1",
+        tool_versions=TOOLS,
+        tool_definitions_fingerprint=fingerprint(definitions()),
+        model_requests=0,
+    )
+    spec["report_text"] = report_text(spec)
+    spec["report_hash"] = sha(spec["report_text"])
+    # Reject the full original save-tool bounds now, never truncate after confirmation.
+    validate_call("artifact.save_text", {"text": spec["report_text"]})
+    validate_call("data.aggregate_csv", {"resource_id": body.resource_id, "column": body.column})
+    if policy["limits"]["max_tools"] < 3:
+        raise DomainError("BUDGET_EXHAUSTED", "本合同需原注册工具调用额度3次")
+    rid = store.submit_tx(
+        c,
+        user,
+        project,
+        GOAL,
+        [body.resource_id],
+        body.request_key,
+        policy={**policy, "ordinary_csv_report": spec},
+    )
+    r = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
+    if "csv_report_frozen" not in r["context"]:
+        saved = c.execute(
+            select(run_contracts.c.fingerprint).where(run_contracts.c.run_id == rid)
+        ).scalar_one()
+        seal = {
+            "contract_fingerprint": saved,
+            "spec_fingerprint": fingerprint(spec),
+            "deadline": r["created_at"] + policy["limits"]["run_seconds"],
+        }
+        c.execute(
+            update(runs)
+            .where(runs.c.id == rid)
+            .values(status="WAITING_APPROVAL", context={**r["context"], "csv_report_frozen": seal})
         )
-        if source["format"] != "csv" or len(source["content"].encode()) > 32768:
-            raise DomainError("INVALID_INPUT", "本合同只接受至多32768字节的CSV材料")
-        store.authorize(c, user, p["runtime_id"], project, body.resource_id, "data.aggregate_csv")
-        store.authorize(c, user, p["runtime_id"], project, project, "artifact.save_text")
-        data = aggregate_csv_content(source["content"], body.resource_id, body.column)
-        exact_sum_oracle(source["content"], body.column, data)
-        spec = dict(
-            version=VERSION,
-            checker="csv-report-independent.v1",
-            resource_id=body.resource_id,
-            revision=1,
-            source_hash=source["hash"],
-            column=body.column,
-            csv_rule="utf8-no-bom-strict-unique-header-rectangular-1000.v1",
-            numeric_rule="finite-decimal-exact-1000-digits-exponent.v1",
-            count=data["count"],
-            sum=data["sum"],
-            report_format="md",
-            save_rule="same-run-transactional-save-and-exact-readback.v1",
-            tool_versions=TOOLS,
-            tool_definitions_fingerprint=fingerprint(definitions()),
-            model_requests=0,
-        )
-        spec["report_text"] = report_text(spec)
-        spec["report_hash"] = sha(spec["report_text"])
-        # Reject the full original save-tool bounds now, never truncate after confirmation.
-        validate_call("artifact.save_text", {"text": spec["report_text"]})
-        validate_call(
-            "data.aggregate_csv", {"resource_id": body.resource_id, "column": body.column}
-        )
-        if policy["limits"]["max_tools"] < 3:
-            raise DomainError("BUDGET_EXHAUSTED", "本合同需原注册工具调用额度3次")
-        rid = store.submit_tx(
-            c,
-            user,
-            project,
-            GOAL,
-            [body.resource_id],
-            body.request_key,
-            policy={**policy, "ordinary_csv_report": spec},
-        )
-        r = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
-        if "csv_report_frozen" not in r["context"]:
-            saved = c.execute(
-                select(run_contracts.c.fingerprint).where(run_contracts.c.run_id == rid)
-            ).scalar_one()
-            seal = {
-                "contract_fingerprint": saved,
-                "spec_fingerprint": fingerprint(spec),
-                "deadline": r["created_at"] + policy["limits"]["run_seconds"],
-            }
-            c.execute(
-                update(runs)
-                .where(runs.c.id == rid)
-                .values(
-                    status="WAITING_APPROVAL", context={**r["context"], "csv_report_frozen": seal}
-                )
-            )
-            store.event(c, rid, "CSV_REPORT_FROZEN", seal)
-        return {"run_id": rid, "mode": "DETERMINISTIC", "model_requests": 0}
+        store.event(c, rid, "CSV_REPORT_FROZEN", seal)
+    return {"run_id": rid, "mode": "DETERMINISTIC", "model_requests": 0}
 
 
 def event_seal(c, rid, kind, expected):
@@ -269,8 +270,13 @@ def confirmation(store, c, run, contract):
 def confirm(store, user, rid, body):
     store.require_run_owner(user, rid)
     with store.tx() as c:
-        owner = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
-        store.lock_project(c, user, owner["project_id"])
+        project = c.execute(
+            select(runs.c.project_id).where(runs.c.id == rid, runs.c.principal_id == user)
+        ).scalar_one()
+        store.lock_project(c, user, project)
+        from .goal_applications import source_scope_gate
+
+        source_scope_gate(store, c, rid)
         run = dict(
             c.execute(select(runs).where(runs.c.id == rid).with_for_update()).mappings().one()
         )
