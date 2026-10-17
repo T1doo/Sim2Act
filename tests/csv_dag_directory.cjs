@@ -4,10 +4,28 @@ const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node
 const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),requests=[],assets=[],checks=[],mutations=[];
 let unknownHint=false;
 let serial=0,dom,w,$,boots=0,active=0,hold=null,releaseRead=null;
+const httpReplies=[],heldWaits=[];
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
 const check=(ok,label)=>{assert(ok,label);checks.push(label);};
 const wait=async(test,label)=>{const until=Date.now()+12000;while(Date.now()<until){if(test())return;await new Promise(r=>setTimeout(r,5));}throw Error('bounded wait: '+label);};
+// Opening includes several real authorization reads. Keep the 12s no-progress
+// limit while bounding the complete chain at 60s; only actual HTTP replies renew it.
+const waitHeld=async label=>{
+ const start=Date.now(),initial=httpReplies.length;let last=start,seen=initial;
+ const record=outcome=>heldWaits.push({label,outcome,elapsed_ms:Date.now()-start,http_reply_offsets_ms:httpReplies.slice(initial).map(at=>at-start),idle_limit_ms:12000,total_limit_ms:60000});
+ while(true){
+  if(Date.now()-start>=60000){record('total limit');throw Error('bounded wait: '+label+' (60s total)');}
+  for(;seen<httpReplies.length;seen++){
+   const at=httpReplies[seen];
+   if(at-last>=12000){record('HTTP reply gap');throw Error('bounded wait: '+label+' (12s HTTP reply gap)');}
+   last=at;
+  }
+  if(Date.now()-last>=12000){record('no HTTP progress');throw Error('bounded wait: '+label+' (12s without HTTP progress)');}
+  if(releaseRead){record('exact gate reached');return;}
+  await new Promise(r=>setTimeout(r,5));
+ }
+};
 function visible(el){if(!el?.isConnected)return false;for(let p=el;p;p=p.parentElement)if(p.hidden||w.getComputedStyle(p).display==='none')return false;return true;}
 async function click(value){
  const el=typeof value==='string'?$(value):value;assert(visible(el),'visible click '+value);assert(!el.matches(':disabled'),'enabled click '+value);
@@ -26,7 +44,7 @@ async function boot(){
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});w.setInterval=()=>0;
  const style=w.document.createElement('style');style.textContent=await load('/app.css');w.document.head.append(style);
  w.fetch=async(path,options={})=>{active++;const request={method:options.method||'GET',path,body:options.body?JSON.parse(options.body):undefined};requests.push(request);
-  try{const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response=JSON.parse(r.text);
+  try{const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response=JSON.parse(r.text);httpReplies.push(Date.now());
    if(hold&&path===hold.path&&--hold.remaining===0){const gate=hold;hold=null;await new Promise(resolve=>{releaseRead=resolve;});if(gate.error){mutations.push({path,kind:'synthetic late response403',actual_status:r.status});return new Response(JSON.stringify({error:{code:'PERMISSION_DENIED',message:'synthetic delayed error'}}),{status:403,headers:{'Content-Type':'application/json'}});}}
    if(unknownHint&&path.endsWith('/dag-releases')){const modified=JSON.parse(r.text);for(const rel of modified.items)rel.snapshot.execution_source.version='toString';mutations.push({path,kind:'synthetic discovery version hint',actual_status:r.status});return new Response(JSON.stringify(modified),{status:r.status,headers:{'Content-Type':'application/json'}});}
    return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});
@@ -72,11 +90,11 @@ async function guards(){
   {path:`/api/internal/apps/${info.app}/dag-releases`,remaining:1,change:async()=>{await click('identity-switch');$('token').value='synthetic-test-A';await click('connect');},label:'DAG release list same-account reconnect'},
   {path:`/api/apps/${info.app}`,remaining:1,change:async()=>{for(const p of [info.other,info.project]){$('project-select').value=p;await $('project-select').onchange(new w.Event('change'));}},label:'initial app read project ABA'},
  ]){
-  hold={path:scenario.path,remaining:scenario.remaining};const opening=click(entry());await wait(()=>!!releaseRead,'held '+scenario.label);await scenario.change();const release=releaseRead;releaseRead=null;release();await opening;
+  hold={path:scenario.path,remaining:scenario.remaining};const opening=click(entry());await waitHeld('held '+scenario.label);await scenario.change();const release=releaseRead;releaseRead=null;release();await opening;
   check(!w.eval('csvDagContext')&&!$('dag-reuse-proof').textContent&&!$('dag-reuse-results').textContent,scenario.label+' rejects late opening chain');check(posts().length===0,'late opening has no write');await readonly();
  }
  for(const error of [false,true]){
-  hold={path:`/api/internal/instances/${info.instance}`,remaining:1,error};const opening=click(entry());await wait(()=>!!releaseRead,'held exact instance read');
+  hold={path:`/api/internal/instances/${info.instance}`,remaining:1,error};const opening=click(entry());await waitHeld('held exact instance read');
   $('dag-reuse-instance').value=info.second_instance;$('dag-reuse-instance').dispatchEvent(new w.Event('change'));await click('dag-reuse-read');const before=$('dag-reuse-proof').textContent;
   const release=releaseRead;releaseRead=null;release();await opening;
   check(w.eval('csvDagContext.reuse.instance.id')===info.second_instance&&$('dag-reuse-proof').textContent===before,'late original instance '+(error?'error':'success')+' cannot replace selected second instance');await readonly();
@@ -99,7 +117,7 @@ async function guards(){
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
-  fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,requests,assets,boots,mutations,
+  fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,requests,assets,boots,mutations,heldWaits,
    scope:'Actual ASGI TestClient HTTP + full served JS in JSDOM, cold SQLite NoModel DAG Worker',pg:'NOT_RUN',native_browser:'NOT_RUN',real_model:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');
  }
