@@ -18,3 +18,5 @@
 独立复验结果另见 `independent/`。同一新增 3 节点的重复运行不增加不同节点数。原始未压缩作者材料在 `/workspace/literal-result-download-evidence-20261017`；执行命令、源码哈希和语法/静态检查见 `source-and-commands.json`、`checks.json`。相关回归更完整的运行目录保留在该外部路径。
 
 本片的 PG、正常受保护浏览器下载、Windows、真实模型/语义、远端 CI、部署均未执行。本片工程测试不关闭既有 PG/浏览器验收卡点；按后续要求单独定位。此前旧环境满盘丢失的独审报告没有补回。
+
+体积较大的自然规范回归 `result.json` 以 gzip 原字节保留，解压后 SHA256/字节数及外部原件路径见 `compressed-originals.json`；其余原日志/XML未改写。
