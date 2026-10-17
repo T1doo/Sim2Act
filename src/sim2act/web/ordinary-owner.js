@@ -2,15 +2,17 @@
 const ordinaryOwnerIntents=new Map();
 let ordinaryOwnerView=null,ordinaryRubricScope=null,ordinaryOwnerMetadataOpenView=null;
 function ordinaryRubricIdentity(){return activeGoalCard?JSON.stringify([token,identityConnectionGeneration,$('project-select').value,activeGoalCard.id,activeGoalCard.version,activeGoalCard.fingerprint]):null;}
-function resetOrdinaryRubricAcknowledgement(){ordinaryRubricScope=null;$('ordinary-rubric-start-ack').checked=false;renderOrdinaryRubricStart();}
+function resetOrdinaryRubricAcknowledgement(){ordinaryRubricScope=null;$('ordinary-rubric-start-ack').checked=false;$('ordinary-rubric-md').checked=false;renderOrdinaryRubricStart();}
 function ordinaryRubricReady(){return !!activeGoalCard&&!goalCardLoading&&!goalCardSaving&&ordinaryRubricScope===ordinaryRubricIdentity()&&$('ordinary-rubric-start-ack').checked&&activeGoalCard.snapshot.content.acceptance_checks.length>0&&activeGoalCard.snapshot.content.acceptance_checks.every(x=>x.trim())&&activeGoalCard.snapshot.content.resource_refs.length>0;}
 function renderOrdinaryRubricStart(){
  const scope=ordinaryRubricIdentity(),entry=goalRunRequests.get(goalRunKey());
- if(scope!==ordinaryRubricScope){$('ordinary-rubric-start-ack').checked=false;ordinaryRubricScope=scope;}
+ if(scope!==ordinaryRubricScope){$('ordinary-rubric-start-ack').checked=false;$('ordinary-rubric-md').checked=false;ordinaryRubricScope=scope;}
  $('ordinary-rubric-preview').textContent=activeGoalCard?JSON.stringify({goal_card:activeGoalCard.id,version:activeGoalCard.version,fingerprint:activeGoalCard.fingerprint,...activeGoalCard.snapshot.content},null,2):'请先保存目标、选择材料并填写明确验收标准。';
+ $('ordinary-rubric-run').textContent=$('ordinary-rubric-md').checked?'冻结标准并交付本项目一份MD':'冻结标准并执行普通任务';
  $('ordinary-rubric-run').disabled=!ordinaryRubricReady()||['sending','unknown','accepted-read-error'].includes(entry?.state);
 }
 $('ordinary-rubric-start-ack').onchange=renderOrdinaryRubricStart;
+$('ordinary-rubric-md').onchange=()=>{$('ordinary-rubric-start-ack').checked=false;renderOrdinaryRubricStart();};
 $('ordinary-rubric-run').onclick=safe(()=>executeGoalCard(false,true));
 function ordinaryOwnerKey(id){return JSON.stringify([token,$('project-select').value,id]);}
 function ordinaryOwnerScope(id){return JSON.stringify([ordinaryOwnerKey(id),identityConnectionGeneration,projectSelectionGeneration,runUserSelectionGeneration]);}
@@ -27,7 +29,7 @@ async function showOrdinaryOwnerMetadata(id){
  await $('ordinary-owner-read').onclick();
 }
 function renderOrdinaryOwnerReview(result,redacted=false,metadataOnly=false){
- if(result.contract?.snapshot?.human_review?.version!=='owner.ordinary-goal.v1')return;
+ if(!['owner.ordinary-goal.v1','owner.ordinary-goal-md.v2'].includes(result.contract?.snapshot?.human_review?.version))return;
  const id=result.id,scope=ordinaryOwnerScope(id),workspace=workspaceSelectionGeneration,intentKey=ordinaryOwnerKey(id);
  if(ordinaryOwnerView?.scope===scope&&ordinaryOwnerView.workspace===workspace){ordinaryOwnerView.result=result;$('result').append(ordinaryOwnerView.node);return;}
  const view={run:id,scope,workspace,result,read:0,busy:false,state:null,redacted,metadataOnly};ordinaryOwnerView=view;
@@ -35,7 +37,7 @@ function renderOrdinaryOwnerReview(result,redacted=false,metadataOnly=false){
  const node=document.createElement('section');node.id='ordinary-owner-review';view.node=node;
  const heading=document.createElement('h3');heading.textContent='本次普通任务的人工逐项签收';node.append(heading);
  node.append(row('人工声明独立于自动验收 NOT_RUN、技术 PARTIAL；语义 UNKNOWN，正式发布关闭。Goal版本变化后当前签收失效，历史保留。'));
- const frozen=document.createElement('pre');frozen.id='ordinary-owner-frozen';frozen.textContent=redacted?'':JSON.stringify({run:id,contract_fingerprint:result.contract.fingerprint,source_goal:result.contract.snapshot.source_goal_card},null,2);node.append(frozen);
+ const frozen=document.createElement('pre');frozen.id='ordinary-owner-frozen';frozen.textContent=redacted?'':JSON.stringify({run:id,contract_fingerprint:result.contract.fingerprint,source_goal:result.contract.snapshot.source_goal_card,...(result.contract.snapshot.artifact_delivery?{artifact_delivery:result.contract.snapshot.artifact_delivery}:{})},null,2);node.append(frozen);
  const status=document.createElement('p');status.id='ordinary-owner-status';status.setAttribute('role','status');
  const body=document.createElement('div');body.id='ordinary-owner-body';
  const read=document.createElement('button');read.id='ordinary-owner-read';read.type='button';read.textContent='读取此 Run 的当前签收与完整证据';
@@ -48,7 +50,7 @@ function renderOrdinaryOwnerReview(result,redacted=false,metadataOnly=false){
  function clearResultContent(){view.redacted=true;ordinaryOutcomeView=null;frozen.textContent='';$('result').replaceChildren(node);$('raw-result').textContent='';$('events').textContent='';}
  function forget(p){if(pending()===p)ordinaryOwnerIntents.delete(intentKey);}
  async function verify(state){
-  if(state.version!=='owner.ordinary-goal.v1'||state.run_id!==id||state.project_id!==$('project-select').value||state.formal_publication_enabled!==false||state.automatic_goal_acceptance!=='NOT_RUN')throw Error('VERSION_CONFLICT');
+  if(!['owner.ordinary-goal.v1','owner.ordinary-goal-md.v2'].includes(state.version)||(!metadataOnly&&state.version!==result.contract.snapshot.human_review.version)||state.run_id!==id||state.project_id!==$('project-select').value||state.formal_publication_enabled!==false||state.automatic_goal_acceptance!=='NOT_RUN')throw Error('VERSION_CONFLICT');
   let previous='';for(const [n,row] of state.history.entries()){if(row.run_id!==id||row.principal_id!==state.principal_id||row.project_id!==state.project_id||row.sequence!==n+1||row.previous_fingerprint!==previous)throw Error('VERIFICATION_FAILED');previous=row.fingerprint;}
   if(state.sequence!==state.history.length)throw Error('VERIFICATION_FAILED');
   if(metadataOnly&&state.content_access)throw Error('授权已恢复，请从任务历史重新打开完整Run再核对证据。');

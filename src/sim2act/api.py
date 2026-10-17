@@ -674,6 +674,20 @@ def create_app(store=None, settings=None):
                         "fingerprint": body.expected_fingerprint})
         return {**acceptance(db, user, rid), "human_review": POLICY}
 
+    @app.post("/api/projects/{pid}/goal-cards/{cid}/reviewable-artifact-runs", status_code=202)
+    def run_reviewable_artifact_goal(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        from .ordinary_artifacts import delivery_policy
+        from .ordinary_owner_review import MD_POLICY
+
+        selected = delivery_policy()
+        rid = db.submit(user, pid, "", [], body.request_key, policy={
+            "limits": {**platform_limits.model_dump(), "max_repairs": 0},
+            "mode": s.mode, "request_model": s.model, "human_review": MD_POLICY,
+            "artifact_delivery": selected,
+        }, goal_source={"card_id": cid, "version": body.expected_version,
+                        "fingerprint": body.expected_fingerprint})
+        return {**acceptance(db, user, rid), "human_review": MD_POLICY, "artifact_delivery": selected}
+
     @app.post("/api/projects/{pid}/goal-cards/{cid}/planned-runs", status_code=202)
     def plan_saved_goal(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
         from .goal_planner import policy

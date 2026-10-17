@@ -55,6 +55,17 @@
             }
           ],
           "default": null
+        },
+        "artifact_delivery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OrdinaryArtifactDelivery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -250,7 +261,10 @@
       "description": "Explicit prospective user rubric; no automated semantic claim or delegated role.",
       "properties": {
         "version": {
-          "const": "owner.ordinary-goal.v1",
+          "enum": [
+            "owner.ordinary-goal.v1",
+            "owner.ordinary-goal-md.v2"
+          ],
           "title": "Version",
           "type": "string"
         },
@@ -271,6 +285,76 @@
         "automatic_goal_acceptance"
       ],
       "title": "OrdinaryHumanReview",
+      "type": "object"
+    },
+    "OrdinaryArtifactDelivery": {
+      "additionalProperties": false,
+      "description": "Prospective single MD requirement on the original project save tool.",
+      "properties": {
+        "version": {
+          "const": "ordinary-goal-md.v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "required": {
+          "const": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "format": {
+          "const": "md",
+          "title": "Format",
+          "type": "string"
+        },
+        "destination": {
+          "const": "current-project",
+          "title": "Destination",
+          "type": "string"
+        },
+        "max_artifacts": {
+          "const": 1,
+          "title": "Max Artifacts",
+          "type": "integer"
+        },
+        "max_text_characters": {
+          "const": 8000,
+          "title": "Max Text Characters",
+          "type": "integer"
+        },
+        "tool_ref": {
+          "const": "artifact.save_text",
+          "title": "Tool Ref",
+          "type": "string"
+        },
+        "tool_version": {
+          "const": "1",
+          "title": "Tool Version",
+          "type": "string"
+        },
+        "tool_definitions_fingerprint": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Tool Definitions Fingerprint",
+          "type": "string"
+        },
+        "acceptance_check": {
+          "const": "\u6838\u5bf9\u672cRun\u552f\u4e00MD\u6210\u679c\u7684\u5b8c\u6574\u5185\u5bb9\u3001\u6765\u6e90\u3001\u672a\u51b3\u9879\u53ca\u7cbe\u786e\u7248\u672c\uff1b\u6587\u4ef6\u56de\u8bfb\u4e0d\u8bc1\u660e\u8bed\u4e49\u6b63\u786e",
+          "title": "Acceptance Check",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "required",
+        "format",
+        "destination",
+        "max_artifacts",
+        "max_text_characters",
+        "tool_ref",
+        "tool_version",
+        "tool_definitions_fingerprint",
+        "acceptance_check"
+      ],
+      "title": "OrdinaryArtifactDelivery",
       "type": "object"
     }
   },

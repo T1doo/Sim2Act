@@ -243,7 +243,7 @@ function ordinaryOutcomeCurrent(view) {
 function ordinaryArtifactBindings(r, project) {
   if(r.contract?.snapshot?.goal?.project_id !== project)return [];
   const effects=Array.isArray(r.known_effects)?r.known_effects:[],bindings=[];
-  for(const receipt of r.result?.receipts || r.ordinary_csv?.receipts || []) {
+  for(const receipt of r.result?.receipts || r.ordinary_csv?.receipts || r.artifact_delivery?.receipts || []) {
     const id=receipt?.data?.resource_id,hash=receipt?.data?.hash,operation=receipt?.operation_id;
     if(receipt?.status !== "VERIFIED" || receipt.receipt_ref !== operation || !/^op_[a-f0-9]{32}$/.test(operation) || !/^res_[a-f0-9]{32}$/.test(id) || !/^[a-f0-9]{64}$/.test(hash) || !Array.isArray(receipt.artifact_refs) || receipt.artifact_refs.length !== 1 || receipt.artifact_refs[0] !== id)continue;
     const matches=effects.filter(effect=>effect?.id === operation);
@@ -398,7 +398,8 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
     }
     renderOrdinaryOutcome(r);
   }
-  if (!r.result && r.ordinary_csv?.receipts?.length)renderOrdinaryOutcome(r);
+  if (!r.result && (r.ordinary_csv?.receipts?.length||r.artifact_delivery?.receipts?.length))renderOrdinaryOutcome(r);
+  if(r.artifact_delivery){const status=row(`单份MD交付：${r.artifact_delivery.status} · 自动语义 NOT_RUN · 人工声明另行提交`);status.id="ordinary-md-status";$("result").append(status);}
   if(typeof renderCsvReportContract === "function")renderCsvReportContract(r,id,current);
   if(typeof renderOrdinaryOwnerReview === "function")renderOrdinaryOwnerReview(r);
   if (r.error) $("result").append(row(`需要处理：${r.error.message || r.error.code}`));
@@ -816,6 +817,7 @@ async function readGoalRun(entry,current,selection){
   goalRunDisplayed=entry.runId;
   await showRun(entry.runId,true,()=>current()&&goalRunDisplayed===entry.runId,r=>{
    const source=r.contract?.snapshot?.source_goal_card;
+   if(entry.deliveryPolicy&&(r.contract.snapshot.human_review?.version!=="owner.ordinary-goal-md.v2"||goalRunCanonical(r.contract.snapshot.artifact_delivery)!==goalRunCanonical(entry.deliveryPolicy)))throw Error("VERSION_CONFLICT");
    if(r.id!==entry.runId||!source||source.card_id!==activeGoalCard.id||source.version!==entry.body.expected_version||source.fingerprint!==entry.body.expected_fingerprint||source.snapshot?.schema_version!=="F2-goal-card.v1"||goalRunCanonical(source.snapshot)!==goalRunCanonical(entry.snapshot))throw Error("VERSION_CONFLICT");
   });
   if(!current())return;
@@ -832,8 +834,8 @@ async function executeGoalCard(recover=false,humanReview=false){
  if(!recover){
   if(["unknown","accepted-read-error"].includes(entry?.state))return;
   if(humanReview && (typeof ordinaryRubricReady !== "function" || !ordinaryRubricReady()))return;
-  entry={path:humanReview?"reviewable-runs":"runs",snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};goalRunRequests.set(key,entry);
-  if(humanReview)$("ordinary-rubric-start-ack").checked=false;
+  entry={path:humanReview?($("ordinary-rubric-md").checked?"reviewable-artifact-runs":"reviewable-runs"):"runs",snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};goalRunRequests.set(key,entry);
+  if(humanReview){$("ordinary-rubric-start-ack").checked=false;$("ordinary-rubric-md").checked=false;}
  }
  if(!entry)return;
  if(entry.state==="accepted-read-error"){await readGoalRun(entry,current,selection);return;}
@@ -841,6 +843,11 @@ async function executeGoalCard(recover=false,humanReview=false){
  try{
   const receipt=await api(`/api/projects/${project}/goal-cards/${card.id}/${entry.path||"runs"}`,"POST",entry.body);
   if(!receipt||typeof receipt.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||receipt.status!=="ACCEPTED"||receipt.goal_card_id!==card.id||receipt.goal_version!==entry.body.expected_version||receipt.goal_fingerprint!==entry.body.expected_fingerprint||receipt.goal_acceptance!=="NOT_RUN"||receipt.candidate_generated!==false)throw Error("Invalid goal execution receipt");
+  if(entry.path==="reviewable-artifact-runs"){
+   const delivery=receipt.artifact_delivery;
+   if(receipt.human_review?.version!=="owner.ordinary-goal-md.v2"||delivery?.version!=="ordinary-goal-md.v1"||delivery.required!==true||delivery.format!=="md"||delivery.max_artifacts!==1||delivery.max_text_characters!==8000||!/^[a-f0-9]{64}$/.test(delivery.tool_definitions_fingerprint))throw Error("MD交付合同回执不匹配");
+   entry.deliveryPolicy=delivery;
+  }
   entry.runId=receipt.run_id;entry.state="accepted-read-error";
  }catch(error){
   const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);

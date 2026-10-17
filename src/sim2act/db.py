@@ -915,6 +915,8 @@ class Store:
             from .ordinary_owner_review import require_prospective
 
             require_prospective(source, policy)
+        if policy.get("artifact_delivery") is not None:
+            self.authorize(c, principal, p["runtime_id"], project_id, project_id, "artifact.save_text")
         request = {"goal": goal, "resource_refs": refs, "policy": policy}
         if source is not None:
             request["goal_source"] = source.model_dump()
@@ -1026,6 +1028,8 @@ class Store:
                if policy.get("application_generation") is not None else {}),
             **({"human_review": policy["human_review"]}
                if policy.get("human_review") is not None else {}),
+            **({"artifact_delivery": policy["artifact_delivery"]}
+               if policy.get("artifact_delivery") is not None else {}),
         })
         return rid
 
@@ -1113,6 +1117,9 @@ class Store:
         from .ordinary_csv import frozen as verify_csv_contract
 
         verify_csv_contract(self, c, run, contract)
+        from .ordinary_artifacts import validate_contract as validate_md_contract
+
+        validate_md_contract(contract, raw=saved["snapshot"].get("artifact_delivery"))
         return contract
 
     def claim(self, worker_id, lease_seconds, *, trial_binding=None):
@@ -1369,6 +1376,11 @@ class Store:
                         "candidate": value, "candidate_fingerprint": fingerprint(value),
                         "goal_acceptance": "NOT_RUN", "semantic_status": "UNKNOWN", "app_created": False}:
                         raise DomainError("VERSION_CONFLICT", "Goal generation result changed")
+            artifact_delivery = None
+            if source_contract and source_contract.get("artifact_delivery") is not None:
+                from .ordinary_artifacts import projection as artifact_projection
+
+                artifact_delivery = artifact_projection(self, c, r, self.frozen_contract(c, r))
             natural_plan = None
             natural_deadline = None
             ordinary_csv = None
@@ -1407,6 +1419,7 @@ class Store:
                 "contract": self.contract_metadata(c, r),
                 "known_effects": self.known_effects(c, run_id),
                 **({"ordinary_csv": ordinary_csv} if ordinary_csv is not None else {}),
+                **({"artifact_delivery": artifact_delivery} if artifact_delivery is not None else {}),
                 **({"natural_plan": natural_plan} if natural_plan is not None else {}),
                 **({"natural_deadline": natural_deadline} if natural_deadline is not None else {}),
             }

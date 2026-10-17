@@ -88,7 +88,8 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
         selected = source["snapshot"].get("natural_planning") if source else None
         activated = isinstance(selected, dict) and selected.get("activation") is not None
         csv_report = bool(source and source["snapshot"].get("ordinary_csv_report"))
-        if activated or csv_report:
+        md_delivery = bool(source and source["snapshot"].get("artifact_delivery"))
+        if activated or csv_report or md_delivery:
             store.lock_project(c, source["principal_id"], source["project_id"])
         run = store.guard(c, run_id, fence)
         if csv_report:
@@ -130,8 +131,17 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
             if old["fingerprint"] != fp:
                 raise DomainError("VERSION_CONFLICT")
             if old["status"] == "VERIFIED":
+                if md_delivery:
+                    store.authorize_receipts(c, run)
+                    status, receipt = reconcile_readback(store, c, run, old)
+                    if status != "VERIFIED" or receipt != old["receipt"]:
+                        raise DomainError("VERIFICATION_FAILED", "Original MD operation changed")
                 return old["receipt"]
             raise DomainError("OUTCOME_UNKNOWN")
+        if md_delivery:
+            from .ordinary_artifacts import dispatch_gate
+
+            dispatch_gate(store, c, run, name)
         ctx = dict(run["context"])
         if ctx["tools"] >= store.frozen_contract(c, run).limits.max_tools:
             raise DomainError("BUDGET_EXHAUSTED")

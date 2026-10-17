@@ -2,7 +2,7 @@
 // All human clicks below are synthetic test actions; never a real owner signoff.
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
 const info=JSON.parse(fs.readFileSync(process.argv[2])),requests=[],checks=[],assets=[],pending=new Map();
-let serial=0,dom,w,$,hold=null,release=null,drop=false,run;
+let serial=0,dom,w,$,hold=null,release=null,drop=false,run;const blobs=[],downloads=[];
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
 const check=(ok,label)=>{assert(ok,label);checks.push(label);};
@@ -22,7 +22,7 @@ async function prepare(){await read();await action('ordinary-owner-prepare');che
 async function choices(reject=false){for(const [n,s] of [...$('ordinary-owner-form').querySelectorAll('select')].entries()){check(s.value==='','each criterion starts without an ACCEPT default');s.value=reject&&n===0?'REJECT':'ACCEPT';}for(const t of $('ordinary-owner-form').querySelectorAll('textarea'))t.value='SIMULATED user declaration, not real human signoff';await tick('ordinary-owner-ack');}
 async function boot(){
  const load=async path=>{const r=await rpc({method:'GET',path});assert.equal(r.status,200);assets.push({path,sha256:crypto.createHash('sha256').update(r.text).digest('hex')});return r.text;};
- dom=new JSDOM(await load('/'),{url:'http://testserver/',runScripts:'dangerously',pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;w.structuredClone=structuredClone;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});w.setInterval=()=>0;
+ dom=new JSDOM(await load('/'),{url:'http://testserver/',runScripts:'dangerously',pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;w.structuredClone=structuredClone;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});w.setInterval=()=>0;w.Blob=Blob;w.URL.createObjectURL=blob=>{const url='blob:md-'+blobs.length;blobs.push({blob,url,revoked:false});return url;};w.URL.revokeObjectURL=url=>{const b=blobs.find(x=>x.url===url);assert(b);b.revoked=true;};w.HTMLAnchorElement.prototype.click=function(){downloads.push({url:this.href,filename:this.download});};
  const style=w.document.createElement('style');style.textContent=await load('/app.css');w.document.head.append(style);
  w.fetch=async(path,options={})=>{const request={method:options.method||'GET',path,body:options.body?JSON.parse(options.body):undefined};requests.push(request);const h=hold&&hold.path===path&&hold.method===request.method?hold:null;if(h)hold=null;
   const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response=JSON.parse(r.text);
@@ -31,15 +31,16 @@ async function boot(){
   return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});};
  for(const script of [...w.document.querySelectorAll('script[src]')]){const node=w.document.createElement('script');node.textContent=await load(script.getAttribute('src'));w.document.body.append(node);}
  $('token').value='synthetic-test-A';await action('connect');await project(info.project);
- const card=[...$('goal-card-list').children].find(r=>r.textContent.includes('按完整条件执行'));assert(card);await action(card.querySelector('button'));
- check($('ordinary-rubric-preview').textContent.includes('不能签收语义')&&$('ordinary-rubric-preview').textContent.includes('不把旧成功当本次结果'),'visible full saved rubric and unresolved items before execution');
+ const card=[...$('goal-card-list').children].find(r=>r.textContent.includes(info.card_title||'按完整条件执行'));assert(card);await action(card.querySelector('button'));
+ check($('ordinary-rubric-preview').textContent.includes(info.expected_unresolved||'不能签收语义')&&$('ordinary-rubric-preview').textContent.includes(info.expected_check||'不把旧成功当本次结果'),'visible full saved rubric and unresolved items before execution');
  check($('ordinary-rubric-run').disabled&&!$('ordinary-rubric-start-ack').checked,'starting a new reviewable Run requires an explicit unchecked confirmation');
  $('goal-card-acceptance_checks').value='UNSAVED MUST NOT REPLACE THE FROZEN STANDARD';
+ if(info.require_md){check(!$('ordinary-rubric-md').checked,'MD writing starts unchecked');await tick('ordinary-rubric-md');check(!$('ordinary-rubric-start-ack').checked,'selecting MD requires fresh explicit confirmation');}
  await tick('ordinary-rubric-start-ack');await action('ordinary-rubric-run');
- const sent=requests.find(r=>r.method==='POST'&&r.path.endsWith('/reviewable-runs'));check(sent?.status===202,'visible dedicated control creates a prospective ordinary Run');run=sent.response.run_id;
+ const sent=requests.find(r=>r.method==='POST'&&r.path.endsWith(info.require_md?'/reviewable-artifact-runs':'/reviewable-runs'));check(sent?.status===202,'visible dedicated control creates a prospective ordinary Run');run=sent.response.run_id;
  assert.equal((await rpc({command:'worker'})).status,200);await selectRun();
- check($('result').textContent.includes('PARTIAL')&&$('result').textContent.includes('NOT_RUN')&&visible($('ordinary-owner-review')),'same ordinary result canvas exposes manual review alongside PARTIAL/NOT_RUN');
- check($('ordinary-owner-frozen').textContent.includes('不把旧成功当本次结果')&&!$('ordinary-owner-frozen').textContent.includes('UNSAVED'),'frozen saved standards, not unsaved editor content, bind the exact Run');
+ check($('result').textContent.includes(['md-missing','md-partial-file'].includes(info.case)?'FAILED':'PARTIAL')&&$('result').textContent.includes('NOT_RUN')&&visible($('ordinary-owner-review')),'same ordinary result canvas exposes manual review alongside PARTIAL/NOT_RUN');
+ check($('ordinary-owner-frozen').textContent.includes(info.expected_check||'不把旧成功当本次结果')&&!$('ordinary-owner-frozen').textContent.includes('UNSAVED'),'frozen saved standards, not unsaved editor content, bind the exact Run');
  check(posts().length===0,'opening the result never prepares or declares acceptance automatically');
 }
 async function normal(reject){await prepare();check(!$('ordinary-owner-ack').checked&&$('ordinary-owner-decide').disabled,'explicit user acknowledgement required after choosing all criteria');await choices(reject);await action('ordinary-owner-decide');
@@ -74,9 +75,32 @@ async function lateIntent(){
  await action('ordinary-owner-recover');check($('ordinary-owner-status').textContent.includes('ACCEPTED')&&posts().length===2,'next declaration GET recovers its own exact accepted record with no duplicate POST');finishDecide();await deciding;
  check(posts().length===2&&$('ordinary-owner-status').textContent.includes('ACCEPTED'),'late declaration response preserves current same-Run recovered state');
 }
+async function mdDeliver(){
+ check($('ordinary-md-status').textContent.includes('DELIVERED'),'same-Run MD delivery status comes from actual saved artifact proof');
+ const buttons=()=>[...$('run-artifacts').querySelectorAll('button')],viewButton=()=>buttons().find(b=>b.textContent==='查看此成果'),downloadButton=()=>buttons().find(b=>b.textContent==='下载此成果');
+ await action(viewButton());check($('run-artifacts').querySelector('pre').textContent===info.report&&!w.mdUnsafe,'exact original MD displays inertly');
+ await action(downloadButton());check(blobs.length===1&&Buffer.from(await blobs[0].blob.arrayBuffer()).equals(Buffer.from(info.report)),'download bytes exactly match saved Unicode/CRLF MD');
+ check(downloads[0].filename.includes(run),'download identifies this exact Run');
+ await prepare();await choices(info.case==='md-reject');await action('ordinary-owner-decide');check($('ordinary-owner-status').textContent.includes(info.case==='md-reject'?'REJECTED':'ACCEPTED'),'same-Run complete synthetic manual declaration remains separate from MD delivery');
+ check($('ordinary-owner-declaration').textContent.includes('artifact.md'),'manual declaration includes the prospectively frozen file criterion');
+ if(info.case==='md-navigation'){
+  const detached=downloadButton(),before=blobs.length;
+  const resource=requests.filter(r=>r.method==='GET'&&r.path.startsWith('/api/resources/')).at(-1).path;
+  hold={path:resource,method:'GET'};const downloading=action(detached);await wait(()=>!!release,'saved MD bytes held');w.selectWorkspace('resources');w.selectWorkspace('projects');const finish=release;release=null;finish();await downloading;
+  check(blobs.length===before,'late MD download bytes cannot create Blob after workspace return');await action(downloadButton());check(blobs.length===before+1,'fresh returned file control still downloads');
+  await project(info.other);await project(info.project);await selectRun();check(!$('ordinary-rubric-md').checked,'project away/back does not inherit write opt-in');
+ }
+}
+async function mdIncompleteFile(){
+ check($('ordinary-md-status').textContent.includes('INCOMPLETE')&&!!$('run-artifacts'),'failed task preserves its known verified file and incomplete status');
+ const buttons=[...$('run-artifacts').querySelectorAll('button')];await action(buttons.find(b=>b.textContent==='查看此成果'));check($('run-artifacts').querySelector('pre').textContent===info.report,'known saved file remains freshly readable after later save refusal');
+ await action(buttons.find(b=>b.textContent==='下载此成果'));check(blobs.length===1&&Buffer.from(await blobs[0].blob.arrayBuffer()).equals(Buffer.from(info.report)),'failed task downloads only the actual first file, without creating a second');
+ await action('ordinary-owner-read');check(!$('ordinary-owner-prepare')&&!$('ordinary-owner-form')&&posts().length===0,'existing file cannot make failed task eligible for manual signoff');
+}
+async function mdMissing(){check($('ordinary-md-status').textContent.includes('INCOMPLETE')&&!$('run-artifacts'),'answer without actual saved file is a visible incomplete delivery');await action('ordinary-owner-read');check(!$('ordinary-owner-prepare')&&!$('ordinary-owner-form')&&posts().length===0,'missing required MD cannot be manually signed or prepared');}
 async function revoked(){await prepare();await choices();assert.equal((await rpc({command:'revoke'})).status,200);await action('ordinary-owner-decide');check(posts().length===1&&!$('ordinary-owner-form'),'fresh authorization check blocks DECIDE before POST after actual Grant revoke');check(!$('run-answer')&&$('raw-result').textContent===''&&!$('result').textContent.includes('item,amount'),'failed DECIDE clears protected result immediately, before any subsequent read');w.selectWorkspace('resources');w.selectWorkspace('projects');check(!$('run-answer')&&$('ordinary-owner-frozen').textContent===''&&$('raw-result').textContent==='','workspace return cannot revive revoked answer or frozen Goal cache');await action('ordinary-owner-read');
  check($('ordinary-owner-status').textContent.includes('STALE')&&!$('run-answer')&&$('raw-result').textContent==='','revoked content clears protected result and retains metadata-only STALE history');
  await selectRun();check(!!$('ordinary-owner-metadata-open')&&!$('run-answer'),'denied full Run from durable history exposes explicit metadata-only signoff entry');const detachedOpen=$('ordinary-owner-metadata-open');await project(info.other);await project(info.project);const oldCount=requests.length;await detachedOpen.onclick(new w.Event('click'));check(requests.length===oldCount&&!$('ordinary-owner-review'),'old detached metadata entry cannot reopen after project away/back');await selectRun();const oldWorkspaceOpen=$('ordinary-owner-metadata-open');w.selectWorkspace('resources');w.selectWorkspace('projects');const beforeOpen=requests.length;await oldWorkspaceOpen.onclick(new w.Event('click'));check(requests.length===beforeOpen,'old workspace metadata entry stays inert');await action('ordinary-owner-metadata-open');check(!!$('ordinary-owner-stop')&&$('ordinary-owner-frozen').textContent==='','metadata-only entry reaches exact pending STOP without protected source body');
  $('ordinary-owner-stop-reason').value='Cancel after source revoke';await tick('ordinary-owner-stop-ack');await action('ordinary-owner-stop');check($('ordinary-owner-status').textContent.includes('CANCELLED'),'owner can explicitly cancel exact pending preview after source access withdrawal');
 }
-(async()=>{try{await boot();if(info.case==='accept'||info.case==='reject')await normal(info.case==='reject');else if(info.case==='navigation-unknown')await navigation();else if(info.case==='late-intent')await lateIntent();else await revoked();fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,assets,requests,run,real_human_signoff:'NOT_RUN',real_model_requests:0},null,2));}catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',case:info.case,checks,assets,requests,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}finally{dom?.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');}})();
+(async()=>{try{await boot();if(info.case==='md-partial-file')await mdIncompleteFile();else if(info.case==='md-missing')await mdMissing();else if(info.require_md)await mdDeliver();else if(info.case==='accept'||info.case==='reject')await normal(info.case==='reject');else if(info.case==='navigation-unknown')await navigation();else if(info.case==='late-intent')await lateIntent();else await revoked();const captures=[];for(const [index,entry] of blobs.entries()){await wait(()=>entry.revoked,'Blob URL cleanup');const bytes=Buffer.from(await entry.blob.arrayBuffer()),filename=`download-${index}.md`;fs.writeFileSync(info.output.replace('result.json',filename),bytes);captures.push({...downloads[index],original:filename,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,revoked:entry.revoked});}if(blobs.length)check(!w.document.querySelector('a[download]'),'download URLs released and temporary anchors removed');fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,assets,requests,run,downloads:captures,real_human_signoff:'NOT_RUN',real_model_requests:0},null,2));}catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',case:info.case,checks,assets,requests,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}finally{dom?.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');}})();

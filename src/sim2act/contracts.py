@@ -275,9 +275,24 @@ class OrdinaryCsvReport(Strict):
 class OrdinaryHumanReview(Strict):
     """Explicit prospective user rubric; no automated semantic claim or delegated role."""
 
-    version: Literal["owner.ordinary-goal.v1"]
+    version: Literal["owner.ordinary-goal.v1", "owner.ordinary-goal-md.v2"]
     declarant: Literal["current-project-and-run-owner"]
     automatic_goal_acceptance: Literal["NOT_RUN"]
+
+
+class OrdinaryArtifactDelivery(Strict):
+    """Prospective single MD requirement on the original project save tool."""
+
+    version: Literal["ordinary-goal-md.v1"]
+    required: Literal[True]
+    format: Literal["md"]
+    destination: Literal["current-project"]
+    max_artifacts: Literal[1]
+    max_text_characters: Literal[8000]
+    tool_ref: Literal["artifact.save_text"]
+    tool_version: Literal["1"]
+    tool_definitions_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    acceptance_check: Literal["核对本Run唯一MD成果的完整内容、来源、未决项及精确版本；文件回读不证明语义正确"]
 
 
 class FrozenRunContract(Strict):
@@ -295,6 +310,7 @@ class FrozenRunContract(Strict):
     application_generation: ApplicationGenerationPolicy | None = None
     ordinary_csv_report: OrdinaryCsvReport | None = None
     human_review: OrdinaryHumanReview | None = None
+    artifact_delivery: OrdinaryArtifactDelivery | None = None
 
 
 class Run(Strict):

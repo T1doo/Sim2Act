@@ -31,8 +31,10 @@ from .goals import GoalCardInput
 from .tools import reconcile_readback
 
 VERSION = "owner.ordinary-goal.v1"
+MD_VERSION = "owner.ordinary-goal-md.v2"
 POLICY = OrdinaryHumanReview(version=VERSION, declarant="current-project-and-run-owner",
     automatic_goal_acceptance="NOT_RUN").model_dump()
+MD_POLICY = {**POLICY, "version": MD_VERSION}
 
 
 def require(condition, message="Exact prospective ordinary Goal review required"):
@@ -48,9 +50,14 @@ def items(content):
 
 
 def require_prospective(source, policy):
-    require(source is not None and policy["human_review"] == POLICY
+    require(source is not None and policy["human_review"] in (POLICY, MD_POLICY)
         and not any(policy.get(k) is not None for k in
                     ("natural_planning", "application_generation", "ordinary_csv_report")))
+    from .ordinary_artifacts import delivery_policy
+
+    require((policy["human_review"] == MD_POLICY) == (policy.get("artifact_delivery") is not None))
+    if policy.get("artifact_delivery") is not None:
+        require(policy["artifact_delivery"] == delivery_policy(), "MD policy or tool version changed")
     content = GoalCardInput.model_validate(source.snapshot["content"]).model_dump()
     if not content["acceptance_checks"] or any(not text.strip() for text in content["acceptance_checks"]):
         raise DomainError("INVALID_INPUT", "Save explicit nonblank acceptance checks before starting")
@@ -73,7 +80,7 @@ def scope(store, c, user, rid):
         run_contracts.c.snapshot["human_review"]["version"].as_string().label("version"),
         run_contracts.c.snapshot["goal"]["owner_id"].as_string().label("owner"))
         .where(run_contracts.c.run_id == rid)).mappings().first()
-    require(frozen is not None and frozen["version"] == VERSION and frozen["owner"] == user,
+    require(frozen is not None and frozen["version"] in (VERSION, MD_VERSION) and frozen["owner"] == user,
         "This Run did not freeze a prospective human rubric")
     require(not c.execute(select(internal_run_bindings.c.run_id)
         .where(internal_run_bindings.c.run_id == rid)).first(), "Internal Run is a different review scope")
@@ -106,18 +113,25 @@ def context(store, c, user, rid):
     require(bool(actual) and len(actual) <= contract.limits.max_tools)
     for operation in actual:
         require(operation["status"] == "VERIFIED" and operation["tool_ref"] in
-            {"resource.read", "data.aggregate_csv"}, "Unverified or unsupported ordinary effect")
+            ({"resource.read", "data.aggregate_csv", "artifact.save_text"} if contract.artifact_delivery else
+             {"resource.read", "data.aggregate_csv"}), "Unverified or unsupported ordinary effect")
         status, receipt = reconcile_readback(store, c, run, operation)
         require(status == "VERIFIED" and receipt == operation["receipt"], "Actual tool readback changed")
     require(sorted(map(fingerprint, run["result"].get("receipts", []))) ==
         sorted(fingerprint(op["receipt"]) for op in actual), "Result differs from exact Run receipts")
     materials = [dict(r) for r in c.execute(select(resources).where(resources.c.id.in_(run["resource_refs"]))
         .order_by(resources.c.id)).mappings()]
+    artifact_details = {}
+    if contract.artifact_delivery is not None:
+        from .ordinary_artifacts import projection
+
+        artifact_details["artifacts"] = projection(store, c, run, contract)["artifacts"]
     content = GoalCardInput.model_validate(source["snapshot"]["content"]).model_dump()
-    return dict(version=VERSION, principal_id=user, project_id=pid, runtime_id=run["runtime_id"],
+    return dict(version=contract.human_review.version, principal_id=user, project_id=pid, runtime_id=run["runtime_id"],
         run_id=rid, result_version=run["version"], run_input_fingerprint=run["fingerprint"],
         contract_fingerprint=fingerprint(contract.model_dump(exclude_none=True)),
-        source_goal=source, goal=content, items=items(content), materials=materials,
+        source_goal=source, goal=content, items=items(content) + ([dict(id="artifact.md", text=contract.artifact_delivery.acceptance_check)] if contract.artifact_delivery else []), materials=materials,
+        **artifact_details,
         output=run["result"], output_fingerprint=fingerprint(run["result"]), actual_operations=actual,
         grant_version=lifecycle.grant_version(c, pid, user), automatic_goal_acceptance="NOT_RUN",
         technical_semantic_status="UNKNOWN", formal_publication_enabled=False)
@@ -157,7 +171,11 @@ def read(store, user, rid, key=None):
         pid = scope(store, c, user, rid)
         rows = ledger(c, user, rid)
         last = rows[-1] if rows else None
-        out = dict(version=VERSION, principal_id=user, project_id=pid, run_id=rid,
+        from .db import run_contracts
+
+        version = c.execute(select(run_contracts.c.snapshot["human_review"]["version"].as_string())
+            .where(run_contracts.c.run_id == rid)).scalar_one()
+        out = dict(version=version, principal_id=user, project_id=pid, run_id=rid,
             sequence=len(rows), history=rows, latest=last, owner_acceptance=last["status"] if last else "PENDING",
             content_access=False, automatic_goal_acceptance="NOT_RUN", technical_semantic_status="UNKNOWN",
             formal_publication_enabled=False)

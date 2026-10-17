@@ -357,6 +357,12 @@ class Worker:
                         raise DomainError("VERIFICATION_FAILED", "完整事前CSV合同尚未通过")
                 else:
                     result = None
+            if saved and saved.get("artifact_delivery") and state in {"PARTIAL", "SUCCEEDED"}:
+                from .ordinary_artifacts import report
+
+                frozen_md = self.store.frozen_contract(c, run)
+                if state != "PARTIAL" or not result or result.get("artifact_delivery") != report(self.store, c, run, frozen_md, required=True):
+                    raise DomainError("VERIFICATION_FAILED", "Required same-Run MD is not delivered")
             if saved and saved.get("application_generation") and state != "PARTIAL":
                 result = None
             if state in {"SUCCEEDED", "PARTIAL"}:
@@ -464,8 +470,11 @@ class Worker:
         goal_input = {"goal": run["goal"], "resource_refs": run["resource_refs"]}
         if contract.source_goal_card is not None:
             goal_tools = [t for t in goal_tools if t["function"]["name"] in
-                          {"resource.read", "data.aggregate_csv"}]
+                          ({"resource.read", "data.aggregate_csv", "artifact.save_text"} if contract.artifact_delivery else
+                           {"resource.read", "data.aggregate_csv"})]
             goal_input["saved_goal"] = contract.source_goal_card.model_dump()
+            if contract.artifact_delivery is not None:
+                goal_input["artifact_delivery"] = contract.artifact_delivery.model_dump()
             if ctx["messages"]:
                 try:
                     original_input = ctx["messages"][1]["content"]
@@ -617,8 +626,13 @@ class Worker:
                 if contract.source_goal_card is not None:
                     with self.store.tx() as c:
                         self.store.frozen_contract(c, self.store.guard(c, rid, fence))
-                    if any(call["function"]["name"] not in {"resource.read", "data.aggregate_csv"} for call in pending):
+                    allowed = {"resource.read", "data.aggregate_csv"} | ({"artifact.save_text"} if contract.artifact_delivery else set())
+                    if any(call["function"]["name"] not in allowed for call in pending):
                         raise DomainError("UNSUPPORTED_CAPABILITY", "Saved-goal task is read-only")
+                if contract.artifact_delivery is not None:
+                    from .ordinary_artifacts import check_pending
+
+                    check_pending(pending)
                 if pending:
                     if ctx["tools"] + len(pending) > self.s.max_tools:
                         raise DomainError("BUDGET_EXHAUSTED")
@@ -655,6 +669,13 @@ class Worker:
                         raise DomainError(
                             "VERIFICATION_FAILED", "No independently verified tool effect"
                         )
+                    artifact_result = {}
+                    if contract.artifact_delivery is not None:
+                        from .ordinary_artifacts import report
+
+                        with self.store.tx() as c:
+                            current = self.store.guard(c, rid, fence)
+                            artifact_result["artifact_delivery"] = report(self.store, c, current, contract, required=True)
                     # F1 only: receipts verified, semantic goal acceptance belongs to F2/F3.
                     self.finish(
                         rid,
@@ -665,6 +686,7 @@ class Worker:
                             "answer": ctx["messages"][-1]["content"],
                             "receipts": verified,
                             "goal_acceptance": "NOT_RUN",
+                            **artifact_result,
                             "boundary": "F1 tool chain; application/semantic acceptance not yet implemented",
                             **({"source_goal_card": {"card_id": contract.source_goal_card.card_id,
                                  "version": contract.source_goal_card.version,
