@@ -25,7 +25,7 @@ async function refreshApplicationUse(apps){
  const current=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&generation===applicationUseListGeneration;
  const selectable=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&context===applicationUseContextGeneration;
  const rows=[];
-  if(csvDagContext?.savedUse&&!apps.some(summary=>summary.id===csvDagContext.parent.id))clearSavedDagUse();
+  if(typeof csvDagContext!=="undefined"&&csvDagContext?.savedUse&&!apps.some(summary=>summary.id===csvDagContext.parent.id))clearSavedDagUse();
  if(applicationUseCurrent(applicationUse)&&!apps.some(summary=>summary.id===applicationUse.appId))clearApplicationUseData(applicationUse);
  for(const summary of apps){
    if(summary.csv_instance_candidate===false)clearSavedDagUse(summary.id);
@@ -83,7 +83,7 @@ function savedDagUseLabel(version){
  const labels={"internal.csv-read-sum.v1":"读取 → 求和","internal.csv-read-sum-report.v1":"读取 → 求和 → 报告","internal.csv-read-two-sums.v1":"读取 → 双求和","internal.project-csv-read-sum-report.v1":"项目固定读取 → 求和 → 报告"};
  return Object.hasOwn(labels,version)?labels[version]:null;
 }
-function clearSavedDagUse(appId=null){if(csvDagContext?.savedUse&&(!appId||csvDagContext.parent.id===appId))clearCsvDag();}
+function clearSavedDagUse(appId=null){if(typeof csvDagContext!=="undefined"&&csvDagContext?.savedUse&&(!appId||csvDagContext.parent.id===appId))clearCsvDag();}
 async function openSavedDagUse(appId,id,selectionCurrent=()=>true){
  const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,project=$("project-select").value;
  let generation=null,c=null;

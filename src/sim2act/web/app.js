@@ -562,7 +562,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   }
   if(typeof openInternal === "function")await openInternal(a,generation,selectionCurrent);
   if(generation!==appSelectionGeneration||!selectionCurrent())return false;
-  if(deliveryContext?.generation===generation&&deliveryContext.selectionCurrent===selectionCurrent)deliveryContext.selectionCurrent=null;
+  if(typeof deliveryContext!=="undefined"&&deliveryContext?.generation===generation&&deliveryContext.selectionCurrent===selectionCurrent)deliveryContext.selectionCurrent=null;
   return true;
 }
 $("extraction-form").onsubmit=safe(async()=>{
