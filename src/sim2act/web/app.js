@@ -196,7 +196,11 @@ function fixedGoalAcceptancePassed(r) {
 function renderOrdinaryProgress(r, attempts) {
   const section=document.createElement("section");section.id="run-progress";
   const heading=document.createElement("h3");heading.textContent="执行记录（只读）";section.append(heading);
-  const acceptance=row(fixedGoalAcceptancePassed(r)
+  const acceptance=row(typeof csvReportPassed === "function" && csvReportPassed(r)
+    ? "目标验收：本次明确选择并事前冻结的CSV完整报告合同 PASS；0模型请求。通用语义 NOT_RUN，人工 PENDING，正式发布关闭。"
+    : r.contract?.snapshot?.ordinary_csv_report
+      ? "目标验收：事前CSV完整报告合同尚未通过（NOT_RUN）；0模型请求。"
+      : fixedGoalAcceptancePassed(r)
     ? "目标验收：本次冻结的固定合成目标契约 PASS。仅限精确冻结目标；通用语义 NOT_RUN，人工 PENDING，正式发布关闭。"
     : r.contract?.snapshot?.natural_planning?.goal_acceptance
       ? "目标验收：本次固定合成合同尚未通过全部检查（NOT_RUN）。技术状态与单步核验不代表整体验收。"
@@ -239,7 +243,7 @@ function ordinaryOutcomeCurrent(view) {
 function ordinaryArtifactBindings(r, project) {
   if(r.contract?.snapshot?.goal?.project_id !== project)return [];
   const effects=Array.isArray(r.known_effects)?r.known_effects:[],bindings=[];
-  for(const receipt of r.result?.receipts || []) {
+  for(const receipt of r.result?.receipts || r.ordinary_csv?.receipts || []) {
     const id=receipt?.data?.resource_id,hash=receipt?.data?.hash,operation=receipt?.operation_id;
     if(receipt?.status !== "VERIFIED" || receipt.receipt_ref !== operation || !/^op_[a-f0-9]{32}$/.test(operation) || !/^res_[a-f0-9]{32}$/.test(id) || !/^[a-f0-9]{64}$/.test(hash) || !Array.isArray(receipt.artifact_refs) || receipt.artifact_refs.length !== 1 || receipt.artifact_refs[0] !== id)continue;
     const matches=effects.filter(effect=>effect?.id === operation);
@@ -381,7 +385,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   }
   if(!internal)renderOrdinaryProgress(r,attempts);
   if (r.result && !internal) {
-    $("result").append(row(fixedGoalAcceptancePassed(r)?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
+    $("result").append(row(typeof csvReportPassed === "function" && csvReportPassed(r)?"事前CSV完整报告合同 PASS；0模型请求，通用语义 NOT_RUN，人工 PENDING。":fixedGoalAcceptancePassed(r)?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
     for (const receipt of r.result.receipts || []) {
       const data = receipt.data;
       if (typeof data.content === "string") {$("result").append(row("工具读取的材料（来源回执）"));const pre=document.createElement("pre");pre.textContent=data.content;$("result").append(pre);}
@@ -389,13 +393,15 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
     }
     renderOrdinaryOutcome(r);
   }
+  if (!r.result && r.ordinary_csv?.receipts?.length)renderOrdinaryOutcome(r);
+  if(typeof renderCsvReportContract === "function")renderCsvReportContract(r,id,current);
   if (r.error) $("result").append(row(`需要处理：${r.error.message || r.error.code}`));
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
   $("events").textContent = JSON.stringify(r.events, null, 2);
   if(typeof renderNaturalGoalRun === "function")await renderNaturalGoalRun(r,id,current);
   if(typeof renderNaturalReceiptCandidate === "function")await renderNaturalReceiptCandidate(r,id,current);
   if(!current())return;
-  const commands = ["QUEUED","RUNNING"].includes(r.status) ? ["pause","cancel"] : ["PAUSED","WAITING_RESOURCE"].includes(r.status) ? (unresolvedAttempts.length ? ["cancel"] : ["resume","cancel"]) : [];
+  const commands = r.contract?.snapshot?.ordinary_csv_report && r.status === "WAITING_APPROVAL" ? ["cancel"] : ["QUEUED","RUNNING"].includes(r.status) ? ["pause","cancel"] : ["PAUSED","WAITING_RESOURCE"].includes(r.status) ? (unresolvedAttempts.length ? ["cancel"] : ["resume","cancel"]) : [];
   $("commands").replaceChildren(...commands.map(command => {const b = document.createElement("button"); b.textContent = {pause:"暂停",cancel:"取消",resume:"继续"}[command]; b.onclick = safe(async () => {if(!current())return;await api(`/api/runs/${id}/commands`, "POST", {command,version:r.version}); if(current())await showRun(id);}); return b;}));
 }
 async function loadProjects(preferred=null) {
@@ -995,9 +1001,11 @@ function runSubmissionEntry() {
   return ordinarySubmissions.get(token)?.get($("project-select").value);
 }
 function clearOrdinaryRunMaterials() {
+  if(typeof clearCsvReport === "function")clearCsvReport();
   refs=[];ordinaryRunMaterialsReady=false;$("run-materials").replaceChildren();
 }
 function updateOrdinaryRunMaterials(materials,ready=true) {
+  if(typeof updateCsvReportMaterials === "function")updateCsvReportMaterials(materials,ready);
   const select=$("run-materials"),entry=runSubmissionEntry();
   const locked=entry && ["sending","unknown"].includes(entry.state);
   const selected=locked?entry.body.resource_refs:Array.from(select.selectedOptions,o=>o.value);

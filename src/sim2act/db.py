@@ -913,6 +913,8 @@ class Store:
             return old["id"]
         rid = new_id("run")
         created_at = time.time()
+        from .ordinary_csv import RULES as csv_report_rules
+
         snapshot = FrozenRunContract(
             run_id=rid,
             runtime_id=p["runtime_id"],
@@ -922,8 +924,9 @@ class Store:
                 project_id=project_id,
                 owner_id=principal,
                 goal=goal,
-                constraints=source.snapshot["content"]["constraints"] if source else [],
-                acceptance_version="F1-tool-chain.v1",
+                constraints=(csv_report_rules
+                             if policy.get("ordinary_csv_report") else source.snapshot["content"]["constraints"] if source else []),
+                acceptance_version="ordinary-csv-report.v1" if policy.get("ordinary_csv_report") else "F1-tool-chain.v1",
                 resource_refs=refs,
                 unresolved=source.snapshot["content"]["unresolved"] if source else ["Semantic goal acceptance NOT_RUN"],
             ),
@@ -1072,6 +1075,9 @@ class Store:
             from .goal_runs import verify_source
 
             verify_source(self, c, run, contract)
+        from .ordinary_csv import frozen as verify_csv_contract
+
+        verify_csv_contract(self, c, run, contract)
         return contract
 
     def claim(self, worker_id, lease_seconds, *, trial_binding=None):
@@ -1305,7 +1311,8 @@ class Store:
             source_contract = c.execute(select(run_contracts.c.snapshot).where(
                 run_contracts.c.run_id == run_id,
             )).scalar_one_or_none()
-            if source_contract and source_contract.get("natural_planning") is not None:
+            if source_contract and (source_contract.get("natural_planning") is not None
+                                    or source_contract.get("ordinary_csv_report") is not None):
                 self.lock_project(c, principal, r["project_id"])
             for rid in r["resource_refs"]:
                 self.authorize(c, principal, r["runtime_id"], r["project_id"], rid, "resource.read")
@@ -1329,6 +1336,15 @@ class Store:
                         raise DomainError("VERSION_CONFLICT", "Goal generation result changed")
             natural_plan = None
             natural_deadline = None
+            ordinary_csv = None
+            from .ordinary_csv import projection as csv_projection
+
+            if (source_contract and source_contract.get("ordinary_csv_report") is not None
+                    or "csv_report_frozen" in r["context"]
+                    or c.execute(select(events.c.id).where(events.c.run_id == run_id,
+                        events.c.kind == "CSV_REPORT_FROZEN")).first()):
+                csv_contract = self.frozen_contract(c, r)
+                ordinary_csv = csv_projection(self, c, r, csv_contract)
             if source_contract and source_contract.get("natural_planning") is not None:
                 from .goal_planner import plan_projection
 
@@ -1355,6 +1371,7 @@ class Store:
                 "events": [dict(x) for x in ev],
                 "contract": self.contract_metadata(c, r),
                 "known_effects": self.known_effects(c, run_id),
+                **({"ordinary_csv": ordinary_csv} if ordinary_csv is not None else {}),
                 **({"natural_plan": natural_plan} if natural_plan is not None else {}),
                 **({"natural_deadline": natural_deadline} if natural_deadline is not None else {}),
             }
@@ -1457,7 +1474,8 @@ class Store:
             ).mappings().first()
             if source and (
                 isinstance(source["snapshot"], dict)
-                and source["snapshot"].get("natural_planning") is not None
+                and (source["snapshot"].get("natural_planning") is not None
+                     or source["snapshot"].get("ordinary_csv_report") is not None)
                 or isinstance(source["context"], dict)
                 and source["context"].get("natural_plan") is not None
             ):
@@ -1500,6 +1518,11 @@ class Store:
                         c, principal, r["runtime_id"], r["project_id"], rid, "resource.read"
                     )
                 contract = self.frozen_contract(c, r)
+                if contract.ordinary_csv_report is not None:
+                    from .ordinary_csv import active, confirmation
+
+                    active(self, c, r, contract)
+                    confirmation(self, c, r, contract)
                 if (contract.natural_planning is not None
                         and r["context"].get("natural_plan") is not None):
                     from .goal_planner import verified_plan, verify_confirmation

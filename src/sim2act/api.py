@@ -375,6 +375,37 @@ def create_app(store=None, settings=None):
             response.headers["X-Sim2Act-Server-Time"] = str(server_time)
         return result
 
+    from .ordinary_csv import ConfirmInput as CsvReportConfirmInput
+    from .ordinary_csv import PrepareInput as CsvReportPrepareInput
+
+    @app.post("/api/projects/{pid}/csv-report-runs", status_code=202)
+    def prepare_csv_report(pid: str, body: CsvReportPrepareInput, user=user_dependency):
+        from .ordinary_csv import prepare
+
+        return prepare(db, user, pid, body, {"limits": platform_limits.model_dump(),
+            "mode": s.mode, "request_model": s.model})
+
+    @app.get("/api/resources/{rid}/csv-report-columns")
+    def csv_report_columns(rid: str, user=user_dependency):
+        from .tools import authorized_read, csv_column_options
+
+        resource_id(rid)
+        with db.tx() as c:
+            res = c.execute(select(resources).where(resources.c.id == rid)).mappings().first()
+            if not res:
+                raise DomainError("PERMISSION_DENIED")
+            p = db.lock_project(c, user, res["project_id"])
+            source = authorized_read(db, c, user, p["runtime_id"], p["id"], "resource.read", {"resource_id": rid})
+            if source["format"] != "csv":
+                raise DomainError("INVALID_INPUT", "CSV material required")
+            return {"resource_id": rid, "source_hash": source["hash"], **csv_column_options(source["content"])}
+
+    @app.post("/api/runs/{rid}/confirm-csv-report")
+    def confirm_csv_report(rid: str, body: CsvReportConfirmInput, user=user_dependency):
+        from .ordinary_csv import confirm
+
+        return confirm(db, user, rid, body)
+
     @app.post("/api/runs/{rid}/commands")
     def command(rid: str, body: CommandInput, user=user_dependency):
         return {"status": db.command(user, rid, body.command, body.version)}
@@ -955,6 +986,10 @@ def create_app(store=None, settings=None):
     @app.get("/app.js")
     def js():
         return FileResponse(web / "app.js", media_type="text/javascript")
+
+    @app.get("/ordinary-csv.js")
+    def ordinary_csv_js():
+        return FileResponse(web / "ordinary-csv.js", media_type="text/javascript")
 
     @app.get("/internal.js")
     def internal_js():

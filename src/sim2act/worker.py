@@ -111,6 +111,8 @@ class Worker:
             run = self.store.guard(c, run_id, fence)
             from .natural_trial_runs import check_worker_tx
             check_worker_tx(self, c, run_id)
+            if self.store.frozen_contract(c, run).ordinary_csv_report is not None:
+                raise DomainError("PERMISSION_DENIED", "事前CSV完整报告合同禁止模型请求或预留")
             if self.pa_trial is not None:
                 from .pa_trial_dispatch import preflight
                 preflight(self, c, run, generation=generation_request,
@@ -305,7 +307,8 @@ class Worker:
             if saved is not None and not isinstance(saved, dict):
                 raise DomainError("VERSION_CONFLICT", "Invalid frozen finalization contract")
             verify_goal_source = verify_goal_source or bool(saved and saved.get("natural_planning"))
-            if verify_goal_source:
+            csv_report = bool(saved and saved.get("ordinary_csv_report"))
+            if verify_goal_source or csv_report:
                 owner = c.execute(select(runs.c.principal_id, runs.c.project_id).where(
                     runs.c.id == run_id,
                 )).mappings().one()
@@ -342,6 +345,18 @@ class Worker:
                 state = "PAUSED"
             if self.store.has_unknown(c, run_id):
                 state = "RECONCILING" if run["cancel_intent"] else "WAITING_RESOURCE"
+            if csv_report:
+                # Only the complete independent composite check can authorize success.
+                from .ordinary_csv import accepted_result, active, confirmation
+
+                frozen_csv = self.store.frozen_contract(c, run)
+                if state == "SUCCEEDED":
+                    active(self.store, c, run, frozen_csv, self.s)
+                    confirmation(self.store, c, run, frozen_csv)
+                    if result != accepted_result(self.store, c, run, frozen_csv):
+                        raise DomainError("VERIFICATION_FAILED", "完整事前CSV合同尚未通过")
+                else:
+                    result = None
             if saved and saved.get("application_generation") and state != "PARTIAL":
                 result = None
             if state in {"SUCCEEDED", "PARTIAL"}:
@@ -372,6 +387,10 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
+            if csv_report and state == "SUCCEEDED":
+                active(self.store, c, run, frozen_csv, self.s)
+                if run["lease_until"] <= time.time():
+                    raise DomainError("VERSION_CONFLICT", "Original worker lease expired before final commit")
             if state in {"SUCCEEDED", "PARTIAL"}:
                 from .natural_trial_runs import check_worker_tx
                 check_worker_tx(self, c, run_id)
@@ -424,6 +443,11 @@ class Worker:
                 for key, value in contract.limits.model_dump().items()
             },
         )
+        if contract.ordinary_csv_report is not None:
+            from .ordinary_csv import process
+
+            process(self, run, contract)
+            return
         if contract.application_generation is not None:
             from .goal_applications import process
 

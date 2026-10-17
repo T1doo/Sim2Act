@@ -178,7 +178,7 @@ class GoalSpec(Strict):
     owner_id: str = Field(pattern=ID)
     goal: str = Field(min_length=1, max_length=4000)
     constraints: list[str] = Field(max_length=16)
-    acceptance_version: Literal["F1-tool-chain.v1"]
+    acceptance_version: Literal["F1-tool-chain.v1", "ordinary-csv-report.v1"]
     resource_refs: list[str] = Field(max_length=8)
     unresolved: list[str] = Field(max_length=16)
 
@@ -250,6 +250,28 @@ class ApplicationGenerationPolicy(Strict):
     app_limits: Limits | None = None
 
 
+class OrdinaryCsvReport(Strict):
+    """Prospective finite task, never inferred from arbitrary natural language."""
+
+    version: Literal["ordinary-csv-report.v1"]
+    checker: Literal["csv-report-independent.v1"]
+    resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
+    revision: Literal[1]
+    source_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    column: str = Field(min_length=1, max_length=32768)
+    csv_rule: Literal["utf8-no-bom-strict-unique-header-rectangular-1000.v1"]
+    numeric_rule: Literal["finite-decimal-exact-1000-digits-exponent.v1"]
+    count: int = Field(ge=0, le=1000)
+    sum: str = Field(min_length=1, max_length=8000)
+    report_format: Literal["md"]
+    report_text: str = Field(min_length=1, max_length=8000)
+    report_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    save_rule: Literal["same-run-transactional-save-and-exact-readback.v1"]
+    tool_versions: dict[str, str]
+    tool_definitions_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    model_requests: Literal[0]
+
+
 class FrozenRunContract(Strict):
     run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
     # Existing project runtime or existing declarative app runtime; neither creates a grant.
@@ -263,6 +285,7 @@ class FrozenRunContract(Strict):
     source_goal_card: GoalCardRunSource | None = None
     natural_planning: NaturalPlanningPolicy | None = None
     application_generation: ApplicationGenerationPolicy | None = None
+    ordinary_csv_report: OrdinaryCsvReport | None = None
 
 
 class Run(Strict):

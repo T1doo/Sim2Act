@@ -76,7 +76,7 @@ def definitions():
 
 
 def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
-             natural_activation_settings=None):
+             natural_activation_settings=None, ordinary_csv_settings=None):
     """Authorization, local effect and receipt are one transaction, fenced by the Run row."""
     name, args = call["function"]["name"], call["args"]
     validate_call(name, args)
@@ -87,9 +87,14 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
                            .where(runs.c.id == run_id)).mappings().first()
         selected = source["snapshot"].get("natural_planning") if source else None
         activated = isinstance(selected, dict) and selected.get("activation") is not None
-        if activated:
+        csv_report = bool(source and source["snapshot"].get("ordinary_csv_report"))
+        if activated or csv_report:
             store.lock_project(c, source["principal_id"], source["project_id"])
         run = store.guard(c, run_id, fence)
+        if csv_report:
+            from .ordinary_csv import dispatch_gate
+
+            dispatch_gate(store, c, run, call, ordinary_csv_settings)
         if activated:
             from .goal_planner import verified_plan, verify_confirmation
             from .natural_activations import validate_run
@@ -180,6 +185,10 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
         )
         if crash_before_commit:
             raise RuntimeError("FAULT_INJECTION before local commit")
+        if csv_report:
+            # Same transaction: deadline/lease/permission changes roll back this effect.
+            current = store.guard(c, run_id, fence)
+            dispatch_gate(store, c, current, call, ordinary_csv_settings)
         return receipt
 
 
