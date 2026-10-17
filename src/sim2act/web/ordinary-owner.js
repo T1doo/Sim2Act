@@ -1,6 +1,6 @@
 // The authenticated user declares each frozen criterion; model tools cannot call this API.
 const ordinaryOwnerIntents=new Map();
-let ordinaryOwnerView=null,ordinaryRubricScope=null;
+let ordinaryOwnerView=null,ordinaryRubricScope=null,ordinaryOwnerMetadataOpenView=null;
 function ordinaryRubricIdentity(){return activeGoalCard?JSON.stringify([token,identityConnectionGeneration,$('project-select').value,activeGoalCard.id,activeGoalCard.version,activeGoalCard.fingerprint]):null;}
 function resetOrdinaryRubricAcknowledgement(){ordinaryRubricScope=null;$('ordinary-rubric-start-ack').checked=false;renderOrdinaryRubricStart();}
 function ordinaryRubricReady(){return !!activeGoalCard&&!goalCardLoading&&!goalCardSaving&&ordinaryRubricScope===ordinaryRubricIdentity()&&$('ordinary-rubric-start-ack').checked&&activeGoalCard.snapshot.content.acceptance_checks.length>0&&activeGoalCard.snapshot.content.acceptance_checks.every(x=>x.trim())&&activeGoalCard.snapshot.content.resource_refs.length>0;}
@@ -14,8 +14,14 @@ $('ordinary-rubric-start-ack').onchange=renderOrdinaryRubricStart;
 $('ordinary-rubric-run').onclick=safe(()=>executeGoalCard(false,true));
 function ordinaryOwnerKey(id){return JSON.stringify([token,$('project-select').value,id]);}
 function ordinaryOwnerScope(id){return JSON.stringify([ordinaryOwnerKey(id),identityConnectionGeneration,projectSelectionGeneration,runUserSelectionGeneration]);}
-function clearOrdinaryOwnerReview(){ordinaryOwnerView=null;}
-function resumeOrdinaryOwnerReview(){const old=ordinaryOwnerView;if(old&&(activeRun===old.run||(old.metadataOnly&&activeRun===null))&&old.scope===ordinaryOwnerScope(old.run)){old.node.remove();renderOrdinaryOwnerReview(old.result,old.redacted,old.metadataOnly);}}
+function clearOrdinaryOwnerReview(){ordinaryOwnerView=null;ordinaryOwnerMetadataOpenView=null;}
+function ordinaryOwnerMetadataButton(id,baseCurrent){
+ const scope=ordinaryOwnerScope(id),workspace=workspaceSelectionGeneration,view={id,scope,baseCurrent};ordinaryOwnerMetadataOpenView=view;
+ const current=()=>ordinaryOwnerMetadataOpenView===view&&baseCurrent()&&scope===ordinaryOwnerScope(id)&&workspace===workspaceSelectionGeneration&&!$('projects').hidden;
+ const button=document.createElement('button');button.id='ordinary-owner-metadata-open';button.type='button';button.textContent='只读打开此 Run 人工声明元数据 / 停止入口';
+ button.onclick=safe(async()=>{if(!current()||button.disabled)return;button.disabled=true;try{await showOrdinaryOwnerMetadata(id);}finally{if(current())button.disabled=false;}});return button;
+}
+function resumeOrdinaryOwnerReview(){const failure=ordinaryOwnerMetadataOpenView;if(failure&&failure.scope===ordinaryOwnerScope(failure.id)&&failure.baseCurrent())$('ordinary-owner-metadata-open')?.replaceWith(ordinaryOwnerMetadataButton(failure.id,failure.baseCurrent));const old=ordinaryOwnerView;if(old&&(activeRun===old.run||(old.metadataOnly&&activeRun===null))&&old.scope===ordinaryOwnerScope(old.run)){old.node.remove();renderOrdinaryOwnerReview(old.result,old.redacted,old.metadataOnly);}}
 async function showOrdinaryOwnerMetadata(id){
  renderOrdinaryOwnerReview({id,contract:{fingerprint:null,snapshot:{human_review:{version:'owner.ordinary-goal.v1'}}}},true,true);
  await $('ordinary-owner-read').onclick();

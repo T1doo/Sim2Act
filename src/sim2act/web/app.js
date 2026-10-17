@@ -369,8 +369,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
     },"重新读取任务");
     feedback.id="run-read-failure";$("result").append(feedback);
     if(error.httpStatus===403 && typeof showOrdinaryOwnerMetadata === "function"){
-      const metadata=document.createElement("button");metadata.id="ordinary-owner-metadata-open";metadata.type="button";metadata.textContent="只读打开此 Run 人工声明元数据 / 停止入口";
-      metadata.onclick=safe(async()=>{if(identity===token && project===$("project-select").value && generation===runSelectionGeneration && activeRun===null)await showOrdinaryOwnerMetadata(id);});$("result").append(metadata);
+      $("result").append(ordinaryOwnerMetadataButton(id,()=>identity===token && project===$("project-select").value && generation===runSelectionGeneration && activeRun===null));
     }
     if(userSelection)throw error;
     return;
