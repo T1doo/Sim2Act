@@ -29,11 +29,13 @@
 
 3新整页以实际HTML/CSS/全部23项页面资产、authenticated ASGI RPC及原Worker运行：
 
-- deliver和lost各经可见控件执行新列预览 → 精确版本批准/保存 → 创建实例 → 统一目录选择 → 明确提交新列 → 新Run实际结果15/v1与同Run人工验收入口 → 导航重开零提交。
+- deliver和lost各经可见控件执行新列预览 → 精确版本批准/保存 → 创建实例 → 统一目录选择 → 明确提交新列 → 新Run实际结果15/v1及既有验收状态区域 → 导航重开零提交。
 - lost在实际201受理后丢响应，双提交仍只有一次提取POST；工作区返回保留原key并GET恢复，没有第二次提取POST。
 - navigation持有实际options回复后切项目、持有实际candidate回复后切换身份并重连B，迟到回复不安装应用、不新增提交。该例不执行版本/实例链。
 
 合计**40条可见断言、248次实际页面API回复、69次资产校验**，不含夹具及Worker RPC。[逐页统计](raw/author-meta/final-scope-summary.json)、[deliver原件](raw/author-pages-related/test_visible_sum_extraction_th0/page-result.json)、[lost原件](raw/author-pages-related/test_visible_sum_extraction_th1/page-result.json)、[navigation原件](raw/author-pages-related/test_visible_sum_extraction_th2/page-result.json)。原完整来源任务由Python夹具预先真实执行，页面从其任务历史起步；不是原报告GUI从零创建验收。驱动关闭interval计时，以实际showRun/API手动触发正常后台重画；不声称实测2500ms调度或原生浏览器。没有下载手势或Blob验收。
+
+验收状态断言仅证明既有区域存在并显示PENDING，**没有证明CSV人工声明可提交**。实际owner-review返回200元数据、`content_access=false`及`invalidation_reason=UNSUPPORTED_CAPABILITY`（见deliver请求原件），这个CSV家族目前不能提交人工声明。本片不新增其人工验收合同；原测试/独审中“入口”的表述按此只读状态区域理解，不能扩大为已可人工签收或同Run完整声明验收。
 
 3既有回归精确为ordinary prospective完整CSV报告、registered成功AppRun提取新列、旧natural回执候选durable runner新结果及错误输入；没有旧故障长矩阵。本片CSV来源及派生主路径为NoModel；manual-ACCEPTED MD负例使用旧ScriptedMd合成响应，旧natural回归使用MockTransport。真实模型0，不能把整批称为零合成模型请求或全部NoModel。新Store/客户端/Worker仍在同一Python进程内，不是独立进程重启。
 
