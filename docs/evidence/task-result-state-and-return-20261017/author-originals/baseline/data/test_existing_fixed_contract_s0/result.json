@@ -1,0 +1,2052 @@
+{
+  "status": "FAIL",
+  "error": "AssertionError [ERR_ASSERTION]: progress states actual fixed-contract PASS without claiming no evaluator ran\n    at check (/workspace/Sim2Act/tests/fixed_goal_status.cjs:7:26)\n    at /workspace/Sim2Act/tests/fixed_goal_status.cjs:18:2\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+  "kind": "read_preview",
+  "checks": [
+    "real existing evaluator has accepted this exact prospective fixed goal"
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "status": 200,
+      "response": [
+        {
+          "id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "name": "中文 空格工程"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_886be5b83083474bab643be6642320e5",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_67e12ce2bbc94afdbdae313850d0a433",
+          "name": "fixed.csv",
+          "format": "csv",
+          "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/goal-cards",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "id": "goal_8243be29ca1c4c58b6e9f8389538818b",
+            "title": "Synthetic quantity_z sum",
+            "version": 1
+          },
+          {
+            "id": "goal_030388b038434da3a942f8fe1728bdf1",
+            "title": "Synthetic CSV preview",
+            "version": 1
+          }
+        ],
+        "state": "DRAFT"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "PREVIEW_ONLY",
+        "publishable": false,
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/conditional-apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "namespace": "bounded-conditional-app.v1",
+        "items": [],
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/protocol/contracts",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "contract_id": "protocol.synthetic.a-source.v1",
+            "version": 1,
+            "family": "a",
+            "phase": "source",
+            "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.a-cold.v1",
+            "version": 1,
+            "family": "a",
+            "phase": "cold",
+            "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "29209e986cfb89cd0620dd8d4a67f3f0ba428fe823cd852012929808e201b1fc"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.b-source.v1",
+            "version": 1,
+            "family": "b",
+            "phase": "source",
+            "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string"
+                      },
+                      "decision": {
+                        "type": "string"
+                      },
+                      "rule_relation": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "resource",
+                            "line"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "decision",
+                      "rule_relation",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 16
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "b1e9cb226f39a332f391f1314cb624e55f0e301356f890787e3081508b09813c",
+              "7f726bba0a9eaa01f52c99a62c3acb89fd9d1f3ab91072050e22959eaa9c292f"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.b-cold.v1",
+            "version": 1,
+            "family": "b",
+            "phase": "cold",
+            "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string"
+                      },
+                      "decision": {
+                        "type": "string"
+                      },
+                      "rule_relation": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "resource",
+                            "line"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "decision",
+                      "rule_relation",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 16
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "3a885c40ba8c8a5e887f76293506c318ff44d3653d50b088982151972a63747f",
+              "68c3e0103399e3a7ad06ab1351403069f3b2db2700a95c054dd16b6ed38ff01f"
+            ]
+          }
+        ],
+        "owner_semantic_acceptance": "PENDING",
+        "live_enabled": false
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_886be5b83083474bab643be6642320e5",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_67e12ce2bbc94afdbdae313850d0a433",
+          "name": "fixed.csv",
+          "format": "csv",
+          "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/runs?metadata_only=true",
+      "status": 200,
+      "response": [
+        {
+          "id": "run_200aca0815f946da921ae107b0a22cca",
+          "status": "SUCCEEDED",
+          "created_at": 1792222663.9381137,
+          "goal_summary": "打开任务后核查当前授权内容",
+          "mode": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/grants",
+      "status": 200,
+      "response": [
+        {
+          "id": "grant_c9ce325c24114c948915ecfc8401d7f4",
+          "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792309062.4440172,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ff80318b5275488cb12f33a856717067",
+          "principal_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792309062.447921,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_d9a38359439745ebbebe609d35139ac0",
+          "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_886be5b83083474bab643be6642320e5",
+          "tool_ref": "resource.read",
+          "expires_at": 1792309062.46742,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_36f46f6e5854495db43ad32967f4dd5e",
+          "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_886be5b83083474bab643be6642320e5",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792309062.4676461,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_88855f3c2d1c4fc291a0e57cf3a040ec",
+          "principal_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_886be5b83083474bab643be6642320e5",
+          "tool_ref": "resource.read",
+          "expires_at": 1792309062.469904,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_099ac9dbc3aa4023b158122b0ea811fa",
+          "principal_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_886be5b83083474bab643be6642320e5",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792309062.4701326,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_607e38d251c84cdeaa679bcc9cb80282",
+          "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+          "tool_ref": "resource.read",
+          "expires_at": 1792309063.5927908,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_aaecb0d364524609872c4004d1502313",
+          "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792309063.5930998,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_cc4719b2ecc24f2f8c1da859ea229a4b",
+          "principal_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+          "tool_ref": "resource.read",
+          "expires_at": 1792309063.5932672,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_35f0418e813c455982df2cef91ab6faa",
+          "principal_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+          "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+          "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792309063.5934072,
+          "revision": 1,
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/capabilities",
+      "status": 200,
+      "response": {
+        "materials": [
+          "txt",
+          "md",
+          "csv",
+          "json"
+        ],
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv",
+          "artifact.save_text"
+        ],
+        "connection": {
+          "model": "intern-s2",
+          "mode": "MOCK",
+          "status": "MOCK_ENGINEERING"
+        },
+        "natural_spec_generation": {
+          "version": "natural-spec-generation-availability.v1",
+          "availability": "OFFLINE_TEST_ONLY",
+          "provider": "intern-s2",
+          "live_request_allowance": 0
+        },
+        "code_execution": "DISABLED"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/run_200aca0815f946da921ae107b0a22cca",
+      "status": 200,
+      "response": {
+        "id": "run_200aca0815f946da921ae107b0a22cca",
+        "status": "SUCCEEDED",
+        "version": 4,
+        "result": {
+          "mode": "MOCK",
+          "provider": "intern-s2",
+          "transport": "OFFLINE_MOCKTRANSPORT",
+          "planning": {
+            "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+            "plan": {
+              "version": "natural-goal-plan.v1",
+              "source_goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+              "interpretation": {
+                "objective": "Read the synthetic CSV and preview its rows.",
+                "assumptions": [],
+                "unresolved": []
+              },
+              "steps": [
+                {
+                  "id": "only",
+                  "tool_ref": "resource.read",
+                  "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                  "depends_on": []
+                }
+              ]
+            },
+            "fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532"
+          },
+          "receipts": [
+            {
+              "operation_id": "op_884f17d2301e4af293210d3086264522",
+              "status": "VERIFIED",
+              "data": {
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "content": "item,quantity_z\na,7\nb,12\n",
+                "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                "format": "csv"
+              },
+              "artifact_refs": [],
+              "receipt_ref": "op_884f17d2301e4af293210d3086264522",
+              "check_results": [
+                {
+                  "check": "receipt.readback.v1",
+                  "status": "PASS"
+                }
+              ],
+              "usage_ref": null,
+              "error": null
+            }
+          ],
+          "goal_acceptance": "PASS_FIXED_CONTRACT",
+          "owner_acceptance": "PENDING",
+          "candidate_generated": false,
+          "task_acceptance": {
+            "version": "fixed-csv-goal-acceptance.v1",
+            "contract_fingerprint": "8e8a8d9ea2c8fdeda83f782a05e89168130d2cd4787241ee2629c5dae2a3008d",
+            "objective": "read_preview",
+            "status": "PASS",
+            "whole_task_accepted": true,
+            "scope": "EXACT_FIXED_SYNTHETIC_GOAL_ONLY",
+            "single_step_status": "VERIFIED",
+            "check": "csv.complete_preview.v1",
+            "source_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+            "receipt_fingerprint": "85c5a64ad858f78ba2f1fed7aada021b563d9aa81925987f08001ad8510a9050",
+            "general_semantic_acceptance": "NOT_RUN",
+            "owner_acceptance": "PENDING",
+            "formal_publication_enabled": false
+          }
+        },
+        "error": null,
+        "events": [
+          {
+            "id": "event_18ac95ccaf7b4e349dee956098b15bdc",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222663.9432435,
+            "kind": "NL_RUN_DEADLINE_FROZEN",
+            "data": {
+              "run_id": "run_200aca0815f946da921ae107b0a22cca",
+              "contract_fingerprint": "a4657ab659b1d15cb57799215dd4720f397ff38dfcf5ac51487906e2766f8235",
+              "created_at": 1792222663.9381137,
+              "deadline": 1792222783.9381137
+            }
+          },
+          {
+            "id": "event_3bf614fa81a84f8ebd2b8cd37c8de498",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222663.9450994,
+            "kind": "ACCEPTED",
+            "data": {
+              "input_fingerprint": "733c2d860ec843b8f87dbcedd4fac41705bf27104e9c58df8269c971da012c4f",
+              "goal_source": {
+                "card_id": "goal_030388b038434da3a942f8fe1728bdf1",
+                "version": 1,
+                "fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b"
+              },
+              "natural_planning": {
+                "version": "natural-goal-planning.v1",
+                "provider": "intern-s2",
+                "schema_fingerprint": "1f3557f5cc375bc11fe8ea99f8a96054dd6eed5d14ff537d25db435238e66c68",
+                "request_limit": 1,
+                "repair_limit": 0,
+                "live_request_allowance": 0,
+                "require_confirmation": true,
+                "activation": {
+                  "activation_id": "nlactivation_c51dc41cffd34fe8a3c7a1f80f92ef53",
+                  "scope_fingerprint": "0aebba3820be49c5f083f2025a0416f4beb15047dde60ceb4d869b51bd06e2dd",
+                  "approval_fingerprint": "523b083009c775aad660331353a16fba064c07099eb962a8acfc2cd331525c9f"
+                },
+                "goal_acceptance": {
+                  "version": "fixed-csv-goal-acceptance.v1",
+                  "kind": "read_preview",
+                  "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                  "source_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                  "goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+                  "check": "csv.complete_preview.v1"
+                }
+              }
+            }
+          },
+          {
+            "id": "event_ad4379819a044e29be16575cd5d769b3",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222664.0391624,
+            "kind": "CLAIMED",
+            "data": {
+              "fence": 1
+            }
+          },
+          {
+            "id": "event_99df1cd326b4487eada4ac8be4c8bcae",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222664.821201,
+            "kind": "NL_PLANNING_WIRE_RESERVED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "fence": 1,
+              "wire": {
+                "sha256": "82c443938de7b07e168f09073bad3204a211025aaaf25e8e40d4810bfb2b472a",
+                "bytes": 3521,
+                "characters": 3521
+              }
+            }
+          },
+          {
+            "id": "event_33a703fb66fb4c95b8058444bc279c5f",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222664.8219388,
+            "kind": "MODEL_RESERVED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "mode": "mock",
+              "planning_fence": 1
+            }
+          },
+          {
+            "id": "event_e4be72846f774544a8d67f2e525745b8",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222665.1638434,
+            "kind": "NL_PLAN_VALIDATED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "plan": {
+                "version": "natural-goal-plan.v1",
+                "source_goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+                "interpretation": {
+                  "objective": "Read the synthetic CSV and preview its rows.",
+                  "assumptions": [],
+                  "unresolved": []
+                },
+                "steps": [
+                  {
+                    "id": "only",
+                    "tool_ref": "resource.read",
+                    "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                    "depends_on": []
+                  }
+                ]
+              },
+              "fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532"
+            }
+          },
+          {
+            "id": "event_3e1e803ee85f4a1485d3aeb273f81d34",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222665.1642354,
+            "kind": "NL_PLAN_RECEIVED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "response_fingerprint": "fa99ad33cba4ed4ff3c15124dd40b4c3fcd5328fcaf2964869812b1ac9433452",
+              "usage": {
+                "status": "known",
+                "tokens": {
+                  "prompt_tokens": 10,
+                  "completion_tokens": 20,
+                  "total_tokens": 30
+                }
+              },
+              "response_model": "Intern-S2",
+              "request_fingerprint": "82f1dffe913aa1087490ec16114c9ffa211aaf978ccaeddea9682ace48599a10"
+            }
+          },
+          {
+            "id": "event_609a5333a08e4f21a0b641793a10ea02",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222665.2856822,
+            "kind": "STATE",
+            "data": {
+              "status": "WAITING_APPROVAL",
+              "error": null
+            }
+          },
+          {
+            "id": "event_39dda1f54ec7479d90cce3755f2a9d30",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222666.531144,
+            "kind": "NL_PLAN_CONFIRMED",
+            "data": {
+              "run_id": "run_200aca0815f946da921ae107b0a22cca",
+              "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+              "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+              "contract_fingerprint": "a4657ab659b1d15cb57799215dd4720f397ff38dfcf5ac51487906e2766f8235",
+              "plan_fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532",
+              "expected_version": 2,
+              "confirmed_version": 3,
+              "planning_fence": 1,
+              "request_key": "confirm-exact-plan"
+            }
+          },
+          {
+            "id": "event_12831162d19a432bb72b3633b4840d94",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222666.5623276,
+            "kind": "CLAIMED",
+            "data": {
+              "fence": 2
+            }
+          },
+          {
+            "id": "event_bc354ad0f2da4a189441794ee5d1179c",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222667.347926,
+            "kind": "TOOL_VERIFIED",
+            "data": {
+              "operation_id": "op_884f17d2301e4af293210d3086264522",
+              "tool_ref": "resource.read",
+              "source_ref": "res_67e12ce2bbc94afdbdae313850d0a433"
+            }
+          },
+          {
+            "id": "event_3f708422507d4396a1b64cd38991ffc4",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222667.76748,
+            "kind": "STATE",
+            "data": {
+              "status": "SUCCEEDED",
+              "error": null
+            }
+          }
+        ],
+        "contract": {
+          "snapshot": {
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "runtime_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+            "contract_version": "F1.3",
+            "goal": {
+              "goal_id": "goal_030388b038434da3a942f8fe1728bdf1",
+              "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+              "owner_id": "user_867fa88d22814c3da4ccf313af3baa31",
+              "goal": "Read the synthetic CSV and preview its rows.",
+              "constraints": [
+                "Read only; no external data or arbitrary code."
+              ],
+              "acceptance_version": "F1-tool-chain.v1",
+              "resource_refs": [
+                "res_67e12ce2bbc94afdbdae313850d0a433"
+              ],
+              "unresolved": []
+            },
+            "resources": [
+              {
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "revision": 1,
+                "content_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                "format": "csv"
+              }
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 2,
+              "max_repairs": 0,
+              "max_total_tokens": 11000,
+              "max_output_tokens": 512,
+              "run_seconds": 120
+            },
+            "mode": "mock",
+            "request_model": "intern-s2",
+            "source_goal_card": {
+              "card_id": "goal_030388b038434da3a942f8fe1728bdf1",
+              "version": 1,
+              "fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+              "snapshot": {
+                "schema_version": "F2-goal-card.v1",
+                "content": {
+                  "title": "Synthetic CSV preview",
+                  "goal": "Read the synthetic CSV and preview its rows.",
+                  "known": [
+                    "Only the fixed synthetic CSV is in scope."
+                  ],
+                  "assumptions": [],
+                  "unresolved": [],
+                  "constraints": [
+                    "Read only; no external data or arbitrary code."
+                  ],
+                  "acceptance_checks": [
+                    "Use the bound registered read-only tool and retain its receipt."
+                  ],
+                  "resource_refs": [
+                    "res_67e12ce2bbc94afdbdae313850d0a433"
+                  ]
+                },
+                "resource_snapshots": [
+                  {
+                    "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                    "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                    "format": "csv"
+                  }
+                ]
+              }
+            },
+            "natural_planning": {
+              "version": "natural-goal-planning.v1",
+              "provider": "intern-s2",
+              "schema_fingerprint": "1f3557f5cc375bc11fe8ea99f8a96054dd6eed5d14ff537d25db435238e66c68",
+              "request_limit": 1,
+              "repair_limit": 0,
+              "live_request_allowance": 0,
+              "require_confirmation": true,
+              "activation": {
+                "activation_id": "nlactivation_c51dc41cffd34fe8a3c7a1f80f92ef53",
+                "scope_fingerprint": "0aebba3820be49c5f083f2025a0416f4beb15047dde60ceb4d869b51bd06e2dd",
+                "approval_fingerprint": "523b083009c775aad660331353a16fba064c07099eb962a8acfc2cd331525c9f"
+              },
+              "goal_acceptance": {
+                "version": "fixed-csv-goal-acceptance.v1",
+                "kind": "read_preview",
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "source_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                "goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+                "check": "csv.complete_preview.v1"
+              }
+            }
+          },
+          "fingerprint": "a4657ab659b1d15cb57799215dd4720f397ff38dfcf5ac51487906e2766f8235"
+        },
+        "known_effects": [
+          {
+            "id": "op_884f17d2301e4af293210d3086264522",
+            "tool_ref": "resource.read",
+            "status": "VERIFIED",
+            "resource_id": null,
+            "content_hash": null
+          }
+        ],
+        "natural_plan": {
+          "plan": {
+            "version": "natural-goal-plan.v1",
+            "source_goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+            "interpretation": {
+              "objective": "Read the synthetic CSV and preview its rows.",
+              "assumptions": [],
+              "unresolved": []
+            },
+            "steps": [
+              {
+                "id": "only",
+                "tool_ref": "resource.read",
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "depends_on": []
+              }
+            ]
+          },
+          "fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532",
+          "validation": "VALIDATED",
+          "confirmation_required": true,
+          "confirmed": true
+        },
+        "natural_deadline": {
+          "accepted_at": 1792222663.9381137,
+          "expires_at": 1792222783.9381137,
+          "run_seconds": 120
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_8db3e2bb949e4c559342c6d2adcf1e8a/natural-activations",
+      "status": 200,
+      "response": {
+        "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+        "items": [
+          {
+            "id": "nlactivation_c51dc41cffd34fe8a3c7a1f80f92ef53",
+            "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+            "version": 2,
+            "status": "APPROVED",
+            "scope": {
+              "version": "natural-activation.v2",
+              "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+              "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+              "runtime_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+              "mode": "OFFLINE_TEST",
+              "provider": {
+                "model": "intern-s2",
+                "endpoint": "https://chat.intern-ai.org.cn/api/v1/chat/completions",
+                "quota_subject": "default-intern-account"
+              },
+              "caps": {
+                "requests": 2,
+                "tokens": 22000,
+                "output_tokens": 512,
+                "ttl_seconds": 7200,
+                "rpm": 1
+              },
+              "goals": [
+                {
+                  "kind": "read_preview",
+                  "card_id": "goal_030388b038434da3a942f8fe1728bdf1",
+                  "expected_version": 1,
+                  "expected_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+                  "snapshot": {
+                    "schema_version": "F2-goal-card.v1",
+                    "content": {
+                      "title": "Synthetic CSV preview",
+                      "goal": "Read the synthetic CSV and preview its rows.",
+                      "known": [
+                        "Only the fixed synthetic CSV is in scope."
+                      ],
+                      "assumptions": [],
+                      "unresolved": [],
+                      "constraints": [
+                        "Read only; no external data or arbitrary code."
+                      ],
+                      "acceptance_checks": [
+                        "Use the bound registered read-only tool and retain its receipt."
+                      ],
+                      "resource_refs": [
+                        "res_67e12ce2bbc94afdbdae313850d0a433"
+                      ]
+                    },
+                    "resource_snapshots": [
+                      {
+                        "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                        "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                        "format": "csv"
+                      }
+                    ]
+                  },
+                  "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                  "resource_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e"
+                },
+                {
+                  "kind": "sum_quantity_z",
+                  "card_id": "goal_8243be29ca1c4c58b6e9f8389538818b",
+                  "expected_version": 1,
+                  "expected_fingerprint": "66104eff755907f8f28fb0ecd57bc598c450686125b4704c7724d421bb146e58",
+                  "snapshot": {
+                    "schema_version": "F2-goal-card.v1",
+                    "content": {
+                      "title": "Synthetic quantity_z sum",
+                      "goal": "Compute the sum of quantity_z in the synthetic CSV.",
+                      "known": [
+                        "Only the fixed synthetic CSV is in scope."
+                      ],
+                      "assumptions": [],
+                      "unresolved": [],
+                      "constraints": [
+                        "Read only; no external data or arbitrary code."
+                      ],
+                      "acceptance_checks": [
+                        "Use the bound registered read-only tool and retain its receipt."
+                      ],
+                      "resource_refs": [
+                        "res_67e12ce2bbc94afdbdae313850d0a433"
+                      ]
+                    },
+                    "resource_snapshots": [
+                      {
+                        "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                        "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                        "format": "csv"
+                      }
+                    ]
+                  },
+                  "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                  "resource_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e"
+                }
+              ]
+            },
+            "scope_fingerprint": "0aebba3820be49c5f083f2025a0416f4beb15047dde60ceb4d869b51bd06e2dd",
+            "approval": {
+              "expected_version": 1,
+              "expected_scope_fingerprint": "0aebba3820be49c5f083f2025a0416f4beb15047dde60ceb4d869b51bd06e2dd",
+              "request_key": "approve-once",
+              "consent": "APPROVE_EXACT_SYNTHETIC_SCOPE_NO_GENERAL_MODEL_AUTHORITY",
+              "activation_id": "nlactivation_c51dc41cffd34fe8a3c7a1f80f92ef53",
+              "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+              "scope_fingerprint": "0aebba3820be49c5f083f2025a0416f4beb15047dde60ceb4d869b51bd06e2dd",
+              "approved_at": 1792222663.8200998,
+              "expires_at": 1792229863.8200998
+            },
+            "approval_fingerprint": "523b083009c775aad660331353a16fba064c07099eb962a8acfc2cd331525c9f",
+            "charged_requests": 1,
+            "reserved_tokens": 4033,
+            "approved_not_expired": true,
+            "submission_available": true,
+            "blocked_reason": null,
+            "charged_kinds": [
+              "read_preview"
+            ]
+          }
+        ],
+        "general_live_request_allowance": 0
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/run_200aca0815f946da921ae107b0a22cca/receipt-candidate-options",
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "UNSUPPORTED_CAPABILITY",
+          "message": "Fixed sum scope was revoked or unsupported",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    }
+  ],
+  "assets": [
+    {
+      "path": "/",
+      "sha256": "ef4266fc7f1cc5a05c7aae96433c051358c538d0c60d470877802ba27455728a"
+    },
+    {
+      "path": "/app.css",
+      "sha256": "2ad3d886c00de86c04059fa95072c654019c477273597cf7323b9aafe485ceee"
+    },
+    {
+      "path": "/app.js",
+      "sha256": "3ce6191f95021b226b419eaf745710c97c10235c679ec50ea99cc66cec2e891f"
+    },
+    {
+      "path": "/natural-goal.js",
+      "sha256": "485d99733e4535a77960c40c856638dc24436542b193c679988c300fb56fbc9f"
+    },
+    {
+      "path": "/goal-application.js",
+      "sha256": "c421e74077718155bc15806feb664ff7d67489138cbf9ca243f52924cc40754f"
+    },
+    {
+      "path": "/internal.js",
+      "sha256": "4a9a0805f81e4d0fecd22e7b7e8ad067c9428f7094b0b548fae47648e20a1cc6"
+    },
+    {
+      "path": "/owner-review.js",
+      "sha256": "7d2c748910520f1d1aa811ec208387c994aad8fe1577cf420da0b228b76d58d0"
+    },
+    {
+      "path": "/protocol.js",
+      "sha256": "dcf97729f2a69872a8b7c33374e9f2cd50e88c8b368c4d417ba133bea8e5f1e8"
+    },
+    {
+      "path": "/use.js",
+      "sha256": "f68fe707de50f875140961caecc3d48c6211304399db7be7dbce3ff746faae57"
+    },
+    {
+      "path": "/conditional-runs.js",
+      "sha256": "8493353812ee7b57e48c6b18e9cf8069a7366e38b07709f7ab6d6320e735393e"
+    },
+    {
+      "path": "/conditional-apps.js",
+      "sha256": "82303591b0483339dea6fef9c34b6476bac000f3bcc4886fb38f54a08af88ad1"
+    },
+    {
+      "path": "/report-manifest.js",
+      "sha256": "1e521d342c61f1feb9ed1e1770184b6123f26170b417d78a7246bb8a2052e89a"
+    },
+    {
+      "path": "/delivery-graph.js",
+      "sha256": "8a47a8d95e95cc6a9419fa0f15919ba57f7e3b4bbe6061d5f31fb0b39c6e37bb"
+    },
+    {
+      "path": "/manual-locks.js",
+      "sha256": "2faab55b3e524d93e7f7ed832d2303a0c0034e0663b00674adb458e93615710c"
+    },
+    {
+      "path": "/csv-dag.js",
+      "sha256": "28fc90386a81e174c752956474d18c8275b437557aab835032f75207e85a3812"
+    },
+    {
+      "path": "/csv-logic.js",
+      "sha256": "732f547e8cb5e264c0cb606db1381477dc39ea62d08ce0f24834bb03dc839f89"
+    },
+    {
+      "path": "/project-revalidation.js",
+      "sha256": "ffa499d3d07e712443ccd0f33160623bce12871268f625e4453f8bb743db5e72"
+    },
+    {
+      "path": "/project-natural.js",
+      "sha256": "59ff19f27035197ae772e0117d7e28fd2b0da424571df38f632d466c381874c8"
+    },
+    {
+      "path": "/project-columns.js",
+      "sha256": "692c5c8219e1648150087df7484efb22d67b4a4fa69ca5194498ca91ffafdc8d"
+    },
+    {
+      "path": "/project-column-versions.js",
+      "sha256": "0b2d5c7b2859c835af3390beec98c2ef54a4ab71c7c7834f982b54f71cb89387"
+    },
+    {
+      "path": "/text-logic.js",
+      "sha256": "f7454d76f4b1f221e016daae1de2e0844670d823c3f510e556a25fcce532200f"
+    }
+  ],
+  "observations": [
+    {
+      "actual_run": {
+        "id": "run_200aca0815f946da921ae107b0a22cca",
+        "status": "SUCCEEDED",
+        "version": 4,
+        "result": {
+          "mode": "MOCK",
+          "provider": "intern-s2",
+          "transport": "OFFLINE_MOCKTRANSPORT",
+          "planning": {
+            "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+            "plan": {
+              "version": "natural-goal-plan.v1",
+              "source_goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+              "interpretation": {
+                "objective": "Read the synthetic CSV and preview its rows.",
+                "assumptions": [],
+                "unresolved": []
+              },
+              "steps": [
+                {
+                  "id": "only",
+                  "tool_ref": "resource.read",
+                  "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                  "depends_on": []
+                }
+              ]
+            },
+            "fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532"
+          },
+          "receipts": [
+            {
+              "operation_id": "op_884f17d2301e4af293210d3086264522",
+              "status": "VERIFIED",
+              "data": {
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "content": "item,quantity_z\na,7\nb,12\n",
+                "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                "format": "csv"
+              },
+              "artifact_refs": [],
+              "receipt_ref": "op_884f17d2301e4af293210d3086264522",
+              "check_results": [
+                {
+                  "check": "receipt.readback.v1",
+                  "status": "PASS"
+                }
+              ],
+              "usage_ref": null,
+              "error": null
+            }
+          ],
+          "goal_acceptance": "PASS_FIXED_CONTRACT",
+          "owner_acceptance": "PENDING",
+          "candidate_generated": false,
+          "task_acceptance": {
+            "version": "fixed-csv-goal-acceptance.v1",
+            "contract_fingerprint": "8e8a8d9ea2c8fdeda83f782a05e89168130d2cd4787241ee2629c5dae2a3008d",
+            "objective": "read_preview",
+            "status": "PASS",
+            "whole_task_accepted": true,
+            "scope": "EXACT_FIXED_SYNTHETIC_GOAL_ONLY",
+            "single_step_status": "VERIFIED",
+            "check": "csv.complete_preview.v1",
+            "source_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+            "receipt_fingerprint": "85c5a64ad858f78ba2f1fed7aada021b563d9aa81925987f08001ad8510a9050",
+            "general_semantic_acceptance": "NOT_RUN",
+            "owner_acceptance": "PENDING",
+            "formal_publication_enabled": false
+          }
+        },
+        "error": null,
+        "events": [
+          {
+            "id": "event_18ac95ccaf7b4e349dee956098b15bdc",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222663.9432435,
+            "kind": "NL_RUN_DEADLINE_FROZEN",
+            "data": {
+              "run_id": "run_200aca0815f946da921ae107b0a22cca",
+              "contract_fingerprint": "a4657ab659b1d15cb57799215dd4720f397ff38dfcf5ac51487906e2766f8235",
+              "created_at": 1792222663.9381137,
+              "deadline": 1792222783.9381137
+            }
+          },
+          {
+            "id": "event_3bf614fa81a84f8ebd2b8cd37c8de498",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222663.9450994,
+            "kind": "ACCEPTED",
+            "data": {
+              "input_fingerprint": "733c2d860ec843b8f87dbcedd4fac41705bf27104e9c58df8269c971da012c4f",
+              "goal_source": {
+                "card_id": "goal_030388b038434da3a942f8fe1728bdf1",
+                "version": 1,
+                "fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b"
+              },
+              "natural_planning": {
+                "version": "natural-goal-planning.v1",
+                "provider": "intern-s2",
+                "schema_fingerprint": "1f3557f5cc375bc11fe8ea99f8a96054dd6eed5d14ff537d25db435238e66c68",
+                "request_limit": 1,
+                "repair_limit": 0,
+                "live_request_allowance": 0,
+                "require_confirmation": true,
+                "activation": {
+                  "activation_id": "nlactivation_c51dc41cffd34fe8a3c7a1f80f92ef53",
+                  "scope_fingerprint": "0aebba3820be49c5f083f2025a0416f4beb15047dde60ceb4d869b51bd06e2dd",
+                  "approval_fingerprint": "523b083009c775aad660331353a16fba064c07099eb962a8acfc2cd331525c9f"
+                },
+                "goal_acceptance": {
+                  "version": "fixed-csv-goal-acceptance.v1",
+                  "kind": "read_preview",
+                  "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                  "source_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                  "goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+                  "check": "csv.complete_preview.v1"
+                }
+              }
+            }
+          },
+          {
+            "id": "event_ad4379819a044e29be16575cd5d769b3",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222664.0391624,
+            "kind": "CLAIMED",
+            "data": {
+              "fence": 1
+            }
+          },
+          {
+            "id": "event_99df1cd326b4487eada4ac8be4c8bcae",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222664.821201,
+            "kind": "NL_PLANNING_WIRE_RESERVED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "fence": 1,
+              "wire": {
+                "sha256": "82c443938de7b07e168f09073bad3204a211025aaaf25e8e40d4810bfb2b472a",
+                "bytes": 3521,
+                "characters": 3521
+              }
+            }
+          },
+          {
+            "id": "event_33a703fb66fb4c95b8058444bc279c5f",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222664.8219388,
+            "kind": "MODEL_RESERVED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "mode": "mock",
+              "planning_fence": 1
+            }
+          },
+          {
+            "id": "event_e4be72846f774544a8d67f2e525745b8",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222665.1638434,
+            "kind": "NL_PLAN_VALIDATED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "plan": {
+                "version": "natural-goal-plan.v1",
+                "source_goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+                "interpretation": {
+                  "objective": "Read the synthetic CSV and preview its rows.",
+                  "assumptions": [],
+                  "unresolved": []
+                },
+                "steps": [
+                  {
+                    "id": "only",
+                    "tool_ref": "resource.read",
+                    "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                    "depends_on": []
+                  }
+                ]
+              },
+              "fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532"
+            }
+          },
+          {
+            "id": "event_3e1e803ee85f4a1485d3aeb273f81d34",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222665.1642354,
+            "kind": "NL_PLAN_RECEIVED",
+            "data": {
+              "attempt_id": "attempt_7bd3062a0acf43e6ab1b28ddb450c0dc",
+              "response_fingerprint": "fa99ad33cba4ed4ff3c15124dd40b4c3fcd5328fcaf2964869812b1ac9433452",
+              "usage": {
+                "status": "known",
+                "tokens": {
+                  "prompt_tokens": 10,
+                  "completion_tokens": 20,
+                  "total_tokens": 30
+                }
+              },
+              "response_model": "Intern-S2",
+              "request_fingerprint": "82f1dffe913aa1087490ec16114c9ffa211aaf978ccaeddea9682ace48599a10"
+            }
+          },
+          {
+            "id": "event_609a5333a08e4f21a0b641793a10ea02",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222665.2856822,
+            "kind": "STATE",
+            "data": {
+              "status": "WAITING_APPROVAL",
+              "error": null
+            }
+          },
+          {
+            "id": "event_39dda1f54ec7479d90cce3755f2a9d30",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222666.531144,
+            "kind": "NL_PLAN_CONFIRMED",
+            "data": {
+              "run_id": "run_200aca0815f946da921ae107b0a22cca",
+              "principal_id": "user_867fa88d22814c3da4ccf313af3baa31",
+              "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+              "contract_fingerprint": "a4657ab659b1d15cb57799215dd4720f397ff38dfcf5ac51487906e2766f8235",
+              "plan_fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532",
+              "expected_version": 2,
+              "confirmed_version": 3,
+              "planning_fence": 1,
+              "request_key": "confirm-exact-plan"
+            }
+          },
+          {
+            "id": "event_12831162d19a432bb72b3633b4840d94",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222666.5623276,
+            "kind": "CLAIMED",
+            "data": {
+              "fence": 2
+            }
+          },
+          {
+            "id": "event_bc354ad0f2da4a189441794ee5d1179c",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222667.347926,
+            "kind": "TOOL_VERIFIED",
+            "data": {
+              "operation_id": "op_884f17d2301e4af293210d3086264522",
+              "tool_ref": "resource.read",
+              "source_ref": "res_67e12ce2bbc94afdbdae313850d0a433"
+            }
+          },
+          {
+            "id": "event_3f708422507d4396a1b64cd38991ffc4",
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "created_at": 1792222667.76748,
+            "kind": "STATE",
+            "data": {
+              "status": "SUCCEEDED",
+              "error": null
+            }
+          }
+        ],
+        "contract": {
+          "snapshot": {
+            "run_id": "run_200aca0815f946da921ae107b0a22cca",
+            "runtime_id": "runtime_a2b45e95675b44948e9f293484e4cc38",
+            "contract_version": "F1.3",
+            "goal": {
+              "goal_id": "goal_030388b038434da3a942f8fe1728bdf1",
+              "project_id": "proj_8db3e2bb949e4c559342c6d2adcf1e8a",
+              "owner_id": "user_867fa88d22814c3da4ccf313af3baa31",
+              "goal": "Read the synthetic CSV and preview its rows.",
+              "constraints": [
+                "Read only; no external data or arbitrary code."
+              ],
+              "acceptance_version": "F1-tool-chain.v1",
+              "resource_refs": [
+                "res_67e12ce2bbc94afdbdae313850d0a433"
+              ],
+              "unresolved": []
+            },
+            "resources": [
+              {
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "revision": 1,
+                "content_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                "format": "csv"
+              }
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 2,
+              "max_repairs": 0,
+              "max_total_tokens": 11000,
+              "max_output_tokens": 512,
+              "run_seconds": 120
+            },
+            "mode": "mock",
+            "request_model": "intern-s2",
+            "source_goal_card": {
+              "card_id": "goal_030388b038434da3a942f8fe1728bdf1",
+              "version": 1,
+              "fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+              "snapshot": {
+                "schema_version": "F2-goal-card.v1",
+                "content": {
+                  "title": "Synthetic CSV preview",
+                  "goal": "Read the synthetic CSV and preview its rows.",
+                  "known": [
+                    "Only the fixed synthetic CSV is in scope."
+                  ],
+                  "assumptions": [],
+                  "unresolved": [],
+                  "constraints": [
+                    "Read only; no external data or arbitrary code."
+                  ],
+                  "acceptance_checks": [
+                    "Use the bound registered read-only tool and retain its receipt."
+                  ],
+                  "resource_refs": [
+                    "res_67e12ce2bbc94afdbdae313850d0a433"
+                  ]
+                },
+                "resource_snapshots": [
+                  {
+                    "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                    "hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                    "format": "csv"
+                  }
+                ]
+              }
+            },
+            "natural_planning": {
+              "version": "natural-goal-planning.v1",
+              "provider": "intern-s2",
+              "schema_fingerprint": "1f3557f5cc375bc11fe8ea99f8a96054dd6eed5d14ff537d25db435238e66c68",
+              "request_limit": 1,
+              "repair_limit": 0,
+              "live_request_allowance": 0,
+              "require_confirmation": true,
+              "activation": {
+                "activation_id": "nlactivation_c51dc41cffd34fe8a3c7a1f80f92ef53",
+                "scope_fingerprint": "0aebba3820be49c5f083f2025a0416f4beb15047dde60ceb4d869b51bd06e2dd",
+                "approval_fingerprint": "523b083009c775aad660331353a16fba064c07099eb962a8acfc2cd331525c9f"
+              },
+              "goal_acceptance": {
+                "version": "fixed-csv-goal-acceptance.v1",
+                "kind": "read_preview",
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "source_hash": "5c21ed898ea8068472098586cc8daea6ab2f64030af6fc1f24937976ba34d66e",
+                "goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+                "check": "csv.complete_preview.v1"
+              }
+            }
+          },
+          "fingerprint": "a4657ab659b1d15cb57799215dd4720f397ff38dfcf5ac51487906e2766f8235"
+        },
+        "known_effects": [
+          {
+            "id": "op_884f17d2301e4af293210d3086264522",
+            "tool_ref": "resource.read",
+            "status": "VERIFIED",
+            "resource_id": null,
+            "content_hash": null
+          }
+        ],
+        "natural_plan": {
+          "plan": {
+            "version": "natural-goal-plan.v1",
+            "source_goal_fingerprint": "20c903ff7c7c79db0cf8a20b6835708576570e100e17f56afd285e166f16db0b",
+            "interpretation": {
+              "objective": "Read the synthetic CSV and preview its rows.",
+              "assumptions": [],
+              "unresolved": []
+            },
+            "steps": [
+              {
+                "id": "only",
+                "tool_ref": "resource.read",
+                "resource_id": "res_67e12ce2bbc94afdbdae313850d0a433",
+                "depends_on": []
+              }
+            ]
+          },
+          "fingerprint": "4c3b2278e7a64574acaa8584b308d91de54aeb2f0520828b9a99fd0a9995b532",
+          "validation": "VALIDATED",
+          "confirmation_required": true,
+          "confirmed": true
+        },
+        "natural_deadline": {
+          "accepted_at": 1792222663.9381137,
+          "expires_at": 1792222783.9381137,
+          "run_seconds": 120
+        },
+        "unresolved_attempts": []
+      },
+      "progress": "执行记录（只读）目标验收：当前普通任务尚未实现（NOT_RUN）。技术状态与工具核验不代表目标已完成。已记录工具效果：1 项已核验；0 项效果已知但核验失败。此计数不代表整体目标验收。最近 7 条已记录步骤；完整回执保留在详情中。10/17/2026, 7:37:43 AM · 任务已持久接受10/17/2026, 7:37:44 AM · 后台已领取任务10/17/2026, 7:37:44 AM · 已登记一次模型尝试（不表示已发送或成功）10/17/2026, 7:37:45 AM · 已保存技术状态10/17/2026, 7:37:46 AM · 后台已领取任务10/17/2026, 7:37:47 AM · 工具效果已核验10/17/2026, 7:37:47 AM · 已保存技术状态（SUCCEEDED）",
+      "canvas": "SUCCEEDED（SUCCEEDED）执行记录（只读）目标验收：当前普通任务尚未实现（NOT_RUN）。技术状态与工具核验不代表目标已完成。已记录工具效果：1 项已核验；0 项效果已知但核验失败。此计数不代表整体目标验收。最近 7 条已记录步骤；完整回执保留在详情中。10/17/2026, 7:37:43 AM · 任务已持久接受10/17/2026, 7:37:44 AM · 后台已领取任务10/17/2026, 7:37:44 AM · 已登记一次模型尝试（不表示已发送或成功）10/17/2026, 7:37:45 AM · 已保存技术状态10/17/2026, 7:37:46 AM · 后台已领取任务10/17/2026, 7:37:47 AM · 工具效果已核验10/17/2026, 7:37:47 AM · 已保存技术状态（SUCCEEDED）固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。工具读取的材料（来源回执）item,quantity_z\na,7\nb,12\n自然语言计划与确认任务接受：2026-10-17T07:37:43.938Z；确认和执行截止：2026-10-17T07:39:43.938Z（原接受起 120 秒，不随刷新续期）。已绑定会话 nlactivation_c51dc41cffd34fe8a3c7a1f80f92ef53；会话授权不是本计划的执行确认。本次冻结固定目标契约 fixed-csv-goal-acceptance.v1：PASS；单步 VERIFIED；限定整体 PASS；人工 PENDING，正式发布关闭。已通过结构与来源校验；通用目标语义 NOT_RUN，人工签收 PENDING。保存来源 v1。计划目标：Read the synthetic CSV and preview its rows.假设：无未决项：无only：resource.read · res_67e12ce2bbc94afdbdae313850d0a433 · 依赖 无离线 MOCK 工程记录，不代表真实模型验收。会话到期：2026-10-17T09:37:43.820Z · 已占请求 1/2；会话有效，仍须另行确认本计划。该计划已有显式确认记录；实际执行状态与回执见本任务。固定合成目标契约 PASS；来源 Run SUCCEEDED。人工适用范围 PENDING，候选未验收，完整 P-B 未验收。不能提取此回执：UNSUPPORTED_CAPABILITY"
+    }
+  ],
+  "scope": "Actual existing prospective fixed synthetic evaluator + full served JS/authenticated ASGI/SQLite. One MockTransport provider request, no real model. General semantic NOT_RUN, owner PENDING; page read-only."
+}
