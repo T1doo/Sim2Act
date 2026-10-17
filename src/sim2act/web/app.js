@@ -477,7 +477,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     await openInternal(a,generation,selectionCurrent);return generation===appSelectionGeneration&&selectionCurrent();
   }
   if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation,selectionCurrent);
-  if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation,selectionCurrent);
+  if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation,a.candidate.actions.length===1&&a.candidate.actions[0].executor.kind==="registered_tool"&&a.candidate.actions[0].executor.ref==="data.aggregate_csv"?selectionCurrent:null);
   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;

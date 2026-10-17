@@ -60,6 +60,9 @@ async function use(){
  check(posts().length===before,'cold page and reopened instance send no POST');
  check($('internal-data').textContent.includes('历史结果 v1')&&$('internal-data').textContent.includes('历史结果 v2'),'cold directory recovers both persistent versions');
  check($('internal-runs').textContent.includes(results[0])&&$('internal-runs').textContent.includes(results[1]),'cold directory reaches same two Runs');
+ const reads=requests.length;await nav('resources');await nav('apps');await click('delivery-read');
+ check(requests.slice(reads).some(r=>r.method==='GET'&&r.path===`/api/apps/${info.app}`),'literal delivery read remains responsive and reauthorizes after workspace return');
+ check(posts().length===before,'literal workspace return and explicit delivery read do not POST');await readonly();
 }
 async function guards(){
  await readonly();

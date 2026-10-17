@@ -25,8 +25,10 @@ async function refreshApplicationUse(apps){
  const current=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&generation===applicationUseListGeneration;
  const selectable=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&context===applicationUseContextGeneration;
  const rows=[];
+  if(csvDagContext?.savedUse&&!apps.some(summary=>summary.id===csvDagContext.parent.id))clearSavedDagUse();
  if(applicationUseCurrent(applicationUse)&&!apps.some(summary=>summary.id===applicationUse.appId))clearApplicationUseData(applicationUse);
  for(const summary of apps){
+   if(summary.csv_instance_candidate===false)clearSavedDagUse(summary.id);
   // Family metadata only routes discovery; opening always reauthorizes the selection.
    if(summary.use_family==="CLOSED_TEXT_WORKFLOW"){
     const item=row(`${summary.name} · 四步文本流程 · 固定 TXT/MD（≤1536字节、32行）· 两检索词各≤80码点 + 报告开关 · 0 模型请求 · 未选报告为 PARTIAL，不新增成果。内部应用未发布，语义 UNKNOWN，人工 PENDING（暂不提交人工声明）。打开后明确选择已有实例与运行。`,async()=>{
@@ -56,7 +58,7 @@ async function refreshApplicationUse(apps){
    [reply,dagInstances]=await Promise.all([api(`/api/internal/apps/${app.id}/instances`),api(`/api/internal/apps/${app.id}/dag-instances`)]);if(!current())return;
    if(dagInstances.items.length)dagReleases=await api(`/api/internal/apps/${app.id}/dag-releases`);
   }
-  catch(error){if(!current())return;rows.push(row(`${summary.name} · 当前版本不可读取；请核对授权与来源。`));if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);continue;}
+  catch(error){if(!current())return;rows.push(row(`${summary.name} · 当前版本不可读取；请核对授权与来源。`));if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);clearSavedDagUse(summary.id);continue;}
   if(!current())return;
   for(const instance of reply.items){
    if(instance.project_id!==project||instance.source_app_id!==app.id)throw Error("VERSION_CONFLICT");
@@ -68,7 +70,7 @@ async function refreshApplicationUse(apps){
   for(const instance of dagInstances.items){
    const release=dagReleases.items.find(v=>v.id===instance.release_id),version=release?.snapshot?.execution_source?.version,label=savedDagUseLabel(version);
    if(instance.project_id!==project||instance.source_app_id!==app.id||instance.runtime_id!==app.runtime_id)throw Error("VERSION_CONFLICT");
-   if(!label){rows.push(row(`${app.name} · CSV DAG 实例 ${instance.id} · 当前图或版本不受此入口支持，请核查原来源。`));continue;}
+   if(!label){clearSavedDagUse(app.id);rows.push(row(`${app.name} · CSV DAG 实例 ${instance.id} · 当前图或版本不受此入口支持，请核查原来源。`));continue;}
    const item=row(`${app.name} · CSV DAG · ${label} · 固定授权材料与允许列 · 结果版本 ${instance.data_version} · ${instance.id} · 0 模型请求；内部未发布，语义 UNKNOWN，人工 PENDING。打开仅核查已有实例，不自动运行。`,async()=>{
     if(selectable())await openSavedDagUse(app.id,instance.id,selectable);
    },"使用此 CSV 流程实例");
@@ -81,7 +83,7 @@ function savedDagUseLabel(version){
  const labels={"internal.csv-read-sum.v1":"读取 → 求和","internal.csv-read-sum-report.v1":"读取 → 求和 → 报告","internal.csv-read-two-sums.v1":"读取 → 双求和","internal.project-csv-read-sum-report.v1":"项目固定读取 → 求和 → 报告"};
  return Object.hasOwn(labels,version)?labels[version]:null;
 }
-function clearSavedDagUse(){if(csvDagContext?.savedUse)clearCsvDag();}
+function clearSavedDagUse(appId=null){if(csvDagContext?.savedUse&&(!appId||csvDagContext.parent.id===appId))clearCsvDag();}
 async function openSavedDagUse(appId,id,selectionCurrent=()=>true){
  const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,project=$("project-select").value;
  let generation=null,c=null;

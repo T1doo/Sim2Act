@@ -84,8 +84,11 @@ async function guards(){
  unknownHint=true;await w.refreshApps();check(!entry()&&$('use-list').textContent.includes('不受此入口支持'),'unknown/prototype-named execution version has no runnable DAG entry');unknownHint=false;await w.refreshApps();
  let rejected=false;try{await w.openSavedDagUse(info.app,info.plain_instance);}catch(e){rejected=e.message==='VERSION_CONFLICT';}
  check(rejected&&!w.eval('csvDagContext')&&!$('dag-reuse-proof').textContent,'ordinary instance cannot be opened through DAG route');await readonly();await open();
- const before=requests.length;assert.equal((await rpc({command:'revoke'})).status,200);await click(entry());
- check(requests.slice(before).some(r=>r.status===403),'stale directory button reauthorizes after real synthetic revoke403');
+ const stale=entry().onclick,before=requests.length,intents=w.eval('JSON.stringify([...dagReuseIntents])');assert.equal((await rpc({command:'revoke'})).status,200);await w.refreshApps();
+ check(requests.slice(before).some(r=>r.path===`/api/apps/${info.app}`&&r.status===403)&&!w.eval('csvDagContext')&&!$('dag-reuse-proof').textContent&&!$('dag-reuse-results').textContent,'authoritative directory refresh403 clears cached DAG evidence');
+ check(w.eval('JSON.stringify([...dagReuseIntents])')===intents,'directory invalidation preserves original intent map');
+ const retried=requests.length;await stale(new w.Event('click'));
+ check(requests.slice(retried).some(r=>r.status===403),'captured stale callback reauthorizes after real synthetic revoke403');
  check(!w.eval('csvDagContext')&&!$('dag-reuse-proof').textContent&&!$('dag-reuse-results').textContent,'revoked open clears protected DAG proof and results');
  check(posts().length===0,'navigation, unknown type and revoked opens create zero Run/Grant POST');await readonly();
 }
