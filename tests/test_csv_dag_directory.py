@@ -22,17 +22,20 @@ from sim2act.db import Store, grants, internal_app_runs, internal_instance_data,
 from sim2act.worker import Worker
 
 
-@pytest.mark.parametrize("scenario", ["use", "report", "guards", "dual", "fixed"])
+@pytest.mark.parametrize("scenario", ["use", "report", "guards", "dual", "fixed",
+                                      "download-use", "download-report", "download-dual", "download-fixed"])
 def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
+    family = scenario.removeprefix("download-")
+    downloading = scenario.startswith("download-")
     store, settings, client, owner, _, project, _ = env
     assert store.sqlite and store.test_only and settings.mode == "mock"
     with store.tx() as c:
         original_runs = set(c.execute(select(runs.c.id)).scalars())
     fixture_group = None
-    if scenario == "dual":
+    if family == "dual":
         aid, resource, _, source, rel = dual_release(env, DECIMAL)
         first = create(env, rel)
-    elif scenario == "fixed":
+    elif family == "fixed":
         values, _, _, _, _, _, fixture_group = fixed_created(env)
         aid, resource = values[3], values[5]  # The other group member, not its anchor application.
         entry = next(e for e in fixture_group["entries"] if e["app_id"] == aid)
@@ -40,11 +43,11 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
         first = client.get(f"/api/internal/instances/{entry['instance_id']}").json()
         source = client.get(f"/api/csv-dag/runs/{rel['snapshot']['execution_source']['run_id']}").json()
     else:
-        aid, resource, _, source, rel = release(env, with_report=scenario == "report")
+        aid, resource, _, source, rel = release(env, with_report=family == "report")
         first = create(env, rel)
     second = create(env, rel, "second-directory-instance")
     selection_listing = None
-    if scenario in {"dual", "fixed"}:
+    if family in {"dual", "fixed"}:
         listing = client.get(f"/api/internal/apps/{aid}/dag-instances")
         assert listing.status_code == 200, listing.text
         selection_listing = listing.json()
@@ -56,7 +59,7 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
         saved, unselected = first, second
     with store.tx() as c:
         fixture_runs = c.execute(select(runs).where(runs.c.id.not_in(original_runs))).mappings().all()
-    assert len(fixture_runs) == (4 if scenario == "fixed" else 1)
+    assert len(fixture_runs) == (4 if family == "fixed" else 1)
     assert all(r["status"] == "SUCCEEDED" for r in fixture_runs)
     (tmp_path / "fixture-proof.json").write_text(json.dumps({
         "source_worker_run_ids": [r["id"] for r in fixture_runs],
@@ -85,8 +88,8 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
     info = dict(project=project, other=other, app=aid, instance=saved["id"],
                 second_instance=unselected["id"], plain_instance=plain["id"], release=rel["id"],
                 resource=resource, execution=rel["snapshot"]["execution_source"],
-                source_run=source["id"], nodes=2 if scenario in {"use", "guards"} else 3,
-                scenario=scenario, output=str(tmp_path / "result.json"))
+                source_run=source["id"], nodes=2 if family in {"use", "guards"} else 3,
+                scenario=family, download=downloading, output=str(tmp_path / "result.json"))
     path = tmp_path / "info.json"
     path.write_text(json.dumps(info))
     worked, checkpoints, revocations = 0, 0, 0
@@ -117,7 +120,7 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
                     checkpoints += 1
                     answer = dict(status=200, text="{}")
                 elif command == "revoke":
-                    assert scenario == "guards" and revocations == 0
+                    assert (family == "guards" or downloading and family == "dual") and revocations == 0
                     with store.tx() as c:
                         grant = c.execute(select(grants).where(grants.c.principal_id == owner,
                             grants.c.resource_id == resource, grants.c.tool_ref == "resource.read")).mappings().one()
@@ -142,7 +145,7 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
         assert code == 0, stderr.read_text()
         proof = json.loads((tmp_path / "result.json").read_text())
         assert proof["status"] == "PASS" and worked == (0 if scenario == "guards" else 2)
-        assert checkpoints >= 2 and revocations == int(scenario == "guards") and rows(store) == baseline
+        assert checkpoints >= 2 and revocations == int(family == "guards" or downloading and family == "dual") and rows(store) == baseline
         with store.tx() as c:
             typed = c.execute(select(internal_app_runs).where(
                 internal_app_runs.c.instance_id == saved["id"])).mappings().all()
@@ -152,14 +155,14 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
         assert len(typed) == len(records) == worked
         if worked:
             assert [r["version"] for r in records] == [1, 2]
-            if scenario == "dual":
+            if family == "dual":
                 for record, columns in zip(records, [dict(zip(STEPS, ["quantity", "amount"], strict=True)),
                                                      dict(zip(STEPS, ["amount", "quantity"], strict=True))], strict=True):
                     check_output(record["data"]["result"], DECIMAL, resource, columns)
             else:
-                assert [r["data"]["result"]["sum"] for r in records] == (["30", "15"] if scenario == "fixed" else ["15", "30"])
-                assert [r["data"]["result"]["column"] for r in records] == (["amount", "quantity"] if scenario == "fixed" else ["quantity", "amount"])
-        if scenario in {"dual", "fixed"}:
+                assert [r["data"]["result"]["sum"] for r in records] == (["30", "15"] if family == "fixed" else ["15", "30"])
+                assert [r["data"]["result"]["column"] for r in records] == (["amount", "quantity"] if family == "fixed" else ["quantity", "amount"])
+        if family in {"dual", "fixed"} and not (downloading and family == "dual"):
             detail = client.get(f"/api/internal/instances/{saved['id']}").json()
             assert len(detail["runs"]) == 2 and detail["release_id"] == rel["id"]
             for record in detail["data"]:
@@ -179,7 +182,7 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
             file = Path("src/sim2act/web") / (asset["path"].lstrip("/") or "index.html")
             assert hashlib.sha256(file.read_bytes()).hexdigest() == asset["sha256"]
         (tmp_path / "database-proof.json").write_text(json.dumps({
-            "backend": "SQLite synthetic", "tables": len(baseline), "read_checkpoints": checkpoints,
+            "download_feature": downloading, "backend": "SQLite synthetic", "tables": len(baseline), "read_checkpoints": checkpoints,
             "all_get_rows_unchanged": True, "fixture_source_worker_runs": len(fixture_runs),
             "cold_worker_runs_from_directory": worked, "source_run_id": source["id"],
             "new_result_versions": [r["version"] for r in records],

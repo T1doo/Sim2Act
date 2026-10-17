@@ -6,6 +6,8 @@ const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),reques
 let unknownHint=false;
 let serial=0,dom,w,$,boots=0,active=0,hold=null,releaseRead=null;
 const httpReplies=[],heldWaits=[];
+const downloadBlobs=[],downloadAnchors=[];
+let downloadMutation=null,anchorFailure=false;
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
 const check=(ok,label)=>{assert(ok,label);checks.push(label);};
@@ -43,10 +45,21 @@ async function boot(){
  const load=async path=>{const r=await rpc({method:'GET',path});assert.equal(r.status,200);assets.push({path,sha256:crypto.createHash('sha256').update(r.text).digest('hex')});return r.text;};
  dom=new JSDOM(await load('/'),{url:'http://testserver/',runScripts:'dangerously',pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});w.setInterval=()=>0;
+ if(info.download){
+  w.Blob=Blob;
+  w.URL.createObjectURL=blob=>{const url='blob:dag-test-'+downloadBlobs.length;downloadBlobs.push({url,blob,revoked:false});return url;};
+  w.URL.revokeObjectURL=url=>{const value=downloadBlobs.find(b=>b.url===url);assert(value);value.revoked=true;};
+  w.HTMLAnchorElement.prototype.click=function(){if(anchorFailure)throw Error('synthetic anchor failure');downloadAnchors.push({url:this.href,filename:this.download});};
+ }
  const style=w.document.createElement('style');style.textContent=await load('/app.css');w.document.head.append(style);
  w.fetch=async(path,options={})=>{active++;const request={method:options.method||'GET',path,body:options.body?JSON.parse(options.body):undefined};requests.push(request);
   try{const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response=JSON.parse(r.text);httpReplies.push(Date.now());
    if(hold&&path===hold.path&&--hold.remaining===0){const gate=hold;hold=null;await new Promise(resolve=>{releaseRead=resolve;});if(gate.error){mutations.push({path,kind:'synthetic late response403',actual_status:r.status});return new Response(JSON.stringify({error:{code:'PERMISSION_DENIED',message:'synthetic delayed error'}}),{status:403,headers:{'Content-Type':'application/json'}});}}
+   if(downloadMutation&&/^\/api\/internal\/instances\/[^/]+\/runs\/[^/]+$/.test(path)){
+    const action=downloadMutation;downloadMutation=null;const value=JSON.parse(r.text);action.change(value);
+    mutations.push({path,kind:action.label,actual_status:r.status,returned_response:value});
+    return new Response(JSON.stringify(value),{status:r.status,headers:{'Content-Type':'application/json'}});
+   }
    if(unknownHint&&path.endsWith('/dag-releases')){const modified=JSON.parse(r.text);for(const rel of modified.items)rel.snapshot.execution_source.version='toString';mutations.push({path,kind:'synthetic discovery version hint',actual_status:r.status});return new Response(JSON.stringify(modified),{status:r.status,headers:{'Content-Type':'application/json'}});}
    return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});
   }finally{active--;}};
@@ -94,7 +107,8 @@ async function remaining(){
   const prefix=`结果版本 ${version} · `,rows=[...$('dag-reuse-results').children].filter(row=>row.textContent.startsWith(prefix));
   const columns=dual?e.aggregate_steps.map(sid=>wanted.input.columns[sid]):[wanted.input.column];
   const expectedParts=columns.map((column,i)=>`${dual?e.aggregate_steps[i]:'求和'}：列 ${column}，行数 2，合计 ${wanted.totals[i]}`).sort();
-  return rows.length===1&&visible(rows[0])&&same(rows[0].textContent.slice(prefix.length).split('；').sort(),expectedParts);
+  const summary=rows[0]?.querySelector('[data-role="dag-result-summary"]');
+  return rows.length===1&&visible(rows[0])&&visible(summary)&&summary.textContent.startsWith(prefix)&&same(summary.textContent.slice(prefix.length).split('；').sort(),expectedParts);
  };
  check(posts().length===0,'directory discovery makes no POST');
  check($('use-list').querySelectorAll(`[data-use-family="CSV_DAG"][data-app-id="${info.app}"]`).length===2&&!!$('use-list').querySelector(`[data-use-family="CSV"][data-instance-id="${info.plain_instance}"]`),'exact application has two DAG choices and a distinct ordinary CSV instance');
@@ -160,14 +174,94 @@ async function guards(){
  check(!w.eval('csvDagContext')&&!$('dag-reuse-proof').textContent&&!$('dag-reuse-results').textContent,'revoked open clears protected DAG proof and results');
  check(posts().length===0,'navigation, unknown type and revoked opens create zero Run/Grant POST');await readonly();
 }
+async function downloads(){
+ const initialPosts=posts().length;
+ const proof=()=>JSON.parse($('dag-reuse-proof').textContent);
+ const button=version=>$('dag-reuse-results').querySelector(`[data-result-version="${version}"] button`);
+ const snapshot=proof(),detail=snapshot.instance,rel=snapshot.release,e=rel.snapshot.execution_source;
+ const records=[...detail.data].sort((a,b)=>a.version-b.version);
+ const runFor=record=>detail.runs.find(r=>r.app_run_id===record.run_id);
+ const path=version=>`/api/internal/instances/${detail.id}/runs/${runFor(records[version-1]).run_id}`;
+ async function capture(index,version){
+  await wait(()=>downloadBlobs[index]?.revoked,'download URL revoked');
+  const b=downloadBlobs[index],text=await b.blob.text(),value=JSON.parse(text),record=records[version-1],run=runFor(record);
+  assert.equal(b.blob.type,'application/json;charset=utf-8');assert.equal(text,JSON.stringify(value,null,2)+'\n');
+  assert.equal(value.namespace,'csv-dag-result.v1');assert.equal(value.instance_id,detail.id);assert.equal(value.run_id,run.run_id);assert.equal(value.app_run_id,record.run_id);
+  assert.equal(value.instance_revision,run.expected_revision);assert.equal(value.release_id,record.release_id);assert.equal(value.release_fingerprint,rel.fingerprint);
+  assert.equal(value.execution_version,e.version);assert.equal(value.result_version,version);assert.equal(value.record_fingerprint,record.fingerprint);
+  assert(same(value.input,run.input)&&same(value.result,record.data.result)&&same(value.output,run.proof.result.output));
+  assert(same(value.source,{app_id:detail.source_app_id,run_id:e.run_id,plan_key:e.plan_key,plan_fingerprint:e.plan_fingerprint,source_hash:e.source_hash}));
+  assert.equal(value.run_plan_fingerprint,run.proof.plan_fingerprint);
+  const ids=[...(e.aggregate_steps||[e.aggregate_step]),...(e.report_step?[e.report_step]:[])];
+  assert(same(Object.keys(value.node_outputs).sort(),[...ids].sort()));
+  for(const id of ids)assert(same(value.node_outputs[id],run.proof.result.steps.find(s=>s.step_id===id).data));
+  for(const id of e.aggregate_steps||[e.aggregate_step])assert.equal(typeof value.node_outputs[id].sum,'string');
+  if(e.report_step)assert.equal(value.node_outputs[e.report_step].text,`列 ${run.output.column}；行数 ${run.output.count}；合计 ${run.output.sum}`);
+  assert.equal(value.model_requests,0);assert.equal(value.semantic_status,'UNKNOWN');assert.equal(value.owner_acceptance,'PENDING');assert.equal(value.formal_publication_enabled,false);
+  assert(!text.includes('item,amount,quantity')&&!text.includes('synthetic-test-A')&&!text.includes('authorization_fingerprint'));
+  assert(downloadAnchors.some(a=>a.url===b.url&&a.filename===`csv-dag-${detail.id}-${run.run_id}-v${version}.json`));
+  fs.writeFileSync(info.output.replace('result.json',`download-blob-${index}.json`),text);
+  check(true,`download v${version} exact Run/typed/revision/Release/source/input/version and complete stable-node outputs with string sums`);
+ }
+ for(const version of [2,1]){
+  const start=requests.length,index=downloadBlobs.length,work=click(button(version));button(version).click();await work;await capture(index,version);
+  check(requests.slice(start).filter(r=>r.path===path(version)).length===1&&requests.slice(start).every(r=>r.method==='GET'),'duplicate explicit download uses one freshly authorized Run GET and read-only plan validation');await readonly();
+ }
+ if(e.report_step){
+  const index=downloadBlobs.length;downloadMutation={label:'synthetic missing bound report text',change:r=>{delete r.proof.result.steps.find(s=>s.step_id===e.report_step).data.text;}};
+  await click(button(2));check(downloadBlobs.length===index&&$('dag-reuse-results').textContent.includes('未下载文件'),'missing report text rejects before Blob creation');await readonly();
+ }
+ if(info.scenario==='dual'){
+  const changes={
+   'wrong actual Run':r=>r.run_id=runFor(records[0]).run_id,
+   'wrong typed AppRun':r=>r.app_run_id='iapprun_synthetic_wrong',
+   'wrong Release':r=>r.release_id='irelease_synthetic_wrong',
+   'wrong result version':r=>r.result_version=1,
+   'wrong source hash':r=>r.proof.result.steps.find(s=>s.step_id===e.aggregate_steps[0]).data.source_hash='0'.repeat(64),
+   'changed complete node output':r=>r.output[e.aggregate_steps[1]].sum='999',
+  };
+  for(const [label,change]of Object.entries(changes)){
+   const count=downloadBlobs.length;downloadMutation={label:'synthetic '+label,change};await click(button(2));
+   check(downloadBlobs.length===count&&$('dag-reuse-results').textContent.includes('未下载文件'),label+' rejects without Blob');await readonly();
+  }
+  let count=downloadBlobs.length;
+  hold={path:path(1),remaining:1};let work=click(button(1));await waitHeld('held earlier history result download');
+  await click(button(2));await capture(count,2);let release=releaseRead;releaseRead=null;release();await work;
+  check(downloadBlobs.length===count+1,'selecting another historical result invalidates earlier late download');
+  const restore=async()=>{await nav('apps');await wait(()=>!!entry(),'restored directory');await open();};
+  const changesOfContext=[
+   ['workspace ABA',async()=>{await nav('resources');await restore();}],
+   ['project ABA',async()=>{for(const id of [info.other,info.project]){$('project-select').value=id;await $('project-select').onchange(new w.Event('change'));}await restore();}],
+   ['instance ABA',async()=>{for(const id of [info.second_instance,info.instance]){$('dag-reuse-instance').value=id;$('dag-reuse-instance').dispatchEvent(new w.Event('change'));await click('dag-reuse-read');}}],
+   ['identity ABA',async()=>{for(const id of ['synthetic-test-B','synthetic-test-A']){await click('identity-switch');$('token').value=id;await click('connect');}if($('project-select').value!==info.project){$('project-select').value=info.project;await $('project-select').onchange(new w.Event('change'));}await restore();}],
+  ];
+  for(const [label,change]of changesOfContext){
+   count=downloadBlobs.length;hold={path:path(2),remaining:1};work=click(button(2));await waitHeld('held download '+label);await change();
+   release=releaseRead;releaseRead=null;release();await work;
+   check(downloadBlobs.length===count&&w.eval('dagReuseDownloads.size')===0,label+' suppresses late success and releases download key');await readonly();
+  }
+  count=downloadBlobs.length;hold={path:path(2),remaining:1,error:true};work=click(button(2));await waitHeld('held stale download error');
+  await nav('resources');await restore();const currentProof=$('dag-reuse-proof').textContent;release=releaseRead;releaseRead=null;release();await work;
+  check(downloadBlobs.length===count&&$('dag-reuse-proof').textContent===currentProof,'late error does not clear current restored protected view');
+  anchorFailure=true;const anchors=downloadAnchors.length;await click(button(2));anchorFailure=false;
+  await wait(()=>downloadBlobs.at(-1)?.revoked,'failed anchor URL revoked');
+  check(downloadBlobs.length===count+1&&downloadAnchors.length===anchors&&!$('dag-reuse-results').querySelector('a[download]'),'anchor exception removes link, revokes URL and releases key');
+  count=downloadBlobs.length;await click(button(1));await capture(count,1);
+  assert.equal((await rpc({command:'revoke'})).status,200);count=downloadBlobs.length;const start=requests.length;await click(button(2));
+  check(requests.slice(start).some(r=>r.path===path(2)&&r.status===403)&&downloadBlobs.length===count&&!w.eval('csvDagContext')&&!$('dag-reuse-results').textContent&&!$('dag-reuse-proof').textContent,'real revoked grant returns403 and clears protected results without Blob');await readonly();
+ }
+ check(posts().length===initialPosts&&w.eval('dagReuseDownloads.size')===0,'all download actions add zero Run/Grant POST and leave no download keys');
+ check(downloadBlobs.every(b=>b.revoked),'every created Blob URL is revoked');
+}
 (async()=>{
  let status='FAIL',error;
- try{await boot();if(info.scenario==='guards')await guards();else if(['dual','fixed'].includes(info.scenario))await remaining();else await use();status='PASS';}
+ try{await boot();if(info.scenario==='guards')await guards();else if(['dual','fixed'].includes(info.scenario))await remaining();else await use();if(info.download)await downloads();status='PASS';}
  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
-  fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,requests,assets,boots,mutations,heldWaits,
+  fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,download_feature:info.download,checks,requests,assets,boots,mutations,heldWaits,
+   download_blobs:downloadBlobs.map(({url,blob,revoked})=>({url,type:blob.type,bytes:blob.size,revoked})),download_anchors:downloadAnchors,
    scope:'Actual ASGI TestClient HTTP + full served JS in JSDOM, cold SQLite NoModel DAG Worker',pg:'NOT_RUN',native_browser:'NOT_RUN',real_model:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');
  }

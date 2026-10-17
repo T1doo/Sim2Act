@@ -583,6 +583,73 @@ async function dagReuseHistory(c=csvDagContext) {
   $("dag-reuse-status").textContent="已有版本与实例已读回；选择实例后只读恢复结果";
   dagReuseButtons(c);
 }
+// Shared by history and explicit downloads: the same full Run/typed-record seal.
+async function dagReuseRunSeal(c,detail,run,rel,current) {
+  if(!await dagReuseReleaseSeal(rel,c)||!detail.history.some(h=>h.revision===run.expected_revision&&h.release_id===rel.id))throw Error("VERIFICATION_FAILED");
+  if(!current())return;
+  const e=rel.snapshot.execution_source;
+  if(run.instance_id!==detail.id||run.id!==run.app_run_id||run.release_id!==rel.id||run.execution_version!==e.version||run.run_id!==run.proof?.id||run.status!==run.proof.status)throw Error("VERIFICATION_FAILED");
+  const accepted=run.proof.internal_instance;
+  if(accepted?.instance_id!==detail.id||accepted.app_run_id!==run.app_run_id||accepted.version!==e.version)throw Error("VERIFICATION_FAILED");
+  const planCacheKey=JSON.stringify([run.plan_key,run.proof.plan_fingerprint]);
+  const material=rel.snapshot.execution_source.plan_key.match(/^(material|logic)-plan-/);
+  const plan=(material&&c.reuse.materialPlans.get(planCacheKey))||await api(csvDagBase(c)+"/"+encodeURIComponent(run.plan_key));
+  if(!current())return;
+  if(!await csvDagPlanSeal(plan,c)||run.proof.plan_fingerprint!==plan.plan_fingerprint||!dagReuseShape(plan)||!dagReuseExecutionMatches(e,plan,run.input))throw Error("VERIFICATION_FAILED");
+  if(!await csvDagJobSeal({...run.proof,business_writes:0},c,plan))throw Error("VERIFICATION_FAILED");
+  if(run.status==="SUCCEEDED") {
+    const record=detail.data.find(v=>v.run_id===run.app_run_id),p=run.proof.result.instance_result;
+    if(!record||record.instance_id!==detail.id||p?.instance_id!==detail.id||p.app_run_id!==run.app_run_id||p.release_id!==rel.id||p.result_version!==run.result_version||record.version!==run.result_version||record.release_id!==rel.id||record.fingerprint!==await deliveryDigest(record.data)||p.record_fingerprint!==record.fingerprint||!deliverySame(record.data,{result:run.output})||!deliverySame(run.output,dagReuseAggregate(run.proof.result,e))||run.proof.business_writes!==1||run.proof.result.business_writes!==1)throw Error("VERIFICATION_FAILED");
+  } else if(run.proof.business_writes!==0||run.result_version!==null||run.output!==null)throw Error("VERIFICATION_FAILED");
+  return [planCacheKey,plan];
+}
+function dagReuseResultValue(detail,run,record,rel) {
+  if(run?.status!=="SUCCEEDED"||run.instance_id!==detail.id||run.release_id!==rel.id||record?.instance_id!==detail.id||record.run_id!==run.app_run_id||record.version!==run.result_version||record.release_id!==rel.id||!Number.isSafeInteger(record.version)||record.version<1)throw Error("VERIFICATION_FAILED");
+  const e=rel.snapshot.execution_source,result=run.proof.result;
+  const ids=[...(e.aggregate_steps||[e.aggregate_step]),...(e.report_step?[e.report_step]:[])];
+  const nodes=Object.fromEntries(ids.map(id=>{
+    const steps=result.steps.filter(v=>v.step_id===id);
+    if(steps.length!==1||steps[0].status!=="VERIFIED")throw Error("VERIFICATION_FAILED");
+    return [id,steps[0].data];
+  }));
+  return {namespace:"csv-dag-result.v1",instance_id:detail.id,run_id:run.run_id,app_run_id:run.app_run_id,
+    instance_revision:run.expected_revision,release_id:rel.id,release_fingerprint:rel.fingerprint,
+    execution_version:e.version,result_version:record.version,record_fingerprint:record.fingerprint,input:run.input,
+    source:{app_id:detail.source_app_id,run_id:e.run_id,plan_key:e.plan_key,plan_fingerprint:e.plan_fingerprint,source_hash:e.source_hash},
+    run_plan_fingerprint:run.proof.plan_fingerprint,result:run.output,output:result.output,node_outputs:nodes,
+    model_requests:0,semantic_status:"UNKNOWN",owner_acceptance:"PENDING",formal_publication_enabled:false};
+}
+const dagReuseDownloads=new Set();
+function dagReuseResultDownload(node,c,detail,run,record,rel) {
+  const r=c.reuse,read=r.readGeneration,expected=structuredClone(dagReuseResultValue(detail,run,record,rel));
+  const button=document.createElement("button"),status=document.createElement("span");
+  button.type="button";button.textContent="下载此流程结果 JSON";
+  status.setAttribute("role","status");status.setAttribute("aria-live","polite");
+  node.dataset.dagRun=run.run_id;node.dataset.resultVersion=record.version;node.append(button,status);
+  const selected=()=>node.isConnected&&csvDagCurrent(c)&&c.reuse===r&&r.instance===detail&&r.readGeneration===read;
+  button.onclick=async()=>{
+    if(!selected()||r.busy)return;
+    const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+    const key=JSON.stringify([connection,c.parent.project,detail.id,run.run_id,record.version]);
+    if(dagReuseDownloads.has(key))return;
+    const selection=r.downloadGeneration=(r.downloadGeneration||0)+1;
+    const current=()=>selected()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&selection===r.downloadGeneration;
+    dagReuseDownloads.add(key);button.disabled=true;status.textContent="正在重新核对此运行与成果版本…";
+    try{
+      const saved=await api(`/api/internal/instances/${encodeURIComponent(detail.id)}/runs/${encodeURIComponent(run.run_id)}`);
+      if(!current())return;
+      await dagReuseRunSeal(c,detail,saved,rel,current);
+      if(!current())return;
+      const value=dagReuseResultValue(detail,saved,record,rel);
+      if(!deliverySame(value,expected))throw Error("VERSION_CONFLICT");
+      const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
+      const link=document.createElement("a");link.href=url;link.download=`csv-dag-${detail.id}-${run.run_id}-v${record.version}.json`;link.hidden=true;
+      try{node.append(link);link.click();status.textContent=`已生成此运行成果 v${record.version} 的 JSON 下载；语义 UNKNOWN。`;}
+      finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),0);}
+    }catch(error){if(current()){if(error.httpStatus===403)clearCsvDag();else status.textContent=`成果核对未通过：${error.message}。未下载文件。`;}}
+    finally{dagReuseDownloads.delete(key);button.disabled=false;if(selected()&&selection!==r.downloadGeneration)status.textContent="下载选择已变化；请重新点击需要的成果。";}
+  };
+}
 async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, expected=null) {
   if(!c||!csvDagCurrent(c)||!iid)return;
   const r=c.reuse,generation=(r.readGeneration||0)+1;r.readGeneration=generation;
@@ -598,27 +665,14 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   const rel=expected?.release||cachedRelease||await api(`/api/internal/releases/${detail.release_id}`);
   if(!current())return;
   if(detail.id!==iid||rel.id!==detail.release_id||detail.source_app_id!==c.parent.id||detail.project_id!==c.parent.project||detail.runtime_id!==c.parent.app.runtime_id||detail.release_fingerprint!==rel.fingerprint||!await dagReuseReleaseSeal(rel,c)||!Array.isArray(detail.runs)||!Array.isArray(detail.data))throw Error("VERSION_CONFLICT");
-  const material=rel.snapshot.execution_source.plan_key.match(/^(material|logic)-plan-/),verifiedPlans=[];
+  const material=rel.snapshot.execution_source.plan_key.match(/^(material|logic)-plan-/),verifiedPlans=[],runReleases=new Map();
   for(const run of detail.runs) {
     const runRelease=run.release_id===rel.id?rel:await api(`/api/internal/releases/${run.release_id}`);
     if(!current())return;
-    if(!await dagReuseReleaseSeal(runRelease,c)||!detail.history.some(h=>h.revision===run.expected_revision&&h.release_id===runRelease.id))throw Error("VERIFICATION_FAILED");
-    const e=runRelease.snapshot.execution_source;
-    if(run.instance_id!==iid||run.release_id!==runRelease.id||run.execution_version!==e.version||run.run_id!==run.proof?.id||run.status!==run.proof.status)throw Error("VERIFICATION_FAILED");
-    const accepted=run.proof.internal_instance;
-    if(accepted?.instance_id!==iid||accepted.app_run_id!==run.app_run_id||accepted.version!==e.version)throw Error("VERIFICATION_FAILED");
-    const planCacheKey=JSON.stringify([run.plan_key,run.proof.plan_fingerprint]);
-    const bindingPlan=(material&&c.reuse.materialPlans.get(planCacheKey))||await api(csvDagBase(c)+"/"+encodeURIComponent(run.plan_key));
+    const verified=await dagReuseRunSeal(c,detail,run,runRelease,current);
     if(!current())return;
-    const shape=dagReuseShape(bindingPlan);
-    if(!await csvDagPlanSeal(bindingPlan,c)||run.proof.plan_fingerprint!==bindingPlan.plan_fingerprint||!shape||!dagReuseExecutionMatches(e,bindingPlan,run.input))throw Error("VERIFICATION_FAILED");
-    // Verify the unchanged DAG receipt protocol, then separately bind the one typed write.
-    if(!await csvDagJobSeal({...run.proof,business_writes:0},c,bindingPlan))throw Error("VERIFICATION_FAILED");
-    if(run.status==="SUCCEEDED") {
-      const record=detail.data.find(v=>v.run_id===run.app_run_id),p=run.proof.result.instance_result;
-      if(!record||p?.instance_id!==iid||p.app_run_id!==run.app_run_id||p.release_id!==runRelease.id||p.result_version!==run.result_version||record.version!==run.result_version||record.release_id!==runRelease.id||record.fingerprint!==await deliveryDigest(record.data)||p.record_fingerprint!==record.fingerprint||!deliverySame(record.data,{result:run.output})||!deliverySame(run.output,dagReuseAggregate(run.proof.result,e))||run.proof.business_writes!==1||run.proof.result.business_writes!==1)throw Error("VERIFICATION_FAILED");
-    } else if(run.proof.business_writes!==0||run.result_version!==null||run.output!==null)throw Error("VERIFICATION_FAILED");
-    if(material)verifiedPlans.push([planCacheKey,bindingPlan]);
+    runReleases.set(run.release_id,runRelease);
+    if(material)verifiedPlans.push(verified);
   }
   if(detail.data.length!==detail.runs.filter(v=>v.status==="SUCCEEDED").length)throw Error("VERIFICATION_FAILED");
   if(expected) {
@@ -639,7 +693,11 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   for(const record of detail.data) {
     const row=document.createElement("p");
     const values=dual?Object.entries(record.data.result):[["求和",record.data.result]];
-    row.textContent=`结果版本 ${record.version} · `+values.map(([sid,v])=>`${sid}：列 ${v.column}，行数 ${v.count}，合计 ${v.sum}`).join("；");
+    const summary=document.createElement("span");summary.dataset.role="dag-result-summary";
+    summary.textContent=`结果版本 ${record.version} · `+values.map(([sid,v])=>`${sid}：列 ${v.column}，行数 ${v.count}，合计 ${v.sum}`).join("；");
+    row.append(summary,document.createTextNode(" "));
+    const run=detail.runs.find(v=>v.app_run_id===record.run_id);
+    dagReuseResultDownload(row,c,detail,run,record,runReleases.get(run.release_id));
     $("dag-reuse-results").append(row);
   }
   $("dag-reuse-run-confirm").checked=false;
