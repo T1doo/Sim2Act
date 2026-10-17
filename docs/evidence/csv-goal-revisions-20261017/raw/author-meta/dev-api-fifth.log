@@ -1,0 +1,41 @@
+.F
+=================================== FAILURES ===================================
+________ test_adopt_without_drift_new_worker_result_and_new_run_pending ________
+
+env = (<sim2act.db.Store object at 0x7fcea16fedb0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-15/test_ado...0562104a8f4194868ccb3ac5259717', 'user_48da12af2aab4f269ece97c1f9acfce6', 'proj_470ab1b66410435c8d7627b64fbc4334', ...)
+
+    def test_adopt_without_drift_new_worker_result_and_new_run_pending(env):
+        data,aid,base,instance,path,body,value,updated = ready(env)
+        started = start(data,path,value)
+        drive(data,started["run_id"])
+        version = approve(data,path,value)
+        r = data[2].post(f"/api/internal/instances/{instance['id']}/switch-approvals",json=dict(
+            expected_revision=instance["revision"],target_release_id=version["id"],expected_target_fingerprint=version["fingerprint"]))
+        assert r.status_code == 201,r.text
+        a = r.json()
+        r = data[2].post(f"/api/internal/instances/{instance['id']}/switch-approvals/{a['id']}/commit",json=dict(fingerprint=a["fingerprint"]))
+        assert r.status_code == 200,r.text
+        inst = r.json()
+        accepted = jobs.enqueue(data[0],data[3],instance["id"],inst["revision"],version["fingerprint"],
+            {"column":"quantity"},"after-adoption",limits(data),csv_review="FREEZE_SUM_ONLY_WITHOUT_MD")
+        drive(data,accepted["run_id"])
+        result = jobs.inspect_job(data[0],data[3],accepted["run_id"])
+        assert result["status"] == "SUCCEEDED" and result["result"]["sum"] == "5"
+        assert result["instance_id"] == instance["id"] and result["release_id"] == version["id"]
+        state = data[2].get(f"/api/internal/instances/{instance['id']}/runs/{accepted['run_id']}/csv-owner-review")
+        assert state.status_code == 200,state.text
+>       assert state.json()["status"] == "PENDING",state.json()
+               ^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_csv_goal_revisions.py:134: KeyError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_goal_revisions.py::test_adopt_without_drift_new_worker_result_and_new_run_pending
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 passed, 1 warning in 36.89s

@@ -1,0 +1,43 @@
+.....F
+=================================== FAILURES ===================================
+_____ test_checked_proposal_rejects_current_drift_and_keeps_original[lock] _____
+
+env = (<sim2act.db.Store object at 0x7fabd6667d70>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-17/test_che...72081b2eff431a8cbc71a3ea0071ef', 'user_4d791ec9b4a44ef69b18fe141ce9c841', 'proj_f942af010acc4a2f9c3f180f048984f9', ...)
+fault = 'lock'
+
+    @pytest.mark.parametrize("fault",["goal","permission","instance","lock"])
+    def test_checked_proposal_rejects_current_drift_and_keeps_original(env,fault):
+        data,aid,base,instance,path,body,value,updated = ready(env)
+        accepted = start(data,path,value)
+        drive(data,accepted["run_id"])
+        proof = data[2].get(path+"/checks/"+body["request_key"]).json()
+        if fault == "goal":
+            cid = value["context"]["goal"]["card_id"]
+            assert data[2].put(f"/api/goal-cards/{cid}",json={**updated,"goal":"next","expected_version":2}).status_code == 200
+        elif fault == "permission":
+            with data[0].tx() as c:
+                c.execute(update(grants).where(grants.c.project_id == data[5],grants.c.resource_id == data[6]).values(revoked=True))
+        elif fault == "instance":
+            old = jobs.enqueue(data[0],data[3],instance["id"],instance["revision"],base["fingerprint"],{"column":"amount"},"changed-data",limits(data))
+            drive(data,old["run_id"])
+        else:
+            node = next(n for n in value["baseline_graph"]["graph"]["nodes"] if n["key"] == "action:aggregate")
+            r = data[2].post(f"/api/projects/{data[5]}/apps/{aid}/delivery-graph/manual-locks",json=dict(
+                request_key="lock",expected_graph_fingerprint=value["context"]["graph_fingerprint"],
+                change=dict(node_id=node["id"],expected_revision=node["revision"],expected_content_fingerprint=node["content_fingerprint"]),locked=True))
+>           assert r.status_code == 201,r.text
+E           AssertionError: {"detail":"Not Found"}
+E           assert 404 == 201
+E            +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_csv_goal_revisions.py:213: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_goal_revisions.py::test_checked_proposal_rejects_current_drift_and_keeps_original[lock]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 5 passed, 1 warning in 86.32s (0:01:26)

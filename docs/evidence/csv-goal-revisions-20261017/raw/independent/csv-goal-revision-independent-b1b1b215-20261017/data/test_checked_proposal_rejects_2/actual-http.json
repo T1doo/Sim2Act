@@ -1,0 +1,2656 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/projects/proj_d7cc61a0ccf4487f96c25a0399d41cb6/resources",
+    "body": {
+      "name": "two.csv",
+      "format": "csv",
+      "content": "amount,quantity\n10,2\n20,3\n"
+    },
+    "status": 201,
+    "response": {
+      "id": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/proj_d7cc61a0ccf4487f96c25a0399d41cb6/goal-cards",
+    "body": {
+      "title": "固定能力演示",
+      "goal": "汇总授权CSV；这不是任意目标生成",
+      "known": [
+        "金额单位元"
+      ],
+      "assumptions": [
+        "人工确认列含义"
+      ],
+      "unresolved": [
+        "目标语义未验收"
+      ],
+      "constraints": [
+        "不外发",
+        "保留所有原始条件"
+      ],
+      "acceptance_checks": [
+        "列合计与授权材料一致"
+      ],
+      "resource_refs": [
+        "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": "goal_a94296677b1f431a81e0efdb903a11be",
+      "version": 1,
+      "fingerprint": "aee8b2deecc76afdb4c2e0c25b8b9967a3e6aada7e2f23dea471194b0eaab861",
+      "state": "DRAFT",
+      "executable": false
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/goal-cards/goal_a94296677b1f431a81e0efdb903a11be/candidates",
+    "body": {
+      "expected_version": 1,
+      "resource_id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+      "capability": "csv.sum",
+      "request_key": "same-intent"
+    },
+    "status": 201,
+    "response": {
+      "id": "app_d0478f328555422cb8a5088db94bb9d9",
+      "candidate_fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757",
+      "state": "PREVIEW_ONLY",
+      "publishable": false,
+      "generator": "MOCK_DETERMINISTIC_CSV_SUM.v1",
+      "model_requests": 0,
+      "goal_card_id": "goal_a94296677b1f431a81e0efdb903a11be",
+      "goal_version": 1,
+      "goal_acceptance": "NOT_RUN"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/apps/app_d0478f328555422cb8a5088db94bb9d9",
+    "body": null,
+    "status": 200,
+    "response": {
+      "id": "app_d0478f328555422cb8a5088db94bb9d9",
+      "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+      "runtime_id": "appruntime_94b62f8034a44864b51f16f4e146836f",
+      "name": "固定能力演示",
+      "candidate": {
+        "manifest": {
+          "schema_version": "1.0-draft",
+          "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+          "revision": 1,
+          "origin": "goal",
+          "goal_ref": "goal_a94296677b1f431a81e0efdb903a11be",
+          "source_run_ref": null,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "column": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "column"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "outputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "column"
+            },
+            "count": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "count"
+            },
+            "sum": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "sum"
+            },
+            "source_hash": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "source_hash"
+            }
+          },
+          "views": [
+            {
+              "component_ref": "text",
+              "output_field": "sum"
+            }
+          ],
+          "workflow": [
+            {
+              "step_id": "aggregate",
+              "binding_id": "csv_sum",
+              "depends_on": [],
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "column"
+                }
+              }
+            }
+          ],
+          "action_bindings": [
+            {
+              "binding_id": "csv_sum",
+              "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "revision": 1
+            }
+          ],
+          "data_bindings": [
+            {
+              "binding_id": "source",
+              "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+            }
+          ],
+          "runtime_identity_requirements": {
+            "mode": "user_and_app_intersection"
+          },
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+            },
+            {
+              "tool_ref": "data.aggregate_csv",
+              "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+            }
+          ],
+          "dependency_lock": [
+            {
+              "kind": "resource",
+              "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "data.aggregate_csv",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "version": "1"
+            }
+          ],
+          "validation_suite_ref": "receipt.readback.v1",
+          "runtime_limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 1,
+            "max_output_tokens": 1,
+            "run_seconds": 1
+          },
+          "data_schema_version": 1
+        },
+        "actions": [
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "column": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "column"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "column": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "sum": {
+                  "type": "string"
+                },
+                "source_hash": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "column",
+                "count",
+                "sum",
+                "source_hash"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "data.aggregate_csv",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+              },
+              {
+                "tool_ref": "data.aggregate_csv",
+                "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "receipt.readback.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 1,
+              "max_repairs": 0,
+              "max_total_tokens": 1,
+              "max_output_tokens": 1,
+              "run_seconds": 1
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED"
+            ]
+          }
+        ],
+        "source_hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+        "goal": {
+          "title": "固定能力演示",
+          "goal": "汇总授权CSV；这不是任意目标生成",
+          "known": [
+            "金额单位元"
+          ],
+          "assumptions": [
+            "人工确认列含义"
+          ],
+          "unresolved": [
+            "目标语义未验收"
+          ],
+          "constraints": [
+            "不外发",
+            "保留所有原始条件"
+          ],
+          "acceptance_checks": [
+            "列合计与授权材料一致"
+          ],
+          "resource_refs": [
+            "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+          ]
+        },
+        "generation": {
+          "kind": "goal_card",
+          "goal_card_id": "goal_a94296677b1f431a81e0efdb903a11be",
+          "goal_version": 1,
+          "goal_fingerprint": "aee8b2deecc76afdb4c2e0c25b8b9967a3e6aada7e2f23dea471194b0eaab861",
+          "goal_snapshot": {
+            "schema_version": "F2-goal-card.v1",
+            "content": {
+              "title": "固定能力演示",
+              "goal": "汇总授权CSV；这不是任意目标生成",
+              "known": [
+                "金额单位元"
+              ],
+              "assumptions": [
+                "人工确认列含义"
+              ],
+              "unresolved": [
+                "目标语义未验收"
+              ],
+              "constraints": [
+                "不外发",
+                "保留所有原始条件"
+              ],
+              "acceptance_checks": [
+                "列合计与授权材料一致"
+              ],
+              "resource_refs": [
+                "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+              ]
+            },
+            "resource_snapshots": [
+              {
+                "resource_id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                "hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+                "format": "csv"
+              }
+            ]
+          },
+          "generator": "MOCK_DETERMINISTIC_CSV_SUM.v1",
+          "model_requests": 0,
+          "goal_acceptance": "NOT_RUN",
+          "capability": "csv.sum"
+        }
+      },
+      "fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757",
+      "created_at": 1792239931.463705,
+      "state": "PREVIEW_ONLY",
+      "publishable": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "column"
+        ],
+        "additionalProperties": false
+      },
+      "validation": {
+        "state": "PREFLIGHTED_DRAFT",
+        "execution_performed": false,
+        "publishable": false,
+        "topological_order": [
+          "aggregate"
+        ]
+      },
+      "history": [],
+      "input_guidance": {
+        "row_count": 2,
+        "columns": [
+          {
+            "name": "amount",
+            "numeric": true,
+            "reason": null
+          },
+          {
+            "name": "quantity",
+            "numeric": true,
+            "reason": null
+          }
+        ],
+        "error": null
+      }
+    }
+  },
+  {
+    "method": "PUT",
+    "path": "/api/goal-cards/goal_a94296677b1f431a81e0efdb903a11be",
+    "body": {
+      "title": "数量 Goal v2",
+      "goal": "明确改为汇总 quantity，保留原材料与历史",
+      "known": [
+        "金额单位元"
+      ],
+      "assumptions": [
+        "人工确认列含义"
+      ],
+      "unresolved": [
+        "目标语义未验收"
+      ],
+      "constraints": [
+        "不外发",
+        "保留所有原始条件"
+      ],
+      "acceptance_checks": [
+        "列合计与授权材料一致"
+      ],
+      "resource_refs": [
+        "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+      ],
+      "expected_version": 1
+    },
+    "status": 200,
+    "response": {
+      "id": "goal_a94296677b1f431a81e0efdb903a11be",
+      "version": 2,
+      "fingerprint": "2431f014262eddfe01fd3f0b31def3064a4c933573f30b66aaac8b1768d9a2b2",
+      "state": "DRAFT",
+      "executable": false
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/proj_d7cc61a0ccf4487f96c25a0399d41cb6/apps/app_d0478f328555422cb8a5088db94bb9d9/delivery-graph/derive",
+    "body": {
+      "request_key": "baseline",
+      "expected_candidate_fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757"
+    },
+    "status": 201,
+    "response": {
+      "namespace": "delivery-graph-apps.v1",
+      "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+      "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+      "runtime_id": "appruntime_94b62f8034a44864b51f16f4e146836f",
+      "candidate_fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757",
+      "graph_revision": 1,
+      "authorization_revision": 1,
+      "current_authorization_fingerprint": "f57f184a7b01388bc2794171697c7b82e21808f49bda358cbe18e5c54e35f59a",
+      "graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7",
+      "state": "PLANNING_ONLY",
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING",
+      "patch_executed": false,
+      "business_write_performed": false,
+      "publishable": false,
+      "formal_publication_enabled": false,
+      "graph": {
+        "schema_version": "delivery-graph.v1",
+        "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+        "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+        "authorization_revision": 1,
+        "context_fingerprint": "de312d3ba38021ebaae57ec01c5564b47538455d2355fca30bed504d6c6cf5b3",
+        "resource_ids": [
+          "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+        ],
+        "nodes": [
+          {
+            "id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "key": "action:aggregate",
+            "kind": "ACTION",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "action": {
+                "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+                "allowed_tool_refs": [],
+                "dependencies": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                    "version": "1"
+                  }
+                ],
+                "effect": "read",
+                "error_contract": [
+                  "INVALID_INPUT",
+                  "PERMISSION_DENIED",
+                  "GRANT_REVOKED"
+                ],
+                "executor": {
+                  "kind": "registered_tool",
+                  "ref": "data.aggregate_csv",
+                  "version": "1"
+                },
+                "idempotency": "read_only",
+                "input_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "resource_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "column"
+                  ],
+                  "type": "object"
+                },
+                "limits": {
+                  "max_output_tokens": 1,
+                  "max_repairs": 0,
+                  "max_requests": 1,
+                  "max_tools": 1,
+                  "max_total_tokens": 1,
+                  "run_seconds": 1
+                },
+                "output_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "resource_id": {
+                      "type": "string"
+                    },
+                    "source_hash": {
+                      "type": "string"
+                    },
+                    "sum": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "column",
+                    "count",
+                    "sum",
+                    "source_hash"
+                  ],
+                  "type": "object"
+                },
+                "permission_requirements": [
+                  {
+                    "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                    "tool_ref": "resource.read"
+                  },
+                  {
+                    "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                    "tool_ref": "data.aggregate_csv"
+                  }
+                ],
+                "postcheck_refs": [
+                  "receipt.readback.v1"
+                ],
+                "preconditions": [],
+                "reconcile_ref": "operation.lookup.v1",
+                "revision": 1,
+                "schema_version": "1.0-draft"
+              },
+              "step": {
+                "binding_id": "csv_sum",
+                "depends_on": [],
+                "inputs": {
+                  "column": {
+                    "field": "column",
+                    "ref": null,
+                    "source": "input"
+                  },
+                  "resource_id": {
+                    "field": "resource_id",
+                    "ref": "source",
+                    "source": "data"
+                  }
+                },
+                "step_id": "aggregate"
+              }
+            },
+            "content_fingerprint": "c145b233caa026973c8fe89dfffd7dabe4509047396bb1b39ba29be5ae68caa6"
+          },
+          {
+            "id": "node_9b5db6d04d5447ceb3f157b177e858db",
+            "key": "artifact:column",
+            "kind": "ARTIFACT",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "column",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "column",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "aafe71acedb5bcee536ab7138e88d2a38b007fea4acd6d138a3972ff4af53eed"
+          },
+          {
+            "id": "node_64a5b828b43441f7bc53cffeb62b0a69",
+            "key": "artifact:count",
+            "kind": "ARTIFACT",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "count",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "count",
+              "schema": {
+                "type": "integer"
+              }
+            },
+            "content_fingerprint": "19fbf770108550da75db326c0ca17894869ff75db4cc5bdc64b125ceaf5d6a0a"
+          },
+          {
+            "id": "node_ed57f706e40a410eac5668c4e7dacb54",
+            "key": "artifact:resource_id",
+            "kind": "ARTIFACT",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "resource_id",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "resource_id",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "2fe1bc684d18d706cce1ebf4ff64fd62e1ea30e8650cfaa3d5c878851532e37d"
+          },
+          {
+            "id": "node_fc1ebb128b9843649d6147387730adee",
+            "key": "artifact:source_hash",
+            "kind": "ARTIFACT",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "source_hash",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "source_hash",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "6de08ebaac5e2a00c3b31ec38958ea489809b3952a287541249bd809a11c1fbe"
+          },
+          {
+            "id": "node_6b9320759f794616bb64aee0f2d21d29",
+            "key": "artifact:sum",
+            "kind": "ARTIFACT",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "binding": {
+                "field": "sum",
+                "ref": "aggregate",
+                "source": "step"
+              },
+              "field": "sum",
+              "schema": {
+                "type": "string"
+              }
+            },
+            "content_fingerprint": "eff3b495fef19edc29045579c6dcd13db8f2fb074a36048b3a0a77eb3e8ddbd2"
+          },
+          {
+            "id": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "key": "check:receipt.readback.v1",
+            "kind": "CHECK",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "check_ref": "receipt.readback.v1",
+              "source_version": {
+                "content_fingerprint": "84fd0c27e37724342570f30429d04d2d7b6d7a20e5091e36d8ab26ebbbe8bf6c",
+                "revision": 1
+              }
+            },
+            "content_fingerprint": "e41384797572a697b42136ef791457165b81133d905c3872a48f5f2b17f6c0c7"
+          },
+          {
+            "id": "goal_a94296677b1f431a81e0efdb903a11be",
+            "key": "goal:goal_a94296677b1f431a81e0efdb903a11be",
+            "kind": "GOAL",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "goal_ref": "goal_a94296677b1f431a81e0efdb903a11be",
+              "source_version": {
+                "content_fingerprint": "cd0c278502c1cb8a49cfed5782f88fb75cb87ab9e95b19dd5c2d4b42c0e5bbe9",
+                "revision": 1
+              }
+            },
+            "content_fingerprint": "1bd0fd90155a207512f215ef64fef09cdd5376627546c610e684bd899f4efbe4"
+          },
+          {
+            "id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "key": "manifest:app_d0478f328555422cb8a5088db94bb9d9",
+            "kind": "MANIFEST",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "action_bindings": [
+                {
+                  "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+                  "binding_id": "csv_sum",
+                  "revision": 1
+                }
+              ],
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "data_bindings": [
+                {
+                  "binding_id": "source",
+                  "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+                }
+              ],
+              "data_schema_version": 1,
+              "dependency_lock": [
+                {
+                  "kind": "resource",
+                  "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                  "version": "1"
+                },
+                {
+                  "kind": "tool",
+                  "ref": "data.aggregate_csv",
+                  "version": "1"
+                },
+                {
+                  "kind": "check",
+                  "ref": "receipt.readback.v1",
+                  "version": "1"
+                }
+              ],
+              "goal_ref": "goal_a94296677b1f431a81e0efdb903a11be",
+              "input_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "column"
+                ],
+                "type": "object"
+              },
+              "origin": "goal",
+              "output_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer"
+                  },
+                  "resource_id": {
+                    "type": "string"
+                  },
+                  "source_hash": {
+                    "type": "string"
+                  },
+                  "sum": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "resource_id",
+                  "column",
+                  "count",
+                  "sum",
+                  "source_hash"
+                ],
+                "type": "object"
+              },
+              "outputs": {
+                "column": {
+                  "field": "column",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "count": {
+                  "field": "count",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "resource_id": {
+                  "field": "resource_id",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "source_hash": {
+                  "field": "source_hash",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "sum": {
+                  "field": "sum",
+                  "ref": "aggregate",
+                  "source": "step"
+                }
+              },
+              "permission_requirements": [
+                {
+                  "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                  "tool_ref": "resource.read"
+                },
+                {
+                  "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                  "tool_ref": "data.aggregate_csv"
+                }
+              ],
+              "revision": 1,
+              "runtime_identity_requirements": {
+                "mode": "user_and_app_intersection"
+              },
+              "runtime_limits": {
+                "max_output_tokens": 1,
+                "max_repairs": 0,
+                "max_requests": 1,
+                "max_tools": 1,
+                "max_total_tokens": 1,
+                "run_seconds": 1
+              },
+              "schema_version": "1.0-draft",
+              "source_run_ref": null,
+              "validation_suite_ref": "receipt.readback.v1",
+              "views": [
+                {
+                  "component_ref": "text",
+                  "output_field": "sum"
+                }
+              ],
+              "workflow": [
+                {
+                  "binding_id": "csv_sum",
+                  "depends_on": [],
+                  "inputs": {
+                    "column": {
+                      "field": "column",
+                      "ref": null,
+                      "source": "input"
+                    },
+                    "resource_id": {
+                      "field": "resource_id",
+                      "ref": "source",
+                      "source": "data"
+                    }
+                  },
+                  "step_id": "aggregate"
+                }
+              ]
+            },
+            "content_fingerprint": "86893f1e4262cc02cfcd39ed9ae254a0b4dc92417a8d748bf59bfe27fac9041b"
+          },
+          {
+            "id": "node_90cbde3b538d43e7ab4caf256724338f",
+            "key": "rule:check:receipt.readback.v1",
+            "kind": "REQUIREMENT",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "source_version": {
+                "content_fingerprint": "055ee8db35249a4cddad259ef24385e55197a3ed02b390634957796daad8b1d7",
+                "revision": 1
+              },
+              "version": "1"
+            },
+            "content_fingerprint": "d82168d873614c0eb832fca82fcd262e7263173eb7d2749b0cd95896104c6fbf"
+          },
+          {
+            "id": "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+            "key": "rule:tool:data.aggregate_csv",
+            "kind": "REQUIREMENT",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "kind": "tool",
+              "ref": "data.aggregate_csv",
+              "source_version": {
+                "content_fingerprint": "eaee1ae1c303431dc6d027067659f74dbd65f8ff635038138ae0e5cba75c0674",
+                "revision": 1
+              },
+              "version": "1"
+            },
+            "content_fingerprint": "cc07781056cc2e002bc63fdd4bb163129d31786be2beb8a64747e2abf6260ad6"
+          },
+          {
+            "id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+            "key": "source:res_cecb656201ef4d45aa23f8e2e7f40ee1",
+            "kind": "SOURCE",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "source_version": {
+                "content_fingerprint": "e255f82ad7058fab3fcc2db1414a2c701c0736cf7991f9cbf445845843b19d2b",
+                "revision": 1
+              }
+            },
+            "content_fingerprint": "b7e3658095f022a92cf52aaa435eec77f8acaa44f54cb4ef5a91a962d78897f8"
+          },
+          {
+            "id": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+            "key": "view:text:sum",
+            "kind": "VIEW",
+            "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+            "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "revision": 1,
+            "locked": false,
+            "definition": {
+              "component_ref": "text",
+              "output_field": "sum"
+            },
+            "content_fingerprint": "2cdb3627f2585663d3a7e454deb414748d6527c9a3f5882bc37594fe74d8b3e7"
+          }
+        ],
+        "edges": [
+          {
+            "upstream": "node_6b9320759f794616bb64aee0f2d21d29",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "downstream": "node_9b5db6d04d5447ceb3f157b177e858db",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_ed57f706e40a410eac5668c4e7dacb54",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "downstream": "node_64a5b828b43441f7bc53cffeb62b0a69",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_fc1ebb128b9843649d6147387730adee",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_6b9320759f794616bb64aee0f2d21d29",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "downstream": "node_ed57f706e40a410eac5668c4e7dacb54",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "downstream": "node_6b9320759f794616bb64aee0f2d21d29",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "goal_a94296677b1f431a81e0efdb903a11be",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_9b5db6d04d5447ceb3f157b177e858db",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_64a5b828b43441f7bc53cffeb62b0a69",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_ed57f706e40a410eac5668c4e7dacb54",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_9b5db6d04d5447ceb3f157b177e858db",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_fc1ebb128b9843649d6147387730adee",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+            "downstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+            "downstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "type": "RULE",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_90cbde3b538d43e7ab4caf256724338f",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "goal_a94296677b1f431a81e0efdb903a11be",
+            "downstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "type": "RULE",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_90cbde3b538d43e7ab4caf256724338f",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "RULE",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_64a5b828b43441f7bc53cffeb62b0a69",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "downstream": "node_fc1ebb128b9843649d6147387730adee",
+            "type": "DATA",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+            "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+            "type": "PACKAGED_IN",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_6b9320759f794616bb64aee0f2d21d29",
+            "downstream": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+            "type": "PRESENTATION",
+            "provenance": "DECLARED"
+          },
+          {
+            "upstream": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+            "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+            "type": "VERIFIED_BY",
+            "provenance": "DECLARED"
+          }
+        ],
+        "unknown_dependencies": [
+          {
+            "node_id": "app_d0478f328555422cb8a5088db94bb9d9",
+            "scope": "APP",
+            "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+          }
+        ],
+        "graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7"
+      },
+      "source_versions": {
+        "check:receipt.readback.v1": {
+          "revision": 1,
+          "content_fingerprint": "84fd0c27e37724342570f30429d04d2d7b6d7a20e5091e36d8ab26ebbbe8bf6c"
+        },
+        "goal:goal_a94296677b1f431a81e0efdb903a11be": {
+          "revision": 1,
+          "content_fingerprint": "cd0c278502c1cb8a49cfed5782f88fb75cb87ab9e95b19dd5c2d4b42c0e5bbe9"
+        },
+        "rule:check:receipt.readback.v1": {
+          "revision": 1,
+          "content_fingerprint": "055ee8db35249a4cddad259ef24385e55197a3ed02b390634957796daad8b1d7"
+        },
+        "rule:tool:data.aggregate_csv": {
+          "revision": 1,
+          "content_fingerprint": "eaee1ae1c303431dc6d027067659f74dbd65f8ff635038138ae0e5cba75c0674"
+        },
+        "source:res_cecb656201ef4d45aa23f8e2e7f40ee1": {
+          "revision": 1,
+          "content_fingerprint": "e255f82ad7058fab3fcc2db1414a2c701c0736cf7991f9cbf445845843b19d2b"
+        }
+      },
+      "cached": false
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/internal/instances/iinstance_90028b65a57e4c1ab22a614e4b85bb21/csv-goal-revisions/context",
+    "body": null,
+    "status": 200,
+    "response": {
+      "instance_id": "iinstance_90028b65a57e4c1ab22a614e4b85bb21",
+      "principal_id": "user_88da5a3bb03247c7a0603c71b42e62de",
+      "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+      "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+      "runtime_id": "appruntime_94b62f8034a44864b51f16f4e146836f",
+      "release_id": "irelease_867f1d69594048f4a3b29d6174ad5328",
+      "release_fingerprint": "cf4013fd1e8ae8f8380279e8bf82e4765bc3a745d77bdccda32a8b4fc6aba3fb",
+      "draft_fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757",
+      "instance_revision": 1,
+      "data_version": 0,
+      "source": {
+        "resource_id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+        "hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f"
+      },
+      "goal": {
+        "card_id": "goal_a94296677b1f431a81e0efdb903a11be",
+        "version": 2,
+        "fingerprint": "2431f014262eddfe01fd3f0b31def3064a4c933573f30b66aaac8b1768d9a2b2",
+        "snapshot": {
+          "schema_version": "F2-goal-card.v1",
+          "content": {
+            "title": "数量 Goal v2",
+            "goal": "明确改为汇总 quantity，保留原材料与历史",
+            "known": [
+              "金额单位元"
+            ],
+            "assumptions": [
+              "人工确认列含义"
+            ],
+            "unresolved": [
+              "目标语义未验收"
+            ],
+            "constraints": [
+              "不外发",
+              "保留所有原始条件"
+            ],
+            "acceptance_checks": [
+              "列合计与授权材料一致"
+            ],
+            "resource_refs": [
+              "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+            ]
+          },
+          "resource_snapshots": [
+            {
+              "resource_id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+              "format": "csv"
+            }
+          ]
+        }
+      },
+      "original_goal_version": 1,
+      "graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7",
+      "graph_revision": 1,
+      "authorization_fingerprint": "f57f184a7b01388bc2794171697c7b82e21808f49bda358cbe18e5c54e35f59a",
+      "columns": [
+        "amount",
+        "quantity"
+      ],
+      "limits": {
+        "max_requests": 4,
+        "max_tools": 4,
+        "max_repairs": 1,
+        "max_total_tokens": 64000,
+        "max_output_tokens": 1024,
+        "run_seconds": 300
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/internal/instances/iinstance_90028b65a57e4c1ab22a614e4b85bb21/csv-goal-revisions/previews",
+    "body": {
+      "request_key": "revision-one",
+      "expected_revision": 1,
+      "expected_release_fingerprint": "cf4013fd1e8ae8f8380279e8bf82e4765bc3a745d77bdccda32a8b4fc6aba3fb",
+      "expected_graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7",
+      "goal_version": 2,
+      "goal_fingerprint": "2431f014262eddfe01fd3f0b31def3064a4c933573f30b66aaac8b1768d9a2b2",
+      "baseline_column": "amount",
+      "column": "quantity"
+    },
+    "status": 201,
+    "response": {
+      "namespace": "csv-goal-revision.v1",
+      "request_key": "revision-one",
+      "context": {
+        "instance_id": "iinstance_90028b65a57e4c1ab22a614e4b85bb21",
+        "principal_id": "user_88da5a3bb03247c7a0603c71b42e62de",
+        "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+        "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+        "runtime_id": "appruntime_94b62f8034a44864b51f16f4e146836f",
+        "release_id": "irelease_867f1d69594048f4a3b29d6174ad5328",
+        "release_fingerprint": "cf4013fd1e8ae8f8380279e8bf82e4765bc3a745d77bdccda32a8b4fc6aba3fb",
+        "draft_fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757",
+        "instance_revision": 1,
+        "data_version": 0,
+        "source": {
+          "resource_id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+          "hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f"
+        },
+        "goal": {
+          "card_id": "goal_a94296677b1f431a81e0efdb903a11be",
+          "version": 2,
+          "fingerprint": "2431f014262eddfe01fd3f0b31def3064a4c933573f30b66aaac8b1768d9a2b2",
+          "snapshot": {
+            "schema_version": "F2-goal-card.v1",
+            "content": {
+              "title": "数量 Goal v2",
+              "goal": "明确改为汇总 quantity，保留原材料与历史",
+              "known": [
+                "金额单位元"
+              ],
+              "assumptions": [
+                "人工确认列含义"
+              ],
+              "unresolved": [
+                "目标语义未验收"
+              ],
+              "constraints": [
+                "不外发",
+                "保留所有原始条件"
+              ],
+              "acceptance_checks": [
+                "列合计与授权材料一致"
+              ],
+              "resource_refs": [
+                "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+              ]
+            },
+            "resource_snapshots": [
+              {
+                "resource_id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                "hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+                "format": "csv"
+              }
+            ]
+          }
+        },
+        "original_goal_version": 1,
+        "graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7",
+        "graph_revision": 1,
+        "authorization_fingerprint": "f57f184a7b01388bc2794171697c7b82e21808f49bda358cbe18e5c54e35f59a",
+        "columns": [
+          "amount",
+          "quantity"
+        ],
+        "limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        }
+      },
+      "impact": {
+        "schema_version": "delivery-change-plan.v1",
+        "graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7",
+        "context_fingerprint": "de312d3ba38021ebaae57ec01c5564b47538455d2355fca30bed504d6c6cf5b3",
+        "request_key": "revision-one",
+        "request_fingerprint": "11f2a3313c5dc09f92e309f071deca7c648a7dc1264f58f1e1621aae54fcf0b5",
+        "changed_nodes": [
+          "action_cfdefa2c9bcc4a0f96c10da567218e45",
+          "goal_a94296677b1f431a81e0efdb903a11be"
+        ],
+        "definite_impact": [
+          "action_cfdefa2c9bcc4a0f96c10da567218e45",
+          "goal_a94296677b1f431a81e0efdb903a11be"
+        ],
+        "uncertain_impact": [
+          "app_d0478f328555422cb8a5088db94bb9d9",
+          "node_64a5b828b43441f7bc53cffeb62b0a69",
+          "node_6b9320759f794616bb64aee0f2d21d29",
+          "node_90cbde3b538d43e7ab4caf256724338f",
+          "node_9b5db6d04d5447ceb3f157b177e858db",
+          "node_bbe1574d1e7546dd8c109e11cc5945b2",
+          "node_cdd1c94c7779498d9ef7a9027347854c",
+          "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+          "node_ed57f706e40a410eac5668c4e7dacb54",
+          "node_fc1ebb128b9843649d6147387730adee",
+          "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+        ],
+        "revalidation_nodes": [
+          "action_cfdefa2c9bcc4a0f96c10da567218e45",
+          "app_d0478f328555422cb8a5088db94bb9d9",
+          "goal_a94296677b1f431a81e0efdb903a11be",
+          "node_64a5b828b43441f7bc53cffeb62b0a69",
+          "node_6b9320759f794616bb64aee0f2d21d29",
+          "node_90cbde3b538d43e7ab4caf256724338f",
+          "node_9b5db6d04d5447ceb3f157b177e858db",
+          "node_bbe1574d1e7546dd8c109e11cc5945b2",
+          "node_cdd1c94c7779498d9ef7a9027347854c",
+          "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+          "node_ed57f706e40a410eac5668c4e7dacb54",
+          "node_fc1ebb128b9843649d6147387730adee",
+          "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+        ],
+        "revalidation_scope": "APP",
+        "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+        "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+        "revalidation_checks": [
+          "node_cdd1c94c7779498d9ef7a9027347854c"
+        ],
+        "invalidated_packages": [
+          "app_d0478f328555422cb8a5088db94bb9d9"
+        ],
+        "retained_objects": [],
+        "global_invariants": [
+          "current_authority",
+          "current_versions",
+          "strict_preflight",
+          "dependency_completeness",
+          "manual_locks"
+        ],
+        "patch_executed": false,
+        "business_write_performed": false,
+        "publishable": false,
+        "plan_fingerprint": "667f484ca53dc548a497e343a2de7f9aa8f02300c446a2c688017c466654a840"
+      },
+      "baseline_graph": {
+        "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+        "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+        "principal_id": "user_88da5a3bb03247c7a0603c71b42e62de",
+        "runtime_id": "appruntime_94b62f8034a44864b51f16f4e146836f",
+        "candidate_fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757",
+        "stable_ids": {
+          "action:aggregate": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+          "artifact:column": "node_9b5db6d04d5447ceb3f157b177e858db",
+          "artifact:count": "node_64a5b828b43441f7bc53cffeb62b0a69",
+          "artifact:resource_id": "node_ed57f706e40a410eac5668c4e7dacb54",
+          "artifact:source_hash": "node_fc1ebb128b9843649d6147387730adee",
+          "artifact:sum": "node_6b9320759f794616bb64aee0f2d21d29",
+          "check:receipt.readback.v1": "node_cdd1c94c7779498d9ef7a9027347854c",
+          "goal:goal_a94296677b1f431a81e0efdb903a11be": "goal_a94296677b1f431a81e0efdb903a11be",
+          "manifest:app_d0478f328555422cb8a5088db94bb9d9": "app_d0478f328555422cb8a5088db94bb9d9",
+          "rule:check:receipt.readback.v1": "node_90cbde3b538d43e7ab4caf256724338f",
+          "rule:tool:data.aggregate_csv": "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+          "source:res_cecb656201ef4d45aa23f8e2e7f40ee1": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+          "view:text:sum": "node_bbe1574d1e7546dd8c109e11cc5945b2"
+        },
+        "source_versions": {
+          "check:receipt.readback.v1": {
+            "revision": 1,
+            "content_fingerprint": "84fd0c27e37724342570f30429d04d2d7b6d7a20e5091e36d8ab26ebbbe8bf6c"
+          },
+          "goal:goal_a94296677b1f431a81e0efdb903a11be": {
+            "revision": 1,
+            "content_fingerprint": "cd0c278502c1cb8a49cfed5782f88fb75cb87ab9e95b19dd5c2d4b42c0e5bbe9"
+          },
+          "rule:check:receipt.readback.v1": {
+            "revision": 1,
+            "content_fingerprint": "055ee8db35249a4cddad259ef24385e55197a3ed02b390634957796daad8b1d7"
+          },
+          "rule:tool:data.aggregate_csv": {
+            "revision": 1,
+            "content_fingerprint": "eaee1ae1c303431dc6d027067659f74dbd65f8ff635038138ae0e5cba75c0674"
+          },
+          "source:res_cecb656201ef4d45aa23f8e2e7f40ee1": {
+            "revision": 1,
+            "content_fingerprint": "e255f82ad7058fab3fcc2db1414a2c701c0736cf7991f9cbf445845843b19d2b"
+          }
+        },
+        "authorization_fingerprint": "f57f184a7b01388bc2794171697c7b82e21808f49bda358cbe18e5c54e35f59a",
+        "authorization_revision": 1,
+        "graph_revision": 1,
+        "derivation_key": "baseline",
+        "graph": {
+          "schema_version": "delivery-graph.v1",
+          "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+          "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+          "authorization_revision": 1,
+          "context_fingerprint": "de312d3ba38021ebaae57ec01c5564b47538455d2355fca30bed504d6c6cf5b3",
+          "resource_ids": [
+            "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+          ],
+          "nodes": [
+            {
+              "id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "key": "action:aggregate",
+              "kind": "ACTION",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action": {
+                  "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+                  "allowed_tool_refs": [],
+                  "dependencies": [
+                    {
+                      "kind": "resource",
+                      "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                      "version": "1"
+                    }
+                  ],
+                  "effect": "read",
+                  "error_contract": [
+                    "INVALID_INPUT",
+                    "PERMISSION_DENIED",
+                    "GRANT_REVOKED"
+                  ],
+                  "executor": {
+                    "kind": "registered_tool",
+                    "ref": "data.aggregate_csv",
+                    "version": "1"
+                  },
+                  "idempotency": "read_only",
+                  "input_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "column": {
+                        "type": "string"
+                      },
+                      "resource_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "column"
+                    ],
+                    "type": "object"
+                  },
+                  "limits": {
+                    "max_output_tokens": 1,
+                    "max_repairs": 0,
+                    "max_requests": 1,
+                    "max_tools": 1,
+                    "max_total_tokens": 1,
+                    "run_seconds": 1
+                  },
+                  "output_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "column": {
+                        "type": "string"
+                      },
+                      "count": {
+                        "type": "integer"
+                      },
+                      "resource_id": {
+                        "type": "string"
+                      },
+                      "source_hash": {
+                        "type": "string"
+                      },
+                      "sum": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "column",
+                      "count",
+                      "sum",
+                      "source_hash"
+                    ],
+                    "type": "object"
+                  },
+                  "permission_requirements": [
+                    {
+                      "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                      "tool_ref": "resource.read"
+                    },
+                    {
+                      "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                      "tool_ref": "data.aggregate_csv"
+                    }
+                  ],
+                  "postcheck_refs": [
+                    "receipt.readback.v1"
+                  ],
+                  "preconditions": [],
+                  "reconcile_ref": "operation.lookup.v1",
+                  "revision": 1,
+                  "schema_version": "1.0-draft"
+                },
+                "step": {
+                  "binding_id": "csv_sum",
+                  "depends_on": [],
+                  "inputs": {
+                    "column": {
+                      "field": "column",
+                      "ref": null,
+                      "source": "input"
+                    },
+                    "resource_id": {
+                      "field": "resource_id",
+                      "ref": "source",
+                      "source": "data"
+                    }
+                  },
+                  "step_id": "aggregate"
+                }
+              },
+              "content_fingerprint": "c145b233caa026973c8fe89dfffd7dabe4509047396bb1b39ba29be5ae68caa6"
+            },
+            {
+              "id": "node_9b5db6d04d5447ceb3f157b177e858db",
+              "key": "artifact:column",
+              "kind": "ARTIFACT",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "column",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "column",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "aafe71acedb5bcee536ab7138e88d2a38b007fea4acd6d138a3972ff4af53eed"
+            },
+            {
+              "id": "node_64a5b828b43441f7bc53cffeb62b0a69",
+              "key": "artifact:count",
+              "kind": "ARTIFACT",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "count",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "count",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "content_fingerprint": "19fbf770108550da75db326c0ca17894869ff75db4cc5bdc64b125ceaf5d6a0a"
+            },
+            {
+              "id": "node_ed57f706e40a410eac5668c4e7dacb54",
+              "key": "artifact:resource_id",
+              "kind": "ARTIFACT",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "resource_id",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "resource_id",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "2fe1bc684d18d706cce1ebf4ff64fd62e1ea30e8650cfaa3d5c878851532e37d"
+            },
+            {
+              "id": "node_fc1ebb128b9843649d6147387730adee",
+              "key": "artifact:source_hash",
+              "kind": "ARTIFACT",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "source_hash",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "source_hash",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "6de08ebaac5e2a00c3b31ec38958ea489809b3952a287541249bd809a11c1fbe"
+            },
+            {
+              "id": "node_6b9320759f794616bb64aee0f2d21d29",
+              "key": "artifact:sum",
+              "kind": "ARTIFACT",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "sum",
+                  "ref": "aggregate",
+                  "source": "step"
+                },
+                "field": "sum",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "eff3b495fef19edc29045579c6dcd13db8f2fb074a36048b3a0a77eb3e8ddbd2"
+            },
+            {
+              "id": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "key": "check:receipt.readback.v1",
+              "kind": "CHECK",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "check_ref": "receipt.readback.v1",
+                "source_version": {
+                  "content_fingerprint": "84fd0c27e37724342570f30429d04d2d7b6d7a20e5091e36d8ab26ebbbe8bf6c",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "e41384797572a697b42136ef791457165b81133d905c3872a48f5f2b17f6c0c7"
+            },
+            {
+              "id": "goal_a94296677b1f431a81e0efdb903a11be",
+              "key": "goal:goal_a94296677b1f431a81e0efdb903a11be",
+              "kind": "GOAL",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "goal_ref": "goal_a94296677b1f431a81e0efdb903a11be",
+                "source_version": {
+                  "content_fingerprint": "cd0c278502c1cb8a49cfed5782f88fb75cb87ab9e95b19dd5c2d4b42c0e5bbe9",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "1bd0fd90155a207512f215ef64fef09cdd5376627546c610e684bd899f4efbe4"
+            },
+            {
+              "id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "key": "manifest:app_d0478f328555422cb8a5088db94bb9d9",
+              "kind": "MANIFEST",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action_bindings": [
+                  {
+                    "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+                    "binding_id": "csv_sum",
+                    "revision": 1
+                  }
+                ],
+                "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+                "data_bindings": [
+                  {
+                    "binding_id": "source",
+                    "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+                  }
+                ],
+                "data_schema_version": 1,
+                "dependency_lock": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "data.aggregate_csv",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "receipt.readback.v1",
+                    "version": "1"
+                  }
+                ],
+                "goal_ref": "goal_a94296677b1f431a81e0efdb903a11be",
+                "input_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "column"
+                  ],
+                  "type": "object"
+                },
+                "origin": "goal",
+                "output_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "resource_id": {
+                      "type": "string"
+                    },
+                    "source_hash": {
+                      "type": "string"
+                    },
+                    "sum": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "column",
+                    "count",
+                    "sum",
+                    "source_hash"
+                  ],
+                  "type": "object"
+                },
+                "outputs": {
+                  "column": {
+                    "field": "column",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "count": {
+                    "field": "count",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "resource_id": {
+                    "field": "resource_id",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "source_hash": {
+                    "field": "source_hash",
+                    "ref": "aggregate",
+                    "source": "step"
+                  },
+                  "sum": {
+                    "field": "sum",
+                    "ref": "aggregate",
+                    "source": "step"
+                  }
+                },
+                "permission_requirements": [
+                  {
+                    "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                    "tool_ref": "resource.read"
+                  },
+                  {
+                    "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                    "tool_ref": "data.aggregate_csv"
+                  }
+                ],
+                "revision": 1,
+                "runtime_identity_requirements": {
+                  "mode": "user_and_app_intersection"
+                },
+                "runtime_limits": {
+                  "max_output_tokens": 1,
+                  "max_repairs": 0,
+                  "max_requests": 1,
+                  "max_tools": 1,
+                  "max_total_tokens": 1,
+                  "run_seconds": 1
+                },
+                "schema_version": "1.0-draft",
+                "source_run_ref": null,
+                "validation_suite_ref": "receipt.readback.v1",
+                "views": [
+                  {
+                    "component_ref": "text",
+                    "output_field": "sum"
+                  }
+                ],
+                "workflow": [
+                  {
+                    "binding_id": "csv_sum",
+                    "depends_on": [],
+                    "inputs": {
+                      "column": {
+                        "field": "column",
+                        "ref": null,
+                        "source": "input"
+                      },
+                      "resource_id": {
+                        "field": "resource_id",
+                        "ref": "source",
+                        "source": "data"
+                      }
+                    },
+                    "step_id": "aggregate"
+                  }
+                ]
+              },
+              "content_fingerprint": "86893f1e4262cc02cfcd39ed9ae254a0b4dc92417a8d748bf59bfe27fac9041b"
+            },
+            {
+              "id": "node_90cbde3b538d43e7ab4caf256724338f",
+              "key": "rule:check:receipt.readback.v1",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "check",
+                "ref": "receipt.readback.v1",
+                "source_version": {
+                  "content_fingerprint": "055ee8db35249a4cddad259ef24385e55197a3ed02b390634957796daad8b1d7",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "d82168d873614c0eb832fca82fcd262e7263173eb7d2749b0cd95896104c6fbf"
+            },
+            {
+              "id": "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+              "key": "rule:tool:data.aggregate_csv",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "tool",
+                "ref": "data.aggregate_csv",
+                "source_version": {
+                  "content_fingerprint": "eaee1ae1c303431dc6d027067659f74dbd65f8ff635038138ae0e5cba75c0674",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "cc07781056cc2e002bc63fdd4bb163129d31786be2beb8a64747e2abf6260ad6"
+            },
+            {
+              "id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "key": "source:res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "kind": "SOURCE",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                "source_version": {
+                  "content_fingerprint": "e255f82ad7058fab3fcc2db1414a2c701c0736cf7991f9cbf445845843b19d2b",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "b7e3658095f022a92cf52aaa435eec77f8acaa44f54cb4ef5a91a962d78897f8"
+            },
+            {
+              "id": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+              "key": "view:text:sum",
+              "kind": "VIEW",
+              "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+              "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "component_ref": "text",
+                "output_field": "sum"
+              },
+              "content_fingerprint": "2cdb3627f2585663d3a7e454deb414748d6527c9a3f5882bc37594fe74d8b3e7"
+            }
+          ],
+          "edges": [
+            {
+              "upstream": "node_6b9320759f794616bb64aee0f2d21d29",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "downstream": "node_9b5db6d04d5447ceb3f157b177e858db",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_ed57f706e40a410eac5668c4e7dacb54",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "downstream": "node_64a5b828b43441f7bc53cffeb62b0a69",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_fc1ebb128b9843649d6147387730adee",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_6b9320759f794616bb64aee0f2d21d29",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "downstream": "node_ed57f706e40a410eac5668c4e7dacb54",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "downstream": "node_6b9320759f794616bb64aee0f2d21d29",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_a94296677b1f431a81e0efdb903a11be",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_9b5db6d04d5447ceb3f157b177e858db",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_64a5b828b43441f7bc53cffeb62b0a69",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_ed57f706e40a410eac5668c4e7dacb54",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_9b5db6d04d5447ceb3f157b177e858db",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_fc1ebb128b9843649d6147387730adee",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "downstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+              "downstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_90cbde3b538d43e7ab4caf256724338f",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_a94296677b1f431a81e0efdb903a11be",
+              "downstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_90cbde3b538d43e7ab4caf256724338f",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_64a5b828b43441f7bc53cffeb62b0a69",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_e5e4bbdc37a0406b8ae89f8e812f32a8",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "downstream": "node_fc1ebb128b9843649d6147387730adee",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "downstream": "app_d0478f328555422cb8a5088db94bb9d9",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_6b9320759f794616bb64aee0f2d21d29",
+              "downstream": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+              "type": "PRESENTATION",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_bbe1574d1e7546dd8c109e11cc5945b2",
+              "downstream": "node_cdd1c94c7779498d9ef7a9027347854c",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            }
+          ],
+          "unknown_dependencies": [
+            {
+              "node_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "scope": "APP",
+              "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+            }
+          ],
+          "graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7"
+        },
+        "context": {
+          "project_id": "proj_d7cc61a0ccf4487f96c25a0399d41cb6",
+          "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+          "authorization_revision": 1,
+          "authorized": true,
+          "resource_ids": [
+            "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+          ],
+          "node_revisions": {
+            "goal:goal_a94296677b1f431a81e0efdb903a11be": 1,
+            "source:res_cecb656201ef4d45aa23f8e2e7f40ee1": 1,
+            "rule:tool:data.aggregate_csv": 1,
+            "rule:check:receipt.readback.v1": 1,
+            "check:receipt.readback.v1": 1,
+            "action:aggregate": 1,
+            "artifact:resource_id": 1,
+            "artifact:column": 1,
+            "artifact:count": 1,
+            "artifact:sum": 1,
+            "artifact:source_hash": 1,
+            "view:text:sum": 1,
+            "manifest:app_d0478f328555422cb8a5088db94bb9d9": 1
+          },
+          "locked_nodes": [],
+          "source_versions": {
+            "check:receipt.readback.v1": {
+              "revision": 1,
+              "content_fingerprint": "84fd0c27e37724342570f30429d04d2d7b6d7a20e5091e36d8ab26ebbbe8bf6c"
+            },
+            "goal:goal_a94296677b1f431a81e0efdb903a11be": {
+              "revision": 1,
+              "content_fingerprint": "cd0c278502c1cb8a49cfed5782f88fb75cb87ab9e95b19dd5c2d4b42c0e5bbe9"
+            },
+            "rule:check:receipt.readback.v1": {
+              "revision": 1,
+              "content_fingerprint": "055ee8db35249a4cddad259ef24385e55197a3ed02b390634957796daad8b1d7"
+            },
+            "rule:tool:data.aggregate_csv": {
+              "revision": 1,
+              "content_fingerprint": "eaee1ae1c303431dc6d027067659f74dbd65f8ff635038138ae0e5cba75c0674"
+            },
+            "source:res_cecb656201ef4d45aa23f8e2e7f40ee1": {
+              "revision": 1,
+              "content_fingerprint": "e255f82ad7058fab3fcc2db1414a2c701c0736cf7991f9cbf445845843b19d2b"
+            }
+          },
+          "dependency_edges": [],
+          "unknown_dependencies": [
+            {
+              "node_id": "app_d0478f328555422cb8a5088db94bb9d9",
+              "scope": "APP",
+              "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+            }
+          ],
+          "graph_fingerprint": "b67f01a827d4a9e376ac335792f1f3190eec730051a46f9e5ee9a714c47a2ab7"
+        }
+      },
+      "effective_candidate": {
+        "manifest": {
+          "schema_version": "1.0-draft",
+          "app_id": "app_d0478f328555422cb8a5088db94bb9d9",
+          "revision": 2,
+          "origin": "goal",
+          "goal_ref": "goal_a94296677b1f431a81e0efdb903a11be",
+          "source_run_ref": null,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "column": {
+                "type": "string",
+                "enum": [
+                  "quantity"
+                ]
+              }
+            },
+            "required": [
+              "column"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "outputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "column"
+            },
+            "count": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "count"
+            },
+            "sum": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "sum"
+            },
+            "source_hash": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "source_hash"
+            }
+          },
+          "views": [
+            {
+              "component_ref": "text",
+              "output_field": "sum"
+            }
+          ],
+          "workflow": [
+            {
+              "step_id": "aggregate",
+              "binding_id": "csv_sum",
+              "depends_on": [],
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "column"
+                }
+              }
+            }
+          ],
+          "action_bindings": [
+            {
+              "binding_id": "csv_sum",
+              "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+              "revision": 2
+            }
+          ],
+          "data_bindings": [
+            {
+              "binding_id": "source",
+              "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+            }
+          ],
+          "runtime_identity_requirements": {
+            "mode": "user_and_app_intersection"
+          },
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+            },
+            {
+              "tool_ref": "data.aggregate_csv",
+              "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+            }
+          ],
+          "dependency_lock": [
+            {
+              "kind": "resource",
+              "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "data.aggregate_csv",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "version": "1"
+            }
+          ],
+          "validation_suite_ref": "receipt.readback.v1",
+          "runtime_limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 1,
+            "max_output_tokens": 1,
+            "run_seconds": 1
+          },
+          "data_schema_version": 1
+        },
+        "actions": [
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_cfdefa2c9bcc4a0f96c10da567218e45",
+            "revision": 2,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "column": {
+                  "type": "string",
+                  "enum": [
+                    "quantity"
+                  ]
+                }
+              },
+              "required": [
+                "resource_id",
+                "column"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "column": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "sum": {
+                  "type": "string"
+                },
+                "source_hash": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "column",
+                "count",
+                "sum",
+                "source_hash"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "data.aggregate_csv",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+              },
+              {
+                "tool_ref": "data.aggregate_csv",
+                "resource_ref": "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "receipt.readback.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 1,
+              "max_repairs": 0,
+              "max_total_tokens": 1,
+              "max_output_tokens": 1,
+              "run_seconds": 1
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED"
+            ]
+          }
+        ],
+        "source_hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+        "goal": {
+          "title": "数量 Goal v2",
+          "goal": "明确改为汇总 quantity，保留原材料与历史",
+          "known": [
+            "金额单位元"
+          ],
+          "assumptions": [
+            "人工确认列含义"
+          ],
+          "unresolved": [
+            "目标语义未验收"
+          ],
+          "constraints": [
+            "不外发",
+            "保留所有原始条件"
+          ],
+          "acceptance_checks": [
+            "列合计与授权材料一致"
+          ],
+          "resource_refs": [
+            "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+          ]
+        },
+        "generation": {
+          "kind": "goal_card",
+          "goal_card_id": "goal_a94296677b1f431a81e0efdb903a11be",
+          "goal_version": 1,
+          "goal_fingerprint": "aee8b2deecc76afdb4c2e0c25b8b9967a3e6aada7e2f23dea471194b0eaab861",
+          "goal_snapshot": {
+            "schema_version": "F2-goal-card.v1",
+            "content": {
+              "title": "固定能力演示",
+              "goal": "汇总授权CSV；这不是任意目标生成",
+              "known": [
+                "金额单位元"
+              ],
+              "assumptions": [
+                "人工确认列含义"
+              ],
+              "unresolved": [
+                "目标语义未验收"
+              ],
+              "constraints": [
+                "不外发",
+                "保留所有原始条件"
+              ],
+              "acceptance_checks": [
+                "列合计与授权材料一致"
+              ],
+              "resource_refs": [
+                "res_cecb656201ef4d45aa23f8e2e7f40ee1"
+              ]
+            },
+            "resource_snapshots": [
+              {
+                "resource_id": "res_cecb656201ef4d45aa23f8e2e7f40ee1",
+                "hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+                "format": "csv"
+              }
+            ]
+          },
+          "generator": "MOCK_DETERMINISTIC_CSV_SUM.v1",
+          "model_requests": 0,
+          "goal_acceptance": "NOT_RUN",
+          "capability": "csv.sum"
+        }
+      },
+      "effective_fingerprint": "78c26397add2294910f0aee9c2d6cbfa356e57690395678a2587fbcd659b140b",
+      "plan_fingerprint": "0b1ec86affacaa2b90aab2f9b291d1f8e0703427fb1428958bc1373dc8f59618",
+      "baseline_input": {
+        "column": "amount"
+      },
+      "input": {
+        "column": "quantity"
+      },
+      "model_requests": 0,
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING",
+      "formal_publication_enabled": false,
+      "preview_fingerprint": "348a3b2462638167a4d7df8e692ee4174689b9718bbd9dea2e16c486cfa0cf2b"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/internal/instances/iinstance_90028b65a57e4c1ab22a614e4b85bb21/csv-goal-revisions/checks",
+    "body": {
+      "request_key": "revision-one",
+      "expected_preview_fingerprint": "348a3b2462638167a4d7df8e692ee4174689b9718bbd9dea2e16c486cfa0cf2b",
+      "consent": "RUN_EXACT_CSV_GOAL_CHECK_KEEP_ORIGINAL"
+    },
+    "status": 202,
+    "response": {
+      "run_id": "run_aa47c5b237834672be0fbdf113743484",
+      "app_run_id": "iapprun_afeddaef39204ecba16aa1086ad786d4",
+      "status": "QUEUED",
+      "version": 1,
+      "cached": false,
+      "namespace": "INTERNAL_ENGINEERING_ONLY",
+      "check_instance_id": "iinstance_14f5e92e05cb553276d76949ded53ac1",
+      "request_key": "revision-one",
+      "accepted_request_fingerprint": "fa75e35bd3a095ebea5fe2f6f07155fe355e9671ba44fce0f279c17de03543b6"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/internal/instances/iinstance_90028b65a57e4c1ab22a614e4b85bb21/csv-goal-revisions/checks",
+    "body": {
+      "request_key": "revision-one",
+      "expected_preview_fingerprint": "348a3b2462638167a4d7df8e692ee4174689b9718bbd9dea2e16c486cfa0cf2b",
+      "consent": "RUN_EXACT_CSV_GOAL_CHECK_KEEP_ORIGINAL"
+    },
+    "status": 202,
+    "response": {
+      "run_id": "run_aa47c5b237834672be0fbdf113743484",
+      "app_run_id": "iapprun_afeddaef39204ecba16aa1086ad786d4",
+      "status": "QUEUED",
+      "version": 1,
+      "cached": false,
+      "namespace": "INTERNAL_ENGINEERING_ONLY",
+      "check_instance_id": "iinstance_14f5e92e05cb553276d76949ded53ac1",
+      "request_key": "revision-one",
+      "accepted_request_fingerprint": "fa75e35bd3a095ebea5fe2f6f07155fe355e9671ba44fce0f279c17de03543b6"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/internal/instances/iinstance_90028b65a57e4c1ab22a614e4b85bb21/csv-goal-revisions/checks/revision-one",
+    "body": null,
+    "status": 200,
+    "response": {
+      "namespace": "csv-goal-revision.v1",
+      "ref": "csv.exact_integer_sum.v1",
+      "status": "PASS",
+      "run_id": "run_aa47c5b237834672be0fbdf113743484",
+      "check_instance_id": "iinstance_14f5e92e05cb553276d76949ded53ac1",
+      "preview_fingerprint": "348a3b2462638167a4d7df8e692ee4174689b9718bbd9dea2e16c486cfa0cf2b",
+      "effective_fingerprint": "78c26397add2294910f0aee9c2d6cbfa356e57690395678a2587fbcd659b140b",
+      "candidate_fingerprint": "bda281ec985a273251886714aab4cd83d474ec09b592970fbfe63daf7123e757",
+      "input_fingerprint": "6cd9cd5dd5242ac4cf5d2d46bd65730f157612cb3ed308e9b89c4f1e90964dfe",
+      "output_fingerprint": "08f6b677327e7bbff56b978c1e19549ff1aea57142e8391240a189344c37d910",
+      "plan_fingerprint": "0b1ec86affacaa2b90aab2f9b291d1f8e0703427fb1428958bc1373dc8f59618",
+      "actual_proof_fingerprint": "67c197ad92c82a29e4bae24874827a046a5847621596309a6c7f11d0f0dfc638",
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING",
+      "model_requests": 0,
+      "check_fingerprint": "5461122f01e94b21a459d6801ac2e355a3178ce8a389ad2de11fe3d61d09e88b",
+      "request_key": "revision-one",
+      "accepted_request_fingerprint": "fa75e35bd3a095ebea5fe2f6f07155fe355e9671ba44fce0f279c17de03543b6"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/internal/instances/iinstance_90028b65a57e4c1ab22a614e4b85bb21/csv-goal-revisions/version-approvals",
+    "body": {
+      "request_key": "revision-one",
+      "expected_check_fingerprint": "5461122f01e94b21a459d6801ac2e355a3178ce8a389ad2de11fe3d61d09e88b",
+      "consent": "CREATE_EXACT_CHECKED_CSV_GOAL_RELEASE"
+    },
+    "status": 409,
+    "response": {
+      "error": {
+        "code": "VERSION_CONFLICT",
+        "message": "Goal, authority, graph, locks or original instance changed; prepare a fresh revision",
+        "safe_retry": false,
+        "effect_known": true,
+        "user_action": "Check status, configuration and permissions"
+      }
+    }
+  }
+]
