@@ -1,0 +1,16 @@
+{
+  "status": "BLOCK",
+  "source_sha": "7378b97ec0d85f821c9830290d5075e831270e33",
+  "finding": "Same-key POST and correction-request GET select full child runs row before current parent materials/output authority. Child context can contain parent rejection feedback and previous output.",
+  "file": "src/sim2act/ordinary_corrections.py",
+  "file_sha256": "fd173e4f28700aecee966a333478fe60b0724b3773a993eff76c76f325df9196",
+  "entrypoints": [
+    "POST /api/runs/{parent}/correction-runs same key",
+    "GET /api/runs/{parent}/correction-requests/{key}"
+  ],
+  "submit_line": 347,
+  "recover_line": 491,
+  "basis": "human.scope is metadata-only; full runs query precedes receipt -> scope_gate; existing trace test only covers GET child",
+  "minimal_fix": "Select child ID first, authorize required current source/output identifiers before full child Run/context read in both paths.",
+  "dynamic_reproduction": "NOT_RUN; static source ordering finding; running fixed 36-node batch will be retained without automatic retry"
+}
