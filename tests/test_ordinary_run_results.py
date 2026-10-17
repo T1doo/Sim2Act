@@ -18,7 +18,7 @@ from sim2act.model import MockModel
 from sim2act.worker import Worker
 
 
-@pytest.mark.parametrize("case", ["deliver", "navigation", "revocation"])
+@pytest.mark.parametrize("case", ["deliver", "navigation", "revocation", "workspace-return"])
 def test_ordinary_goal_results_actual_tools_and_page(env, tmp_path, case):
     store, settings, client, owner, other_owner, project, material = env
     assert store.sqlite and store.test_only and settings.mode == "mock" and not settings.live_enabled

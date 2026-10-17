@@ -88,9 +88,22 @@ async function revocation(){
  check(!$('run-answer')&&!$('run-artifacts')&&$('raw-result').textContent===''&&!$('result').textContent.includes(info.report),'current denial clears protected answer, report, controls and raw detail');
  const count=requests.length;await detached.onclick(new w.Event('click'));check(requests.length===count,'detached denied control sends no further request');
 }
+async function workspaceReturn(){
+ await action(artifactButton('查看此成果'));const detached=artifactButton('下载此成果'),before=requests.length;
+ w.selectWorkspace('resources');w.selectWorkspace('projects');
+ check(requests.length===before&&visible(artifactButton('查看此成果')),'workspace return exposes controls without automatic API/model activity');
+ await action(artifactButton('查看此成果'));
+ check(requests.length===before+2&&$('run-artifacts').querySelector('pre')?.textContent===info.report,'immediate return View works without polling or manually reopening the Run');
+ const count=requests.length;await detached.onclick(new w.Event('click'));check(requests.length===count,'old detached workspace control cannot issue a request');
+ hold={path:`/api/resources/${actual.artifact.id}`};const downloading=action(artifactButton('下载此成果'));await wait(()=>!!release,'old workspace authorized resource bytes held');
+ w.selectWorkspace('resources');w.selectWorkspace('projects');await action(artifactButton('查看此成果'));
+ const finish=release;release=null;finish();await downloading;
+ check(blobs.length===0&&$('run-artifacts').querySelector('pre')?.textContent===info.report,'new workspace controller works while the old late download remains isolated');
+ await action(artifactButton('下载此成果'));await capture(0);
+}
 (async()=>{let status='FAIL',error;try{
  await boot();const postCount=requests.filter(r=>r.method==='POST').length;
- if(info.case==='deliver')await deliver();else if(info.case==='navigation')await navigation();else await revocation();
+ if(info.case==='deliver')await deliver();else if(info.case==='navigation')await navigation();else if(info.case==='workspace-return')await workspaceReturn();else await revocation();
  check(requests.filter(r=>r.method==='POST').length===postCount&&postCount===1,'all result use is read-only; only the original visible Run submission POST');
  assert.equal((await rpc({command:'verify-readonly'})).status,200);check(w.eval('ordinaryArtifactRequests.size')===0,'all result read locks released');status='PASS';
 }catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}finally{
