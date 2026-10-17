@@ -1,0 +1,613 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="5" time="25.814" timestamp="2026-10-17T08:21:08.737486+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_ordinary_csv_report" name="test_visible_prospective_csv_report[workspace-unconfirmed]" time="4.911"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: returned visible acknowledgement freshly verifies the Run and enables explicit confirmation&#10;      at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)&#10;      at prepareReturn (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:57:3)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:85:2)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fc2d80686e0&gt;, Settings(database_url='sqlite:////tmp/csv-report-confirm-workspace-red-i...6b4fb09a49401dbc2466df48f754fc', 'user_c91fa21b23e44ce8956facbbfc3a6061', 'proj_2a77e8b0d26f4937bc5277d10d6d2010', ...)
+tmp_path = PosixPath('/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/data/test_visible_prospective_csv_r0')
+case = 'workspace-unconfirmed'
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "deliver",
+            "lost",
+            "navigation",
+            "workspace-unconfirmed",
+            "workspace-pending",
+            "workspace-unknown",
+            "scope-project",
+            "scope-identity",
+        ],
+    )
+    def test_visible_prospective_csv_report(env, tmp_path, case):
+        import os
+        import subprocess
+        import threading
+    
+        store, settings, client, owner, other_owner, project, material = env
+        other = store.project(owner, "Other owned project")
+        if case == "scope-identity":
+            store.project(other_owner, "Other identity project")
+        info = dict(
+            case=case,
+            project=project,
+            other=other,
+            material=material,
+            output=str(tmp_path / "result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        proof = {}
+        worker_runs = 0
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/ordinary_csv_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(60, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    command = request.get("command")
+                    if command == "before":
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "WAITING_APPROVAL"
+                        assert not Worker(store, settings, NoModel()).once()
+                        with store.tx() as c:
+                            assert (
+                                not c.execute(select(operations)).first()
+                                and len(c.execute(select(resources)).all()) == 1
+                            )
+                        proof["before"] = actual
+                        answer = dict(status=200, text="{}")
+                    elif command == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        try:
+                            assert Worker(cold, settings, NoModel()).once()
+                        finally:
+                            cold.engine.dispose()
+                        worker_runs += 1
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "SUCCEEDED"
+                        artifact = client.get(
+                            f"/api/resources/{actual['result']['receipts'][-1]['data']['resource_id']}"
+                        ).json()
+                        proof["actual"] = actual
+                        proof["artifact"] = artifact
+                        answer = dict(status=200, text=json.dumps(dict(run=actual, artifact=artifact)))
+                    elif command == "after":
+                        with store.tx() as c:
+                            assert len(c.execute(select(operations)).all()) == 3
+                            assert (
+                                len(c.execute(select(runs)).all()) == 1
+                                and len(c.execute(select(resources)).all()) == 2
+                            )
+                            assert (
+                                not c.execute(select(attempts)).first()
+                                and not c.execute(select(reservations)).first()
+                            )
+                        assert not Worker(store, settings, NoModel()).once()
+                        assert worker_runs == 1
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps({"id": request["id"], **answer}) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: returned visible acknowledgement freshly verifies the Run and enables explicit confirmation
+E                 at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)
+E                 at prepareReturn (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:57:3)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:85:2)
+E             
+E           assert 1 == 0
+
+tests/test_ordinary_csv_report.py:426: AssertionError</failure></testcase><testcase classname="tests.test_ordinary_csv_report" name="test_visible_prospective_csv_report[workspace-pending]" time="4.336"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: pending return rebuilds an unchecked locked confirmation view&#10;      at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)&#10;      at main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:99:4)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fc2d5a2cdd0&gt;, Settings(database_url='sqlite:////tmp/csv-report-confirm-workspace-red-i...9e9e786f224d8599e46b4e25b7b9ce', 'user_b2b01d44adf34887a0cdb7ef47b465e2', 'proj_a164a686c5884aa899414babb9d10779', ...)
+tmp_path = PosixPath('/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/data/test_visible_prospective_csv_r1')
+case = 'workspace-pending'
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "deliver",
+            "lost",
+            "navigation",
+            "workspace-unconfirmed",
+            "workspace-pending",
+            "workspace-unknown",
+            "scope-project",
+            "scope-identity",
+        ],
+    )
+    def test_visible_prospective_csv_report(env, tmp_path, case):
+        import os
+        import subprocess
+        import threading
+    
+        store, settings, client, owner, other_owner, project, material = env
+        other = store.project(owner, "Other owned project")
+        if case == "scope-identity":
+            store.project(other_owner, "Other identity project")
+        info = dict(
+            case=case,
+            project=project,
+            other=other,
+            material=material,
+            output=str(tmp_path / "result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        proof = {}
+        worker_runs = 0
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/ordinary_csv_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(60, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    command = request.get("command")
+                    if command == "before":
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "WAITING_APPROVAL"
+                        assert not Worker(store, settings, NoModel()).once()
+                        with store.tx() as c:
+                            assert (
+                                not c.execute(select(operations)).first()
+                                and len(c.execute(select(resources)).all()) == 1
+                            )
+                        proof["before"] = actual
+                        answer = dict(status=200, text="{}")
+                    elif command == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        try:
+                            assert Worker(cold, settings, NoModel()).once()
+                        finally:
+                            cold.engine.dispose()
+                        worker_runs += 1
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "SUCCEEDED"
+                        artifact = client.get(
+                            f"/api/resources/{actual['result']['receipts'][-1]['data']['resource_id']}"
+                        ).json()
+                        proof["actual"] = actual
+                        proof["artifact"] = artifact
+                        answer = dict(status=200, text=json.dumps(dict(run=actual, artifact=artifact)))
+                    elif command == "after":
+                        with store.tx() as c:
+                            assert len(c.execute(select(operations)).all()) == 3
+                            assert (
+                                len(c.execute(select(runs)).all()) == 1
+                                and len(c.execute(select(resources)).all()) == 2
+                            )
+                            assert (
+                                not c.execute(select(attempts)).first()
+                                and not c.execute(select(reservations)).first()
+                            )
+                        assert not Worker(store, settings, NoModel()).once()
+                        assert worker_runs == 1
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps({"id": request["id"], **answer}) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: pending return rebuilds an unchecked locked confirmation view
+E                 at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)
+E                 at main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:99:4)
+E             
+E           assert 1 == 0
+
+tests/test_ordinary_csv_report.py:426: AssertionError</failure></testcase><testcase classname="tests.test_ordinary_csv_report" name="test_visible_prospective_csv_report[workspace-unknown]" time="4.271"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: returned UNKNOWN recovery actually replays only the exact frozen body and key&#10;      at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)&#10;      at main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:120:3)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fc2d5379e80&gt;, Settings(database_url='sqlite:////tmp/csv-report-confirm-workspace-red-i...b5328edf7b4c62ba5bfd37c5fb0c11', 'user_1104231fb2534323b384e7dc827fc741', 'proj_566c535182134db4a1e9abd9a7b7d3d5', ...)
+tmp_path = PosixPath('/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/data/test_visible_prospective_csv_r2')
+case = 'workspace-unknown'
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "deliver",
+            "lost",
+            "navigation",
+            "workspace-unconfirmed",
+            "workspace-pending",
+            "workspace-unknown",
+            "scope-project",
+            "scope-identity",
+        ],
+    )
+    def test_visible_prospective_csv_report(env, tmp_path, case):
+        import os
+        import subprocess
+        import threading
+    
+        store, settings, client, owner, other_owner, project, material = env
+        other = store.project(owner, "Other owned project")
+        if case == "scope-identity":
+            store.project(other_owner, "Other identity project")
+        info = dict(
+            case=case,
+            project=project,
+            other=other,
+            material=material,
+            output=str(tmp_path / "result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        proof = {}
+        worker_runs = 0
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/ordinary_csv_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(60, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    command = request.get("command")
+                    if command == "before":
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "WAITING_APPROVAL"
+                        assert not Worker(store, settings, NoModel()).once()
+                        with store.tx() as c:
+                            assert (
+                                not c.execute(select(operations)).first()
+                                and len(c.execute(select(resources)).all()) == 1
+                            )
+                        proof["before"] = actual
+                        answer = dict(status=200, text="{}")
+                    elif command == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        try:
+                            assert Worker(cold, settings, NoModel()).once()
+                        finally:
+                            cold.engine.dispose()
+                        worker_runs += 1
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "SUCCEEDED"
+                        artifact = client.get(
+                            f"/api/resources/{actual['result']['receipts'][-1]['data']['resource_id']}"
+                        ).json()
+                        proof["actual"] = actual
+                        proof["artifact"] = artifact
+                        answer = dict(status=200, text=json.dumps(dict(run=actual, artifact=artifact)))
+                    elif command == "after":
+                        with store.tx() as c:
+                            assert len(c.execute(select(operations)).all()) == 3
+                            assert (
+                                len(c.execute(select(runs)).all()) == 1
+                                and len(c.execute(select(resources)).all()) == 2
+                            )
+                            assert (
+                                not c.execute(select(attempts)).first()
+                                and not c.execute(select(reservations)).first()
+                            )
+                        assert not Worker(store, settings, NoModel()).once()
+                        assert worker_runs == 1
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps({"id": request["id"], **answer}) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: returned UNKNOWN recovery actually replays only the exact frozen body and key
+E                 at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)
+E                 at main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:120:3)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_ordinary_csv_report.py:426: AssertionError</failure></testcase><testcase classname="tests.test_ordinary_csv_report" name="test_visible_prospective_csv_report[scope-project]" time="5.485"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: new identity/project scope cannot inherit a previous checked acknowledgement&#10;      at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)&#10;      at prepareReturn (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:67:3)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:85:2)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fc2d7a5ba40&gt;, Settings(database_url='sqlite:////tmp/csv-report-confirm-workspace-red-i...57f359194f4823a74e96b7cdb0275e', 'user_5a4c8ebed7aa4a3bacf8587f42b60b9e', 'proj_394344ef585c4feabe176af27a170369', ...)
+tmp_path = PosixPath('/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/data/test_visible_prospective_csv_r3')
+case = 'scope-project'
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "deliver",
+            "lost",
+            "navigation",
+            "workspace-unconfirmed",
+            "workspace-pending",
+            "workspace-unknown",
+            "scope-project",
+            "scope-identity",
+        ],
+    )
+    def test_visible_prospective_csv_report(env, tmp_path, case):
+        import os
+        import subprocess
+        import threading
+    
+        store, settings, client, owner, other_owner, project, material = env
+        other = store.project(owner, "Other owned project")
+        if case == "scope-identity":
+            store.project(other_owner, "Other identity project")
+        info = dict(
+            case=case,
+            project=project,
+            other=other,
+            material=material,
+            output=str(tmp_path / "result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        proof = {}
+        worker_runs = 0
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/ordinary_csv_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(60, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    command = request.get("command")
+                    if command == "before":
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "WAITING_APPROVAL"
+                        assert not Worker(store, settings, NoModel()).once()
+                        with store.tx() as c:
+                            assert (
+                                not c.execute(select(operations)).first()
+                                and len(c.execute(select(resources)).all()) == 1
+                            )
+                        proof["before"] = actual
+                        answer = dict(status=200, text="{}")
+                    elif command == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        try:
+                            assert Worker(cold, settings, NoModel()).once()
+                        finally:
+                            cold.engine.dispose()
+                        worker_runs += 1
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "SUCCEEDED"
+                        artifact = client.get(
+                            f"/api/resources/{actual['result']['receipts'][-1]['data']['resource_id']}"
+                        ).json()
+                        proof["actual"] = actual
+                        proof["artifact"] = artifact
+                        answer = dict(status=200, text=json.dumps(dict(run=actual, artifact=artifact)))
+                    elif command == "after":
+                        with store.tx() as c:
+                            assert len(c.execute(select(operations)).all()) == 3
+                            assert (
+                                len(c.execute(select(runs)).all()) == 1
+                                and len(c.execute(select(resources)).all()) == 2
+                            )
+                            assert (
+                                not c.execute(select(attempts)).first()
+                                and not c.execute(select(reservations)).first()
+                            )
+                        assert not Worker(store, settings, NoModel()).once()
+                        assert worker_runs == 1
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps({"id": request["id"], **answer}) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: new identity/project scope cannot inherit a previous checked acknowledgement
+E                 at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)
+E                 at prepareReturn (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:67:3)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:85:2)
+E             
+E           assert 1 == 0
+
+tests/test_ordinary_csv_report.py:426: AssertionError</failure></testcase><testcase classname="tests.test_ordinary_csv_report" name="test_visible_prospective_csv_report[scope-identity]" time="5.966"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: new identity/project scope cannot inherit a previous checked acknowledgement&#10;      at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)&#10;      at prepareReturn (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:67:3)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:85:2)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fc2d4723830&gt;, Settings(database_url='sqlite:////tmp/csv-report-confirm-workspace-red-i...8e84bfb0044b74844071c4e8d44e2d', 'user_5d66ac72a21f4a3ba7f34f8f9b8a2547', 'proj_6dcb433da782413c947a88cad1ac8096', ...)
+tmp_path = PosixPath('/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/data/test_visible_prospective_csv_r4')
+case = 'scope-identity'
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "deliver",
+            "lost",
+            "navigation",
+            "workspace-unconfirmed",
+            "workspace-pending",
+            "workspace-unknown",
+            "scope-project",
+            "scope-identity",
+        ],
+    )
+    def test_visible_prospective_csv_report(env, tmp_path, case):
+        import os
+        import subprocess
+        import threading
+    
+        store, settings, client, owner, other_owner, project, material = env
+        other = store.project(owner, "Other owned project")
+        if case == "scope-identity":
+            store.project(other_owner, "Other identity project")
+        info = dict(
+            case=case,
+            project=project,
+            other=other,
+            material=material,
+            output=str(tmp_path / "result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        proof = {}
+        worker_runs = 0
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/ordinary_csv_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(60, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    command = request.get("command")
+                    if command == "before":
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "WAITING_APPROVAL"
+                        assert not Worker(store, settings, NoModel()).once()
+                        with store.tx() as c:
+                            assert (
+                                not c.execute(select(operations)).first()
+                                and len(c.execute(select(resources)).all()) == 1
+                            )
+                        proof["before"] = actual
+                        answer = dict(status=200, text="{}")
+                    elif command == "worker":
+                        cold = Store(settings.database_url, test_only=True)
+                        try:
+                            assert Worker(cold, settings, NoModel()).once()
+                        finally:
+                            cold.engine.dispose()
+                        worker_runs += 1
+                        actual = client.get(f"/api/runs/{request['run']}").json()
+                        assert actual["status"] == "SUCCEEDED"
+                        artifact = client.get(
+                            f"/api/resources/{actual['result']['receipts'][-1]['data']['resource_id']}"
+                        ).json()
+                        proof["actual"] = actual
+                        proof["artifact"] = artifact
+                        answer = dict(status=200, text=json.dumps(dict(run=actual, artifact=artifact)))
+                    elif command == "after":
+                        with store.tx() as c:
+                            assert len(c.execute(select(operations)).all()) == 3
+                            assert (
+                                len(c.execute(select(runs)).all()) == 1
+                                and len(c.execute(select(resources)).all()) == 2
+                            )
+                            assert (
+                                not c.execute(select(attempts)).first()
+                                and not c.execute(select(reservations)).first()
+                            )
+                        assert not Worker(store, settings, NoModel()).once()
+                        assert worker_runs == 1
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = client.request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps({"id": request["id"], **answer}) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: new identity/project scope cannot inherit a previous checked acknowledgement
+E                 at check (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:7:26)
+E                 at prepareReturn (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:67:3)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async main (/tmp/csv-report-confirm-workspace-red-independent-2c530db7-20261017/snapshot/tests/ordinary_csv_report.cjs:85:2)
+E             
+E           assert 1 == 0
+
+tests/test_ordinary_csv_report.py:426: AssertionError</failure></testcase></testsuite></testsuites>

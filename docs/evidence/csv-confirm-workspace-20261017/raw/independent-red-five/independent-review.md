@@ -1,0 +1,3 @@
+Git源`2c530db7c25836f5851de057771450ff632c379d`独立五红实际RC1，5 FAIL / 0 ERROR / 0 SKIP，JUnit25.814s。未确认返回勾选无fresh GET且按钮仍禁用；pending真实confirm200后旧view未换；UNKNOWN返回可见恢复按钮仍0新请求；项目/账号重开继承旧checked。均为真实UI断言失败，非harness错误。5个任务0Worker领取执行/0Operation/0attempt/0reservation；pending与UNKNOWN的原确认已真实接受为QUEUED，其余WAITING_APPROVAL。共193产品API/110served资产，五DB、完整请求响应pageJSON、status观察及stderr原样保留。573个导出输入文件前后与Git一致。
+
+快照仅从指定commit的Git对象导出；node_modules仅作为只读依赖使用，未编辑工作区。snapshot源码/测试为可重建输入，原件计数排除复制输入树，全部Git/SHA256保留于source-before/after。运行输出、DB、请求JSON、日志/XML等全部列入raw-manifest；没有重建缺失执行原件。合成SQLite/实际ASGI/servedJS/JSDOM，不代表native/Windows、PG、真实模型或CI。目录封存后停止写入。

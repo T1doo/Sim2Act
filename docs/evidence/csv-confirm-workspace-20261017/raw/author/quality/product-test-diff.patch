@@ -1,0 +1,252 @@
+diff --git a/src/sim2act/web/app.js b/src/sim2act/web/app.js
+index f930977d..d40a490e 100644
+--- a/src/sim2act/web/app.js
++++ b/src/sim2act/web/app.js
+@@ -325,6 +325,7 @@ function resumeOrdinaryOutcome() {
+ }
+ function clearRunDetail() {
+   ordinaryOutcomeView=null;
++  if(typeof clearCsvReportContract === "function")clearCsvReportContract();
+   if(typeof invalidateNaturalGoalAcknowledgements === "function")invalidateNaturalGoalAcknowledgements();
+   unresolvedAttempts=[];reconcileVersion=null;
+   for(const name of ["result","events","raw-result","commands","reconcile-attempt"])$(name).replaceChildren();
+@@ -934,7 +935,7 @@ function selectWorkspace(id,preserveFirstGuide=null) {
+   workspaceSelectionGeneration++;
+   if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
+   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
+-  if(id === "projects")resumeOrdinaryOutcome();
++  if(id === "projects"){resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();}
+   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
+     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
+     else button.removeAttribute("aria-current");
+diff --git a/src/sim2act/web/ordinary-csv.js b/src/sim2act/web/ordinary-csv.js
+index 98373a64..8ec85f76 100644
+--- a/src/sim2act/web/ordinary-csv.js
++++ b/src/sim2act/web/ordinary-csv.js
+@@ -1,6 +1,6 @@
+ // Explicit finite task; arbitrary ordinary Goal drafts remain independent.
+ const csvReportIntents=new Map(),csvReportConfirmations=new Map();
+-let csvReportMaterials=[],csvReportGeneration=0,csvReportOptionsReady=false;
++let csvReportMaterials=[],csvReportGeneration=0,csvReportOptionsReady=false,csvReportContractView=null;
+ function csvReportIdentity(){return JSON.stringify([token,identityConnectionGeneration,$('project-select').value,projectSelectionGeneration]);}
+ function csvReportOwner(){return JSON.stringify([token,$('project-select').value]);}
+ function csvReportCurrent(scope){return scope===csvReportIdentity()&&!$('projects').hidden;}
+@@ -66,27 +66,53 @@ function csvReportPassed(r){
+   report?.version===spec.version&&report.checker===spec.checker&&report.contract_fingerprint===r.contract.fingerprint&&report.status==='PASS'&&report.whole_task_accepted===true&&
+   report.scope==='EXPLICIT_CSV_REPORT_CONTRACT_ONLY'&&report.general_semantic_acceptance==='NOT_RUN'&&report.owner_acceptance==='PENDING'&&report.formal_publication_enabled===false;
+ }
++function csvReportContractOwner(id){return JSON.stringify([csvReportIdentity(),runUserSelectionGeneration,id]);}
++function clearCsvReportContract(){csvReportContractView=null;}
++function resumeCsvReportContract(){
++ const previous=csvReportContractView;
++ if(!previous||activeRun!==previous.run||previous.owner!==csvReportContractOwner(previous.run))return;
++ const owner=previous.owner,id=previous.run;
++ $('csv-report-contract')?.remove();
++ renderCsvReportContract(previous.result,id,()=>activeRun===id&&owner===csvReportContractOwner(id));
++}
+ function renderCsvReportContract(r,id,current){
+- const spec=r.contract?.snapshot?.ordinary_csv_report;if(!spec)return;
+- const scope=csvReportIdentity(),workspace=workspaceSelectionGeneration,userSelection=runUserSelectionGeneration;
+- const ownerCurrent=()=>activeRun===id&&csvReportCurrent(scope)&&workspace===workspaceSelectionGeneration&&userSelection===runUserSelectionGeneration;
+- const stillCurrent=()=>current()&&csvReportCurrent(scope)&&workspace===workspaceSelectionGeneration&&userSelection===runUserSelectionGeneration;
++ const spec=r.contract?.snapshot?.ordinary_csv_report;if(!spec){clearCsvReportContract();return;}
++ const scope=csvReportIdentity(),workspace=workspaceSelectionGeneration,owner=csvReportContractOwner(id),viewScope=owner+':'+workspace;
++ const sameView=csvReportContractView?.scope===viewScope;
++ const view=sameView?csvReportContractView:{scope:viewScope,owner,run:id,ackGeneration:0};csvReportContractView=view;view.result=r;
++ const ownerCurrent=()=>csvReportContractView===view&&activeRun===id&&csvReportCurrent(scope)&&workspace===workspaceSelectionGeneration&&owner===csvReportContractOwner(id);
++ const stillCurrent=()=>current()&&ownerCurrent();
+  const section=document.createElement('section');section.id='csv-report-contract';
+  const heading=document.createElement('h3');heading.textContent='本次完整事前合同（只读）';section.append(heading);
+- const proof=document.createElement('pre');proof.id='csv-report-proof';proof.textContent=JSON.stringify({run:id,version:r.version,contract_fingerprint:r.contract.fingerprint,
++ const proof=document.createElement('pre');proof.id='csv-report-proof';proof.textContent=JSON.stringify({run:id,run_version:r.version,contract_fingerprint:r.contract.fingerprint,
+   deadline:r.ordinary_csv?.deadline,rules:r.ordinary_csv?.rules,...spec},null,2);section.append(proof);
+  section.append(row(r.ordinary_csv?.confirmed?'此精确合同已确认；通用语义 NOT_RUN，人工 PENDING。':'以下为冻结报告预览，尚未保存成果。确认前不会执行工具或调用模型。'));
+  const preview=document.createElement('pre');preview.id='csv-report-preview';preview.textContent=spec.report_text;section.append(preview);
+  if(r.status==='WAITING_APPROVAL'&&!r.ordinary_csv?.confirmed){
+   const key=JSON.stringify([token,$('project-select').value,id]);let entry=csvReportConfirmations.get(key);
+   if(!entry){entry={body:{version:r.version,contract_fingerprint:r.contract.fingerprint,request_key:crypto.randomUUID()},state:'ready',ack:false};csvReportConfirmations.set(key,entry);}
+-  const label=document.createElement('label'),ack=document.createElement('input');ack.type='checkbox';ack.id='csv-report-ack';ack.checked=entry.ack;
++  if(!sameView&&entry.state==='ready'){entry.ack=false;entry.message='请核对当前完整合同并重新明确勾选。';}
++  const label=document.createElement('label'),ack=document.createElement('input');ack.type='checkbox';ack.id='csv-report-ack';ack.checked=sameView&&entry.ack;
+   label.append(ack,document.createTextNode('已核对来源版本/hash、列与数值规则、记录数、完整MD及保存回读要求，明确执行此合同。'));
+   const button=document.createElement('button');button.id='csv-report-confirm';button.type='button';
+   const status=document.createElement('p');status.id='csv-report-confirm-status';status.setAttribute('role','status');
+   const render=()=>{ack.disabled=entry.state==='sending'||entry.state==='unknown';button.disabled=!entry.ack||entry.state==='sending'||entry.state==='accepted'||entry.state==='rejected';button.textContent=entry.state==='unknown'?'恢复同一确认的回执':'确认此合同并提交后台执行';status.textContent=entry.message||'尚未确认执行';};
+   entry.renderCurrent=()=>{if(stillCurrent())render();};
+-  ack.onchange=()=>{if(!stillCurrent()||ack.disabled)return;entry.ack=ack.checked;render();};
++  ack.onchange=safe(async()=>{
++   if(!stillCurrent()||ack.disabled)return;
++   const generation=++view.ackGeneration;entry.ack=false;render();if(!ack.checked)return;
++   entry.message='正在重新核验原Run的完整合同…';render();
++   try{
++    const fresh=await api(`/api/runs/${id}`);
++    if(!stillCurrent()||generation!==view.ackGeneration||!ack.checked)return;
++    if(fresh?.id!==id||fresh.status!=='WAITING_APPROVAL'||fresh.version!==entry.body.version||fresh.ordinary_csv?.confirmed!==false||fresh.contract?.fingerprint!==entry.body.contract_fingerprint||JSON.stringify(fresh.contract?.snapshot)!==JSON.stringify(r.contract.snapshot))throw Error('合同状态已改变；请重新读取完整合同后核对。');
++    entry.ack=true;entry.message='完整合同回读一致；可明确提交本次确认。';
++   }catch(error){
++    if(!stillCurrent()||generation!==view.ackGeneration)return;
++    ack.checked=false;entry.ack=false;entry.message=error.message;
++    if(error.httpStatus===403){clearRunDetail();activeRun=null;$('result').append(row('原Run读取授权不可用，已清除合同；未发送确认。'));return;}
++   }finally{if(stillCurrent()&&generation===view.ackGeneration)render();}
++  });
+   button.onclick=safe(async()=>{
+    if(!stillCurrent()||!entry.ack||['sending','accepted','rejected'].includes(entry.state))return;
+    entry.state='sending';entry.message='正在提交本次明确确认…';render();
+@@ -96,7 +122,10 @@ function renderCsvReportContract(r,id,current){
+     entry.state='accepted';entry.message='合同已确认；只运行原有工具，0模型请求。';if(ownerCurrent())await showRun(id,false,ownerCurrent);
+    }catch(error){entry.state=!entry.wasUncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus)?'rejected':'unknown';if(entry.state==='unknown')entry.wasUncertain=true;entry.message=entry.state==='unknown'?'确认结果未知；仅用原key恢复，不自动重发。':error.message;}
+    finally{if(ownerCurrent())entry.renderCurrent?.();}
+-  });render();section.append(label,button,status);
++  });
++  const read=document.createElement('button');read.type='button';read.id='csv-report-confirm-read';read.textContent='重新读取原Run完整合同（只读）';
++  read.onclick=safe(async()=>{if(stillCurrent())await showRun(id,false,ownerCurrent);});
++  render();section.append(label,button,read,status);
+  }
+  $('result').append(section);
+ }
+diff --git a/tests/ordinary_csv_report.cjs b/tests/ordinary_csv_report.cjs
+index d3a03ccf..89bf6d32 100644
+--- a/tests/ordinary_csv_report.cjs
++++ b/tests/ordinary_csv_report.cjs
+@@ -1,6 +1,6 @@
+ 'use strict';
+ const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
+-const info=JSON.parse(fs.readFileSync(process.argv[2])),requests=[],checks=[],assets=[],blobs=[],pending=new Map();let serial=0,dom,w,$,hold=null,release=null,drop=null;
++const info=JSON.parse(fs.readFileSync(process.argv[2])),requests=[],checks=[],assets=[],blobs=[],observations=[],pending=new Map();let serial=0,dom,w,$,hold=null,release=null,drop=null;
+ readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
+ const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
+ const wait=async(fn,label)=>{const until=Date.now()+12000;while(Date.now()<until){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('bounded wait: '+label);};
+@@ -35,6 +35,39 @@ async function boot(){
+  $('csv-report-column').value='amount';await action('csv-report-column','change');
+  await w.refresh();check($('csv-report-column').value==='amount'&&!$('csv-report-prepare').disabled,'ordinary background refresh preserves explicit column for unchanged authorized source version');
+ }
++async function workspaceRoundtrip(){
++ await action(w.document.querySelector('#workspace-nav [data-tab="resources"]'));
++ await action(w.document.querySelector('#workspace-nav [data-tab="projects"]'));
++}
++function observeContract(stage){observations.push({stage,requests:requests.length,visible:visible($('csv-report-contract')),ackChecked:$('csv-report-ack')?.checked,confirmDisabled:$('csv-report-confirm')?.disabled,readVisible:visible($('csv-report-confirm-read')),proof:$('csv-report-proof')?.textContent,status:$('csv-report-confirm-status')?.textContent});}
++async function staleControlsSendNothing(ack,button,label){
++ const count=requests.length;ack.checked=true;await ack.onchange(new w.Event('change'));await button.onclick(new w.Event('click'));
++ check(requests.length===count,label+' old detached controls send no requests');
++}
++async function prepareReturn(rid){
++ if(!['workspace-unconfirmed','scope-project','scope-identity'].includes(info.case))return;
++ const oldAck=$('csv-report-ack'),oldButton=$('csv-report-confirm'),oldSection=$('csv-report-contract');
++ if(info.case==='workspace-unconfirmed'){
++  const count=requests.length;await workspaceRoundtrip();observeContract('unconfirmed workspace return');
++  check(requests.length===count,'visible workspace return does not automatically read, acknowledge or confirm');
++  // Exercise the returned visible controls before checking identity: this is the actual zero-request red.
++  $('csv-report-ack').checked=true;await action('csv-report-ack','change');
++  if($('csv-report-confirm').disabled)$('csv-report-confirm').click();
++  observeContract('returned visible acknowledgement attempted');
++  check(!$('csv-report-confirm').disabled&&requests.slice(count).some(r=>r.method==='GET'&&r.path===`/api/runs/${rid}`),'returned visible acknowledgement freshly verifies the Run and enables explicit confirmation');
++  check($('csv-report-contract')!==oldSection,'workspace return creates a new confirmation view');
++ }else{
++  $('csv-report-ack').checked=true;await action('csv-report-ack','change');
++  check(!$('csv-report-confirm').disabled,'original view has an explicit acknowledgement before scope change');
++  if(info.case==='scope-project'){await project(info.other);await project(info.project);}
++  else{await action('identity-switch');$('token').value='synthetic-test-B';await action('connect');await action('identity-switch');$('token').value='synthetic-test-A';await action('connect');await project(info.project);}
++  check(!$('csv-report-contract'),'scope change removes the old protected confirmation');
++  await staleControlsSendNothing(oldAck,oldButton,'scope change');
++  await action('csv-report-open');observeContract('explicitly reopened under new owner scope');
++  check(!$('csv-report-ack').checked&&$('csv-report-confirm').disabled,'new identity/project scope cannot inherit a previous checked acknowledgement');
++ }
++ await staleControlsSendNothing(oldAck,oldButton,'workspace/current-scope replacement');
++}
+ async function main(){
+  await boot();const route=`/api/projects/${info.project}/csv-report-runs`;
+  if(info.case==='lost')drop=route;
+@@ -49,14 +82,26 @@ async function main(){
+  check($('csv-report-preview').textContent.includes('记录数：2')&&$('csv-report-preview').textContent.includes('精确合计：4.00')&&$('csv-report-confirm').disabled,'complete MD preview requires a separate unchecked explicit confirmation');
+  check($('goal').value==='独立自然语言草稿：不得被有限CSV合同覆盖','structured task does not interpret or replace arbitrary Goal draft');
+  assert.equal((await rpc({command:'before',run:rid})).status,200);
+- $('csv-report-ack').checked=true;await action('csv-report-ack','change');
++ await prepareReturn(rid);
++ const ackStart=requests.length;$('csv-report-ack').checked=true;await action('csv-report-ack','change');
++ if(['scope-project','scope-identity'].includes(info.case))check(requests.slice(ackStart).some(r=>r.method==='GET'&&r.path===`/api/runs/${rid}`),'new explicit acknowledgement rechecks the exact complete Run contract');
+  const confirmRoute=`/api/runs/${rid}/confirm-csv-report`;
+- if(info.case==='lost')drop=confirmRoute;
+- if(info.case!=='lost')hold={path:confirmRoute,method:'POST'};
++ if(['lost','workspace-unknown'].includes(info.case))drop=confirmRoute;
++ if(!['lost','workspace-unknown'].includes(info.case))hold={path:confirmRoute,method:'POST'};
+  const confirming=action('csv-report-confirm');
+- if(info.case!=='lost'){
++ if(!['lost','workspace-unknown'].includes(info.case)){
+   await wait(()=>!!release,'actual confirm receipt held');const count=requests.length;const old=$('csv-report-confirm');
+   await old.onclick(new w.Event('click'));check(requests.length===count,'duplicate click while confirmation is in flight sends no second POST');
++  if(info.case==='workspace-pending'){
++   const oldAck=$('csv-report-ack'),oldButton=$('csv-report-confirm'),oldSection=$('csv-report-contract'),count=requests.length;
++   await workspaceRoundtrip();observeContract('workspace return with actual accepted confirmation response held');
++   check(requests.length===count,'pending workspace return sends no automatic GET or duplicate POST');
++   check($('csv-report-contract')!==oldSection&&!$('csv-report-ack').checked&&$('csv-report-confirm').disabled,'pending return rebuilds an unchecked locked confirmation view');
++   await staleControlsSendNothing(oldAck,oldButton,'pending workspace return');
++   check(visible($('csv-report-confirm-read')),'new pending view offers explicit original-Run readback');
++   await action('csv-report-confirm-read');observeContract('current view read actual already-confirmed Run');
++   check(!$('csv-report-confirm')&&$('raw-result').textContent.includes('QUEUED'),'explicit readback recovers actual accepted Run without a second confirmation');
++  }
+   if(info.case==='navigation'){
+    await project(info.other);await project(info.project);
+    check(!$('csv-report-contract'),'project away/back clears old contract selection');
+@@ -64,6 +109,18 @@ async function main(){
+   const finish=release;release=null;finish();
+  }
+  await confirming;
++ if(info.case==='workspace-pending'){observeContract('old accepted response released after current readback');check(!$('csv-report-confirm')&&$('raw-result').textContent.includes('QUEUED')&&requests.filter(r=>r.method==='POST'&&r.path===confirmRoute).length===1,'late old confirmation cannot overwrite current readback or add a POST');}
++ if(info.case==='workspace-unknown'){
++  const oldAck=$('csv-report-ack'),oldButton=$('csv-report-confirm'),oldSection=$('csv-report-contract'),count=requests.length;
++  check(oldButton.textContent==='恢复同一确认的回执','actual lost confirmation is UNKNOWN before navigating');
++  await workspaceRoundtrip();observeContract('UNKNOWN workspace return before any manual action');
++  check(requests.length===count,'UNKNOWN workspace return does not automatically reread or replay');
++  await action('csv-report-confirm');observeContract('returned visible UNKNOWN recovery clicked');
++  const attempts=requests.filter(r=>r.method==='POST'&&r.path===confirmRoute);
++  check(attempts.length===2&&JSON.stringify(attempts[0].body)===JSON.stringify(attempts[1].body),'returned UNKNOWN recovery actually replays only the exact frozen body and key');
++  check($('csv-report-contract')!==oldSection,'UNKNOWN workspace return uses a replacement confirmation view');
++  await staleControlsSendNothing(oldAck,oldButton,'UNKNOWN workspace return');
++ }
+  if(info.case==='lost'){
+   check($('csv-report-confirm')?.textContent==='恢复同一确认的回执','lost accepted confirmation offers exact original recovery');
+   await action('csv-report-confirm');
+@@ -87,6 +144,6 @@ async function main(){
+  check(bytes.equals(Buffer.from(actual.artifact.content))&&blobs[0].filename===`sim2act-${rid}-${actual.artifact.id}.md`,'download bytes and filename bind exact saved artifact and Run');
+  fs.writeFileSync(info.output.replace('result.json','captured-report.md'),bytes);
+  assert.equal((await rpc({command:'after',run:rid})).status,200);
+- fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,requests,assets,actual},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');
++ fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,requests,assets,observations,actual},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');
+ }
+-main().catch(error=>{if(info?.output)fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:String(error.stack),checks,requests,assets},null,2));if(dom)dom.window.close();process.stderr.write(String(error.stack)+'\n');process.stdout.write(JSON.stringify({done:true})+'\n');process.exitCode=1;});
++main().catch(error=>{if(info?.output)fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:String(error.stack),checks,requests,assets,observations},null,2));if(dom)dom.window.close();process.stderr.write(String(error.stack)+'\n');process.stdout.write(JSON.stringify({done:true})+'\n');process.exitCode=1;});
+diff --git a/tests/test_ordinary_csv_report.py b/tests/test_ordinary_csv_report.py
+index 0540f04b..5a5b74dc 100644
+--- a/tests/test_ordinary_csv_report.py
++++ b/tests/test_ordinary_csv_report.py
+@@ -313,14 +313,28 @@ def test_current_worker_budget_tightening_stops_before_tools(env, tmp_path):
+     (tmp_path / "actual-run.json").write_text(json.dumps(actual, ensure_ascii=False, indent=2))
+ 
+ 
+-@pytest.mark.parametrize("case", ["deliver", "lost", "navigation"])
++@pytest.mark.parametrize(
++    "case",
++    [
++        "deliver",
++        "lost",
++        "navigation",
++        "workspace-unconfirmed",
++        "workspace-pending",
++        "workspace-unknown",
++        "scope-project",
++        "scope-identity",
++    ],
++)
+ def test_visible_prospective_csv_report(env, tmp_path, case):
+     import os
+     import subprocess
+     import threading
+ 
+-    store, settings, client, owner, _, project, material = env
++    store, settings, client, owner, other_owner, project, material = env
+     other = store.project(owner, "Other owned project")
++    if case == "scope-identity":
++        store.project(other_owner, "Other identity project")
+     info = dict(
+         case=case,
+         project=project,
