@@ -43,6 +43,8 @@ Ruff、单个新模块mypy、四个JS语法检查通过，范围见命令原件�
 
 本目录封存**182份资料、185个文件、184条SHA256SUMS**，含54个SQLite（首红/开发/两轮最终夹具，不能按54例计数）。[artifact-map.json](artifact-map.json)逐件列原路径、长度、原SHA、类型及编码；DB和大文件mtime0 gzip，其余原字节保留。解码后逐件等于原件；资料包括运行输出、派生审查及复现辅助脚本，未混称全部为运行输出。
 
+首轮归档辅助脚本按文件名排除SHA256SUMS，误漏了嵌套的独审原清单；已改为只排除顶层自身，现184项全部校验。原清单、运行原件及首轮Git提交保留，没有改写独审封印。
+
 独审manifest58项，加manifest/sums共60件；[封印核对](raw/author-meta/independent-seal-verification.json)、[原manifest](raw/independent/raw-manifest.json)、[原SHA清单](raw/independent/SHA256SUMS)。其SQLite路径指原未压缩件，按artifact-map解码后校验。
 
 首红在原f3fa生产源码、测试提交 `490008ec301adef0253783974e1466a7eadbe144`，真实完成来源后新options路由HTTP404：[首红日志](raw/author-meta/red.log)、[来源](raw/author-meta/red-provenance.json)。保留开发期SQLite嵌套HTTP夹具锁、HTTP400/409及WAITING_RESOURCE/FAILED断言误期、隐藏connect夹具手势失败原日志/XML/SQLite；它们不是最终准入失败。静态handoff、后台重画、原key响应绑定及confirmation指纹改进均在f3d冻结前完成。[准确说明](raw/author-meta/development-notes.json)为派生说明，不伪造未执行的旧UI红测或缺失报告。
