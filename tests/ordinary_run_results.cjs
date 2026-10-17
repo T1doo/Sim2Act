@@ -58,8 +58,11 @@ async function deliver(){
  check($('run-artifacts').querySelector('pre')?.textContent===info.report&&!$('run-artifacts').querySelector('script')&&!w.artifactExecuted,'view reads exact saved report as inert text within this Run');
  check(requests.length===before+2&&requests[before].path===`/api/runs/${actual.run.id}`&&requests[before+1].path===`/api/resources/${actual.artifact.id}`,'view freshly authorizes exact Run then resource without catalog lookup');
  const count=requests.length;hold={path:`/api/runs/${actual.run.id}`};const downloading=action(artifactButton('下载此成果'));await wait(()=>!!release,'fresh Run GET held');
+ await w.showRun(actual.run.id,false);
+ check(requests.length===count+2&&artifactButton('下载此成果').disabled&&$('run-artifacts').querySelector('pre').textContent===info.report,'same-Run background redraw preserves verified preview and pending download lock');
  artifactButton('下载此成果').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await new Promise(r=>setImmediate(r));
- check(requests.length===count+1,'duplicate click shares one in-flight Run verification');const finish=release;release=null;finish();await downloading;await capture(0);
+ check(requests.length===count+2,'redrawn duplicate control adds no further Run or resource request');const finish=release;release=null;finish();await downloading;await capture(0);
+ check(!artifactButton('下载此成果').disabled,'completed download unlocks the current redrawn control');
  await action(artifactButton('下载此成果'));await capture(1);check(blobs.length===2,'a later explicit download reads and saves anew');
  const number=blobs.length;mutation={path:`/api/resources/${actual.artifact.id}`,label:'Synthetic content change after actual authorized GET200',change:r=>r.content+='changed'};await action(artifactButton('下载此成果'));
  check(blobs.length===number&&$('run-artifacts').textContent.includes('未下载'),'changed content digest blocks file delivery');
