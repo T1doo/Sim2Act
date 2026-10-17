@@ -66,6 +66,93 @@ def parent_hint(c, rid):
     return saved
 
 
+def evidence_scope(store, c, rid, header, *, completed_parent):
+    frozen = (
+        c.execute(
+            select(
+                run_contracts.c.snapshot["resources"].label("materials"),
+                run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"][
+                    "resource_refs"
+                ].label("refs"),
+                run_contracts.c.snapshot["human_review"]["version"].as_string().label("version"),
+            ).where(run_contracts.c.run_id == rid)
+        )
+        .mappings()
+        .one()
+    )
+    require(
+        isinstance(frozen["materials"], list)
+        and 1 <= len(frozen["materials"]) <= 8
+        and all(
+            isinstance(v, dict) and isinstance(v.get("resource_id"), str)
+            for v in frozen["materials"]
+        )
+        and all(
+            isinstance(refs, list) and all(isinstance(v, str) for v in refs)
+            for refs in (header["resource_refs"], frozen["refs"])
+        )
+        and frozen["version"] in (human.VERSION, human.MD_VERSION),
+        "Invalid evidence identifier projections",
+    )
+    material_ids = [v["resource_id"] for v in frozen["materials"]]
+    for material in set(header["resource_refs"] + frozen["refs"] + material_ids):
+        store.authorize(
+            c,
+            header["principal_id"],
+            header["runtime_id"],
+            header["project_id"],
+            material,
+            "resource.read",
+        )
+    require(
+        header["resource_refs"] == frozen["refs"] and set(material_ids) == set(frozen["refs"]),
+        "Parent material identifier projections differ",
+    )
+    effects = (
+        c.execute(
+            select(local_effects.c.resource_id)
+            .join(operations, operations.c.id == local_effects.c.operation_id)
+            .where(
+                operations.c.run_id == rid,
+                operations.c.tool_ref == "artifact.save_text",
+                operations.c.status == "VERIFIED",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    receipt_ids = (
+        c.execute(
+            select(operations.c.receipt["artifact_refs"]).where(
+                operations.c.run_id == rid,
+                operations.c.tool_ref == "artifact.save_text",
+                operations.c.status == "VERIFIED",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # A damaged receipt cannot hide the independently committed resource from authority checks.
+    for artifact in effects:
+        store.authorize(
+            c,
+            header["principal_id"],
+            header["runtime_id"],
+            header["project_id"],
+            artifact,
+            "resource.read",
+        )
+    require(
+        (
+            (len(effects) == 1 if completed_parent else len(effects) <= 1)
+            and receipt_ids == [[artifact] for artifact in effects]
+        )
+        if frozen["version"] == human.MD_VERSION
+        else not effects and not receipt_ids,
+        "Parent MD effect/receipt identifiers differ",
+    )
+
+
 def scope_gate(store, c, rid):
     """Identifier projections and current source/output authority before feedback bodies."""
     parent = parent_hint(c, rid)
@@ -73,9 +160,13 @@ def scope_gate(store, c, rid):
         return
     child = (
         c.execute(
-            select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id).where(
-                runs.c.id == rid
-            )
+            select(
+                runs.c.id,
+                runs.c.principal_id,
+                runs.c.project_id,
+                runs.c.runtime_id,
+                runs.c.resource_refs,
+            ).where(runs.c.id == rid)
         )
         .mappings()
         .one()
@@ -102,80 +193,15 @@ def scope_gate(store, c, rid):
     )
     require(
         header is not None
-        and all(header[k] == child[k] for k in child)
+        and all(header[k] == child[k] for k in ("principal_id", "project_id", "runtime_id"))
         and all(link[k] == child[k] for k in ("principal_id", "project_id"))
         and parent_hint(c, parent) is None,
         "Only one ordinary correction edge is supported",
     )
     from .goal_applications import source_scope_gate
 
-    frozen = (
-        c.execute(
-            select(
-                run_contracts.c.snapshot["resources"].label("materials"),
-                run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"][
-                    "resource_refs"
-                ].label("refs"),
-                run_contracts.c.snapshot["human_review"]["version"].as_string().label("version"),
-            ).where(run_contracts.c.run_id == parent)
-        )
-        .mappings()
-        .one()
-    )
-    material_ids = [v["resource_id"] for v in frozen["materials"]]
-    for material in set(header["resource_refs"] + frozen["refs"] + material_ids):
-        store.authorize(
-            c,
-            header["principal_id"],
-            header["runtime_id"],
-            header["project_id"],
-            material,
-            "resource.read",
-        )
-    require(
-        header["resource_refs"] == frozen["refs"] and set(material_ids) == set(frozen["refs"]),
-        "Parent material identifier projections differ",
-    )
-    effects = (
-        c.execute(
-            select(local_effects.c.resource_id)
-            .join(operations, operations.c.id == local_effects.c.operation_id)
-            .where(
-                operations.c.run_id == parent,
-                operations.c.tool_ref == "artifact.save_text",
-                operations.c.status == "VERIFIED",
-            )
-        )
-        .scalars()
-        .all()
-    )
-    receipt_ids = (
-        c.execute(
-            select(operations.c.receipt["artifact_refs"]).where(
-                operations.c.run_id == parent,
-                operations.c.tool_ref == "artifact.save_text",
-                operations.c.status == "VERIFIED",
-            )
-        )
-        .scalars()
-        .all()
-    )
-    # A damaged receipt cannot hide the independently committed resource from authority checks.
-    for artifact in effects:
-        store.authorize(
-            c,
-            header["principal_id"],
-            header["runtime_id"],
-            header["project_id"],
-            artifact,
-            "resource.read",
-        )
-    require(
-        (len(effects) == 1 and receipt_ids == [[effects[0]]])
-        if frozen["version"] == human.MD_VERSION
-        else not effects and not receipt_ids,
-        "Parent MD effect/receipt identifiers differ",
-    )
+    evidence_scope(store, c, parent, header, completed_parent=True)
+    evidence_scope(store, c, rid, child, completed_parent=False)
     source_scope_gate(store, c, parent)
     store.authorize_receipts(c, header)
 
@@ -344,23 +370,28 @@ def receipt(store, c, user, parent, run):
     )
 
 
+def scoped_request_run(store, c, user, pid, parent, key):
+    rid = c.execute(
+        select(runs.c.id).where(
+            runs.c.principal_id == user, runs.c.project_id == pid, runs.c.request_key == key
+        )
+    ).scalar()
+    if rid is None:
+        return None
+    require(parent_hint(c, rid) == parent, "Original key belongs to a different correction source")
+    from .goal_applications import source_scope_gate
+
+    source_scope_gate(store, c, rid)
+    return c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+
+
 def submit(store, user, parent, body, limits):
     from .app_jobs import submission_tx
 
     guard = {}
     with submission_tx(store, guard) as c:
         pid = human.scope(store, c, user, parent)
-        old = (
-            c.execute(
-                select(runs).where(
-                    runs.c.principal_id == user,
-                    runs.c.project_id == pid,
-                    runs.c.request_key == body["request_key"],
-                )
-            )
-            .mappings()
-            .first()
-        )
+        old = scoped_request_run(store, c, user, pid, parent, body["request_key"])
         if old:
             current = store.frozen_contract(c, old)
             require(
@@ -493,17 +524,7 @@ def mount(app, store, limits, identity, settings):
             raise DomainError("INVALID_INPUT")
         with store.tx() as c:
             pid = human.scope(store, c, user, rid)
-            run = (
-                c.execute(
-                    select(runs).where(
-                        runs.c.principal_id == user,
-                        runs.c.project_id == pid,
-                        runs.c.request_key == key,
-                    )
-                )
-                .mappings()
-                .first()
-            )
+            run = scoped_request_run(store, c, user, pid, rid, key)
             if run is None:
                 raise DomainError("OUTCOME_UNKNOWN", "Original correction key not accepted")
             return receipt(store, c, user, rid, run)

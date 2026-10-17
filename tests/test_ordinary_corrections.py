@@ -449,16 +449,26 @@ def test_exact_consent_schema_identity_and_mock_admission_required(env):
     assert post(env, parent, body).status_code == 403
 
 
-def test_parent_effect_authority_precedes_child_feedback_body_with_damaged_receipt(env):
-    _, _, parent, result, _ = rejected(env)
-    made = post(env, parent, correction_body(preview(env, parent)))
+@pytest.mark.parametrize("target", ["parent-output", "child-output"])
+def test_parent_effect_authority_precedes_child_feedback_body_with_damaged_receipt(
+    env, tmp_path, target
+):
+    _, source, parent, result, _ = rejected(env)
+    value = preview(env, parent)
+    body = correction_body(value)
+    made = post(env, parent, body)
     assert made.status_code == 202, made.text
     child = made.json()["run_id"]
+    assert Worker(env[0], env[1], CorrectionModel(source, value["feedback"])).once()
+    child_result = env[2].get(f"/api/runs/{child}")
+    assert child_result.status_code == 200, child_result.text
+    target_run = parent if target == "parent-output" else child
+    target_result = result if target == "parent-output" else child_result.json()
     with env[0].tx() as c:
         operation = (
             c.execute(
                 select(operations).where(
-                    operations.c.run_id == parent, operations.c.tool_ref == "artifact.save_text"
+                    operations.c.run_id == target_run, operations.c.tool_ref == "artifact.save_text"
                 )
             )
             .mappings()
@@ -473,23 +483,50 @@ def test_parent_effect_authority_precedes_child_feedback_body_with_damaged_recei
             update(grants)
             .where(
                 grants.c.principal_id == env[3],
-                grants.c.resource_id == result["artifact_delivery"]["artifacts"][0]["id"],
+                grants.c.resource_id == target_result["artifact_delivery"]["artifacts"][0]["id"],
             )
             .values(revoked=True)
         )
-    statements = []
+    statements, proofs = [], []
 
     def trace(connection, cursor, statement, parameters, context, many):
         statements.append(statement)
 
     event.listen(env[0].engine, "before_cursor_execute", trace)
     try:
-        assert env[2].get(f"/api/runs/{child}").status_code == 403
+        for method, path, request in [
+            ("GET", f"/api/runs/{child}", None),
+            ("GET", f"/api/runs/{parent}/correction-requests/{body['request_key']}", None),
+            ("POST", f"/api/runs/{parent}/correction-runs", body),
+        ]:
+            statements.clear()
+            response = env[2].request(method, path, json=request)
+            assert response.status_code == 403, response.text
+            assert not any(
+                "runs.goal" in sql
+                or "SELECT run_contracts.run_id, run_contracts.snapshot" in sql
+                or " ".join(sql.split()).startswith(
+                    ("SELECT runs.context ", "SELECT run_contracts.snapshot ")
+                )
+                for sql in statements
+            )
+            proofs.append(
+                dict(method=method, path=path, status=response.status_code, sql=list(statements))
+            )
     finally:
         event.remove(env[0].engine, "before_cursor_execute", trace)
-    assert not any(
-        "runs.goal" in sql or "SELECT run_contracts.run_id, run_contracts.snapshot" in sql
-        for sql in statements
+    (tmp_path / "authority-before-body.json").write_text(
+        json.dumps(
+            dict(
+                target=target,
+                parent=parent,
+                child=child,
+                checked=proofs,
+                full_run_or_contract_body_reads=0,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
     )
 
 
