@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="13" time="74.406" timestamp="2026-10-17T10:56:30.831660+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_csv_owner_review" name="test_prospective_csv_sum_scope" time="1.454" /><testcase classname="tests.test_csv_owner_review" name="test_sum_only_exact_result_explicit_choices_idempotent_and_no_authority[True]" time="3.826" /><testcase classname="tests.test_csv_owner_review" name="test_sum_only_exact_result_explicit_choices_idempotent_and_no_authority[False]" time="3.914" /><testcase classname="tests.test_csv_owner_review" name="test_no_retroactive_scope_new_result_does_not_inherit_or_sign_old_run" time="5.085" /><testcase classname="tests.test_csv_owner_review" name="test_current_authority_result_expiry_seal_and_metadata_stop[grant]" time="3.858" /><testcase classname="tests.test_csv_owner_review" name="test_current_authority_result_expiry_seal_and_metadata_stop[typed]" time="3.141" /><testcase classname="tests.test_csv_owner_review" name="test_current_authority_result_expiry_seal_and_metadata_stop[expiry]" time="4.236" /><testcase classname="tests.test_csv_owner_review" name="test_current_authority_result_expiry_seal_and_metadata_stop[seal]" time="2.038" /><testcase classname="tests.test_csv_owner_review" name="test_final_commit_change_rolls_back_and_original_key_receipt_readonly" time="2.447" /><testcase classname="tests.test_csv_owner_review" name="test_ordinary_success_derived_sum_declaration_keeps_complete_md_contract_separate" time="9.378" /><testcase classname="tests.test_csv_owner_review" name="test_actual_page_prospective_csv_declaration[deliver]" time="10.993" /><testcase classname="tests.test_csv_owner_review" name="test_actual_page_prospective_csv_declaration[lost]" time="8.973"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: accepted lost receipt recovers by original key GET only&#10;      at check (/workspace/Sim2Act/tests/csv_owner_ui.cjs:7:26)&#10;      at /workspace/Sim2Act/tests/csv_owner_ui.cjs:51:4&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f8ac08e3200&gt;, Settings(database_url='sqlite:////tmp/csv-owner-dev2-20261017/test_actua...f65174c3ca4f64b70d9e1818af02df', 'user_a1d9313c0202423d89271f610977b107', 'proj_6b85942348e94311aa78107d07824c34', ...)
+tmp_path = PosixPath('/tmp/csv-owner-dev2-20261017/test_actual_page_prospective_c1')
+case = 'lost'
+
+    @pytest.mark.parametrize("case", ["deliver", "lost", "navigation"])
+    def test_actual_page_prospective_csv_declaration(env, tmp_path, case):
+        import hashlib
+        import os
+        import subprocess
+        import threading
+        from pathlib import Path
+    
+        from sim2act.db import Store
+    
+        rel, i, _, _ = setup(env)
+        env[0].project(env[4], "other account")
+        before = table_snapshot(env[0])
+        info = dict(
+            case=case, project=env[5], instance=i["id"], output=str(tmp_path / "page-result.json")
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        worker_results = []
+        process = None
+        watchdog = None
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/csv_owner_ui.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(90, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        cold = Store(env[1].database_url, test_only=True)
+                        try:
+                            assert Worker(cold, env[1], NoModel()).once()
+                        finally:
+                            cold.engine.dispose()
+                        result = env[2].get(f"/api/runs/{request['run']}")
+                        assert result.status_code == 200, result.text
+                        worker_results.append(result.json())
+                        answer = dict(status=200, text="{}")
+                    elif request.get("command") == "revoke":
+                        with env[0].tx() as c:
+                            c.execute(
+                                update(grants)
+                                .where(grants.c.principal_id == i["runtime_id"])
+                                .values(revoked=True)
+                            )
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = env[2].request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers") or {},
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps(dict(id=request["id"], **answer)) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=15)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: accepted lost receipt recovers by original key GET only
+E                 at check (/workspace/Sim2Act/tests/csv_owner_ui.cjs:7:26)
+E                 at /workspace/Sim2Act/tests/csv_owner_ui.cjs:51:4
+E             
+E           assert 1 == 0
+
+tests/test_csv_owner_review.py:389: AssertionError</failure></testcase><testcase classname="tests.test_csv_owner_review" name="test_actual_page_prospective_csv_declaration[navigation]" time="14.800" /></testsuite></testsuites>

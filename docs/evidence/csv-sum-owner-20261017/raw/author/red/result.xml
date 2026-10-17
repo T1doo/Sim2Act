@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.337" timestamp="2026-10-17T10:50:40.913713+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_csv_owner_review" name="test_prospective_csv_sum_scope" time="1.199"><failure message="AssertionError: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;csv_review&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;input&quot;:&quot;FREEZE_SUM_ONLY_WITHOUT_MD&quot;}],&quot;submission_rejection&quot;:{&quot;namespace&quot;:&quot;internal-run-rejection.v1&quot;,&quot;endpoint&quot;:&quot;runs&quot;,&quot;principal_id&quot;:&quot;user_0e702c2123c34c0fab691c05ca64774a&quot;,&quot;project_id&quot;:&quot;proj_8168877a92f44ab4abde41b57bfba4ac&quot;,&quot;instance_id&quot;:&quot;iinstance_ccb0e04f586947d6bfd19aba8f76932d&quot;,&quot;request_key&quot;:&quot;freeze-csv-scope&quot;,&quot;request_fingerprint&quot;:&quot;28248b1b5a83576a6264184e74bc85c54575fbe047c50bdfb5e9711dd2eb915a&quot;,&quot;acceptance&quot;:&quot;NOT_ACCEPTED&quot;,&quot;previous_request&quot;:&quot;ABSENT&quot;,&quot;phase&quot;:&quot;VALIDATION_NOT_STARTED&quot;}}&#10;assert 422 == 202&#10; +  where 422 = &lt;Response [422 Unprocessable Entity]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f810d3dd700&gt;, Settings(database_url='sqlite:////tmp/csv-owner-red-20261017/test_prospe...702c2123c34c0fab691c05ca64774a', 'user_4749dbace44d40c2b5b1b97ad5cdb7f7', 'proj_8168877a92f44ab4abde41b57bfba4ac', ...)
+
+    def test_prospective_csv_sum_scope(env):
+        release, instance, _, _ = setup(env)
+        response = env[2].post(f"/api/internal/instances/{instance['id']}/runs", json=dict(
+            expected_revision=instance['revision'], expected_release_fingerprint=release['fingerprint'],
+            input={'column': 'amount'}, request_key='freeze-csv-scope',
+            csv_review='FREEZE_SUM_ONLY_WITHOUT_MD',
+        ))
+&gt;       assert response.status_code == 202, response.text
+E       AssertionError: {"detail":[{"type":"extra_forbidden","loc":["body","csv_review"],"msg":"Extra inputs are not permitted","input":"FREEZE_SUM_ONLY_WITHOUT_MD"}],"submission_rejection":{"namespace":"internal-run-rejection.v1","endpoint":"runs","principal_id":"user_0e702c2123c34c0fab691c05ca64774a","project_id":"proj_8168877a92f44ab4abde41b57bfba4ac","instance_id":"iinstance_ccb0e04f586947d6bfd19aba8f76932d","request_key":"freeze-csv-scope","request_fingerprint":"28248b1b5a83576a6264184e74bc85c54575fbe047c50bdfb5e9711dd2eb915a","acceptance":"NOT_ACCEPTED","previous_request":"ABSENT","phase":"VALIDATION_NOT_STARTED"}}
+E       assert 422 == 202
+E        +  where 422 = &lt;Response [422 Unprocessable Entity]&gt;.status_code
+
+tests/test_csv_owner_review.py:12: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,134 @@
+diff --git a/tests/test_csv_owner_review.py b/tests/test_csv_owner_review.py
+index fe7e6f4b..889b029e 100644
+--- a/tests/test_csv_owner_review.py
++++ b/tests/test_csv_owner_review.py
+@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
+ from unittest.mock import patch
+ 
+ import pytest
+-from sqlalchemy import event, select, update
++from sqlalchemy import event, insert, select, update
+ from test_internal_lifecycle import create
+ from test_internal_lifecycle import release as make_release
+ from test_natural_receipt_candidate import table_snapshot
+@@ -23,6 +23,7 @@ from sim2act.db import (
+     internal_app_runs,
+     internal_instance_data,
+     internal_run_bindings,
++    new_id,
+     operations,
+     resources,
+     runs,
+@@ -211,14 +212,48 @@ def test_current_authority_result_expiry_seal_and_metadata_stop(env, tmp_path, c
+     rel, i, _, _ = setup(env)
+     rid, _ = start(env, rel, i)
+     assert Worker(env[0], env[1], NoModel()).once()
++    if change in {"receipt_bool", "receipt_float"}:
++        initial = state(env, i, rid)
++        assert initial["content_access"] and initial["sequence"] == 0
++        with env[0].tx() as c:
++            op = c.execute(select(operations).where(operations.c.run_id == rid)).mappings().one()
++            damaged = {**op["receipt"], "result_version": True if change == "receipt_bool" else 1.0}
++            c.execute(update(operations).where(operations.c.id == op["id"]).values(receipt=damaged))
++        before = table_snapshot(env[0])
++        rejected = state(env, i, rid)
++        assert (
++            not rejected["content_access"]
++            and rejected["sequence"] == 0
++            and "current" not in rejected
++        )
++        response = env[2].post(
++            endpoint(i, rid) + "-requests",
++            json=dict(
++                command="PREPARE",
++                expected_sequence=0,
++                request_key="reject-first-prepare",
++                expected_contract_fingerprint=fingerprint(initial["current"]),
++            ),
++        )
++        assert response.status_code == 409, response.text
++        assert table_snapshot(env[0]) == before
++        assert before["csv_owner_records"] == before["csv_owner_seals"] == []
++        (tmp_path / "first-prepare-type-rejection.json").write_text(
++            json.dumps(
++                dict(
++                    initial=initial,
++                    damaged_receipt=damaged,
++                    state=rejected,
++                    rejection=response.json(),
++                ),
++                ensure_ascii=False,
++                indent=2,
++            )
++        )
++        return
+     _, p, _ = prepare_review(env, i, rid)
+     intent = choices(p)
+     sql = []
+-    if change in {"grant", "grant_redirect"}:
+-        with env[0].tx() as c:
+-            c.execute(
+-                update(grants).where(grants.c.principal_id == i["runtime_id"]).values(revoked=True)
+-            )
+     if change == "grant_redirect":
+         spare = (
+             env[2]
+@@ -228,13 +263,53 @@ def test_current_authority_result_expiry_seal_and_metadata_stop(env, tmp_path, c
+             )
+             .json()["id"]
+         )
++        # Synthetic fixture authority is established before the mutation/probe.
+         with env[0].tx() as c:
+-            c.execute(update(runs).where(runs.c.id == rid).values(resource_refs=[spare]))
+-    elif change in {"receipt_bool", "receipt_float"}:
++            original = [
++                dict(r)
++                for r in c.execute(
++                    select(grants).where(
++                        grants.c.principal_id == i["runtime_id"], grants.c.resource_id == env[6]
++                    )
++                ).mappings()
++            ]
++            assert {r["tool_ref"] for r in original} == {"resource.read", "data.aggregate_csv"}
++            for grant in original:
++                c.execute(
++                    insert(grants).values(**{**grant, "id": new_id("grant"), "resource_id": spare})
++                )
++            for action in ("resource.read", "data.aggregate_csv"):
++                env[0].authorize(c, env[3], i["runtime_id"], env[5], spare, action)
++    if change in {"grant", "grant_redirect"}:
+         with env[0].tx() as c:
+-            op = c.execute(select(operations).where(operations.c.run_id == rid)).mappings().one()
+-            receipt = {**op["receipt"], "result_version": True if change == "receipt_bool" else 1.0}
+-            c.execute(update(operations).where(operations.c.id == op["id"]).values(receipt=receipt))
++            c.execute(
++                update(grants)
++                .where(
++                    grants.c.principal_id == i["runtime_id"],
++                    *([grants.c.resource_id == env[6]] if change == "grant_redirect" else []),
++                )
++                .values(revoked=True)
++            )
++    if change == "grant_redirect":
++        with env[0].tx() as c:
++            for action in ("resource.read", "data.aggregate_csv"):
++                env[0].authorize(c, env[3], i["runtime_id"], env[5], spare, action)
++            c.execute(update(runs).where(runs.c.id == rid).values(resource_refs=[spare]))
++        (tmp_path / "redirect-fixture-proof.json").write_text(
++            json.dumps(
++                dict(
++                    original_resource=env[6],
++                    replacement_resource=spare,
++                    application_runtime=i["runtime_id"],
++                    replacement_user_and_runtime_authorization=[
++                        "resource.read",
++                        "data.aggregate_csv",
++                    ],
++                    original_only_revoked=True,
++                ),
++                indent=2,
++            )
++        )
+     elif change == "typed":
+         with env[0].tx() as c:
+             c.execute(

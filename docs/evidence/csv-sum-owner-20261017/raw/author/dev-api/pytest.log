@@ -1,0 +1,30 @@
+........F.                                                               [100%]
+=================================== FAILURES ===================================
+____ test_final_commit_change_rolls_back_and_original_key_receipt_readonly _____
+
+env = (<sim2act.db.Store object at 0x7f8eee8b45f0>, Settings(database_url='sqlite:////tmp/csv-owner-api-dev-20261017/test_fi...51e998ba3449ec96d226a2f4617a40', 'user_d64fe8b9fcd94418be9d13fd2180efa9', 'proj_04233b7669174e968c4c5c19bc1debd7', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f8eee0b79b0>
+
+    def test_final_commit_change_rolls_back_and_original_key_receipt_readonly(env, monkeypatch):
+        rel,i,_,_=setup(env);rid,_=start(env,rel,i);assert Worker(env[0],env[1],NoModel()).once()
+        _,p,_=prepare_review(env,i,rid);original=human.final_gate
+        def changed(store,c,user,iid,run_id,limits,fresh,**kw):
+            c.execute(update(grants).where(grants.c.principal_id==i['runtime_id']).values(revoked=True))
+            original(store,c,user,iid,run_id,limits,fresh,**kw)
+        monkeypatch.setattr(human,'final_gate',changed)
+        response=env[2].post(endpoint(i,rid)+'-requests',json=choices(p))
+        assert response.status_code in (403,409),response.text
+>       assert response.json()['submission_rejection']['namespace']=='csv-owner-submission-rejection.v1'
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'submission_rejection'
+
+tests/test_csv_owner_review.py:179: KeyError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_owner_review.py::test_final_commit_change_rolls_back_and_original_key_receipt_readonly
+1 failed, 9 passed, 1 warning in 32.63s
