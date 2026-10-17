@@ -518,7 +518,7 @@ function literalResultValue(instanceId,run,record){
     !Number.isSafeInteger(run.result_version)||run.result_version<1)return null;
   const project=value=>{
     if(!value||typeof value.resource_id!=="string"||!Number.isSafeInteger(value.revision)||value.revision<1||
-      typeof value.source_hash!=="string"||!/^[a-f0-9]{64}$/.test(value.source_hash)||typeof value.term!=="string"||!value.term||value.term!==value.term.trim()||value.term.length>80||
+      typeof value.source_hash!=="string"||!/^[a-f0-9]{64}$/.test(value.source_hash)||typeof value.term!=="string"||!value.term||value.term!==value.term.trim()||Array.from(value.term).length>80||
       value.semantic_status!=="UNKNOWN"||!Array.isArray(value.citations)||value.citations.length>16||
       !value.citations.every(c=>c&&Number.isSafeInteger(c.start_line)&&c.start_line>0&&Number.isSafeInteger(c.end_line)&&c.end_line>=c.start_line&&typeof c.quote==="string"))return null;
     return {resource_id:value.resource_id,revision:value.revision,source_hash:value.source_hash,term:value.term,
