@@ -507,7 +507,55 @@ function internalResult(record,view) {
   const quotes=document.createElement("ul");
   for(const cite of value.citations){const line=document.createElement("li"),label=document.createElement("span"),quote=document.createElement("blockquote");label.textContent=`第 ${cite.start_line}—${cite.end_line} 行`;quote.textContent=cite.quote;line.append(label,quote);quotes.append(line);}
   if(!value.citations.length)quotes.textContent="无字面命中；不代表语义不存在。";
-  node.append(title,scope,quotes);return node;
+  node.append(title,scope,quotes);
+  if(view.literal)literalResultDownload(node,record,view);
+  return node;
+}
+const literalResultDownloads=new Set();
+function literalResultValue(instanceId,run,record){
+  if(!run||!record||run.status!=="SUCCEEDED"||run.instance_id!==instanceId||record.instance_id!==instanceId||
+    record.run_id!==run.app_run_id||record.release_id!==run.release_id||record.version!==run.result_version||
+    !Number.isSafeInteger(run.result_version)||run.result_version<1)return null;
+  const project=value=>{
+    if(!value||typeof value.resource_id!=="string"||!Number.isSafeInteger(value.revision)||value.revision<1||
+      typeof value.source_hash!=="string"||!/^[a-f0-9]{64}$/.test(value.source_hash)||typeof value.term!=="string"||!value.term||value.term!==value.term.trim()||value.term.length>80||
+      value.semantic_status!=="UNKNOWN"||!Array.isArray(value.citations)||value.citations.length>16||
+      !value.citations.every(c=>c&&Number.isSafeInteger(c.start_line)&&c.start_line>0&&Number.isSafeInteger(c.end_line)&&c.end_line>=c.start_line&&typeof c.quote==="string"))return null;
+    return {resource_id:value.resource_id,revision:value.revision,source_hash:value.source_hash,term:value.term,
+      citations:value.citations.map(c=>({start_line:c.start_line,end_line:c.end_line,quote:c.quote})),semantic_status:"UNKNOWN"};
+  };
+  const result=project(run.result),typed=project(record.data?.result);
+  if(!result||!typed||JSON.stringify(result)!==JSON.stringify(typed))return null;
+  return {instance_id:instanceId,run_id:run.id,release_id:run.release_id,result_version:run.result_version,result};
+}
+function literalResultDownload(node,record,view){
+  const instance=view.instance,selection=view.instanceGeneration;
+  const run=instance.runs.find(r=>r.app_run_id===record.run_id&&r.release_id===record.release_id&&r.result_version===record.version);
+  const expected=literalResultValue(instance.id,run,record);if(!expected)return;
+  const button=document.createElement("button"),status=document.createElement("p");
+  button.type="button";button.textContent="下载此检索结果 JSON";status.setAttribute("role","status");status.setAttribute("aria-live","polite");
+  node.dataset.literalRun=run.id;node.dataset.resultVersion=record.version;node.append(button,status);
+  const selected=()=>node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection;
+  button.onclick=async()=>{
+    if(!selected()||view.busy)return;
+    const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,runSelection=view.runGeneration;
+    const key=JSON.stringify([connection,view.project,instance.id,run.id,record.version]);
+    if(literalResultDownloads.has(key))return;
+    const current=()=>selected()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&runSelection===view.runGeneration;
+    literalResultDownloads.add(key);button.disabled=true;status.textContent="正在重新核对此运行与成果版本…";
+    try{
+      const saved=await api(`/api/internal/instances/${encodeURIComponent(instance.id)}/runs/${encodeURIComponent(run.id)}`);
+      if(!current())return;
+      const typed=saved.known_effects?.find(r=>r.run_id===record.run_id);
+      const value=literalResultValue(instance.id,saved,typed);
+      if(saved.app_run_id!==record.run_id||!value||JSON.stringify(value)!==JSON.stringify(expected))throw Error("VERSION_CONFLICT");
+      const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
+      const link=document.createElement("a");link.href=url;link.download=`literal-${instance.id}-${run.id}-v${record.version}.json`;link.hidden=true;
+      try{node.append(link);link.click();status.textContent=`已生成此运行成果 v${record.version} 的 JSON 下载；语义 UNKNOWN。`;}
+      finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),0);}
+    }catch(error){if(current()){if(error.httpStatus===403)invalidateInternalContent(view);else status.textContent=`成果核对未通过：${error.message}。未下载文件。`;}}
+    finally{literalResultDownloads.delete(key);button.disabled=false;}
+  };
 }
 function specResult(record,view){
   const instance=view.instance,selection=view.instanceGeneration,value=record.data.result;
