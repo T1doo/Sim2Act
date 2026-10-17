@@ -139,6 +139,9 @@ def enqueue(
         if human_correction is not None:
             limits = natural_spec_corrections.bounded_limits(limits,Limits(**human_correction[1]["proposed_limits"]))
         i, release = instance(store, c, user, iid, scope_limits, lock=True)
+        from .csv_full_report_instances import is_snapshot
+        if is_snapshot(release["snapshot"]):
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Prepare and confirm the complete ordinary CSV contract")
         from . import csv_goal_revisions as csv_revision
         if csv_revision.pins(c,user,iid) and csv_goal_check is None:
             raise DomainError("VERSION_CONFLICT", "This isolated instance is reserved for its original CSV Goal CHECK")

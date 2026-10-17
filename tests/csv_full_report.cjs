@@ -39,7 +39,7 @@ async function save(){
  await w.showRun(info.run,false);check($('csv-full-report-extraction')===panel&&$('csv-full-report-save').disabled,'same Run background redraw preserves in-flight source view');const finish=release;release=null;finish();await sending;check(saves().length===1&&!$('csv-full-report-directory').hidden,'one saved recipe settles the current redraw and enables directory');
  await action('csv-full-report-directory');const aid=saves()[0].response.id;
  const node=[...$('use-list').children].find(r=>r.dataset.appId===aid);check(node?.dataset.useFamily==='CSV_FULL_REPORT'&&node.textContent.includes('完整MD'),'unified saved-use directory classifies complete report separately from sum');await action(node.querySelector('button'));
- check(visible($('csv-full-report-use'))&&$('app-origin').textContent.includes('没有内部Release或实例'),'saved recipe opens usable input form with honest version scope');
+ check(visible($('csv-full-report-use'))&&$('app-origin').textContent.includes('受限内部Release'),'saved recipe opens usable input form with honest version scope');
  check(w.fullUnsafe===undefined,'saved name remains inert text');return aid;
 }
 async function configure(){

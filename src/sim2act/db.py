@@ -1671,6 +1671,8 @@ class Store:
                 )
             )
             self.event(c, run_id, "COMMAND", {"command": command, "status": state})
+            from .csv_full_report_instances import sync_control
+            sync_control(c, principal, run_id, state)
             return state
 
     def unresolved_attempts(self, principal, run_id):

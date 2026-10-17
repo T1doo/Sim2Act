@@ -158,6 +158,9 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/approvals/{aid}")
     def inspect_approval(aid: str, user=user_dependency):
         with store.tx() as c:
+            from . import csv_full_report_instances as full_report
+            if full_report.release_gate(store, c, user, approval_id=aid) is not None:
+                return envelope(**dict(full_report.validate_approval(store, c, user, aid)))
             from .csv_goal_revisions import release_gate as csv_revision_gate
             csv_revision_gate(store,c,user,approval_id=aid)
             from .text_continuations import draft_gate

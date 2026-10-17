@@ -440,85 +440,101 @@ def accepted(store, c, user, aid, key, limits):
 
 
 def use(store, user, aid, body, limits, policy):
+    with store.tx() as c:
+        return use_tx(store, c, user, aid, body, limits, policy)
+
+
+def use_tx(store, c, user, aid, body, limits, policy):
     from .ordinary_csv import PrepareInput, prepare_tx
 
-    with store.tx() as c:
-        row = checked(store, c, user, aid, limits)
-        require(body.expected_definition_fingerprint == row["fingerprint"])
-        request_fp = fingerprint(body.model_dump())
-        previous = c.execute(
-            select(uses.c.request_fingerprint).where(
-                uses.c.workflow_id == aid,
-                uses.c.principal_id == user,
-                uses.c.request_key == body.request_key,
-            )
-        ).scalar_one_or_none()
-        if previous is not None:
-            require(previous == request_fp)
-            return accepted(store, c, user, aid, body.request_key, limits)
-        bounded = {
-            key: min(value, limits.model_dump()[key])
-            for key, value in row["definition"]["limits"].items()
-        }
-        prepared = prepare_tx(
-            store,
-            c,
-            user,
-            row["project_id"],
-            PrepareInput(
-                resource_id=body.resource_id,
-                column=body.column,
-                request_key="full-report-" + fingerprint([user, aid, body.request_key])[:64],
-            ),
-            {**policy, "limits": bounded},
+    row = checked(store, c, user, aid, limits)
+    require(body.expected_definition_fingerprint == row["fingerprint"])
+    request_fp = fingerprint(body.model_dump())
+    previous = c.execute(
+        select(uses.c.request_fingerprint).where(
+            uses.c.workflow_id == aid,
+            uses.c.principal_id == user,
+            uses.c.request_key == body.request_key,
         )
-        rid = prepared["run_id"]
-        contract_fp = c.execute(
-            select(run_contracts.c.fingerprint).where(run_contracts.c.run_id == rid)
-        ).scalar_one()
-        binding = dict(
-            version=VERSION,
-            workflow_id=aid,
-            definition_version=1,
-            definition_fingerprint=row["fingerprint"],
+    ).scalar_one_or_none()
+    if previous is not None:
+        require(previous == request_fp)
+        return accepted(store, c, user, aid, body.request_key, limits)
+    bounded = {
+        key: min(value, limits.model_dump()[key])
+        for key, value in row["definition"]["limits"].items()
+    }
+    # A new use must be bound before confirmation or any tool effect. An ordinary
+    # caller can predict this key; never adopt a previously accepted ordinary Run.
+    ordinary_key = "full-report-" + fingerprint([user, aid, body.request_key])[:64]
+    require(
+        not c.execute(
+            select(runs.c.id).where(
+                runs.c.principal_id == user,
+                runs.c.project_id == row["project_id"],
+                runs.c.request_key == ordinary_key,
+            )
+        ).first()
+    )
+    prepared = prepare_tx(
+        store,
+        c,
+        user,
+        row["project_id"],
+        PrepareInput(
+            resource_id=body.resource_id,
+            column=body.column,
+            request_key=ordinary_key,
+        ),
+        {**policy, "limits": bounded},
+    )
+    rid = prepared["run_id"]
+    contract_fp = c.execute(
+        select(run_contracts.c.fingerprint).where(run_contracts.c.run_id == rid)
+    ).scalar_one()
+    binding = dict(
+        version=VERSION,
+        workflow_id=aid,
+        definition_version=1,
+        definition_fingerprint=row["fingerprint"],
+        run_id=rid,
+        principal_id=user,
+        project_id=row["project_id"],
+        runtime_id=row["runtime_id"],
+        resource_id=body.resource_id,
+        request_key=body.request_key,
+        request_fingerprint=request_fp,
+        contract_fingerprint=contract_fp,
+    )
+    seal = fingerprint(binding)
+    c.execute(
+        insert(uses).values(
             run_id=rid,
+            workflow_id=aid,
             principal_id=user,
             project_id=row["project_id"],
-            runtime_id=row["runtime_id"],
             resource_id=body.resource_id,
             request_key=body.request_key,
             request_fingerprint=request_fp,
-            contract_fingerprint=contract_fp,
+            binding=binding,
+            fingerprint=seal,
         )
-        seal = fingerprint(binding)
-        c.execute(
-            insert(uses).values(
-                run_id=rid,
-                workflow_id=aid,
-                principal_id=user,
-                project_id=row["project_id"],
-                resource_id=body.resource_id,
-                request_key=body.request_key,
-                request_fingerprint=request_fp,
-                binding=binding,
-                fingerprint=seal,
-            )
+    )
+    context = c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one()
+    require("csv_full_report_use" not in context)
+    c.execute(
+        update(runs)
+        .where(runs.c.id == rid)
+        .values(
+            context={
+                **context,
+                "csv_full_report_use": {"workflow_id": aid, "fingerprint": seal},
+            }
         )
-        context = c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one()
-        require("csv_full_report_use" not in context)
-        c.execute(
-            update(runs)
-            .where(runs.c.id == rid)
-            .values(
-                context={
-                    **context,
-                    "csv_full_report_use": {"workflow_id": aid, "fingerprint": seal},
-                }
-            )
-        )
-        store.event(c, rid, EVENT, binding)
-        scope_gate(store, c, rid)
-        return accepted(store, c, user, aid, body.request_key, limits)
+    )
+    store.event(c, rid, EVENT, binding)
+    scope_gate(store, c, rid)
+    return accepted(store, c, user, aid, body.request_key, limits)
 
 
 def mount(app, store, limits, identity, settings):

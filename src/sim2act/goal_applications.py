@@ -128,6 +128,8 @@ def source_scope_gate(store, c, rid):
         from .csv_full_report import scope_gate as csv_full_report_scope_gate
 
         csv_full_report_scope_gate(store, c, rid)
+        from .csv_full_report_instances import scope_gate as report_instance_gate
+        report_instance_gate(store, c, rid)
         refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
         if not isinstance(refs, list):
             raise DomainError("VERSION_CONFLICT")

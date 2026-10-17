@@ -287,6 +287,8 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
     store.lock_project(c, user, location)
     from . import csv_goal_revisions as csv_revision
     csv_revision.release_gate(store,c,user,approval_id=approval_id)
+    from . import csv_full_report_instances as full_report
+    report = full_report.release_gate(store, c, user, approval_id=approval_id)
     a = approval(c, user, approval_id, exact_fp, "release", allow_consumed=True)
     if (a["payload"]["snapshot"].get("execution_source", {}).get("version") ==
             "internal.project-csv-read-sum-report.v1" and project_group is None):
@@ -302,6 +304,8 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
     )
     if old:
         return dict(read_release(store, c, user, old["id"], limits))
+    if report is not None:
+        return full_report.commit_release_tx(store, c, user, a)
     p = a["payload"]
     snap = p["snapshot"]
     draft = snap["draft"]
@@ -366,7 +370,9 @@ def validate_source_bytes(store, c, user, draft):
 def owned_release_pointer(store, c, user, rid):
     """Authorize identifiers before reading a Release body; never follow origins."""
     from .text_continuations import release_gate
+    from .csv_full_report_instances import release_gate as report_gate
 
+    report_gate(store, c, user, release_id=rid)
     release_gate(store, c, user, rid)
     r = c.execute(select(internal_releases).where(internal_releases.c.id == rid,
         internal_releases.c.principal_id == user)).mappings().first()
@@ -522,6 +528,10 @@ def switch_preflight(store, c, user, iid, target_id, *, _state_out=None):
     if (target["project_id"] != i["project_id"] or target["snapshot"]["draft"]["id"] != i["source_app_id"]
             or target["snapshot"]["draft"]["runtime_id"] != i["runtime_id"]):
         raise DomainError("PERMISSION_DENIED", "Cannot switch another app/runtime into this instance")
+    from .csv_full_report_instances import switch_preflight as report_preflight
+    report_fp = report_preflight(store, c, user, i, old, target, state_out=_state_out)
+    if report_fp is not None:
+        return report_fp
     current_trace = logic_release_trace(store, c, user, old)
     target_trace = logic_release_trace(store, c, user, target, proposed_instance=iid)
     if current_trace["over_limit"] or target_trace["over_limit"]:
@@ -594,6 +604,9 @@ def _read_release(store, c, user, rid, limits, *, archival_software=None, _origi
         legacy_release(store, c, user, r, limits, archival_software)
         return r
     immutable_release_pointer(c, user, r)
+    from . import csv_full_report_instances as full_report
+    if full_report.release_gate(store, c, user, release_id=rid) is not None:
+        return full_report.validate_release(store, c, user, r)
     if "natural_logic_source" in r["snapshot"]:
         trace = logic_release_trace(store, c, user, r)
         if trace["over_limit"]:
@@ -725,6 +738,9 @@ def instance(store, c, user, iid, limits, *, lock=False, _origin_out=None, _veri
         or r["snapshot"]["draft"]["runtime_id"] != i["runtime_id"]
     ):
         raise DomainError("VERSION_CONFLICT")
+    from .csv_full_report_instances import is_snapshot, validate_instance_history
+    if is_snapshot(r["snapshot"]):
+        validate_instance_history(c, user, i, r)
     return i, r
 
 
@@ -732,6 +748,8 @@ def data_rows(c, iid, *, store=None, user=None, run_id=None):
     from .pb_natural_uses import data_scope_gate
 
     data_scope_gate(store, c, user, iid, app_run_id=run_id)
+    from .csv_full_report_instances import data_scope_gate as report_data_gate
+    report_data_gate(store, c, user, iid, app_run_id=run_id)
     if store is not None and user is not None:
         from .csv_goal_revisions import job_gate as csv_revision_gate
         from .db import internal_run_bindings
@@ -775,6 +793,10 @@ def inspect_instance(store, user, iid, limits):
         i, release = instance(store, c, user, iid, limits)
         records = data_rows(c, iid, store=store, user=user)
         from . import pa_spec_apps, text_workflows
+        from . import csv_full_report_instances as full_report
+        if full_report.is_snapshot(release["snapshot"]):
+            full_report.verify_records(store, c, user, i, records)
+            return {**dict(i), "namespace": full_report.VERSION, "data": [dict(x) for x in records]}
         if pa_spec_apps.is_candidate(release["snapshot"]["draft"]["candidate"]):
             pa_spec_apps.verify_instance_records(store, c, user, i, records, limits)
 
@@ -802,6 +824,9 @@ def run_instance(
         ).scalar()
         store.lock_project(c, user, pid)
         i, r = instance(store, c, user, iid, limits, lock=True)
+        from .csv_full_report_instances import is_snapshot
+        if is_snapshot(r["snapshot"]):
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Prepare and confirm the complete ordinary CSV contract")
         from .csv_goal_revisions import SOURCE
         from .csv_goal_revisions import pins as csv_goal_pins
         if SOURCE in r["snapshot"] or csv_goal_pins(c,user,iid):
@@ -901,6 +926,8 @@ def compatible(old, new):
 
 
 def switch_target(store, c, user, i, old, target, limits):
+    from .csv_full_report_instances import switch_preflight as report_preflight
+    report_preflight(store, c, user, i, old, target)
     from . import csv_goal_revisions as csv_revision
     if csv_revision.SOURCE in target["snapshot"]:
         value = csv_revision.validate_snapshot(store,c,user,target["snapshot"],limits)
@@ -1055,8 +1082,9 @@ def inspect_switch_approval(store, user, iid, aid, limits):
         }
 
 
-def commit_switch(store, user, approval_id, exact_fp, limits):
-    with store.tx() as c:
+def commit_switch(store, user, approval_id, exact_fp, limits, *, _tx=None):
+    from contextlib import nullcontext
+    with (nullcontext(_tx) if _tx is not None else store.tx()) as c:
         pid = c.execute(
             select(internal_approvals.c.project_id).where(internal_approvals.c.id == approval_id)
         ).scalar()

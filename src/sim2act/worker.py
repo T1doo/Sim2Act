@@ -393,6 +393,9 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
+            if csv_report:
+                from .csv_full_report_instances import finish_tx as finish_report_instance
+                finish_report_instance(self.store, c, run_id, state, error)
             if csv_report and state == "SUCCEEDED":
                 active(self.store, c, run, frozen_csv, self.s)
                 if run["lease_until"] <= time.time():

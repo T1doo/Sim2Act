@@ -976,6 +976,8 @@ def create_app(store=None, settings=None):
     from .csv_full_report import mount as mount_csv_full_report
 
     mount_csv_full_report(app, db, platform_limits, identity, s)
+    from .csv_full_report_instances import mount as mount_full_report_instances
+    mount_full_report_instances(app, db, platform_limits, identity, s)
     from .app_owner_goals import mount as mount_app_owner_goals
 
     mount_app_owner_goals(app, db, platform_limits, identity)

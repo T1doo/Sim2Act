@@ -39,7 +39,7 @@ async function refreshApplicationUse(apps){
     item.dataset.useFamily="CLOSED_TEXT_WORKFLOW";item.dataset.appId=summary.id;rows.push(item);continue;
    }
   if(summary.use_family==="CSV_FULL_REPORT"){
-   const item=row(`${summary.name} · 完整CSV报告流程 · 定义版本1 · 每次明确选择已有授权CSV及列，另行确认新合同，保存并下载完整MD · 0模型请求，未发布；语义 NOT_RUN，人工 PENDING。`,async()=>{
+   const item=row(`${summary.name} · 完整CSV报告流程 · 定义版本1 · 可保存受限内部Release、创建并选择实例；每次明确选择已有授权CSV及列，另行确认新合同，保存并下载完整MD · 0模型请求，未发布；语义 NOT_RUN，人工 PENDING。`,async()=>{
     if(selectable())await showApp(summary.id,project,null,selectable);
    },"使用完整CSV报告流程");
    item.dataset.useFamily="CSV_FULL_REPORT";item.dataset.appId=summary.id;rows.push(item);continue;
