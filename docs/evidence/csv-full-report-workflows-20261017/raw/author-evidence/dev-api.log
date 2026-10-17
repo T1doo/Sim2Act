@@ -1,0 +1,2013 @@
+FFFFFFFF.                                                                [100%]
+=================================== FAILURES ===================================
+_________ test_complete_report_saved_directory_new_contract_run_and_md _________
+
+env = (<sim2act.db.Store object at 0x7ff1d8545670>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_compl...d331154fae4fe88c1c16b314d04a59', 'user_c733908e1da149338e435432e58f2fe7', 'proj_50f27d23d9d7413f947b624c7ed8e81e', ...)
+tmp_path = PosixPath('/tmp/csv-full-report-dev-api/test_complete_report_saved_dir0')
+
+    def test_complete_report_saved_directory_new_contract_run_and_md(env, tmp_path):
+        rid, original, options, save_body = source(env)
+        before = table_snapshot(env[0])
+        made = env[2].post(f"/api/runs/{rid}/csv-full-report-workflows", json=save_body)
+        assert made.status_code == 201, made.text
+        made = made.json()
+        after = table_snapshot(env[0])
+        assert all(before[k] == after[k] for k in before if k != "csv_report_workflows")
+        assert len(after["csv_report_workflows"]) == 1
+        for suffix in ("", "?metadata_only=true"):
+            directory = env[2].get("/api/apps" + suffix).json()
+            item = next(x for x in directory["items"] if x["id"] == made["id"])
+            assert item["use_family"] == "CSV_FULL_REPORT" and item["csv_instance_candidate"] is False
+        app = env[2].get(f"/api/apps/{made['id']}").json()
+        assert app["definition"]["tools"] == {
+            "resource.read": "1",
+            "data.aggregate_csv": "1",
+            "artifact.save_text": "1",
+        }
+        assert app["definition"]["scope"] == "READ_SUM_SAVE_COMPLETE_MD"
+        material = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/resources",
+                json=dict(name="fresh.csv", format="csv", content="amount,quantity\n30,6\n50,9\n"),
+            )
+            .json()["id"]
+        )
+        body = dict(
+            expected_version=1,
+            expected_definition_fingerprint=made["fingerprint"],
+            resource_id=material,
+            column="quantity",
+            request_key="new-independent-run",
+            consent="PREPARE_NEW_COMPLETE_MD_CONTRACT_ONLY",
+        )
+        snapshot = table_snapshot(env[0])
+>       reply = env[2].post(f"/api/apps/{made['id']}/csv-full-report-uses", json=body)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d8545670>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d6879070>
+rid = 'run_afeb97a61d424e26b0ed0e718de79b6d'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+________ test_consent_atomic_idempotency_original_key_and_invalid_input ________
+
+env = (<sim2act.db.Store object at 0x7ff1d7a82cf0>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_conse...3d01767e14485a9b88ebed7fa7881b', 'user_f77e6fa49ce84b9c8a721b16946c9bd9', 'proj_8a81be5e36e84582bec2580c246e0b36', ...)
+tmp_path = PosixPath('/tmp/csv-full-report-dev-api/test_consent_atomic_idempotenc0')
+
+    def test_consent_atomic_idempotency_original_key_and_invalid_input(env, tmp_path):
+        rid, original, _, save_body = source(env)
+        path = f"/api/runs/{rid}/csv-full-report-workflows"
+        missing = {k: v for k, v in save_body.items() if k != "consent"}
+        assert env[2].post(path, json=missing).status_code == 422
+        with ThreadPoolExecutor(2) as pool:
+            replies = list(pool.map(lambda _: env[2].post(path, json=save_body), range(2)))
+        assert [r.status_code for r in replies] == [201, 201], [r.text for r in replies]
+        app = replies[0].json()
+        assert replies[1].json() == app
+        assert env[2].post(path, json={**save_body, "name": "changed"}).status_code == 409
+        assert (
+            env[2]
+            .get(f"/api/runs/{rid}/csv-full-report-workflow-requests/{save_body['request_key']}")
+            .json()
+            == app
+        )
+        material = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/resources",
+                json=dict(name="new.csv", format="csv", content="value,bad\n2,x\n3,y\n"),
+            )
+            .json()["id"]
+        )
+        body = dict(
+            expected_version=1,
+            expected_definition_fingerprint=app["fingerprint"],
+            resource_id=material,
+            column="bad",
+            request_key="same-use-key",
+            consent="PREPARE_NEW_COMPLETE_MD_CONTRACT_ONLY",
+        )
+        before = table_snapshot(env[0])
+        endpoint = f"/api/apps/{app['id']}/csv-full-report-uses"
+        assert env[2].post(endpoint, json=body).status_code == 400
+        assert table_snapshot(env[0]) == before
+        body["column"] = "value"
+        with ThreadPoolExecutor(2) as pool:
+>           replies = list(pool.map(lambda _: env[2].post(endpoint, json=body), range(2)))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:619: in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:317: in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_csv_full_report.py:220: in <lambda>
+    replies = list(pool.map(lambda _: env[2].post(endpoint, json=body), range(2)))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d7a82cf0>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d81863f0>
+rid = 'run_4f7f224fa6c0494f90371d74efcef57c'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+_ test_current_scope_and_independent_binding_before_protected_read_or_confirm[source] _
+
+env = (<sim2act.db.Store object at 0x7ff1d5c34c80>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_curre...1c69d3a6a542938c4adb63d897ed45', 'user_7364a9aa3b6544f5b29a978264aeffb2', 'proj_6ae1ffbcbb69414bbda4ff9d3c1a244f', ...)
+target = 'source'
+
+    @pytest.mark.parametrize(
+        "target", ["source", "new-material", "project-save", "account", "marker", "link"]
+    )
+    def test_current_scope_and_independent_binding_before_protected_read_or_confirm(env, target):
+        rid, _, _, _, app, material, body = saved(env)
+>       response = env[2].post(f"/api/apps/{app['id']}/csv-full-report-uses", json=body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d5c34c80>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d66273b0>
+rid = 'run_e6da42ed0e8249c398a0ece21dacf30d'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+_ test_current_scope_and_independent_binding_before_protected_read_or_confirm[new-material] _
+
+env = (<sim2act.db.Store object at 0x7ff1d62aeea0>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_curre...4aba554a994b78af86c9977fed220c', 'user_141d788953b84f1d88caad8b94d20cfa', 'proj_62a7db05d57c4582a9f397911ce437d4', ...)
+target = 'new-material'
+
+    @pytest.mark.parametrize(
+        "target", ["source", "new-material", "project-save", "account", "marker", "link"]
+    )
+    def test_current_scope_and_independent_binding_before_protected_read_or_confirm(env, target):
+        rid, _, _, _, app, material, body = saved(env)
+>       response = env[2].post(f"/api/apps/{app['id']}/csv-full-report-uses", json=body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d62aeea0>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d82e33b0>
+rid = 'run_a86f8eb03802460c8d8458915630339c'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+_ test_current_scope_and_independent_binding_before_protected_read_or_confirm[project-save] _
+
+env = (<sim2act.db.Store object at 0x7ff1d7c46c60>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_curre...1a1bf9e99a4b43b03144c8b5dcdd81', 'user_9e81fc119dcb482985237205aacb7c0e', 'proj_1646c6afe69f49659475ff83867f27ed', ...)
+target = 'project-save'
+
+    @pytest.mark.parametrize(
+        "target", ["source", "new-material", "project-save", "account", "marker", "link"]
+    )
+    def test_current_scope_and_independent_binding_before_protected_read_or_confirm(env, target):
+        rid, _, _, _, app, material, body = saved(env)
+>       response = env[2].post(f"/api/apps/{app['id']}/csv-full-report-uses", json=body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d7c46c60>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d81a88c0>
+rid = 'run_4b5da252eabd4a09abde11cf2a5dcfed'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+_ test_current_scope_and_independent_binding_before_protected_read_or_confirm[account] _
+
+env = (<sim2act.db.Store object at 0x7ff1d67f9790>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_curre...9ad2fee57949cf812c46b98921e1fa', 'user_5410996221aa412eae2532afde3ade13', 'proj_ae2e432dd66f4ab5bc87d337baf69a15', ...)
+target = 'account'
+
+    @pytest.mark.parametrize(
+        "target", ["source", "new-material", "project-save", "account", "marker", "link"]
+    )
+    def test_current_scope_and_independent_binding_before_protected_read_or_confirm(env, target):
+        rid, _, _, _, app, material, body = saved(env)
+>       response = env[2].post(f"/api/apps/{app['id']}/csv-full-report-uses", json=body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d67f9790>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d69a4fb0>
+rid = 'run_4a63d67c0504479eb1a0db7f8379c097'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+_ test_current_scope_and_independent_binding_before_protected_read_or_confirm[marker] _
+
+env = (<sim2act.db.Store object at 0x7ff1d61fe6c0>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_curre...86b8445b3647d7bb04e94e9aca478b', 'user_85893640dc9f42c899935fb72ae9395c', 'proj_1a88f686dbf4468492111374fdd80b85', ...)
+target = 'marker'
+
+    @pytest.mark.parametrize(
+        "target", ["source", "new-material", "project-save", "account", "marker", "link"]
+    )
+    def test_current_scope_and_independent_binding_before_protected_read_or_confirm(env, target):
+        rid, _, _, _, app, material, body = saved(env)
+>       response = env[2].post(f"/api/apps/{app['id']}/csv-full-report-uses", json=body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d61fe6c0>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d5a58f20>
+rid = 'run_c0f7a2cc959f4294b4e81d4b3dd31f64'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+_ test_current_scope_and_independent_binding_before_protected_read_or_confirm[link] _
+
+env = (<sim2act.db.Store object at 0x7ff1d7c5e2d0>, Settings(database_url='sqlite:////tmp/csv-full-report-dev-api/test_curre...37f2a92f134ca7a6f34b8c0c86a4a2', 'user_9694c6bb1dd84341ba0d1fb20acd4899', 'proj_66b52d0e11c34c949c34820d48d6f905', ...)
+target = 'link'
+
+    @pytest.mark.parametrize(
+        "target", ["source", "new-material", "project-save", "account", "marker", "link"]
+    )
+    def test_current_scope_and_independent_binding_before_protected_read_or_confirm(env, target):
+        rid, _, _, _, app, material, body = saved(env)
+>       response = env[2].post(f"/api/apps/{app['id']}/csv-full-report-uses", json=body)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_full_report.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_full_report.py:515: in prepare_use
+    return use(
+src/sim2act/csv_full_report.py:480: in use
+    scope_gate(store, c, rid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <sim2act.db.Store object at 0x7ff1d7c5e2d0>
+c = <sqlalchemy.engine.base.Connection object at 0x7ff1d7be07d0>
+rid = 'run_9ece8ec927064746b59c10c5162cecb2'
+
+    def scope_gate(store, c, rid):
+        """Reauthorize scalar identity/material union before protected Run/recipe bodies."""
+        link = (
+            c.execute(
+                select(
+                    uses.c.workflow_id, uses.c.principal_id, uses.c.project_id, uses.c.resource_id
+                ).where(uses.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        hint = (
+            c.execute(
+                select(
+                    runs.c.principal_id,
+                    runs.c.project_id,
+                    runs.c.runtime_id,
+                    runs.c.context["csv_full_report_use"]["workflow_id"].as_string().label("aid"),
+                    runs.c.context["csv_full_report_use"]["fingerprint"].as_string().label("fp"),
+                ).where(runs.c.id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        anchored = (
+            c.execute(
+                select(events.c.data["workflow_id"].as_string()).where(
+                    events.c.run_id == rid, events.c.kind == EVENT
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if (
+            link is None
+            and not anchored
+            and (hint is None or hint["aid"] is None and hint["fp"] is None)
+        ):
+            return
+        require(
+            link is not None
+            and hint is not None
+            and anchored == [link["workflow_id"]]
+            and hint["aid"] == link["workflow_id"]
+            and link["principal_id"] == hint["principal_id"]
+            and link["project_id"] == hint["project_id"]
+        )
+        h = header(store, c, link["principal_id"], link["workflow_id"])
+        require(h["project_id"] == hint["project_id"] and h["runtime_id"] == hint["runtime_id"])
+        frozen = (
+            c.execute(
+                select(
+                    run_contracts.c.fingerprint,
+                    run_contracts.c.snapshot["ordinary_csv_report"]["resource_id"]
+                    .as_string()
+                    .label("resource"),
+                    run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+                    run_contracts.c.snapshot["resources"][0]["resource_id"]
+                    .as_string()
+                    .label("material"),
+                ).where(run_contracts.c.run_id == rid)
+            )
+            .mappings()
+            .first()
+        )
+        refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        require(frozen is not None and isinstance(refs, list) and isinstance(frozen["refs"], list))
+        from .db import operation_intents, operations
+    
+        intents = (
+            c.execute(
+                select(operation_intents.c.request["args"]["resource_id"].as_string())
+                .join(operations, operations.c.id == operation_intents.c.operation_id)
+                .where(
+                    operations.c.run_id == rid,
+                    operations.c.tool_ref.in_(["resource.read", "data.aggregate_csv"]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ids = (
+            refs
+            + frozen["refs"]
+            + [frozen["resource"], frozen["material"], link["resource_id"]]
+            + intents
+        )
+        require(all(isinstance(resource, str) for resource in ids))
+        for resource in set(ids):
+            for tool in ("resource.read", "data.aggregate_csv"):
+                store.authorize(
+                    c, link["principal_id"], hint["runtime_id"], hint["project_id"], resource, tool
+                )
+        require(
+            refs
+            == frozen["refs"]
+            == [link["resource_id"]]
+            == [frozen["resource"]]
+            == [frozen["material"]]
+            and all(resource == link["resource_id"] for resource in intents)
+        )
+        # Source limits reconstruct provenance only; new uses independently bound current limits.
+>       row = checked(store, c, link["principal_id"], link["workflow_id"], Limits())
+                                                                           ^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 6 validation errors for Limits
+E       max_requests
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_tools
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_repairs
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_total_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       max_output_tokens
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       run_seconds
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/csv_full_report.py:353: ValidationError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_csv_full_report.py::test_complete_report_saved_directory_new_contract_run_and_md
+FAILED tests/test_csv_full_report.py::test_consent_atomic_idempotency_original_key_and_invalid_input
+FAILED tests/test_csv_full_report.py::test_current_scope_and_independent_binding_before_protected_read_or_confirm[source]
+FAILED tests/test_csv_full_report.py::test_current_scope_and_independent_binding_before_protected_read_or_confirm[new-material]
+FAILED tests/test_csv_full_report.py::test_current_scope_and_independent_binding_before_protected_read_or_confirm[project-save]
+FAILED tests/test_csv_full_report.py::test_current_scope_and_independent_binding_before_protected_read_or_confirm[account]
+FAILED tests/test_csv_full_report.py::test_current_scope_and_independent_binding_before_protected_read_or_confirm[marker]
+FAILED tests/test_csv_full_report.py::test_current_scope_and_independent_binding_before_protected_read_or_confirm[link]
+8 failed, 1 passed, 1 warning in 21.44s

@@ -1,0 +1,484 @@
+{
+  "app_drafts": {
+    "schema": "CREATE TABLE app_drafts (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\tcandidate JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id)\n)",
+    "rows": []
+  },
+  "app_previews": {
+    "schema": "CREATE TABLE app_previews (\n\tid VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tinput JSON NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\toutput JSON, \n\terror JSON, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (app_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "attempts": {
+    "schema": "CREATE TABLE attempts (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR, \n\tcreated_at FLOAT, \n\tmode VARCHAR, \n\trequest_model VARCHAR, \n\tresponse_model VARCHAR, \n\tstatus VARCHAR, \n\tusage JSON, \n\treserved_tokens INTEGER, \n\tparameters JSON, \n\tresponse JSON, \n\terror VARCHAR, \n\telapsed FLOAT, \n\tPRIMARY KEY (id)\n)",
+    "rows": []
+  },
+  "csv_owner_records": {
+    "schema": "CREATE TABLE csv_owner_records (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, sequence), \n\tUNIQUE (run_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "csv_owner_seals": {
+    "schema": "CREATE TABLE csv_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (run_id, record_id)\n)",
+    "rows": []
+  },
+  "delivery_graph_anchors": {
+    "schema": "CREATE TABLE delivery_graph_anchors (\n\tid VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (app_id, revision)\n)",
+    "rows": []
+  },
+  "delivery_graph_locks": {
+    "schema": "CREATE TABLE delivery_graph_locks (\n\tapp_id VARCHAR NOT NULL, \n\tnode_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id, node_id)\n)",
+    "rows": []
+  },
+  "delivery_graph_requests": {
+    "schema": "CREATE TABLE delivery_graph_requests (\n\tapp_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id, principal_id, kind, request_key)\n)",
+    "rows": []
+  },
+  "delivery_graph_scope_jobs": {
+    "schema": "CREATE TABLE delivery_graph_scope_jobs (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tsource_app_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (source_app_id, principal_id, request_key, app_id)\n)",
+    "rows": []
+  },
+  "delivery_graph_source_versions": {
+    "schema": "CREATE TABLE delivery_graph_source_versions (\n\tapp_id VARCHAR NOT NULL, \n\tlogical_key VARCHAR NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id, logical_key, revision)\n)",
+    "rows": []
+  },
+  "delivery_graph_states": {
+    "schema": "CREATE TABLE delivery_graph_states (\n\tapp_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tanchor_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id)\n)",
+    "rows": []
+  },
+  "events": {
+    "schema": "CREATE TABLE events (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR, \n\tcreated_at FLOAT, \n\tkind VARCHAR, \n\tdata JSON, \n\tPRIMARY KEY (id)\n)",
+    "rows": [
+      [
+        "event_6cc435abed4140e29b7c7f1581b3159a",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236294.7469141,
+        "ACCEPTED",
+        "{\"input_fingerprint\": \"1f6bb8c3c0698f2c92820470c02e5cf920cc588a42f564575477f41c93b9aba4\"}"
+      ],
+      [
+        "event_34a57735f1a748ca9296e5706867e567",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236294.7501976,
+        "CSV_REPORT_FROZEN",
+        "{\"contract_fingerprint\": \"70e2f056d34003f22c3c645eeab43487e468fe1ff673d92c3d21048c23d99aae\", \"spec_fingerprint\": \"2834d04389ee23a4fe476b965d53236fc0dcc4f611c3e749eece7da533e69f28\", \"deadline\": 1792236594.7428136}"
+      ],
+      [
+        "event_8bbd0760f556476e8f6a9ad806198d46",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236294.934645,
+        "CSV_REPORT_CONFIRMED",
+        "{\"version\": 1, \"contract_fingerprint\": \"70e2f056d34003f22c3c645eeab43487e468fe1ff673d92c3d21048c23d99aae\", \"request_key\": \"confirm\", \"run_id\": \"run_ede78549c62e4a348790ceabe38e55b6\", \"principal_id\": \"user_d4936a4875f4422ba3c3225dd0934644\", \"project_id\": \"proj_e0f6042252d346a2b4b8b3c86a7a3f30\", \"runtime_id\": \"runtime_39e77d48108e4f6da96a32e5334c2808\"}"
+      ],
+      [
+        "event_2a72ee52a03641618b667f7b7cc7a8c6",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236295.0287166,
+        "CLAIMED",
+        "{\"fence\": 1}"
+      ],
+      [
+        "event_77fc756b054a45b58ff87728aaa11e21",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236295.161739,
+        "TOOL_VERIFIED",
+        "{\"operation_id\": \"op_335ac9f6eaed4b86a720f04720252653\", \"tool_ref\": \"resource.read\", \"source_ref\": \"res_e759f6aaf4bd439583303a5fb4f8e881\"}"
+      ],
+      [
+        "event_d5534790f9964ba780e90762d2552262",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236295.3016481,
+        "TOOL_VERIFIED",
+        "{\"operation_id\": \"op_8e63fa439044452ba13764590965a687\", \"tool_ref\": \"data.aggregate_csv\", \"source_ref\": \"res_e759f6aaf4bd439583303a5fb4f8e881\"}"
+      ],
+      [
+        "event_ea9294b330e74d8b8243f790d773e48a",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236295.4425828,
+        "TOOL_VERIFIED",
+        "{\"operation_id\": \"op_05b78b2d21a44f5bb6a397cbec4c70df\", \"tool_ref\": \"artifact.save_text\", \"source_ref\": \"proj_e0f6042252d346a2b4b8b3c86a7a3f30\"}"
+      ],
+      [
+        "event_1c0780d57c0e435a84bc04dd2570a44b",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        1792236295.6317883,
+        "STATE",
+        "{\"status\": \"SUCCEEDED\", \"error\": null}"
+      ]
+    ]
+  },
+  "goal_application_candidates": {
+    "schema": "CREATE TABLE goal_application_candidates (\n\tapp_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tcandidate_fingerprint VARCHAR NOT NULL, \n\tconfirmation JSON NOT NULL, \n\tPRIMARY KEY (app_id), \n\tUNIQUE (run_id)\n)",
+    "rows": []
+  },
+  "goal_candidate_requests": {
+    "schema": "CREATE TABLE goal_candidate_requests (\n\tcard_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tPRIMARY KEY (card_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "goal_card_versions": {
+    "schema": "CREATE TABLE goal_card_versions (\n\tcard_id VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (card_id, version)\n)",
+    "rows": []
+  },
+  "goal_cards": {
+    "schema": "CREATE TABLE goal_cards (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\ttitle VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id)\n)",
+    "rows": []
+  },
+  "grants": {
+    "schema": "CREATE TABLE grants (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\ttool_ref VARCHAR NOT NULL, \n\texpires_at FLOAT NOT NULL, \n\trevision INTEGER, \n\trevoked BOOLEAN, \n\tPRIMARY KEY (id)\n)",
+    "rows": [
+      [
+        "grant_a4e904ae5b7946148dd585952e802418",
+        "user_d4936a4875f4422ba3c3225dd0934644",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "artifact.save_text",
+        1792322694.6985,
+        1,
+        0
+      ],
+      [
+        "grant_135f0ceac38a45079dcb773005658009",
+        "runtime_39e77d48108e4f6da96a32e5334c2808",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "artifact.save_text",
+        1792322694.7008138,
+        1,
+        0
+      ],
+      [
+        "grant_6c82a1f6ac3a4b4c961975ad9d992a86",
+        "user_d4936a4875f4422ba3c3225dd0934644",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "res_e759f6aaf4bd439583303a5fb4f8e881",
+        "resource.read",
+        1792322694.7134864,
+        1,
+        0
+      ],
+      [
+        "grant_a1e887772e724f59a68c29d367c8f5c0",
+        "user_d4936a4875f4422ba3c3225dd0934644",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "res_e759f6aaf4bd439583303a5fb4f8e881",
+        "data.aggregate_csv",
+        1792322694.7138777,
+        1,
+        0
+      ],
+      [
+        "grant_952894f472b64e55a5a0d8a103965e03",
+        "runtime_39e77d48108e4f6da96a32e5334c2808",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "res_e759f6aaf4bd439583303a5fb4f8e881",
+        "resource.read",
+        1792322694.714973,
+        1,
+        0
+      ],
+      [
+        "grant_4fc9ce3952474813b7a9e43a045de733",
+        "runtime_39e77d48108e4f6da96a32e5334c2808",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "res_e759f6aaf4bd439583303a5fb4f8e881",
+        "data.aggregate_csv",
+        1792322694.7152257,
+        1,
+        0
+      ],
+      [
+        "grant_4ee0c31c402d4a4fb4089c41ceb68c30",
+        "user_d4936a4875f4422ba3c3225dd0934644",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "res_7d9b9ac88dcf42b686b2cb32826e36ff",
+        "resource.read",
+        1792322695.438576,
+        1,
+        0
+      ],
+      [
+        "grant_7cf4c23a2d9144d8a3ba942ca0840f0a",
+        "runtime_39e77d48108e4f6da96a32e5334c2808",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "res_7d9b9ac88dcf42b686b2cb32826e36ff",
+        "resource.read",
+        1792322695.4395306,
+        1,
+        0
+      ]
+    ]
+  },
+  "heartbeats": {
+    "schema": "CREATE TABLE heartbeats (\n\tid VARCHAR NOT NULL, \n\tat FLOAT, \n\tPRIMARY KEY (id)\n)",
+    "rows": [
+      [
+        "worker_90a2d5d92308413b8395a89084d25d6e",
+        1792236294.854472
+      ],
+      [
+        "worker_26c0e21abfda42729ae6cf1235b9c804",
+        1792236294.9785385
+      ],
+      [
+        "worker_e344f810d65a4235bb48ec901b23e264",
+        1792236295.639841
+      ]
+    ]
+  },
+  "internal_app_runs": {
+    "schema": "CREATE TABLE internal_app_runs (\n\tid VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tinput JSON NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\toutput JSON, \n\terror JSON, \n\tresult_version INTEGER, \n\tPRIMARY KEY (id), \n\tUNIQUE (instance_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "internal_approvals": {
+    "schema": "CREATE TABLE internal_approvals (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\texpires_at FLOAT NOT NULL, \n\tconsumed BOOLEAN NOT NULL, \n\tPRIMARY KEY (id)\n)",
+    "rows": []
+  },
+  "internal_instance_data": {
+    "schema": "CREATE TABLE internal_instance_data (\n\tinstance_id VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\tschema_version INTEGER NOT NULL, \n\tdata JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (instance_id, version), \n\tUNIQUE (run_id)\n)",
+    "rows": []
+  },
+  "internal_instances": {
+    "schema": "CREATE TABLE internal_instances (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tsource_app_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\trevision INTEGER NOT NULL, \n\tdata_version INTEGER NOT NULL, \n\thistory JSON NOT NULL, \n\tPRIMARY KEY (id)\n)",
+    "rows": []
+  },
+  "internal_owner_records": {
+    "schema": "CREATE TABLE internal_owner_records (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (instance_id, sequence), \n\tUNIQUE (instance_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "internal_owner_seals": {
+    "schema": "CREATE TABLE internal_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (instance_id, sequence)\n)",
+    "rows": []
+  },
+  "internal_releases": {
+    "schema": "CREATE TABLE internal_releases (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tapproval_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (approval_id)\n)",
+    "rows": []
+  },
+  "internal_run_bindings": {
+    "schema": "CREATE TABLE internal_run_bindings (\n\trun_id VARCHAR NOT NULL, \n\tapp_run_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (run_id), \n\tUNIQUE (app_run_id)\n)",
+    "rows": []
+  },
+  "internal_spec_run_terminals": {
+    "schema": "CREATE TABLE internal_spec_run_terminals (\n\tinstance_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (instance_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "local_csv_tasks": {
+    "schema": "CREATE TABLE local_csv_tasks (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tinput JSON, \n\toutput JSON, \n\terror JSON, \n\tproof JSON, \n\tproof_fingerprint VARCHAR, \n\tPRIMARY KEY (id), \n\tUNIQUE (project_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "local_effects": {
+    "schema": "CREATE TABLE local_effects (\n\toperation_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\tcontent_hash VARCHAR NOT NULL, \n\tPRIMARY KEY (operation_id), \n\tUNIQUE (resource_id)\n)",
+    "rows": [
+      [
+        "op_05b78b2d21a44f5bb6a397cbec4c70df",
+        "res_7d9b9ac88dcf42b686b2cb32826e36ff",
+        "0e6fce5452dce759a183c939f2a32c7f288fb90b2bc791f45ad27f114f9b530c"
+      ]
+    ]
+  },
+  "natural_activations": {
+    "schema": "CREATE TABLE natural_activations (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tscope JSON NOT NULL, \n\tscope_fingerprint VARCHAR NOT NULL, \n\tapproval JSON, \n\tapproval_fingerprint VARCHAR, \n\tledger JSON NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (principal_id, project_id, request_key)\n)",
+    "rows": []
+  },
+  "natural_owner_records": {
+    "schema": "CREATE TABLE natural_owner_records (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, sequence), \n\tUNIQUE (run_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "natural_owner_seals": {
+    "schema": "CREATE TABLE natural_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (run_id, record_id)\n)",
+    "rows": []
+  },
+  "operation_intents": {
+    "schema": "CREATE TABLE operation_intents (\n\toperation_id VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tPRIMARY KEY (operation_id)\n)",
+    "rows": [
+      [
+        "op_335ac9f6eaed4b86a720f04720252653",
+        "{\"tool\": \"resource.read\", \"args\": {\"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\"}}"
+      ],
+      [
+        "op_8e63fa439044452ba13764590965a687",
+        "{\"tool\": \"data.aggregate_csv\", \"args\": {\"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\", \"column\": \"amount\"}}"
+      ],
+      [
+        "op_05b78b2d21a44f5bb6a397cbec4c70df",
+        "{\"tool\": \"artifact.save_text\", \"args\": {\"text\": \"# CSV \\u7cbe\\u786e\\u6c47\\u603b\\u62a5\\u544a\\n\\n\\u6765\\u6e90\\uff1ares_e759f6aaf4bd439583303a5fb4f8e881\\n\\u7248\\u672c\\uff1a1\\nSHA-256\\uff1a4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\\n\\u5217\\uff1a\\\"amount\\\"\\n\\u8bb0\\u5f55\\u6570\\uff1a2\\n\\u7cbe\\u786e\\u5408\\u8ba1\\uff1a4.00\\n\\nCSV\\u81f3\\u591a32768\\u5b57\\u8282\\uff0cUTF-8\\u65e0BOM\\uff1b\\u552f\\u4e00\\u975e\\u7a7a\\u8868\\u5934\\uff1b\\u4e25\\u683c\\u7b49\\u5bbd\\uff1b\\u5ffd\\u7565\\u7a7a\\u884c\\uff1b\\u81f3\\u591a1000\\u6761\\u8bb0\\u5f55\\u3002\\n\\u6240\\u9009\\u5217\\u6bcf\\u683c\\u987b\\u4e3a\\u6709\\u9650\\u5341\\u8fdb\\u5236\\uff1b\\u7cfb\\u6570\\u81f3\\u591a1000\\u4f4d\\uff0c\\u6307\\u6570\\u7edd\\u5bf9\\u503c\\u81f3\\u591a1000\\uff1b\\u7cbe\\u786e\\u76f8\\u52a0\\uff0c\\u4e0d\\u56db\\u820d\\u4e94\\u5165\\u3002\\n\\u5b8c\\u6574MD\\u81f3\\u591a8000\\u5b57\\u7b26\\uff0c\\u4fdd\\u5b58\\u53c2\\u6570JSON\\u81f3\\u591a32768\\u5b57\\u8282\\uff1b\\u5305\\u542b\\u6765\\u6e90ID\\u3001\\u7248\\u672c/hash\\u3001\\u5217\\u3001\\u8bb0\\u5f55\\u6570\\u3001\\u7cbe\\u786e\\u5408\\u8ba1\\u53ca\\u89c4\\u5219\\uff1b\\u6309\\u539f\\u6587\\u4fdd\\u5b58\\u5e76\\u5728\\u540c\\u4e00Run\\u6838\\u5bf9\\u56de\\u8bfb\\u3002\\n\\u4ec5\\u6b64\\u7ed3\\u6784\\u5316\\u76ee\\u6807\\u9a8c\\u6536\\uff1b\\u901a\\u7528\\u8bed\\u4e49NOT_RUN\\uff0c\\u4eba\\u5de5PENDING\\uff0c\\u6b63\\u5f0f\\u53d1\\u5e03\\u5173\\u95ed\\uff1b0\\u6a21\\u578b\\u8bf7\\u6c42\\u3002\\n\"}}"
+      ]
+    ]
+  },
+  "operations": {
+    "schema": "CREATE TABLE operations (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR, \n\tcall_id VARCHAR, \n\tfingerprint VARCHAR, \n\ttool_ref VARCHAR, \n\tstatus VARCHAR, \n\treceipt JSON, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, call_id)\n)",
+    "rows": [
+      [
+        "op_335ac9f6eaed4b86a720f04720252653",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        "csv_report_read_v1",
+        "ef7e879c588d045c542dcf445db8d2453683ac8c16bd5b744b8649750d7d64ab",
+        "resource.read",
+        "VERIFIED",
+        "{\"operation_id\": \"op_335ac9f6eaed4b86a720f04720252653\", \"status\": \"VERIFIED\", \"data\": {\"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\", \"content\": \"item,amount\\na,1.25\\nb,2.75\\n\", \"hash\": \"4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\", \"format\": \"csv\"}, \"artifact_refs\": [], \"receipt_ref\": \"op_335ac9f6eaed4b86a720f04720252653\", \"check_results\": [{\"check\": \"receipt.readback.v1\", \"status\": \"PASS\"}], \"usage_ref\": null, \"error\": null}"
+      ],
+      [
+        "op_8e63fa439044452ba13764590965a687",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        "csv_report_sum_v1",
+        "0daf0fe9424b3698f687b70fb1e6f20589d84e26b71a2f2d08505a8143b5be71",
+        "data.aggregate_csv",
+        "VERIFIED",
+        "{\"operation_id\": \"op_8e63fa439044452ba13764590965a687\", \"status\": \"VERIFIED\", \"data\": {\"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\", \"column\": \"amount\", \"count\": 2, \"sum\": \"4.00\", \"source_hash\": \"4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\"}, \"artifact_refs\": [], \"receipt_ref\": \"op_8e63fa439044452ba13764590965a687\", \"check_results\": [{\"check\": \"receipt.readback.v1\", \"status\": \"PASS\"}], \"usage_ref\": null, \"error\": null}"
+      ],
+      [
+        "op_05b78b2d21a44f5bb6a397cbec4c70df",
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        "csv_report_save_v1",
+        "5d780c5b1cb2a0d8c84307a60b5612df4ead068dd8047dcf62675d001d3f4228",
+        "artifact.save_text",
+        "VERIFIED",
+        "{\"operation_id\": \"op_05b78b2d21a44f5bb6a397cbec4c70df\", \"status\": \"VERIFIED\", \"data\": {\"resource_id\": \"res_7d9b9ac88dcf42b686b2cb32826e36ff\", \"hash\": \"0e6fce5452dce759a183c939f2a32c7f288fb90b2bc791f45ad27f114f9b530c\"}, \"artifact_refs\": [\"res_7d9b9ac88dcf42b686b2cb32826e36ff\"], \"receipt_ref\": \"op_05b78b2d21a44f5bb6a397cbec4c70df\", \"check_results\": [{\"check\": \"receipt.readback.v1\", \"status\": \"PASS\"}], \"usage_ref\": null, \"error\": null}"
+      ]
+    ]
+  },
+  "ordinary_correction_links": {
+    "schema": "CREATE TABLE ordinary_correction_links (\n\tparent_run_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (parent_run_id), \n\tUNIQUE (run_id)\n)",
+    "rows": []
+  },
+  "ordinary_owner_records": {
+    "schema": "CREATE TABLE ordinary_owner_records (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, sequence), \n\tUNIQUE (run_id, principal_id, request_key)\n)",
+    "rows": []
+  },
+  "ordinary_owner_seals": {
+    "schema": "CREATE TABLE ordinary_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (run_id, record_id)\n)",
+    "rows": []
+  },
+  "preview_extractions": {
+    "schema": "CREATE TABLE preview_extractions (\n\tpreview_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tPRIMARY KEY (preview_id, principal_id, request_key), \n\tUNIQUE (app_id)\n)",
+    "rows": []
+  },
+  "principals": {
+    "schema": "CREATE TABLE principals (\n\tid VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\ttoken_hash VARCHAR, \n\tPRIMARY KEY (id), \n\tUNIQUE (token_hash)\n)",
+    "rows": [
+      [
+        "user_d4936a4875f4422ba3c3225dd0934644",
+        "fixture A",
+        "92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd"
+      ],
+      [
+        "user_2ae0d05febe64003b27055462784701c",
+        "fixture B",
+        "61500f94abd88d2a98c55b4a36f2536fad5a0dde87317c9c7ea56b5e3034a31b"
+      ],
+      [
+        "runtime_39e77d48108e4f6da96a32e5334c2808",
+        "project runtime",
+        null
+      ]
+    ]
+  },
+  "projects": {
+    "schema": "CREATE TABLE projects (\n\tid VARCHAR NOT NULL, \n\towner_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\tPRIMARY KEY (id)\n)",
+    "rows": [
+      [
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "user_d4936a4875f4422ba3c3225dd0934644",
+        "runtime_39e77d48108e4f6da96a32e5334c2808",
+        "中文 空格工程"
+      ]
+    ]
+  },
+  "protocol_jobs": {
+    "schema": "CREATE TABLE protocol_jobs (\n\trun_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\taccepted_snapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tresult_snapshot JSON, \n\tresult_fingerprint VARCHAR, \n\tcompleted_fence INTEGER, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (run_id)\n)",
+    "rows": []
+  },
+  "protocol_request_pools": {
+    "schema": "CREATE TABLE protocol_request_pools (\n\tid VARCHAR NOT NULL, \n\tmode VARCHAR NOT NULL, \n\trequest_limit INTEGER NOT NULL, \n\ttoken_limit INTEGER NOT NULL, \n\treserved_requests INTEGER NOT NULL, \n\treserved_tokens INTEGER NOT NULL, \n\tknown_tokens INTEGER NOT NULL, \n\thalted BOOLEAN NOT NULL, \n\thalt_reason VARCHAR, \n\tpolicy_fingerprint VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id)\n)",
+    "rows": []
+  },
+  "protocol_request_slots": {
+    "schema": "CREATE TABLE protocol_request_slots (\n\tattempt_id VARCHAR NOT NULL, \n\tpool_id VARCHAR NOT NULL, \n\tordinal INTEGER NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tfence INTEGER NOT NULL, \n\tphase VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\treserved_tokens INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tusage JSON, \n\tsafe_response_fingerprint VARCHAR, \n\terror VARCHAR, \n\tcreated_at FLOAT NOT NULL, \n\tfinished_at FLOAT, \n\tPRIMARY KEY (attempt_id), \n\tUNIQUE (pool_id, ordinal)\n)",
+    "rows": []
+  },
+  "protocol_reviews": {
+    "schema": "CREATE TABLE protocol_reviews (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tcontract_id VARCHAR NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, request_key)\n)",
+    "rows": []
+  },
+  "quotas": {
+    "schema": "CREATE TABLE quotas (\n\tsubject VARCHAR NOT NULL, \n\tblocked_until FLOAT, \n\tPRIMARY KEY (subject)\n)",
+    "rows": [
+      [
+        "default-intern-account",
+        0.0
+      ]
+    ]
+  },
+  "registered_extraction_requests": {
+    "schema": "CREATE TABLE registered_extraction_requests (\n\tsource_run_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsource_app_id VARCHAR NOT NULL, \n\ttarget_app_id VARCHAR NOT NULL, \n\texpected_proof_fingerprint VARCHAR NOT NULL, \n\texpected_target_draft_fingerprint VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\tprevious_key VARCHAR, \n\trequest_fingerprint VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tstate VARCHAR NOT NULL, \n\tapp_id VARCHAR, \n\tcandidate_fingerprint VARCHAR, \n\thistory JSON NOT NULL, \n\tPRIMARY KEY (source_run_id, principal_id, request_key), \n\tUNIQUE (source_run_id, principal_id, sequence)\n)",
+    "rows": []
+  },
+  "reservations": {
+    "schema": "CREATE TABLE reservations (\n\tid VARCHAR NOT NULL, \n\tsubject VARCHAR, \n\tcreated_at FLOAT, \n\trun_id VARCHAR, \n\tPRIMARY KEY (id)\n)",
+    "rows": []
+  },
+  "resource_retirements": {
+    "schema": "CREATE TABLE resource_retirements (\n\tresource_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\ttask_id VARCHAR NOT NULL, \n\tproof_fingerprint VARCHAR NOT NULL, \n\tsource_hash VARCHAR NOT NULL, \n\tpolicy VARCHAR NOT NULL, \n\tPRIMARY KEY (resource_id)\n)",
+    "rows": []
+  },
+  "resources": {
+    "schema": "CREATE TABLE resources (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tname VARCHAR, \n\tformat VARCHAR, \n\tcontent VARCHAR, \n\thash VARCHAR, \n\tPRIMARY KEY (id)\n)",
+    "rows": [
+      [
+        "res_e759f6aaf4bd439583303a5fb4f8e881",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "data.csv",
+        "csv",
+        "item,amount\na,1.25\nb,2.75\n",
+        "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+      ],
+      [
+        "res_7d9b9ac88dcf42b686b2cb32826e36ff",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "Run artifact",
+        "md",
+        "# CSV 精确汇总报告\n\n来源：res_e759f6aaf4bd439583303a5fb4f8e881\n版本：1\nSHA-256：4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\n列：\"amount\"\n记录数：2\n精确合计：4.00\n\nCSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。\n所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。\n完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。\n仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。\n",
+        "0e6fce5452dce759a183c939f2a32c7f288fb90b2bc791f45ad27f114f9b530c"
+      ]
+    ]
+  },
+  "run_contracts": {
+    "schema": "CREATE TABLE run_contracts (\n\trun_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (run_id)\n)",
+    "rows": [
+      [
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        "{\"run_id\": \"run_ede78549c62e4a348790ceabe38e55b6\", \"runtime_id\": \"runtime_39e77d48108e4f6da96a32e5334c2808\", \"contract_version\": \"F1.3\", \"goal\": {\"goal_id\": \"goal_46d4440b5d3c4a1a8059136177575dbd\", \"project_id\": \"proj_e0f6042252d346a2b4b8b3c86a7a3f30\", \"owner_id\": \"user_d4936a4875f4422ba3c3225dd0934644\", \"goal\": \"\\u6309\\u4e8b\\u524d\\u786e\\u8ba4\\u7684CSV\\u5217\\u7cbe\\u786e\\u6c47\\u603b\\uff0c\\u6838\\u5bf9\\u8bb0\\u5f55\\u6570\\uff0c\\u4fdd\\u5b58\\u5e76\\u56de\\u8bfb\\u5b8c\\u6574MD\\u62a5\\u544a\\u3002\", \"constraints\": [\"CSV\\u81f3\\u591a32768\\u5b57\\u8282\\uff0cUTF-8\\u65e0BOM\\uff1b\\u552f\\u4e00\\u975e\\u7a7a\\u8868\\u5934\\uff1b\\u4e25\\u683c\\u7b49\\u5bbd\\uff1b\\u5ffd\\u7565\\u7a7a\\u884c\\uff1b\\u81f3\\u591a1000\\u6761\\u8bb0\\u5f55\\u3002\", \"\\u6240\\u9009\\u5217\\u6bcf\\u683c\\u987b\\u4e3a\\u6709\\u9650\\u5341\\u8fdb\\u5236\\uff1b\\u7cfb\\u6570\\u81f3\\u591a1000\\u4f4d\\uff0c\\u6307\\u6570\\u7edd\\u5bf9\\u503c\\u81f3\\u591a1000\\uff1b\\u7cbe\\u786e\\u76f8\\u52a0\\uff0c\\u4e0d\\u56db\\u820d\\u4e94\\u5165\\u3002\", \"\\u5b8c\\u6574MD\\u81f3\\u591a8000\\u5b57\\u7b26\\uff0c\\u4fdd\\u5b58\\u53c2\\u6570JSON\\u81f3\\u591a32768\\u5b57\\u8282\\uff1b\\u5305\\u542b\\u6765\\u6e90ID\\u3001\\u7248\\u672c/hash\\u3001\\u5217\\u3001\\u8bb0\\u5f55\\u6570\\u3001\\u7cbe\\u786e\\u5408\\u8ba1\\u53ca\\u89c4\\u5219\\uff1b\\u6309\\u539f\\u6587\\u4fdd\\u5b58\\u5e76\\u5728\\u540c\\u4e00Run\\u6838\\u5bf9\\u56de\\u8bfb\\u3002\", \"\\u4ec5\\u6b64\\u7ed3\\u6784\\u5316\\u76ee\\u6807\\u9a8c\\u6536\\uff1b\\u901a\\u7528\\u8bed\\u4e49NOT_RUN\\uff0c\\u4eba\\u5de5PENDING\\uff0c\\u6b63\\u5f0f\\u53d1\\u5e03\\u5173\\u95ed\\uff1b0\\u6a21\\u578b\\u8bf7\\u6c42\\u3002\"], \"acceptance_version\": \"ordinary-csv-report.v1\", \"resource_refs\": [\"res_e759f6aaf4bd439583303a5fb4f8e881\"], \"unresolved\": [\"Semantic goal acceptance NOT_RUN\"]}, \"resources\": [{\"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\", \"revision\": 1, \"content_hash\": \"4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\", \"format\": \"csv\"}], \"limits\": {\"max_requests\": 4, \"max_tools\": 4, \"max_repairs\": 1, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"mode\": \"mock\", \"request_model\": \"intern-s2\", \"ordinary_csv_report\": {\"version\": \"ordinary-csv-report.v1\", \"checker\": \"csv-report-independent.v1\", \"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\", \"revision\": 1, \"source_hash\": \"4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\", \"column\": \"amount\", \"csv_rule\": \"utf8-no-bom-strict-unique-header-rectangular-1000.v1\", \"numeric_rule\": \"finite-decimal-exact-1000-digits-exponent.v1\", \"count\": 2, \"sum\": \"4.00\", \"report_format\": \"md\", \"report_text\": \"# CSV \\u7cbe\\u786e\\u6c47\\u603b\\u62a5\\u544a\\n\\n\\u6765\\u6e90\\uff1ares_e759f6aaf4bd439583303a5fb4f8e881\\n\\u7248\\u672c\\uff1a1\\nSHA-256\\uff1a4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\\n\\u5217\\uff1a\\\"amount\\\"\\n\\u8bb0\\u5f55\\u6570\\uff1a2\\n\\u7cbe\\u786e\\u5408\\u8ba1\\uff1a4.00\\n\\nCSV\\u81f3\\u591a32768\\u5b57\\u8282\\uff0cUTF-8\\u65e0BOM\\uff1b\\u552f\\u4e00\\u975e\\u7a7a\\u8868\\u5934\\uff1b\\u4e25\\u683c\\u7b49\\u5bbd\\uff1b\\u5ffd\\u7565\\u7a7a\\u884c\\uff1b\\u81f3\\u591a1000\\u6761\\u8bb0\\u5f55\\u3002\\n\\u6240\\u9009\\u5217\\u6bcf\\u683c\\u987b\\u4e3a\\u6709\\u9650\\u5341\\u8fdb\\u5236\\uff1b\\u7cfb\\u6570\\u81f3\\u591a1000\\u4f4d\\uff0c\\u6307\\u6570\\u7edd\\u5bf9\\u503c\\u81f3\\u591a1000\\uff1b\\u7cbe\\u786e\\u76f8\\u52a0\\uff0c\\u4e0d\\u56db\\u820d\\u4e94\\u5165\\u3002\\n\\u5b8c\\u6574MD\\u81f3\\u591a8000\\u5b57\\u7b26\\uff0c\\u4fdd\\u5b58\\u53c2\\u6570JSON\\u81f3\\u591a32768\\u5b57\\u8282\\uff1b\\u5305\\u542b\\u6765\\u6e90ID\\u3001\\u7248\\u672c/hash\\u3001\\u5217\\u3001\\u8bb0\\u5f55\\u6570\\u3001\\u7cbe\\u786e\\u5408\\u8ba1\\u53ca\\u89c4\\u5219\\uff1b\\u6309\\u539f\\u6587\\u4fdd\\u5b58\\u5e76\\u5728\\u540c\\u4e00Run\\u6838\\u5bf9\\u56de\\u8bfb\\u3002\\n\\u4ec5\\u6b64\\u7ed3\\u6784\\u5316\\u76ee\\u6807\\u9a8c\\u6536\\uff1b\\u901a\\u7528\\u8bed\\u4e49NOT_RUN\\uff0c\\u4eba\\u5de5PENDING\\uff0c\\u6b63\\u5f0f\\u53d1\\u5e03\\u5173\\u95ed\\uff1b0\\u6a21\\u578b\\u8bf7\\u6c42\\u3002\\n\", \"report_hash\": \"0e6fce5452dce759a183c939f2a32c7f288fb90b2bc791f45ad27f114f9b530c\", \"save_rule\": \"same-run-transactional-save-and-exact-readback.v1\", \"tool_versions\": {\"resource.read\": \"1\", \"data.aggregate_csv\": \"1\", \"artifact.save_text\": \"1\"}, \"tool_definitions_fingerprint\": \"b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52\", \"model_requests\": 0}}",
+        "70e2f056d34003f22c3c645eeab43487e468fe1ff673d92c3d21048c23d99aae"
+      ]
+    ]
+  },
+  "runs": {
+    "schema": "CREATE TABLE runs (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tgoal VARCHAR, \n\tresource_refs JSON, \n\tstatus VARCHAR NOT NULL, \n\trequest_key VARCHAR, \n\tfingerprint VARCHAR, \n\tcreated_at FLOAT, \n\tlease_until FLOAT, \n\tfence INTEGER, \n\tworker_id VARCHAR, \n\tcontext JSON, \n\tresult JSON, \n\terror JSON, \n\tcancel_intent BOOLEAN, \n\tversion INTEGER, \n\tPRIMARY KEY (id), \n\tUNIQUE (principal_id, project_id, request_key)\n)",
+    "rows": [
+      [
+        "run_ede78549c62e4a348790ceabe38e55b6",
+        "proj_e0f6042252d346a2b4b8b3c86a7a3f30",
+        "user_d4936a4875f4422ba3c3225dd0934644",
+        "runtime_39e77d48108e4f6da96a32e5334c2808",
+        "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+        "[\"res_e759f6aaf4bd439583303a5fb4f8e881\"]",
+        "SUCCEEDED",
+        "prepare",
+        "1f6bb8c3c0698f2c92820470c02e5cf920cc588a42f564575477f41c93b9aba4",
+        1792236294.7428136,
+        0.0,
+        1,
+        "worker_26c0e21abfda42729ae6cf1235b9c804",
+        "{\"messages\": [], \"requests\": 0, \"tools\": 3, \"repairs\": 0, \"reserved_tokens\": 0, \"csv_report_frozen\": {\"contract_fingerprint\": \"70e2f056d34003f22c3c645eeab43487e468fe1ff673d92c3d21048c23d99aae\", \"spec_fingerprint\": \"2834d04389ee23a4fe476b965d53236fc0dcc4f611c3e749eece7da533e69f28\", \"deadline\": 1792236594.7428136}, \"csv_report_confirmation\": {\"version\": 1, \"contract_fingerprint\": \"70e2f056d34003f22c3c645eeab43487e468fe1ff673d92c3d21048c23d99aae\", \"request_key\": \"confirm\", \"run_id\": \"run_ede78549c62e4a348790ceabe38e55b6\", \"principal_id\": \"user_d4936a4875f4422ba3c3225dd0934644\", \"project_id\": \"proj_e0f6042252d346a2b4b8b3c86a7a3f30\", \"runtime_id\": \"runtime_39e77d48108e4f6da96a32e5334c2808\"}}",
+        "{\"mode\": \"DETERMINISTIC\", \"model_requests\": 0, \"answer\": \"\\u5b8c\\u6574MD\\u62a5\\u544a\\u5df2\\u6309\\u4e8b\\u524d\\u5408\\u540c\\u4fdd\\u5b58\\u5e76\\u72ec\\u7acb\\u6838\\u5bf9\\u3002\", \"receipts\": [{\"operation_id\": \"op_335ac9f6eaed4b86a720f04720252653\", \"status\": \"VERIFIED\", \"data\": {\"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\", \"content\": \"item,amount\\na,1.25\\nb,2.75\\n\", \"hash\": \"4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\", \"format\": \"csv\"}, \"artifact_refs\": [], \"receipt_ref\": \"op_335ac9f6eaed4b86a720f04720252653\", \"check_results\": [{\"check\": \"receipt.readback.v1\", \"status\": \"PASS\"}], \"usage_ref\": null, \"error\": null}, {\"operation_id\": \"op_8e63fa439044452ba13764590965a687\", \"status\": \"VERIFIED\", \"data\": {\"resource_id\": \"res_e759f6aaf4bd439583303a5fb4f8e881\", \"column\": \"amount\", \"count\": 2, \"sum\": \"4.00\", \"source_hash\": \"4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\"}, \"artifact_refs\": [], \"receipt_ref\": \"op_8e63fa439044452ba13764590965a687\", \"check_results\": [{\"check\": \"receipt.readback.v1\", \"status\": \"PASS\"}], \"usage_ref\": null, \"error\": null}, {\"operation_id\": \"op_05b78b2d21a44f5bb6a397cbec4c70df\", \"status\": \"VERIFIED\", \"data\": {\"resource_id\": \"res_7d9b9ac88dcf42b686b2cb32826e36ff\", \"hash\": \"0e6fce5452dce759a183c939f2a32c7f288fb90b2bc791f45ad27f114f9b530c\"}, \"artifact_refs\": [\"res_7d9b9ac88dcf42b686b2cb32826e36ff\"], \"receipt_ref\": \"op_05b78b2d21a44f5bb6a397cbec4c70df\", \"check_results\": [{\"check\": \"receipt.readback.v1\", \"status\": \"PASS\"}], \"usage_ref\": null, \"error\": null}], \"goal_acceptance\": \"PASS_CSV_REPORT_CONTRACT\", \"task_acceptance\": {\"version\": \"ordinary-csv-report.v1\", \"checker\": \"csv-report-independent.v1\", \"status\": \"PASS\", \"scope\": \"EXPLICIT_CSV_REPORT_CONTRACT_ONLY\", \"whole_task_accepted\": true, \"contract_fingerprint\": \"70e2f056d34003f22c3c645eeab43487e468fe1ff673d92c3d21048c23d99aae\", \"checks\": [\"source-version-hash\", \"exact-column-count-sum\", \"three-original-tool-intents-receipts\", \"same-run-md-save-effect\", \"complete-content-byte-readback\", \"zero-model-requests\"], \"general_semantic_acceptance\": \"NOT_RUN\", \"owner_acceptance\": \"PENDING\", \"formal_publication_enabled\": false}}",
+        "null",
+        0,
+        3
+      ]
+    ]
+  },
+  "spec_checklist_tasks": {
+    "schema": "CREATE TABLE spec_checklist_tasks (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\tsource_hash VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\toutput JSON, \n\treceipt JSON, \n\tproof JSON, \n\tproof_fingerprint VARCHAR, \n\terror JSON, \n\tPRIMARY KEY (id), \n\tUNIQUE (principal_id, project_id, request_key)\n)",
+    "rows": []
+  },
+  "task_extractions": {
+    "schema": "CREATE TABLE task_extractions (\n\ttask_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tPRIMARY KEY (task_id, principal_id, request_key), \n\tUNIQUE (app_id)\n)",
+    "rows": []
+  }
+}

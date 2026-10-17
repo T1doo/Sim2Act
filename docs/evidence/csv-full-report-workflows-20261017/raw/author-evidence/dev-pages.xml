@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="19.182" timestamp="2026-10-17T11:27:27.561781+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_csv_full_report" name="test_visible_complete_report_directory_and_new_run[deliver]" time="7.370"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: enabled csv-report-confirm&#10;      at action (/workspace/Sim2Act/tests/csv_full_report.cjs:10:92)&#10;      at /workspace/Sim2Act/tests/csv_full_report.cjs:68:40&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f9146905400&gt;, Settings(database_url='sqlite:////tmp/csv-full-report-dev-pages/test_vis...a4b16f910f48419147ebf0dc684d6b', 'user_79312af9af0c4253bb5465f905712d1a', 'proj_2b929d5a42e44c12ab24807ff440f4df', ...)
+tmp_path = PosixPath('/tmp/csv-full-report-dev-pages/test_visible_complete_report_d0')
+case = 'deliver'
+
+    @pytest.mark.parametrize("case", ["deliver", "lost", "navigation"])
+    def test_visible_complete_report_directory_and_new_run(env, tmp_path, case):
+        import hashlib
+        import os
+        import subprocess
+        import threading
+        from pathlib import Path
+    
+        rid, original, _, _ = source(env)
+        material = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/resources",
+                json=dict(name="page-new.csv", format="csv", content="amount,quantity\n30,6\n50,9\n"),
+            )
+            .json()["id"]
+        )
+        other = env[2].post("/api/projects", json={"name": "other project"}).json()["id"]
+        info = dict(
+            case=case,
+            run=rid,
+            project=env[5],
+            other=other,
+            material=material,
+            output=str(tmp_path / "page-result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        worker_runs = []
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/csv_full_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(90, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        assert Worker(env[0], env[1], NoModel()).once()
+                        result = env[2].get(f"/api/runs/{request['run']}")
+                        assert result.status_code == 200, result.text
+                        worker_runs.append(result.json())
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = env[2].request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps(dict(id=request["id"], **answer)) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=15)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: enabled csv-report-confirm
+E                 at action (/workspace/Sim2Act/tests/csv_full_report.cjs:10:92)
+E                 at /workspace/Sim2Act/tests/csv_full_report.cjs:68:40
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_csv_full_report.py:387: AssertionError</failure></testcase><testcase classname="tests.test_csv_full_report" name="test_visible_complete_report_directory_and_new_run[lost]" time="6.556"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: enabled csv-report-confirm&#10;      at action (/workspace/Sim2Act/tests/csv_full_report.cjs:10:92)&#10;      at /workspace/Sim2Act/tests/csv_full_report.cjs:68:40&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f9145dedd90&gt;, Settings(database_url='sqlite:////tmp/csv-full-report-dev-pages/test_vis...57581ae58c4a88ae6099bc82a78119', 'user_0afb7ae2470b452cbcf80e9357fb3beb', 'proj_1abccab5ceea4177a81a613e6f0f81af', ...)
+tmp_path = PosixPath('/tmp/csv-full-report-dev-pages/test_visible_complete_report_d1')
+case = 'lost'
+
+    @pytest.mark.parametrize("case", ["deliver", "lost", "navigation"])
+    def test_visible_complete_report_directory_and_new_run(env, tmp_path, case):
+        import hashlib
+        import os
+        import subprocess
+        import threading
+        from pathlib import Path
+    
+        rid, original, _, _ = source(env)
+        material = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/resources",
+                json=dict(name="page-new.csv", format="csv", content="amount,quantity\n30,6\n50,9\n"),
+            )
+            .json()["id"]
+        )
+        other = env[2].post("/api/projects", json={"name": "other project"}).json()["id"]
+        info = dict(
+            case=case,
+            run=rid,
+            project=env[5],
+            other=other,
+            material=material,
+            output=str(tmp_path / "page-result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        worker_runs = []
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/csv_full_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(90, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        assert Worker(env[0], env[1], NoModel()).once()
+                        result = env[2].get(f"/api/runs/{request['run']}")
+                        assert result.status_code == 200, result.text
+                        worker_runs.append(result.json())
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = env[2].request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps(dict(id=request["id"], **answer)) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=15)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: enabled csv-report-confirm
+E                 at action (/workspace/Sim2Act/tests/csv_full_report.cjs:10:92)
+E                 at /workspace/Sim2Act/tests/csv_full_report.cjs:68:40
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E             
+E           assert 1 == 0
+
+tests/test_csv_full_report.py:387: AssertionError</failure></testcase><testcase classname="tests.test_csv_full_report" name="test_visible_complete_report_directory_and_new_run[navigation]" time="4.833"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible project-select&#10;      at action (/workspace/Sim2Act/tests/csv_full_report.cjs:10:35)&#10;      at project (/workspace/Sim2Act/tests/csv_full_report.cjs:14:63)&#10;      at /workspace/Sim2Act/tests/csv_full_report.cjs:52:222&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f9137f3f620&gt;, Settings(database_url='sqlite:////tmp/csv-full-report-dev-pages/test_vis...90655d03094ff0a7237d920298c180', 'user_08104a628b4a4b7a85392fe4bc3acd88', 'proj_b5ea13a8ca764cd08f0d69f26bae1a69', ...)
+tmp_path = PosixPath('/tmp/csv-full-report-dev-pages/test_visible_complete_report_d2')
+case = 'navigation'
+
+    @pytest.mark.parametrize("case", ["deliver", "lost", "navigation"])
+    def test_visible_complete_report_directory_and_new_run(env, tmp_path, case):
+        import hashlib
+        import os
+        import subprocess
+        import threading
+        from pathlib import Path
+    
+        rid, original, _, _ = source(env)
+        material = (
+            env[2]
+            .post(
+                f"/api/projects/{env[5]}/resources",
+                json=dict(name="page-new.csv", format="csv", content="amount,quantity\n30,6\n50,9\n"),
+            )
+            .json()["id"]
+        )
+        other = env[2].post("/api/projects", json={"name": "other project"}).json()["id"]
+        info = dict(
+            case=case,
+            run=rid,
+            project=env[5],
+            other=other,
+            material=material,
+            output=str(tmp_path / "page-result.json"),
+        )
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        worker_runs = []
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(
+                    ["node", "tests/csv_full_report.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules"),
+                    },
+                )
+                watchdog = threading.Timer(90, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        assert Worker(env[0], env[1], NoModel()).once()
+                        result = env[2].get(f"/api/runs/{request['run']}")
+                        assert result.status_code == 200, result.text
+                        worker_runs.append(result.json())
+                        answer = dict(status=200, text="{}")
+                    else:
+                        response = env[2].request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    process.stdin.write(json.dumps(dict(id=request["id"], **answer)) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=15)
+&gt;           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible project-select
+E                 at action (/workspace/Sim2Act/tests/csv_full_report.cjs:10:35)
+E                 at project (/workspace/Sim2Act/tests/csv_full_report.cjs:14:63)
+E                 at /workspace/Sim2Act/tests/csv_full_report.cjs:52:222
+E             
+E           assert 1 == 0
+
+tests/test_csv_full_report.py:387: AssertionError</failure></testcase></testsuite></testsuites>
