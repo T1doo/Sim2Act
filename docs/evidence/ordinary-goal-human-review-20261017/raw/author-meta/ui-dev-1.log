@@ -1,0 +1,78 @@
+F
+=================================== FAILURES ===================================
+_______________ test_ordinary_owner_full_page_actual_api[accept] _______________
+
+env = (<sim2act.db.Store object at 0x7fbf41e68e00>, Settings(database_url='sqlite:////tmp/ordinary-owner-ui-dev-1/test_ordin...44f006c0dc42dba050e0082c5988ae', 'user_f58a4850085845eb923ef64843b67874', 'proj_c827d9282f7a4d25bdc9d9c62c0e8b8f', ...)
+tmp_path = PosixPath('/tmp/ordinary-owner-ui-dev-1/test_ordinary_owner_full_page_0')
+case = 'accept'
+
+    @pytest.mark.parametrize("case", ["accept", "reject", "navigation-unknown", "revocation"])
+    def test_ordinary_owner_full_page_actual_api(env, tmp_path, case):
+        store, settings, client, owner, other, project, material = env
+        assert store.sqlite and store.test_only and settings.mode == "mock" and not settings.live_enabled
+        source, _ = card(env)
+        alternate = store.project(owner, "Other owned project")
+        store.project(other, "Other identity project")
+        before = authority(store)
+        info = dict(case=case, project=project, other=alternate, card=source["id"],
+            output=str(tmp_path / "result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        calls = worker_runs = 0
+        process = None
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(["node", "tests/ordinary_owner_ui.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                    env={**os.environ, "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules")})
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        class CountedMock(MockModel):
+                            def request(self, messages, tools):
+                                nonlocal calls
+                                calls += 1
+                                assert {t["function"]["name"] for t in tools} == {"resource.read", "data.aggregate_csv"}
+                                return super().request(messages, tools)
+                        assert Worker(store, settings, CountedMock()).once()
+                        worker_runs += 1
+                        answer = dict(status=200, text="{}")
+                    elif request.get("command") == "revoke":
+                        with store.tx() as c:
+                            grant = dict(c.execute(select(grants).where(grants.c.principal_id == owner,
+                                grants.c.resource_id == material, grants.c.tool_ref == "resource.read")).mappings().one())
+                        response = client.post(f"/api/grants/{grant['id']}/revoke", json={"command": "revoke", "version": grant["revision"]})
+                        answer = dict(status=response.status_code, text=response.text)
+                    else:
+                        response = client.request(request["method"], request["path"],
+                            json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(status=response.status_code, text=response.text,
+                            content_type=response.headers.get("content-type"))
+                    process.stdin.write(json.dumps({"id": request["id"], **answer})+"\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+>           assert code == 0, (tmp_path / "node.stderr").read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+E             
+E             404 !== 200
+E             
+E                 at load (/workspace/Sim2Act/tests/ordinary_owner_ui.cjs:24:72)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async boot (/workspace/Sim2Act/tests/ordinary_owner_ui.cjs:32:134)
+E                 at async /workspace/Sim2Act/tests/ordinary_owner_ui.cjs:67:16
+E             
+E           assert 1 == 0
+
+tests/test_ordinary_owner_ui.py:65: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ordinary_owner_ui.py::test_ordinary_owner_full_page_actual_api[accept]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 3.21s
