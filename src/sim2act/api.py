@@ -950,6 +950,9 @@ def create_app(store=None, settings=None):
     from .ordinary_owner_review import mount as mount_ordinary_owner_review
 
     mount_ordinary_owner_review(app, db, platform_limits, identity)
+    from .csv_owner_review import mount as mount_csv_owner_review
+
+    mount_csv_owner_review(app, db, platform_limits, identity)
     from .ordinary_corrections import mount as mount_ordinary_corrections
 
     mount_ordinary_corrections(app, db, platform_limits, identity, s)
@@ -1084,6 +1087,10 @@ def create_app(store=None, settings=None):
     @app.get("/conditional-apps.js")
     def conditional_apps_js():
         return FileResponse(web / "conditional-apps.js", media_type="text/javascript")
+
+    @app.get("/csv-owner.js")
+    def csv_owner_js():
+        return FileResponse(web / "csv-owner.js", media_type="text/javascript")
 
     @app.get("/use.js")
     def use_js():

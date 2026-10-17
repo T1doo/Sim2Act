@@ -102,7 +102,7 @@ def submission_tx(store, guard):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None, logic_check=None, logic_tx=None, project_check=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None, logic_check=None, logic_tx=None, project_check=None, csv_review=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
@@ -110,6 +110,8 @@ def enqueue(
         raise DomainError("INVALID_INPUT", "Per-use modes are mutually exclusive")
     if human_correction is not None and (pb_use is not None or offline_replay is not None or owner_goal_fp is not None):
         raise DomainError("INVALID_INPUT", "Correction cannot change another execution mode")
+    if csv_review is not None and any(x is not None for x in (pa_use, pb_use, human_correction, offline_replay, owner_goal_fp, logic_check, project_check)):
+        raise DomainError("INVALID_INPUT", "CSV review cannot change another execution mode")
     use_body = pa_use if pa_use is not None else pb_use
     use_field = "pa_use" if pa_use is not None else "pb_use"
     guard: dict = {}
@@ -138,6 +140,10 @@ def enqueue(
         from .text_continuations import execution
 
         execution(store, c, user, i, release, limits)
+        if csv_review is not None:
+            from .csv_owner_review import supported
+            if not supported(release):
+                raise DomainError("UNSUPPORTED_CAPABILITY", "CSV review requires a single sum action")
         if "execution_source" in release["snapshot"]:
             from .csv_dag_instances import enqueue_tx
             if offline_replay is not None:
@@ -178,6 +184,8 @@ def enqueue(
             if release["id"] != member["context"]["release_id"] or iid == member["context"]["instance_id"]:
                 raise DomainError("VERSION_CONFLICT")
             request["project_check"] = project_check.model_dump()
+        if csv_review is not None:
+            request["csv_review"] = csv_review
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -263,6 +271,9 @@ def enqueue(
             "namespace": KIND,
             "model_requests": 0,
         }
+        if csv_review is not None:
+            from . import csv_owner_review
+            snapshot["csv_owner_review"] = csv_owner_review.prospective(release, source, input_value, csv_review)
         if pa_use is not None:
             snapshot["pa_base_data_version"] = i["data_version"]
         if own_goal is not None:
@@ -394,6 +405,11 @@ def enqueue(
                 "input_fingerprint": fp,
             },
         )
+        if csv_review is not None:
+            store.event(c, jid, "CSV_REVIEW_FROZEN", dict(
+                instance_id=iid, app_run_id=aid, release_id=release["id"],
+                binding_fingerprint=fingerprint(snapshot),
+                policy_fingerprint=fingerprint(snapshot["csv_owner_review"])))
         if human_correction is not None:
             correction.seal(c,user,snapshot,correction_ref)
             store.event(c,jid,"HUMAN_CORRECTION_ACCEPTED",dict(parent_run_id=correction_ref.parent_run_id,
@@ -474,6 +490,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         request["project_check"] = s["project_check"]
     if "offline_replay" in s:
         request["offline_replay"] = s["offline_replay"]
+    if "csv_review" in s:
+        request["csv_review"] = s["csv_review"]
     if "owner_goal_binding_fingerprint" in s:
         request["owner_goal_binding_fingerprint"] = s["owner_goal_binding_fingerprint"]
     if (

@@ -1,5 +1,7 @@
 """Authenticated INTERNAL_ENGINEERING_ONLY adapter; formal deployment stays disabled."""
 
+from typing import Literal
+
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
@@ -50,6 +52,7 @@ class InstanceInput(Strict):
 
 
 class AppRunInput(InstanceInput):
+    csv_review: Literal["FREEZE_SUM_ONLY_WITHOUT_MD"] | None = None
     expected_revision: int = Field(ge=1)
     input: dict
     offline_replay: list[dict] | None = Field(default=None, min_length=2, max_length=2)
@@ -368,6 +371,7 @@ def mount(app, store, limits, identity):
                 offline_replay=body.offline_replay,
                 require_offline_replay=True,
                 owner_goal_fp=body.expected_owner_goal_binding_fingerprint,
+                csv_review=body.csv_review,
                 submission=dict(endpoint="runs", body=body.model_dump(exclude_unset=True)),
             )
         )

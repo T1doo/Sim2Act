@@ -62,7 +62,7 @@ function ownerScope(view,value){
   return value?.principal_id===view.principal && value.project_id===view.project && value.instance_id===view.iid;
 }
 function ownerContract(view,value){
-  return ownerScope(view,value) && value.app_id===view.app && value.version===(view.spec ? "owner.natural-spec.v1" : "owner.generated-text.v1") && (!view.spec || value.run_id===view.rid) && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
+  return ownerScope(view,value) && value.app_id===view.app && value.version===(view.csv ? "owner.csv-sum.v1" : view.spec ? "owner.natural-spec.v1" : "owner.generated-text.v1") && (!view.spec || value.run_id===view.rid) && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
 }
 async function ownerValidate(view,state,key,current){
   const invalid=()=>{throw Error("签收读取身份、序列或回执绑定不一致");};

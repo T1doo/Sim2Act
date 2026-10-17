@@ -160,10 +160,12 @@ async function openApplicationUse(appId,id){
 }
 function clearApplicationUseData(v){
  v.instance=null;
+ $("use-csv-review-start")?.remove();
  for(const id of ["use-output","use-history","use-provenance","use-column","use-acceptance"])$(id).replaceChildren();
  $("use-form").hidden=true;$("use-refresh").hidden=false;
  $("use-info").textContent="当前版本或结果无法读取，请核对授权、来源和版本。读取失败不表示任务执行失败。";
  applicationUseButtons(v);
+ if(v.selected&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,null,null,true);
 }
 // Projection of authorized immutable evidence only. It cannot confirm or publish an app.
 function renderApplicationAcceptance(v,release,run){
@@ -182,7 +184,7 @@ function renderApplicationAcceptance(v,release,run){
  $("use-acceptance").replaceChildren(
   row(`固定版本样本工具检查：${checked?"PASS":"UNKNOWN"}。仅一个冻结样本的整数求和检查，不代表全部新输入或业务目标通过。`),
   row(run?`${v.historical?"所选历史":"本次"}技术执行：${status}；结果核对：${verified?`PASS · v${run.result_version}`:"尚无可核对的成功结果"}。`:"尚未选择运行；历史成功不作为本次验收。"),
-  row("目标语义验收：NOT_RUN；用户确认：PENDING；正式发布：关闭。内部版本批准不替代这些验收。"),
+  row(typeof renderCsvOwnerReview==="function"?"目标语义验收：NOT_RUN；本人适用范围声明见下方所选Run的独立读取；正式发布：关闭。内部版本批准不替代人工判断。":"目标语义验收：NOT_RUN；用户确认：PENDING；正式发布：关闭。内部版本批准不替代这些验收。"),
   row("适用范围：固定CSV材料，仅数值列参数可变；当前模型请求0。")
  );
 }
@@ -236,7 +238,7 @@ async function readApplicationUse(v){
   const release=await api(`/api/internal/releases/${instance.release_id}`);if(!current())return;
   const app=await api(`/api/apps/${v.appId}`);if(!current())return;
   if(!csvUseApp(app)||app.project_id!==v.project||release.project_id!==v.project||release.fingerprint!==instance.release_fingerprint||release.snapshot.draft.id!==v.appId||release.snapshot.draft.fingerprint!==app.fingerprint)throw Error("VERSION_CONFLICT");
-  v.instance=instance;v.app=app;
+  v.instance=instance;v.principal=instance.principal_id;v.app=app;
   const previous=$("use-column").value,pending=applicationUseRequests.get(applicationUseKey(v));
   $("use-column").replaceChildren(...app.input_guidance.columns.filter(c=>c.numeric).map(c=>new Option(c.name,c.name)));
   if([...$("use-column").options].some(o=>o.value===(pending?.state==="unknown"?pending.body.input.column:previous)))$("use-column").value=pending?.state==="unknown"?pending.body.input.column:previous;
@@ -261,6 +263,8 @@ async function readApplicationUse(v){
    if(!applicationUseCurrent(v)||v.busy)return;v.selected=r.id;v.historical=true;await readApplicationUse(v);
   },"查看这次运行")),...instance.data.map(record=>row(`历史结果 v${record.version} · ${record.data.result.column} 合计 ${record.data.result.sum}，${record.data.result.count} 条 · ${record.release_id}`)));
   renderApplicationAcceptance(v,release,run);
+  if(typeof renderCsvReviewStart==="function")renderCsvReviewStart(v,release);
+  if(run&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,run,release);
   applicationUseButtons(v);
  }catch(error){if(!current())return;clearApplicationUseData(v);throw error;}
 }
@@ -269,7 +273,8 @@ async function submitApplicationUse(v,recover=false){
  const key=applicationUseKey(v);let pending=applicationUseRequests.get(key);
  if(!recover){
   if(!v.instance||pending&&["sending","unknown","accepted-read-error"].includes(pending.state))return;
-  pending={state:"new",body:{expected_revision:v.instance.revision,expected_release_fingerprint:v.instance.release_fingerprint,input:{column:$("use-column").value},request_key:crypto.randomUUID()},runId:null,uncertain:false};applicationUseRequests.set(key,pending);
+  const csvReview=$("use-csv-review-optin")?.checked&&typeof csvReviewStartScope==="function"&&v.csvReviewScope===csvReviewStartScope(v);
+  pending={state:"new",body:{expected_revision:v.instance.revision,expected_release_fingerprint:v.instance.release_fingerprint,input:{column:$("use-column").value},request_key:crypto.randomUUID(),...(csvReview?{csv_review:"FREEZE_SUM_ONLY_WITHOUT_MD"}:{})},runId:null,uncertain:false};applicationUseRequests.set(key,pending);
  }
  if(!pending)return;
  if(!recover){$("use-acceptance").replaceChildren();v.selected=null;v.historical=false;$("use-output").replaceChildren(row("正在确认新运行的接受回执；下方历史结果不是本次新结果。"));}
