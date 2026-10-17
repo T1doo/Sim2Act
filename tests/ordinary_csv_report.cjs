@@ -86,10 +86,10 @@ async function main(){
  const ackStart=requests.length;$('csv-report-ack').checked=true;await action('csv-report-ack','change');
  if(['scope-project','scope-identity'].includes(info.case))check(requests.slice(ackStart).some(r=>r.method==='GET'&&r.path===`/api/runs/${rid}`),'new explicit acknowledgement rechecks the exact complete Run contract');
  const confirmRoute=`/api/runs/${rid}/confirm-csv-report`;
- if(info.case==='lost')drop=confirmRoute;
- if(info.case!=='lost')hold={path:confirmRoute,method:'POST'};
+ if(['lost','workspace-unknown'].includes(info.case))drop=confirmRoute;
+ if(!['lost','workspace-unknown'].includes(info.case))hold={path:confirmRoute,method:'POST'};
  const confirming=action('csv-report-confirm');
- if(info.case!=='lost'){
+ if(!['lost','workspace-unknown'].includes(info.case)){
   await wait(()=>!!release,'actual confirm receipt held');const count=requests.length;const old=$('csv-report-confirm');
   await old.onclick(new w.Event('click'));check(requests.length===count,'duplicate click while confirmation is in flight sends no second POST');
   if(info.case==='workspace-pending'){
@@ -110,6 +110,17 @@ async function main(){
  }
  await confirming;
  if(info.case==='workspace-pending'){observeContract('old accepted response released after current readback');check(!$('csv-report-confirm')&&$('raw-result').textContent.includes('QUEUED')&&requests.filter(r=>r.method==='POST'&&r.path===confirmRoute).length===1,'late old confirmation cannot overwrite current readback or add a POST');}
+ if(info.case==='workspace-unknown'){
+  const oldAck=$('csv-report-ack'),oldButton=$('csv-report-confirm'),oldSection=$('csv-report-contract'),count=requests.length;
+  check(oldButton.textContent==='恢复同一确认的回执','actual lost confirmation is UNKNOWN before navigating');
+  await workspaceRoundtrip();observeContract('UNKNOWN workspace return before any manual action');
+  check(requests.length===count,'UNKNOWN workspace return does not automatically reread or replay');
+  await action('csv-report-confirm');observeContract('returned visible UNKNOWN recovery clicked');
+  const attempts=requests.filter(r=>r.method==='POST'&&r.path===confirmRoute);
+  check(attempts.length===2&&JSON.stringify(attempts[0].body)===JSON.stringify(attempts[1].body),'returned UNKNOWN recovery actually replays only the exact frozen body and key');
+  check($('csv-report-contract')!==oldSection,'UNKNOWN workspace return uses a replacement confirmation view');
+  await staleControlsSendNothing(oldAck,oldButton,'UNKNOWN workspace return');
+ }
  if(info.case==='lost'){
   check($('csv-report-confirm')?.textContent==='恢复同一确认的回执','lost accepted confirmation offers exact original recovery');
   await action('csv-report-confirm');

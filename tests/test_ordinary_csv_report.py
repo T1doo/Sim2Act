@@ -321,6 +321,7 @@ def test_current_worker_budget_tightening_stops_before_tools(env, tmp_path):
         "navigation",
         "workspace-unconfirmed",
         "workspace-pending",
+        "workspace-unknown",
         "scope-project",
         "scope-identity",
     ],
