@@ -285,6 +285,8 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
         select(internal_approvals.c.project_id).where(internal_approvals.c.id == approval_id)
     ).scalar()
     store.lock_project(c, user, location)
+    from . import csv_goal_revisions as csv_revision
+    csv_revision.release_gate(store,c,user,approval_id=approval_id)
     a = approval(c, user, approval_id, exact_fp, "release", allow_consumed=True)
     if (a["payload"]["snapshot"].get("execution_source", {}).get("version") ==
             "internal.project-csv-read-sum-report.v1" and project_group is None):
@@ -307,6 +309,7 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
     validate_family(c, user, approval_id, snap)
     from .natural_logic_patches import validate_family as validate_logic_family
     validate_logic_family(c,user,approval_id,snap)
+    csv_revision.validate_family(c,user,approval_id,snap)
     current, _, _, _ = load_draft(store, c, user, draft["id"], limits, lock=True)
     validate_source_bytes(store, c, user, current)
     if (
@@ -320,6 +323,8 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
     if "natural_logic_source" in snap:
         from .natural_logic_patches import validate_snapshot as validate_logic
         validate_logic(store,c,user,snap,limits,commit=True)
+    if csv_revision.SOURCE in snap:
+        csv_revision.validate_snapshot(store,c,user,snap,limits,current=True)
     rid = new_id("irelease")
     row = {
         "id": rid,
@@ -339,6 +344,8 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
 
     if text_logic_reuse.independent(draft):
         text_logic_reuse.record_release_index(c, user, row)
+    if csv_revision.SOURCE in snap:
+        csv_revision.validate_snapshot(store,c,user,snap,limits,current=True)
     return row
 
 
@@ -523,8 +530,19 @@ def switch_preflight(store, c, user, iid, target_id, *, _state_out=None):
         raise DomainError("VERSION_CONFLICT", "Instance switch would create or retain a logic source cycle")
     from .project_natural_revalidation import pins as project_pins
     pins = logic_source_pins(store, c, user, i) + project_pins(c,user,i)
+    from . import csv_goal_revisions as csv_revision
+    pins += csv_revision.pins(c,user,iid)
     if pins:
         raise DomainError("VERSION_CONFLICT", "Instance supplies immutable logic source or check evidence")
+    if csv_revision.SOURCE in target["snapshot"]:
+        from .contracts import Limits
+        ref = target["snapshot"][csv_revision.SOURCE]["reference"]
+        # Use the exact frozen cap for this scope-only preflight. switch_target
+        # repeats the check with current platform limits before adoption.
+        _,sealed = csv_revision.pair(c,user,ref["instance_id"],csv_revision.PREVIEW,ref["preview_key"],csv_revision.Preview)
+        cap = Limits(**sealed["context"]["limits"])
+        value = csv_revision.validate_snapshot(store,c,user,target["snapshot"],cap)
+        csv_revision.eligibility(store,c,user,value,cap,i,target_id)
     state = dict(instance=i, current=current_trace, target=target_trace,
         target_id=target_id, target_fingerprint=target["fingerprint"], pins=pins)
     if _state_out is not None:
@@ -539,6 +557,8 @@ def switch_policy(store, c, user, i):
     from .project_natural_revalidation import pins as project_pins
     roles = (["check"] if hints["check_keys"] else []) + (["source"] if hints["source_ids"] else [])
     roles += [x["role"] for x in project_pins(c,user,i)]
+    from .csv_goal_revisions import pins as csv_goal_pins
+    roles += [x["role"] for x in csv_goal_pins(c,user,i["id"])]
     targets = c.execute(select(internal_releases.c.id).where(
         internal_releases.c.principal_id == user, internal_releases.c.project_id == i["project_id"],
         internal_releases.c.snapshot["draft"]["id"].as_string() == i["source_app_id"])).scalars().all()
@@ -591,6 +611,8 @@ def _read_release(store, c, user, rid, limits, *, archival_software=None, _origi
     validate_family(c, user, r["approval_id"], s)
     from .natural_logic_patches import validate_family as validate_logic_family
     validate_logic_family(c,user,r["approval_id"],s)
+    from . import csv_goal_revisions as csv_revision
+    csv_revision.validate_family(c,user,r["approval_id"],s)
     if (
         s["namespace"] != NAMESPACE
         or s["formal_publication_enabled"] is not False
@@ -606,6 +628,8 @@ def _read_release(store, c, user, rid, limits, *, archival_software=None, _origi
     origin: dict[str, Any] = _origin_out if _origin_out is not None else {}
     validate_frozen_candidate(store, c, user, draft, limits, _origin_out=origin,_reuse_origin=_reuse_origin)
     validate_source_bytes(store, c, user, draft)
+    if csv_revision.SOURCE in s:
+        csv_revision.validate_snapshot(store,c,user,s,limits)
     if "natural_logic_source" in s:
         from .natural_logic_patches import validate_snapshot as validate_logic
         logic_value = validate_logic(store,c,user,s,limits,_verified_origin=origin)
@@ -638,6 +662,9 @@ def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, requ
     r = read_release(store, c, user, rid, limits)
     if r["fingerprint"] != expected_release_fp:
         raise DomainError("VERSION_CONFLICT")
+    from .csv_goal_revisions import SOURCE
+    if SOURCE in r["snapshot"]:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "Explicitly adopt this checked version on its original instance")
     draft = r["snapshot"]["draft"]
     from .text_continuations import no_context
 
@@ -695,6 +722,15 @@ def data_rows(c, iid, *, store=None, user=None, run_id=None):
     from .pb_natural_uses import data_scope_gate
 
     data_scope_gate(store, c, user, iid, app_run_id=run_id)
+    if store is not None and user is not None:
+        from .csv_goal_revisions import job_gate as csv_revision_gate
+        from .db import internal_run_bindings
+        job_ids = c.execute(select(internal_run_bindings.c.run_id)
+            .join(internal_app_runs,internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
+            .where(internal_app_runs.c.instance_id == iid,
+                *([] if run_id is None else [internal_app_runs.c.id == run_id]))).scalars().all()
+        for job_id in job_ids:
+            csv_revision_gate(store,c,user,job_id)
     rows = (
         c.execute(
             select(internal_instance_data)
@@ -756,6 +792,10 @@ def run_instance(
         ).scalar()
         store.lock_project(c, user, pid)
         i, r = instance(store, c, user, iid, limits, lock=True)
+        from .csv_goal_revisions import SOURCE
+        from .csv_goal_revisions import pins as csv_goal_pins
+        if SOURCE in r["snapshot"] or csv_goal_pins(c,user,iid):
+            raise DomainError("UNSUPPORTED_CAPABILITY", "CSV Goal revisions require the durable AppRun Worker")
         if r["snapshot"]["draft"]["candidate"].get("namespace") == "closed-text-four-step.v1":
             raise DomainError("UNSUPPORTED_CAPABILITY", "Four-step text requires the durable AppRun worker")
         if "execution_source" in r["snapshot"]:
@@ -851,6 +891,10 @@ def compatible(old, new):
 
 
 def switch_target(store, c, user, i, old, target, limits):
+    from . import csv_goal_revisions as csv_revision
+    if csv_revision.SOURCE in target["snapshot"]:
+        value = csv_revision.validate_snapshot(store,c,user,target["snapshot"],limits)
+        csv_revision.eligibility(store,c,user,value,limits,i,target["id"])
     from .text_continuations import no_context
 
     no_context(store, c, user, old["snapshot"]["draft"])
@@ -881,9 +925,10 @@ def switch_target(store, c, user, i, old, target, limits):
 
 
 def prepare_switch(
-    store, user, iid, target_id, expected_revision, limits, *, expected_target_fingerprint=None
+    store, user, iid, target_id, expected_revision, limits, *, expected_target_fingerprint=None, _tx=None
 ):
-    with store.tx() as c:
+    from contextlib import nullcontext
+    with (nullcontext(_tx) if _tx is not None else store.tx()) as c:
         pid = c.execute(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
         ).scalar()

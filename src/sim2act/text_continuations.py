@@ -483,6 +483,8 @@ def draft_gate(store, c, user, aid):
 
 
 def release_gate(store, c, user, rid):
+    from .csv_goal_revisions import release_gate as csv_revision_gate
+    csv_revision_gate(store,c,user,rid)
     aid = c.execute(select(internal_releases.c.snapshot["draft"]["id"].as_string())
         .where(internal_releases.c.id == rid, internal_releases.c.principal_id == user)).scalar_one_or_none()
     if aid is not None:
@@ -490,6 +492,8 @@ def release_gate(store, c, user, rid):
 
 
 def job_gate(store, c, user, rid, *, _spec_scope_checked=False):
+    from .csv_goal_revisions import job_gate as csv_revision_gate
+    csv_revision_gate(store,c,user,rid)
     from .pa_spec_apps import job_scope_gate as spec_job_gate
     if not _spec_scope_checked:
         spec_job_gate(store, c, user, rid)

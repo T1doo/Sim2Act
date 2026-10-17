@@ -123,6 +123,8 @@ def source_scope_gate(store, c, rid):
         if job_scope_gate(store, c, metadata["principal_id"], rid):
             return False
         store.own_project(c, metadata["principal_id"], metadata["project_id"])
+        from .csv_goal_revisions import job_gate as csv_revision_gate
+        csv_revision_gate(store,c,metadata["principal_id"],rid)
         from .csv_full_report import scope_gate as csv_full_report_scope_gate
 
         csv_full_report_scope_gate(store, c, rid)

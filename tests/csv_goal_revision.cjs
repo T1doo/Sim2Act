@@ -1,0 +1,107 @@
+'use strict';
+const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
+const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),requests=[],checks=[],assets=[];let serial=0,dom,w,$,drop=false,hold=null,release=null;
+readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
+const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
+const check=(ok,label)=>{assert(ok,label);checks.push(label);};
+const wait=async(fn,label)=>{const end=Date.now()+15000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('bounded wait '+label);};
+function visible(el){if(!el?.isConnected)return false;for(let p=el;p;p=p.parentElement)if(p.hidden||w.getComputedStyle(p).display==='none')return false;return true;}
+async function action(el,type='click'){
+ if(typeof el==='string')el=$(el);assert(visible(el),'visible '+(el?.id||el?.textContent));assert(!el.matches(':disabled'),'enabled '+el.id);
+ const work=[],restore=[];
+ for(const [node,name]of [[el,type==='change'?'onchange':'onclick'],[type==='click'?el.form:null,'onsubmit']]){const fn=node?.[name];if(typeof fn!=='function')continue;const wrap=function(e){const p=fn.call(this,e);work.push(Promise.resolve(p));return p;};node[name]=wrap;restore.push(()=>{if(node[name]===wrap)node[name]=fn;});}
+ try{if(type==='click')el.click();else el.dispatchEvent(new w.Event(type,{bubbles:true}));await Promise.all(work);}finally{restore.forEach(fn=>fn());}
+}
+const posts=suffix=>requests.filter(r=>r.method==='POST'&&r.path.endsWith(suffix));
+async function nav(tab){await action(w.document.querySelector(`#workspace-nav [data-tab="${tab}"]`));}
+async function project(id){$('project-select').value=id;await action('project-select','change');}
+async function open(){await nav('apps');await action([...$('use-list').children].find(x=>x.dataset.instanceId===info.instance).querySelector('button'));}
+async function boot(){
+ const load=async path=>{const r=await rpc({method:'GET',path});assert.equal(r.status,200);assets.push({path,sha256:crypto.createHash('sha256').update(r.text).digest('hex')});return r.text;};
+ dom=new JSDOM(await load('/'),{url:'http://testserver/',runScripts:'dangerously',pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});w.setInterval=()=>0;
+ const style=w.document.createElement('style');style.textContent=await load('/app.css');w.document.head.append(style);
+ w.fetch=async(path,options={})=>{const request={path,method:options.method||'GET',body:options.body?JSON.parse(options.body):undefined};requests.push(request);const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response=JSON.parse(r.text);
+  if(hold===path){hold=null;await new Promise(resolve=>{release=resolve;});}
+  if(drop&&request.method==='POST'&&path.endsWith('/csv-goal-revisions/checks')){drop=false;assert.equal(r.status,202);request.delivery='ACTUAL_202_LOST';throw Error('synthetic lost CHECK response');}
+  return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});
+ };
+ for(const script of [...w.document.querySelectorAll('script[src]')]){const node=w.document.createElement('script');node.textContent=await load(script.getAttribute('src'));w.document.body.append(node);}
+ $('token').value='synthetic-test-A';await action('connect');await project(info.project);await open();
+ check(visible($('csv-goal-edit'))&&$('use-info').textContent.includes('CSV'),'saved CSV instance exposes Goal revision entry');
+ check(posts('/previews').length===0&&posts('/checks').length===0,'opening instance only reads and never submits revision');
+}
+async function revise(){
+ await action('csv-goal-edit');check(visible($('goal-card-goal'))&&$('goal-card-status').textContent.includes('v1'),'original same Goal card opens for explicit editing');
+ $('goal-card-title').value='数量目标 v2';$('goal-card-goal').value='明确汇总 quantity，保留原材料与历史';await action($('goal-card-save'));
+ check($('goal-card-status').textContent.includes('v2'),'explicit save creates same card v2');await open();await action('csv-goal-baseline');
+ check($('csv-goal-revision-proof').textContent.includes('明确汇总 quantity'),'authorized exact new Goal is visible before mapping');
+ $('csv-goal-from').value='amount';$('csv-goal-to').value='quantity';await action('csv-goal-to','change');
+ const button=$('csv-goal-preview'),sending=action(button);await button.onclick(new w.Event('click'));await sending;
+ check(posts('/csv-goal-revisions/previews').length===1&&$('csv-goal-check').disabled,'one explicit revision POST and CHECK awaits separate consent');
+}
+async function checkRun(){
+ await action('csv-goal-check-ack');if(info.case==='lost')drop=true;
+ if(['deliver','lost'].includes(info.case))hold=`/api/internal/instances/${info.instance}/csv-goal-revisions/checks`;
+ const b=$('csv-goal-check'),sending=action(b);await b.onclick(new w.Event('click'));
+ if(['deliver','lost'].includes(info.case)){
+  await wait(()=>release,'actual CHECK acceptance held');const before=$('csv-goal-revision');
+  if(info.case==='deliver'){
+   await w.readApplicationUse(w.eval('applicationUse'));check($('csv-goal-revision')===before&&$('csv-goal-check').disabled,'same-view polling preserves in-flight revision controller');
+  }else{
+   await nav('resources');await nav('apps');await wait(()=>visible($('csv-goal-revision')),'workspace return rebuilt current controller');
+   check($('csv-goal-revision')!==before&&$('csv-goal-check').disabled,'same instance new workspace controller keeps original sending intent locked');
+  }
+  const done=release;release=null;done();
+ }
+ await sending;
+ if(info.case==='lost'){
+  check(visible($('csv-goal-recover'))&&$('csv-goal-check').disabled,'lost actual202 freezes original CHECK intent');
+  await action('csv-goal-recover');
+  check(posts('/csv-goal-revisions/checks').length===1&&requests.some(x=>x.method==='GET'&&x.path.endsWith('/checks/'+posts('/csv-goal-revisions/checks')[0].body.request_key)),'navigation return recovers original CHECK by GET only');
+ }
+ check(posts('/csv-goal-revisions/checks').length===(info.case==='rejected'?2:1),'double click creates exactly one CHECK per explicit accepted intent');
+ const accepted=posts('/csv-goal-revisions/checks').find(x=>x.status===202),jid=accepted.response.run_id;
+ await rpc({command:'worker',run:jid});await action('csv-goal-outcome');
+ check($('csv-goal-revision-proof').textContent.includes('"status": "PASS"')&&$('csv-goal-revision-status').textContent.includes('人工 PENDING'),'actual original Worker check passes separately from human acceptance');
+ check(![...$('use-list').children].some(x=>x.dataset.instanceId===accepted.response.check_instance_id),'CHECK is excluded from business use directory');
+}
+(async()=>{try{
+ await boot();await revise();
+ if(info.case==='navigation'){
+  await action('csv-goal-check-ack');hold=`/api/internal/instances/${info.instance}/csv-goal-revisions/checks`;const sending=action('csv-goal-check');await wait(()=>release,'accepted CHECK held');
+  await nav('projects');await project(info.other);const done=release;release=null;done();await sending;
+  check(!visible($('csv-goal-revision'))&&w.eval('applicationUse===null'),'late CHECK cannot populate another project');
+  const key=posts('/csv-goal-revisions/checks')[0].body.request_key;
+  check(!requests.some(x=>x.method==='GET'&&x.path.endsWith('/checks/'+key)),'late accepted callback sends no original-project GET');
+  await project(info.project);await open();await action('csv-goal-recover');check(posts('/csv-goal-revisions/checks').length===1,'same-owner return recovers the one accepted CHECK');
+  await action('csv-goal-outcome');
+  // A second instance has its own UI selection fence; delayed baseline cannot
+  // replace its visible source or install an old approval.
+  hold=`/api/internal/instances/${info.instance}/csv-goal-revisions/checks/${key}`;const reading=action('csv-goal-outcome');await wait(()=>release,'outcome held');
+  await action([...$('use-list').children].find(x=>x.dataset.instanceId===info.instance2).querySelector('button'));const doneRead=release;release=null;doneRead();await reading;
+  check(w.eval('applicationUse.id')===info.instance2&&!$('csv-goal-revision-proof').textContent.includes(posts('/csv-goal-revisions/checks')[0].response.run_id),'late outcome cannot replace another selected instance');
+  hold=`/api/internal/instances/${info.instance2}/csv-goal-revisions/context`;const baseline=action('csv-goal-baseline');await wait(()=>release,'other instance baseline held');
+  await action('identity-switch');$('token').value='synthetic-test-B';await action('connect');const finish=release;release=null;finish();await baseline;
+  check(!visible($('csv-goal-revision'))&&w.eval('applicationUse===null'),'late CHECK read cannot populate another account');
+ }else{
+  if(info.case==='rejected'){
+   await rpc({command:'drift'});await action('csv-goal-check-ack');await action('csv-goal-check');
+   check(posts('/csv-goal-revisions/checks').length===1&&posts('/csv-goal-revisions/checks')[0].status===409,'intervening real Run rejects CHECK before acceptance');
+   await open();check(visible($('csv-goal-reset'))&&!visible($('csv-goal-recover')),'proved absent rolled-back request exposes explicit fresh preparation');
+   await action('csv-goal-reset');await action('csv-goal-baseline');$('csv-goal-from').value='amount';$('csv-goal-to').value='quantity';await action('csv-goal-to','change');await action('csv-goal-preview');
+   check(posts('/csv-goal-revisions/previews').length===2&&posts('/csv-goal-revisions/previews')[0].body.request_key!==posts('/csv-goal-revisions/previews')[1].body.request_key,'explicit fresh proposal uses a new key while old rejected key remains recorded');
+  }
+  await checkRun();await action('csv-goal-version');check($('csv-goal-release').disabled&&!$('csv-goal-release-ack').checked,'new Release requires fresh explicit confirmation');
+  await action('csv-goal-release-ack');await action('csv-goal-release');check($('csv-goal-adopt').disabled&&posts('/switch-approvals').length===0,'saving Release has not adopted business instance');
+  await action('csv-goal-adopt-prepare');check($('csv-goal-revision-proof').textContent.includes(info.instance)&&$('csv-goal-adopt').disabled,'CAS adoption proof names original instance and awaits consent');
+  await action('csv-goal-adopt-ack');await action('csv-goal-adopt');
+  check([...$('use-column').options].map(x=>x.value).join() === 'quantity'&&$('use-info').textContent.includes('Goal v2'),'same instance now exposes only verified new Release column and Goal');
+  $('use-csv-review-optin').checked=true;await action('use-submit');const run=posts('/runs').at(-1).response.run_id;
+  await rpc({command:'worker',run});await action('use-refresh');
+  check($('use-output').textContent.includes('合计 5')&&$('use-output').textContent.includes(run),'same new Run shows actual different typed result');
+  await action('csv-owner-read');check($('csv-owner-status').textContent.includes('PENDING')&&$('csv-owner-body').textContent.includes('5'),'new Run human acceptance opens PENDING on exact new result');
+  const record=await rpc({command:'proof',run});check(record.status===200,'cold server proof verifies same app runtime, original provenance, old result and Goal v2');
+ }
+ await wait(()=>requests.every(x=>Number.isInteger(x.status)),'all actual API replies settle');
+ fs.writeFileSync(info.output,JSON.stringify({status:'PASS',checks,requests,assets},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');process.exit(0);
+}catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:error.stack,checks,requests,assets},null,2));if(dom)dom.window.close();process.stderr.write(error.stack+'\n');process.stdout.write(JSON.stringify({done:true})+'\n');process.exit(1);}})();

@@ -102,10 +102,12 @@ def submission_tx(store, guard):
 
 def enqueue(
     store, user, iid, expected_revision, release_fp, input_value, key, limits,
-    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None, logic_check=None, logic_tx=None, project_check=None, csv_review=None,
+    *, offline_replay=None, require_offline_replay=False, owner_goal_fp=None, pb_use=None, submission=None, human_correction=None, pa_use=None, logic_check=None, logic_tx=None, project_check=None, csv_review=None, csv_goal_check=None,
 ):
     if not isinstance(key, str) or not 1 <= len(key) <= 100:
         raise DomainError("INVALID_INPUT")
+    if csv_goal_check is not None and any(x is not None for x in (pa_use,pb_use,human_correction,offline_replay,owner_goal_fp,logic_check,project_check)):
+        raise DomainError("INVALID_INPUT", "CSV Goal checks cannot change another execution mode")
     if pa_use is not None and (pb_use is not None or human_correction is not None or offline_replay is not None or owner_goal_fp is not None):
         raise DomainError("INVALID_INPUT", "Per-use modes are mutually exclusive")
     if human_correction is not None and (pb_use is not None or offline_replay is not None or owner_goal_fp is not None):
@@ -137,6 +139,9 @@ def enqueue(
         if human_correction is not None:
             limits = natural_spec_corrections.bounded_limits(limits,Limits(**human_correction[1]["proposed_limits"]))
         i, release = instance(store, c, user, iid, scope_limits, lock=True)
+        from . import csv_goal_revisions as csv_revision
+        if csv_revision.pins(c,user,iid) and csv_goal_check is None:
+            raise DomainError("VERSION_CONFLICT", "This isolated instance is reserved for its original CSV Goal CHECK")
         from .text_continuations import execution
 
         execution(store, c, user, i, release, limits)
@@ -186,6 +191,11 @@ def enqueue(
             request["project_check"] = project_check.model_dump()
         if csv_review is not None:
             request["csv_review"] = csv_review
+        csv_ref = csv_goal_check
+        if csv_ref is None and csv_revision.SOURCE in release["snapshot"]:
+            csv_ref = csv_revision.Reference.model_validate(release["snapshot"][csv_revision.SOURCE]["reference"])
+        if csv_ref is not None:
+            request[csv_revision.MARKER] = csv_ref.model_dump()
         fp = fingerprint(request)
         old = (
             c.execute(
@@ -256,6 +266,9 @@ def enqueue(
             use_checked, _, use_goal = pb_natural_uses.approve(store, c, user, i, release, use_body, limits, family=use_family)
             draft = {**copy.deepcopy(draft), "candidate": use_checked["effective_candidate"],
                      "fingerprint": use_checked["effective_fingerprint"]}
+        if csv_ref is not None:
+            draft,_,_,_ = csv_revision.bound(store,c,user,release,limits,
+                {**request,"instance_id":iid},current=True)
         resource_ref = draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
         source = c.execute(select(resources).where(resources.c.id == resource_ref)).mappings().one()
         snapshot = {
@@ -306,6 +319,13 @@ def enqueue(
             request_model="intern-s2",
         ).model_dump()
         from . import pa_spec_apps, text_workflows
+        if csv_ref is not None:
+            _,revision_value = csv_revision.load_preview(store,c,user,csv_ref.instance_id,csv_ref.preview_key,limits)
+            source_goal = revision_value["context"]["goal"]
+            snapshot["csv_goal"] = source_goal
+            contract["goal"] = csv_revision.goal_spec(source_goal,contract["goal"])
+            FrozenRunContract.model_validate(contract)
+            goal = source_goal["snapshot"]["content"]["goal"]
         if pa_spec_apps.is_candidate(draft["candidate"]):
             source_goal = correction_value["context"]["source_goal"] if human_correction is not None else use_goal.model_dump() if use_goal is not None else logic_goal if logic_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
             snapshot["spec_goal"] = source_goal
@@ -356,6 +376,7 @@ def enqueue(
                     "tools": 0,
                     "repairs": 0,
                     "reserved_tokens": 0,
+                    **({csv_revision.MARKER:fingerprint(csv_ref.model_dump())} if csv_ref is not None else {}),
                     **({"text_workflow": text_workflows.VERSION} if text_workflows.is_candidate(draft["candidate"]) else {}),
                     **({"spec_family": draft["candidate"]["namespace"]} if pa_spec_apps.is_candidate(draft["candidate"]) else {}),
                 },
@@ -389,6 +410,10 @@ def enqueue(
             pa_spec_apps.seal_job_scope(c, user, draft, snapshot)
         if logic_check is not None:
             logic.remember(c,user,jid,logic.JOB,"accepted",logic_check,logic_check.model_dump())
+        if csv_ref is not None:
+            csv_revision.remember(c,user,jid,csv_revision.JOB,"accepted",csv_ref,csv_ref.model_dump())
+            store.event(c,jid,"CSV_GOAL_REVISION_FROZEN",dict(reference=csv_ref.model_dump(),
+                reference_fingerprint=fingerprint(csv_ref.model_dump()),instance_id=iid,app_run_id=aid))
         if project_check is not None:
             project.remember(c,user,jid,project.JOB,"accepted",project_check,project_check.model_dump())
         if use_body is not None:
@@ -492,6 +517,9 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         request["offline_replay"] = s["offline_replay"]
     if "csv_review" in s:
         request["csv_review"] = s["csv_review"]
+    from . import csv_goal_revisions as csv_revision
+    if csv_revision.MARKER in s:
+        request[csv_revision.MARKER] = s[csv_revision.MARKER]
     if "owner_goal_binding_fingerprint" in s:
         request["owner_goal_binding_fingerprint"] = s["owner_goal_binding_fingerprint"]
     if (
@@ -537,6 +565,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         from .app_owner_goals import verify_frozen_run
 
         verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
+        csv_revision.verify_job(store,c,user,job,s,r,limits,contract)
         if "offline_replay" in s:
             from .agent_apps import is_agent, offline_replay_model
 
@@ -634,6 +663,9 @@ def command_job(store, user, rid, command, version):
         from .pb_natural_uses import control_scope
 
         metadata = control_scope(store, c, user, rid, lock=True)
+        if metadata is None:
+            from .csv_goal_revisions import control_scope as csv_control_scope
+            metadata = csv_control_scope(store,c,user,rid,lock=True)
         if metadata is not None and command != "resume":
             job, a = metadata
         else:
@@ -841,12 +873,14 @@ def prepare_dispatch(worker, run):
 
         execution(store, c, run["principal_id"], i, release,
                   Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields}))
-        draft, manifest, action, _ = validate_frozen_candidate(
+        from .csv_goal_revisions import bound as csv_bound
+        draft, manifest, action, _ = csv_bound(
             store,
             c,
             run["principal_id"],
-            release["snapshot"]["draft"],
+            release,
             Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields}),
+            s,current=True,
         )
         from .app_owner_goals import check_run
 
@@ -985,8 +1019,9 @@ def commit_result(worker, run, plan, output):
         from .text_continuations import execution
 
         execution(store, c, run["principal_id"], i, release, limits)
-        draft, manifest, action, _ = validate_frozen_candidate(
-            store, c, run["principal_id"], release["snapshot"]["draft"], limits
+        from .csv_goal_revisions import bound as csv_bound
+        draft, manifest, action, _ = csv_bound(
+            store, c, run["principal_id"], release, limits,s,current=True
         )
         from .app_owner_goals import check_run
 
@@ -1152,6 +1187,8 @@ def commit_result(worker, run, plan, output):
         )
         # This independent authority may expire while the local append is made.
         # Recheck before transaction commit so the entire append rolls back.
+        if "csv_goal_revision" in s:
+            csv_bound(store,c,run["principal_id"],release,limits,s,current=True)
         if draft["candidate"].get("task_proof", {}).get("proof", {}).get("kind") == "authorized_data_free_text_logic.v1":
             validate_frozen_candidate(store, c, run["principal_id"], draft, limits)
             check_run(store, c, run["principal_id"], draft, limits, s)

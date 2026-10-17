@@ -1049,6 +1049,10 @@ def create_app(store=None, settings=None):
     def csv_full_report_script():
         return FileResponse(web / "csv-full-report.js", media_type="text/javascript")
 
+    @app.get("/csv-goal-revision.js")
+    def csv_goal_revision_script():
+        return FileResponse(web / "csv-goal-revision.js", media_type="text/javascript")
+
     @app.get("/ordinary-csv.js")
     def ordinary_csv_js():
         return FileResponse(web / "ordinary-csv.js", media_type="text/javascript")

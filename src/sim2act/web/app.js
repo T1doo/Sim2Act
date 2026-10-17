@@ -951,6 +951,7 @@ $("goal-card-form").onsubmit=safe(async()=>{
 
 
 function selectWorkspace(id,preserveFirstGuide=null) {
+  if(typeof clearCsvGoalRevision === "function")clearCsvGoalRevision();
   if(typeof clearSavedDagUse === "function")clearSavedDagUse();
   if(naturalFirstGuide!==preserveFirstGuide)clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
@@ -962,6 +963,7 @@ function selectWorkspace(id,preserveFirstGuide=null) {
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
   if(typeof resetOrdinaryRubricAcknowledgement === "function")resetOrdinaryRubricAcknowledgement();
   if(id === "apps" && typeof resumeCsvOwnerReview === "function")resumeCsvOwnerReview();
+  if(id === "apps" && typeof resumeCsvGoalRevision === "function")resumeCsvGoalRevision();
   if(id === "projects"){if(typeof resumeOrdinaryOwnerReview === "function")resumeOrdinaryOwnerReview();resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();if(typeof resumeCsvSumExtraction === "function")resumeCsvSumExtraction();if(typeof resumeCsvFullReportExtraction === "function")resumeCsvFullReportExtraction();}
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");

@@ -14,6 +14,7 @@ const naturalUseFamily=a=>{
 const applicationUseCurrent=v=>!!v && applicationUse===v && v.identity===token && v.project===$("project-select").value && v.generation===applicationUseGeneration;
 const applicationUseKey=v=>JSON.stringify([v.identity,v.project,v.id]);
 function clearApplicationUse(clearList=false){
+ if(typeof clearCsvGoalRevision==="function")clearCsvGoalRevision(applicationUse);
  if(typeof clearCsvFullReport === "function")clearCsvFullReport();
  applicationUseGeneration++;applicationUse=null;
  if(clearList)clearConditionalChecks(true);
@@ -69,6 +70,7 @@ async function refreshApplicationUse(apps){
   if(!current())return;
   const sumOnly=app.candidate?.task_proof?.proof?.kind==='completed_ordinary_csv_report_sum_source.v1';
   for(const instance of reply.items){
+   if(instance.switch_policy?.roles?.includes("csv_goal_check"))continue;
    if(instance.project_id!==project||instance.source_app_id!==app.id)throw Error("VERSION_CONFLICT");
    const item=row(`${app.name} · CSV 单步汇总${sumOnly?' · 普通成功任务提取，仅求和、不含MD报告':''} · 未发布内部版本 · 结果版本 ${instance.data_version} · ${instance.id.slice(0,18)}`,async()=>{
     if(selectable())await openApplicationUse(app.id,instance.id);
@@ -144,8 +146,8 @@ async function openSavedInternalUse(appId,id,family,selectionCurrent=()=>true){
 function applicationUseButtons(v){
  if(!applicationUseCurrent(v))return;
  const pending=applicationUseRequests.get(applicationUseKey(v));
- const locked=pending&&["sending","unknown","accepted-read-error"].includes(pending.state);
- if(locked&&[...$("use-column").options].some(o=>o.value===pending.body.input.column))$("use-column").value=pending.body.input.column;
+ const pendingLocked=pending&&["sending","unknown","accepted-read-error"].includes(pending.state),locked=!!v.csvGoalRevision?.busy||pendingLocked;
+ if(pendingLocked&&[...$("use-column").options].some(o=>o.value===pending.body.input.column))$("use-column").value=pending.body.input.column;
  $("use-submit").disabled=v.busy||locked||!$("use-column").value;
  $("use-column").disabled=v.busy||locked;
  $("use-recover").hidden=!pending||!["unknown","accepted-read-error"].includes(pending.state);
@@ -166,6 +168,7 @@ async function openApplicationUse(appId,id){
  }catch(error){if(applicationUseCurrent(v)){clearApplicationUseData(v);throw error;}}
 }
 function clearApplicationUseData(v){
+ if(typeof clearCsvGoalRevision==="function")clearCsvGoalRevision(v);
  v.instance=null;
  $("use-csv-review-start")?.remove();
  for(const id of ["use-output","use-history","use-provenance","use-column","use-acceptance"])$(id).replaceChildren();
@@ -238,7 +241,7 @@ function csvRunDownloadControl(v,run){
  return node;
 }
 async function readApplicationUse(v){
- const generation=++v.readGeneration,current=()=>applicationUseCurrent(v)&&generation===v.readGeneration;
+ const generation=++v.readGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,current=()=>applicationUseCurrent(v)&&generation===v.readGeneration&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
  try{
   const instance=await api(`/api/internal/instances/${v.id}`);if(!current())return;
   if(instance.project_id!==v.project||instance.source_app_id!==v.appId||instance.id!==v.id||instance.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
@@ -247,10 +250,12 @@ async function readApplicationUse(v){
   if(!csvUseApp(app)||app.project_id!==v.project||release.project_id!==v.project||release.fingerprint!==instance.release_fingerprint||release.snapshot.draft.id!==v.appId||release.snapshot.draft.fingerprint!==app.fingerprint)throw Error("VERSION_CONFLICT");
   v.instance=instance;v.principal=instance.principal_id;v.app=app;
   const previous=$("use-column").value,pending=applicationUseRequests.get(applicationUseKey(v));
-  $("use-column").replaceChildren(...app.input_guidance.columns.filter(c=>c.numeric).map(c=>new Option(c.name,c.name)));
+  const revision=release.snapshot.csv_goal_revision_source;
+  $("use-column").replaceChildren(...app.input_guidance.columns.filter(c=>c.numeric&&(!revision||c.name===revision.input.column)).map(c=>new Option(c.name,c.name)));
   if([...$("use-column").options].some(o=>o.value===(pending?.state==="unknown"?pending.body.input.column:previous)))$("use-column").value=pending?.state==="unknown"?pending.body.input.column:previous;
   const material=release.snapshot.draft.candidate.manifest.data_bindings[0].resource_ref;
   $("use-info").textContent=`${app.name} · 未发布内部版本 · 固定材料 ${material} · 只读CSV求和；仅数值列可变，0模型请求，目标语义验收未执行。`;
+  if(revision)$("use-info").textContent+=` 当前 Goal v${revision.goal.version}：${revision.goal.snapshot.content.goal}；固定新列 ${revision.input.column}。`;
   $("use-provenance").textContent=JSON.stringify({instance_id:v.id,release_id:instance.release_id,revision:instance.revision,release_fingerprint:instance.release_fingerprint,resource_id:material,source:app.candidate.task_proof||app.candidate.extraction||null},null,2);
   $("use-form").hidden=false;$("use-refresh").hidden=false;
   $("use-output").replaceChildren();
@@ -269,14 +274,17 @@ async function readApplicationUse(v){
   $("use-history").replaceChildren(...instance.runs.map(r=>row(`${r.id.slice(0,18)} · ${r.status} · 结果版本 ${r.result_version??"无"}`,async()=>{
    if(!applicationUseCurrent(v)||v.busy)return;v.selected=r.id;v.historical=true;await readApplicationUse(v);
   },"查看这次运行")),...instance.data.map(record=>row(`历史结果 v${record.version} · ${record.data.result.column} 合计 ${record.data.result.sum}，${record.data.result.count} 条 · ${record.release_id}`)));
-  renderApplicationAcceptance(v,release,run);
+  let runRelease=release;
+  if(run&&run.release_id!==release.id){runRelease=await api(`/api/internal/releases/${run.release_id}`);if(!current())return;if(runRelease.snapshot.draft.id!==v.appId||runRelease.id!==run.release_id)throw Error("VERSION_CONFLICT");}
+  renderApplicationAcceptance(v,runRelease,run);
   if(typeof renderCsvReviewStart==="function")renderCsvReviewStart(v,release);
-  if(run&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,run,release);
+  if(run&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,run,runRelease);
+  if(typeof renderCsvGoalRevision==="function")renderCsvGoalRevision(v,release);
   applicationUseButtons(v);
  }catch(error){if(!current())return;clearApplicationUseData(v);throw error;}
 }
 async function submitApplicationUse(v,recover=false){
- if(!applicationUseCurrent(v)||v.busy)return;
+ if(!applicationUseCurrent(v)||v.busy||v.csvGoalRevision?.busy)return;
  const key=applicationUseKey(v);let pending=applicationUseRequests.get(key);
  if(!recover){
   if(!v.instance||pending&&["sending","unknown","accepted-read-error"].includes(pending.state))return;

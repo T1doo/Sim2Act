@@ -118,6 +118,9 @@ def mount(app, store, limits, identity):
                 from .pb_natural_uses import control_scope
 
                 metadata = control_scope(store, c, user, rid, iid=iid)
+                if metadata is None:
+                    from .csv_goal_revisions import control_scope as csv_control_scope
+                    metadata = csv_control_scope(store,c,user,rid,iid=iid)
                 if metadata is not None:
                     return {**metadata[0], "accepted_spec_metadata": True}
             if historical:
@@ -155,6 +158,8 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/approvals/{aid}")
     def inspect_approval(aid: str, user=user_dependency):
         with store.tx() as c:
+            from .csv_goal_revisions import release_gate as csv_revision_gate
+            csv_revision_gate(store,c,user,approval_id=aid)
             from .text_continuations import draft_gate
 
             app_id = c.execute(select(internal_approvals.c.payload["snapshot"]["draft"]["id"].as_string())
@@ -179,6 +184,10 @@ def mount(app, store, limits, identity):
             lifecycle.validate_source_bytes(store, c, user, draft)
             from . import natural_logic_patches as natural_logic
             natural_logic.validate_family(c,user,aid,row["payload"]["snapshot"])
+            from . import csv_goal_revisions as csv_revision
+            csv_revision.validate_family(c,user,aid,row["payload"]["snapshot"])
+            if csv_revision.SOURCE in row["payload"]["snapshot"]:
+                csv_revision.validate_snapshot(store,c,user,row["payload"]["snapshot"],limits)
             if "natural_logic_source" in row["payload"]["snapshot"]:
                 natural_logic.validate_snapshot(store,c,user,row["payload"]["snapshot"],limits)
             if "execution_source" in row["payload"]["snapshot"]:
@@ -205,22 +214,22 @@ def mount(app, store, limits, identity):
                 return envelope(items=[dict(lifecycle.read_release(store, c, user, rid, limits)) for rid in ids])
             ids = (
                 c.execute(
-                    select(internal_releases.c.id, internal_releases.c.snapshot)
+                    select(internal_releases.c.id)
                     .where(
                         internal_releases.c.project_id == pid,
                         internal_releases.c.principal_id == user,
+                        internal_releases.c.snapshot["draft"]["id"].as_string() == aid,
                     )
                     .order_by(internal_releases.c.id)
                 )
                 .mappings()
                 .all()
             )
-            items = [
-                dict(lifecycle.read_release(store, c, user, row["id"], limits))
-                for row in ids
-                if row["snapshot"].get("draft", {}).get("id") == aid
-                and ("execution_source" in row["snapshot"]) == dag_only
-            ]
+            items = []
+            for row in ids:
+                rel = lifecycle.read_release(store,c,user,row["id"],limits)
+                if ("execution_source" in rel["snapshot"]) == dag_only:
+                    items.append(dict(rel))
             return envelope(items=items)
 
     @app.get("/api/internal/releases/{rid}")
@@ -305,6 +314,7 @@ def mount(app, store, limits, identity):
                 value, rel = lifecycle.instance(store, c, user, iid, limits)
                 if ("execution_source" in rel["snapshot"]) == dag_only:
                     items.append({**dict(value), "namespace": lifecycle.NAMESPACE,
+                        "switch_policy": lifecycle.switch_policy(store,c,user,value),
                         **({} if dag_only else {"data": [dict(x) for x in lifecycle.data_rows(c, iid, store=store, user=user)]})})
         return envelope(items=items)
 
