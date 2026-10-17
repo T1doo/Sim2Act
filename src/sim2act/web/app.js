@@ -78,11 +78,11 @@ function resourceDownloadContext() {
 function resourceDownloadCurrent(context) {
   return !!context.identity && !!context.project && context.identity === token && context.connection === identityConnectionGeneration && context.project === $("project-select").value && context.generation === resourceDownloadGeneration;
 }
-function saveResourceDownload(data) {
+function saveResourceDownload(data, filename = `sim2act-resource.${data.format}`) {
   const url = URL.createObjectURL(new Blob([data.content], {type: "text/plain;charset=utf-8", endings: "transparent"}));
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `sim2act-resource.${data.format}`;
+  anchor.download = filename;
   anchor.hidden = true;
   try {document.body.append(anchor);anchor.click();}
   finally {anchor.remove();setTimeout(() => URL.revokeObjectURL(url), 0);}
@@ -208,7 +208,91 @@ function renderOrdinaryProgress(r, attempts) {
   else section.append(row("尚无可展示的步骤记录；请查看持久状态或重新读取。"));
   $("result").append(section);
 }
+let ordinaryOutcomeView = null;
+const ordinaryArtifactRequests = new Set();
+function ordinaryOutcomeScope(id) {
+  return JSON.stringify([token,identityConnectionGeneration,$("project-select").value,projectSelectionGeneration,workspaceSelectionGeneration,runUserSelectionGeneration,id]);
+}
+function ordinaryOutcomeCurrent(view) {
+  return ordinaryOutcomeView === view && activeRun === view.run && !$("projects").hidden && view.scope === ordinaryOutcomeScope(view.run);
+}
+function ordinaryArtifactBindings(r, project) {
+  if(r.contract?.snapshot?.goal?.project_id !== project)return [];
+  const effects=Array.isArray(r.known_effects)?r.known_effects:[],bindings=[];
+  for(const receipt of r.result?.receipts || []) {
+    const id=receipt?.data?.resource_id,hash=receipt?.data?.hash,operation=receipt?.operation_id;
+    if(receipt?.status !== "VERIFIED" || receipt.receipt_ref !== operation || !/^op_[a-f0-9]{32}$/.test(operation) || !/^res_[a-f0-9]{32}$/.test(id) || !/^[a-f0-9]{64}$/.test(hash) || !Array.isArray(receipt.artifact_refs) || receipt.artifact_refs.length !== 1 || receipt.artifact_refs[0] !== id)continue;
+    const matches=effects.filter(effect=>effect?.id === operation);
+    if(matches.length !== 1 || matches[0].status !== "VERIFIED" || matches[0].tool_ref !== "artifact.save_text" || matches[0].resource_id !== id || matches[0].content_hash !== hash)continue;
+    const key=JSON.stringify([operation,id,hash]);
+    if(!bindings.some(binding=>binding.key===key))bindings.push({key,id,hash,operation});
+  }
+  return bindings;
+}
+function updateOrdinaryArtifactNodes(view) {
+  if(!ordinaryOutcomeCurrent(view))return;
+  for(const node of $("run-artifacts")?.querySelectorAll("[data-ordinary-artifact]") || []) {
+    const key=node.dataset.ordinaryArtifact,busy=ordinaryArtifactRequests.has(view.scope+key);
+    for(const button of node.querySelectorAll("button"))button.disabled=busy;
+    node.querySelector("[data-artifact-status]").textContent=view.messages.get(key) || "按需重新核对此任务、成果权限和内容指纹。";
+    const preview=node.querySelector("pre");preview.hidden=!view.previews.has(key);preview.textContent=view.previews.get(key) || "";
+  }
+}
+async function readOrdinaryArtifact(view, binding, download) {
+  if(!ordinaryOutcomeCurrent(view))return;
+  const key=view.scope+binding.key;if(ordinaryArtifactRequests.has(key))return;
+  ordinaryArtifactRequests.add(key);view.messages.set(binding.key,"正在重新核对本次任务与成果…");updateOrdinaryArtifactNodes(view);
+  try {
+    const run=await api(`/api/runs/${encodeURIComponent(view.run)}`);
+    if(!ordinaryOutcomeCurrent(view))return;
+    if(run.id !== view.run || !ordinaryArtifactBindings(run,view.project).some(item=>item.key===binding.key))throw Error("成果与本次任务的已核验回执不匹配");
+    const data=await api(`/api/resources/${encodeURIComponent(binding.id)}`);
+    if(!ordinaryOutcomeCurrent(view))return;
+    if(data?.id !== binding.id || data.project_id !== view.project || data.format !== "md" || data.hash !== binding.hash || typeof data.content !== "string")throw Error("成果来源或内容指纹不匹配");
+    const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(data.content))),byte=>byte.toString(16).padStart(2,"0")).join("");
+    if(!ordinaryOutcomeCurrent(view))return;
+    if(digest !== binding.hash)throw Error("成果内容与已保存指纹不一致");
+    if(download)saveResourceDownload(data,`sim2act-${view.run}-${binding.id}.${data.format}`);
+    else view.previews.set(binding.key,data.content);
+    view.messages.set(binding.key,download?"已按本次任务核对并交付原文件；目标验收状态不变。":"已重新授权并核对原文；技术核验不代表目标语义验收。");
+  } catch(error) {
+    if(!ordinaryOutcomeCurrent(view))return;
+    if(error.httpStatus === 403) {
+      clearRunDetail();activeRun=null;
+      $("result").append(row("当前任务或成果读取授权不可用，已清除本次成果。请核对授权后从历史重新打开任务。"));
+    } else {
+      view.previews.delete(binding.key);
+      view.messages.set(binding.key,`${error.message}；${download?"未下载文件":"未显示成果"}，可明确重新读取。`);
+    }
+  } finally {ordinaryArtifactRequests.delete(key);updateOrdinaryArtifactNodes(view);}
+}
+function renderOrdinaryOutcome(r) {
+  const scope=ordinaryOutcomeScope(r.id);
+  if(!ordinaryOutcomeView || ordinaryOutcomeView.scope !== scope)ordinaryOutcomeView={scope,run:r.id,project:$("project-select").value,previews:new Map(),messages:new Map()};
+  const view=ordinaryOutcomeView,section=document.createElement("section");section.id="run-outcome";
+  if(typeof r.result?.answer === "string" && r.result.answer) {
+    const heading=document.createElement("h3");heading.textContent="本次回答";
+    const answer=document.createElement("pre");answer.id="run-answer";answer.textContent=r.result.answer;section.append(heading,answer);
+  }
+  const bindings=ordinaryArtifactBindings(r,view.project);
+  if(bindings.length) {
+    const artifacts=document.createElement("section");artifacts.id="run-artifacts";
+    const heading=document.createElement("h3");heading.textContent="本次已保存成果";artifacts.append(heading);
+    for(const binding of bindings) {
+      const node=row(`任务 ${r.id} · 成果 ${binding.id} · 指纹 ${binding.hash}`);node.dataset.ordinaryArtifact=binding.key;
+      for(const [label,download] of [["查看此成果",false],["下载此成果",true]]) {
+        const button=document.createElement("button");button.type="button";button.textContent=label;button.onclick=safe(()=>readOrdinaryArtifact(view,binding,download));node.append(button);
+      }
+      const status=document.createElement("p");status.dataset.artifactStatus="";status.setAttribute("role","status");status.setAttribute("aria-live","polite");
+      const preview=document.createElement("pre");preview.hidden=true;preview.setAttribute("aria-label","此任务保存的成果原文");node.append(status,preview);artifacts.append(node);
+    }
+    section.append(artifacts);
+  }
+  if(section.childNodes.length)$("result").append(section);
+  updateOrdinaryArtifactNodes(view);
+}
 function clearRunDetail() {
+  ordinaryOutcomeView=null;
   if(typeof invalidateNaturalGoalAcknowledgements === "function")invalidateNaturalGoalAcknowledgements();
   unresolvedAttempts=[];reconcileVersion=null;
   for(const name of ["result","events","raw-result","commands","reconcile-attempt"])$(name).replaceChildren();
@@ -272,10 +356,10 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
     $("result").append(row(r.result.task_acceptance?.whole_task_accepted===true?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
     for (const receipt of r.result.receipts || []) {
       const data = receipt.data;
-      if (typeof data.content === "string") {const pre=document.createElement("pre");pre.textContent=data.content;$("result").append(pre);}
+      if (typeof data.content === "string") {$("result").append(row("工具读取的材料（来源回执）"));const pre=document.createElement("pre");pre.textContent=data.content;$("result").append(pre);}
       else if (data.sum !== undefined) $("result").append(row(`${data.column} 合计 ${data.sum}，共 ${data.count} 条记录。`));
-      else if (data.resource_id) $("result").append(row("已保存文本成果，可在资源工作区查看。"));
     }
+    renderOrdinaryOutcome(r);
   }
   if (r.error) $("result").append(row(`需要处理：${r.error.message || r.error.code}`));
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
