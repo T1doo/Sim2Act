@@ -42,7 +42,9 @@ async function revise(){
 }
 async function confirmationReturn(stage,ack,submit){
  const suffix={preview:'/previews',release:'/version-approvals',adoption:'/adoption-approvals'}[stage];
- const frozen=posts('/csv-goal-revisions'+suffix).at(-1).response,preview=posts('/csv-goal-revisions/previews').at(-1).response;
+ const hint=posts('/csv-goal-revisions'+suffix).at(-1).response,preview=posts('/csv-goal-revisions/previews').at(-1).response;
+ const frozen=stage==='adoption'?requests.filter(x=>x.method==='GET'&&x.path.endsWith(suffix+'/'+preview.request_key)&&x.status===200).at(-1).response:hint;
+ assert.equal(frozen.id,hint.id);assert.equal(frozen.fingerprint,hint.fingerprint);
  await action(ack);check(!$(submit).disabled,stage+' original explicit consent enables exact next action');
  const count=requests.filter(x=>x.method==='POST').length,before=$('csv-goal-revision');
  await nav('resources');await nav('apps');
