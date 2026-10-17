@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 from test_literal_directory import rows
 
-from sim2act.db import Store, operations, run_contracts, runs
+from sim2act.db import Store, operation_intents, operations, run_contracts, runs
 from sim2act.model import MockModel
 from sim2act.worker import Worker
 
@@ -81,9 +81,12 @@ def test_ordinary_run_explicit_materials_actual_http(env, tmp_path, case):
                     assert run["resource_refs"] == contract["goal"]["resource_refs"] == [request["resource"]]
                     assert [r["resource_id"] for r in contract["resources"]] == [request["resource"]]
                     assert len(ops) == 1 and ops[0]["tool_ref"] == "resource.read" and ops[0]["status"] == "VERIFIED"
-                    assert ops[0]["intent"]["args"]["resource_id"] == request["resource"]
+                    with store.tx() as c:
+                        intent = c.execute(select(operation_intents.c.request).where(
+                            operation_intents.c.operation_id == ops[0]["id"])).scalar_one()
+                    assert intent["args"]["resource_id"] == request["resource"]
                     proof.append(dict(run_id=run["id"], status=run["status"], resource_refs=run["resource_refs"],
-                        contract=contract, operations=[dict(op) for op in ops]))
+                        contract=contract, operations=[dict(op) for op in ops], operation_intent=intent))
                     answer = dict(status=200, text="{}")
                 elif command == "verify":
                     after = rows(store)
