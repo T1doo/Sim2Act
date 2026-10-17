@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
-const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),requests=[],checks=[],assets=[];let serial=0,dom,w,$,drop=false,dropAdoption=false,dropRelease=false,hold=null,release=null,directoryAudit=null;
+const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),requests=[],checks=[],assets=[];let serial=0,dom,w,$,drop=false,dropAdoption=false,dropRelease=false,dropBaseline=false,hold=null,release=null,directoryAudit=null;
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
 const check=(ok,label)=>{assert(ok,label);checks.push(label);};
@@ -23,6 +23,7 @@ async function boot(){
  w.fetch=async(path,options={})=>{const request={path,method:options.method||'GET',body:options.body?JSON.parse(options.body):undefined};requests.push(request);const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response=JSON.parse(r.text);
   if(hold===path){hold=null;await new Promise(resolve=>{release=resolve;});}
   if(drop&&request.method==='POST'&&path.endsWith('/csv-goal-revisions/checks')){drop=false;assert.equal(r.status,202);request.delivery='ACTUAL_202_LOST';throw Error('synthetic lost CHECK response');}
+  if(dropBaseline&&request.method==='POST'&&path.endsWith('/delivery-graph/derive')){dropBaseline=false;assert.equal(r.status,201);request.delivery='ACTUAL_DERIVE_201_LOST';throw Error('synthetic lost baseline derive response');}
   if(dropRelease&&request.method==='POST'&&path.startsWith('/api/internal/approvals/')&&path.endsWith('/commit')){dropRelease=false;assert.equal(r.status,200);request.delivery='ACTUAL_RELEASE_200_LOST';throw Error('synthetic lost Release response');}
   if(dropAdoption&&request.method==='POST'&&path.includes('/switch-approvals/')&&path.endsWith('/commit')){dropAdoption=false;assert.equal(r.status,200);request.delivery='ACTUAL_CAS_200_LOST';throw Error('synthetic lost original CAS response');}
   return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});
@@ -40,8 +41,24 @@ async function revise(){
   $('goal-card-title').value='明确下一目标 v3';$('goal-card-goal').value='明确下一目标：汇总 amount，保留同一材料';await action('goal-card-save');
   check($('goal-card-status').textContent.includes('v3'),'explicit Goal editor saves same card v3');await open();
  }
- const before=requests.length;await action('csv-goal-baseline');
- check(!requests.slice(before).some(x=>x.method==='POST'),'continuation baseline GET does not derive or mutate root graph');
+ const before=requests.length;
+ if(info.case==='same-navigation'){
+  const graphPath=`/api/projects/${info.project}/apps/${info.app}/delivery-graph`;
+  hold=graphPath+'/derive';dropBaseline=true;const sending=action('csv-goal-baseline');
+  await wait(()=>release,'actual upgraded baseline derive201 held',90000);await nav('resources');await nav('apps');
+  await wait(()=>visible($('csv-goal-revision')),'return retains original baseline intent',60000);
+  const done=release;release=null;done();await sending;
+  await wait(()=>visible($('csv-goal-recover'))&&!$('csv-goal-recover').disabled,'lost baseline exposes original GET recovery',60000);
+  const mark=requests.length;await action('csv-goal-recover');
+  check(requests.slice(mark).every(x=>x.method==='GET'),'lost baseline201 recovers original key using GET only');
+  const sent=requests.filter(x=>x.method==='POST'&&x.path===graphPath+'/derive');
+  check(sent.length===1&&sent[0].status===201&&sent[0].delivery==='ACTUAL_DERIVE_201_LOST','explicit baseline derives stale software anchor exactly once');
+  check(requests.slice(before).some(x=>x.path===graphPath&&x.status===409&&x.response.error.message==='Current graph baseline changed; explicitly derive a new anchor'),'only exact actual stale software baseline conflict enables derive');
+  check(requests.slice(mark).some(x=>x.method==='GET'&&x.path===graphPath+'/derive-requests/'+sent[0].body.request_key&&x.status===200),'recovery reads exact accepted derive request key');
+ }else{
+  await action('csv-goal-baseline');
+  check(!requests.slice(before).some(x=>x.method==='POST'),'current baseline GET does not derive or mutate root graph');
+ }
  const shown=JSON.parse($('csv-goal-revision-proof').textContent),ctx=shown.context;
  check(ctx.parent.spec_revision===2&&ctx.parent.column==='quantity'&&ctx.parent.release_id===info.release,'baseline comes from current verified effective v2 binding');
  check(ctx.goal.version===(info.case==='next-unknown'?3:2)&&ctx.goal_mode===(info.case==='next-unknown'?'EXPLICIT_NEXT_GOAL':'KEEP_ADOPTED_GOAL'),'Goal version is independently frozen and not manufactured for same-target column edit');

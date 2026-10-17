@@ -96,13 +96,24 @@ function renderCsvGoalRevision(v,release){
  const edit=button("csv-goal-edit",currentRelease?"可选：编辑 Goal 并明确保存下一版本":"打开来源 Goal，保存下一版本",()=>action(async()=>{const pid=v.project;clearApp();selectWorkspace("projects");await showGoalCard(generation.goal_card_id,pid);}));
  const read=button("csv-goal-baseline","读取新 Goal 与修订基线",()=>action(async()=>{
   const graphPath=`/api/projects/${v.project}/apps/${v.appId}/delivery-graph`;
-  // This explicit action saves a missing/stale graph with the existing bounded
-  // derive controller. Its deterministic key also handles a lost derive reply.
+  // This explicit action reuses the existing derive only for its exact stale
+  // baseline conflict. A current parent anchor is read without mutation.
   if(!entry.baselineAccepted){
-   if(currentRelease){/* The current graph is checked by context GET. Reading a continuation must not derive a new anchor and invalidate its parent. */}
-   else if(entry.baselineUnknown){const saved=await api(graphPath);if(!here())return;if(saved.derivation_key!==entry.baselineKey)throw Error("原图锚回执尚未确认");}
-   else{entry.baselineUnknown=true;await api(graphPath+"/derive","POST",{request_key:entry.baselineKey,expected_candidate_fingerprint:v.app.fingerprint});if(!here())return;}
-   entry.baselineAccepted=true;entry.baselineUnknown=false;
+   let derive=!currentRelease||!!entry.steps.baseline;
+   if(currentRelease&&!entry.steps.baseline){
+    try{await api(graphPath);if(!here())return;}
+    catch(error){if(!here())return;if(error.httpStatus!==409||error.message!=="VERSION_CONFLICT"||error.detail!=="Current graph baseline changed; explicitly derive a new anchor")throw error;derive=true;}
+   }
+   if(derive){
+    const body=entry.steps.baseline?.body||{request_key:entry.baselineKey,expected_candidate_fingerprint:v.app.fingerprint};
+    await request("baseline",graphPath+"/derive",body,graphPath+`/derive-requests/${entry.baselineKey}`,async(saved,b,hint)=>{
+     const value=saved.response;
+     if(saved.namespace!=="delivery-graph-derive-request.v1"||saved.principal_id!==v.principal||saved.project_id!==v.project||saved.app_id!==v.appId||saved.request_key!==entry.baselineKey||!same(saved.request,b)||saved.request_fingerprint!==await ownerHash(b)||value?.app_id!==v.appId||value.project_id!==v.project||value.runtime_id!==v.instance.runtime_id||value.candidate_fingerprint!==v.app.fingerprint)throw Error("原图锚回执尚未确认");
+     if(hint){const {cached,...accepted}=hint;if(!same(value,accepted))throw Error("原图锚接受回执不匹配");}
+     return value;
+    },()=>{entry.baselineAccepted=true;});
+    if(!here())return;
+   }else entry.baselineAccepted=true;
   }
   const ctx=await api(path+"/context");if(!here())return;
   if(ctx.instance_id!==v.id||ctx.app_id!==v.appId||ctx.project_id!==v.project||ctx.release_fingerprint!==v.instance.release_fingerprint||ctx.instance_revision!==v.instance.revision)throw Error("修订基线与所选实例不匹配");
@@ -183,7 +194,7 @@ function renderCsvGoalRevision(v,release){
  }));
  const recover=button("csv-goal-recover","只读恢复原请求",()=>action(async()=>{
   const stage=Object.keys(entry.steps).find(k=>["unknown","accepted-read-error"].includes(entry.steps[k].state));
-  const actions={preview:save,check,version:prepare,commit,adopt:adoptPrepare,adoptCommit:adopt};
+  const actions={baseline:read,preview:save,check,version:prepare,commit,adopt:adoptPrepare,adoptCommit:adopt};
   // Release the local guard only for the original stage handler; its ledger
   // forces GET recovery and never sends a second POST.
   if(stage){c.busy=false;await actions[stage].onclick();}

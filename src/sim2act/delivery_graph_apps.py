@@ -870,6 +870,23 @@ def verify_jobs(c, user, aid, key, expected):
 
 
 @controlled
+def derive_receipt(store, user, pid, aid, key, limits):
+    """Only the exact accepted derive, after current authority and graph checks."""
+    with store.tx() as c:
+        saved = current(store,c,user,pid,aid,limits)
+        row = lookup(c,user,aid,"derive",key)
+        if row is None:
+            conflict("Original derive receipt is not available")
+        body,answer = checked_request(row)
+        expected = {**metadata(saved),"graph":saved["graph"],"source_versions":saved["source_versions"]}
+        if (body.request_key != key or body.expected_candidate_fingerprint != saved["candidate_fingerprint"]
+                or fingerprint(answer) != fingerprint(expected)):
+            conflict("Original derive receipt no longer matches the current graph")
+        return dict(namespace="delivery-graph-derive-request.v1",principal_id=user,project_id=pid,app_id=aid,
+            request_key=key,request=body.model_dump(),request_fingerprint=fingerprint(body.model_dump()),response=answer)
+
+
+@controlled
 def history(store, user, pid, aid, limits):
     with store.tx() as c:
         saved = current(store, c, user, pid, aid, limits)
@@ -952,6 +969,10 @@ def mount(app, store, identity, limits, settings=None):
     @app.post(base + "/derive", status_code=201)
     def save(pid: str, aid: str, body: DeriveInput, user=dependency):
         return derive(store, user, pid, aid, body, limits)
+
+    @app.get(base + "/derive-requests/{key}")
+    def read_derive(pid: str, aid: str, key: str, user=dependency):
+        return derive_receipt(store,user,pid,aid,key,limits)
 
     @app.post(base + "/plans", status_code=201)
     def changes(pid: str, aid: str, body: PlanInput, user=dependency):

@@ -41,7 +41,8 @@ def immutable_rows(data):
     """Capture actual stored JSON strings, including old acceptance seals."""
     tables=("app_drafts","internal_releases","run_contracts","internal_run_bindings",
         "internal_app_runs","internal_instance_data","operations","internal_owner_records",
-        "csv_owner_records","delivery_graph_requests","goal_card_versions")
+        "csv_owner_records","delivery_graph_requests","goal_card_versions",
+        "delivery_graph_anchors","delivery_graph_source_versions")
     with data[0].tx() as c:
         return {name:[dict(r) for r in c.execute(text('SELECT * FROM '+name)).mappings()] for name in tables}
 
@@ -122,7 +123,7 @@ def test_current_effective_parent_actual_check_release_adopt_and_new_result(env,
 
 
 @pytest.mark.parametrize("case",["same-navigation","next-unknown","navigation"])
-def test_visible_current_effective_revision_and_fenced_recovery(env,tmp_path,case):
+def test_visible_current_effective_revision_and_fenced_recovery(env,tmp_path,monkeypatch,case):
     import os
     import subprocess
     import threading
@@ -130,7 +131,22 @@ def test_visible_current_effective_revision_and_fenced_recovery(env,tmp_path,cas
 
     from test_internal_lifecycle import create
 
-    data,aid,base,current,path,old_value,v2,goal,second=adopted(env)
+    if case=="same-navigation":
+        from sim2act import delivery_graph_apps as graph
+        logical=graph.logical
+        def prior_registry(*args,**kwargs):
+            keys,external=logical(*args,**kwargs)
+            for definition in external.values():
+                if "registry_versions" in definition:
+                    definition["registry_versions"]={name:"0"*64 for name in definition["registry_versions"]}
+            return keys,external
+        # A valid saved v2 under a synthetic prior software registry. Restore
+        # current software before ordinary-page entry; no product file changes.
+        with monkeypatch.context() as previous_software:
+            previous_software.setattr(graph,"logical",prior_registry)
+            data,aid,base,current,path,old_value,v2,goal,second=adopted(env)
+    else:
+        data,aid,base,current,path,old_value,v2,goal,second=adopted(env)
     other=data[2].post('/api/projects',json={"name":"Other owned project"}).json()["id"]
     instance2=create(data,base)
     data[0].project(data[4],"Other account project")
