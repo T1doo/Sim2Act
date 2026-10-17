@@ -1,0 +1,4084 @@
+{
+  "status": "PASS",
+  "case": "frozen",
+  "checks": [
+    "sending locks picker and blocks a duplicate submit",
+    "lost actual receipt preserves UNKNOWN and locked selection",
+    "refresh with new material preserves frozen selection/body/key",
+    "explicit recovery returns same durable Run with exact original material/body/key",
+    "known acceptance unlocks editing for a separately explicit next task"
+  ],
+  "observations": [],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "status": 200,
+      "response": [
+        {
+          "id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "name": "中文 空格工程"
+        },
+        {
+          "id": "proj_ea7bf769b10d4503aa1bd64f50f5d2cc",
+          "name": "Other owned project"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/goal-cards",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "DRAFT"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "PREVIEW_ONLY",
+        "publishable": false,
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/conditional-apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "namespace": "bounded-conditional-app.v1",
+        "items": [],
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/protocol/contracts",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "contract_id": "protocol.synthetic.a-source.v1",
+            "version": 1,
+            "family": "a",
+            "phase": "source",
+            "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.a-cold.v1",
+            "version": 1,
+            "family": "a",
+            "phase": "cold",
+            "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "29209e986cfb89cd0620dd8d4a67f3f0ba428fe823cd852012929808e201b1fc"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.b-source.v1",
+            "version": 1,
+            "family": "b",
+            "phase": "source",
+            "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string"
+                      },
+                      "decision": {
+                        "type": "string"
+                      },
+                      "rule_relation": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "resource",
+                            "line"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "decision",
+                      "rule_relation",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 16
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "b1e9cb226f39a332f391f1314cb624e55f0e301356f890787e3081508b09813c",
+              "7f726bba0a9eaa01f52c99a62c3acb89fd9d1f3ab91072050e22959eaa9c292f"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.b-cold.v1",
+            "version": 1,
+            "family": "b",
+            "phase": "cold",
+            "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string"
+                      },
+                      "decision": {
+                        "type": "string"
+                      },
+                      "rule_relation": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "resource",
+                            "line"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "decision",
+                      "rule_relation",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 16
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "3a885c40ba8c8a5e887f76293506c318ff44d3653d50b088982151972a63747f",
+              "68c3e0103399e3a7ad06ab1351403069f3b2db2700a95c054dd16b6ed38ff01f"
+            ]
+          }
+        ],
+        "owner_semantic_acceptance": "PENDING",
+        "live_enabled": false
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/runs?metadata_only=true",
+      "status": 200,
+      "response": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/grants",
+      "status": 200,
+      "response": [
+        {
+          "id": "grant_ec6d2d0e28514731a500a9fca2e16789",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3123176,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_474830770f484763b8da333e4a080115",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3160036,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_8c07992d66a84830ba3da4ee450b80d3",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3365932,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_33d7d00048f24ed48db205282de1be52",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3368466,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_cf3a58644805493dbe7b2e43be104e1e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3370113,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7deb6cfc4bc045b38eb5eb2cd5ddd352",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3372035,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_2989d9623f884d719d19af46df850424",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3870323,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ad4cc7eb906e4abd87f1c0933089d117",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3874085,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1dd0831cf70443fa96adc2363a6ddd8e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3875756,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_74b3d2b973034429aefb10f2ef3a5b95",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3877234,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3bb376933bbe4040a6f9d64105febdd2",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4030082,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_9acc2d7abb2442fb9d300f766d5b0ede",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403264,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_094ac9ceb05140019561633535dec50e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4034255,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_e04bd5b9355043c1be99048080488457",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403562,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_da3d4f3d2be14870a9124adbb2e66922",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4229803,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_40a0ccd82aab4561bf8d22d0522805e8",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4240167,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1fbb9ed0f4b34077b212407890899459",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4243314,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c56b7ced47eb473c99b3fef03d7160c7",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4246628,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_438c4170d0c14864b249e6760b956894",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.444818,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1b4e8d6f91ca498bbd595b9d3002c728",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4458997,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_16edf51fd0ba4364b0adc518349b2d4a",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4461846,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_41b7acc04d84499e8fb7478842772e33",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4464808,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ed7df3a9c8f8473983ad9a75f10cd1bb",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5330281,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0944553511644a0991f147184df8563",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5335445,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_d27a25d6237e4c1daaadf37cd6a3f792",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5338726,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_fc1de4990f6341ec939b1eef055fbcd5",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.534155,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_bce2f6275e0843fb8a496779778836ff",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5531147,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_037695aa209c458ab421065c41dec37b",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5533557,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3ce76f401e1244fe9866e6c8ad287f18",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5535178,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0248d3c98c84d1c99cccbdc48643f54",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5536919,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_954a184c385a4ddbb4b956b88d1f503a",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.566417,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_4a1de675e0cf4232b1224b279df05476",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5671554,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7c50666fdd224a59a8f6ce7b7d334fa6",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5673485,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3b9eb81178004f9eb2c453dc5073d30b",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5676608,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_27b8fb4c602540508d64b21c08f3f50d",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5785522,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_baedc8b5bc474fd095e1fe61d6c5c673",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5788224,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_29ce1567e58040ab8ce651ea04ed59c3",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.579293,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_de0ee0cf77444e9395df3eb6352c1aba",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5794826,
+          "revision": 1,
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/capabilities",
+      "status": 200,
+      "response": {
+        "materials": [
+          "txt",
+          "md",
+          "csv",
+          "json"
+        ],
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv",
+          "artifact.save_text"
+        ],
+        "connection": {
+          "model": "intern-s2",
+          "mode": "MOCK",
+          "status": "MOCK_ENGINEERING"
+        },
+        "natural_spec_generation": {
+          "version": "natural-spec-generation-availability.v1",
+          "availability": "BLOCKED",
+          "provider": "disabled",
+          "live_request_allowance": 0
+        },
+        "code_execution": "DISABLED"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/goal-cards",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "DRAFT"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "PREVIEW_ONLY",
+        "publishable": false,
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/conditional-apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "namespace": "bounded-conditional-app.v1",
+        "items": [],
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/protocol/contracts",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "contract_id": "protocol.synthetic.a-source.v1",
+            "version": 1,
+            "family": "a",
+            "phase": "source",
+            "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.a-cold.v1",
+            "version": 1,
+            "family": "a",
+            "phase": "cold",
+            "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "29209e986cfb89cd0620dd8d4a67f3f0ba428fe823cd852012929808e201b1fc"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.b-source.v1",
+            "version": 1,
+            "family": "b",
+            "phase": "source",
+            "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string"
+                      },
+                      "decision": {
+                        "type": "string"
+                      },
+                      "rule_relation": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "resource",
+                            "line"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "decision",
+                      "rule_relation",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 16
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "b1e9cb226f39a332f391f1314cb624e55f0e301356f890787e3081508b09813c",
+              "7f726bba0a9eaa01f52c99a62c3acb89fd9d1f3ab91072050e22959eaa9c292f"
+            ]
+          },
+          {
+            "contract_id": "protocol.synthetic.b-cold.v1",
+            "version": 1,
+            "family": "b",
+            "phase": "cold",
+            "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+            "public_inputs": {
+              "format": "JSON with line evidence and explicit UNKNOWN"
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string"
+                      },
+                      "decision": {
+                        "type": "string"
+                      },
+                      "rule_relation": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "resource",
+                            "line"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "decision",
+                      "rule_relation",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 16
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "resource_hashes": [
+              "3a885c40ba8c8a5e887f76293506c318ff44d3653d50b088982151972a63747f",
+              "68c3e0103399e3a7ad06ab1351403069f3b2db2700a95c054dd16b6ed38ff01f"
+            ]
+          }
+        ],
+        "owner_semantic_acceptance": "PENDING",
+        "live_enabled": false
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/runs?metadata_only=true",
+      "status": 200,
+      "response": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/grants",
+      "status": 200,
+      "response": [
+        {
+          "id": "grant_ec6d2d0e28514731a500a9fca2e16789",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3123176,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_474830770f484763b8da333e4a080115",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3160036,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_8c07992d66a84830ba3da4ee450b80d3",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3365932,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_33d7d00048f24ed48db205282de1be52",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3368466,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_cf3a58644805493dbe7b2e43be104e1e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3370113,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7deb6cfc4bc045b38eb5eb2cd5ddd352",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3372035,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_2989d9623f884d719d19af46df850424",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3870323,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ad4cc7eb906e4abd87f1c0933089d117",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3874085,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1dd0831cf70443fa96adc2363a6ddd8e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3875756,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_74b3d2b973034429aefb10f2ef3a5b95",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3877234,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3bb376933bbe4040a6f9d64105febdd2",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4030082,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_9acc2d7abb2442fb9d300f766d5b0ede",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403264,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_094ac9ceb05140019561633535dec50e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4034255,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_e04bd5b9355043c1be99048080488457",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403562,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_da3d4f3d2be14870a9124adbb2e66922",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4229803,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_40a0ccd82aab4561bf8d22d0522805e8",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4240167,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1fbb9ed0f4b34077b212407890899459",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4243314,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c56b7ced47eb473c99b3fef03d7160c7",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4246628,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_438c4170d0c14864b249e6760b956894",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.444818,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1b4e8d6f91ca498bbd595b9d3002c728",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4458997,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_16edf51fd0ba4364b0adc518349b2d4a",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4461846,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_41b7acc04d84499e8fb7478842772e33",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4464808,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ed7df3a9c8f8473983ad9a75f10cd1bb",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5330281,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0944553511644a0991f147184df8563",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5335445,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_d27a25d6237e4c1daaadf37cd6a3f792",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5338726,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_fc1de4990f6341ec939b1eef055fbcd5",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.534155,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_bce2f6275e0843fb8a496779778836ff",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5531147,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_037695aa209c458ab421065c41dec37b",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5533557,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3ce76f401e1244fe9866e6c8ad287f18",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5535178,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0248d3c98c84d1c99cccbdc48643f54",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5536919,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_954a184c385a4ddbb4b956b88d1f503a",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.566417,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_4a1de675e0cf4232b1224b279df05476",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5671554,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7c50666fdd224a59a8f6ce7b7d334fa6",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5673485,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3b9eb81178004f9eb2c453dc5073d30b",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5676608,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_27b8fb4c602540508d64b21c08f3f50d",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5785522,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_baedc8b5bc474fd095e1fe61d6c5c673",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5788224,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_29ce1567e58040ab8ce651ea04ed59c3",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.579293,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_de0ee0cf77444e9395df3eb6352c1aba",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5794826,
+          "revision": 1,
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/runs",
+      "body": {
+        "goal": "读取明确选择的这一份合成材料",
+        "resource_refs": [
+          "res_ec275a050ba944399e29127e02b0bc5e"
+        ],
+        "request_key": "e4603543-63a7-48d8-bf29-c16e0ba75f47"
+      },
+      "status": 202,
+      "response": {
+        "run_id": "run_18e6ad1738284e48aa82c8db35943ee0",
+        "mode": "MOCK"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        },
+        {
+          "id": "res_09c917eab9424a4083cff7766377e00b",
+          "name": "new-tenth.txt",
+          "format": "txt",
+          "hash": "27a26a3460855d8efd30bf2bd0516f503a2cd8950ab9d7fafc75efd1b3dd0d42"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/goal-cards",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "DRAFT"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "PREVIEW_ONLY",
+        "publishable": false,
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/conditional-apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "namespace": "bounded-conditional-app.v1",
+        "items": [],
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        },
+        {
+          "id": "res_09c917eab9424a4083cff7766377e00b",
+          "name": "new-tenth.txt",
+          "format": "txt",
+          "hash": "27a26a3460855d8efd30bf2bd0516f503a2cd8950ab9d7fafc75efd1b3dd0d42"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/runs?metadata_only=true",
+      "status": 200,
+      "response": [
+        {
+          "id": "run_18e6ad1738284e48aa82c8db35943ee0",
+          "status": "QUEUED",
+          "created_at": 1792221034.1962214,
+          "goal_summary": "打开任务后核查当前授权内容",
+          "mode": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/grants",
+      "status": 200,
+      "response": [
+        {
+          "id": "grant_ec6d2d0e28514731a500a9fca2e16789",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3123176,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_474830770f484763b8da333e4a080115",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3160036,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_8c07992d66a84830ba3da4ee450b80d3",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3365932,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_33d7d00048f24ed48db205282de1be52",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3368466,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_cf3a58644805493dbe7b2e43be104e1e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3370113,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7deb6cfc4bc045b38eb5eb2cd5ddd352",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3372035,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_2989d9623f884d719d19af46df850424",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3870323,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ad4cc7eb906e4abd87f1c0933089d117",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3874085,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1dd0831cf70443fa96adc2363a6ddd8e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3875756,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_74b3d2b973034429aefb10f2ef3a5b95",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3877234,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3bb376933bbe4040a6f9d64105febdd2",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4030082,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_9acc2d7abb2442fb9d300f766d5b0ede",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403264,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_094ac9ceb05140019561633535dec50e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4034255,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_e04bd5b9355043c1be99048080488457",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403562,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_da3d4f3d2be14870a9124adbb2e66922",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4229803,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_40a0ccd82aab4561bf8d22d0522805e8",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4240167,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1fbb9ed0f4b34077b212407890899459",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4243314,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c56b7ced47eb473c99b3fef03d7160c7",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4246628,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_438c4170d0c14864b249e6760b956894",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.444818,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1b4e8d6f91ca498bbd595b9d3002c728",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4458997,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_16edf51fd0ba4364b0adc518349b2d4a",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4461846,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_41b7acc04d84499e8fb7478842772e33",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4464808,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ed7df3a9c8f8473983ad9a75f10cd1bb",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5330281,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0944553511644a0991f147184df8563",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5335445,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_d27a25d6237e4c1daaadf37cd6a3f792",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5338726,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_fc1de4990f6341ec939b1eef055fbcd5",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.534155,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_bce2f6275e0843fb8a496779778836ff",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5531147,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_037695aa209c458ab421065c41dec37b",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5533557,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3ce76f401e1244fe9866e6c8ad287f18",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5535178,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0248d3c98c84d1c99cccbdc48643f54",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5536919,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_954a184c385a4ddbb4b956b88d1f503a",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.566417,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_4a1de675e0cf4232b1224b279df05476",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5671554,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7c50666fdd224a59a8f6ce7b7d334fa6",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5673485,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3b9eb81178004f9eb2c453dc5073d30b",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5676608,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_27b8fb4c602540508d64b21c08f3f50d",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5785522,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_baedc8b5bc474fd095e1fe61d6c5c673",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5788224,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_29ce1567e58040ab8ce651ea04ed59c3",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.579293,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_de0ee0cf77444e9395df3eb6352c1aba",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5794826,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_f2c8032d78be4b4bae07968c3bc1afba",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307434.224613,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1d6629ff279f48719d523d881ebee17c",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307434.224874,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_66b10e3b46cc42cfb2dc4ede1ca0acb6",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307434.2250347,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_5cb7e76edc3f4ba19f4b28c3584c5b5b",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307434.2252162,
+          "revision": 1,
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/runs",
+      "body": {
+        "goal": "读取明确选择的这一份合成材料",
+        "resource_refs": [
+          "res_ec275a050ba944399e29127e02b0bc5e"
+        ],
+        "request_key": "e4603543-63a7-48d8-bf29-c16e0ba75f47"
+      },
+      "status": 202,
+      "response": {
+        "run_id": "run_18e6ad1738284e48aa82c8db35943ee0",
+        "mode": "MOCK"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        },
+        {
+          "id": "res_09c917eab9424a4083cff7766377e00b",
+          "name": "new-tenth.txt",
+          "format": "txt",
+          "hash": "27a26a3460855d8efd30bf2bd0516f503a2cd8950ab9d7fafc75efd1b3dd0d42"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/goal-cards",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "DRAFT"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "items": [],
+        "state": "PREVIEW_ONLY",
+        "publishable": false,
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/conditional-apps?metadata_only=true",
+      "status": 200,
+      "response": {
+        "namespace": "bounded-conditional-app.v1",
+        "items": [],
+        "discovery_only": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/resources",
+      "status": 200,
+      "response": [
+        {
+          "id": "res_555de45d66654ee49a9f206ad1af0add",
+          "name": "data.csv",
+          "format": "csv",
+          "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+        },
+        {
+          "id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "name": "material-1.txt",
+          "format": "txt",
+          "hash": "ffc95e7726c8226fd15af02499e7062de6efe260d9d93c6f0ace36072abef38a"
+        },
+        {
+          "id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "name": "material-2.txt",
+          "format": "txt",
+          "hash": "554aa12699397999ed4a4c5fd830b7341f0ff92bef532fe0cc26bdcead435b1b"
+        },
+        {
+          "id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "name": "material-3.txt",
+          "format": "txt",
+          "hash": "0bdcb72b5f60fd74841eee0f45129489c1219d21d553c007ae25d152dabd913d"
+        },
+        {
+          "id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "name": "material-4.txt",
+          "format": "txt",
+          "hash": "0fa6957bdee0855fb50c3a0a1a602e0775f6565027ea366b9ff6dd6bbed36987"
+        },
+        {
+          "id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "name": "material-5.txt",
+          "format": "txt",
+          "hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd"
+        },
+        {
+          "id": "res_415b46a4bad544f09ab45e8774d70930",
+          "name": "material-6.txt",
+          "format": "txt",
+          "hash": "48417ca70650233c0d3b21003da4c21fa5340fe99b65b8bd79af4a2367219d8e"
+        },
+        {
+          "id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "name": "material-7.txt",
+          "format": "txt",
+          "hash": "d866e8241573b4f75f5093272fb546675b9d9f25790ab735b37c9902d47ad68d"
+        },
+        {
+          "id": "res_ac5712effcc44c62928f57944b548b1f",
+          "name": "material-8.txt",
+          "format": "txt",
+          "hash": "fe5d8e356a2662ff22be89e181c478735cf9309e632b196ffa7fb13f597dbc48"
+        },
+        {
+          "id": "res_09c917eab9424a4083cff7766377e00b",
+          "name": "new-tenth.txt",
+          "format": "txt",
+          "hash": "27a26a3460855d8efd30bf2bd0516f503a2cd8950ab9d7fafc75efd1b3dd0d42"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/runs?metadata_only=true",
+      "status": 200,
+      "response": [
+        {
+          "id": "run_18e6ad1738284e48aa82c8db35943ee0",
+          "status": "QUEUED",
+          "created_at": 1792221034.1962214,
+          "goal_summary": "打开任务后核查当前授权内容",
+          "mode": "UNKNOWN"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/proj_d7a360de8c364c16a9adf8daf6439549/grants",
+      "status": 200,
+      "response": [
+        {
+          "id": "grant_ec6d2d0e28514731a500a9fca2e16789",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3123176,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_474830770f484763b8da333e4a080115",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "tool_ref": "artifact.save_text",
+          "expires_at": 1792307431.3160036,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_8c07992d66a84830ba3da4ee450b80d3",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3365932,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_33d7d00048f24ed48db205282de1be52",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3368466,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_cf3a58644805493dbe7b2e43be104e1e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3370113,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7deb6cfc4bc045b38eb5eb2cd5ddd352",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_555de45d66654ee49a9f206ad1af0add",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3372035,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_2989d9623f884d719d19af46df850424",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3870323,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ad4cc7eb906e4abd87f1c0933089d117",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3874085,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1dd0831cf70443fa96adc2363a6ddd8e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.3875756,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_74b3d2b973034429aefb10f2ef3a5b95",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_eb08602418ff40e9827ed79f6d2a13d4",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.3877234,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3bb376933bbe4040a6f9d64105febdd2",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4030082,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_9acc2d7abb2442fb9d300f766d5b0ede",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403264,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_094ac9ceb05140019561633535dec50e",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4034255,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_e04bd5b9355043c1be99048080488457",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_6e15c2bd75494a70b38c7d44d260034e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.403562,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_da3d4f3d2be14870a9124adbb2e66922",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4229803,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_40a0ccd82aab4561bf8d22d0522805e8",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4240167,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1fbb9ed0f4b34077b212407890899459",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4243314,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c56b7ced47eb473c99b3fef03d7160c7",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_f2c0707fcc224f0fbad378bb214a192d",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4246628,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_438c4170d0c14864b249e6760b956894",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.444818,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1b4e8d6f91ca498bbd595b9d3002c728",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4458997,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_16edf51fd0ba4364b0adc518349b2d4a",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.4461846,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_41b7acc04d84499e8fb7478842772e33",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_dcb67305d26a4f83b1f5f79b001f6e15",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.4464808,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_ed7df3a9c8f8473983ad9a75f10cd1bb",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5330281,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0944553511644a0991f147184df8563",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5335445,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_d27a25d6237e4c1daaadf37cd6a3f792",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5338726,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_fc1de4990f6341ec939b1eef055fbcd5",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.534155,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_bce2f6275e0843fb8a496779778836ff",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5531147,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_037695aa209c458ab421065c41dec37b",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5533557,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3ce76f401e1244fe9866e6c8ad287f18",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5535178,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_c0248d3c98c84d1c99cccbdc48643f54",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_415b46a4bad544f09ab45e8774d70930",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5536919,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_954a184c385a4ddbb4b956b88d1f503a",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.566417,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_4a1de675e0cf4232b1224b279df05476",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5671554,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_7c50666fdd224a59a8f6ce7b7d334fa6",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5673485,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_3b9eb81178004f9eb2c453dc5073d30b",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_e31d09b637ad4758b4b195b3874e5104",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5676608,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_27b8fb4c602540508d64b21c08f3f50d",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.5785522,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_baedc8b5bc474fd095e1fe61d6c5c673",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5788224,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_29ce1567e58040ab8ce651ea04ed59c3",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307431.579293,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_de0ee0cf77444e9395df3eb6352c1aba",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_ac5712effcc44c62928f57944b548b1f",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307431.5794826,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_f2c8032d78be4b4bae07968c3bc1afba",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307434.224613,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_1d6629ff279f48719d523d881ebee17c",
+          "principal_id": "user_337d5dde03374707a3837c889aaf2c39",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307434.224874,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_66b10e3b46cc42cfb2dc4ede1ca0acb6",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "resource.read",
+          "expires_at": 1792307434.2250347,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_5cb7e76edc3f4ba19f4b28c3584c5b5b",
+          "principal_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+          "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+          "resource_id": "res_09c917eab9424a4083cff7766377e00b",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792307434.2252162,
+          "revision": 1,
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/run_18e6ad1738284e48aa82c8db35943ee0",
+      "status": 200,
+      "response": {
+        "id": "run_18e6ad1738284e48aa82c8db35943ee0",
+        "status": "QUEUED",
+        "version": 1,
+        "result": null,
+        "error": null,
+        "events": [
+          {
+            "id": "event_605f26672784413f9380441d377a4329",
+            "run_id": "run_18e6ad1738284e48aa82c8db35943ee0",
+            "created_at": 1792221034.1994517,
+            "kind": "ACCEPTED",
+            "data": {
+              "input_fingerprint": "063df527fb99512cb2e8bb1127c82cd0738587ba3ffb73e45c3f2e9c9f34c862"
+            }
+          }
+        ],
+        "contract": {
+          "snapshot": {
+            "run_id": "run_18e6ad1738284e48aa82c8db35943ee0",
+            "runtime_id": "runtime_64d23b3b86f84c0cb82fa5f9ca0e50b5",
+            "contract_version": "F1.3",
+            "goal": {
+              "goal_id": "goal_b7ac71aa1b3b49b089f81a9e0b1bbce1",
+              "project_id": "proj_d7a360de8c364c16a9adf8daf6439549",
+              "owner_id": "user_337d5dde03374707a3837c889aaf2c39",
+              "goal": "读取明确选择的这一份合成材料",
+              "constraints": [],
+              "acceptance_version": "F1-tool-chain.v1",
+              "resource_refs": [
+                "res_ec275a050ba944399e29127e02b0bc5e"
+              ],
+              "unresolved": [
+                "Semantic goal acceptance NOT_RUN"
+              ]
+            },
+            "resources": [
+              {
+                "resource_id": "res_ec275a050ba944399e29127e02b0bc5e",
+                "revision": 1,
+                "content_hash": "7918ab65e528a04f42cf0141faa811d8bec132c58cfece9a40a6695359b10bdd",
+                "format": "txt"
+              }
+            ],
+            "limits": {
+              "max_requests": 4,
+              "max_tools": 4,
+              "max_repairs": 1,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "mode": "mock",
+            "request_model": "intern-s2"
+          },
+          "fingerprint": "cbfd85fb125c629ac47c22da6b0aee8e368a6d9e94df1544a10c7a780542d322"
+        },
+        "known_effects": []
+      }
+    }
+  ],
+  "assets": [
+    {
+      "path": "/",
+      "sha256": "ef4266fc7f1cc5a05c7aae96433c051358c538d0c60d470877802ba27455728a"
+    },
+    {
+      "path": "/app.css",
+      "sha256": "2ad3d886c00de86c04059fa95072c654019c477273597cf7323b9aafe485ceee"
+    },
+    {
+      "path": "/app.js",
+      "sha256": "f46eeedd7f7792c66a04080ebbc8cb86fc73289cf6c8ef05b0bf92cda9c92fa1"
+    },
+    {
+      "path": "/natural-goal.js",
+      "sha256": "485d99733e4535a77960c40c856638dc24436542b193c679988c300fb56fbc9f"
+    },
+    {
+      "path": "/goal-application.js",
+      "sha256": "c421e74077718155bc15806feb664ff7d67489138cbf9ca243f52924cc40754f"
+    },
+    {
+      "path": "/internal.js",
+      "sha256": "4a9a0805f81e4d0fecd22e7b7e8ad067c9428f7094b0b548fae47648e20a1cc6"
+    },
+    {
+      "path": "/owner-review.js",
+      "sha256": "7d2c748910520f1d1aa811ec208387c994aad8fe1577cf420da0b228b76d58d0"
+    },
+    {
+      "path": "/protocol.js",
+      "sha256": "dcf97729f2a69872a8b7c33374e9f2cd50e88c8b368c4d417ba133bea8e5f1e8"
+    },
+    {
+      "path": "/use.js",
+      "sha256": "f68fe707de50f875140961caecc3d48c6211304399db7be7dbce3ff746faae57"
+    },
+    {
+      "path": "/conditional-runs.js",
+      "sha256": "8493353812ee7b57e48c6b18e9cf8069a7366e38b07709f7ab6d6320e735393e"
+    },
+    {
+      "path": "/conditional-apps.js",
+      "sha256": "82303591b0483339dea6fef9c34b6476bac000f3bcc4886fb38f54a08af88ad1"
+    },
+    {
+      "path": "/report-manifest.js",
+      "sha256": "1e521d342c61f1feb9ed1e1770184b6123f26170b417d78a7246bb8a2052e89a"
+    },
+    {
+      "path": "/delivery-graph.js",
+      "sha256": "8a47a8d95e95cc6a9419fa0f15919ba57f7e3b4bbe6061d5f31fb0b39c6e37bb"
+    },
+    {
+      "path": "/manual-locks.js",
+      "sha256": "2faab55b3e524d93e7f7ed832d2303a0c0034e0663b00674adb458e93615710c"
+    },
+    {
+      "path": "/csv-dag.js",
+      "sha256": "28fc90386a81e174c752956474d18c8275b437557aab835032f75207e85a3812"
+    },
+    {
+      "path": "/csv-logic.js",
+      "sha256": "732f547e8cb5e264c0cb606db1381477dc39ea62d08ce0f24834bb03dc839f89"
+    },
+    {
+      "path": "/project-revalidation.js",
+      "sha256": "ffa499d3d07e712443ccd0f33160623bce12871268f625e4453f8bb743db5e72"
+    },
+    {
+      "path": "/project-natural.js",
+      "sha256": "59ff19f27035197ae772e0117d7e28fd2b0da424571df38f632d466c381874c8"
+    },
+    {
+      "path": "/project-columns.js",
+      "sha256": "692c5c8219e1648150087df7484efb22d67b4a4fa69ca5194498ca91ffafdc8d"
+    },
+    {
+      "path": "/project-column-versions.js",
+      "sha256": "0b2d5c7b2859c835af3390beec98c2ef54a4ab71c7c7834f982b54f71cb89387"
+    },
+    {
+      "path": "/text-logic.js",
+      "sha256": "f7454d76f4b1f221e016daae1de2e0844670d823c3f510e556a25fcce532200f"
+    }
+  ],
+  "scope": "Actual served JS/JSDOM + authenticated ASGI synthetic SQLite. Mock Worker only in use; no real model/native/PG."
+}

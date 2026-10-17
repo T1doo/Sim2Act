@@ -1,0 +1,35 @@
+# Ordinary Run explicit material selection — 2026-10-17
+
+This closes an actual user input gap on the original V5 path, not another directory/test/preflight slice. Product design§2:59 requires project ideas plus attached materials;§4 P-A begins with a goal and chosen materials;§5.1/5.6 require a stable input snapshot and original request identity. Phase tasks F2-T01/T06 support this scope. Before this change app.js refresh assigned every authorized project material to refs, and submitOrdinaryRun sent all of them. The form had no material picker, whereas RunInput has an8-item limit. Having9 legitimate materials made even a task needing1 impossible at this entrance.
+
+Delivered base3c20e21c8993404342f6da3826f1cbf40b7348be. Final executed source09155e6e3415acb1d53aff80248d745badd37805 is in source-verified.json. Only product app.js/index.html change. API, Worker, model adapter, contracts, identity, Grant, schema and underlying submission/recovery gateway remain unchanged. No new executor or permission policy is introduced.
+
+## Actual red and intermediate correction
+
+Baseline66786b5312e0e83e044f53cfd668bde57851d58e adds only tests; src bytes equal3c20. One actual authenticated ASGI/full served JS/JSDOM attempt really sends9 IDs, receives HTTP422 with max8/actual9, has no picker, and preserves all48 tables exactly with0 Runs. RC1, JUnit14.407s; original request/response, database, logs, XML and source hashes remain intact.
+
+Intermediate c76968d9e744a4bc7b838a39e973d87b53a54bf3 author module is2PASS/1FAIL, RC1/JUnit16.235s. The use case actually accepted202 and executed a cold mock Worker, but the new test then incorrectly read top-level resource_refs; the real API publishes them in contract.snapshot.goal.resource_refs. The SQL Run/contract/intent oracle already passed. This was a test oracle error. Independent static review additionally found a product issue: after a failed list read the disabled picker prevented explicit cancellation of an unavailable choice. Both were corrected without reducing the selected-input assertions. That intermediate batch and its source-final.json are retained unchanged; it was never dynamically run by the independent agent.
+
+## Visible resulting behavior
+
+The ordinary project task form now offers a separate0–8 multi-select. It starts with no attached material; GoalCard selection is independent. Current authorized names/formats are visible. New materials discovered during refresh are not silently attached. A ninth choice stays visible and blocks both button and direct submit without truncation. An unavailable prior ID is labelled without its old protected name and prevents a changed new submission; the user can explicitly remove it and submit a legitimate goal without attachments. A failed material-list read does not trap that cancellation path.
+
+Project/identity transitions clear old choices immediately. Only a current existing refresh may update the list. Sending/UNKNOWN displays and locks the original request's material IDs; changes to the list never rewrite the frozen body/key. Explicit recovery uses the unchanged existing handler and original request. No automatic resend occurs. Page-memory draft and UNKNOWN limits remain the existing limits; this is not new durable browser storage.
+
+## Final executed acceptance
+
+Only tests/test_ordinary_run_materials.py three parameters execute, with fresh synthetic SQLite, real authenticated ASGI APIs, full served product JS/JSDOM and a normal cold mock Worker where stated:
+
+- use:9 eligible materials/default none, independent GoalCard choice,8/9 boundary with0 over-limit POSTs, choose1 actual202, exact SQL Run/GoalSpec/resource snapshot/VERIFIED resource.read intent, selected content readback without other material bodies. A single cold Store/Worker with the existing MockModel makes2 synthetic requests and0 real requests, ends PARTIAL with semantic goal acceptance NOT_RUN. Subsequently0 and8 selections each actually receive202 and persist exact snapshots; both stay QUEUED and are not executed. Three distinct explicit Runs,3 POSTs,15 checks.
+- refresh: add tenth material via the existing fixture Save API; it appears without becoming selected. After an actual resources GET200, one explicitly controlled synthetic delivery error exercises retained ID plus user cancellation to0. A normal reread restores the list. One actual old resource-list response is held across project other→A; old selection cannot return. Identity switch clears old names/choices.0 product POST,8 checks.
+- frozen: hold the actual accepted POST and attempt a duplicate submit, then deliver a synthetic receipt loss. Sending/UNKNOWN lock the original selection. Add tenth material using the existing Save policy and omit the selected item from one delivered catalog response. The actual server authorization remains valid: this is a labelled synthetic delivery omission, not revocation. Only original ID is shown, no stale name; original body/key remains identical. Explicit recovery really POSTs that same body/key and returns the same sole QUEUED Run.2 product POST,6 checks.
+
+Author final3PASS/0FAIL/0ERROR/0SKIP, RC0/JUnit18.141s; independent final3PASS/0FAIL/0ERROR/0SKIP, RC0/JUnit16.073s. Each has29 checks,148 product API requests (143GET/5POST),63 served static responses and1 actual cold mock Worker/2 synthetic model requests. Independent repetition adds zero unique nodes. Its117 tracked source/related-test hashes match frozen Git before/after; author checks12 directly relevant files and actual asset hashes. The earlier failed use also actually executed a mock Worker; do not portray the whole history as only the final executions.
+
+The refresh/frozen fixture each saves one new resource through the original resource Save API, with its original derived Grant policy; this is not zero new Grants. No production permission semantics or access scope is expanded. The successful use leaves principal/Grant/resource rows unchanged; only accepted tasks/normal Worker records change. Final Run counts are3/0/1 across use/refresh/frozen, and only the1-material Run executes.
+
+## Evidence and limits
+
+Originals manifests map each newly preserved path/size/SHA256 to archive size/SHA256. Deterministic gzip usesmtime0; SHA256SUMS covers repository evidence except itself. Stored/decoded/live originals are checked for this slice only. Baseline failure, intermediate failure, final successes, explicit controlled deliveries, command/terminal/JUnit and independent report remain separate. Earlier batches are not mass-reverified. Source-final.json is deliberately the untouched intermediate source; source-verified.json identifies the final executed source.
+
+PG, native browser/Windows, real models/semantic scenarios, actual permission revocation in the synthetic catalog-omission case, deployment and other nodes/fault matrices are NOT_RUN. No remote CI was requested or checked. This does not complete general P-A/P-B/goal semantics/publication or recover the old full-disk independent-report gap. Prior accepted directory/cross-Release/project-creation/background conclusions keep their own precise evidence boundaries.
