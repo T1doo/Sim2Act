@@ -46,4 +46,6 @@ qualified-d22的页面JSDOM driver已PASS，Python后验因新增断言误取顶
 
 断连通知后只做了一次有界环境检查：工具、原测试与日志继续；HEAD/两份未提交差异已哈希及tar保全，后续按原进程完成，没有重复启动写入者或删除未知锁进程。
 
-远端最终SHA、是否干净和推送差异以交付后 `final-delivery-verification.json` 为准；普通开发分支正常推送，不修改main或任何旧分支、不强推。
+原a05最终SHA、是否干净和推送差异见实际保存的 [final-delivery-verification.json](final-delivery-verification.json)。此文件原先仅在工作区保存、未在提交清单内，本次按原字节补入。普通开发分支正常推送，不修改main或任何旧分支、不强推。
+
+独审可直接读取 [129份原始UTF-8文本及关键JUnit/HTTP/页面/MD索引](READABLE.md)，无需读取tar；原tar与155件完整清单仍保留。

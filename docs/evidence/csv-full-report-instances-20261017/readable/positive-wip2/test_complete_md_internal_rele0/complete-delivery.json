@@ -1,0 +1,1521 @@
+{
+  "release": {
+    "namespace": "INTERNAL_ENGINEERING_ONLY",
+    "formal_publication_enabled": false,
+    "id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+    "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+    "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+    "approval_id": "iapproval_9ed18e7ce1ef4bdd8d1f05056c441beb",
+    "snapshot": {
+      "namespace": "csv-full-report-instances.v1",
+      "draft": {
+        "id": "app_09813aaa547a49eab54cbae9555306d9",
+        "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+        "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+        "candidate": {
+          "namespace": "csv-full-report-instances.v1"
+        },
+        "fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514"
+      },
+      "definition": {
+        "version": "csv-full-report-workflow.v1",
+        "definition_version": 1,
+        "scope": "READ_SUM_SAVE_COMPLETE_MD",
+        "source": {
+          "source_run_id": "run_10be8bc46b1f40799ac8a53ff90a2a34",
+          "source_run_version": 3,
+          "run_fingerprint": "cb951cc1c84e75a84a8c8a90daa90d9845df659e7793ae198a8f356b12920a55",
+          "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+          "confirmation_fingerprint": "b10780f57b90f7e5950f350d190edbc3bc8214cac2aeb39483448eb92026eeee",
+          "source_goal_id": "goal_de0f6dde8bf74157842bbebce0e1a76a",
+          "source_goal_fingerprint": "8b4487882cbf944be870c8cedfbd59d44c65144179898c792a1706baa9a6f2ca",
+          "result_fingerprint": "e356cf1cafc827d3e5a0c1c02cc8d0df91cd4a8fc9d6f0ee3a1ca50146320045",
+          "receipts_fingerprint": "244acf376bb1463adbae212b8b616f72e3d895fec189b27c8f919b00b3f5fd62",
+          "source_task_acceptance": {
+            "version": "ordinary-csv-report.v1",
+            "checker": "csv-report-independent.v1",
+            "status": "PASS",
+            "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+            "whole_task_accepted": true,
+            "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+            "checks": [
+              "source-version-hash",
+              "exact-column-count-sum",
+              "three-original-tool-intents-receipts",
+              "same-run-md-save-effect",
+              "complete-content-byte-readback",
+              "zero-model-requests"
+            ],
+            "general_semantic_acceptance": "NOT_RUN",
+            "owner_acceptance": "PENDING",
+            "formal_publication_enabled": false
+          },
+          "source_resource_id": "res_924bd031bff34970b8f64b3ec545116f",
+          "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+          "source_report_hash": "56e8514c1d9095a6596b46e181e65bcdddb3c5760fec09f3818964b13b56f96e"
+        },
+        "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+        "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+        "goal": "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+        "contract_version": "ordinary-csv-report.v1",
+        "rules": [
+          "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+          "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+          "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+          "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+        ],
+        "tools": {
+          "resource.read": "1",
+          "data.aggregate_csv": "1",
+          "artifact.save_text": "1"
+        },
+        "tool_definitions_fingerprint": "b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52",
+        "limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "formatter": "ordinary_csv.report_text.v1",
+        "variable_inputs": [
+          "authorized_csv_resource_id",
+          "numeric_column"
+        ],
+        "execution": "EXISTING_ORDINARY_CSV_REPORT_RUN",
+        "model_requests": 0,
+        "semantic_acceptance": "NOT_RUN",
+        "owner_acceptance": "PENDING",
+        "publishable": false
+      },
+      "definition_version": 1,
+      "data_schema": {
+        "type": "object",
+        "required": [
+          "result",
+          "release_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "type": "object",
+            "required": [
+              "ordinary_run_id",
+              "contract_fingerprint",
+              "result_fingerprint",
+              "report_resource_id",
+              "report_hash",
+              "source_resource_id",
+              "column",
+              "count",
+              "sum"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "ordinary_run_id": {
+                "type": "string"
+              },
+              "contract_fingerprint": {
+                "type": "string"
+              },
+              "result_fingerprint": {
+                "type": "string"
+              },
+              "report_resource_id": {
+                "type": "string"
+              },
+              "report_hash": {
+                "type": "string"
+              },
+              "source_resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              }
+            }
+          },
+          "release_ref": {
+            "type": "string"
+          }
+        }
+      },
+      "data_schema_version": 1,
+      "check_evidence": {
+        "status": "PASS",
+        "ref": "csv.complete-md-contract.v1",
+        "source": {
+          "source_run_id": "run_10be8bc46b1f40799ac8a53ff90a2a34",
+          "source_run_version": 3,
+          "run_fingerprint": "cb951cc1c84e75a84a8c8a90daa90d9845df659e7793ae198a8f356b12920a55",
+          "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+          "confirmation_fingerprint": "b10780f57b90f7e5950f350d190edbc3bc8214cac2aeb39483448eb92026eeee",
+          "source_goal_id": "goal_de0f6dde8bf74157842bbebce0e1a76a",
+          "source_goal_fingerprint": "8b4487882cbf944be870c8cedfbd59d44c65144179898c792a1706baa9a6f2ca",
+          "result_fingerprint": "e356cf1cafc827d3e5a0c1c02cc8d0df91cd4a8fc9d6f0ee3a1ca50146320045",
+          "receipts_fingerprint": "244acf376bb1463adbae212b8b616f72e3d895fec189b27c8f919b00b3f5fd62",
+          "source_task_acceptance": {
+            "version": "ordinary-csv-report.v1",
+            "checker": "csv-report-independent.v1",
+            "status": "PASS",
+            "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+            "whole_task_accepted": true,
+            "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+            "checks": [
+              "source-version-hash",
+              "exact-column-count-sum",
+              "three-original-tool-intents-receipts",
+              "same-run-md-save-effect",
+              "complete-content-byte-readback",
+              "zero-model-requests"
+            ],
+            "general_semantic_acceptance": "NOT_RUN",
+            "owner_acceptance": "PENDING",
+            "formal_publication_enabled": false
+          },
+          "source_resource_id": "res_924bd031bff34970b8f64b3ec545116f",
+          "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+          "source_report_hash": "56e8514c1d9095a6596b46e181e65bcdddb3c5760fec09f3818964b13b56f96e"
+        },
+        "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+        "semantic_acceptance": "NOT_RUN",
+        "owner_acceptance": "PENDING"
+      },
+      "model_requests": 0,
+      "formal_publication_enabled": false
+    },
+    "fingerprint": "7e53b81a607779cf4408131dbfd94f31919714dba61be1018413e68f86fd495a"
+  },
+  "approval": {
+    "id": "iapproval_9ed18e7ce1ef4bdd8d1f05056c441beb",
+    "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+    "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+    "kind": "release",
+    "payload": {
+      "snapshot": {
+        "namespace": "csv-full-report-instances.v1",
+        "draft": {
+          "id": "app_09813aaa547a49eab54cbae9555306d9",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+          "candidate": {
+            "namespace": "csv-full-report-instances.v1"
+          },
+          "fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514"
+        },
+        "definition": {
+          "version": "csv-full-report-workflow.v1",
+          "definition_version": 1,
+          "scope": "READ_SUM_SAVE_COMPLETE_MD",
+          "source": {
+            "source_run_id": "run_10be8bc46b1f40799ac8a53ff90a2a34",
+            "source_run_version": 3,
+            "run_fingerprint": "cb951cc1c84e75a84a8c8a90daa90d9845df659e7793ae198a8f356b12920a55",
+            "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+            "confirmation_fingerprint": "b10780f57b90f7e5950f350d190edbc3bc8214cac2aeb39483448eb92026eeee",
+            "source_goal_id": "goal_de0f6dde8bf74157842bbebce0e1a76a",
+            "source_goal_fingerprint": "8b4487882cbf944be870c8cedfbd59d44c65144179898c792a1706baa9a6f2ca",
+            "result_fingerprint": "e356cf1cafc827d3e5a0c1c02cc8d0df91cd4a8fc9d6f0ee3a1ca50146320045",
+            "receipts_fingerprint": "244acf376bb1463adbae212b8b616f72e3d895fec189b27c8f919b00b3f5fd62",
+            "source_task_acceptance": {
+              "version": "ordinary-csv-report.v1",
+              "checker": "csv-report-independent.v1",
+              "status": "PASS",
+              "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+              "whole_task_accepted": true,
+              "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+              "checks": [
+                "source-version-hash",
+                "exact-column-count-sum",
+                "three-original-tool-intents-receipts",
+                "same-run-md-save-effect",
+                "complete-content-byte-readback",
+                "zero-model-requests"
+              ],
+              "general_semantic_acceptance": "NOT_RUN",
+              "owner_acceptance": "PENDING",
+              "formal_publication_enabled": false
+            },
+            "source_resource_id": "res_924bd031bff34970b8f64b3ec545116f",
+            "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+            "source_report_hash": "56e8514c1d9095a6596b46e181e65bcdddb3c5760fec09f3818964b13b56f96e"
+          },
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+          "goal": "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+          "contract_version": "ordinary-csv-report.v1",
+          "rules": [
+            "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+            "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+            "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+            "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+          ],
+          "tools": {
+            "resource.read": "1",
+            "data.aggregate_csv": "1",
+            "artifact.save_text": "1"
+          },
+          "tool_definitions_fingerprint": "b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52",
+          "limits": {
+            "max_requests": 4,
+            "max_tools": 4,
+            "max_repairs": 1,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "formatter": "ordinary_csv.report_text.v1",
+          "variable_inputs": [
+            "authorized_csv_resource_id",
+            "numeric_column"
+          ],
+          "execution": "EXISTING_ORDINARY_CSV_REPORT_RUN",
+          "model_requests": 0,
+          "semantic_acceptance": "NOT_RUN",
+          "owner_acceptance": "PENDING",
+          "publishable": false
+        },
+        "definition_version": 1,
+        "data_schema": {
+          "type": "object",
+          "required": [
+            "result",
+            "release_ref"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "result": {
+              "type": "object",
+              "required": [
+                "ordinary_run_id",
+                "contract_fingerprint",
+                "result_fingerprint",
+                "report_resource_id",
+                "report_hash",
+                "source_resource_id",
+                "column",
+                "count",
+                "sum"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "ordinary_run_id": {
+                  "type": "string"
+                },
+                "contract_fingerprint": {
+                  "type": "string"
+                },
+                "result_fingerprint": {
+                  "type": "string"
+                },
+                "report_resource_id": {
+                  "type": "string"
+                },
+                "report_hash": {
+                  "type": "string"
+                },
+                "source_resource_id": {
+                  "type": "string"
+                },
+                "column": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "sum": {
+                  "type": "string"
+                }
+              }
+            },
+            "release_ref": {
+              "type": "string"
+            }
+          }
+        },
+        "data_schema_version": 1,
+        "check_evidence": {
+          "status": "PASS",
+          "ref": "csv.complete-md-contract.v1",
+          "source": {
+            "source_run_id": "run_10be8bc46b1f40799ac8a53ff90a2a34",
+            "source_run_version": 3,
+            "run_fingerprint": "cb951cc1c84e75a84a8c8a90daa90d9845df659e7793ae198a8f356b12920a55",
+            "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+            "confirmation_fingerprint": "b10780f57b90f7e5950f350d190edbc3bc8214cac2aeb39483448eb92026eeee",
+            "source_goal_id": "goal_de0f6dde8bf74157842bbebce0e1a76a",
+            "source_goal_fingerprint": "8b4487882cbf944be870c8cedfbd59d44c65144179898c792a1706baa9a6f2ca",
+            "result_fingerprint": "e356cf1cafc827d3e5a0c1c02cc8d0df91cd4a8fc9d6f0ee3a1ca50146320045",
+            "receipts_fingerprint": "244acf376bb1463adbae212b8b616f72e3d895fec189b27c8f919b00b3f5fd62",
+            "source_task_acceptance": {
+              "version": "ordinary-csv-report.v1",
+              "checker": "csv-report-independent.v1",
+              "status": "PASS",
+              "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+              "whole_task_accepted": true,
+              "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+              "checks": [
+                "source-version-hash",
+                "exact-column-count-sum",
+                "three-original-tool-intents-receipts",
+                "same-run-md-save-effect",
+                "complete-content-byte-readback",
+                "zero-model-requests"
+              ],
+              "general_semantic_acceptance": "NOT_RUN",
+              "owner_acceptance": "PENDING",
+              "formal_publication_enabled": false
+            },
+            "source_resource_id": "res_924bd031bff34970b8f64b3ec545116f",
+            "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+            "source_report_hash": "56e8514c1d9095a6596b46e181e65bcdddb3c5760fec09f3818964b13b56f96e"
+          },
+          "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+          "semantic_acceptance": "NOT_RUN",
+          "owner_acceptance": "PENDING"
+        },
+        "model_requests": 0,
+        "formal_publication_enabled": false
+      },
+      "grant_version": "212831124c68e4104d09ca51b5519638d7ed3d766f1c58295577537793987732",
+      "approval_id": "iapproval_9ed18e7ce1ef4bdd8d1f05056c441beb",
+      "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+      "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+      "kind": "release",
+      "expires_at": 1792247547.0719254
+    },
+    "fingerprint": "89d5ed6322be625a386ff4f230832d4c4ddb9b9b16e164f8edd93b9fd49e00de",
+    "expires_at": 1792247547.0719254,
+    "consumed": false
+  },
+  "instance": {
+    "namespace": "INTERNAL_ENGINEERING_ONLY",
+    "formal_publication_enabled": false,
+    "id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+    "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+    "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+    "source_app_id": "app_09813aaa547a49eab54cbae9555306d9",
+    "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+    "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+    "revision": 1,
+    "data_version": 0,
+    "history": [
+      {
+        "revision": 1,
+        "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+        "kind": "created"
+      }
+    ]
+  },
+  "first": {
+    "id": "run_86710be0cda14985b67345c951073e3b",
+    "status": "SUCCEEDED",
+    "version": 3,
+    "result": {
+      "mode": "DETERMINISTIC",
+      "model_requests": 0,
+      "answer": "完整MD报告已按事前合同保存并独立核对。",
+      "receipts": [
+        {
+          "operation_id": "op_72d4d8e5d46d42f89e87f8985836bba3",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+            "content": "amount,quantity,bad\n30,6,x\n50,9,y\n",
+            "hash": "b32950551b0fd376d8ec783fe555bcba3be39b3f460851cb54ed82a2d967298a",
+            "format": "csv"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_72d4d8e5d46d42f89e87f8985836bba3",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_5e20a3fba2154f5d9cb0f6a1766241ae",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "b32950551b0fd376d8ec783fe555bcba3be39b3f460851cb54ed82a2d967298a"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_5e20a3fba2154f5d9cb0f6a1766241ae",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_c84893ceed1d49aeb982f66ec58514f9",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_4d0871c09eb044b98008cbee20792a6e",
+            "hash": "e9f8c31a7fd3a47f231301d7de90ae14cc57c43a939906e64386b8cbe44de476"
+          },
+          "artifact_refs": [
+            "res_4d0871c09eb044b98008cbee20792a6e"
+          ],
+          "receipt_ref": "op_c84893ceed1d49aeb982f66ec58514f9",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        }
+      ],
+      "goal_acceptance": "PASS_CSV_REPORT_CONTRACT",
+      "task_acceptance": {
+        "version": "ordinary-csv-report.v1",
+        "checker": "csv-report-independent.v1",
+        "status": "PASS",
+        "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+        "whole_task_accepted": true,
+        "contract_fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3",
+        "checks": [
+          "source-version-hash",
+          "exact-column-count-sum",
+          "three-original-tool-intents-receipts",
+          "same-run-md-save-effect",
+          "complete-content-byte-readback",
+          "zero-model-requests"
+        ],
+        "general_semantic_acceptance": "NOT_RUN",
+        "owner_acceptance": "PENDING",
+        "formal_publication_enabled": false
+      }
+    },
+    "error": null,
+    "events": [
+      {
+        "id": "event_04149a2e944e440fa508f3ed14ee7681",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247247.78227,
+        "kind": "ACCEPTED",
+        "data": {
+          "input_fingerprint": "6962e103360d1f992e928390d93063ae39e43d29e9418c78dfd96fd43ca8a27e"
+        }
+      },
+      {
+        "id": "event_c113b228b3184ab68a95d6ad6b3959be",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247247.7845309,
+        "kind": "CSV_REPORT_FROZEN",
+        "data": {
+          "contract_fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3",
+          "spec_fingerprint": "049c5c75acddd08db24474281254e31b6f49e3c19df24360983212e06c634de8",
+          "deadline": 1792247547.7801435
+        }
+      },
+      {
+        "id": "event_23388f726ffa4338a104d1cb6ebb6a81",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247247.7874274,
+        "kind": "CSV_FULL_REPORT_USE",
+        "data": {
+          "version": "csv-full-report-workflow.v1",
+          "workflow_id": "app_09813aaa547a49eab54cbae9555306d9",
+          "definition_version": 1,
+          "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+          "run_id": "run_86710be0cda14985b67345c951073e3b",
+          "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+          "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+          "request_key": "instance-b73d228c716a5866fcd96046d13a077e8c80d7c218354a7550b04eef3c3c0f8b",
+          "request_fingerprint": "1f8b82524caf66e3d2ed89fd699034e567e5d7fa2530f7c9ce27f03db95daec2",
+          "contract_fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3"
+        }
+      },
+      {
+        "id": "event_80e4337b414040919b481a0990776527",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247248.036385,
+        "kind": "CSV_FULL_REPORT_INSTANCE_USE",
+        "data": {
+          "namespace": "csv-full-report-instances.v1",
+          "run_id": "run_86710be0cda14985b67345c951073e3b",
+          "app_run_id": "iapprun_37dc2f324cce42de95590299c5ff1199",
+          "workflow_id": "app_09813aaa547a49eab54cbae9555306d9",
+          "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+          "instance_id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+          "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+          "release_fingerprint": "7e53b81a607779cf4408131dbfd94f31919714dba61be1018413e68f86fd495a",
+          "revision": 1,
+          "data_version": 0,
+          "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+          "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+          "request_key": "first-fresh",
+          "request_fingerprint": "5c5e3f5fb12999345cf38b7956725ded85577239beb306d161175352187b00f6",
+          "contract_fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3"
+        }
+      },
+      {
+        "id": "event_00f3598941d046cbb01f4d28c91e7dff",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247252.3415632,
+        "kind": "CSV_REPORT_CONFIRMED",
+        "data": {
+          "version": 1,
+          "contract_fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3",
+          "request_key": "confirm-first-fresh",
+          "run_id": "run_86710be0cda14985b67345c951073e3b",
+          "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8"
+        }
+      },
+      {
+        "id": "event_77098f489e3140cebc603735e021775b",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247252.7028642,
+        "kind": "CLAIMED",
+        "data": {
+          "fence": 1
+        }
+      },
+      {
+        "id": "event_ea53ee210e99487faaf7abf6c552c57d",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247254.4000185,
+        "kind": "TOOL_VERIFIED",
+        "data": {
+          "operation_id": "op_72d4d8e5d46d42f89e87f8985836bba3",
+          "tool_ref": "resource.read",
+          "source_ref": "res_92a72d1eae3e4dd8858aa3250baa689c"
+        }
+      },
+      {
+        "id": "event_356e9064cab24b788bfda63d1133c22f",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247256.3486109,
+        "kind": "TOOL_VERIFIED",
+        "data": {
+          "operation_id": "op_5e20a3fba2154f5d9cb0f6a1766241ae",
+          "tool_ref": "data.aggregate_csv",
+          "source_ref": "res_92a72d1eae3e4dd8858aa3250baa689c"
+        }
+      },
+      {
+        "id": "event_2767973f8bde4f71a1ecb46b928bca12",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247258.2620978,
+        "kind": "TOOL_VERIFIED",
+        "data": {
+          "operation_id": "op_c84893ceed1d49aeb982f66ec58514f9",
+          "tool_ref": "artifact.save_text",
+          "source_ref": "proj_4b263d1ed10d4139af7c8db6bed70084"
+        }
+      },
+      {
+        "id": "event_b07ae2e8ffc444989c78d6d422898d32",
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "created_at": 1792247260.4779387,
+        "kind": "STATE",
+        "data": {
+          "status": "SUCCEEDED",
+          "error": null
+        }
+      }
+    ],
+    "contract": {
+      "snapshot": {
+        "run_id": "run_86710be0cda14985b67345c951073e3b",
+        "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+        "contract_version": "F1.3",
+        "goal": {
+          "goal_id": "goal_01a3eb7c4dbe4bb3b05eba006580b221",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "owner_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "goal": "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+          "constraints": [
+            "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+            "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+            "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+            "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+          ],
+          "acceptance_version": "ordinary-csv-report.v1",
+          "resource_refs": [
+            "res_92a72d1eae3e4dd8858aa3250baa689c"
+          ],
+          "unresolved": [
+            "Semantic goal acceptance NOT_RUN"
+          ]
+        },
+        "resources": [
+          {
+            "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+            "revision": 1,
+            "content_hash": "b32950551b0fd376d8ec783fe555bcba3be39b3f460851cb54ed82a2d967298a",
+            "format": "csv"
+          }
+        ],
+        "limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "mode": "mock",
+        "request_model": "intern-s2",
+        "ordinary_csv_report": {
+          "version": "ordinary-csv-report.v1",
+          "checker": "csv-report-independent.v1",
+          "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+          "revision": 1,
+          "source_hash": "b32950551b0fd376d8ec783fe555bcba3be39b3f460851cb54ed82a2d967298a",
+          "column": "quantity",
+          "csv_rule": "utf8-no-bom-strict-unique-header-rectangular-1000.v1",
+          "numeric_rule": "finite-decimal-exact-1000-digits-exponent.v1",
+          "count": 2,
+          "sum": "15",
+          "report_format": "md",
+          "report_text": "# CSV 精确汇总报告\n\n来源：res_92a72d1eae3e4dd8858aa3250baa689c\n版本：1\nSHA-256：b32950551b0fd376d8ec783fe555bcba3be39b3f460851cb54ed82a2d967298a\n列：\"quantity\"\n记录数：2\n精确合计：15\n\nCSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。\n所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。\n完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。\n仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。\n",
+          "report_hash": "e9f8c31a7fd3a47f231301d7de90ae14cc57c43a939906e64386b8cbe44de476",
+          "save_rule": "same-run-transactional-save-and-exact-readback.v1",
+          "tool_versions": {
+            "resource.read": "1",
+            "data.aggregate_csv": "1",
+            "artifact.save_text": "1"
+          },
+          "tool_definitions_fingerprint": "b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52",
+          "model_requests": 0
+        }
+      },
+      "fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3"
+    },
+    "known_effects": [
+      {
+        "id": "op_72d4d8e5d46d42f89e87f8985836bba3",
+        "tool_ref": "resource.read",
+        "status": "VERIFIED",
+        "resource_id": null,
+        "content_hash": null
+      },
+      {
+        "id": "op_c84893ceed1d49aeb982f66ec58514f9",
+        "tool_ref": "artifact.save_text",
+        "status": "VERIFIED",
+        "resource_id": "res_4d0871c09eb044b98008cbee20792a6e",
+        "content_hash": "e9f8c31a7fd3a47f231301d7de90ae14cc57c43a939906e64386b8cbe44de476"
+      },
+      {
+        "id": "op_5e20a3fba2154f5d9cb0f6a1766241ae",
+        "tool_ref": "data.aggregate_csv",
+        "status": "VERIFIED",
+        "resource_id": null,
+        "content_hash": null
+      }
+    ],
+    "ordinary_csv": {
+      "confirmed": true,
+      "deadline": 1792247547.7801435,
+      "rules": [
+        "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+        "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+        "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+        "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+      ],
+      "receipts": [
+        {
+          "operation_id": "op_72d4d8e5d46d42f89e87f8985836bba3",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+            "content": "amount,quantity,bad\n30,6,x\n50,9,y\n",
+            "hash": "b32950551b0fd376d8ec783fe555bcba3be39b3f460851cb54ed82a2d967298a",
+            "format": "csv"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_72d4d8e5d46d42f89e87f8985836bba3",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_5e20a3fba2154f5d9cb0f6a1766241ae",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+            "column": "quantity",
+            "count": 2,
+            "sum": "15",
+            "source_hash": "b32950551b0fd376d8ec783fe555bcba3be39b3f460851cb54ed82a2d967298a"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_5e20a3fba2154f5d9cb0f6a1766241ae",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_c84893ceed1d49aeb982f66ec58514f9",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_4d0871c09eb044b98008cbee20792a6e",
+            "hash": "e9f8c31a7fd3a47f231301d7de90ae14cc57c43a939906e64386b8cbe44de476"
+          },
+          "artifact_refs": [
+            "res_4d0871c09eb044b98008cbee20792a6e"
+          ],
+          "receipt_ref": "op_c84893ceed1d49aeb982f66ec58514f9",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        }
+      ],
+      "model_requests": 0
+    }
+  },
+  "second": {
+    "id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+    "status": "SUCCEEDED",
+    "version": 3,
+    "result": {
+      "mode": "DETERMINISTIC",
+      "model_requests": 0,
+      "answer": "完整MD报告已按事前合同保存并独立核对。",
+      "receipts": [
+        {
+          "operation_id": "op_ad6d6c83842c48729c20f3b1c318cd60",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+            "content": "quantity\n100\n200\n",
+            "hash": "a1492639822ec8ed99ea15b330797383e30a9d3b4083f5d1984134703a340609",
+            "format": "csv"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_ad6d6c83842c48729c20f3b1c318cd60",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_4d8fbe1824c448de8738b39d8e2cc004",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+            "column": "quantity",
+            "count": 2,
+            "sum": "300",
+            "source_hash": "a1492639822ec8ed99ea15b330797383e30a9d3b4083f5d1984134703a340609"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_4d8fbe1824c448de8738b39d8e2cc004",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_72792035a67f4b51a0c75f01bef2cfeb",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_4c1f2779aa464be386b3846e2939c11f",
+            "hash": "613f77af60e9b15e461edf0fe45ccffa15d32d7942b9916994627fbc87088b41"
+          },
+          "artifact_refs": [
+            "res_4c1f2779aa464be386b3846e2939c11f"
+          ],
+          "receipt_ref": "op_72792035a67f4b51a0c75f01bef2cfeb",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        }
+      ],
+      "goal_acceptance": "PASS_CSV_REPORT_CONTRACT",
+      "task_acceptance": {
+        "version": "ordinary-csv-report.v1",
+        "checker": "csv-report-independent.v1",
+        "status": "PASS",
+        "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+        "whole_task_accepted": true,
+        "contract_fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81",
+        "checks": [
+          "source-version-hash",
+          "exact-column-count-sum",
+          "three-original-tool-intents-receipts",
+          "same-run-md-save-effect",
+          "complete-content-byte-readback",
+          "zero-model-requests"
+        ],
+        "general_semantic_acceptance": "NOT_RUN",
+        "owner_acceptance": "PENDING",
+        "formal_publication_enabled": false
+      }
+    },
+    "error": null,
+    "events": [
+      {
+        "id": "event_f32c34e7e8654ae7b3429eef48a34bb4",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247265.378718,
+        "kind": "ACCEPTED",
+        "data": {
+          "input_fingerprint": "69171e0479a265abe5726e40d63ba2a65670fb5a973455e8db364e13ed7de053"
+        }
+      },
+      {
+        "id": "event_26f8c7da6c924e10a14db9bde0bc4fae",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247265.379648,
+        "kind": "CSV_REPORT_FROZEN",
+        "data": {
+          "contract_fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81",
+          "spec_fingerprint": "aa9f99d0b6e6776ec8cb105d43721a4d3bbe326e1e5a6a042edc58f755fbf1fb",
+          "deadline": 1792247565.376672
+        }
+      },
+      {
+        "id": "event_5a396edb1b934b668f2afc918193a93b",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247265.3810008,
+        "kind": "CSV_FULL_REPORT_USE",
+        "data": {
+          "version": "csv-full-report-workflow.v1",
+          "workflow_id": "app_09813aaa547a49eab54cbae9555306d9",
+          "definition_version": 1,
+          "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+          "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+          "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+          "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+          "request_key": "instance-dda6869f73e8afb1eb11164ec036cbd111d1f2e226b01c0b53d888d6fcfd5619",
+          "request_fingerprint": "28b19681471b28aa2872368cd0337aac48166f170b0760d3bcd3395792c33f87",
+          "contract_fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81"
+        }
+      },
+      {
+        "id": "event_95096da6c93a4210ae90c63ce68502bc",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247265.5986753,
+        "kind": "CSV_FULL_REPORT_INSTANCE_USE",
+        "data": {
+          "namespace": "csv-full-report-instances.v1",
+          "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+          "app_run_id": "iapprun_a1460abf460c4ceda4b414adfed05e24",
+          "workflow_id": "app_09813aaa547a49eab54cbae9555306d9",
+          "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+          "instance_id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+          "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+          "release_fingerprint": "7e53b81a607779cf4408131dbfd94f31919714dba61be1018413e68f86fd495a",
+          "revision": 1,
+          "data_version": 1,
+          "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+          "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+          "request_key": "second-fresh",
+          "request_fingerprint": "acb82260c4079bed0a90659fc3ea6f87d2c1c5210c253d784ed0150afc67affb",
+          "contract_fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81"
+        }
+      },
+      {
+        "id": "event_af4706200b2d452bb97ba29d4706b146",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247268.6873097,
+        "kind": "CSV_REPORT_CONFIRMED",
+        "data": {
+          "version": 1,
+          "contract_fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81",
+          "request_key": "confirm-second-fresh",
+          "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+          "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "runtime_id": "runtime_c6373c12a197421199277d50e1643de8"
+        }
+      },
+      {
+        "id": "event_5bc3831564c249c4bf31308a7bc56eea",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247269.0849385,
+        "kind": "CLAIMED",
+        "data": {
+          "fence": 1
+        }
+      },
+      {
+        "id": "event_74ed492a46594361a209c97c42fc4dc4",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247270.790672,
+        "kind": "TOOL_VERIFIED",
+        "data": {
+          "operation_id": "op_ad6d6c83842c48729c20f3b1c318cd60",
+          "tool_ref": "resource.read",
+          "source_ref": "res_eb4a40ecc7db45a6afa2d3326f537505"
+        }
+      },
+      {
+        "id": "event_1279ec89030440e39f9cc0ef8fe3cb6f",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247277.1758926,
+        "kind": "TOOL_VERIFIED",
+        "data": {
+          "operation_id": "op_4d8fbe1824c448de8738b39d8e2cc004",
+          "tool_ref": "data.aggregate_csv",
+          "source_ref": "res_eb4a40ecc7db45a6afa2d3326f537505"
+        }
+      },
+      {
+        "id": "event_7a4df3c804ce428fb7cfbfb528e91b66",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247279.9683394,
+        "kind": "TOOL_VERIFIED",
+        "data": {
+          "operation_id": "op_72792035a67f4b51a0c75f01bef2cfeb",
+          "tool_ref": "artifact.save_text",
+          "source_ref": "proj_4b263d1ed10d4139af7c8db6bed70084"
+        }
+      },
+      {
+        "id": "event_8241187bd448482f8a03236333bf9438",
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "created_at": 1792247283.7196362,
+        "kind": "STATE",
+        "data": {
+          "status": "SUCCEEDED",
+          "error": null
+        }
+      }
+    ],
+    "contract": {
+      "snapshot": {
+        "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+        "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+        "contract_version": "F1.3",
+        "goal": {
+          "goal_id": "goal_0d4fd834edb74eeab24d12d20d4c94c7",
+          "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+          "owner_id": "user_cdfb209c45c24d3a986b951906235f9a",
+          "goal": "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+          "constraints": [
+            "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+            "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+            "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+            "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+          ],
+          "acceptance_version": "ordinary-csv-report.v1",
+          "resource_refs": [
+            "res_eb4a40ecc7db45a6afa2d3326f537505"
+          ],
+          "unresolved": [
+            "Semantic goal acceptance NOT_RUN"
+          ]
+        },
+        "resources": [
+          {
+            "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+            "revision": 1,
+            "content_hash": "a1492639822ec8ed99ea15b330797383e30a9d3b4083f5d1984134703a340609",
+            "format": "csv"
+          }
+        ],
+        "limits": {
+          "max_requests": 4,
+          "max_tools": 4,
+          "max_repairs": 1,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "mode": "mock",
+        "request_model": "intern-s2",
+        "ordinary_csv_report": {
+          "version": "ordinary-csv-report.v1",
+          "checker": "csv-report-independent.v1",
+          "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+          "revision": 1,
+          "source_hash": "a1492639822ec8ed99ea15b330797383e30a9d3b4083f5d1984134703a340609",
+          "column": "quantity",
+          "csv_rule": "utf8-no-bom-strict-unique-header-rectangular-1000.v1",
+          "numeric_rule": "finite-decimal-exact-1000-digits-exponent.v1",
+          "count": 2,
+          "sum": "300",
+          "report_format": "md",
+          "report_text": "# CSV 精确汇总报告\n\n来源：res_eb4a40ecc7db45a6afa2d3326f537505\n版本：1\nSHA-256：a1492639822ec8ed99ea15b330797383e30a9d3b4083f5d1984134703a340609\n列：\"quantity\"\n记录数：2\n精确合计：300\n\nCSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。\n所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。\n完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。\n仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。\n",
+          "report_hash": "613f77af60e9b15e461edf0fe45ccffa15d32d7942b9916994627fbc87088b41",
+          "save_rule": "same-run-transactional-save-and-exact-readback.v1",
+          "tool_versions": {
+            "resource.read": "1",
+            "data.aggregate_csv": "1",
+            "artifact.save_text": "1"
+          },
+          "tool_definitions_fingerprint": "b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52",
+          "model_requests": 0
+        }
+      },
+      "fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81"
+    },
+    "known_effects": [
+      {
+        "id": "op_ad6d6c83842c48729c20f3b1c318cd60",
+        "tool_ref": "resource.read",
+        "status": "VERIFIED",
+        "resource_id": null,
+        "content_hash": null
+      },
+      {
+        "id": "op_72792035a67f4b51a0c75f01bef2cfeb",
+        "tool_ref": "artifact.save_text",
+        "status": "VERIFIED",
+        "resource_id": "res_4c1f2779aa464be386b3846e2939c11f",
+        "content_hash": "613f77af60e9b15e461edf0fe45ccffa15d32d7942b9916994627fbc87088b41"
+      },
+      {
+        "id": "op_4d8fbe1824c448de8738b39d8e2cc004",
+        "tool_ref": "data.aggregate_csv",
+        "status": "VERIFIED",
+        "resource_id": null,
+        "content_hash": null
+      }
+    ],
+    "ordinary_csv": {
+      "confirmed": true,
+      "deadline": 1792247565.376672,
+      "rules": [
+        "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+        "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+        "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+        "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+      ],
+      "receipts": [
+        {
+          "operation_id": "op_ad6d6c83842c48729c20f3b1c318cd60",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+            "content": "quantity\n100\n200\n",
+            "hash": "a1492639822ec8ed99ea15b330797383e30a9d3b4083f5d1984134703a340609",
+            "format": "csv"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_ad6d6c83842c48729c20f3b1c318cd60",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_4d8fbe1824c448de8738b39d8e2cc004",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+            "column": "quantity",
+            "count": 2,
+            "sum": "300",
+            "source_hash": "a1492639822ec8ed99ea15b330797383e30a9d3b4083f5d1984134703a340609"
+          },
+          "artifact_refs": [],
+          "receipt_ref": "op_4d8fbe1824c448de8738b39d8e2cc004",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        {
+          "operation_id": "op_72792035a67f4b51a0c75f01bef2cfeb",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_4c1f2779aa464be386b3846e2939c11f",
+            "hash": "613f77af60e9b15e461edf0fe45ccffa15d32d7942b9916994627fbc87088b41"
+          },
+          "artifact_refs": [
+            "res_4c1f2779aa464be386b3846e2939c11f"
+          ],
+          "receipt_ref": "op_72792035a67f4b51a0c75f01bef2cfeb",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        }
+      ],
+      "model_requests": 0
+    }
+  },
+  "delivery": {
+    "namespace": "csv-full-report-instances.v1",
+    "formal_publication_enabled": false,
+    "workflow_id": "app_09813aaa547a49eab54cbae9555306d9",
+    "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+    "releases": [
+      {
+        "id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+        "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+        "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+        "approval_id": "iapproval_9ed18e7ce1ef4bdd8d1f05056c441beb",
+        "snapshot": {
+          "namespace": "csv-full-report-instances.v1",
+          "draft": {
+            "id": "app_09813aaa547a49eab54cbae9555306d9",
+            "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+            "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+            "candidate": {
+              "namespace": "csv-full-report-instances.v1"
+            },
+            "fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514"
+          },
+          "definition": {
+            "version": "csv-full-report-workflow.v1",
+            "definition_version": 1,
+            "scope": "READ_SUM_SAVE_COMPLETE_MD",
+            "source": {
+              "source_run_id": "run_10be8bc46b1f40799ac8a53ff90a2a34",
+              "source_run_version": 3,
+              "run_fingerprint": "cb951cc1c84e75a84a8c8a90daa90d9845df659e7793ae198a8f356b12920a55",
+              "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+              "confirmation_fingerprint": "b10780f57b90f7e5950f350d190edbc3bc8214cac2aeb39483448eb92026eeee",
+              "source_goal_id": "goal_de0f6dde8bf74157842bbebce0e1a76a",
+              "source_goal_fingerprint": "8b4487882cbf944be870c8cedfbd59d44c65144179898c792a1706baa9a6f2ca",
+              "result_fingerprint": "e356cf1cafc827d3e5a0c1c02cc8d0df91cd4a8fc9d6f0ee3a1ca50146320045",
+              "receipts_fingerprint": "244acf376bb1463adbae212b8b616f72e3d895fec189b27c8f919b00b3f5fd62",
+              "source_task_acceptance": {
+                "version": "ordinary-csv-report.v1",
+                "checker": "csv-report-independent.v1",
+                "status": "PASS",
+                "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+                "whole_task_accepted": true,
+                "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+                "checks": [
+                  "source-version-hash",
+                  "exact-column-count-sum",
+                  "three-original-tool-intents-receipts",
+                  "same-run-md-save-effect",
+                  "complete-content-byte-readback",
+                  "zero-model-requests"
+                ],
+                "general_semantic_acceptance": "NOT_RUN",
+                "owner_acceptance": "PENDING",
+                "formal_publication_enabled": false
+              },
+              "source_resource_id": "res_924bd031bff34970b8f64b3ec545116f",
+              "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+              "source_report_hash": "56e8514c1d9095a6596b46e181e65bcdddb3c5760fec09f3818964b13b56f96e"
+            },
+            "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+            "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+            "goal": "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+            "contract_version": "ordinary-csv-report.v1",
+            "rules": [
+              "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+              "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+              "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+              "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+            ],
+            "tools": {
+              "resource.read": "1",
+              "data.aggregate_csv": "1",
+              "artifact.save_text": "1"
+            },
+            "tool_definitions_fingerprint": "b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52",
+            "limits": {
+              "max_requests": 4,
+              "max_tools": 4,
+              "max_repairs": 1,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "formatter": "ordinary_csv.report_text.v1",
+            "variable_inputs": [
+              "authorized_csv_resource_id",
+              "numeric_column"
+            ],
+            "execution": "EXISTING_ORDINARY_CSV_REPORT_RUN",
+            "model_requests": 0,
+            "semantic_acceptance": "NOT_RUN",
+            "owner_acceptance": "PENDING",
+            "publishable": false
+          },
+          "definition_version": 1,
+          "data_schema": {
+            "type": "object",
+            "required": [
+              "result",
+              "release_ref"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "result": {
+                "type": "object",
+                "required": [
+                  "ordinary_run_id",
+                  "contract_fingerprint",
+                  "result_fingerprint",
+                  "report_resource_id",
+                  "report_hash",
+                  "source_resource_id",
+                  "column",
+                  "count",
+                  "sum"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "ordinary_run_id": {
+                    "type": "string"
+                  },
+                  "contract_fingerprint": {
+                    "type": "string"
+                  },
+                  "result_fingerprint": {
+                    "type": "string"
+                  },
+                  "report_resource_id": {
+                    "type": "string"
+                  },
+                  "report_hash": {
+                    "type": "string"
+                  },
+                  "source_resource_id": {
+                    "type": "string"
+                  },
+                  "column": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer"
+                  },
+                  "sum": {
+                    "type": "string"
+                  }
+                }
+              },
+              "release_ref": {
+                "type": "string"
+              }
+            }
+          },
+          "data_schema_version": 1,
+          "check_evidence": {
+            "status": "PASS",
+            "ref": "csv.complete-md-contract.v1",
+            "source": {
+              "source_run_id": "run_10be8bc46b1f40799ac8a53ff90a2a34",
+              "source_run_version": 3,
+              "run_fingerprint": "cb951cc1c84e75a84a8c8a90daa90d9845df659e7793ae198a8f356b12920a55",
+              "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+              "confirmation_fingerprint": "b10780f57b90f7e5950f350d190edbc3bc8214cac2aeb39483448eb92026eeee",
+              "source_goal_id": "goal_de0f6dde8bf74157842bbebce0e1a76a",
+              "source_goal_fingerprint": "8b4487882cbf944be870c8cedfbd59d44c65144179898c792a1706baa9a6f2ca",
+              "result_fingerprint": "e356cf1cafc827d3e5a0c1c02cc8d0df91cd4a8fc9d6f0ee3a1ca50146320045",
+              "receipts_fingerprint": "244acf376bb1463adbae212b8b616f72e3d895fec189b27c8f919b00b3f5fd62",
+              "source_task_acceptance": {
+                "version": "ordinary-csv-report.v1",
+                "checker": "csv-report-independent.v1",
+                "status": "PASS",
+                "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+                "whole_task_accepted": true,
+                "contract_fingerprint": "c767f00a45b56d0d780ca506a50e97c1040dbc43b0965e3aba5609bc24aa8915",
+                "checks": [
+                  "source-version-hash",
+                  "exact-column-count-sum",
+                  "three-original-tool-intents-receipts",
+                  "same-run-md-save-effect",
+                  "complete-content-byte-readback",
+                  "zero-model-requests"
+                ],
+                "general_semantic_acceptance": "NOT_RUN",
+                "owner_acceptance": "PENDING",
+                "formal_publication_enabled": false
+              },
+              "source_resource_id": "res_924bd031bff34970b8f64b3ec545116f",
+              "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+              "source_report_hash": "56e8514c1d9095a6596b46e181e65bcdddb3c5760fec09f3818964b13b56f96e"
+            },
+            "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+            "semantic_acceptance": "NOT_RUN",
+            "owner_acceptance": "PENDING"
+          },
+          "model_requests": 0,
+          "formal_publication_enabled": false
+        },
+        "fingerprint": "7e53b81a607779cf4408131dbfd94f31919714dba61be1018413e68f86fd495a"
+      }
+    ],
+    "instances": [
+      {
+        "id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+        "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+        "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+        "source_app_id": "app_09813aaa547a49eab54cbae9555306d9",
+        "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+        "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+        "revision": 1,
+        "data_version": 2,
+        "history": [
+          {
+            "revision": 1,
+            "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+            "kind": "created"
+          }
+        ],
+        "release_fingerprint": "7e53b81a607779cf4408131dbfd94f31919714dba61be1018413e68f86fd495a",
+        "runs": [
+          {
+            "namespace": "csv-full-report-instances.v1",
+            "run_id": "run_86710be0cda14985b67345c951073e3b",
+            "app_run_id": "iapprun_37dc2f324cce42de95590299c5ff1199",
+            "workflow_id": "app_09813aaa547a49eab54cbae9555306d9",
+            "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+            "instance_id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+            "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+            "release_fingerprint": "7e53b81a607779cf4408131dbfd94f31919714dba61be1018413e68f86fd495a",
+            "revision": 1,
+            "data_version": 0,
+            "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+            "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+            "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+            "resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+            "request_key": "first-fresh",
+            "request_fingerprint": "5c5e3f5fb12999345cf38b7956725ded85577239beb306d161175352187b00f6",
+            "contract_fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3",
+            "status": "SUCCEEDED",
+            "version": 3,
+            "result_version": 1,
+            "definition_version": 1,
+            "model_requests": 0,
+            "formal_publication_enabled": false
+          },
+          {
+            "namespace": "csv-full-report-instances.v1",
+            "run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+            "app_run_id": "iapprun_a1460abf460c4ceda4b414adfed05e24",
+            "workflow_id": "app_09813aaa547a49eab54cbae9555306d9",
+            "definition_fingerprint": "b27a2a367329700954538ed5fc1398dd11ae17cd735c438df01b19a203367514",
+            "instance_id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+            "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+            "release_fingerprint": "7e53b81a607779cf4408131dbfd94f31919714dba61be1018413e68f86fd495a",
+            "revision": 1,
+            "data_version": 1,
+            "principal_id": "user_cdfb209c45c24d3a986b951906235f9a",
+            "project_id": "proj_4b263d1ed10d4139af7c8db6bed70084",
+            "runtime_id": "runtime_c6373c12a197421199277d50e1643de8",
+            "resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+            "request_key": "second-fresh",
+            "request_fingerprint": "acb82260c4079bed0a90659fc3ea6f87d2c1c5210c253d784ed0150afc67affb",
+            "contract_fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81",
+            "status": "SUCCEEDED",
+            "version": 3,
+            "result_version": 2,
+            "definition_version": 1,
+            "model_requests": 0,
+            "formal_publication_enabled": false
+          }
+        ],
+        "data": [
+          {
+            "instance_id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+            "version": 1,
+            "run_id": "iapprun_37dc2f324cce42de95590299c5ff1199",
+            "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+            "schema_version": 1,
+            "data": {
+              "result": {
+                "ordinary_run_id": "run_86710be0cda14985b67345c951073e3b",
+                "contract_fingerprint": "b78b113888837537bbb559ffa45c3a42604cada37f08b32870e845d68702c5e3",
+                "result_fingerprint": "153e2e0189f18219e8000a559875919a85577b29bd7ec132ad9421f4af29d6e9",
+                "report_resource_id": "res_4d0871c09eb044b98008cbee20792a6e",
+                "report_hash": "e9f8c31a7fd3a47f231301d7de90ae14cc57c43a939906e64386b8cbe44de476",
+                "source_resource_id": "res_92a72d1eae3e4dd8858aa3250baa689c",
+                "column": "quantity",
+                "count": 2,
+                "sum": "15"
+              },
+              "release_ref": "irelease_adcd112c379e44ba872dc2f9db6533d7"
+            },
+            "fingerprint": "f0b1ff1dd34788d632dc1ce940eb7cddd9a82e45f799b16765aeb2bb299e7589"
+          },
+          {
+            "instance_id": "iinstance_0f8daf202d61323a4b37c48a3d47db36",
+            "version": 2,
+            "run_id": "iapprun_a1460abf460c4ceda4b414adfed05e24",
+            "release_id": "irelease_adcd112c379e44ba872dc2f9db6533d7",
+            "schema_version": 1,
+            "data": {
+              "result": {
+                "ordinary_run_id": "run_d0aa60b3582e4262ab7d2fd8ebe6438e",
+                "contract_fingerprint": "43ac4d77f3a21f25ae87036e9f8c463471a5288f7a56442b7b47d7e332423f81",
+                "result_fingerprint": "4b772b52e21d0cb397437e84d3c82062697fbbe03eb4ea9ebe57fc4c8a254e64",
+                "report_resource_id": "res_4c1f2779aa464be386b3846e2939c11f",
+                "report_hash": "613f77af60e9b15e461edf0fe45ccffa15d32d7942b9916994627fbc87088b41",
+                "source_resource_id": "res_eb4a40ecc7db45a6afa2d3326f537505",
+                "column": "quantity",
+                "count": 2,
+                "sum": "300"
+              },
+              "release_ref": "irelease_adcd112c379e44ba872dc2f9db6533d7"
+            },
+            "fingerprint": "b35af75364de927959925e5d51d31dc9b71845a5fbe01fab448507c0f8be8f0a"
+          }
+        ]
+      }
+    ]
+  }
+}
