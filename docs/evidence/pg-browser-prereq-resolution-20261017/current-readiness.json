@@ -1,0 +1,100 @@
+{
+  "captured_at": "2026-10-17T03:54:29.853097+00:00",
+  "source": "4694681d281885184b0dfa52dc3f3c710a547454",
+  "uid": 1000,
+  "gid": 1000,
+  "checks": [
+    {
+      "command": [
+        "stat",
+        "-c",
+        "%n uid=%u gid=%g mode=%a",
+        "/usr/lib/chromium/chrome-sandbox",
+        "/usr/lib/chromium/chromium"
+      ],
+      "exit_code": 0,
+      "stdout": "/usr/lib/chromium/chrome-sandbox uid=65534 gid=65534 mode=4755\n/usr/lib/chromium/chromium uid=65534 gid=65534 mode=755\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "cat",
+        "/proc/self/uid_map",
+        "/proc/self/gid_map"
+      ],
+      "exit_code": 0,
+      "stdout": "      1000          0          1\n      1000          0          1\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "docker",
+        "image",
+        "ls",
+        "--format",
+        "{{.Repository}}:{{.Tag}} {{.ID}}"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "docker",
+        "ps",
+        "-a",
+        "--format",
+        "{{.ID}} {{.Image}} {{.Status}}"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "dpkg-query",
+        "-W",
+        "-f",
+        "${binary:Package} ${db:Status-Abbrev} ${Version}\n",
+        "postgresql-17",
+        "postgresql-client-17"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "dpkg-query: no packages found matching postgresql-17\ndpkg-query: no packages found matching postgresql-client-17\n"
+    }
+  ],
+  "security_status": [
+    "CapEff:\t0000000000000000",
+    "CapBnd:\t0000000000000000",
+    "NoNewPrivs:\t1",
+    "Seccomp:\t2"
+  ],
+  "pg_binaries": {
+    "postgres": null,
+    "initdb": null,
+    "pg_ctl": null,
+    "pg_isready": null,
+    "psql": null
+  },
+  "provided_pg_variables": {
+    "SIM2ACT_TEST_DATABASE_URL": false,
+    "SIM2ACT_DATABASE_URL": false,
+    "DATABASE_URL": false,
+    "PGHOST": false,
+    "PGPORT": false,
+    "PGDATABASE": false,
+    "PGUSER": false,
+    "PGPASSWORD": false
+  },
+  "browser_env_paths": {
+    "XDG_CONFIG_HOME": null,
+    "XDG_CACHE_HOME": null,
+    "XDG_RUNTIME_DIR": null,
+    "CHROME_DEVEL_SANDBOX": null
+  },
+  "namespace_policy_files": {
+    "/proc/sys/user/max_user_namespaces": "2147483647",
+    "/proc/sys/kernel/unprivileged_userns_clone": "ABSENT"
+  }
+}
