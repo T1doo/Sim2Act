@@ -313,14 +313,27 @@ def test_current_worker_budget_tightening_stops_before_tools(env, tmp_path):
     (tmp_path / "actual-run.json").write_text(json.dumps(actual, ensure_ascii=False, indent=2))
 
 
-@pytest.mark.parametrize("case", ["deliver", "lost", "navigation"])
+@pytest.mark.parametrize(
+    "case",
+    [
+        "deliver",
+        "lost",
+        "navigation",
+        "workspace-unconfirmed",
+        "workspace-pending",
+        "scope-project",
+        "scope-identity",
+    ],
+)
 def test_visible_prospective_csv_report(env, tmp_path, case):
     import os
     import subprocess
     import threading
 
-    store, settings, client, owner, _, project, material = env
+    store, settings, client, owner, other_owner, project, material = env
     other = store.project(owner, "Other owned project")
+    if case == "scope-identity":
+        store.project(other_owner, "Other identity project")
     info = dict(
         case=case,
         project=project,

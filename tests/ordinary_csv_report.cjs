@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
-const info=JSON.parse(fs.readFileSync(process.argv[2])),requests=[],checks=[],assets=[],blobs=[],pending=new Map();let serial=0,dom,w,$,hold=null,release=null,drop=null;
+const info=JSON.parse(fs.readFileSync(process.argv[2])),requests=[],checks=[],assets=[],blobs=[],observations=[],pending=new Map();let serial=0,dom,w,$,hold=null,release=null,drop=null;
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
 const wait=async(fn,label)=>{const until=Date.now()+12000;while(Date.now()<until){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('bounded wait: '+label);};
@@ -35,6 +35,39 @@ async function boot(){
  $('csv-report-column').value='amount';await action('csv-report-column','change');
  await w.refresh();check($('csv-report-column').value==='amount'&&!$('csv-report-prepare').disabled,'ordinary background refresh preserves explicit column for unchanged authorized source version');
 }
+async function workspaceRoundtrip(){
+ await action(w.document.querySelector('#workspace-nav [data-tab="resources"]'));
+ await action(w.document.querySelector('#workspace-nav [data-tab="projects"]'));
+}
+function observeContract(stage){observations.push({stage,requests:requests.length,visible:visible($('csv-report-contract')),ackChecked:$('csv-report-ack')?.checked,confirmDisabled:$('csv-report-confirm')?.disabled,readVisible:visible($('csv-report-confirm-read')),proof:$('csv-report-proof')?.textContent,status:$('csv-report-confirm-status')?.textContent});}
+async function staleControlsSendNothing(ack,button,label){
+ const count=requests.length;ack.checked=true;await ack.onchange(new w.Event('change'));await button.onclick(new w.Event('click'));
+ check(requests.length===count,label+' old detached controls send no requests');
+}
+async function prepareReturn(rid){
+ if(!['workspace-unconfirmed','scope-project','scope-identity'].includes(info.case))return;
+ const oldAck=$('csv-report-ack'),oldButton=$('csv-report-confirm'),oldSection=$('csv-report-contract');
+ if(info.case==='workspace-unconfirmed'){
+  const count=requests.length;await workspaceRoundtrip();observeContract('unconfirmed workspace return');
+  check(requests.length===count,'visible workspace return does not automatically read, acknowledge or confirm');
+  // Exercise the returned visible controls before checking identity: this is the actual zero-request red.
+  $('csv-report-ack').checked=true;await action('csv-report-ack','change');
+  if($('csv-report-confirm').disabled)$('csv-report-confirm').click();
+  observeContract('returned visible acknowledgement attempted');
+  check(!$('csv-report-confirm').disabled&&requests.slice(count).some(r=>r.method==='GET'&&r.path===`/api/runs/${rid}`),'returned visible acknowledgement freshly verifies the Run and enables explicit confirmation');
+  check($('csv-report-contract')!==oldSection,'workspace return creates a new confirmation view');
+ }else{
+  $('csv-report-ack').checked=true;await action('csv-report-ack','change');
+  check(!$('csv-report-confirm').disabled,'original view has an explicit acknowledgement before scope change');
+  if(info.case==='scope-project'){await project(info.other);await project(info.project);}
+  else{await action('identity-switch');$('token').value='synthetic-test-B';await action('connect');await action('identity-switch');$('token').value='synthetic-test-A';await action('connect');await project(info.project);}
+  check(!$('csv-report-contract'),'scope change removes the old protected confirmation');
+  await staleControlsSendNothing(oldAck,oldButton,'scope change');
+  await action('csv-report-open');observeContract('explicitly reopened under new owner scope');
+  check(!$('csv-report-ack').checked&&$('csv-report-confirm').disabled,'new identity/project scope cannot inherit a previous checked acknowledgement');
+ }
+ await staleControlsSendNothing(oldAck,oldButton,'workspace/current-scope replacement');
+}
 async function main(){
  await boot();const route=`/api/projects/${info.project}/csv-report-runs`;
  if(info.case==='lost')drop=route;
@@ -49,7 +82,9 @@ async function main(){
  check($('csv-report-preview').textContent.includes('记录数：2')&&$('csv-report-preview').textContent.includes('精确合计：4.00')&&$('csv-report-confirm').disabled,'complete MD preview requires a separate unchecked explicit confirmation');
  check($('goal').value==='独立自然语言草稿：不得被有限CSV合同覆盖','structured task does not interpret or replace arbitrary Goal draft');
  assert.equal((await rpc({command:'before',run:rid})).status,200);
- $('csv-report-ack').checked=true;await action('csv-report-ack','change');
+ await prepareReturn(rid);
+ const ackStart=requests.length;$('csv-report-ack').checked=true;await action('csv-report-ack','change');
+ if(['workspace-pending','scope-project','scope-identity'].includes(info.case))check(requests.slice(ackStart).some(r=>r.method==='GET'&&r.path===`/api/runs/${rid}`),'new explicit acknowledgement rechecks the exact complete Run contract');
  const confirmRoute=`/api/runs/${rid}/confirm-csv-report`;
  if(info.case==='lost')drop=confirmRoute;
  if(info.case!=='lost')hold={path:confirmRoute,method:'POST'};
@@ -57,6 +92,16 @@ async function main(){
  if(info.case!=='lost'){
   await wait(()=>!!release,'actual confirm receipt held');const count=requests.length;const old=$('csv-report-confirm');
   await old.onclick(new w.Event('click'));check(requests.length===count,'duplicate click while confirmation is in flight sends no second POST');
+  if(info.case==='workspace-pending'){
+   const oldAck=$('csv-report-ack'),oldButton=$('csv-report-confirm'),oldSection=$('csv-report-contract'),count=requests.length;
+   await workspaceRoundtrip();observeContract('workspace return with actual accepted confirmation response held');
+   check(requests.length===count,'pending workspace return sends no automatic GET or duplicate POST');
+   check($('csv-report-contract')!==oldSection&&!$('csv-report-ack').checked&&$('csv-report-confirm').disabled,'pending return rebuilds an unchecked locked confirmation view');
+   await staleControlsSendNothing(oldAck,oldButton,'pending workspace return');
+   check(visible($('csv-report-confirm-read')),'new pending view offers explicit original-Run readback');
+   await action('csv-report-confirm-read');observeContract('current view read actual already-confirmed Run');
+   check(!$('csv-report-confirm')&&$('raw-result').textContent.includes('QUEUED'),'explicit readback recovers actual accepted Run without a second confirmation');
+  }
   if(info.case==='navigation'){
    await project(info.other);await project(info.project);
    check(!$('csv-report-contract'),'project away/back clears old contract selection');
@@ -64,6 +109,7 @@ async function main(){
   const finish=release;release=null;finish();
  }
  await confirming;
+ if(info.case==='workspace-pending'){observeContract('old accepted response released after current readback');check(!$('csv-report-confirm')&&$('raw-result').textContent.includes('QUEUED')&&requests.filter(r=>r.method==='POST'&&r.path===confirmRoute).length===1,'late old confirmation cannot overwrite current readback or add a POST');}
  if(info.case==='lost'){
   check($('csv-report-confirm')?.textContent==='恢复同一确认的回执','lost accepted confirmation offers exact original recovery');
   await action('csv-report-confirm');
@@ -87,6 +133,6 @@ async function main(){
  check(bytes.equals(Buffer.from(actual.artifact.content))&&blobs[0].filename===`sim2act-${rid}-${actual.artifact.id}.md`,'download bytes and filename bind exact saved artifact and Run');
  fs.writeFileSync(info.output.replace('result.json','captured-report.md'),bytes);
  assert.equal((await rpc({command:'after',run:rid})).status,200);
- fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,requests,assets,actual},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');
+ fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,requests,assets,observations,actual},null,2));dom.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');
 }
-main().catch(error=>{if(info?.output)fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:String(error.stack),checks,requests,assets},null,2));if(dom)dom.window.close();process.stderr.write(String(error.stack)+'\n');process.stdout.write(JSON.stringify({done:true})+'\n');process.exitCode=1;});
+main().catch(error=>{if(info?.output)fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:String(error.stack),checks,requests,assets,observations},null,2));if(dom)dom.window.close();process.stderr.write(String(error.stack)+'\n');process.stdout.write(JSON.stringify({done:true})+'\n');process.exitCode=1;});
