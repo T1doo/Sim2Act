@@ -75,8 +75,12 @@ async function readonly(){assert.equal((await rpc({command:'readonly'})).status,
 const selected=()=>JSON.parse($('dag-reuse-proof').textContent);
 const resultButton=version=>$('dag-reuse-results').querySelector(`[data-result-version="${version}"] button`);
 const sourceReleases=new Map([info.old,info.target].map(r=>[r.id,r]));
-const savedFiles=[],forbidden=[];
-function visibleRelease(id){return $('dag-reuse-release').value===id&&$('dag-reuse-release').selectedOptions[0]?.value===id;}
+const savedFiles=[],forbidden=[],visibleReleases=[];
+function visibleRelease(id){
+ const select=$('dag-reuse-release');
+ visibleReleases.push({expected:id,selected:select.value,selected_option:select.selectedOptions[0]?.value,options:[...select.options].map(o=>({value:o.value,label:o.textContent}))});
+ return select.value===id&&select.selectedOptions[0]?.value===id;
+}
 async function submit(column,release,revision,version,total){
  const before=posts().length;
  $('dag-reuse-column').value=column;$('dag-reuse-column').dispatchEvent(new w.Event('change'));
@@ -165,7 +169,7 @@ async function flow(){
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
-  fs.writeFileSync(info.output,JSON.stringify({status,error,checks,requests,assets,boots,mutations,heldWaits,saved_files:savedFiles,forbidden_after_revoke:forbidden,
+  fs.writeFileSync(info.output,JSON.stringify({status,error,checks,requests,assets,boots,mutations,heldWaits,saved_files:savedFiles,forbidden_after_revoke:forbidden,visible_releases:visibleReleases,
    download_blobs:downloadBlobs.map(({url,blob,revoked})=>({url,type:blob.type,bytes:blob.size,revoked})),download_anchors:downloadAnchors,
    scope:'One actual ASGI/JSDOM compatible adoption + own-Release cold downloads; synthetic SQLite/NoModel. Direct post-clear endpoint probe is labelled separately.',pg:'NOT_RUN',native_browser:'NOT_RUN',real_models_semantics:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');

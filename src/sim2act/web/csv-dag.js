@@ -682,6 +682,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   if(!current())return;
   for(const [key,plan] of verifiedPlans){c.reuse.materialPlans.set(key,plan);while(c.reuse.materialPlans.size>50)c.reuse.materialPlans.delete(c.reuse.materialPlans.keys().next().value);}
   c.reuse.instance=detail;c.reuse.release=rel;c.reuse.job=detail.runs.find(v=>["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"].includes(v.status))||detail.runs.slice().sort((a,b)=>(b.result_version||0)-(a.result_version||0))[0]||null;
+  $("dag-reuse-release").value=rel.id;
   dagReuseSwitchClear(c);
   $("dag-reuse-switch-target").replaceChildren(new Option("请选择升级或回退的内部版本",""),...(c.reuse.releases||[]).filter(v=>v.id!==rel.id&&dagReuseSwitchCompatible(rel,v)).map(v=>new Option(v.id,v.id)));
   const e=rel.snapshot.execution_source,dual=e.version===dagReuseTwoSumVersion;
