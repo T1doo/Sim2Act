@@ -3,6 +3,7 @@ let naturalUsePreparation=null;
 let naturalFirstGuide=null;
 const naturalPreparationGoalRequests=new Map();
 let token = "", activeRun = null, refs = [];
+let ordinaryRunMaterialsReady = false;
 let reconcileVersion = null, unresolvedAttempts = [];
 let runSelectionGeneration = 0;
 let foregroundRunRead = null;
@@ -149,11 +150,11 @@ async function refresh() {
   const current=()=>pid===$("project-select").value && identity===token && generation===runHistoryGeneration;
   let materials;
   try {materials = await api(`/api/projects/${pid}/resources`);}
-  catch(error){if(current() && typeof invalidateConditionalSource === "function")invalidateConditionalSource("授权列表读取失败");throw error;}
+  catch(error){if(current()){updateOrdinaryRunMaterials([],false);if(typeof invalidateConditionalSource === "function")invalidateConditionalSource("授权列表读取失败");}throw error;}
   if (!current()) return;
   if(typeof renderResourceMaterial === "function")renderResourceMaterial();
   if(typeof reconcileConditionalSources === "function")reconcileConditionalSources(materials);
-  refs = materials.map(x => x.id);
+  updateOrdinaryRunMaterials(materials);
   const selectedGoals=Array.from($("goal-card-resources").selectedOptions).map(o=>o.value);
   $("goal-card-resources").replaceChildren(...materials.map(m=>{const o=new Option(m.name,m.id);o.selected=selectedGoals.includes(m.id);return o;}));
   await refreshGoalCards(pid);
@@ -303,6 +304,7 @@ async function loadProjects(preferred=null) {
 }
 function clearIdentityView() {
   projectCreatePending=null;$("project-form").querySelector("button").disabled=false;
+  clearOrdinaryRunMaterials();
   clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearSpecRecoveryMemory === "function")clearSpecRecoveryMemory();
@@ -358,7 +360,7 @@ $("resource-form").onsubmit = safe(async () => {const pid=$("project-select").va
 $("run-form").onsubmit = safe(async () => submitOrdinaryRun());
 $("run-history-refresh").onclick=safe(async()=>refresh());
 $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find(x=>x.attempt_id === $("reconcile-attempt").value);if(!a || !activeRun)throw new Error("请重新打开待核对任务");const decision=$("reconcile-decision").value;await api(`/api/runs/${activeRun}/reconcile`,"POST",{attempt_id:a.attempt_id,version:reconcileVersion,decision,expected_fingerprint:a.request_fingerprint,evidence:$("reconcile-evidence").value,acknowledge_unknown_cost:$("reconcile-ack").checked,response_json:decision === "record_response" ? $("reconcile-response").value : null});$("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;await showRun(activeRun);});
-$("project-select").onchange = safe(async () => {projectSelectionGeneration++;if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";projectSelectionRefresh=refresh();await projectSelectionRefresh;});
+$("project-select").onchange = safe(async () => {projectSelectionGeneration++;clearOrdinaryRunMaterials();if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";projectSelectionRefresh=refresh();await projectSelectionRefresh;});
 document.querySelectorAll("#workspace-nav [data-tab]").forEach(b => b.onclick = () => selectWorkspace(b.dataset.tab));
 selectWorkspace("projects");
 document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
@@ -879,10 +881,44 @@ const ordinarySubmissions = new Map();
 function runSubmissionEntry() {
   return ordinarySubmissions.get(token)?.get($("project-select").value);
 }
+function clearOrdinaryRunMaterials() {
+  refs=[];ordinaryRunMaterialsReady=false;$("run-materials").replaceChildren();
+}
+function updateOrdinaryRunMaterials(materials,ready=true) {
+  const select=$("run-materials"),entry=runSubmissionEntry();
+  const locked=entry && ["sending","unknown"].includes(entry.state);
+  const selected=locked?entry.body.resource_refs:Array.from(select.selectedOptions,o=>o.value);
+  refs=materials.map(m=>m.id);ordinaryRunMaterialsReady=ready;
+  select.replaceChildren(...materials.map(m=>new Option(`${m.name} · ${m.format}`,m.id)));
+  for(const id of selected)if(!refs.includes(id))select.append(new Option(`当前列表不可用的原选择 · ${id}`,id));
+  for(const option of select.options)option.selected=selected.includes(option.value);
+  renderRunSubmission();
+}
+function ordinaryRunMaterialSelection() {
+  const selected=Array.from($("run-materials").selectedOptions,o=>o.value);
+  const unavailable=selected.filter(id=>!refs.includes(id));
+  return {selected,unavailable,invalid:selected.length>8 || unavailable.length>0 || (!ordinaryRunMaterialsReady && selected.length>0)};
+}
+function renderOrdinaryRunMaterials(entry,locked) {
+  const select=$("run-materials");
+  if(locked){
+    for(const id of entry.body.resource_refs)if(!Array.from(select.options).some(o=>o.value===id))select.append(new Option(`原提交材料 · ${id}`,id));
+    for(const option of select.options)option.selected=entry.body.resource_refs.includes(option.value);
+  }
+  select.disabled=Boolean(locked)||!ordinaryRunMaterialsReady;
+  const state=ordinaryRunMaterialSelection();
+  $("run-materials-status").textContent=locked
+    ? `原提交已冻结 ${state.selected.length} 份材料；恢复沿用原集合和请求键。${state.unavailable.length?`其中 ${state.unavailable.length} 份当前列表不可用。`:""}`
+    : state.selected.length>8 ? `已选择 ${state.selected.length}/8 份材料；请减少选择后提交，不会自动截断。`
+      : state.unavailable.length ? `有 ${state.unavailable.length} 份原选择当前不可用；请刷新列表核对，或取消该选择后提交。`
+        : `已选择 ${state.selected.length}/8 份材料。${state.selected.length?"仅所选材料随本次目标提交。":"本次未附加材料。"}${ordinaryRunMaterialsReady?"":"材料列表尚未就绪。"}`;
+  return state;
+}
 function renderRunSubmission() {
   const entry=runSubmissionEntry();
   const blocked=entry && ["sending","unknown"].includes(entry.state);
-  $("run-submit").disabled=Boolean(blocked);
+  const materials=renderOrdinaryRunMaterials(entry,blocked);
+  $("run-submit").disabled=Boolean(blocked)||materials.invalid;
   $("goal").readOnly=Boolean(blocked);
   if(blocked)$("goal").value=entry.body.goal;
   $("run-submit-recover").hidden=entry?.state!=="unknown";
@@ -937,7 +973,9 @@ async function submitOrdinaryRun() {
   if(!project)throw Error("先选择项目");
   const old=runSubmissionEntry();
   if(old && ["sending","unknown"].includes(old.state)){renderRunSubmission();return;}
-  const body=Object.freeze({goal:$("goal").value,resource_refs:Object.freeze([...refs]),request_key:crypto.randomUUID()});
+  const materials=ordinaryRunMaterialSelection();
+  if(materials.invalid){renderRunSubmission();throw Error("请明确选择当前可用的最多8份材料，或不附加材料。");}
+  const body=Object.freeze({goal:$("goal").value,resource_refs:Object.freeze(materials.selected),request_key:crypto.randomUUID()});
   runUserSelectionGeneration++;
   const entry={project,identity:token,body,state:"new",message:"",runId:null};
   if(!ordinarySubmissions.has(token))ordinarySubmissions.set(token,new Map());
@@ -956,6 +994,7 @@ $("run-submit-read").onclick=safe(async()=>{
   renderRunSubmission();
   await readAcceptedOrdinaryRun(entry,runUserSelectionGeneration);
 });
+$("run-materials").onchange=()=>renderRunSubmission();
 
 "use strict";
 // Browser-local import; existing resource POST remains the only explicit save/authorization.
