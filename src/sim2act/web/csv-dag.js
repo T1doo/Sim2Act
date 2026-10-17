@@ -1,7 +1,7 @@
 "use strict";
 const csvDagIntents = new Map();
 let csvDagContext = null;
-const csvDagCurrent = c => c === csvDagContext && deliveryCurrent(c.parent);
+const csvDagCurrent = c => c === csvDagContext && deliveryCurrent(c.parent) && (!c.savedUse||c.savedUse.current());
 const csvDagKey = c => deliveryKey(c.parent);
 const csvDagBase = c => `/api/projects/${c.parent.project}/apps/${c.parent.id}/csv-dag`;
 function clearCsvDag() {
@@ -585,20 +585,23 @@ async function dagReuseHistory(c=csvDagContext) {
 }
 async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, expected=null) {
   if(!c||!csvDagCurrent(c)||!iid)return;
+  const r=c.reuse,generation=(r.readGeneration||0)+1;r.readGeneration=generation;
+  const current=()=>csvDagCurrent(c)&&c.reuse===r&&generation===r.readGeneration;
+  try{
   $("dag-reuse-results").replaceChildren();
   const detail=await api(`/api/internal/instances/${iid}`);
-  if(!csvDagCurrent(c))return;
+  if(!current())return;
   // Instance GET reauthorizes read_release and returns its exact fingerprint.
   // Only a matching immutable material release/plan in this context can avoid
   // duplicate GETs. Every fresh Instance proof and every seal remains mandatory.
   const cachedRelease=[c.reuse.release,...(c.reuse.releases||[])].find(v=>v?.id===detail.release_id&&v.fingerprint===detail.release_fingerprint&&v.snapshot?.execution_source?.plan_key?.match(/^(material|logic)-plan-/));
   const rel=expected?.release||cachedRelease||await api(`/api/internal/releases/${detail.release_id}`);
-  if(!csvDagCurrent(c))return;
+  if(!current())return;
   if(detail.id!==iid||rel.id!==detail.release_id||detail.source_app_id!==c.parent.id||detail.project_id!==c.parent.project||detail.runtime_id!==c.parent.app.runtime_id||detail.release_fingerprint!==rel.fingerprint||!await dagReuseReleaseSeal(rel,c)||!Array.isArray(detail.runs)||!Array.isArray(detail.data))throw Error("VERSION_CONFLICT");
   const material=rel.snapshot.execution_source.plan_key.match(/^(material|logic)-plan-/),verifiedPlans=[];
   for(const run of detail.runs) {
     const runRelease=run.release_id===rel.id?rel:await api(`/api/internal/releases/${run.release_id}`);
-    if(!csvDagCurrent(c))return;
+    if(!current())return;
     if(!await dagReuseReleaseSeal(runRelease,c)||!detail.history.some(h=>h.revision===run.expected_revision&&h.release_id===runRelease.id))throw Error("VERIFICATION_FAILED");
     const e=runRelease.snapshot.execution_source;
     if(run.instance_id!==iid||run.release_id!==runRelease.id||run.execution_version!==e.version||run.run_id!==run.proof?.id||run.status!==run.proof.status)throw Error("VERIFICATION_FAILED");
@@ -606,7 +609,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
     if(accepted?.instance_id!==iid||accepted.app_run_id!==run.app_run_id||accepted.version!==e.version)throw Error("VERIFICATION_FAILED");
     const planCacheKey=JSON.stringify([run.plan_key,run.proof.plan_fingerprint]);
     const bindingPlan=(material&&c.reuse.materialPlans.get(planCacheKey))||await api(csvDagBase(c)+"/"+encodeURIComponent(run.plan_key));
-    if(!csvDagCurrent(c))return;
+    if(!current())return;
     const shape=dagReuseShape(bindingPlan);
     if(!await csvDagPlanSeal(bindingPlan,c)||run.proof.plan_fingerprint!==bindingPlan.plan_fingerprint||!shape||!dagReuseExecutionMatches(e,bindingPlan,run.input))throw Error("VERIFICATION_FAILED");
     // Verify the unchanged DAG receipt protocol, then separately bind the one typed write.
@@ -622,7 +625,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
     const run=detail.runs.find(v=>v.run_id===expected.run_id);
     if(rel.id!==detail.release_id||!run||run.app_run_id!==expected.app_run_id||run.instance_id!==expected.instance_id||!deliverySame(run.input,expected.input))throw Error("VERIFICATION_FAILED");
   }
-  if(!csvDagCurrent(c))return;
+  if(!current())return;
   for(const [key,plan] of verifiedPlans){c.reuse.materialPlans.set(key,plan);while(c.reuse.materialPlans.size>50)c.reuse.materialPlans.delete(c.reuse.materialPlans.keys().next().value);}
   c.reuse.instance=detail;c.reuse.release=rel;c.reuse.job=detail.runs.find(v=>["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"].includes(v.status))||detail.runs.slice().sort((a,b)=>(b.result_version||0)-(a.result_version||0))[0]||null;
   dagReuseSwitchClear(c);
@@ -643,6 +646,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   $("dag-reuse-proof").textContent=JSON.stringify({release:rel,instance:detail},null,2);
   $("dag-reuse-status").textContent=`实例已核读回 · ${detail.data_version} 条结果 · ${dagReuseLabel(rel.snapshot.execution_source)}复用 · 正式发布关闭`;
   dagReuseButtons(c);return detail;
+  }catch(error){if(current())throw error;}
 }
 async function dagReuseSubmit(kind,retry=false) {
   const c=csvDagContext;if(!c||!csvDagCurrent(c)||c.reuse.busy)return;
@@ -762,8 +766,8 @@ $("dag-material-plan").onclick=()=>dagReuseSubmit("material");
 $("dag-reuse-recover").onclick=()=>dagReuseSubmit("",true);
 $("dag-reuse-history").onclick=()=>dagReuseAction(dagReuseHistory);
 $("dag-reuse-read").onclick=()=>dagReuseAction(c=>dagReuseRead(c));
-$("dag-reuse-release").onchange=()=>{const c=csvDagContext;if(!c)return;dagReuseSwitchClear(c);c.reuse.release=c.reuse.releases?.find(v=>v.id===$("dag-reuse-release").value)||null;c.reuse.instance=null;c.reuse.job=null;c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();$("dag-reuse-run-confirm").checked=false;$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();dagReuseButtons(c);};
-$("dag-reuse-instance").onchange=()=>{const c=csvDagContext;if(!c)return;dagReuseSwitchClear(c);c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();$("dag-reuse-run-confirm").checked=false;dagReuseButtons(c);};
+$("dag-reuse-release").onchange=()=>{const c=csvDagContext;if(!c)return;c.reuse.readGeneration=(c.reuse.readGeneration||0)+1;dagReuseSwitchClear(c);c.reuse.release=c.reuse.releases?.find(v=>v.id===$("dag-reuse-release").value)||null;c.reuse.instance=null;c.reuse.job=null;c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();$("dag-reuse-run-confirm").checked=false;$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();dagReuseButtons(c);};
+$("dag-reuse-instance").onchange=()=>{const c=csvDagContext;if(!c)return;c.reuse.readGeneration=(c.reuse.readGeneration||0)+1;dagReuseSwitchClear(c);c.reuse.instance=null;c.reuse.job=null;$("dag-reuse-proof").textContent="";$("dag-reuse-results").replaceChildren();$("dag-reuse-run-confirm").checked=false;dagReuseButtons(c);};
 $("dag-reuse-confirm").onchange=()=>dagReuseButtons();
 $("dag-reuse-run-confirm").onchange=()=>dagReuseButtons();
 for(const id of ["dag-reuse-column","dag-reuse-column-second"])$(id).onchange=()=>{$("dag-reuse-run-confirm").checked=false;dagReuseButtons();};

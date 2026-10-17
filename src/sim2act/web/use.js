@@ -51,18 +51,55 @@ async function refreshApplicationUse(apps){
    if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);
    continue;
   }
-  let app,reply;
-  try{app=await api(`/api/apps/${summary.id}`);if(!current())return;if(!csvUseApp(app))continue;reply=await api(`/api/internal/apps/${app.id}/instances`);}
+  let app,reply,dagInstances,dagReleases;
+  try{app=await api(`/api/apps/${summary.id}`);if(!current())return;if(!csvUseApp(app))continue;
+   [reply,dagInstances]=await Promise.all([api(`/api/internal/apps/${app.id}/instances`),api(`/api/internal/apps/${app.id}/dag-instances`)]);if(!current())return;
+   if(dagInstances.items.length)dagReleases=await api(`/api/internal/apps/${app.id}/dag-releases`);
+  }
   catch(error){if(!current())return;rows.push(row(`${summary.name} · 当前版本不可读取；请核对授权与来源。`));if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);continue;}
   if(!current())return;
   for(const instance of reply.items){
    if(instance.project_id!==project||instance.source_app_id!==app.id)throw Error("VERSION_CONFLICT");
-   rows.push(row(`${app.name} · 未发布内部版本 · 结果版本 ${instance.data_version} · ${instance.id.slice(0,18)}`,async()=>{
+   const item=row(`${app.name} · CSV 单步汇总 · 未发布内部版本 · 结果版本 ${instance.data_version} · ${instance.id.slice(0,18)}`,async()=>{
     if(selectable())await openApplicationUse(app.id,instance.id);
-   },"使用此本地实例"));
+   },"使用此本地实例");
+   item.dataset.useFamily="CSV";item.dataset.appId=app.id;item.dataset.instanceId=instance.id;rows.push(item);
+  }
+  for(const instance of dagInstances.items){
+   const release=dagReleases.items.find(v=>v.id===instance.release_id),version=release?.snapshot?.execution_source?.version,label=savedDagUseLabel(version);
+   if(instance.project_id!==project||instance.source_app_id!==app.id||instance.runtime_id!==app.runtime_id)throw Error("VERSION_CONFLICT");
+   if(!label){rows.push(row(`${app.name} · CSV DAG 实例 ${instance.id} · 当前图或版本不受此入口支持，请核查原来源。`));continue;}
+   const item=row(`${app.name} · CSV DAG · ${label} · 固定授权材料与允许列 · 结果版本 ${instance.data_version} · ${instance.id} · 0 模型请求；内部未发布，语义 UNKNOWN，人工 PENDING。打开仅核查已有实例，不自动运行。`,async()=>{
+    if(selectable())await openSavedDagUse(app.id,instance.id,selectable);
+   },"使用此 CSV 流程实例");
+   item.dataset.useFamily="CSV_DAG";item.dataset.appId=app.id;item.dataset.instanceId=instance.id;rows.push(item);
   }
  }
  if(current()){$("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。可点击上方“从 Goal 创建自然应用”，逐步确认候选、内部版本和实例；此处不会自动创建或授权。") ]));renderNaturalFirstGuide();}
+}
+function savedDagUseLabel(version){
+ const labels={"internal.csv-read-sum.v1":"读取 → 求和","internal.csv-read-sum-report.v1":"读取 → 求和 → 报告","internal.csv-read-two-sums.v1":"读取 → 双求和","internal.project-csv-read-sum-report.v1":"项目固定读取 → 求和 → 报告"};
+ return Object.hasOwn(labels,version)?labels[version]:null;
+}
+function clearSavedDagUse(){if(csvDagContext?.savedUse)clearCsvDag();}
+async function openSavedDagUse(appId,id,selectionCurrent=()=>true){
+ const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,project=$("project-select").value;
+ let generation=null,c=null;
+ const current=()=>selectionCurrent()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&project===$("project-select").value&&(generation===null||generation===appSelectionGeneration);
+ try{
+  const opened=await showApp(appId,project,g=>{generation=g;},current,app=>{if(!csvUseApp(app))throw Error("VERSION_CONFLICT");});
+  if(!opened||!current())return;
+  c=csvDagContext;if(!c||!csvDagCurrent(c)||c.parent.id!==appId)throw Error("VERSION_CONFLICT");
+  c.savedUse={current};
+  await dagReuseHistory(c);if(!csvDagCurrent(c))return;
+  const instance=c.reuse.instances.find(v=>v.id===id),release=c.reuse.releases.find(v=>v.id===instance?.release_id);
+  if(!instance||!savedDagUseLabel(release?.snapshot?.execution_source?.version))throw Error("VERSION_CONFLICT");
+  $("dag-reuse-instance").value=id;await dagReuseRead(c,id);
+  if(!csvDagCurrent(c)||c.reuse.instance?.id!==id)return;
+  $("internal-panel").hidden=true;$("app-preview-form").hidden=true;
+  $("csv-dag-panel").scrollIntoView?.({block:"start"});
+ }catch(error){if(current()){clearApp();throw error;}}
+ finally{if(engineering?.selectionCurrent===current){if(current())engineering.selectionCurrent=null;else clearApp();}if(c?.savedUse&&c===csvDagContext&&!current())clearCsvDag();}
 }
 async function openSavedNaturalUse(appId,id,family,selectionCurrent=()=>true){
  return openSavedInternalUse(appId,id,family,selectionCurrent);

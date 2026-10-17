@@ -477,7 +477,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     await openInternal(a,generation,selectionCurrent);return generation===appSelectionGeneration&&selectionCurrent();
   }
   if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation,selectionCurrent);
-  if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);
+  if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation,selectionCurrent);
   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;
@@ -560,7 +560,9 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     $("extraction-form").hidden=false;$("extraction-create").disabled=extractionBusy || !$("extraction-resource").value;
     $("extraction-status").textContent=$("extraction-resource").value ? "只接受成功回执；提取时重新核查来源与独立数值结果。" : "请先在同项目保存内容不同的新CSV，再打开来源草案。";
   }
-  if(typeof openInternal === "function")await openInternal(a,generation);
+  if(typeof openInternal === "function")await openInternal(a,generation,selectionCurrent);
+  if(generation!==appSelectionGeneration||!selectionCurrent())return false;
+  if(deliveryContext?.generation===generation&&deliveryContext.selectionCurrent===selectionCurrent)deliveryContext.selectionCurrent=null;
   return true;
 }
 $("extraction-form").onsubmit=safe(async()=>{
@@ -780,6 +782,7 @@ $("goal-card-form").onsubmit=safe(async()=>{
 
 
 function selectWorkspace(id,preserveFirstGuide=null) {
+  if(typeof clearSavedDagUse === "function")clearSavedDagUse();
   if(naturalFirstGuide!==preserveFirstGuide)clearNaturalFirstGuide();
   if(typeof clearNaturalUsePreparation === "function")clearNaturalUsePreparation();
   if(typeof clearInternalRunReread === "function")clearInternalRunReread();
