@@ -13,18 +13,46 @@ from test_controlled_branches import setup as branch_setup
 from test_controlled_branches import start as branch_start
 from test_csv_dag import NoModel
 from test_csv_dag_instances import create, release
+from test_csv_two_sum_instances import DECIMAL, STEPS, check_output
+from test_csv_two_sum_instances import release as dual_release
 from test_literal_directory import rows
+from test_project_column_versions import created as fixed_created
 
-from sim2act.db import Store, grants, internal_app_runs, internal_instance_data
+from sim2act.db import Store, grants, internal_app_runs, internal_instance_data, runs
 from sim2act.worker import Worker
 
 
-@pytest.mark.parametrize("scenario", ["use", "report", "guards"])
+@pytest.mark.parametrize("scenario", ["use", "report", "guards", "dual", "fixed"])
 def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
     store, settings, client, owner, _, project, _ = env
     assert store.sqlite and store.test_only and settings.mode == "mock"
-    aid, resource, _, source, rel = release(env, with_report=scenario == "report")
-    saved, second = create(env, rel), create(env, rel, "second-directory-instance")
+    with store.tx() as c:
+        original_runs = set(c.execute(select(runs.c.id)).scalars())
+    fixture_group = None
+    if scenario == "dual":
+        aid, resource, _, source, rel = dual_release(env, DECIMAL)
+        first = create(env, rel)
+    elif scenario == "fixed":
+        values, _, _, _, _, _, fixture_group = fixed_created(env)
+        aid, resource = values[3], values[5]  # The other group member, not its anchor application.
+        entry = next(e for e in fixture_group["entries"] if e["app_id"] == aid)
+        rel = client.get(f"/api/internal/releases/{entry['release_id']}").json()
+        first = client.get(f"/api/internal/instances/{entry['instance_id']}").json()
+        source = client.get(f"/api/csv-dag/runs/{rel['snapshot']['execution_source']['run_id']}").json()
+    else:
+        aid, resource, _, source, rel = release(env, with_report=scenario == "report")
+        first = create(env, rel)
+    second = create(env, rel, "second-directory-instance")
+    saved, unselected = (second, first) if scenario in {"dual", "fixed"} else (first, second)
+    with store.tx() as c:
+        fixture_runs = c.execute(select(runs).where(runs.c.id.not_in(original_runs))).mappings().all()
+    assert len(fixture_runs) == (4 if scenario == "fixed" else 1)
+    assert all(r["status"] == "SUCCEEDED" for r in fixture_runs)
+    (tmp_path / "fixture-proof.json").write_text(json.dumps({
+        "source_worker_run_ids": [r["id"] for r in fixture_runs],
+        "selected_source_run": source, "release": rel, "selected_instance": saved,
+        "unselected_instance": unselected, "project_version_group": fixture_group,
+    }, indent=2) + "\n")
     inspected = client.get(f"/api/apps/{aid}").json()
     approval = client.post(f"/api/internal/apps/{aid}/release-approvals", json={
         "expected_draft_fingerprint": inspected["fingerprint"], "sample_input": {"column": "amount"},
@@ -41,11 +69,12 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
     dag_list = client.get(f"/api/internal/apps/{aid}/dag-instances")
     assert normal_list.status_code == dag_list.status_code == 200
     assert [v["id"] for v in normal_list.json()["items"]] == [plain["id"]]
-    assert {v["id"] for v in dag_list.json()["items"]} == {saved["id"], second["id"]}
+    assert {v["id"] for v in dag_list.json()["items"]} == {saved["id"], unselected["id"]}
     assert rows(store) == baseline
     info = dict(project=project, other=other, app=aid, instance=saved["id"],
-                second_instance=second["id"], plain_instance=plain["id"], release=rel["id"],
-                source_run=source["id"], nodes=3 if scenario == "report" else 2,
+                second_instance=unselected["id"], plain_instance=plain["id"], release=rel["id"],
+                resource=resource, execution=rel["snapshot"]["execution_source"],
+                source_run=source["id"], nodes=2 if scenario in {"use", "guards"} else 3,
                 scenario=scenario, output=str(tmp_path / "result.json"))
     path = tmp_path / "info.json"
     path.write_text(json.dumps(info))
@@ -112,14 +141,35 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
         assert len(typed) == len(records) == worked
         if worked:
             assert [r["version"] for r in records] == [1, 2]
-            assert [r["data"]["result"]["sum"] for r in records] == ["15", "30"]
-            assert [r["data"]["result"]["column"] for r in records] == ["quantity", "amount"]
+            if scenario == "dual":
+                for record, columns in zip(records, [dict(zip(STEPS, ["quantity", "amount"], strict=True)),
+                                                     dict(zip(STEPS, ["amount", "quantity"], strict=True))], strict=True):
+                    check_output(record["data"]["result"], DECIMAL, resource, columns)
+            else:
+                assert [r["data"]["result"]["sum"] for r in records] == (["30", "15"] if scenario == "fixed" else ["15", "30"])
+                assert [r["data"]["result"]["column"] for r in records] == (["amount", "quantity"] if scenario == "fixed" else ["quantity", "amount"])
+        if scenario in {"dual", "fixed"}:
+            detail = client.get(f"/api/internal/instances/{saved['id']}").json()
+            assert len(detail["runs"]) == 2 and detail["release_id"] == rel["id"]
+            for record in detail["data"]:
+                run = next(r for r in detail["runs"] if r["app_run_id"] == record["run_id"])
+                assert run["instance_id"] == saved["id"] and run["release_id"] == record["release_id"] == rel["id"]
+                assert run["run_id"] == run["proof"]["id"] and run["result_version"] == record["version"]
+                assert run["output"] == record["data"]["result"]
+                assert run["execution_version"] == rel["snapshot"]["execution_source"]["version"]
+                assert run["proof"]["result"]["instance_result"]["record_fingerprint"] == record["fingerprint"]
+            untouched = client.get(f"/api/internal/instances/{unselected['id']}").json()
+            assert untouched["data_version"] == 0 and untouched["runs"] == untouched["data"] == []
+            assert rows(store) == baseline
+            (tmp_path / "final-instance-proof.json").write_text(json.dumps({
+                "selected": detail, "unselected": untouched,
+            }, indent=2) + "\n")
         for asset in proof["assets"]:
             file = Path("src/sim2act/web") / (asset["path"].lstrip("/") or "index.html")
             assert hashlib.sha256(file.read_bytes()).hexdigest() == asset["sha256"]
         (tmp_path / "database-proof.json").write_text(json.dumps({
             "backend": "SQLite synthetic", "tables": len(baseline), "read_checkpoints": checkpoints,
-            "all_get_rows_unchanged": True, "fixture_source_worker_runs": 1,
+            "all_get_rows_unchanged": True, "fixture_source_worker_runs": len(fixture_runs),
             "cold_worker_runs_from_directory": worked, "source_run_id": source["id"],
             "new_result_versions": [r["version"] for r in records],
             "authority_unchanged_except_explicit_revoke": True, "controlled_revocations": revocations,

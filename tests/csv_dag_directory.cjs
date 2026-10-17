@@ -1,6 +1,7 @@
 'use strict';
 // Product page + actual ASGI HTTP via IPC. JSDOM is not native browser acceptance.
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
+const same=require('node:util').isDeepStrictEqual;
 const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),requests=[],assets=[],checks=[],mutations=[];
 let unknownHint=false;
 let serial=0,dom,w,$,boots=0,active=0,hold=null,releaseRead=null;
@@ -83,6 +84,48 @@ async function use(){
  check(posts().length===n&&detail.runs.length===2&&runs.every(id=>detail.runs.some(r=>r.run_id===id))&&detail.data_version===2,'cold directory restores same instance, Runs and both result versions with zero POST');
  check($('dag-reuse-results').textContent.includes('合计 15')&&$('dag-reuse-results').textContent.includes('合计 30'),'both actual arithmetic results retained');
 }
+async function remaining(){
+ const dual=info.scenario==='dual',e=info.execution;
+ const expected=dual?[
+  {input:{columns:{[e.aggregate_steps[0]]:'quantity',[e.aggregate_steps[1]]:'amount'}},totals:['2.250','0.3']},
+  {input:{columns:{[e.aggregate_steps[0]]:'amount',[e.aggregate_steps[1]]:'quantity'}},totals:['0.3','2.250']},
+ ]:[{input:{column:'amount'},totals:['30']},{input:{column:'quantity'},totals:['15']}];
+ check(posts().length===0,'directory discovery makes no POST');
+ check($('use-list').querySelectorAll(`[data-use-family="CSV_DAG"][data-app-id="${info.app}"]`).length===2&&!!$('use-list').querySelector(`[data-use-family="CSV"][data-instance-id="${info.plain_instance}"]`),'exact application has two DAG choices and a distinct ordinary CSV instance');
+ const description=entry().parentElement.textContent;
+ check(description.includes(dual?'读取 → 双求和':'项目固定读取 → 求和 → 报告')&&description.includes(info.instance),'directory names exact existing family and selected nondefault instance');
+ await readonly();await open();check(posts().length===0,'selected DAG opens with zero POST');await readonly();
+ check($('dag-reuse-second-label').hidden===!dual,'original controller exposes only the correct typed input fields');
+ if(dual)check(e.aggregate_steps.every(sid=>$('dag-reuse-panel').textContent.includes(sid)),'both input labels retain stable aggregate node IDs');
+ else check($('dag-reuse-column').value===e.default_column&&e.default_column==='quantity','fixed report starts at its approved overlay default without opening project patch history');
+ const runIds=[];
+ for(const [index,wanted]of expected.entries()){
+  const columns=dual?e.aggregate_steps.map(sid=>wanted.input.columns[sid]):[wanted.input.column];
+  for(const [i,column]of columns.entries()){
+   $('dag-reuse-run-confirm').checked=true;$('dag-reuse-run-confirm').dispatchEvent(new w.Event('change'));
+   const select=$(i?'dag-reuse-column-second':'dag-reuse-column');select.value=column;select.dispatchEvent(new w.Event('change'));
+   check($('dag-reuse-run').disabled&&!$('dag-reuse-run-confirm').checked,'editing input '+(i+1)+' requires renewed explicit confirmation');
+  }
+  $('dag-reuse-run-confirm').checked=true;$('dag-reuse-run-confirm').dispatchEvent(new w.Event('change'));
+  const count=posts().length,submitted=click('dag-reuse-run');$('dag-reuse-run').click();await submitted;
+  const post=posts().at(-1);check(posts().length===count+1&&post.path===`/api/internal/instances/${info.instance}/runs`&&same(post.body.input,wanted.input),'double click submits one exact node-keyed input to the selected instance');
+  let detail=JSON.parse($('dag-reuse-proof').textContent).instance;const queued=detail.runs.find(r=>r.status==='QUEUED');assert(queued);
+  check(queued.output===null&&queued.result_version===null&&detail.data_version===index,'current queued Run has no copied historical output');runIds.push(queued.run_id);
+  assert.equal((await rpc({command:'worker'})).status,200);await click('dag-reuse-read');detail=JSON.parse($('dag-reuse-proof').textContent).instance;
+  const run=detail.runs.find(r=>r.run_id===queued.run_id),record=detail.data.find(v=>v.run_id===run.app_run_id),binding=run.proof.internal_instance,write=run.proof.result.instance_result;
+  check(run.status==='SUCCEEDED'&&run.proof.id===run.run_id&&run.instance_id===info.instance&&run.release_id===info.release&&run.execution_version===e.version&&run.expected_revision===detail.revision&&same(run.input,wanted.input),'same actual Run binds exact instance, revision, Release, execution family and new input');
+  check(record&&record.instance_id===info.instance&&record.release_id===info.release&&record.version===index+1&&run.result_version===record.version&&same(record.data.result,run.output)&&binding.instance_id===info.instance&&binding.app_run_id===run.app_run_id&&binding.version===e.version&&write.instance_id===info.instance&&write.app_run_id===run.app_run_id&&write.release_id===info.release&&write.result_version===record.version&&write.record_fingerprint===record.fingerprint,'same typed AppRun and result version bind full stored output and receipt fingerprint');
+  check(run.proof.steps.length===3&&run.proof.steps.every(s=>s.status==='VERIFIED')&&run.proof.business_writes===1&&run.proof.model_requests===0,'cold original Worker verifies three Operations, one typed write and zero models');
+  const values=dual?e.aggregate_steps.map(sid=>run.output[sid]):[run.output];
+  check((!dual||JSON.stringify(Object.keys(run.output).sort())===JSON.stringify([...e.aggregate_steps].sort()))&&values.every((v,i)=>JSON.stringify(Object.keys(v).sort())===JSON.stringify(['column','count','resource_id','source_hash','sum'])&&v.resource_id===info.resource&&v.source_hash===e.source_hash&&v.column===columns[i]&&v.count===2&&typeof v.sum==='string'&&v.sum===wanted.totals[i]),'complete five-field results preserve node IDs, resource hash and exact string sums');
+  if(!dual)check(run.proof.result.output.text===`列 ${columns[0]}；行数 2；合计 ${wanted.totals[0]}`&&!Object.hasOwn(run.output,'text'),'fixed report text belongs to this verified Run while typed aggregate retains five fields');
+  check(wanted.totals.every(total=>$('dag-reuse-results').textContent.includes('合计 '+total)),'visible history shows all results of this Run');await readonly();
+ }
+ check(new Set([...runIds,info.source_run]).size===3,'both new directory Runs differ from each other and their own source');
+ const count=posts().length;await boot();await open();await readonly();const detail=JSON.parse($('dag-reuse-proof').textContent).instance;
+ check(posts().length===count&&detail.id===info.instance&&detail.runs.length===2&&detail.data_version===2&&runIds.every(id=>detail.runs.some(r=>r.run_id===id)),'cold directory restores exact selected instance, both same Runs and v1/v2 with zero POST');
+ check(expected.flatMap(v=>v.totals).every(total=>$('dag-reuse-results').textContent.includes('合计 '+total)),'cold history retains every computed result');
+}
 async function guards(){
  await readonly();
  for(const scenario of [
@@ -112,7 +155,7 @@ async function guards(){
 }
 (async()=>{
  let status='FAIL',error;
- try{await boot();if(info.scenario==='guards')await guards();else await use();status='PASS';}
+ try{await boot();if(info.scenario==='guards')await guards();else if(['dual','fixed'].includes(info.scenario))await remaining();else await use();status='PASS';}
  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
