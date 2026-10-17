@@ -43,7 +43,17 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
         aid, resource, _, source, rel = release(env, with_report=scenario == "report")
         first = create(env, rel)
     second = create(env, rel, "second-directory-instance")
-    saved, unselected = (second, first) if scenario in {"dual", "fixed"} else (first, second)
+    selection_listing = None
+    if scenario in {"dual", "fixed"}:
+        listing = client.get(f"/api/internal/apps/{aid}/dag-instances")
+        assert listing.status_code == 200, listing.text
+        selection_listing = listing.json()
+        assert len(selection_listing["items"]) == 2
+        choices = {i["id"]: i for i in (first, second)}
+        assert set(choices) == {i["id"] for i in selection_listing["items"]}
+        saved, unselected = (choices[i["id"]] for i in reversed(selection_listing["items"]))
+    else:
+        saved, unselected = first, second
     with store.tx() as c:
         fixture_runs = c.execute(select(runs).where(runs.c.id.not_in(original_runs))).mappings().all()
     assert len(fixture_runs) == (4 if scenario == "fixed" else 1)
@@ -51,7 +61,8 @@ def test_saved_csv_dag_directory_actual_http(env, tmp_path, scenario):
     (tmp_path / "fixture-proof.json").write_text(json.dumps({
         "source_worker_run_ids": [r["id"] for r in fixture_runs],
         "selected_source_run": source, "release": rel, "selected_instance": saved,
-        "unselected_instance": unselected, "project_version_group": fixture_group,
+        "unselected_instance": unselected, "authoritative_selection_listing": selection_listing,
+        "project_version_group": fixture_group,
     }, indent=2) + "\n")
     inspected = client.get(f"/api/apps/{aid}").json()
     approval = client.post(f"/api/internal/apps/{aid}/release-approvals", json={

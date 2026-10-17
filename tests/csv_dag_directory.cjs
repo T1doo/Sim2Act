@@ -90,13 +90,20 @@ async function remaining(){
   {input:{columns:{[e.aggregate_steps[0]]:'quantity',[e.aggregate_steps[1]]:'amount'}},totals:['2.250','0.3']},
   {input:{columns:{[e.aggregate_steps[0]]:'amount',[e.aggregate_steps[1]]:'quantity'}},totals:['0.3','2.250']},
  ]:[{input:{column:'amount'},totals:['30']},{input:{column:'quantity'},totals:['15']}];
+ const visibleResult=(wanted,version)=>{
+  const prefix=`结果版本 ${version} · `,rows=[...$('dag-reuse-results').children].filter(row=>row.textContent.startsWith(prefix));
+  const columns=dual?e.aggregate_steps.map(sid=>wanted.input.columns[sid]):[wanted.input.column];
+  const expectedParts=columns.map((column,i)=>`${dual?e.aggregate_steps[i]:'求和'}：列 ${column}，行数 2，合计 ${wanted.totals[i]}`).sort();
+  return rows.length===1&&visible(rows[0])&&same(rows[0].textContent.slice(prefix.length).split('；').sort(),expectedParts);
+ };
  check(posts().length===0,'directory discovery makes no POST');
  check($('use-list').querySelectorAll(`[data-use-family="CSV_DAG"][data-app-id="${info.app}"]`).length===2&&!!$('use-list').querySelector(`[data-use-family="CSV"][data-instance-id="${info.plain_instance}"]`),'exact application has two DAG choices and a distinct ordinary CSV instance');
  const description=entry().parentElement.textContent;
  check(description.includes(dual?'读取 → 双求和':'项目固定读取 → 求和 → 报告')&&description.includes(info.instance),'directory names exact existing family and selected nondefault instance');
  await readonly();await open();check(posts().length===0,'selected DAG opens with zero POST');await readonly();
+ check($('dag-reuse-instance').value===info.instance&&$('dag-reuse-instance').selectedIndex===1,'directory explicitly selects the non-first authoritative instance');
  check($('dag-reuse-second-label').hidden===!dual,'original controller exposes only the correct typed input fields');
- if(dual)check(e.aggregate_steps.every(sid=>$('dag-reuse-panel').textContent.includes(sid)),'both input labels retain stable aggregate node IDs');
+ if(dual)check(['dag-reuse-column-label','dag-reuse-column-second-label'].every((id,i)=>visible($(id))&&$(id).textContent.includes(e.aggregate_steps[i])),'each visible input label names its own stable aggregate node ID');
  else check($('dag-reuse-column').value===e.default_column&&e.default_column==='quantity','fixed report starts at its approved overlay default without opening project patch history');
  const runIds=[];
  for(const [index,wanted]of expected.entries()){
@@ -119,12 +126,12 @@ async function remaining(){
   const values=dual?e.aggregate_steps.map(sid=>run.output[sid]):[run.output];
   check((!dual||JSON.stringify(Object.keys(run.output).sort())===JSON.stringify([...e.aggregate_steps].sort()))&&values.every((v,i)=>JSON.stringify(Object.keys(v).sort())===JSON.stringify(['column','count','resource_id','source_hash','sum'])&&v.resource_id===info.resource&&v.source_hash===e.source_hash&&v.column===columns[i]&&v.count===2&&typeof v.sum==='string'&&v.sum===wanted.totals[i]),'complete five-field results preserve node IDs, resource hash and exact string sums');
   if(!dual)check(run.proof.result.output.text===`列 ${columns[0]}；行数 2；合计 ${wanted.totals[0]}`&&!Object.hasOwn(run.output,'text'),'fixed report text belongs to this verified Run while typed aggregate retains five fields');
-  check(wanted.totals.every(total=>$('dag-reuse-results').textContent.includes('合计 '+total)),'visible history shows all results of this Run');await readonly();
+  check(expected.slice(0,index+1).every((value,i)=>visibleResult(value,i+1)),'each visible version row binds its own stable node, input column, count and exact sum');await readonly();
  }
  check(new Set([...runIds,info.source_run]).size===3,'both new directory Runs differ from each other and their own source');
  const count=posts().length;await boot();await open();await readonly();const detail=JSON.parse($('dag-reuse-proof').textContent).instance;
- check(posts().length===count&&detail.id===info.instance&&detail.runs.length===2&&detail.data_version===2&&runIds.every(id=>detail.runs.some(r=>r.run_id===id)),'cold directory restores exact selected instance, both same Runs and v1/v2 with zero POST');
- check(expected.flatMap(v=>v.totals).every(total=>$('dag-reuse-results').textContent.includes('合计 '+total)),'cold history retains every computed result');
+ check(posts().length===count&&detail.id===info.instance&&$('dag-reuse-instance').selectedIndex===1&&detail.runs.length===2&&detail.data_version===2&&runIds.every(id=>detail.runs.some(r=>r.run_id===id)),'cold directory restores exact non-first instance, both same Runs and v1/v2 with zero POST');
+ check(expected.every((wanted,i)=>visibleResult(wanted,i+1)),'cold visible history retains each exact version-to-node/column/count/sum mapping');
 }
 async function guards(){
  await readonly();
