@@ -54,16 +54,17 @@ async function use(){
   const input=posts().at(-1).body.input;check(input.term_a===(emit?'Violet':'Amber')&&input.term_b===(emit?'Amber':'Violet')&&input.emit_report===emit,'exact two terms and boolean reach original controller');
   const id=w.eval('engineering.run.id');runs.push(id);assert.equal((await rpc({command:'worker'})).status,200);await click('internal-refresh');
   const state=emit?'SUCCEEDED':'PARTIAL',run=w.eval('engineering.run');check(run.id===id&&run.status===state&&run.steps.length===4,'same Run exposes actual four step receipts and '+state);
+  check(JSON.parse($('internal-run-detail').textContent).id===id&&$('internal-run-status').textContent.startsWith(state+' ·'),'rendered detail and status bind the same current Run');
   check(run.steps.slice(0,3).every(s=>s.status==='VERIFIED')&&run.steps[3].status===(emit?'VERIFIED':'SKIPPED'),'report branch preserves existing step semantics');
   if(emit)check(run.result.term_a==='Violet'&&run.result.citations_a.length===1&&run.result.citations_b.length===2&&run.result_version===1,'actual complete source citations persisted in result v1');
   else check(run.result===null&&run.result_version===null,'PARTIAL current Run never borrows previous success');
-  check($('internal-data').textContent.includes('历史结果 v1')&&!$('internal-data').textContent.includes('历史结果 v2'),'successful history retained without extra partial result');
+  check($('internal-data').children.length===1&&$('internal-data').textContent.includes('结果 v1')&&!$('internal-data').textContent.includes('结果 v2'),'successful history retained without extra partial result');
   check($('owner-status').textContent.includes('PENDING')&&$('owner-form').hidden,'existing manual status remains pending without unsupported declaration form');await readonly();
  }
  check(runs[0]!==runs[1],'different explicit inputs use distinct Runs');
  const before=posts().length;await boot();await open();await readonly();
  check(posts().length===before,'cold page reopens saved history with zero writes');
- check(runs.every(id=>$('internal-runs').textContent.includes(id))&&$('internal-data').textContent.includes('历史结果 v1'),'cold directory reaches both original Runs and saved v1');
+ check(runs.every(id=>$('internal-runs').textContent.includes(id))&&$('internal-data').textContent.includes('结果 v1'),'cold directory reaches both original Runs and saved v1');
  const partial=[...$('internal-runs').children].find(r=>r.textContent.includes(runs[1]));await click(partial.querySelector('button'));
  check(w.eval('engineering.run.id')===runs[1]&&w.eval('engineering.run.status')==='PARTIAL'&&!w.eval('engineering.run.result'),'explicit partial history opens same Run with no borrowed result');await readonly();
 }
