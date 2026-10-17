@@ -47,7 +47,7 @@ async function configure(){
  check([...$('csv-full-report-column').options].some(o=>o.value==='quantity'),'new material numeric columns are loaded from actual authorization');
  $('csv-full-report-column').value='quantity';await action('csv-full-report-column','change');check(!$('csv-full-report-use-ack').checked&&$('csv-full-report-prepare').disabled,'new material and column require explicit preparation consent');await action('csv-full-report-use-ack');
 }
-const downloads=[],revocations=[];
+const downloads=[],revocations=[],diagnostics={};
 (async()=>{let delivery=null;try{
  await boot();
  if(info.case==='revoked-source'){
@@ -86,10 +86,15 @@ const downloads=[],revocations=[];
   fs.writeFileSync(info.output.replace('.json','.download.md'),bytes);
   const before=uses().length;await nav('apps');const reopened=[...$('use-list').children].find(r=>r.dataset.appId===aid);await action(reopened.querySelector('button'));check($('csv-full-report-history').textContent.includes(run)&&uses().length===before,'directory reopens persisted exact Run history without reexecution');delivery={aid,run};
   if(info.case==='deliver'){await rpc({command:'revoke-output',resource:saved.resource_id});await action($('csv-full-report-history').querySelector('button'));check(w.eval('activeApp===null&&activeRun===null')&&!$('csv-full-report-use')&&!$('app-manifest').textContent&&!$('run-artifacts'),'history open current output403 clears workflow definition, inputs and prior Run artifact canvas');}
-  if(info.case==='misbound'){secondRunRevoke={run,resource:saved.resource_id,count:0};await action($('csv-full-report-history').querySelector('button'));check(secondRunRevoke.count===2&&w.eval('activeApp===null&&activeRun===null')&&!$('app-manifest').textContent&&!$('run-artifacts'),'output revocation during project handoff clears old app and Run after second GET403');}
+  if(info.case==='misbound'){secondRunRevoke={run,resource:saved.resource_id,count:0};await action($('csv-full-report-history').querySelector('button'));
+   await wait(()=>requests.filter(r=>r.method==='GET'&&r.path===`/api/runs/${run}`).every(r=>Number.isInteger(r.status)),'all actual Run replies during handoff settle');
+   diagnostics.handoff={read_count:secondRunRevoke.count,active_app:w.eval('activeApp'),active_run:w.eval('activeRun'),manifest_empty:!$('app-manifest').textContent,artifact_canvas_empty:!$('run-artifacts'),run_http_statuses:requests.filter(r=>r.method==='GET'&&r.path===`/api/runs/${run}`).map(r=>r.status)};
+   const h=diagnostics.handoff;check(h.read_count>=2&&h.run_http_statuses.includes(403)&&h.active_app===null&&h.active_run===null&&h.manifest_empty&&h.artifact_canvas_empty,'output revocation during project handoff clears old app and Run after actual subsequent GET403');
+  }
 
 
  }
  }
- fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,browser:'JSDOM_NOT_NATIVE',checks,assets,requests,delivery,downloads:downloads.map(x=>({name:x.name,size:x.size})),revocations,real_model_requests:0},null,2));
- }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:error.stack,checks,assets,requests,delivery},null,2));console.error(error.stack);process.exitCode=1;}finally{dom?.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');}})();
+ await wait(()=>requests.every(r=>Number.isInteger(r.status)),'all issued actual API replies settle');
+ fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,browser:'JSDOM_NOT_NATIVE',checks,assets,requests,delivery,diagnostics,downloads:downloads.map(x=>({name:x.name,size:x.size})),revocations,real_model_requests:0},null,2));
+ }catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',error:error.stack,checks,assets,requests,delivery,diagnostics},null,2));console.error(error.stack);process.exitCode=1;}finally{dom?.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');}})();
