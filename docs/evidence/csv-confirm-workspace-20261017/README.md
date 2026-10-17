@@ -32,7 +32,7 @@
 
 ## 既有验收证据关系
 
-旧完整28例实际执行源仍是 `599052cbadae21b4a7ba8738fb889ea970c11e84`。此前 `402f3eb5f80be73ddc57d4bb6123fdd6157726e0` 只复验3页面；其余25例保留599来源。本修复aed84也没有重跑或改签这25例，不称“最终28全过”或“31唯一”。旧ae4的全部文件及证据原样保留。后端合同、独立数值checker、权限、Worker/工具账本及原固定checker均与ae4逐字相同。
+旧完整28例实际执行源仍是 `599052cbadae21b4a7ba8738fb889ea970c11e84`。此前 `402f3eb5f80be73ddc57d4bb6123fdd6157726e0` 只复验3页面，当时其余25例保留599来源。本轮aed84另行实际重跑其中的普通成果workspace-return 1例；其余24例未在本轮重跑，不改签原599记录。不称“最终28全过”或“31唯一”。旧ae4的全部文件及证据原样保留。后端合同、独立数值checker、权限、Worker/工具账本及原固定checker均与ae4逐字相同。
 
 `originals-manifest.json`给出每份新执行原件的原始路径、归档路径、字节及SHA-256；SQLite和较大文件以mtime0确定性gzip保存，解压与原件一致。`checksums.sha256`覆盖归档。独审只读导出的snapshot源码是可从Git恢复的输入，其逐字hash/provenance保留；不把数百复制源码或执行产生的pyc当额外原始执行输出计数。独立初始收集错误、五红与最终绿分别归档，不覆盖失败。raw机器输出保留原空格与换行，属性例外只限raw证据。
 
@@ -41,3 +41,5 @@
 ## 后续只读候选，尚未实现
 
 原方案F2-T01与验收章节要求事前标准与语义人工量表分开。当前普通RunInput只收Goal/材料/key，普通自然语言GoalSpec.constraints默认空；已有owner-review入口绑定internal instance（或其natural Run）。下一项高价值候选是普通Goal事前人工标准及同一Run逐项签收，复用现有声明账本的保护，保留自动语义NOT_RUN、区分人工声明与机器通过。不能直接把普通Run传入internal-instance owner API，也不能推导新权限。本轮只核实这个缺口，未写实现。
+
+来源归属补正：首次归档把原25例笼统写成“本轮也未复跑”，与本轮明确执行的普通成果workspace-return 1例冲突。现已补正为“其中1例在aed84重跑，剩余24例未重跑”；原作者scope JSON的旧字段保留为原记录，并由raw/author/scope-attribution-correction.json明确撤回。测试命令、XML、结果与独审9例范围始终不变，原267份原件也未改动，仅增加此补正原件。
