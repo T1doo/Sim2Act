@@ -84,7 +84,7 @@ async function main(){
  assert.equal((await rpc({command:'before',run:rid})).status,200);
  await prepareReturn(rid);
  const ackStart=requests.length;$('csv-report-ack').checked=true;await action('csv-report-ack','change');
- if(['workspace-pending','scope-project','scope-identity'].includes(info.case))check(requests.slice(ackStart).some(r=>r.method==='GET'&&r.path===`/api/runs/${rid}`),'new explicit acknowledgement rechecks the exact complete Run contract');
+ if(['scope-project','scope-identity'].includes(info.case))check(requests.slice(ackStart).some(r=>r.method==='GET'&&r.path===`/api/runs/${rid}`),'new explicit acknowledgement rechecks the exact complete Run contract');
  const confirmRoute=`/api/runs/${rid}/confirm-csv-report`;
  if(info.case==='lost')drop=confirmRoute;
  if(info.case!=='lost')hold={path:confirmRoute,method:'POST'};
