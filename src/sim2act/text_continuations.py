@@ -455,8 +455,10 @@ def target_gate(store, c, user, i):
 
 def draft_gate(store, c, user, aid):
     from .db import task_extractions
+    from .ordinary_csv_extraction import app_scope
     from .text_workflows import scope_gate
 
+    app_scope(store, c, user, aid)
     scope_gate(store, c, user, aid)
     from .pa_material_bindings import scope_gate as pa_binding_scope_gate
 

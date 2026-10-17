@@ -953,6 +953,9 @@ def create_app(store=None, settings=None):
     from .ordinary_corrections import mount as mount_ordinary_corrections
 
     mount_ordinary_corrections(app, db, platform_limits, identity, s)
+    from .ordinary_csv_extraction import mount as mount_ordinary_csv_extraction
+
+    mount_ordinary_csv_extraction(app, db, platform_limits, identity)
     from .app_owner_goals import mount as mount_app_owner_goals
 
     mount_app_owner_goals(app, db, platform_limits, identity)

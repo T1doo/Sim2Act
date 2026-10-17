@@ -60,9 +60,10 @@ async function refreshApplicationUse(apps){
   }
   catch(error){if(!current())return;rows.push(row(`${summary.name} · 当前版本不可读取；请核对授权与来源。`));if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);clearSavedDagUse(summary.id);continue;}
   if(!current())return;
+  const sumOnly=app.candidate?.task_proof?.proof?.kind==='completed_ordinary_csv_report_sum_source.v1';
   for(const instance of reply.items){
    if(instance.project_id!==project||instance.source_app_id!==app.id)throw Error("VERSION_CONFLICT");
-   const item=row(`${app.name} · CSV 单步汇总 · 未发布内部版本 · 结果版本 ${instance.data_version} · ${instance.id.slice(0,18)}`,async()=>{
+   const item=row(`${app.name} · CSV 单步汇总${sumOnly?' · 普通成功任务提取，仅求和、不含MD报告':''} · 未发布内部版本 · 结果版本 ${instance.data_version} · ${instance.id.slice(0,18)}`,async()=>{
     if(selectable())await openApplicationUse(app.id,instance.id);
    },"使用此本地实例");
    item.dataset.useFamily="CSV";item.dataset.appId=app.id;item.dataset.instanceId=instance.id;rows.push(item);

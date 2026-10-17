@@ -327,6 +327,7 @@ function clearRunDetail() {
   if(typeof clearOrdinaryOwnerReview === "function")clearOrdinaryOwnerReview();
   ordinaryOutcomeView=null;
   if(typeof clearCsvReportContract === "function")clearCsvReportContract();
+  if(typeof clearCsvSumExtraction === "function")clearCsvSumExtraction();
   if(typeof invalidateNaturalGoalAcknowledgements === "function")invalidateNaturalGoalAcknowledgements();
   unresolvedAttempts=[];reconcileVersion=null;
   for(const name of ["result","events","raw-result","commands","reconcile-attempt"])$(name).replaceChildren();
@@ -401,6 +402,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   if (!r.result && (r.ordinary_csv?.receipts?.length||r.artifact_delivery?.receipts?.length))renderOrdinaryOutcome(r);
   if(r.artifact_delivery){const status=row(`单份MD交付：${r.artifact_delivery.status} · 自动语义 NOT_RUN · 人工声明另行提交`);status.id="ordinary-md-status";$("result").append(status);}
   if(typeof renderCsvReportContract === "function")renderCsvReportContract(r,id,current);
+  if(typeof renderCsvSumExtraction === "function")renderCsvSumExtraction(r,id,current);
   if(typeof renderOrdinaryOwnerReview === "function")renderOrdinaryOwnerReview(r);
   if (r.error) $("result").append(row(`需要处理：${r.error.message || r.error.code}`));
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
@@ -633,7 +635,10 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   const origin=a.candidate.generation;
   const extraction=a.candidate.extraction;
   const taskProof=a.candidate.task_proof;
-  if(taskProof?.proof?.kind === "accepted_fixed_natural_goal.v1"){
+  if(taskProof?.proof?.kind === "completed_ordinary_csv_report_sum_source.v1"){
+    $("app-origin").textContent="来源普通任务 SUCCEEDED · 原完整CSV报告合同 PASS可追溯 · 本应用仅复用求和步骤、输出结构化结果，不含原MD生成/保存 · 新输入须独立验证 · owner PENDING，语义 UNKNOWN，内部未发布，完整 P-B 未验收";
+    $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify({scope:a.candidate.goal,source:taskProof},null,2);
+  } else if(taskProof?.proof?.kind === "accepted_fixed_natural_goal.v1"){
     $("app-origin").textContent="来源 Run SUCCEEDED · 固定合成目标契约 PASS · 新 CSV / column 候选适用范围仍须人工核对 · owner PENDING · 未发布，完整 P-B 未验收";
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(taskProof,null,2);
   } else if(taskProof?.proof?.kind === "verified_natural_csv_receipt_only.v1"){
@@ -951,7 +956,7 @@ function selectWorkspace(id,preserveFirstGuide=null) {
   if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
   if(typeof resetOrdinaryRubricAcknowledgement === "function")resetOrdinaryRubricAcknowledgement();
-  if(id === "projects"){if(typeof resumeOrdinaryOwnerReview === "function")resumeOrdinaryOwnerReview();resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();}
+  if(id === "projects"){if(typeof resumeOrdinaryOwnerReview === "function")resumeOrdinaryOwnerReview();resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();if(typeof resumeCsvSumExtraction === "function")resumeCsvSumExtraction();}
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
     else button.removeAttribute("aria-current");

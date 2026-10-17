@@ -135,4 +135,81 @@ $('csv-report-form').onsubmit=safe(async event=>{event.preventDefault();await su
 $('csv-report-recover').onclick=safe(()=>submitCsvReport(true));
 $('csv-report-open').onclick=safe(async()=>{const entry=csvReportIntents.get(csvReportOwner());if(entry?.run)await showRun(entry.run,true);});
 $('csv-report-new').onclick=()=>{const entry=csvReportIntents.get(csvReportOwner());if(entry?.state==='sending')return;if(entry?.state==='unknown'){$('csv-report-status').textContent='请先恢复未知原请求，不能另建重复任务。';return;}csvReportIntents.delete(csvReportOwner());renderCsvReportForm();};
+
+// Explicit subtask extraction. A source report PASS never becomes this app's MD promise.
+const csvSumIntents=new Map();let csvSumView=null;
+function csvSumOwner(id){return JSON.stringify([token,$('project-select').value,id]);}
+function clearCsvSumExtraction(){csvSumView=null;}
+function resumeCsvSumExtraction(){
+ const old=csvSumView;if(!old||activeRun!==old.id||old.owner!==csvSumOwner(old.id))return;
+ const owner=old.owner,id=old.id,workspace=workspaceSelectionGeneration;
+ old.node.remove();csvSumView=null;
+ safe(()=>showRun(id,false,()=>activeRun===id&&owner===csvSumOwner(id)&&workspace===workspaceSelectionGeneration))();
+}
+function renderCsvSumExtraction(r,id,baseCurrent){
+ if(!csvReportPassed(r))return;
+ const owner=csvSumOwner(id),connection=identityConnectionGeneration,project=projectSelectionGeneration,
+  selection=runUserSelectionGeneration,workspace=workspaceSelectionGeneration;
+ const signature=JSON.stringify([owner,connection,project,selection,workspace,r.version,r.contract.fingerprint]);
+ if(csvSumView?.signature===signature){csvSumView.baseCurrent=baseCurrent;$('result').append(csvSumView.node);csvSumView.render();return;}
+ const node=document.createElement('section');node.id='csv-sum-extraction';
+ const view={id,owner,node,busy:false,options:null,signature,baseCurrent};csvSumView=view;
+ const current=()=>csvSumView===view&&node.isConnected&&view.baseCurrent()&&owner===csvSumOwner(id)&&connection===identityConnectionGeneration&&project===projectSelectionGeneration&&selection===runUserSelectionGeneration&&workspace===workspaceSelectionGeneration&&!$('projects').hidden;
+ const element=(tag,id,text)=>{const el=document.createElement(tag);el.id=id;if(text)el.textContent=text;return el;};
+ node.append(element('h3','csv-sum-heading','将本次成功任务的求和步骤保存为应用'),element('p','csv-sum-scope','原完整CSV报告合同 PASS；本次仅提取只读求和，输出来源、列、记录数、合计及hash。不包含原MD生成或保存，也不继承原报告验收。新应用仍待新输入验证、人工适用范围 PENDING，语义 UNKNOWN，内部未发布。'));
+ const status=element('p','csv-sum-status');status.setAttribute('role','status');
+ const proof=element('pre','csv-sum-proof');
+ const choose=element('select','csv-sum-target');choose.setAttribute('aria-label','另一份已有授权CSV草案');choose.append(new Option('先读取可用来源和目标',''));
+ const name=element('input','csv-sum-name');name.value='从普通成功任务提取的求和';name.maxLength=200;name.setAttribute('aria-label','求和应用名称');
+ const ack=element('input','csv-sum-ack');ack.type='checkbox';
+ const label=element('label','csv-sum-consent');label.append(ack,'我已核对来源及另一份已有授权CSV，明确只提取求和步骤，不包含原完整MD报告；随后独立验证新输入。');
+ const key=element('input','csv-sum-key');key.maxLength=100;key.setAttribute('aria-label','原提取请求key');key.value=csvSumIntents.get(owner)?.body?.request_key||'';
+ const retryAck=element('input','csv-sum-retry-ack');retryAck.type='checkbox';const retryLabel=element('label','csv-sum-retry-label');retryLabel.append(retryAck,'仅明确重试保留的原key与原正文；不另建请求。');
+ const make=(id,text,fn)=>{const el=element('button',id,text);el.type='button';el.onclick=safe(fn);return el;};
+ const pending=()=>csvSumIntents.get(owner);
+ function render(){const p=pending();read.disabled=view.busy||Boolean(p);choose.disabled=view.busy||Boolean(p);name.disabled=choose.disabled;ack.disabled=choose.disabled;submit.disabled=view.busy||Boolean(p)||!view.options||!choose.value||!name.value.trim()||!ack.checked;recover.disabled=view.busy||!key.value.trim();open.disabled=view.busy||p?.state!=='accepted';retry.hidden=p?.state!=='unknown'||!p.body;retry.disabled=view.busy||!retryAck.checked;retryLabel.hidden=retry.hidden;key.disabled=view.busy;}
+ function failed(error){if(!current())return;if(error.httpStatus===403||error.httpStatus===409){clearRunDetail();activeRun=null;$('result').append(row('来源或授权已不可用，已清除原证明；请重新读取当前任务。'));return;}status.textContent=error.message;}
+ async function receipt(value,expected=null){
+  if(value?.state!=='CANDIDATE_ONLY'||value.source_run_id!==id||value.source_run_status!=='SUCCEEDED'||value.source_task_accepted!==true||value.selected_scope!=='CSV_SUM_ONLY'||value.full_md_report_included!==false||value.candidate_task_acceptance!=='NOT_RUN'||value.semantic_status!=='UNKNOWN'||value.owner_acceptance!=='PENDING'||value.formal_publication_enabled!==false||value.publishable!==false||value.model_requests!==0||value.generator!=='TRUSTED_ORDINARY_CSV_SUM.v1'||!/^app_[a-f0-9]{32}$/.test(value.id)||!naturalGoalFp(value.candidate_fingerprint)||await registeredHash(value.request)!==value.request_fingerprint)throw Error('VERSION_CONFLICT');
+  const req=value.request;if(req.source_run_id!==id||req.consent!=='EXTRACT_SUM_ONLY_WITHOUT_MD_REPORT'||req.expected_proof_fingerprint!==value.source_proof_fingerprint)throw Error('VERSION_CONFLICT');
+  const {source_run_id,...body}=req;body.request_key=value.request_key;
+  if(expected&&goalRunCanonical(expected)!==goalRunCanonical(body))throw Error('VERSION_CONFLICT');
+  return {body,state:'accepted',receipt:value};
+ }
+ const read=make('csv-sum-read','读取求和来源与已有授权CSV',async()=>{
+  if(!current()||view.busy||pending())return;view.busy=true;ack.checked=false;render();
+  try{const value=await api(`/api/runs/${id}/csv-sum-candidate-options`);if(!current())return;
+   if(value.generator!=='TRUSTED_ORDINARY_CSV_SUM.v1'||value.full_md_report_included!==false||value.source_task_accepted!==true||value.proof?.source_run_id!==id||await registeredHash(value.proof)!==value.source_proof_fingerprint)throw Error('VERSION_CONFLICT');
+   if(!current())return;view.options=value;choose.replaceChildren(new Option('请选择另一份已有授权CSV',''),...value.targets.map(t=>new Option(t.name,t.id)));proof.textContent=JSON.stringify(value.proof,null,2);status.textContent='请选择目标并核对材料/hash/runtime；不会新增身份或授权。';
+  }catch(error){failed(error);}finally{view.busy=false;if(current())render();}
+ });
+ const submit=make('csv-sum-submit','明确保存仅求和应用',()=>send(false));
+ async function send(replay){
+  if(!current()||view.busy)return;let p=pending();
+  if(replay){if(p?.state!=='unknown'||!retryAck.checked)return;}
+  else{if(p||!ack.checked||!view.options||!choose.value||!name.value.trim())return;const t=view.options.targets.find(t=>t.id===choose.value);if(!t)return;p={body:{expected_proof_fingerprint:view.options.source_proof_fingerprint,target_app_id:t.id,expected_target_draft_fingerprint:t.fingerprint,name:name.value.trim(),request_key:crypto.randomUUID(),consent:'EXTRACT_SUM_ONLY_WITHOUT_MD_REPORT'},state:'sending'};csvSumIntents.set(owner,p);key.value=p.body.request_key;}
+  p.state='sending';view.busy=true;render();
+  try{const value=await api(`/api/runs/${id}/csv-sum-candidates`,'POST',p.body);const accepted=await receipt(value,p.body);if(pending()===p)csvSumIntents.set(owner,accepted);if(current())status.textContent='仅求和候选已保存；请明确打开并验证新输入。';}
+  catch(error){p.state='unknown';if(current())status.textContent='受理结果 UNKNOWN；保留原key和正文，先GET恢复。未查到不证明未受理。';if(error.httpStatus===403)failed(error);}
+  finally{view.busy=false;if(current())render();}
+ }
+ const recover=make('csv-sum-recover','仅GET恢复原key回执',async()=>{
+  if(!current()||view.busy||!key.value.trim())return;view.busy=true;render();
+  try{const requestedKey=key.value.trim(),old=pending(),value=await api(`/api/runs/${id}/csv-sum-requests/${encodeURIComponent(requestedKey)}`);if(value.request_key!==requestedKey)throw Error('VERSION_CONFLICT');const accepted=await receipt(value,old?.body||null);if(!current())return;csvSumIntents.set(owner,accepted);status.textContent='已只读恢复原请求；尚未打开或执行应用。';}
+  catch(error){failed(error);}finally{view.busy=false;if(current())render();}
+ });
+ const retry=make('csv-sum-retry','明确重试原key原正文',()=>send(true));
+ const open=make('csv-sum-open','打开仅求和应用并验证新输入',async()=>{
+  const p=pending();if(!current()||view.busy||p?.state!=='accepted')return;view.busy=true;render();
+  try{const value=await api(`/api/runs/${id}/csv-sum-requests/${encodeURIComponent(p.body.request_key)}`),fresh=await receipt(value,p.body);if(!current())return;
+   let handedOff=false,appGeneration=null;
+   const appCurrent=()=>handedOff?owner===csvSumOwner(id)&&connection===identityConnectionGeneration&&project===projectSelectionGeneration&&appGeneration===appSelectionGeneration&&activeApp===fresh.receipt.id:current();
+   const shown=await showApp(fresh.receipt.id,$('project-select').value,g=>{appGeneration=g;},appCurrent,async a=>{const marker=a.candidate?.task_proof;if(a.fingerprint!==fresh.receipt.candidate_fingerprint||await registeredHash(a.candidate)!==a.fingerprint||a.candidate.manifest.source_run_ref!==id||marker?.proof?.kind!=='completed_ordinary_csv_report_sum_source.v1'||marker.proof_fingerprint!==fresh.receipt.source_proof_fingerprint||marker.target.app_id!==p.body.target_app_id||marker.target.fingerprint!==p.body.expected_target_draft_fingerprint)throw Error('VERSION_CONFLICT');});
+   if(shown&&current()&&appGeneration===appSelectionGeneration&&activeApp===fresh.receipt.id){handedOff=true;selectWorkspace('apps');}
+  }catch(error){if(current())clearApp();failed(error);}finally{view.busy=false;if(current())render();}
+ });
+ choose.onchange=()=>{ack.checked=false;const t=view.options?.targets.find(t=>t.id===choose.value);status.textContent=t?`目标材料 ${t.resource_id} · hash ${t.source_hash} · 沿用runtime ${t.runtime_id}`:'';render();};
+ name.oninput=()=>{ack.checked=false;render();};ack.onchange=render;retryAck.onchange=render;key.oninput=render;
+ view.render=render;node.append(read,choose,name,label,submit,proof,key,recover,retryLabel,retry,open,status);$('result').append(node);render();
+}
 renderCsvReportForm();

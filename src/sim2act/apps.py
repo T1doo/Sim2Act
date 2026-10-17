@@ -305,6 +305,12 @@ def validate_source_family(c, user, draft):
                     expected_field, expected_kind = "task_proof", "registered_tool"
                 elif isinstance(snapshot, dict) and snapshot.get("kind") == "agent_source.v1":
                     expected_field, expected_kind = "agent_provenance", "bounded_agent"
+                elif isinstance(snapshot, dict) and snapshot.get("kind") == "ordinary_csv_sum_source.v1":
+                    expected_field, expected_kind = "task_proof", "registered_tool"
+                    actions = candidate.get("actions") if isinstance(candidate, dict) else None
+                    if (not isinstance(actions, list) or len(actions) != 1 or not isinstance(actions[0], dict)
+                            or actions[0].get("executor") != {"kind": "registered_tool", "ref": "data.aggregate_csv", "version": "1"}):
+                        raise DomainError("VERSION_CONFLICT", "Ordinary sum extraction executor changed")
                 elif isinstance(snapshot, dict) and snapshot.get("kind") in {"registered_csv_source.v1", "registered_text_source.v1", "natural_csv_receipt_candidate.v1", "text_data_free_binding.v1"}:
                     expected_field, expected_kind = "task_proof", "registered_tool"
                     if snapshot["kind"] in {"registered_text_source.v1", "text_data_free_binding.v1"}:
@@ -490,6 +496,10 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin
             from .registered_run_extraction import validate_registered_candidate
 
             validate_registered_candidate(store, c, user, draft, platform_limits)
+        elif task_origin["snapshot"].get("kind") == "ordinary_csv_sum_source.v1":
+            from .ordinary_csv_extraction import validate_candidate
+
+            validate_candidate(store, c, user, draft, platform_limits)
         elif task_origin["snapshot"].get("kind") == "natural_csv_receipt_candidate.v1":
             from .natural_receipt_extraction import validate_candidate
 
