@@ -369,8 +369,8 @@ def validate_source_bytes(store, c, user, draft):
 
 def owned_release_pointer(store, c, user, rid):
     """Authorize identifiers before reading a Release body; never follow origins."""
-    from .text_continuations import release_gate
     from .csv_full_report_instances import release_gate as report_gate
+    from .text_continuations import release_gate
 
     report_gate(store, c, user, release_id=rid)
     release_gate(store, c, user, rid)
@@ -792,8 +792,8 @@ def inspect_instance(store, user, iid, limits):
     with store.tx() as c:
         i, release = instance(store, c, user, iid, limits)
         records = data_rows(c, iid, store=store, user=user)
-        from . import pa_spec_apps, text_workflows
         from . import csv_full_report_instances as full_report
+        from . import pa_spec_apps, text_workflows
         if full_report.is_snapshot(release["snapshot"]):
             full_report.verify_records(store, c, user, i, records)
             return {**dict(i), "namespace": full_report.VERSION, "data": [dict(x) for x in records]}

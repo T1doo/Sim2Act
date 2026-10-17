@@ -129,7 +129,7 @@ def test_visible_complete_md_internal_delivery_and_original_run(env, tmp_path, c
             added = [row for key, row in current.items() if key not in originals]
             artifact = worker_runs[0]["result"]["receipts"][-1]["data"]["resource_id"]
             assert len(added) == 2
-            assert {row["principal_id"] for row in added} == {env[3], worker_runs[0]["runtime_id"]}
+            assert {row["principal_id"] for row in added} == {env[3], worker_runs[0]["contract"]["snapshot"]["runtime_id"]}
             assert all(
                 row["resource_id"] == artifact
                 and row["tool_ref"] == "resource.read"
