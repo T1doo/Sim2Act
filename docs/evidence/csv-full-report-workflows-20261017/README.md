@@ -29,7 +29,7 @@
 
 旧回归分别为普通完整CSV合同、已有CSV实例实际HTTP使用、普通成功任务SUM_ONLY提取后的目录使用、自然P-A的合成显式人工声明。新18项使用拒绝模型请求的 NoModel，旧自然回归使用合成 MockTransport；没有真实模型，不能称整批零模拟provider调用。
 
-另有作者独立的自有合成 SQLite 增量迁移探针：53个既有表的schema/全部行不变，仅增2个空表，第二次显式初始化不变。它不计入22唯一、不属于独审动态准入，也不代表真实旧用户库、PG或进程重启验收。记录见 [迁移结果](raw/author-evidence/migration/result.json)。Ruff核6个Python文件、mypy仅新模块、Node语法4文件及diff检查共7命令通过，见 [静态检查](raw/author-evidence/final-static-checks.json)。
+另有作者独立的自有合成 SQLite 增量迁移探针：从本轮已结束夹具的自有副本移除2个已知空新表以模拟旧schema，再显式初始化；53个既有表的schema/全部行不变，仅增2个空表，第二次显式初始化不变。它不计入22唯一、不属于独审动态准入，也不代表真实旧用户库、PG或进程重启验收。记录见 [迁移结果](raw/author-evidence/migration/result.json)。Ruff核6个Python文件、mypy仅新模块、Node语法4文件及diff检查共7命令通过，见 [静态检查](raw/author-evidence/final-static-checks.json)。
 
 ## 原件封存与边界
 
