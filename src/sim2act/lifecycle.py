@@ -650,7 +650,7 @@ def create_instance(store, user, rid, expected_release_fp, limits, *, request_ke
         return create_instance_tx(store, c, user, rid, expected_release_fp, limits, request_key=request_key)
 
 
-def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, request_key=None):
+def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, request_key=None, _csv_goal_check=None):
     if request_key is not None and (
         not isinstance(request_key, str) or not 1 <= len(request_key) <= 100
     ):
@@ -664,7 +664,17 @@ def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, requ
         raise DomainError("VERSION_CONFLICT")
     from .csv_goal_revisions import SOURCE
     if SOURCE in r["snapshot"]:
-        raise DomainError("UNSUPPORTED_CAPABILITY", "Explicitly adopt this checked version on its original instance")
+        from . import csv_goal_revisions as csv_revision
+        from .csv_column_revisions import VERSION as successive_version
+        if _csv_goal_check is None:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Explicitly adopt this checked version on its original instance")
+        ref = csv_revision.Reference.model_validate(_csv_goal_check.model_dump())
+        _,value = csv_revision.load_preview(store,c,user,ref.instance_id,ref.preview_key,limits,current=True)
+        if (ref.purpose != "CHECK" or value["namespace"] != successive_version
+                or ref != csv_revision.reference(ref.instance_id,ref.preview_key,value)
+                or value["context"]["release_id"] != rid
+                or request_key != "csv-goal-check:" + fingerprint([ref.instance_id,ref.preview_key])):
+            raise DomainError("VERSION_CONFLICT", "Only the exact original isolated CSV CHECK may use this parent Release")
     draft = r["snapshot"]["draft"]
     from .text_continuations import no_context
 

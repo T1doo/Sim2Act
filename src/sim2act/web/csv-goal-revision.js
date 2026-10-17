@@ -13,8 +13,18 @@ function renderCsvGoalRevision(v,release){
  const owner=applicationUseKey(v);let entry=csvGoalRevisionIntents.get(owner);
  const currentRelease=release.snapshot.csv_goal_revision_source;
  const pendingAdoption=entry?.steps.adoptCommit&&["sending","unknown","accepted-read-error"].includes(entry.steps.adoptCommit.state);
- if(currentRelease&&!pendingAdoption){node.append(row(`已采用 Goal v${currentRelease.goal.version}：${currentRelease.goal.snapshot.content.goal}。新列固定为 ${currentRelease.input.column}；每次新运行的人工声明独立，初始 PENDING。`));$("use-info").after(node);return;}
- if(!entry){entry={key:crypto.randomUUID(),baselineKey:crypto.randomUUID(),steps:{},state:"new"};csvGoalRevisionIntents.set(owner,entry);}
+ const unresolvedEntry=entry&&Object.values(entry.steps).some(p=>["sending","unknown","accepted-read-error"].includes(p.state));
+ const continuing=entry?.cycleRelease===release.id&&entry?.state!=="adopted";
+ if(currentRelease&&!pendingAdoption&&!continuing&&!unresolvedEntry){
+  node.append(row(`已采用 Goal v${currentRelease.goal.version}：${currentRelease.goal.snapshot.content.goal}。当前列 ${currentRelease.input.column}；每次新运行的人工声明独立，初始 PENDING。`));
+  const next=csvFullReportButton("基于当前版本再次修订列","csv-goal-next",()=>{
+   if(!applicationUseCurrent(v)||!node.isConnected||v.busy||signature!==JSON.stringify([v.id,v.instance?.release_id,v.instance?.revision,v.instance?.data_version])||Object.values(entry?.steps||{}).some(p=>["sending","unknown","accepted-read-error"].includes(p.state)))return;
+   const replacement={key:crypto.randomUUID(),baselineKey:crypto.randomUUID(),steps:{},state:"new",cycleRelease:release.id,
+    history:entry?[...(entry.history||[]),{key:entry.key,steps:entry.steps,release:entry.release?.id}]:[]};
+   csvGoalRevisionIntents.set(owner,replacement);clearCsvGoalRevision(v);renderCsvGoalRevision(v,release);
+  });node.append(next);$("use-info").after(node);return;
+ }
+ if(!entry){entry={key:crypto.randomUUID(),baselineKey:crypto.randomUUID(),steps:{},state:"new",cycleRelease:release.id};csvGoalRevisionIntents.set(owner,entry);}
  const c={signature,node,connection:identityConnectionGeneration,workspace:workspaceSelectionGeneration,busy:false,reviewReady:false};v.csvGoalRevision=c;
  const here=()=>applicationUseCurrent(v)&&v.csvGoalRevision===c&&node.isConnected&&c.connection===identityConnectionGeneration&&c.workspace===workspaceSelectionGeneration&&c.signature===JSON.stringify([v.id,v.instance?.release_id,v.instance?.revision,v.instance?.data_version])&&!$("apps").hidden;
  const path=`/api/internal/instances/${v.id}/csv-goal-revisions`;
@@ -83,21 +93,22 @@ function renderCsvGoalRevision(v,release){
   if(!here())return;c.currentContext=ctx;c.reviewReady=true;drawReview();entry.message="已回读原修订并核对当前归属；请阅读完整冻结内容后重新勾选，下一步尚未提交。";
  }
  async function action(fn){if(!here()||c.busy||v.busy)return;c.busy=true;controls();applicationUseButtons(v);try{await fn();if(here()&&entry.ctx&&!c.reviewReady&&!c.staleCheckReady&&!unresolved())await restoreReview();}catch(error){if(here()&&!deny(error)){entry.message=`核查未完成：${error.message}。原键保留，未知请求只读恢复。`;controls();}}finally{c.busy=false;if(here()){controls();applicationUseButtons(v);}}}
- const edit=button("csv-goal-edit","打开来源 Goal，保存下一版本",()=>action(async()=>{const pid=v.project;clearApp();selectWorkspace("projects");await showGoalCard(generation.goal_card_id,pid);}));
+ const edit=button("csv-goal-edit",currentRelease?"可选：编辑 Goal 并明确保存下一版本":"打开来源 Goal，保存下一版本",()=>action(async()=>{const pid=v.project;clearApp();selectWorkspace("projects");await showGoalCard(generation.goal_card_id,pid);}));
  const read=button("csv-goal-baseline","读取新 Goal 与修订基线",()=>action(async()=>{
   const graphPath=`/api/projects/${v.project}/apps/${v.appId}/delivery-graph`;
   // This explicit action saves a missing/stale graph with the existing bounded
   // derive controller. Its deterministic key also handles a lost derive reply.
   if(!entry.baselineAccepted){
-   if(entry.baselineUnknown){const saved=await api(graphPath);if(!here())return;if(saved.derivation_key!==entry.baselineKey)throw Error("原图锚回执尚未确认");}
+   if(currentRelease){/* The current graph is checked by context GET. Reading a continuation must not derive a new anchor and invalidate its parent. */}
+   else if(entry.baselineUnknown){const saved=await api(graphPath);if(!here())return;if(saved.derivation_key!==entry.baselineKey)throw Error("原图锚回执尚未确认");}
    else{entry.baselineUnknown=true;await api(graphPath+"/derive","POST",{request_key:entry.baselineKey,expected_candidate_fingerprint:v.app.fingerprint});if(!here())return;}
    entry.baselineAccepted=true;entry.baselineUnknown=false;
   }
   const ctx=await api(path+"/context");if(!here())return;
   if(ctx.instance_id!==v.id||ctx.app_id!==v.appId||ctx.project_id!==v.project||ctx.release_fingerprint!==v.instance.release_fingerprint||ctx.instance_revision!==v.instance.revision)throw Error("修订基线与所选实例不匹配");
-  entry.ctx=ctx;c.reviewReady=true;entry.message=`来源 Goal v${ctx.original_goal_version} → 当前 v${ctx.goal.version}。请明确选择旧列和新列，再提交修订草案。`;
+  entry.ctx=ctx;c.reviewReady=true;entry.message=ctx.parent?`基于规格 v${ctx.parent.spec_revision}、原实例修订 ${ctx.instance_revision}；${ctx.goal_mode==="KEEP_ADOPTED_GOAL"?"保留已采用的 Goal，不创建新目标版本":"使用已明确保存的下一 Goal"} v${ctx.goal.version}。请选择新列，下一规格独立重验。`:`来源 Goal v${ctx.original_goal_version} → 当前 v${ctx.goal.version}。请明确选择旧列和新列，再提交修订草案。`;
   checkAck.checked=releaseAck.checked=adoptAck.checked=false;
-  entry.selection={from:ctx.columns[0],to:ctx.columns[1]||ctx.columns[0]};controls();
+  entry.selection={from:ctx.parent?.column||ctx.columns[0],to:ctx.columns.find(x=>x!==(ctx.parent?.column||ctx.columns[0]))||ctx.columns[0]};controls();
  }));
  async function request(stage,url,body,recoverUrl,verify,install){
   let p=entry.steps[stage];
@@ -181,7 +192,7 @@ function renderCsvGoalRevision(v,release){
   if(!here()||c.busy||v.busy||!canReset())return;
   // Accepted/unknown keys remain in the map's audit history, never silently
   // reused. Only proved rejection or a terminal CHECK enables this.
-  const replacement={key:crypto.randomUUID(),baselineKey:crypto.randomUUID(),steps:{},state:"new",history:[...(entry.history||[]),{key:entry.key,steps:entry.steps}]};
+  const replacement={key:crypto.randomUUID(),baselineKey:crypto.randomUUID(),steps:{},state:"new",cycleRelease:entry.cycleRelease,history:[...(entry.history||[]),{key:entry.key,steps:entry.steps}]};
   csvGoalRevisionIntents.set(owner,replacement);clearCsvGoalRevision(v);renderCsvGoalRevision(v,release);
  });
  const review=button("csv-goal-review-restore","只读重新核对冻结修订",()=>action(restoreReview));
@@ -192,17 +203,18 @@ function renderCsvGoalRevision(v,release){
   const busy=c.busy||v.busy,locked=!!pending||!c.reviewReady;
   for(const b of [edit,read,save,check,outcome,prepare,commit,adoptPrepare,adopt])b.disabled=busy||locked;
   edit.disabled=busy||!!pending;read.disabled=busy||!!pending||!!entry.preview;
-  save.disabled||=!entry.ctx||!!entry.preview||entry.ctx.goal.version!==entry.ctx.original_goal_version+1||from.value===to.value;
+  save.disabled||=!entry.ctx||!!entry.preview||(!entry.ctx.parent&&entry.ctx.goal.version!==entry.ctx.original_goal_version+1)||from.value===to.value;
   check.disabled=busy||!!pending||!(c.reviewReady||c.staleCheckReady)||!entry.preview||!!entry.check||!checkAck.checked;
   outcome.disabled||=!entry.check;prepare.disabled||=!entry.proof||!!entry.approval;
   commit.disabled||=!entry.approval||!!entry.release||!releaseAck.checked||!unexpired(entry.approval);
   adoptPrepare.disabled||=!entry.release||!!entry.adoption;adopt.disabled||=!entry.adoption||!adoptAck.checked||!unexpired(entry.adoption);
   from.disabled=to.disabled=busy||locked||!!entry.steps.preview;
+  from.disabled||=!!entry.ctx?.parent;
   checkAck.disabled=busy||!!pending||!(c.reviewReady||c.staleCheckReady)||!entry.preview||!!entry.check;releaseAck.disabled=busy||locked||!entry.approval||!!entry.release||!unexpired(entry.approval);adoptAck.disabled=busy||locked||!entry.adoption||!unexpired(entry.adoption);
   recover.hidden=!pending||pending[1].state==="sending";recover.disabled=busy;
   review.hidden=!entry.ctx||!!pending||c.reviewReady;review.disabled=busy;
   reset.hidden=!canReset();reset.disabled=busy;
-  status.textContent=entry.message||(pending?"原请求结果未知；仅恢复原键。":"先保存来源 Goal 的下一版本，再核查修订基线。每步独立确认。");
+  status.textContent=entry.message||(pending?"原请求结果未知；仅恢复原键。":currentRelease?"先读取当前有效版本的基线；可保留已采用 Goal，仅明确修改列。每步独立确认。":"先保存来源 Goal 的下一版本，再核查修订基线。每步独立确认。");
   drawReview();
  }
  c.controls=controls;from.onchange=to.onchange=()=>{entry.selection={from:from.value,to:to.value};checkAck.checked=releaseAck.checked=adoptAck.checked=false;controls();};

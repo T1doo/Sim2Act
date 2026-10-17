@@ -180,6 +180,9 @@ def source_gate(store, c, user, iid, key=None, *, current_head=False):
 def context(store,c,user,iid,limits):
     source_gate(store,c,user,iid,current_head=True)
     inst, release = lifecycle.instance(store,c,user,iid,limits,lock=True)
+    if SOURCE in release["snapshot"]:
+        from . import csv_column_revisions as successive
+        return successive.context(store,c,user,iid,limits,inst,release)
     require(SOURCE not in release["snapshot"] and "execution_source" not in release["snapshot"]
         and "natural_logic_source" not in release["snapshot"], "Only one revision of the original CSV Release is supported")
     base = release["snapshot"]["draft"]
@@ -251,6 +254,10 @@ def calculate(ctx,release,saved,body,limits):
 def load_preview(store,c,user,iid,key,limits,*,current=False):
     source_gate(store,c,user,iid,key)
     body,value = pair(c,user,iid,PREVIEW,key,Preview)
+    if value.get("namespace") != VERSION:
+        from . import csv_column_revisions as successive
+        require(value.get("namespace") == successive.VERSION,"Unknown CSV revision contract")
+        return successive.load(store,c,user,iid,key,limits,body,value,current)
     ctx = value["context"]
     require(ctx["instance_id"] == iid and ctx["principal_id"] == user and ctx["limits"] == limits.model_dump())
     require(all(type(ctx[k]) is int for k in ("instance_revision","data_version","graph_revision","original_goal_version"))
@@ -279,7 +286,11 @@ def preview(store,user,iid,body,limits):
             return value
         require(len(c.execute(select(requests.c.request_key).where(requests.c.app_id == iid,
             requests.c.kind == PREVIEW)).all()) < 32,"Finite revision proposal capacity exhausted")
-        value = calculate(ctx,base,saved,body,limits)
+        if "revision_contract" in ctx:
+            from . import csv_column_revisions as successive
+            value = successive.calculate(store,c,user,ctx,base,saved,body,limits)
+        else:
+            value = calculate(ctx,base,saved,body,limits)
         remember(c,user,iid,PREVIEW,body.request_key,body,value)
         return value
 
@@ -293,6 +304,10 @@ def bound(store,c,user,release,limits,snapshot=None,*,current=False):
     ref = Reference.model_validate(ref_value)
     _,value = load_preview(store,c,user,ref.instance_id,ref.preview_key,limits,current=current and ref.purpose == "CHECK")
     require(reference(ref.instance_id,ref.preview_key,value,ref.purpose) == ref)
+    if value["namespace"] != VERSION:
+        from . import csv_column_revisions as successive
+        require(value["namespace"] == successive.VERSION)
+        return successive.bound(store,c,user,release,limits,snapshot,ref,value,current)
     if ref.purpose == "CHECK":
         require(SOURCE not in release["snapshot"] and release["id"] == value["context"]["release_id"]
             and snapshot is not None and snapshot["instance_id"] != ref.instance_id)
@@ -362,11 +377,14 @@ def verify_job(store,c,user,job,snapshot,release,limits,contract):
     active = job_gate(store,c,user,job["id"])
     require(active == (MARKER in snapshot))
     if SOURCE in release["snapshot"]:
-        require(active and snapshot[MARKER]["purpose"] == "USE")
+        require(active)
     if not active:
         return
     ref = Reference.model_validate(snapshot[MARKER])
     _,value = load_preview(store,c,user,ref.instance_id,ref.preview_key,limits)
+    if SOURCE in release["snapshot"] and ref.purpose != "USE":
+        from .csv_column_revisions import VERSION as successive_version
+        require(ref.purpose == "CHECK" and value["namespace"] == successive_version)
     bound(store,c,user,release,limits,snapshot)
     if ref.purpose == "CHECK":
         _,started = pair(c,user,ref.instance_id,CHECK,ref.preview_key,Check)
@@ -400,6 +418,8 @@ def checked(store,c,user,iid,key,limits,*,current=False):
         input_fingerprint=fingerprint(value["input"]),output_fingerprint=actual["output_fingerprint"],
         plan_fingerprint=value["plan_fingerprint"],actual_proof_fingerprint=fingerprint(actual),
         semantic_status="UNKNOWN",owner_acceptance="PENDING",model_requests=0)
+    if value["namespace"] != VERSION:
+        result.update(namespace=value["namespace"],spec_revision=value["spec_revision"])
     result["check_fingerprint"] = fingerprint(result)
     if graph.lookup(c,user,iid,CHECKED,key):
         old,sealed = pair(c,user,iid,CHECKED,key,Check)
@@ -411,6 +431,10 @@ def checked(store,c,user,iid,key,limits,*,current=False):
 
 def validate_snapshot(store,c,user,snapshot,limits,*,current=False):
     origin = snapshot[SOURCE]
+    if origin.get("namespace") != VERSION:
+        from . import csv_column_revisions as successive
+        require(origin.get("namespace") == successive.VERSION,"Unknown CSV Release contract")
+        return successive.validate_snapshot(store,c,user,snapshot,limits,current)
     require(set(origin) == {"namespace","reference","check_fingerprint","goal","input","effective_fingerprint"}
         and origin["namespace"] == VERSION)
     ref = Reference.model_validate(origin["reference"])
@@ -525,7 +549,8 @@ def mount(app,store,limits,identity):
                 return result
             ctx = value["context"]
             inst = lifecycle.create_instance_tx(store,c,user,ctx["release_id"],ctx["release_fingerprint"],limits,
-                request_key="csv-goal-check:" + fingerprint([iid,body.request_key]))
+                request_key="csv-goal-check:" + fingerprint([iid,body.request_key]),
+                _csv_goal_check=reference(iid,body.request_key,value))
             result = enqueue(store,user,inst["id"],inst["revision"],ctx["release_fingerprint"],value["input"],
                 body.request_key,limits,logic_tx=c,csv_goal_check=reference(iid,body.request_key,value),csv_review=CONSENT)
             result = {**result,"check_instance_id":inst["id"],"request_key":body.request_key,
@@ -556,9 +581,11 @@ def mount(app,store,limits,identity):
                 return result
             base = lifecycle.read_release(store,c,user,value["context"]["release_id"],limits)
             snap = copy.deepcopy(base["snapshot"])
-            snap[SOURCE] = dict(namespace=VERSION,reference=reference(iid,body.request_key,value,"USE").model_dump(),
+            snap[SOURCE] = dict(namespace=value["namespace"],reference=reference(iid,body.request_key,value,"USE").model_dump(),
                 check_fingerprint=proof["check_fingerprint"],goal=value["context"]["goal"],input=value["input"],
                 effective_fingerprint=value["effective_fingerprint"])
+            if value["namespace"] != VERSION:
+                snap[SOURCE].update(parent=value["context"]["parent"],spec_revision=value["spec_revision"])
             snap["check_evidence"] = proof
             result = lifecycle.new_approval(c,user,value["context"]["project_id"],"release",
                 dict(snapshot=snap,grant_version=lifecycle.grant_version(c,value["context"]["project_id"],user)))
