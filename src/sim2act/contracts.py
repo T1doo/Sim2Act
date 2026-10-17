@@ -295,6 +295,44 @@ class OrdinaryArtifactDelivery(Strict):
     acceptance_check: Literal["核对本Run唯一MD成果的完整内容、来源、未决项及精确版本；文件回读不证明语义正确"]
 
 
+class OrdinaryCorrectionRequest(Strict):
+    expected_preview_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    declaration_id: str = Field(pattern=r"^nowner_[a-f0-9]{32}$")
+    declaration_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_sequence: int = Field(ge=1)
+    request_key: str = Field(min_length=1, max_length=100)
+    consent: Literal["RUN_NEW_CORRECTION_KEEP_GOAL_CRITERIA_AND_HISTORY"]
+
+
+class OrdinaryCorrectionIssue(Strict):
+    item_id: str = Field(min_length=1, max_length=100)
+    criterion: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class OrdinaryCorrectionFeedback(Strict):
+    version: Literal["ordinary-goal-correction.v1"]
+    parent_run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
+    parent_contract_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    parent_result_version: int = Field(ge=1)
+    parent_output_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    stable_parent_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    declaration_id: str = Field(pattern=r"^nowner_[a-f0-9]{32}$")
+    declaration_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    declaration_sequence: int = Field(ge=1)
+    materials: list[ResourceSnapshot] = Field(min_length=1, max_length=8)
+    issues: list[OrdinaryCorrectionIssue] = Field(min_length=1, max_length=100)
+    previous_output: dict
+    previous_artifacts: list[dict] = Field(max_length=1)
+
+
+class OrdinaryCorrection(Strict):
+    feedback: OrdinaryCorrectionFeedback
+    authority_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    request: OrdinaryCorrectionRequest
+    real_model_allowance: Literal[0]
+
+
 class FrozenRunContract(Strict):
     run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
     # Existing project runtime or existing declarative app runtime; neither creates a grant.
@@ -311,6 +349,7 @@ class FrozenRunContract(Strict):
     ordinary_csv_report: OrdinaryCsvReport | None = None
     human_review: OrdinaryHumanReview | None = None
     artifact_delivery: OrdinaryArtifactDelivery | None = None
+    ordinary_correction: OrdinaryCorrection | None = None
 
 
 class Run(Strict):

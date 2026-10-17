@@ -65,13 +65,13 @@ def require_prospective(source, policy):
         raise DomainError("INVALID_INPUT", "Select authorized source material before starting")
 
 
-def scope(store, c, user, rid):
+def scope(store, c, user, rid, *, _lock_project=True):
     # Metadata only; do not read Run/contract/owner payload before current human ownership.
     header = c.execute(select(runs.c.project_id, runs.c.runtime_id)
         .where(runs.c.id == rid, runs.c.principal_id == user)).mappings().first()
     if not header or not user.startswith("user_"):
         raise DomainError("PERMISSION_DENIED")
-    project = store.lock_project(c, user, header["project_id"])
+    project = (store.lock_project if _lock_project else store.own_project)(c, user, header["project_id"])
     if project["runtime_id"] != header["runtime_id"]:
         raise DomainError("PERMISSION_DENIED")
     from .db import run_contracts
@@ -87,8 +87,8 @@ def scope(store, c, user, rid):
     return header["project_id"]
 
 
-def context(store, c, user, rid):
-    pid = scope(store, c, user, rid)
+def context(store, c, user, rid, *, _lock_project=True):
+    pid = scope(store, c, user, rid, _lock_project=_lock_project)
     # Existing authorization barrier checks current principal + runtime Grants before bodies.
     from .goal_applications import source_scope_gate
 
@@ -131,6 +131,7 @@ def context(store, c, user, rid):
         run_id=rid, result_version=run["version"], run_input_fingerprint=run["fingerprint"],
         contract_fingerprint=fingerprint(contract.model_dump(exclude_none=True)),
         source_goal=source, goal=content, items=items(content) + ([dict(id="artifact.md", text=contract.artifact_delivery.acceptance_check)] if contract.artifact_delivery else []), materials=materials,
+        **({"human_correction": contract.ordinary_correction.model_dump()} if contract.ordinary_correction else {}),
         **artifact_details,
         output=run["result"], output_fingerprint=fingerprint(run["result"]), actual_operations=actual,
         grant_version=lifecycle.grant_version(c, pid, user), automatic_goal_acceptance="NOT_RUN",

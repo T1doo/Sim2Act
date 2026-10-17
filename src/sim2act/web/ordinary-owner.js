@@ -38,6 +38,11 @@ function renderOrdinaryOwnerReview(result,redacted=false,metadataOnly=false){
  const heading=document.createElement('h3');heading.textContent='本次普通任务的人工逐项签收';node.append(heading);
  node.append(row('人工声明独立于自动验收 NOT_RUN、技术 PARTIAL；语义 UNKNOWN，正式发布关闭。Goal版本变化后当前签收失效，历史保留。'));
  const frozen=document.createElement('pre');frozen.id='ordinary-owner-frozen';frozen.textContent=redacted?'':JSON.stringify({run:id,contract_fingerprint:result.contract.fingerprint,source_goal:result.contract.snapshot.source_goal_card,...(result.contract.snapshot.artifact_delivery?{artifact_delivery:result.contract.snapshot.artifact_delivery}:{})},null,2);node.append(frozen);
+ if(!redacted&&result.contract.snapshot.ordinary_correction){
+  const feedback=result.contract.snapshot.ordinary_correction.feedback,section=document.createElement('section');section.id='ordinary-correction-source';
+  section.append(row(`这是针对 ${feedback.parent_run_id} 原拒绝的新Run；原Goal与标准保留。以下是待修正问题，不表示已修复，仍须另行逐项人工声明。`));
+  for(const issue of feedback.issues)section.append(row(`${issue.item_id} · 原标准：${issue.criterion} · 原拒绝理由：${issue.reason}`));node.append(section);
+ }
  const status=document.createElement('p');status.id='ordinary-owner-status';status.setAttribute('role','status');
  const body=document.createElement('div');body.id='ordinary-owner-body';
  const read=document.createElement('button');read.id='ordinary-owner-read';read.type='button';read.textContent='读取此 Run 的当前签收与完整证据';
@@ -46,8 +51,8 @@ function renderOrdinaryOwnerReview(result,redacted=false,metadataOnly=false){
  const retryLabel=document.createElement('label'),retryAck=document.createElement('input');retryAck.type='checkbox';retryAck.id='ordinary-owner-retry-ack';retryLabel.append(retryAck,'核对原请求内容，明确仅恢复同一请求，不创建新的签收');
  const pending=()=>ordinaryOwnerIntents.get(intentKey);
  function controls(){const p=pending();if(p)p.renderCurrent=()=>{if(current())controls();};read.disabled=view.busy;recover.hidden=!p;recover.disabled=view.busy;retry.hidden=!p||p.state!=='unknown';retryLabel.hidden=retry.hidden;retry.disabled=view.busy||!retryAck.checked;}
- function clearProtected(){body.replaceChildren();frozen.textContent='';view.state=null;}
- function clearResultContent(){view.redacted=true;ordinaryOutcomeView=null;frozen.textContent='';$('result').replaceChildren(node);$('raw-result').textContent='';$('events').textContent='';}
+ function clearProtected(){body.replaceChildren();frozen.textContent='';view.state=null;view.redacted=true;node.querySelector('#ordinary-correction-source')?.remove();}
+ function clearResultContent(){view.redacted=true;ordinaryOutcomeView=null;frozen.textContent='';node.querySelector('#ordinary-correction-source')?.remove();$('result').replaceChildren(node);$('raw-result').textContent='';$('events').textContent='';}
  function forget(p){if(pending()===p)ordinaryOwnerIntents.delete(intentKey);}
  async function verify(state){
   if(!['owner.ordinary-goal.v1','owner.ordinary-goal-md.v2'].includes(state.version)||(!metadataOnly&&state.version!==result.contract.snapshot.human_review.version)||state.run_id!==id||state.project_id!==$('project-select').value||state.formal_publication_enabled!==false||state.automatic_goal_acceptance!=='NOT_RUN')throw Error('VERSION_CONFLICT');
@@ -66,6 +71,7 @@ function renderOrdinaryOwnerReview(result,redacted=false,metadataOnly=false){
   const history=document.createElement('pre');history.id='ordinary-owner-history';history.textContent=JSON.stringify({history:state.history,invalidation_reason:state.invalidation_reason},null,2);body.append(history);
   if(!state.content_access)clearResultContent();
   if(pending()){status.textContent+='；原请求结果尚未恢复，请先读原key。';controls();return;}
+  renderOrdinaryCorrection(body,state,view,current,intentKey);
   const last=state.latest;
   function stopControls(){if(!last||!['PREPARE','DECIDE'].includes(last.kind))return;
    const reason=document.createElement('input');reason.id='ordinary-owner-stop-reason';reason.maxLength=500;reason.placeholder='取消或撤回理由';
@@ -116,6 +122,68 @@ function renderOrdinaryOwnerReview(result,redacted=false,metadataOnly=false){
  }
  read.onclick=safe(()=>load());recover.onclick=safe(()=>{const p=pending();if(p)return load(p.body.request_key);});retryAck.onchange=controls;retry.onclick=safe(()=>send(null,null,true));
  node.append(read,recover,retryLabel,retry,body,status);$('result').append(node);controls();
+ const correction=ordinaryCorrectionIntents.get(intentKey);if(correction)renderOrdinaryCorrection(body,{content_access:false,principal_id:correction.principal,project_id:correction.project},view,current,intentKey);
  status.textContent=pending()?'原请求待恢复；不会自动读取或重发。':'标准已在执行前冻结。请先读取当前精确证据，再准备人工逐项签收。';
+}
+// Page-memory durable intents keep the original body/key across navigation and lost replies.
+const ordinaryCorrectionIntents=new Map();
+function renderOrdinaryCorrection(host,state,view,ownerCurrent,key){
+ const pending=()=>ordinaryCorrectionIntents.get(key);
+ if(!pending()&&(!state.content_access||state.owner_acceptance!=='REJECTED'||state.current?.human_correction))return;
+ const section=document.createElement('section');section.id='ordinary-correction';
+ const current=()=>ownerCurrent()&&section.isConnected;
+ const title=document.createElement('h4');title.textContent='根据原拒绝另行创建修正任务';section.append(title);
+ section.append(row('先读取精确拒绝条目和材料，再另行确认创建一个新Run。原Goal、标准、声明和成果保留；拒绝理由不授予权限。仅Mock，真实模型额度0。'));
+ const status=document.createElement('p');status.id='ordinary-correction-status';status.setAttribute('role','status');
+ const proof=document.createElement('div');proof.id='ordinary-correction-preview';
+ let preview=null,busy=false;
+ const button=(id,label,fn)=>{const node=document.createElement('button');node.type='button';node.id=id;node.textContent=label;node.onclick=safe(fn);return node;};
+ const ack=document.createElement('input');ack.type='checkbox';ack.id='ordinary-correction-ack';const label=document.createElement('label');label.append(ack,'我已核对原Goal、全部标准、精确材料及拒绝理由，明确创建一个新修正Run；不覆盖旧结果。');
+ const retryAck=document.createElement('input');retryAck.type='checkbox';retryAck.id='ordinary-correction-retry-ack';const retryLabel=document.createElement('label');retryLabel.append(retryAck,'仅明确重试原key、原请求；不另建第二个Run。');
+ const prepare=button('ordinary-correction-read','读取新修正任务的精确预览',async()=>{
+  if(!current()||busy||pending())return;busy=true;preview=null;ack.checked=false;controls();
+  try{const value=await api(`/api/runs/${view.run}/correction-preview`);const {preview_fingerprint,...unsigned}=value;
+   if(value.version!=='ordinary-goal-correction.v1'||value.parent_run_id!==view.run||value.project_id!==state.project_id||value.principal_id!==state.principal_id||value.real_model_allowance!==0||value.mode!=='mock'||value.automatic_goal_acceptance!=='NOT_RUN'||value.semantic_status!=='UNKNOWN'||value.formal_publication_enabled!==false||await registeredHash(unsigned)!==preview_fingerprint||value.feedback.declaration_id!==state.record?.id||value.feedback.declaration_fingerprint!==state.record?.fingerprint||goalRunCanonical(value.source_goal)!==goalRunCanonical(state.current.source_goal))throw Error('VERSION_CONFLICT');
+   if(!current())return;preview=value;proof.replaceChildren();
+   proof.append(row(`来源Run：${view.run} · 原声明：${value.feedback.declaration_id} · 新任务人工PENDING / 自动NOT_RUN / 语义UNKNOWN`));
+   const goal=document.createElement('pre');goal.textContent=JSON.stringify({original_goal:value.source_goal,materials:value.feedback.materials,limits:value.limits,artifact_delivery:value.artifact_delivery},null,2);proof.append(goal);
+   for(const issue of value.feedback.issues)proof.append(row(`${issue.item_id} · 原标准：${issue.criterion} · 拒绝理由：${issue.reason}`));
+   status.textContent='请另行确认。新任务仍使用原材料与工具边界，重新鉴权；MD成功保存会产生一个新Resource及两条读取Grant。';
+  }catch(error){if(current()){preview=null;proof.replaceChildren();status.textContent=`未确认修正预览：${error.message}。未创建新任务。`;if(error.httpStatus===403){clearRunDetail();activeRun=null;$('result').append(row('当前来源授权不可用；已清除成果和拒绝正文。'));}}}
+  finally{busy=false;if(current())controls();}
+ });
+ async function verifyReceipt(value,entry){
+  if(value.version!=='ordinary-goal-correction.v1'||value.status!=='ACCEPTED'||!/^run_[a-f0-9]{32}$/.test(value.run_id)||value.run_id===view.run||value.parent_run_id!==view.run||value.principal_id!==entry.principal||value.project_id!==entry.project||value.request_key!==entry.body.request_key||value.request_fingerprint!==await registeredHash(entry.body)||value.feedback_fingerprint!==await registeredHash(entry.feedback)||value.real_model_allowance!==0||value.formal_publication_enabled!==false)throw Error('VERIFICATION_FAILED');
+ }
+ async function send(replay=false){
+  if(!current()||busy)return;let entry=pending();
+  if(replay){if(!entry||entry.state!=='unknown'||!retryAck.checked)return;}
+  else{if(entry||!preview||!ack.checked)return;entry={principal:state.principal_id,project:state.project_id,feedback:structuredClone(preview.feedback),source:structuredClone(preview.source_goal),body:{expected_preview_fingerprint:preview.preview_fingerprint,declaration_id:preview.feedback.declaration_id,declaration_fingerprint:preview.feedback.declaration_fingerprint,expected_sequence:preview.feedback.declaration_sequence,request_key:crypto.randomUUID(),consent:'RUN_NEW_CORRECTION_KEEP_GOAL_CRITERIA_AND_HISTORY'},state:'sending'};ordinaryCorrectionIntents.set(key,entry);}
+  busy=true;entry.state='sending';ack.checked=false;retryAck.checked=false;controls();
+  try{const value=await api(`/api/runs/${view.run}/correction-runs`,'POST',entry.body);await verifyReceipt(value,entry);entry.receipt=value;entry.state='accepted';if(current())status.textContent=`新修正任务已接受：${value.run_id}。请显式打开新Run；尚未完成或通过人工验收。`;}
+  catch(error){const rejected=error.submissionRejection,hash=await registeredHash(entry.body);
+   const definite=rejected?.namespace==='ordinary-correction-submission-rejection.v1'&&rejected.principal_id===entry.principal&&rejected.project_id===entry.project&&rejected.parent_run_id===view.run&&rejected.request_key===entry.body.request_key&&rejected.request_fingerprint===hash&&rejected.acceptance==='NOT_ACCEPTED'&&rejected.previous_request==='ABSENT'&&rejected.phase==='TRANSACTION_ROLLED_BACK';
+   entry.state=definite?'rejected':'unknown';if(definite&&pending()===entry)ordinaryCorrectionIntents.delete(key);
+   if(current()){preview=null;proof.replaceChildren();status.textContent=definite?`新请求已明确拒绝：${error.message}。请重新读取当前预览。`:`接受结果UNKNOWN：${error.message}。保留原key，只显式恢复或重试原请求。`;if(error.httpStatus===403){clearRunDetail();activeRun=null;$('result').append(row('当前来源授权不可用；已清除成果和拒绝正文。'));}}
+  }finally{busy=false;if(current())controls();else if(pending()===entry)entry.renderCurrent?.();}
+ }
+ const submit=button('ordinary-correction-submit','明确创建新修正Run',()=>send());
+ const recover=button('ordinary-correction-recover','只读恢复原key的新Run回执',async()=>{
+  const entry=pending();if(!current()||busy||!entry)return;busy=true;controls();
+  try{const value=await api(`/api/runs/${view.run}/correction-requests/${encodeURIComponent(entry.body.request_key)}`);await verifyReceipt(value,entry);entry.receipt=value;entry.state='accepted';if(current())status.textContent=`原key已恢复：${value.run_id}。未重发创建请求，请显式打开新Run。`;}
+  catch(error){if(current()){proof.replaceChildren();status.textContent=`原key未确认：${error.message}。不自动提交或另建。`;if(error.httpStatus===403){clearRunDetail();activeRun=null;$('result').append(row('当前来源授权不可用；已清除成果和拒绝正文。'));}}}
+  finally{busy=false;if(current())controls();else if(pending()===entry)entry.renderCurrent?.();}
+ });
+ const retry=button('ordinary-correction-retry','明确重试原key原请求',()=>send(true));
+ const open=button('ordinary-correction-open','打开已接受的新修正Run',async()=>{
+  const entry=pending();if(!current()||busy||entry?.state!=='accepted')return;
+  const identity=token,connection=identityConnectionGeneration,project=$('project-select').value,projectGeneration=projectSelectionGeneration,workspace=workspaceSelectionGeneration;
+  const guard=()=>identity===token&&connection===identityConnectionGeneration&&project===$('project-select').value&&projectGeneration===projectSelectionGeneration&&workspace===workspaceSelectionGeneration&&!$('projects').hidden;
+  await showRun(entry.receipt.run_id,true,guard,result=>{if(result.contract.fingerprint!==entry.receipt.contract_fingerprint||goalRunCanonical(result.contract.snapshot.ordinary_correction?.feedback)!==goalRunCanonical(entry.feedback)||goalRunCanonical(result.contract.snapshot.source_goal_card)!==goalRunCanonical(entry.source))throw Error('VERSION_CONFLICT');});
+ });
+ function controls(){if(!current())return;const entry=pending();if(entry)entry.renderCurrent=()=>{if(current())controls();};prepare.disabled=busy||!!entry||!state.content_access;label.hidden=submit.hidden=!!entry||!preview;submit.disabled=busy||!preview||!ack.checked;recover.hidden=!entry;recover.disabled=busy;retry.hidden=retryLabel.hidden=entry?.state!=='unknown';retry.disabled=busy||!retryAck.checked;open.hidden=entry?.state!=='accepted';open.disabled=busy;}
+ ack.onchange=controls;retryAck.onchange=controls;
+ section.append(prepare,proof,label,submit,recover,retryLabel,retry,open,status);host.append(section);controls();
+ status.textContent=pending()?`原修正请求：${pending().state}；仅显式恢复或打开，不自动运行另一任务。`:'当前拒绝尚未创建修正Run。';
 }
 renderOrdinaryRubricStart();

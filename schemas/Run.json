@@ -66,6 +66,17 @@
             }
           ],
           "default": null
+        },
+        "ordinary_correction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OrdinaryCorrection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -337,7 +348,7 @@
           "type": "string"
         },
         "acceptance_check": {
-          "const": "\u6838\u5bf9\u672cRun\u552f\u4e00MD\u6210\u679c\u7684\u5b8c\u6574\u5185\u5bb9\u3001\u6765\u6e90\u3001\u672a\u51b3\u9879\u53ca\u7cbe\u786e\u7248\u672c\uff1b\u6587\u4ef6\u56de\u8bfb\u4e0d\u8bc1\u660e\u8bed\u4e49\u6b63\u786e",
+          "const": "核对本Run唯一MD成果的完整内容、来源、未决项及精确版本；文件回读不证明语义正确",
           "title": "Acceptance Check",
           "type": "string"
         }
@@ -355,6 +366,209 @@
         "acceptance_check"
       ],
       "title": "OrdinaryArtifactDelivery",
+      "type": "object"
+    },
+    "OrdinaryCorrectionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_preview_fingerprint": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Expected Preview Fingerprint",
+          "type": "string"
+        },
+        "declaration_id": {
+          "pattern": "^nowner_[a-f0-9]{32}$",
+          "title": "Declaration Id",
+          "type": "string"
+        },
+        "declaration_fingerprint": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Declaration Fingerprint",
+          "type": "string"
+        },
+        "expected_sequence": {
+          "minimum": 1,
+          "title": "Expected Sequence",
+          "type": "integer"
+        },
+        "request_key": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Request Key",
+          "type": "string"
+        },
+        "consent": {
+          "const": "RUN_NEW_CORRECTION_KEEP_GOAL_CRITERIA_AND_HISTORY",
+          "title": "Consent",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_preview_fingerprint",
+        "declaration_id",
+        "declaration_fingerprint",
+        "expected_sequence",
+        "request_key",
+        "consent"
+      ],
+      "title": "OrdinaryCorrectionRequest",
+      "type": "object"
+    },
+    "OrdinaryCorrectionIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "item_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Item Id",
+          "type": "string"
+        },
+        "criterion": {
+          "minLength": 1,
+          "title": "Criterion",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "criterion",
+        "reason"
+      ],
+      "title": "OrdinaryCorrectionIssue",
+      "type": "object"
+    },
+    "OrdinaryCorrectionFeedback": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "ordinary-goal-correction.v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "parent_run_id": {
+          "pattern": "^run_[a-f0-9]{32}$",
+          "title": "Parent Run Id",
+          "type": "string"
+        },
+        "parent_contract_fingerprint": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Parent Contract Fingerprint",
+          "type": "string"
+        },
+        "parent_result_version": {
+          "minimum": 1,
+          "title": "Parent Result Version",
+          "type": "integer"
+        },
+        "parent_output_fingerprint": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Parent Output Fingerprint",
+          "type": "string"
+        },
+        "stable_parent_fingerprint": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Stable Parent Fingerprint",
+          "type": "string"
+        },
+        "declaration_id": {
+          "pattern": "^nowner_[a-f0-9]{32}$",
+          "title": "Declaration Id",
+          "type": "string"
+        },
+        "declaration_fingerprint": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Declaration Fingerprint",
+          "type": "string"
+        },
+        "declaration_sequence": {
+          "minimum": 1,
+          "title": "Declaration Sequence",
+          "type": "integer"
+        },
+        "materials": {
+          "items": {
+            "$ref": "#/$defs/ResourceSnapshot"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Materials",
+          "type": "array"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/OrdinaryCorrectionIssue"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Issues",
+          "type": "array"
+        },
+        "previous_output": {
+          "additionalProperties": true,
+          "title": "Previous Output",
+          "type": "object"
+        },
+        "previous_artifacts": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "maxItems": 1,
+          "title": "Previous Artifacts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "version",
+        "parent_run_id",
+        "parent_contract_fingerprint",
+        "parent_result_version",
+        "parent_output_fingerprint",
+        "stable_parent_fingerprint",
+        "declaration_id",
+        "declaration_fingerprint",
+        "declaration_sequence",
+        "materials",
+        "issues",
+        "previous_output",
+        "previous_artifacts"
+      ],
+      "title": "OrdinaryCorrectionFeedback",
+      "type": "object"
+    },
+    "OrdinaryCorrection": {
+      "additionalProperties": false,
+      "properties": {
+        "feedback": {
+          "$ref": "#/$defs/OrdinaryCorrectionFeedback"
+        },
+        "authority_version": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Authority Version",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/OrdinaryCorrectionRequest"
+        },
+        "real_model_allowance": {
+          "const": 0,
+          "title": "Real Model Allowance",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "feedback",
+        "authority_version",
+        "request",
+        "real_model_allowance"
+      ],
+      "title": "OrdinaryCorrection",
       "type": "object"
     }
   },

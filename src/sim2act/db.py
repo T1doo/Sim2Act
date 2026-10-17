@@ -465,6 +465,16 @@ natural_owner_seals = Table(
 
 # Ordinary declarations share the per-Run owner protocol, with their own explicit
 # scope adapter. Additive tables preserve all legacy instance metadata/seal bytes.
+ordinary_correction_links = Table(
+    "ordinary_correction_links", meta,
+    Column("parent_run_id", String, primary_key=True),
+    Column("run_id", String, unique=True, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+)
+
+
 ordinary_owner_records = Table(
     "ordinary_owner_records", meta,
     Column("id", String, primary_key=True),
@@ -1005,6 +1015,8 @@ class Store:
                     "repairs": 0,
                     "reserved_tokens": 0,
                     **({"saved_goal_input": fp} if source is not None else {}),
+                    **({"ordinary_correction_parent": policy["ordinary_correction"]["feedback"]["parent_run_id"]}
+                       if policy.get("ordinary_correction") is not None else {}),
                 },
                 version=1,
                 cancel_intent=False,
@@ -1030,6 +1042,8 @@ class Store:
                if policy.get("human_review") is not None else {}),
             **({"artifact_delivery": policy["artifact_delivery"]}
                if policy.get("artifact_delivery") is not None else {}),
+            **({"ordinary_correction": policy["ordinary_correction"]}
+               if policy.get("ordinary_correction") is not None else {}),
         })
         return rid
 
@@ -1120,6 +1134,9 @@ class Store:
         from .ordinary_artifacts import validate_contract as validate_md_contract
 
         validate_md_contract(contract, raw=saved["snapshot"].get("artifact_delivery"))
+        from .ordinary_corrections import validate as validate_correction
+
+        validate_correction(self, c, run, contract, raw=saved["snapshot"].get("ordinary_correction"))
         return contract
 
     def claim(self, worker_id, lease_seconds, *, trial_binding=None):

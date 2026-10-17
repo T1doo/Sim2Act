@@ -129,6 +129,9 @@ def source_scope_gate(store, c, rid):
         for resource_id in refs:
             store.authorize(c, metadata["principal_id"], metadata["runtime_id"], metadata["project_id"], resource_id, "resource.read")
         metadata = {**metadata, "resource_refs": refs}
+        from .ordinary_corrections import scope_gate as correction_scope_gate
+
+        correction_scope_gate(store, c, rid)
     hints = c.execute(select(
         run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
         run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),

@@ -2,7 +2,7 @@
 // All human clicks below are synthetic test actions; never a real owner signoff.
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
 const info=JSON.parse(fs.readFileSync(process.argv[2])),requests=[],checks=[],assets=[],pending=new Map();
-let serial=0,dom,w,$,hold=null,release=null,drop=false,run;const blobs=[],downloads=[];
+let serial=0,dom,w,$,hold=null,release=null,drop=false,dropCorrection=false,failCorrectionBefore=false,run;const blobs=[],downloads=[];
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
 const check=(ok,label)=>{assert(ok,label);checks.push(label);};
@@ -25,9 +25,11 @@ async function boot(){
  dom=new JSDOM(await load('/'),{url:'http://testserver/',runScripts:'dangerously',pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;w.structuredClone=structuredClone;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});w.setInterval=()=>0;w.Blob=Blob;w.URL.createObjectURL=blob=>{const url='blob:md-'+blobs.length;blobs.push({blob,url,revoked:false});return url;};w.URL.revokeObjectURL=url=>{const b=blobs.find(x=>x.url===url);assert(b);b.revoked=true;};w.HTMLAnchorElement.prototype.click=function(){downloads.push({url:this.href,filename:this.download});};
  const style=w.document.createElement('style');style.textContent=await load('/app.css');w.document.head.append(style);
  w.fetch=async(path,options={})=>{const request={method:options.method||'GET',path,body:options.body?JSON.parse(options.body):undefined};requests.push(request);const h=hold&&hold.path===path&&hold.method===request.method?hold:null;if(h)hold=null;
+  if(failCorrectionBefore&&request.method==='POST'&&path.endsWith('/correction-runs')){failCorrectionBefore=false;request.synthetic_phase='NOT_SENT';throw Error('Synthetic connection loss BEFORE server request');}
   const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response=JSON.parse(r.text);
   if(h)await new Promise(resolve=>{release=resolve;});
   if(drop&&request.method==='POST'&&path.endsWith('/owner-review-requests')){drop=false;throw Error('Synthetic response lost AFTER actual server commit');}
+  if(dropCorrection&&request.method==='POST'&&path.endsWith('/correction-runs')){dropCorrection=false;throw Error('Synthetic correction response lost AFTER actual server commit');}
   return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});};
  for(const script of [...w.document.querySelectorAll('script[src]')]){const node=w.document.createElement('script');node.textContent=await load(script.getAttribute('src'));w.document.body.append(node);}
  $('token').value='synthetic-test-A';await action('connect');await project(info.project);
@@ -103,4 +105,58 @@ async function revoked(){await prepare();await choices();assert.equal((await rpc
  await selectRun();check(!!$('ordinary-owner-metadata-open')&&!$('run-answer'),'denied full Run from durable history exposes explicit metadata-only signoff entry');const detachedOpen=$('ordinary-owner-metadata-open');await project(info.other);await project(info.project);const oldCount=requests.length;await detachedOpen.onclick(new w.Event('click'));check(requests.length===oldCount&&!$('ordinary-owner-review'),'old detached metadata entry cannot reopen after project away/back');await selectRun();const oldWorkspaceOpen=$('ordinary-owner-metadata-open');w.selectWorkspace('resources');w.selectWorkspace('projects');const beforeOpen=requests.length;await oldWorkspaceOpen.onclick(new w.Event('click'));check(requests.length===beforeOpen,'old workspace metadata entry stays inert');await action('ordinary-owner-metadata-open');check(!!$('ordinary-owner-stop')&&$('ordinary-owner-frozen').textContent==='','metadata-only entry reaches exact pending STOP without protected source body');
  $('ordinary-owner-stop-reason').value='Cancel after source revoke';await tick('ordinary-owner-stop-ack');await action('ordinary-owner-stop');check($('ordinary-owner-status').textContent.includes('CANCELLED'),'owner can explicitly cancel exact pending preview after source access withdrawal');
 }
-(async()=>{try{await boot();if(info.case==='md-partial-file')await mdIncompleteFile();else if(info.case==='md-missing')await mdMissing();else if(info.require_md)await mdDeliver();else if(info.case==='accept'||info.case==='reject')await normal(info.case==='reject');else if(info.case==='navigation-unknown')await navigation();else if(info.case==='late-intent')await lateIntent();else await revoked();const captures=[];for(const [index,entry] of blobs.entries()){await wait(()=>entry.revoked,'Blob URL cleanup');const bytes=Buffer.from(await entry.blob.arrayBuffer()),filename=`download-${index}.md`;fs.writeFileSync(info.output.replace('result.json',filename),bytes);captures.push({...downloads[index],original:filename,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,revoked:entry.revoked});}if(blobs.length)check(!w.document.querySelector('a[download]'),'download URLs released and temporary anchors removed');fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,assets,requests,run,downloads:captures,real_human_signoff:'NOT_RUN',real_model_requests:0},null,2));}catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',case:info.case,checks,assets,requests,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}finally{dom?.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');}})();
+async function ordinaryCorrection(){
+ await prepare();await choices(true);
+ $('ordinary-owner-form').querySelector('textarea').value='SIMULATED: preserve Beta exception; text grants no access <script>window.correctionUnsafe=true</script>';
+ await action('ordinary-owner-decide');check($('ordinary-owner-status').textContent.includes('REJECTED')&&!!$('ordinary-correction-read'),'actual parent rejection exposes separate new correction entry');
+ const correctionPosts=()=>requests.filter(r=>r.method==='POST'&&r.path.endsWith('/correction-runs'));
+ check(correctionPosts().length===0&&!$('ordinary-correction-ack').checked,'rejection itself creates no correction and inherits no confirmation');
+ await action('ordinary-correction-read');check($('ordinary-correction-preview').textContent.includes('preserve Beta exception')&&!w.correctionUnsafe,'actual exact rejected reason displays inertly in new-request preview');
+ check(!$('ordinary-correction-ack').checked&&$('ordinary-correction-submit').disabled,'preview requires fresh unchecked separate creation consent');
+ if(info.case==='correction-navigation'){
+  const detached=$('ordinary-correction-submit');await tick('ordinary-correction-ack');
+  for(const [label,change] of [['same Run redraw',async()=>{await read();}],['workspace',async()=>{w.selectWorkspace('apps');w.selectWorkspace('projects');}],['Run',async()=>{await selectRun();}],['project',async()=>{await project(info.other);await project(info.project);await selectRun();}],['identity',async()=>{await action('identity-switch');$('token').value='synthetic-test-B';await action('connect');await action('identity-switch');$('token').value='synthetic-test-A';await action('connect');await project(info.project);await selectRun();}]]){
+   hold={path:`/api/runs/${run}/correction-preview`,method:'GET'};const oldRead=action('ordinary-correction-read');await wait(()=>!!release,'old correction preview held');await change();const finish=release;release=null;finish();await oldRead;
+   check(!visible($('ordinary-correction-preview'))||!$('ordinary-correction-preview').textContent.includes('preserve Beta'),label+' navigation discards late correction preview');await read();await action('ordinary-correction-read');check(!$('ordinary-correction-ack').checked&&correctionPosts().length===0,label+' return requires fresh consent and creates no new Run');
+  }
+  await detached.onclick(new w.Event('click'));check(correctionPosts().length===0,'detached acknowledged creation control cannot submit after navigation');
+ }
+ if(info.case==='correction-revoked'){
+  await tick('ordinary-correction-ack');dropCorrection=true;await action('ordinary-correction-submit');assert.equal((await rpc({command:'revoke'})).status,200);await action('ordinary-correction-recover');
+  check(correctionPosts().length===1&&correctionPosts()[0].status===202&&!$('ordinary-correction-preview')&&!$('run-answer')&&$('raw-result').textContent==='','original-key recovery after actual revoke clears protected result without another POST');return;
+ }
+ await tick('ordinary-correction-ack');
+ if(info.case==='correction-unknown')dropCorrection=true;
+ if(info.case==='correction-retry')failCorrectionBefore=true;
+ if(info.case==='correction-navigation'){
+  hold={path:`/api/runs/${run}/correction-runs`,method:'POST'};const detached=$('ordinary-correction-submit'),sending=action(detached);await wait(()=>!!release,'actual accepted correction reply held');
+  const count=correctionPosts().length;await detached.onclick(new w.Event('click'));check(correctionPosts().length===count,'pending correction blocks double submit');
+  w.selectWorkspace('resources');w.selectWorkspace('projects');await action('ordinary-correction-recover');check(correctionPosts().length===count,'returned view explicitly recovers accepted original key while old callback waits');
+  const finish=release;release=null;finish();await sending;check(visible($('ordinary-correction-open')),'late original response preserves current recovered new-Run entry');
+ }else await action('ordinary-correction-submit');
+ if(['correction-unknown','correction-retry'].includes(info.case)){
+  const count=correctionPosts().length,original=JSON.stringify(correctionPosts()[0].body);check(visible($('ordinary-correction-recover'))&&$('ordinary-correction-read').disabled,'unknown acceptance retains original request and blocks new intent');
+  w.selectWorkspace('resources');w.selectWorkspace('projects');check(correctionPosts().length===count&&!$('ordinary-correction-retry-ack').checked,'unknown return does not replay or inherit retry acknowledgement');
+  await action('ordinary-correction-recover');check(correctionPosts().length===count,'original-key GET recovery sends no POST');
+  if(info.case==='correction-retry'){
+   check($('ordinary-correction-status').textContent.includes('OUTCOME_UNKNOWN'),'never-sent original key remains honestly unknown after GET');await tick('ordinary-correction-retry-ack');await action('ordinary-correction-retry');check(correctionPosts().length===2&&JSON.stringify(correctionPosts()[1].body)===original,'explicit retry preserves exact original key/body after synthetic pre-send loss');
+  }
+ }
+ const parent=run,accepted=correctionPosts().find(r=>r.status===202)?.response;
+ check(accepted&&accepted.run_id!==parent&&accepted.parent_run_id===parent&&visible($('ordinary-correction-open')),'one distinct new Run is durably accepted with exact parent link');
+ await action('ordinary-correction-open');run=accepted.run_id;
+ check($('result').textContent.includes('QUEUED')&&$('ordinary-correction-source').textContent.includes(parent),'explicit opening shows the actual queued child and original rejection link');
+ assert.equal((await rpc({command:'worker'})).status,200);await selectRun();
+ check($('result').textContent.includes('PARTIAL')&&$('result').textContent.includes('NOT_RUN')&&$('ordinary-correction-source').textContent.includes('preserve Beta exception'),'new actual result retains correction questions without claiming automatic repair');
+ await read();check($('ordinary-owner-status').textContent.includes('PENDING')&&!$('ordinary-owner-declaration'),'child starts its own PENDING review, without inheriting parent rejection or acceptance');
+ if(info.require_md){const download=[...$('run-artifacts').querySelectorAll('button')].find(b=>b.textContent==='下载此成果');await action(download);check(downloads[0].filename.includes(run),'actual correction MD download belongs to child Run');}
+ await action('ordinary-owner-prepare');await choices();await action('ordinary-owner-decide');check($('ordinary-owner-status').textContent.includes('ACCEPTED')&&$('result').textContent.includes('PARTIAL'),'separate complete synthetic declaration leaves technical and semantic states unchanged');
+ check(correctionPosts().filter(r=>r.status===202).length===1,'exactly one accepted correction POST; no automatic correction chain');
+ if(info.case==='correction-md'){
+  assert.equal((await rpc({command:'revoke'})).status,200);await read();
+  check(!$('ordinary-correction-source')&&!$('result').textContent.includes('preserve Beta exception')&&$('raw-result').textContent==='','child review read after actual revoke immediately clears original rejection feedback');
+  w.selectWorkspace('resources');w.selectWorkspace('projects');check(!$('ordinary-correction-source')&&!$('result').textContent.includes('preserve Beta exception'),'workspace return does not revive revoked parent feedback');
+ }
+ info.parent=parent;info.child=run;
+}
+(async()=>{try{await boot();if(info.case.startsWith('correction-'))await ordinaryCorrection();else if(info.case==='md-partial-file')await mdIncompleteFile();else if(info.case==='md-missing')await mdMissing();else if(info.require_md)await mdDeliver();else if(info.case==='accept'||info.case==='reject')await normal(info.case==='reject');else if(info.case==='navigation-unknown')await navigation();else if(info.case==='late-intent')await lateIntent();else await revoked();const captures=[];for(const [index,entry] of blobs.entries()){await wait(()=>entry.revoked,'Blob URL cleanup');const bytes=Buffer.from(await entry.blob.arrayBuffer()),filename=`download-${index}.md`;fs.writeFileSync(info.output.replace('result.json',filename),bytes);captures.push({...downloads[index],original:filename,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,revoked:entry.revoked});}if(blobs.length)check(!w.document.querySelector('a[download]'),'download URLs released and temporary anchors removed');fs.writeFileSync(info.output,JSON.stringify({status:'PASS',case:info.case,checks,assets,requests,run,parent:info.parent,child:info.child,downloads:captures,real_human_signoff:'NOT_RUN',real_model_requests:0},null,2));}catch(error){fs.writeFileSync(info.output,JSON.stringify({status:'FAIL',case:info.case,checks,assets,requests,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}finally{dom?.window.close();process.stdout.write(JSON.stringify({done:true})+'\n');}})();

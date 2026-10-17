@@ -950,6 +950,9 @@ def create_app(store=None, settings=None):
     from .ordinary_owner_review import mount as mount_ordinary_owner_review
 
     mount_ordinary_owner_review(app, db, platform_limits, identity)
+    from .ordinary_corrections import mount as mount_ordinary_corrections
+
+    mount_ordinary_corrections(app, db, platform_limits, identity, s)
     from .app_owner_goals import mount as mount_app_owner_goals
 
     mount_app_owner_goals(app, db, platform_limits, identity)

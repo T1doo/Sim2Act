@@ -442,6 +442,8 @@ class Worker:
             contract = self.store.frozen_contract(c, run)
         if contract.mode != self.s.mode or contract.request_model != self.s.model:
             raise DomainError("VERSION_CONFLICT", "Worker model policy differs from frozen request")
+        if contract.ordinary_correction is not None and (self.s.mode != "mock" or self.s.live_enabled):
+            raise DomainError("PERMISSION_DENIED", "Ordinary correction real model allowance is zero")
         self.s = replace(
             self.s,
             **{
@@ -475,6 +477,8 @@ class Worker:
             goal_input["saved_goal"] = contract.source_goal_card.model_dump()
             if contract.artifact_delivery is not None:
                 goal_input["artifact_delivery"] = contract.artifact_delivery.model_dump()
+            if contract.ordinary_correction is not None:
+                goal_input["human_correction"] = contract.ordinary_correction.model_dump()
             if ctx["messages"]:
                 try:
                     original_input = ctx["messages"][1]["content"]
