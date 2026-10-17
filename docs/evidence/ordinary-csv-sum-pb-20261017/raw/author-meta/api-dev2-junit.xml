@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="8" time="26.133" timestamp="2026-10-17T10:29:14.408258+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_ordinary_csv_extraction" name="test_ordinary_success_to_sum_only_new_input_version_instance_and_fresh_run" time="5.647" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_exact_consent_concurrent_request_and_readonly_original_key_recovery" time="2.824" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[material]" time="1.817" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[saved-report]" time="1.791" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[target-runtime]" time="6.735"><failure message="sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked&#10;[SQL: BEGIN IMMEDIATE]&#10;(Background on this error at: https://sqlalche.me/e/20/e3q8)">self = &lt;sqlalchemy.engine.base.Connection object at 0x7fc7783664b0&gt;
+dialect = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7fc7785bbb60&gt;
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7fc778367980&gt;
+statement = 'BEGIN IMMEDIATE', parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7fc7785bbb60&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7fc777623740&gt;
+statement = 'BEGIN IMMEDIATE', parameters = ()
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7fc778367980&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: database is locked
+
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+env = (&lt;sim2act.db.Store object at 0x7fc776a45d90&gt;, Settings(database_url='sqlite:////tmp/ordinary-csv-sum-pb-api-dev2-20261...51990cc7794f1eabd2d7ed2a677057', 'user_c086c6b2f6304a328be12b616a9e8f7d', 'proj_6c2e8b2afaf14b9fa284497efe2aeef2', ...)
+tmp_path = PosixPath('/tmp/ordinary-csv-sum-pb-api-dev2-20261017/test_source_and_target_recheck2')
+scope = 'target-runtime'
+
+    @pytest.mark.parametrize("scope", ["material", "saved-report", "target-runtime", "result"])
+    def test_source_and_target_rechecked_before_cached_candidate_or_receipt(env, tmp_path, scope):
+        rid, original, target, target_resource = setup(env)
+        _, body = options_body(env, rid, target)
+        made = env[2].post(f"/api/runs/{rid}/csv-sum-candidates", json=body).json()
+        with env[0].tx() as c:
+            if scope == "result":
+                changed = dict(original["result"])
+                changed["answer"] = "unverified replacement"
+                c.execute(update(runs).where(runs.c.id == rid).values(result=changed))
+            else:
+                resource = (original["contract"]["snapshot"]["ordinary_csv_report"]["resource_id"]
+                    if scope == "material" else original["result"]["receipts"][-1]["data"]["resource_id"]
+                    if scope == "saved-report" else target_resource)
+&gt;               principal = (c.execute(select(app_drafts.c.runtime_id).where(app_drafts.c.id == target)).scalar_one()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    if scope == "target-runtime" else env[3])
+
+tests/test_ordinary_csv_extraction.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1053: in get
+    return self.request(
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:876: in get_app_draft
+    return inspect_draft(db, user, aid, platform_limits)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/apps.py:631: in inspect_draft
+    with store.tx() as c:
+         ^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/db.py:659: in tx
+    c.exec_driver_sql("BEGIN IMMEDIATE")
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7fc7785bbb60&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7fc777623740&gt;
+statement = 'BEGIN IMMEDIATE', parameters = ()
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7fc778367980&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+E       [SQL: BEGIN IMMEDIATE]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+../sim2act-venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: OperationalError</failure></testcase><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[result]" time="1.886" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_manual_accepted_partial_md_is_not_successful_csv_source" time="2.477"><failure message="assert (400 == 409)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fc77850e480&gt;, Settings(database_url='sqlite:////tmp/ordinary-csv-sum-pb-api-dev2-20261...04f6c7fd23473d849534301de79904', 'user_6e3fc3196a824d9a8707232e453c1540', 'proj_33eb46b724424dda9bca5005768af14a', ...)
+
+    
+    def test_manual_accepted_partial_md_is_not_successful_csv_source(env):
+        from test_ordinary_goal_md import execute
+        from test_ordinary_owner_review import decision, review
+        from test_ordinary_owner_review import prepare as prepare_owner
+    
+        _, _, accepted, _, original = execute(env)
+        rid = accepted["run_id"]
+        prepare_owner(env, rid)
+        declared = review(env, rid, "post", decision(env, rid))
+        assert declared.status_code == 201 and declared.json()["record"]["status"] == "ACCEPTED"
+        assert original["status"] == "PARTIAL"
+        before = table_snapshot(env[0])
+&gt;       response = env[2].get(f"/api/runs/{rid}/csv-sum-candidate-options")
+E       assert (400 == 409)
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_ordinary_csv_extraction.py:182: AssertionError</failure></testcase><testcase classname="tests.test_ordinary_csv_extraction" name="test_completed_source_deadline_is_not_reapplied_to_later_extraction" time="1.883" /></testsuite></testsuites>

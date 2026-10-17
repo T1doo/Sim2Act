@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="9" time="25.500" timestamp="2026-10-17T10:32:42.518683+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_ordinary_csv_extraction" name="test_ordinary_success_to_sum_only_new_input_version_instance_and_fresh_run" time="6.371" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_exact_consent_concurrent_request_and_readonly_original_key_recovery" time="3.621" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[material]" time="2.197" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[saved-report]" time="2.232" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[target-runtime]" time="2.230" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_source_and_target_rechecked_before_cached_candidate_or_receipt[result]" time="1.967" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_manual_accepted_partial_md_is_not_successful_csv_source" time="2.618" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_completed_source_deadline_is_not_reapplied_to_later_extraction" time="1.721" /><testcase classname="tests.test_ordinary_csv_extraction" name="test_queued_sum_rechecks_original_source_before_effect" time="2.167"><failure message="AssertionError: assert ('WAITING_RESOURCE' == 'FAILED'&#10;  &#10;  - FAILED&#10;  + WAITING_RESOURCE)">env = (&lt;sim2act.db.Store object at 0x7fe6d737e2a0&gt;, Settings(database_url='sqlite:////tmp/ordinary-csv-sum-pb-api-dev3-20261...5907a0a84341a89208c531df35fcde', 'user_7b26e1a07e9a4ad0b103ec5425c1c447', 'proj_5c9dfbe0ec494e2b8b89c321a5b5e4ec', ...)
+tmp_path = PosixPath('/tmp/ordinary-csv-sum-pb-api-dev3-20261017/test_queued_sum_rechecks_origi0')
+
+    def test_queued_sum_rechecks_original_source_before_effect(env, tmp_path):
+        rid, _, target, _ = setup(env)
+        _, body = options_body(env, rid, target)
+        made = env[2].post(f"/api/runs/{rid}/csv-sum-candidates", json=body).json()
+        rel, _, _ = release(env, made["id"], made["candidate_fingerprint"])
+        instance = create(env, rel)
+        queued = enqueue(env, instance, rel, column="quantity")
+        with env[0].tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == env[6],
+                grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read")
+                .values(revoked=True, revision=grants.c.revision + 1))
+        before = table_snapshot(env[0])
+        worked = Worker(env[0], env[1], NoModel()).once()
+        after = table_snapshot(env[0])
+        assert all(before[k] == after[k] for k in ["operations", "operation_intents", "local_effects", "resources", "grants", "attempts", "reservations"])
+        with env[0].tx() as c:
+            row = dict(c.execute(select(runs).where(runs.c.id == queued["run_id"])).mappings().one())
+&gt;       assert row["status"] == "FAILED" and row["result"] is None
+E       AssertionError: assert ('WAITING_RESOURCE' == 'FAILED'
+E         
+E         - FAILED
+E         + WAITING_RESOURCE)
+
+tests/test_ordinary_csv_extraction.py:215: AssertionError</failure></testcase></testsuite></testsuites>

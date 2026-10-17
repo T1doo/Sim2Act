@@ -1,0 +1,75 @@
+..F                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_visible_sum_extraction_through_existing_version_directory_and_use[navigation] _
+
+env = (<sim2act.db.Store object at 0x7f7715cce0c0>, Settings(database_url='sqlite:////tmp/ordinary-csv-sum-pb-pages-dev1-202...db933cc9564633849cb6a8ba6f7d54', 'user_be5f63baca5a49f4ab49dbf0ff8a61e3', 'proj_8e344c22f2fc4a4f8eaae37ea6cee70c', ...)
+tmp_path = PosixPath('/tmp/ordinary-csv-sum-pb-pages-dev1-20261017/test_visible_sum_extraction_th2')
+case = 'navigation'
+
+    def test_queued_sum_rechecks_original_source_before_effect(env, tmp_path):
+        rid, _, target, _ = setup(env)
+        _, body = options_body(env, rid, target)
+        made = env[2].post(f"/api/runs/{rid}/csv-sum-candidates", json=body).json()
+        rel, _, _ = release(env, made["id"], made["candidate_fingerprint"])
+        instance = create(env, rel)
+        queued = enqueue(env, instance, rel, column="quantity")
+        with env[0].tx() as c:
+            c.execute(update(grants).where(grants.c.resource_id == env[6],
+                grants.c.principal_id == env[3], grants.c.tool_ref == "resource.read")
+                .values(revoked=True, revision=grants.c.revision + 1))
+        before = table_snapshot(env[0])
+        worked = Worker(env[0], env[1], NoModel()).once()
+        after = table_snapshot(env[0])
+        assert all(before[k] == after[k] for k in ["operations", "operation_intents", "local_effects", "resources", "grants", "attempts", "reservations"])
+        with env[0].tx() as c:
+            row = dict(c.execute(select(runs).where(runs.c.id == queued["run_id"])).mappings().one())
+        assert row["status"] == "FAILED" and row["result"] is None
+        assert row["error"]["code"] == "GRANT_REVOKED"
+        (tmp_path / "queued-source-recheck.json").write_text(json.dumps(dict(worker_return=worked, run=row, real_model_requests=0), indent=2))
+    
+    
+    @pytest.mark.parametrize("case", ["deliver", "lost", "navigation"])
+    def test_visible_sum_extraction_through_existing_version_directory_and_use(env, tmp_path, case):
+        import hashlib
+        import os
+        import subprocess
+        import threading
+        from pathlib import Path
+    
+        from sim2act.db import Store, attempts, reservations
+    
+        rid, original, target, target_resource = setup(env)
+        other = env[0].project(env[3], "Other project")
+        env[0].project(env[4], "Other account project")
+        before = table_snapshot(env[0])
+        info = dict(case=case, run=rid, project=env[5], other=other, target=target,
+            target_resource=target_resource, output=str(tmp_path / "page-result.json"))
+        (tmp_path / "info.json").write_text(json.dumps(info))
+        process = None
+        watchdog = None
+        worker_runs = []
+        try:
+            with (tmp_path / "node.stderr").open("w") as errors:
+                process = subprocess.Popen(["node", "tests/ordinary_csv_extraction.cjs", str(tmp_path / "info.json")],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
+                    env={**os.environ, "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules")})
+                watchdog = threading.Timer(90, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+>                   request = json.loads(line)
+E                   AssertionError: AssertionError [ERR_ASSERTION]: visible connect
+E                         at action (/workspace/Sim2Act/tests/ordinary_csv_extraction.cjs:10:35)
+E                         at /workspace/Sim2Act/tests/ordinary_csv_extraction.cjs:53:284
+E                     
+E                   assert 1 == 0
+
+tests/test_ordinary_csv_extraction.py:248: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ordinary_csv_extraction.py::test_visible_sum_extraction_through_existing_version_directory_and_use[navigation]
+1 failed, 2 passed, 1 warning in 43.02s
