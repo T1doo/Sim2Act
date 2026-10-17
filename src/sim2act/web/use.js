@@ -4,6 +4,7 @@ let applicationUse=null,applicationUseGeneration=0,applicationUseListGeneration=
 const applicationUseRequests=new Map();
 const applicationUseDownloads=new Set();
 const csvUseApp=a=>a?.candidate?.manifest?.validation_suite_ref==="receipt.readback.v1" && a.candidate.actions?.length===1 && a.candidate.actions[0].executor?.kind==="registered_tool" && a.candidate.actions[0].executor.ref==="data.aggregate_csv";
+const literalUseApp=a=>a?.input_guidance?.mode==="REGISTERED_LITERAL"&&a.candidate?.manifest?.validation_suite_ref==="source.literal_evidence.v1"&&a.candidate.actions?.length===1&&a.candidate.actions[0].executor?.kind==="registered_tool"&&a.candidate.actions[0].executor.ref==="text.literal_evidence";
 const naturalUseFamily=a=>{
  const c=a?.candidate;if(a?.input_guidance?.mode!=="MODEL_SPEC_CHECKLIST"||c?.namespace!=="pa-natural-spec-app.v1")return null;
  if(c.spec_task?.kind==="pb_natural_spec_task.v1")return "NATURAL_PB";
@@ -26,6 +27,12 @@ async function refreshApplicationUse(apps){
  if(applicationUseCurrent(applicationUse)&&!apps.some(summary=>summary.id===applicationUse.appId))clearApplicationUseData(applicationUse);
  for(const summary of apps){
   // Family metadata only routes discovery; opening always reauthorizes the selection.
+  if(summary.use_family==="LITERAL_TEXT"){
+   const item=row(`${summary.name} · 文本字面检索 · 固定 TXT/MD 材料，检索词可变 · 0 模型请求 · 内部应用未发布；语义 UNKNOWN，人工签收需单独核查。打开后明确选择已有实例与运行。`,async()=>{
+    if(selectable())await openSavedInternalUse(summary.id,null,"LITERAL_TEXT",selectable);
+   },"使用此文本检索应用");
+   item.dataset.useFamily="LITERAL_TEXT";item.dataset.appId=summary.id;rows.push(item);continue;
+  }
   if(["NATURAL_PA","NATURAL_PB"].includes(summary.use_family)){
    const item=row(`${summary.name} · ${summary.use_family==="NATURAL_PA"?"P-A 目标生成":"P-B 成功任务提取"} · 定义 ${summary.definition_version} · 适用范围：逐次 TXT/MD 材料 + 已保存 Goal · 受限内部应用，未发布；真实模型默认关闭，语义 UNKNOWN，新运行人工 PENDING。Release、实例修订、结果版本和当前权限在打开后读取并选择。`,async()=>{
     if(selectable())await openSavedNaturalUse(summary.id,null,summary.use_family,selectable);
@@ -51,20 +58,23 @@ async function refreshApplicationUse(apps){
  if(current()){$("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。可点击上方“从 Goal 创建自然应用”，逐步确认候选、内部版本和实例；此处不会自动创建或授权。") ]));renderNaturalFirstGuide();}
 }
 async function openSavedNaturalUse(appId,id,family,selectionCurrent=()=>true){
+ return openSavedInternalUse(appId,id,family,selectionCurrent);
+}
+async function openSavedInternalUse(appId,id,family,selectionCurrent=()=>true){
  const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,project=$("project-select").value;
  let generation=null,view=null;
  const current=()=>selectionCurrent()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&project===$("project-select").value&&(generation===null||generation===appSelectionGeneration);
  try{
   const opened=await showApp(appId,project,g=>{generation=g;},current,app=>{
-   if(naturalUseFamily(app)!==family)throw Error("VERSION_CONFLICT");
+   if(family==="LITERAL_TEXT"?!literalUseApp(app):naturalUseFamily(app)!==family)throw Error("VERSION_CONFLICT");
   });
   if(!opened||!current())return;
   view=engineering;
   if(!view||!engineeringCurrent(view)||view.app!==appId)throw Error("VERSION_CONFLICT");
   if(id)await showInternalInstance(id,view);
   if(!current()||!engineeringCurrent(view)||(id&&view.instance?.id!==id))return;
-  $("internal-title").textContent=`使用自然规范应用 · ${family==="NATURAL_PA"?"P-A":"P-B"}`;
-  $("pb-use-panel")?.scrollIntoView?.({block:"start"});
+  $("internal-title").textContent=family==="LITERAL_TEXT"?"使用已保存文本应用 · 字面检索":`使用自然规范应用 · ${family==="NATURAL_PA"?"P-A":"P-B"}`;
+  $(family==="LITERAL_TEXT"?"internal-panel":"pb-use-panel")?.scrollIntoView?.({block:"start"});
  }catch(error){if(current())throw error;}
  finally{
   // The opening fence lasts through every chained read. Later explicit instance

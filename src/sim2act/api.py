@@ -759,6 +759,9 @@ def create_app(store=None, settings=None):
                 rows = c.execute(select(app_drafts.c.id, app_drafts.c.name, app_drafts.c.project_id,
                     app_drafts.c.runtime_id,
                     app_drafts.c.candidate["namespace"].as_string().label("namespace"),
+                    app_drafts.c.candidate["actions"][0]["executor"]["kind"].as_string().label("executor_kind"),
+                    app_drafts.c.candidate["actions"][0]["executor"]["ref"].as_string().label("executor_ref"),
+                    app_drafts.c.candidate["manifest"]["validation_suite_ref"].as_string().label("check_ref"),
                     app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task"),
                     app_drafts.c.candidate["spec_binding"]["kind"].as_string().label("binding"))
                     .join(projects, projects.c.id == app_drafts.c.project_id)
@@ -770,10 +773,14 @@ def create_app(store=None, settings=None):
                         grants.c.principal_id == r["runtime_id"], grants.c.project_id == r["project_id"],
                         grants.c.tool_ref == "data.aggregate_csv")).first())
                     family = _natural_use_family(r["namespace"], r["task"], r["binding"], r["id"] in literal_ids)
+                    if not family and (r["executor_kind"], r["executor_ref"], r["check_ref"]) == (
+                        "registered_tool", "text.literal_evidence", "source.literal_evidence.v1"
+                    ):
+                        family = "LITERAL_TEXT"
                     items.append({k: r[k] for k in ("id", "name", "project_id")} | {
                         "csv_instance_candidate": hint,
                         "use_family": family or ("CSV" if hint else "OTHER"),
-                        **({"definition_version": r["namespace"]} if family else {}),
+                        **({"definition_version": r["namespace"]} if family in {"NATURAL_PA", "NATURAL_PB"} else {}),
                     })
                 return {"items": items, "state": "PREVIEW_ONLY", "publishable": False, "discovery_only": True}
             rows = (

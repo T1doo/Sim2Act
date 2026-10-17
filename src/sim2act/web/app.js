@@ -405,10 +405,11 @@ async function refreshApps() {
   const connection=identityConnectionGeneration;
   $("app-list").replaceChildren(...items.map(x=>{
     const natural=["NATURAL_PA","NATURAL_PB"].includes(x.use_family);
-    const family=natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(x.use_family==="CSV"?"CSV 固定材料":"其他应用");
+    const literal=x.use_family==="LITERAL_TEXT";
+    const family=natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(literal?"文本字面检索 · 固定 TXT/MD，检索词可变":(x.use_family==="CSV"?"CSV 固定材料":"其他应用"));
     return row(`${x.name} · ${family} · 未发布草案；当前授权需打开核查`,()=>{
       if(identity===token&&connection===identityConnectionGeneration&&pid===$("project-select").value)return showApp(x.id,pid);
-    },natural?"查看应用与保存实例":"打开预览");
+    },natural||literal?"查看应用与保存实例":"打开预览");
   }));
   if(!items.length)$("app-list").textContent="先保存 CSV 材料，再创建一个草案。";
   if(typeof refreshApplicationUse === "function")await refreshApplicationUse(items);
@@ -495,7 +496,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     $("app-input-hint").textContent="TXT/MD 逐字匹配；输入非空无首尾空白、至多80字符的检索词。每次从授权材料重新计算全部匹配行，无需上传答案。";
     $("app-preview-submit").disabled=appPreviewRequests.has(id);
     $("app-history").replaceChildren(...a.history.map(r=>row(`${r.input.term || "无效输入"} · ${r.status}`,()=>showPreviewResult(r,true),"回读历史")));
-    if(typeof openInternal === "function")await openInternal(a,generation);
+    if(typeof openInternal === "function")await openInternal(a,generation,selectionCurrent);
     return generation === appSelectionGeneration && pid === $("project-select").value && identity === token && activeApp === id && selectionCurrent();
   }
   if(agent){
