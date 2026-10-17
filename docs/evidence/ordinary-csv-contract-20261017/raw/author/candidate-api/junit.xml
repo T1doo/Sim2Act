@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.106" timestamp="2026-10-17T07:56:51.589459+00:00" hostname="f9d79f6f7e02"><testcase classname="tests.test_ordinary_csv_report" name="test_prospective_csv_report" time="1.904"><failure message="NameError: name 'csv_report' is not defined">env = (&lt;sim2act.db.Store object at 0x7f9ed15a1970&gt;, Settings(database_url='sqlite:////workspace/ordinary-csv-contract-eviden...2587b318bf40b59d8e991986ded0d2', 'user_226a2ec2e242433bbe473bd428abb26c', 'proj_d144240df93a4ec880ab6e3321eb404c', ...)
+tmp_path = PosixPath('/workspace/ordinary-csv-contract-evidence-20261017/candidate-api/data/test_prospective_csv_report0')
+
+    def test_prospective_csv_report(env, tmp_path):
+        store, settings, client, owner, _, project, material = env
+        response = prepare(client, project, material)
+        assert response.status_code == 202, response.text
+        rid = response.json()["run_id"]
+        before = client.get(f"/api/runs/{rid}").json()
+        assert before["status"] == "WAITING_APPROVAL"
+        assert not Worker(store, settings, NoModel()).once()
+        with store.tx() as c:
+            assert not c.execute(select(operations)).first()
+            assert not c.execute(select(attempts)).first()
+            assert not c.execute(select(reservations)).first()
+            assert len(c.execute(select(resources)).all()) == 1
+        confirm = {"version": before["version"], "contract_fingerprint": before["contract"]["fingerprint"],
+                   "request_key": "confirm"}
+        reply = client.post(f"/api/runs/{rid}/confirm-csv-report", json=confirm)
+        assert reply.status_code == 200, reply.text
+        assert client.post(f"/api/runs/{rid}/confirm-csv-report", json=confirm).json() == reply.json()
+        cold = Store(settings.database_url, test_only=True)
+        try:
+&gt;           assert Worker(cold, settings, NoModel()).once()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_ordinary_csv_report.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:702: in once
+    self.process(run)
+src/sim2act/worker.py:447: in process
+    process(self, run, contract)
+src/sim2act/ordinary_csv.py:308: in process
+    worker.finish(rid, fence, "SUCCEEDED", result=result)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.worker.Worker object at 0x7f9ecf6f58b0&gt;
+run_id = 'run_5dc0b1c030164a3d9fcc782f766950cd', fence = 1, state = 'SUCCEEDED'
+error = None
+result = {'answer': '完整MD报告已按事前合同保存并独立核对。', 'goal_acceptance': 'PASS_CSV_REPORT_CONTRACT', 'mode': 'DETERMINISTIC', 'model_requests': 0, ...}
+
+    def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False):
+        with self.store.tx() as c:
+            from .db import run_contracts
+            from .goal_applications import source_scope_gate
+    
+            source_scope_gate(self.store, c, run_id)
+            saved = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == run_id)).scalar_one_or_none()
+            if saved is not None and not isinstance(saved, dict):
+                raise DomainError("VERSION_CONFLICT", "Invalid frozen finalization contract")
+            verify_goal_source = verify_goal_source or bool(saved and saved.get("natural_planning"))
+            if verify_goal_source:
+                owner = c.execute(select(runs.c.principal_id, runs.c.project_id).where(
+                    runs.c.id == run_id,
+                )).mappings().one()
+                self.store.lock_project(c, owner["principal_id"], owner["project_id"])
+            run = self.store.guard(c, run_id, fence)
+            if verify_goal_source:
+                frozen = self.store.frozen_contract(c, run)
+                if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
+                    from .goal_applications import check_active, verified_candidate
+    
+                    if frozen.application_generation.activation is not None or frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}:
+                        check_active(self, c, run)
+                    candidate = verified_candidate(self.store, c, run, frozen.limits)
+                    if state != "PARTIAL" or result != {
+                        "candidate": candidate, "candidate_fingerprint": fingerprint(candidate),
+                        "goal_acceptance": "NOT_RUN", "semantic_status": "UNKNOWN", "app_created": False}:
+                        raise DomainError("VERIFICATION_FAILED", "Generation is candidate-ready only")
+                if frozen.natural_planning is not None and state in {"SUCCEEDED", "PARTIAL"} and result is None:
+                    raise DomainError("VERIFICATION_FAILED", "Goal finalization requires verified result")
+                if frozen.natural_planning is not None and result is not None:
+                    from .goal_planner import verify_result
+    
+                    if frozen.natural_planning.activation is not None:
+                        from .natural_activations import validate_run
+    
+                        validate_run(self.store, c, run, self.s, active=True)
+                    verify_result(self.store, c, run, result)
+                    accepted = result.get("task_acceptance", {}).get("whole_task_accepted") is True
+                    if state in {"SUCCEEDED", "PARTIAL"} and (state == "SUCCEEDED") != accepted:
+                        raise DomainError("VERIFICATION_FAILED", "Single-step success is not whole-goal acceptance")
+            if run["status"] == "CANCEL_REQUESTED":
+                state = "CANCELLED"
+            elif run["status"] == "PAUSE_REQUESTED":
+                state = "PAUSED"
+            if self.store.has_unknown(c, run_id):
+                state = "RECONCILING" if run["cancel_intent"] else "WAITING_RESOURCE"
+&gt;           if csv_report:
+               ^^^^^^^^^^
+E           NameError: name 'csv_report' is not defined
+
+src/sim2act/worker.py:346: NameError</failure></testcase></testsuite></testsuites>

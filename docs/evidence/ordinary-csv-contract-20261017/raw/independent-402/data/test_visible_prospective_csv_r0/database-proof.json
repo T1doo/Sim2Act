@@ -1,0 +1,474 @@
+{
+  "case": "deliver",
+  "worker_runs": 1,
+  "model_requests": 0,
+  "real_model_requests": 0,
+  "proof": {
+    "before": {
+      "id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+      "status": "WAITING_APPROVAL",
+      "version": 1,
+      "result": null,
+      "error": null,
+      "events": [
+        {
+          "id": "event_fbbe2d02e7484105923356c7946189dd",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224514.8613317,
+          "kind": "ACCEPTED",
+          "data": {
+            "input_fingerprint": "01f183446e4b64ac600a2b1fbb734677af1f07626e5267ff67c1e3c8cc5e9e86"
+          }
+        },
+        {
+          "id": "event_a9f25d1e754b42e7892c334e70301ef8",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224514.8671405,
+          "kind": "CSV_REPORT_FROZEN",
+          "data": {
+            "contract_fingerprint": "b2efa958330d1f9bcd834c510f31b5ae9894db3507f90c5a36c7041d8a27038f",
+            "spec_fingerprint": "fdd8ef47ae5fa1edabbb739ed98063610bbb59cf6807d6256883982d451a1438",
+            "deadline": 1792224814.8572614
+          }
+        }
+      ],
+      "contract": {
+        "snapshot": {
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "runtime_id": "runtime_6d3a3556082c403faa1632fc3ed9c5c7",
+          "contract_version": "F1.3",
+          "goal": {
+            "goal_id": "goal_25967b0f935d4077af85915f29151960",
+            "project_id": "proj_9a0de42a13aa4a50ae3e2275d24322de",
+            "owner_id": "user_e6aad7e17ddf4860b3ae9476aafd2786",
+            "goal": "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+            "constraints": [
+              "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+              "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+              "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+              "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+            ],
+            "acceptance_version": "ordinary-csv-report.v1",
+            "resource_refs": [
+              "res_b855484a479442e584dc2eb13ca90bf6"
+            ],
+            "unresolved": [
+              "Semantic goal acceptance NOT_RUN"
+            ]
+          },
+          "resources": [
+            {
+              "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+              "revision": 1,
+              "content_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+              "format": "csv"
+            }
+          ],
+          "limits": {
+            "max_requests": 4,
+            "max_tools": 4,
+            "max_repairs": 1,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "mode": "mock",
+          "request_model": "intern-s2",
+          "ordinary_csv_report": {
+            "version": "ordinary-csv-report.v1",
+            "checker": "csv-report-independent.v1",
+            "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+            "revision": 1,
+            "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+            "column": "amount",
+            "csv_rule": "utf8-no-bom-strict-unique-header-rectangular-1000.v1",
+            "numeric_rule": "finite-decimal-exact-1000-digits-exponent.v1",
+            "count": 2,
+            "sum": "4.00",
+            "report_format": "md",
+            "report_text": "# CSV 精确汇总报告\n\n来源：res_b855484a479442e584dc2eb13ca90bf6\n版本：1\nSHA-256：4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\n列：\"amount\"\n记录数：2\n精确合计：4.00\n\nCSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。\n所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。\n完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。\n仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。\n",
+            "report_hash": "6a21638b17082676e27df91096a9571a663c06dd217669b5e369b9f32162e1c1",
+            "save_rule": "same-run-transactional-save-and-exact-readback.v1",
+            "tool_versions": {
+              "resource.read": "1",
+              "data.aggregate_csv": "1",
+              "artifact.save_text": "1"
+            },
+            "tool_definitions_fingerprint": "b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52",
+            "model_requests": 0
+          }
+        },
+        "fingerprint": "b2efa958330d1f9bcd834c510f31b5ae9894db3507f90c5a36c7041d8a27038f"
+      },
+      "known_effects": [],
+      "ordinary_csv": {
+        "confirmed": false,
+        "deadline": 1792224814.8572614,
+        "rules": [
+          "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+          "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+          "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+          "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+        ],
+        "receipts": [],
+        "model_requests": 0
+      }
+    },
+    "actual": {
+      "id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+      "status": "SUCCEEDED",
+      "version": 3,
+      "result": {
+        "mode": "DETERMINISTIC",
+        "model_requests": 0,
+        "answer": "完整MD报告已按事前合同保存并独立核对。",
+        "receipts": [
+          {
+            "operation_id": "op_96bb6f7ce33b4692a5899a56baca44c5",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+              "content": "item,amount\na,1.25\nb,2.75\n",
+              "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+              "format": "csv"
+            },
+            "artifact_refs": [],
+            "receipt_ref": "op_96bb6f7ce33b4692a5899a56baca44c5",
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "usage_ref": null,
+            "error": null
+          },
+          {
+            "operation_id": "op_c691d0e9ed4c48ebbc00183b80c1baa8",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+              "column": "amount",
+              "count": 2,
+              "sum": "4.00",
+              "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+            },
+            "artifact_refs": [],
+            "receipt_ref": "op_c691d0e9ed4c48ebbc00183b80c1baa8",
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "usage_ref": null,
+            "error": null
+          },
+          {
+            "operation_id": "op_c4829abd7ad74c60b37495613b9d019b",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_87bdaa4090fe4167ab12c239d674b419",
+              "hash": "6a21638b17082676e27df91096a9571a663c06dd217669b5e369b9f32162e1c1"
+            },
+            "artifact_refs": [
+              "res_87bdaa4090fe4167ab12c239d674b419"
+            ],
+            "receipt_ref": "op_c4829abd7ad74c60b37495613b9d019b",
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "usage_ref": null,
+            "error": null
+          }
+        ],
+        "goal_acceptance": "PASS_CSV_REPORT_CONTRACT",
+        "task_acceptance": {
+          "version": "ordinary-csv-report.v1",
+          "checker": "csv-report-independent.v1",
+          "status": "PASS",
+          "scope": "EXPLICIT_CSV_REPORT_CONTRACT_ONLY",
+          "whole_task_accepted": true,
+          "contract_fingerprint": "b2efa958330d1f9bcd834c510f31b5ae9894db3507f90c5a36c7041d8a27038f",
+          "checks": [
+            "source-version-hash",
+            "exact-column-count-sum",
+            "three-original-tool-intents-receipts",
+            "same-run-md-save-effect",
+            "complete-content-byte-readback",
+            "zero-model-requests"
+          ],
+          "general_semantic_acceptance": "NOT_RUN",
+          "owner_acceptance": "PENDING",
+          "formal_publication_enabled": false
+        }
+      },
+      "error": null,
+      "events": [
+        {
+          "id": "event_fbbe2d02e7484105923356c7946189dd",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224514.8613317,
+          "kind": "ACCEPTED",
+          "data": {
+            "input_fingerprint": "01f183446e4b64ac600a2b1fbb734677af1f07626e5267ff67c1e3c8cc5e9e86"
+          }
+        },
+        {
+          "id": "event_a9f25d1e754b42e7892c334e70301ef8",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224514.8671405,
+          "kind": "CSV_REPORT_FROZEN",
+          "data": {
+            "contract_fingerprint": "b2efa958330d1f9bcd834c510f31b5ae9894db3507f90c5a36c7041d8a27038f",
+            "spec_fingerprint": "fdd8ef47ae5fa1edabbb739ed98063610bbb59cf6807d6256883982d451a1438",
+            "deadline": 1792224814.8572614
+          }
+        },
+        {
+          "id": "event_3d0a204775ff4eac8dbd73f5b4665c9b",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224515.2090886,
+          "kind": "CSV_REPORT_CONFIRMED",
+          "data": {
+            "version": 1,
+            "contract_fingerprint": "b2efa958330d1f9bcd834c510f31b5ae9894db3507f90c5a36c7041d8a27038f",
+            "request_key": "e560d64e-33c5-4358-8cbb-ce9d80a6edfa",
+            "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+            "principal_id": "user_e6aad7e17ddf4860b3ae9476aafd2786",
+            "project_id": "proj_9a0de42a13aa4a50ae3e2275d24322de",
+            "runtime_id": "runtime_6d3a3556082c403faa1632fc3ed9c5c7"
+          }
+        },
+        {
+          "id": "event_647fc31cb92343f2a1800dd0a9b2783c",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224515.321419,
+          "kind": "CLAIMED",
+          "data": {
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_8fd346e93a14428bbc3571a93f46768c",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224515.448571,
+          "kind": "TOOL_VERIFIED",
+          "data": {
+            "operation_id": "op_96bb6f7ce33b4692a5899a56baca44c5",
+            "tool_ref": "resource.read",
+            "source_ref": "res_b855484a479442e584dc2eb13ca90bf6"
+          }
+        },
+        {
+          "id": "event_a2b79d69381c4a84bdec33cb66aeddf1",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224515.5927048,
+          "kind": "TOOL_VERIFIED",
+          "data": {
+            "operation_id": "op_c691d0e9ed4c48ebbc00183b80c1baa8",
+            "tool_ref": "data.aggregate_csv",
+            "source_ref": "res_b855484a479442e584dc2eb13ca90bf6"
+          }
+        },
+        {
+          "id": "event_f7020a1e3a1a423cb3461c72c8360c58",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224515.7380314,
+          "kind": "TOOL_VERIFIED",
+          "data": {
+            "operation_id": "op_c4829abd7ad74c60b37495613b9d019b",
+            "tool_ref": "artifact.save_text",
+            "source_ref": "proj_9a0de42a13aa4a50ae3e2275d24322de"
+          }
+        },
+        {
+          "id": "event_8318c0ba892b4bcf9b3da27393ab1db7",
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "created_at": 1792224515.8748648,
+          "kind": "STATE",
+          "data": {
+            "status": "SUCCEEDED",
+            "error": null
+          }
+        }
+      ],
+      "contract": {
+        "snapshot": {
+          "run_id": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+          "runtime_id": "runtime_6d3a3556082c403faa1632fc3ed9c5c7",
+          "contract_version": "F1.3",
+          "goal": {
+            "goal_id": "goal_25967b0f935d4077af85915f29151960",
+            "project_id": "proj_9a0de42a13aa4a50ae3e2275d24322de",
+            "owner_id": "user_e6aad7e17ddf4860b3ae9476aafd2786",
+            "goal": "按事前确认的CSV列精确汇总，核对记录数，保存并回读完整MD报告。",
+            "constraints": [
+              "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+              "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+              "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+              "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+            ],
+            "acceptance_version": "ordinary-csv-report.v1",
+            "resource_refs": [
+              "res_b855484a479442e584dc2eb13ca90bf6"
+            ],
+            "unresolved": [
+              "Semantic goal acceptance NOT_RUN"
+            ]
+          },
+          "resources": [
+            {
+              "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+              "revision": 1,
+              "content_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+              "format": "csv"
+            }
+          ],
+          "limits": {
+            "max_requests": 4,
+            "max_tools": 4,
+            "max_repairs": 1,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "mode": "mock",
+          "request_model": "intern-s2",
+          "ordinary_csv_report": {
+            "version": "ordinary-csv-report.v1",
+            "checker": "csv-report-independent.v1",
+            "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+            "revision": 1,
+            "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+            "column": "amount",
+            "csv_rule": "utf8-no-bom-strict-unique-header-rectangular-1000.v1",
+            "numeric_rule": "finite-decimal-exact-1000-digits-exponent.v1",
+            "count": 2,
+            "sum": "4.00",
+            "report_format": "md",
+            "report_text": "# CSV 精确汇总报告\n\n来源：res_b855484a479442e584dc2eb13ca90bf6\n版本：1\nSHA-256：4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\n列：\"amount\"\n记录数：2\n精确合计：4.00\n\nCSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。\n所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。\n完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。\n仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。\n",
+            "report_hash": "6a21638b17082676e27df91096a9571a663c06dd217669b5e369b9f32162e1c1",
+            "save_rule": "same-run-transactional-save-and-exact-readback.v1",
+            "tool_versions": {
+              "resource.read": "1",
+              "data.aggregate_csv": "1",
+              "artifact.save_text": "1"
+            },
+            "tool_definitions_fingerprint": "b1f72f7204037fd3df9457134d4c86d18f5eb555dfff20d8dd1f553d425e7e52",
+            "model_requests": 0
+          }
+        },
+        "fingerprint": "b2efa958330d1f9bcd834c510f31b5ae9894db3507f90c5a36c7041d8a27038f"
+      },
+      "known_effects": [
+        {
+          "id": "op_96bb6f7ce33b4692a5899a56baca44c5",
+          "tool_ref": "resource.read",
+          "status": "VERIFIED",
+          "resource_id": null,
+          "content_hash": null
+        },
+        {
+          "id": "op_c4829abd7ad74c60b37495613b9d019b",
+          "tool_ref": "artifact.save_text",
+          "status": "VERIFIED",
+          "resource_id": "res_87bdaa4090fe4167ab12c239d674b419",
+          "content_hash": "6a21638b17082676e27df91096a9571a663c06dd217669b5e369b9f32162e1c1"
+        },
+        {
+          "id": "op_c691d0e9ed4c48ebbc00183b80c1baa8",
+          "tool_ref": "data.aggregate_csv",
+          "status": "VERIFIED",
+          "resource_id": null,
+          "content_hash": null
+        }
+      ],
+      "ordinary_csv": {
+        "confirmed": true,
+        "deadline": 1792224814.8572614,
+        "rules": [
+          "CSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。",
+          "所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。",
+          "完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。",
+          "仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。"
+        ],
+        "receipts": [
+          {
+            "operation_id": "op_96bb6f7ce33b4692a5899a56baca44c5",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+              "content": "item,amount\na,1.25\nb,2.75\n",
+              "hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+              "format": "csv"
+            },
+            "artifact_refs": [],
+            "receipt_ref": "op_96bb6f7ce33b4692a5899a56baca44c5",
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "usage_ref": null,
+            "error": null
+          },
+          {
+            "operation_id": "op_c691d0e9ed4c48ebbc00183b80c1baa8",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_b855484a479442e584dc2eb13ca90bf6",
+              "column": "amount",
+              "count": 2,
+              "sum": "4.00",
+              "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645"
+            },
+            "artifact_refs": [],
+            "receipt_ref": "op_c691d0e9ed4c48ebbc00183b80c1baa8",
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "usage_ref": null,
+            "error": null
+          },
+          {
+            "operation_id": "op_c4829abd7ad74c60b37495613b9d019b",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_87bdaa4090fe4167ab12c239d674b419",
+              "hash": "6a21638b17082676e27df91096a9571a663c06dd217669b5e369b9f32162e1c1"
+            },
+            "artifact_refs": [
+              "res_87bdaa4090fe4167ab12c239d674b419"
+            ],
+            "receipt_ref": "op_c4829abd7ad74c60b37495613b9d019b",
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ],
+            "usage_ref": null,
+            "error": null
+          }
+        ],
+        "model_requests": 0
+      }
+    },
+    "artifact": {
+      "id": "res_87bdaa4090fe4167ab12c239d674b419",
+      "project_id": "proj_9a0de42a13aa4a50ae3e2275d24322de",
+      "name": "Run artifact",
+      "format": "md",
+      "content": "# CSV 精确汇总报告\n\n来源：res_b855484a479442e584dc2eb13ca90bf6\n版本：1\nSHA-256：4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645\n列：\"amount\"\n记录数：2\n精确合计：4.00\n\nCSV至多32768字节，UTF-8无BOM；唯一非空表头；严格等宽；忽略空行；至多1000条记录。\n所选列每格须为有限十进制；系数至多1000位，指数绝对值至多1000；精确相加，不四舍五入。\n完整MD至多8000字符，保存参数JSON至多32768字节；包含来源ID、版本/hash、列、记录数、精确合计及规则；按原文保存并在同一Run核对回读。\n仅此结构化目标验收；通用语义NOT_RUN，人工PENDING，正式发布关闭；0模型请求。\n",
+      "hash": "6a21638b17082676e27df91096a9571a663c06dd217669b5e369b9f32162e1c1"
+    }
+  }
+}

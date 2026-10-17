@@ -1,0 +1,146 @@
+{
+  "source": "402f3eb5f80be73ddc57d4bb6123fdd6157726e0",
+  "returncode": 0,
+  "junit": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "3",
+    "time": "16.802",
+    "timestamp": "2026-10-17T08:08:30.413368+00:00",
+    "hostname": "f9d79f6f7e02"
+  },
+  "admission": "PASS_LIMITED_PROSPECTIVE_STRUCTURED_CSV_REPORT",
+  "cases": {
+    "deliver": {
+      "directory": "data/test_visible_prospective_csv_r0",
+      "checks": 13,
+      "api": 36,
+      "get": 34,
+      "post": 2,
+      "served_assets": 22,
+      "cold_NoModel_workers": 1,
+      "model_requests": 0,
+      "real_model_requests": 0,
+      "run": "run_5c7cf067afd642c0bdbb28b68f1aaf13",
+      "before_status": "WAITING_APPROVAL",
+      "after_status": "SUCCEEDED",
+      "scoped_goal_acceptance": "PASS_CSV_REPORT_CONTRACT",
+      "general_semantics": "NOT_RUN",
+      "owner_acceptance": "PENDING",
+      "actual_operations": 3,
+      "captured_report": {
+        "path": "data/test_visible_prospective_csv_r0/captured-report.md",
+        "sha256": "6a21638b17082676e27df91096a9571a663c06dd217669b5e369b9f32162e1c1",
+        "bytes": 730
+      },
+      "controlled_reply_losses": []
+    },
+    "lost": {
+      "directory": "data/test_visible_prospective_csv_r1",
+      "checks": 16,
+      "api": 38,
+      "get": 34,
+      "post": 4,
+      "served_assets": 22,
+      "cold_NoModel_workers": 1,
+      "model_requests": 0,
+      "real_model_requests": 0,
+      "run": "run_faff095b0f734bb3be81568301b269a9",
+      "before_status": "WAITING_APPROVAL",
+      "after_status": "SUCCEEDED",
+      "scoped_goal_acceptance": "PASS_CSV_REPORT_CONTRACT",
+      "general_semantics": "NOT_RUN",
+      "owner_acceptance": "PENDING",
+      "actual_operations": 3,
+      "captured_report": {
+        "path": "data/test_visible_prospective_csv_r1/captured-report.md",
+        "sha256": "7970b6e817fb96671ab6fe407ab20559a4773d4ab87b69a26bccbaf4e7c9167c",
+        "bytes": 730
+      },
+      "controlled_reply_losses": [
+        {
+          "index": 27,
+          "path": "/api/projects/proj_274831eb5d6743d68bc4a64079bb391a/csv-report-runs",
+          "description": "actual accepted reply lost"
+        },
+        {
+          "index": 30,
+          "path": "/api/runs/run_faff095b0f734bb3be81568301b269a9/confirm-csv-report",
+          "description": "actual accepted reply lost"
+        }
+      ]
+    },
+    "navigation": {
+      "directory": "data/test_visible_prospective_csv_r2",
+      "checks": 15,
+      "api": 52,
+      "get": 50,
+      "post": 2,
+      "served_assets": 22,
+      "cold_NoModel_workers": 1,
+      "model_requests": 0,
+      "real_model_requests": 0,
+      "run": "run_175cb384b06b4affabf7205920e25c24",
+      "before_status": "WAITING_APPROVAL",
+      "after_status": "SUCCEEDED",
+      "scoped_goal_acceptance": "PASS_CSV_REPORT_CONTRACT",
+      "general_semantics": "NOT_RUN",
+      "owner_acceptance": "PENDING",
+      "actual_operations": 3,
+      "captured_report": {
+        "path": "data/test_visible_prospective_csv_r2/captured-report.md",
+        "sha256": "09a072ad50fefc7ca72ccfd9393b8780db401bd11a2c8ed00daa8c462d8c4807",
+        "bytes": 730
+      },
+      "controlled_reply_losses": []
+    }
+  },
+  "checks": 44,
+  "product_api": 126,
+  "get": 118,
+  "post": 8,
+  "served_assets": 66,
+  "cold_NoModel_worker_executions": 3,
+  "model_requests": 0,
+  "real_model_requests": 0,
+  "source_file_count": 125,
+  "before_after_identical_to_frozen_git": true,
+  "delta_from599": {
+    "previous_source": "599052cbadae21b4a7ba8738fb889ea970c11e84",
+    "source": "402f3eb5f80be73ddc57d4bb6123fdd6157726e0",
+    "all_tracked_changed_paths": [
+      "src/sim2act/web/ordinary-csv.js",
+      "tests/ordinary_csv_report.cjs"
+    ],
+    "all_other_tracked_files_byte_identical_between_commits": true,
+    "diff": "diff --git a/src/sim2act/web/ordinary-csv.js b/src/sim2act/web/ordinary-csv.js\nindex 4351867a..98373a64 100644\n--- a/src/sim2act/web/ordinary-csv.js\n+++ b/src/sim2act/web/ordinary-csv.js\n@@ -62,7 +62,7 @@ async function submitCsvReport(recover=false){\n }\n function csvReportPassed(r){\n  const spec=r.contract?.snapshot?.ordinary_csv_report,report=r.result?.task_acceptance;\n- return spec?.version==='ordinary-csv-report.v1'&&r.status==='SUCCEEDED'&&r.result?.goal_acceptance==='PASS_CSV_REPORT_CONTRACT'&&r.result.model_requests===0&&\n+ return spec?.version==='ordinary-csv-report.v1'&&spec.checker==='csv-report-independent.v1'&&/^[a-f0-9]{64}$/.test(r.contract?.fingerprint)&&/^[a-f0-9]{64}$/.test(report?.contract_fingerprint)&&r.status==='SUCCEEDED'&&r.result?.goal_acceptance==='PASS_CSV_REPORT_CONTRACT'&&r.result.model_requests===0&&\n   report?.version===spec.version&&report.checker===spec.checker&&report.contract_fingerprint===r.contract.fingerprint&&report.status==='PASS'&&report.whole_task_accepted===true&&\n   report.scope==='EXPLICIT_CSV_REPORT_CONTRACT_ONLY'&&report.general_semantic_acceptance==='NOT_RUN'&&report.owner_acceptance==='PENDING'&&report.formal_publication_enabled===false;\n }\ndiff --git a/tests/ordinary_csv_report.cjs b/tests/ordinary_csv_report.cjs\nindex e6f10d40..d3a03ccf 100644\n--- a/tests/ordinary_csv_report.cjs\n+++ b/tests/ordinary_csv_report.cjs\n@@ -75,6 +75,10 @@ async function main(){\n  }\n  const reply=await rpc({command:'worker',run:rid});assert.equal(reply.status,200);const actual=JSON.parse(reply.text);\n  await w.showRun(rid);\n+ const noFingerprints=structuredClone(actual.run);delete noFingerprints.contract.fingerprint;delete noFingerprints.result.task_acceptance.contract_fingerprint;\n+ check(!w.csvReportPassed(noFingerprints),'pure display predicate refuses paired missing contract fingerprints');\n+ const noCheckers=structuredClone(actual.run);delete noCheckers.contract.snapshot.ordinary_csv_report.checker;delete noCheckers.result.task_acceptance.checker;\n+ check(!w.csvReportPassed(noCheckers),'pure display predicate refuses paired missing checker versions');\n  check($('run-goal-acceptance').textContent.includes('合同 PASS')&&$('run-goal-acceptance').textContent.includes('0模型请求')&&$('run-goal-acceptance').textContent.includes('人工 PENDING'),'independent full contract PASS is visible with zero-model/general/human boundaries');\n  check($('run-artifacts')?.textContent.includes(actual.artifact.id),'actual saved artifact is offered inside the same Run');\n  const button=label=>[...$('run-artifacts').querySelectorAll('button')].find(b=>b.textContent===label);\n"
+  },
+  "previous_execution": {
+    "source": "599052cbadae21b4a7ba8738fb889ea970c11e84",
+    "tests": 28,
+    "passed": 28,
+    "junit_seconds": "76.911",
+    "raw_directory": "/tmp/ordinary-csv-report-independent-599052cb-20261017",
+    "manifest_sha256": "2a17267ba1e4843664f1ba7f11a3c2d23d68157477ccc1aa73b89c5fe28fc882",
+    "status": "Kept prevalidation with display BLOCK; 25 other nodes are not re-signed as402. Only the3 affected pages repeated at402. Total selected unique28, not31."
+  },
+  "static_review": {
+    "blockers": [],
+    "closed": "Paired missing fingerprints no longer equal into PASS: both sides64hex plus exact checker version; two in-memory checks per page, no changed server response.",
+    "original_scope": "Explicit source/column/rules/full MD frozen before confirmation. Existing dispatch/Worker/ledger with stable call IDs, current budgets and min deadline, heartbeat/fences and independent integer-scaled oracle; no new executor.kind/ref or Grant policy.",
+    "authority": "Server checker verifies every intent/receipt/effect and readback on finalize/inspect. UI predicate is projection. Existing fixed checker/global Limits remain unchanged."
+  },
+  "limits": [
+    "Actual ASGI/SQLite and full served JS/JSDOM, not native browser;22actual served assets per page SHA-checked by Python.",
+    "One Run and three operations per final page. Lost case deliberately drops real accepted prepare and confirmation responses; manual exact-key replay produces no new Run or extra artifact.",
+    "Navigation case tests project away/back during held confirmation. Do not claim it dynamically covers every new-controller identity/workspace timing path.",
+    "Each page captures actual saved730-byteMD after waiting URL revoke; new pageJSON contains no separate Blob URL metadata array. Save creates original derived read Grants.",
+    "599 API scope tampering includes explicit synthetic persisted mutations, not real user-edit flows; original25 unrelated nodes executed only599. Related4 pages there did load the old JS version, and are not claimed rerun402.",
+    "All acceptance stays limited to explicitly selected structured CSV/report contract; general semanticsNOT_RUN, ownerPENDING, publication closed, old arbitrary ordinary Runs not retrofitted.",
+    "No PG, Windows/native, real model, remote CI/deployment or old recovery matrix run."
+  ],
+  "raw_manifest_files": 31,
+  "raw_manifest_sha256": "16393de7bc08eb99d66e2876ebbf5b4c080da9cb036b749d7956a23d755a4060"
+}
