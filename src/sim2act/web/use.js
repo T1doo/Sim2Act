@@ -5,6 +5,7 @@ const applicationUseRequests=new Map();
 const applicationUseDownloads=new Set();
 const csvUseApp=a=>a?.candidate?.manifest?.validation_suite_ref==="receipt.readback.v1" && a.candidate.actions?.length===1 && a.candidate.actions[0].executor?.kind==="registered_tool" && a.candidate.actions[0].executor.ref==="data.aggregate_csv";
 const literalUseApp=a=>a?.input_guidance?.mode==="REGISTERED_LITERAL"&&a.candidate?.manifest?.validation_suite_ref==="source.literal_evidence.v1"&&a.candidate.actions?.length===1&&a.candidate.actions[0].executor?.kind==="registered_tool"&&a.candidate.actions[0].executor.ref==="text.literal_evidence";
+const closedTextUseApp=a=>a?.input_guidance?.mode==="CLOSED_TEXT_WORKFLOW"&&a.candidate?.namespace==="closed-text-four-step.v1"&&a.candidate.manifest?.validation_suite_ref==="text.four_step_readback.v1"&&a.candidate.actions?.length===4&&["resource.read","text.literal_evidence","text.literal_evidence","text.citation_report"].every((ref,index)=>{const e=a.candidate.actions[index].executor;return e?.kind==="registered_tool"&&e.ref===ref&&e.version==="1";});
 const naturalUseFamily=a=>{
  const c=a?.candidate;if(a?.input_guidance?.mode!=="MODEL_SPEC_CHECKLIST"||c?.namespace!=="pa-natural-spec-app.v1")return null;
  if(c.spec_task?.kind==="pb_natural_spec_task.v1")return "NATURAL_PB";
@@ -27,6 +28,12 @@ async function refreshApplicationUse(apps){
  if(applicationUseCurrent(applicationUse)&&!apps.some(summary=>summary.id===applicationUse.appId))clearApplicationUseData(applicationUse);
  for(const summary of apps){
   // Family metadata only routes discovery; opening always reauthorizes the selection.
+   if(summary.use_family==="CLOSED_TEXT_WORKFLOW"){
+    const item=row(`${summary.name} · 四步文本流程 · 固定 TXT/MD（≤1536字节、32行）· 两检索词各≤80码点 + 报告开关 · 0 模型请求 · 未选报告为 PARTIAL，不新增成果。内部应用未发布，语义 UNKNOWN，人工 PENDING（暂不提交人工声明）。打开后明确选择已有实例与运行。`,async()=>{
+     if(selectable())await openSavedInternalUse(summary.id,null,"CLOSED_TEXT_WORKFLOW",selectable);
+    },"使用此四步文本应用");
+    item.dataset.useFamily="CLOSED_TEXT_WORKFLOW";item.dataset.appId=summary.id;rows.push(item);continue;
+   }
   if(summary.use_family==="LITERAL_TEXT"){
    const item=row(`${summary.name} · 文本字面检索 · 固定 TXT/MD 材料，检索词可变 · 0 模型请求 · 内部应用未发布；语义 UNKNOWN，人工签收需单独核查。打开后明确选择已有实例与运行。`,async()=>{
     if(selectable())await openSavedInternalUse(summary.id,null,"LITERAL_TEXT",selectable);
@@ -66,15 +73,16 @@ async function openSavedInternalUse(appId,id,family,selectionCurrent=()=>true){
  const current=()=>selectionCurrent()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&project===$("project-select").value&&(generation===null||generation===appSelectionGeneration);
  try{
   const opened=await showApp(appId,project,g=>{generation=g;},current,app=>{
-   if(family==="LITERAL_TEXT"?!literalUseApp(app):naturalUseFamily(app)!==family)throw Error("VERSION_CONFLICT");
+    const valid=family==="LITERAL_TEXT"?literalUseApp(app):family==="CLOSED_TEXT_WORKFLOW"?closedTextUseApp(app):naturalUseFamily(app)===family;
+    if(!valid)throw Error("VERSION_CONFLICT");
   });
   if(!opened||!current())return;
   view=engineering;
   if(!view||!engineeringCurrent(view)||view.app!==appId)throw Error("VERSION_CONFLICT");
   if(id)await showInternalInstance(id,view);
   if(!current()||!engineeringCurrent(view)||(id&&view.instance?.id!==id))return;
-  $("internal-title").textContent=family==="LITERAL_TEXT"?"使用已保存文本应用 · 字面检索":`使用自然规范应用 · ${family==="NATURAL_PA"?"P-A":"P-B"}`;
-  $(family==="LITERAL_TEXT"?"internal-panel":"pb-use-panel")?.scrollIntoView?.({block:"start"});
+  $("internal-title").textContent=family==="LITERAL_TEXT"?"使用已保存文本应用 · 字面检索":family==="CLOSED_TEXT_WORKFLOW"?"使用已保存文本应用 · 四步流程":`使用自然规范应用 · ${family==="NATURAL_PA"?"P-A":"P-B"}`;
+  $(["LITERAL_TEXT","CLOSED_TEXT_WORKFLOW"].includes(family)?"internal-panel":"pb-use-panel")?.scrollIntoView?.({block:"start"});
  }catch(error){if(current())throw error;}
  finally{
   // The opening fence lasts through every chained read. Later explicit instance

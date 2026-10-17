@@ -777,6 +777,10 @@ def create_app(store=None, settings=None):
                         "registered_tool", "text.literal_evidence", "source.literal_evidence.v1"
                     ):
                         family = "LITERAL_TEXT"
+                    if not family and r["namespace"] == "closed-text-four-step.v1" and (
+                        r["executor_kind"], r["executor_ref"], r["check_ref"]
+                    ) == ("registered_tool", "resource.read", "text.four_step_readback.v1"):
+                        family = "CLOSED_TEXT_WORKFLOW"
                     items.append({k: r[k] for k in ("id", "name", "project_id")} | {
                         "csv_instance_candidate": hint,
                         "use_family": family or ("CSV" if hint else "OTHER"),

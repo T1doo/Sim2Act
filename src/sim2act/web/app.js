@@ -437,7 +437,7 @@ async function refreshApps() {
   $("app-list").replaceChildren(...items.map(x=>{
     const natural=["NATURAL_PA","NATURAL_PB"].includes(x.use_family);
     const literal=x.use_family==="LITERAL_TEXT";
-    const family=natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(literal?"文本字面检索 · 固定 TXT/MD，检索词可变":(x.use_family==="CSV"?"CSV 固定材料":"其他应用"));
+    const family=natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(literal?"文本字面检索 · 固定 TXT/MD，检索词可变":x.use_family==="CLOSED_TEXT_WORKFLOW"?"四步文本流程 · 固定 TXT/MD，两检索词 + 报告开关":(x.use_family==="CSV"?"CSV 固定材料":"其他应用"));
     return row(`${x.name} · ${family} · 未发布草案；当前授权需打开核查`,()=>{
       if(identity===token&&connection===identityConnectionGeneration&&pid===$("project-select").value)return showApp(x.id,pid);
     },natural||literal?"查看应用与保存实例":"打开预览");
@@ -476,7 +476,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     $("app-agent-term-label").hidden=true;$("app-agent-term").required=false;$("app-agent-term").disabled=true;refreshTextTerm($("app-agent-term"),true);$("csv-extraction-panel").hidden=true;
     await openInternal(a,generation,selectionCurrent);return generation===appSelectionGeneration&&selectionCurrent();
   }
-  if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation);
+  if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation,selectionCurrent);
   if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation);
   if(a.input_guidance.mode === "BOUNDED_REPORT")return openReportManifest(a,generation);
   const origin=a.candidate.generation;
