@@ -12,11 +12,11 @@ from sqlalchemy import select
 from test_literal_directory import rows
 from test_persistent_app_runs import NoModel
 
-from sim2act.db import Store, grants
+from sim2act.db import Store, grants, internal_instance_data
 from sim2act.worker import Worker
 
 
-@pytest.mark.parametrize("scenario", ["bytes", "navigation", "revocation"])
+@pytest.mark.parametrize("scenario", ["bytes", "navigation", "revocation", "unicode"])
 def test_literal_result_download_actual_http(env, tmp_path, monkeypatch, scenario):
     monkeypatch.setattr(literal, "CONTENT", literal.CONTENT + "Alpha 中文完整引文 ✓\n")
     data = literal.setup(env)
@@ -30,7 +30,8 @@ def test_literal_result_download_actual_http(env, tmp_path, monkeypatch, scenari
         "expected_release_fingerprint": release["fingerprint"], "request_key": "other-instance",
     }).json()
     outputs = []
-    for term in ("Alpha", "Beta", "Absent"):
+    terms = ("😀" * 41, "😀" * 80, "😀" * 81) if scenario == "unicode" else ("Alpha", "Beta", "Absent")
+    for term in terms:
         accepted = client.post(f"/api/internal/instances/{instance['id']}/runs", json={
             "expected_revision": instance["revision"],
             "expected_release_fingerprint": release["fingerprint"],
@@ -45,16 +46,28 @@ def test_literal_result_download_actual_http(env, tmp_path, monkeypatch, scenari
         response = client.get(f"/api/internal/instances/{instance['id']}/runs/{accepted.json()['run_id']}")
         assert response.status_code == 200, response.text
         outputs.append(response.json())
-    assert [r["status"] for r in outputs] == ["SUCCEEDED"] * 3
-    assert [r["result_version"] for r in outputs] == [1, 2, 3]
-    assert [c["quote"] for c in outputs[0]["result"]["citations"]] == [
-        "Alpha obligation retained", "Alpha owner undecided", "Alpha 中文完整引文 ✓"]
-    assert [c["quote"] for c in outputs[1]["result"]["citations"]] == [
-        "Beta due tomorrow", "<em>Beta literal</em>"]
-    assert outputs[2]["result"]["citations"] == []
+    if scenario == "unicode":
+        assert [r["status"] for r in outputs] == ["SUCCEEDED", "SUCCEEDED", "FAILED"]
+        assert [r["result_version"] for r in outputs] == [1, 2, None]
+        assert [len(r["result"]["term"]) for r in outputs[:2]] == [41, 80]
+        assert all(r["result"]["citations"] == [] for r in outputs[:2])
+        assert outputs[2]["result"] is None and outputs[2]["error"]["code"] == "INVALID_INPUT"
+    else:
+        assert [r["status"] for r in outputs] == ["SUCCEEDED"] * 3
+        assert [r["result_version"] for r in outputs] == [1, 2, 3]
+        assert [c["quote"] for c in outputs[0]["result"]["citations"]] == [
+            "Alpha obligation retained", "Alpha owner undecided", "Alpha 中文完整引文 ✓"]
+        assert [c["quote"] for c in outputs[1]["result"]["citations"]] == [
+            "Beta due tomorrow", "<em>Beta literal</em>"]
+        assert outputs[2]["result"]["citations"] == []
     other = store.project(owner, "Other owned project")
     store.project(env[4], "Other identity project")
     baseline = rows(store)
+    with store.tx() as connection:
+        result_versions = list(connection.execute(select(internal_instance_data.c.version).where(
+            internal_instance_data.c.instance_id == instance["id"]
+        ).order_by(internal_instance_data.c.version)).scalars())
+    assert result_versions == ([1, 2] if scenario == "unicode" else [1, 2, 3])
     info = dict(project=project, other=other, app=app, instance=instance["id"],
                 other_instance=other_instance["id"], scenario=scenario, outputs=outputs,
                 output=str(tmp_path / "result.json"))
@@ -118,7 +131,9 @@ def test_literal_result_download_actual_http(env, tmp_path, monkeypatch, scenari
         (tmp_path / "database-proof.json").write_text(json.dumps({
             "backend": "SQLite synthetic", "tables": len(baseline), "read_checkpoints": checkpoints,
             "download_get_rows_unchanged": True, "cold_worker_runs": 3,
-            "result_versions": [1, 2, 3], "controlled_revocations": revocations,
+            "result_versions": [r["result_version"] for r in outputs],
+            "persisted_result_record_versions": result_versions,
+            "runtime_statuses": [r["status"] for r in outputs], "controlled_revocations": revocations,
             "authority_unchanged_except_explicit_revoke": True,
             "generation_mock_transport_calls": len(mock_calls), "runtime_model_calls": 0,
             "real_model": "NOT_RUN", "pg": "NOT_RUN", "native_browser": "NOT_RUN",

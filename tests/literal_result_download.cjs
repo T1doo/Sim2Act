@@ -52,7 +52,8 @@ async function setup(){
   }finally{active--;}};
  for(const script of [...w.document.querySelectorAll('script[src]')]){const node=w.document.createElement('script');node.textContent=await load(script.getAttribute('src'));w.document.body.append(node);}
  await connect();await open();await readonly();
- check($('internal-data').querySelectorAll('[data-literal-run]').length===3,'three real successful versions have explicit download controls');
+ const count=info.scenario==='unicode'?2:3;
+ check($('internal-data').querySelectorAll('[data-literal-run]').length===count,info.scenario==='unicode'?'41/80 non-BMP persisted results expose exactly two download controls':'each real successful version has its explicit download control');
  check(!$('internal-data').querySelector('em'),'complete HTML quote remains literal text');
 }
 async function captured(index,output){
@@ -120,9 +121,23 @@ async function revocation(){
  check(!$('internal-data').textContent&&!$('internal-runs').textContent&&!$('internal-instances').textContent&&$('internal-run-form').hidden,'403 clears protected results and controls');
  check(w.eval('literalResultDownloads.size')===0,'403 releases lock');await readonly();
 }
+async function unicode(){
+ for(const [index,length]of [[0,41],[1,80]]){
+  const term=info.outputs[index].result.term;
+  check(Array.from(term).length===length&&term.length===length*2,'fixture has '+length+' non-BMP code points');
+  check(visible(button(index)),'legal '+length+' code-point persisted result exposes download');
+  const n=requests.length;await click(button(index));await captured(index,info.outputs[index]);
+  check(requests.length===n+1&&requests[n].path===runPath(info.outputs[index].id)&&requests[n].cache==='no-store','Unicode v'+(index+1)+' uses its fresh authenticated Run GET');
+ }
+ check(!button(2)&&info.outputs[2].status==='FAILED'&&info.outputs[2].result_version===null,'actual81-code-point Run is INVALID_INPUT without exportable result');
+ check(w.literalResultValue(info.instance,info.outputs[1],info.outputs[1].known_effects[0])!==null,'matching80-code-point evidence passes download validator');
+ const overlong=structuredClone(info.outputs[1]);overlong.result.term='😀'.repeat(81);overlong.known_effects[0].data.result.term=overlong.result.term;
+ check(w.literalResultValue(info.instance,overlong,overlong.known_effects[0])===null,'matching81-code-point evidence is rejected by download validator');
+ await readonly();
+}
 (async()=>{
  let status='FAIL',error;
- try{await setup();if(info.scenario==='bytes')await bytes();else if(info.scenario==='navigation')await navigation();else await revocation();
+ try{await setup();if(info.scenario==='bytes')await bytes();else if(info.scenario==='navigation')await navigation();else if(info.scenario==='unicode')await unicode();else await revocation();
   await wait(()=>active===0&&pending.size===0,'HTTP drained');await wait(()=>blobs.every(b=>b.revoked),'all Blob URLs released');
   check(requests.every(r=>r.method==='GET'&&r.no_body),'all product actions read only; no Run or Grant write');
   check(!w.document.querySelector('a[download]'),'temporary anchors removed');status='PASS';
