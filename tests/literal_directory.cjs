@@ -65,7 +65,7 @@ async function guards(){
  await readonly();
  for(const scenario of [
   {path:`/api/apps/${info.app}`,remaining:2,change:async()=>{await nav('resources');await nav('apps');},label:'second app read workspace ABA'},
-  {path:`/api/internal/apps/${info.app}/instances`,remaining:1,change:async()=>{$('token').value='synthetic-test-A';await click('connect');},label:'instance list same-account reconnect'},
+  {path:`/api/internal/apps/${info.app}/instances`,remaining:1,change:async()=>{await click('identity-switch');$('token').value='synthetic-test-A';await click('connect');},label:'instance list same-account reconnect'},
   {path:`/api/apps/${info.app}`,remaining:1,change:async()=>{
    for(const project of [info.other,info.project]){$('project-select').value=project;await $('project-select').onchange(new w.Event('change'));}
   },label:'initial app read project ABA'},
