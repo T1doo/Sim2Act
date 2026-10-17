@@ -1,0 +1,49 @@
+{
+  "source_sha": "776d76581c7f811f39af584283578d9b252a994b",
+  "returncode": 1,
+  "wall_seconds": 521.7771444320679,
+  "cases": [
+    {
+      "classname": "tests.test_csv_goal_revisions",
+      "name": "test_visible_same_goal_revision_check_release_adopt_and_new_run[return-preview]",
+      "time": "94.262",
+      "failures": [],
+      "errors": [],
+      "skipped": false
+    },
+    {
+      "classname": "tests.test_csv_goal_revisions",
+      "name": "test_visible_same_goal_revision_check_release_adopt_and_new_run[return-release]",
+      "time": "170.741",
+      "failures": [],
+      "errors": [],
+      "skipped": false
+    },
+    {
+      "classname": "tests.test_csv_goal_revisions",
+      "name": "test_visible_same_goal_revision_check_release_adopt_and_new_run[return-adoption]",
+      "time": "84.322",
+      "failures": [
+        "env = (<sim2act.db.Store object at 0x7f5c4ad993d0>, Settings(database_url='sqlite:////tmp/csv-goal-confirmation-return-autho...ab5a725ed943b5883ed2bd77e7ef25', 'user_629cf2da36a0448d93d2e8a803f271a5', 'proj_1f90ec97c718430c933e3b88f40f6fed', ...)\ntmp_path = PosixPath('/tmp/csv-goal-confirmation-return-author-776d7658-confirmation-return-20261017/test_visible_same_goal_revisio2')\ncase = 'return-adoption'\n\n    @pytest.mark.parametrize(\"case\",[\"deliver\",\"lost\",\"navigation\",\"rejected\",\"return-preview\",\"return-release\",\"return-adoption\",\"return-stale\",\"lost-adoption\"])\n    def test_visible_same_goal_revision_check_release_adopt_and_new_run(env,tmp_path,case):\n        import os\n        import subprocess\n        import threading\n        from pathlib import Path\n    \n        data,aid,base,instance,cid,content,app = baseline(env)\n        old = jobs.enqueue(data[0],data[3],instance[\"id\"],instance[\"revision\"],base[\"fingerprint\"],\n            {\"column\":\"amount\"},\"before-browser-goal-edit\",limits(data),csv_review=\"FREEZE_SUM_ONLY_WITHOUT_MD\")\n        drive(data,old[\"run_id\"])\n        other = data[2].post(\"/api/projects\",json={\"name\":\"Other owned project\"}).json()[\"id\"]\n        instance2 = create(data,base)\n        data[0].project(data[4],\"Other account project\")\n        with data[0].tx() as c:\n            counts = {t.name:c.execute(select(func.count()).select_from(t)).scalar() for t in (grants,principals)}\n        info = dict(case=case,project=data[5],other=other,app=aid,instance=instance[\"id\"],instance2=instance2[\"id\"],card=cid,\n            output=str(tmp_path/\"page-result.json\"))\n        (tmp_path/\"info.json\").write_text(json.dumps(info))\n        process=None\n        watchdog=None\n        try:\n            with (tmp_path/\"node.stderr\").open(\"w\") as errors:\n                process=subprocess.Popen([\"node\",\"tests/csv_goal_revision.cjs\",str(tmp_path/\"info.json\")],\n                    stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=errors,text=True,\n                    env={**os.environ,\"NODE_PATH\":str(Path.cwd()/\"scripts/engineering-ci/node_modules\")})\n                watchdog=threading.Timer(240,process.kill)\n                watchdog.start()\n                for line in process.stdout:\n                    request=json.loads(line)\n                    if request.get(\"done\"):\n                        break\n                    if request.get(\"command\") == \"worker\":\n                        drive(data,request[\"run\"])\n                        answer=dict(status=200,text=\"{}\")\n                    elif request.get(\"command\") == \"drift\":\n                        changed=jobs.enqueue(data[0],data[3],instance[\"id\"],instance[\"revision\"],base[\"fingerprint\"],\n                            {\"column\":\"amount\"},\"explicit-intervening-run\",limits(data))\n                        drive(data,changed[\"run_id\"])\n                        answer=dict(status=200,text=\"{}\")\n                    elif request.get(\"command\") == \"proof\":\n                        current=jobs.inspect_job(data[0],data[3],request[\"run\"])\n                        assert current[\"result\"][\"sum\"] == \"5\" and current[\"instance_id\"] == instance[\"id\"]\n                        before=jobs.inspect_job(data[0],data[3],old[\"run_id\"])\n                        assert before[\"result\"][\"sum\"] == \"30\" and before[\"release_id\"] == base[\"id\"]\n                        with data[0].tx() as c:\n                            frozen=c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id==request[\"run\"])).scalar_one()\n                            original=c.execute(select(app_drafts).where(app_drafts.c.id==aid)).mappings().one()\n                            actual_counts={t.name:c.execute(select(func.count()).select_from(t)).scalar() for t in (grants,principals)}\n                        assert actual_counts==counts and original[\"candidate\"]==base[\"snapshot\"][\"draft\"][\"candidate\"]\n                        assert frozen[\"goal\"][\"goal\"] == \"明确汇总 quantity，保留原材料与历史\"\n                        assert frozen[\"runtime_id\"] == instance[\"runtime_id\"]\n                        (tmp_path/\"actual-browser-delivery.json\").write_text(json.dumps(dict(\n                            old=before,new=current,contract=frozen,unchanged_counts=counts),ensure_ascii=False,indent=2))\n                        answer=dict(status=200,text=\"{}\")\n                    else:\n                        response=data[2].request(request[\"method\"],request[\"path\"],json=request.get(\"body\"),headers=request.get(\"headers\"))\n                        answer=dict(status=response.status_code,text=response.text,content_type=response.headers.get(\"content-type\"))\n                    process.stdin.write(json.dumps(dict(id=request[\"id\"],**answer))+\"\\n\")\n                    process.stdin.flush()\n                process.stdin.close()\n                code=process.wait(timeout=15)\n>           assert code == 0,(tmp_path/\"node.stderr\").read_text()\nE           AssertionError: AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\nE             + actual - expected\nE             \nE               {\nE             +   consumed: false,\nE             +   data_preserved: true,\nE             +   expires_at: 1792242245.9801023,\nE                 fingerprint: '61894965452e8fe4bb11c3eb10f3ca86e49e1a55c24b2146f631d4a003c51f4f',\nE             +   from_schema_version: 1,\nE             -   formal_publication_enabled: false,\nE                 id: 'iapproval_d4c70374a98f4a8fb5b034baa147f3bf',\nE             +   kind: 'switch',\nE             +   new_grants: false,\nE             +   payload: {\nE             +     approval_id: 'iapproval_d4c70374a98f4a8fb5b034baa147f3bf',\nE             +     data_fingerprint: '29ed6105c50c8310bcb60dace5bcedc11853cd3de527a1c78d8c1deb787dc85a',\nE             +     data_version: 1,\nE             +     expires_at: 1792242245.9801023,\nE             +     from_release_id: 'irelease_49c9408ff58d4951b4e6d7b4b4616294',\nE             +     grant_version: '793d53777044e61bacfbeedb668bea0abbef888e4e504d3f874e77727fb9d92f',\nE             +     instance_id: 'iinstance_10308268347f4170ab555f7d37fc10cb',\nE             +     kind: 'switch',\nE             +     logic_dependency_fingerprint: 'f722e8f49a8173720ee8b7395b9c665b861e2db6eade8606ae6028675075ac32',\nE             +     principal_id: 'user_42ab5a725ed943b5883ed2bd77e7ef25',\nE             +     project_id: 'proj_1f90ec97c718430c933e3b88f40f6fed',\nE             +     revision: 1,\nE             +     target_fingerprint: 'f02828291a0c232f8dfe183ae8df9d9fedff2d11b7ed875ab98f685e6fbdb068',\nE             +     target_release_id: 'irelease_64159bfab30a4fb68c7ed0e81277cd67'\nE             +   },\nE             +   principal_id: 'user_42ab5a725ed943b5883ed2bd77e7ef25',\nE             +   project_id: 'proj_1f90ec97c718430c933e3b88f40f6fed',\nE             +   retained_records: 1,\nE             +   target_schema_version: 1\nE             -   namespace: 'INTERNAL_ENGINEERING_ONLY'\nE               }\nE             \nE                 at confirmationReturn (/workspace/Sim2Act/tests/csv_goal_revision.cjs:52:9)\nE                 at async /workspace/Sim2Act/tests/csv_goal_revision.cjs:145:36\nE             \nE           assert 1 == 0\n\ntests/test_csv_goal_revisions.py:378: AssertionError"
+      ],
+      "errors": [],
+      "skipped": false
+    },
+    {
+      "classname": "tests.test_csv_goal_revisions",
+      "name": "test_visible_same_goal_revision_check_release_adopt_and_new_run[return-stale]",
+      "time": "85.643",
+      "failures": [],
+      "errors": [],
+      "skipped": false
+    },
+    {
+      "classname": "tests.test_csv_goal_revisions",
+      "name": "test_visible_same_goal_revision_check_release_adopt_and_new_run[lost-adoption]",
+      "time": "83.582",
+      "failures": [],
+      "errors": [],
+      "skipped": false
+    }
+  ]
+}
