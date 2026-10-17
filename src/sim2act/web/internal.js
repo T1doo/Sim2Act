@@ -124,7 +124,7 @@ function clearInternal() {
   $("internal-switch").hidden=true;$("internal-switch-history").replaceChildren();
   engineeringGeneration++;engineering=null;
   $("internal-panel").hidden=true;$("internal-approval").hidden=true;$("internal-approval-detail").textContent="";$("internal-approval-ack").checked=false;
-  $("internal-status").textContent="";$("internal-agent").hidden=true;$("internal-replay-file").value="";$("internal-replay-status").textContent="";$("internal-term").value="";
+  $("internal-status").textContent="";$("internal-agent").hidden=true;$("internal-replay-file").value="";$("internal-replay-status").textContent="";$("internal-term").value="";$("internal-term").disabled=true;refreshTextTerm($("internal-term"),true);
   for(const id of ["internal-releases","internal-instances","internal-runs","internal-data","internal-controls"] )$(id).replaceChildren();
   $("internal-run-form").hidden=true;$("internal-retry").hidden=true;$("internal-new-intent").hidden=true;$("internal-run-detail").textContent="";$("internal-run-status").textContent="";$("internal-instance-info").textContent="";
 }
@@ -227,7 +227,7 @@ async function showInternalInstance(id,view=engineering) {
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
     view.instance=instance;if(view.spec)specRecoveryRefresh(view,instance);renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
-    $("internal-column-label").hidden=view.agent||view.literal||view.workflow||view.spec;$("internal-column").required=!(view.agent||view.literal||view.workflow||view.spec);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;
+    $("internal-column-label").hidden=view.agent||view.literal||view.workflow||view.spec;$("internal-column").required=!(view.agent||view.literal||view.workflow||view.spec);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;$("internal-term").disabled=!(view.agent||view.literal);refreshTextTerm($("internal-term"));
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
     if(typeof showTextWorkflowInputs === "function")showTextWorkflowInputs("internal",!!view.workflow);
     $("internal-run-form").hidden=false;
@@ -308,6 +308,7 @@ async function submitInternal(view,retry=false) {
   if(pbUseUnknown(instance.id))return;
   if(view.spec)return submitPersistentSpecRun(view,instance,retry);
   let pending=engineeringPending.get(instance.id);
+  if(!pending&&!retry&&!textTermsReady($("internal-run-form"),true))return;
   if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.spec ? {} : view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
   if(!pending)return;
   const requestKey=pending.request_key;
@@ -385,7 +386,7 @@ async function submitPersistentSpecRun(view,instance,retry){
     return submitSpecRun(view,instance,pending,retry||recovering);
   });
 }
-$("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
+$("internal-prepare").onclick=()=>{if(!textTermsReady($("app-preview-form"),true))return;return engineeringAction(engineering,async()=>{
   const view=engineering;view.approval=null;$("internal-approval").hidden=true;$("internal-approval-ack").checked=false;
   const inputGeneration=view.inputGeneration;
   const current=()=>engineeringCurrent(view) && inputGeneration===view.inputGeneration;
@@ -398,7 +399,7 @@ $("internal-prepare").onclick=()=>engineeringAction(engineering,async()=>{
   view.approval=detail;$("internal-approval").hidden=false;$("internal-approval-label").textContent=`内部批准 ${detail.id} · 到期 ${new Date(detail.expires_at*1000).toLocaleString()} · ${detail.fingerprint}`;
   $("internal-approval-detail").textContent=JSON.stringify(detail.payload,null,2);engineeringStatus(view,"请检查精确冻结快照，勾选确认后保存内部 Release。");
   renderNaturalFirstGuide();
-});
+});};
 $("internal-approval-ack").onchange=()=>{if(engineering)engineeringButtons(engineering);};
 $("internal-commit").onclick=()=>engineeringAction(engineering,async()=>{
   const view=engineering,approval=view.approval;if(!approval || approval.expires_at*1000<=Date.now() || !$("internal-approval-ack").checked)return;

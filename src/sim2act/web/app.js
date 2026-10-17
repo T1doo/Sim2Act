@@ -21,6 +21,37 @@ let appCreateBusy = false;
 let appReadRecovery = null, appReadBusy = false;
 const appPreviewRequests = new Set();
 const $ = (id) => document.getElementById(id);
+const textTermEditors=new WeakMap(),textTermLimit=80;
+function refreshTextTerm(input,reset=false){
+  const state=textTermEditors.get(input);if(!state)return;
+  if(reset)state.composing=false;
+  const count=Array.from(input.value).length,over=count>textTermLimit;
+  state.hint.textContent=`${count}/${textTermLimit} Unicode 码点${state.composing?" · 正在组合输入，完成后再提交":over?" · 超出上限，请修改后提交":""}`;
+  if(!state.composing&&over)input.setAttribute("aria-invalid","true");else input.removeAttribute("aria-invalid");
+}
+function bindTextTermInput(input){
+  if(textTermEditors.has(input))return;
+  input.dataset.termInput="";input.removeAttribute("maxlength");input.pattern=`[\\s\\S]{0,${textTermLimit}}`;
+  input.title=`检索词最多 ${textTermLimit} 个 Unicode 码点；不会自动截断输入。`;
+  const hint=document.createElement("small");hint.id=input.id+"-limit";hint.setAttribute("role","status");hint.setAttribute("aria-live","polite");
+  input.after(hint);input.setAttribute("aria-describedby",[input.getAttribute("aria-describedby"),hint.id].filter(Boolean).join(" "));
+  const state={hint,composing:false};textTermEditors.set(input,state);
+  input.addEventListener("input",event=>{if(event.isComposing)state.composing=true;refreshTextTerm(input);});
+  input.addEventListener("compositionstart",()=>{state.composing=true;refreshTextTerm(input);});
+  input.addEventListener("compositionend",()=>{state.composing=false;refreshTextTerm(input);});
+  input.addEventListener("change",()=>refreshTextTerm(input));refreshTextTerm(input);
+}
+function textTermReady(input,report=false){
+  if(input.disabled)return true;
+  refreshTextTerm(input);
+  if(textTermEditors.get(input)?.composing)return false;
+  if(Array.from(input.value).length<=textTermLimit)return true;
+  if(report)input.reportValidity();return false;
+}
+function textTermsReady(container,report=false){
+  return [...container.querySelectorAll("[data-term-input]")].every(input=>textTermReady(input,report));
+}
+document.querySelectorAll("[data-term-input]").forEach(bindTextTermInput);
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, cache: "no-store", headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
   const data = await response.json();
@@ -442,7 +473,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify(a.candidate.goal,null,2);
     $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,recipe:a.candidate.spec_recipe,fingerprint:a.fingerprint},null,2);
     $("app-preview-form").hidden=false;$("app-preview-submit").hidden=false;$("app-preview-submit").disabled=appPreviewRequests.has(id);$("app-input-hint").textContent=a.candidate.namespace==="pa-natural-spec-app.v1"?"新材料抽取需模型执行，默认关闭；预览保留原文和完整目标，不生成答案，不保存制品。":"预览不保存业务制品；实际内部实例运行保存一个 JSON 清单。";$("app-column-label").hidden=true;$("app-column").required=false;
-    $("app-agent-term-label").hidden=true;$("app-agent-term").required=false;$("csv-extraction-panel").hidden=true;
+    $("app-agent-term-label").hidden=true;$("app-agent-term").required=false;$("app-agent-term").disabled=true;refreshTextTerm($("app-agent-term"),true);$("csv-extraction-panel").hidden=true;
     await openInternal(a,generation,selectionCurrent);return generation===appSelectionGeneration&&selectionCurrent();
   }
   if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation);
@@ -485,7 +516,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   const agent=a.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal=a.input_guidance.mode === "REGISTERED_LITERAL";
   $("app-preview-form").hidden=false;
   $("app-column-label").hidden=agent||literal;$("app-column").required=!(agent||literal);
-  $("app-agent-term-label").hidden=!(agent||literal);$("app-agent-term").required=agent||literal;$("app-agent-term").value="";
+  $("app-agent-term-label").hidden=!(agent||literal);$("app-agent-term").required=agent||literal;$("app-agent-term").disabled=!(agent||literal);$("app-agent-term").value="";refreshTextTerm($("app-agent-term"),true);
   $("app-preview-submit").hidden=agent;$("csv-extraction-panel").hidden=agent||literal;
   $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,fingerprint:a.fingerprint,runtime_id:a.runtime_id},null,2);
   if(literal){
@@ -593,6 +624,7 @@ async function retryAppRead(){
 $("app-read-retry").onclick=safe(retryAppRead);
 $("app-preview-form").onsubmit=safe(async()=>{
   if($("app-preview-submit").hidden)return; // Agent uses the same internal approval/Run path.
+  if(!textTermsReady($("app-preview-form"),true))return;
   if(!activeApp || activeAppProject !== $("project-select").value)throw new Error("先打开当前项目的草案");
   const id=activeApp,pid=activeAppProject,goalGeneration=goalSelectionGeneration;
   let generation=appSelectionGeneration,result=null;
