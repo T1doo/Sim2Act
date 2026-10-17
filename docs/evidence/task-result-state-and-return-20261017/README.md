@@ -38,4 +38,6 @@ Each ordinary case separately creates a queued otherRun via a fixture API POST, 
 
 Originals manifests record original path/size/SHA256 and archive encoding/size/SHA256. Gzip usesmtime0. SHA256SUMS covers repository evidence except itself. The local .gitattributes rule preserves captured MD CRLF in tracked Git blobs from the first archive commit. Archive storage, decoded originals, live originals and final tracked bytes are checked for this slice only. Earlier batches are not mass-reverified.
 
+Git's default whitespace diagnostic flagged the intentional CR at EOL in15 raw MD captures (60 lines); a recorded read-only reproduction preserves that RC2 output. The narrowly scoped evidence attribute declares CR at EOL for these captures without changing their bytes. The original product checks and the final archive checks pass separately; this is file-format metadata, not a change to any goal/checker success definition.
+
 PG, native browser/Windows, actual browser saving, real models/semantic scenarios, ordinary whole-goal or owner acceptance, remote CI/Actions, deployment and other fault/recovery matrices are NOT_RUN. No new environment or real model allowance was enabled. The previous catalog omission remains synthetic and failed-list cancellation-to0 remains UI-only. The old full-disk independent-report gap is still not recovered.
