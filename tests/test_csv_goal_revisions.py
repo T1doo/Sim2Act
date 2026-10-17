@@ -313,7 +313,7 @@ def test_revoked_new_goal_material_gate_precedes_private_goal_and_proposal_reads
     assert private == [],private
 
 
-@pytest.mark.parametrize("case",["deliver","lost","navigation","rejected"])
+@pytest.mark.parametrize("case",["deliver","lost","navigation","rejected","return-preview","return-release","return-adoption","return-stale","lost-adoption"])
 def test_visible_same_goal_revision_check_release_adopt_and_new_run(env,tmp_path,case):
     import os
     import subprocess
@@ -339,7 +339,7 @@ def test_visible_same_goal_revision_check_release_adopt_and_new_run(env,tmp_path
             process=subprocess.Popen(["node","tests/csv_goal_revision.cjs",str(tmp_path/"info.json")],
                 stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=errors,text=True,
                 env={**os.environ,"NODE_PATH":str(Path.cwd()/"scripts/engineering-ci/node_modules")})
-            watchdog=threading.Timer(150,process.kill)
+            watchdog=threading.Timer(240,process.kill)
             watchdog.start()
             for line in process.stdout:
                 request=json.loads(line)

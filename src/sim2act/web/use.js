@@ -279,7 +279,8 @@ async function readApplicationUse(v){
   renderApplicationAcceptance(v,runRelease,run);
   if(typeof renderCsvReviewStart==="function")renderCsvReviewStart(v,release);
   if(run&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,run,runRelease);
-  if(typeof renderCsvGoalRevision==="function")renderCsvGoalRevision(v,release);
+  if(typeof renderCsvGoalRevision==="function")await renderCsvGoalRevision(v,release);
+  if(!current())return;
   applicationUseButtons(v);
  }catch(error){if(!current())return;clearApplicationUseData(v);throw error;}
 }
