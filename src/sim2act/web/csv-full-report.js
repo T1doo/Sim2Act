@@ -296,7 +296,7 @@ function openCsvFullReport(app,generation,selectionCurrent){
  }
  function expectedRun(intent){return {app,body:intent.body,...(intent.instance?{instanceReceipt:intent.receipt}: {})};}
  const open=csvFullReportButton('打开同一Run的完整合同、结果与MD下载','csv-full-report-open-run',async()=>{
-  const intent=entry,selection=v.instanceGeneration;if(!here()||!intent.run)return;
+  const intent=entry,selection=v.instanceGeneration;if(!here()||v.deliveryPending||!intent.run)return;
   await csvFullReportOpenRun(intent.run,v.identity,v.connection,v.project,()=>here()&&selection===v.instanceGeneration&&entry===intent,expectedRun(intent));
  });
  const submit=csvFullReportButton('准备新完整报告合同（尚不执行）','csv-full-report-prepare',async()=>{
@@ -344,10 +344,10 @@ function openCsvFullReport(app,generation,selectionCurrent){
  const history=document.createElement('div');history.id='csv-full-report-history';
  function render(){
   if(!here()||!entry)return;const locked=entry.state!=='new'||v.deliveryPending;
-  material.disabled=locked;column.disabled=locked||!v.ready;ack.disabled=locked||!v.ready||!column.value;submit.disabled=v.deliveryPending||['sending','accepted','rejected'].includes(entry.state)||(entry.state!=='unknown'&&(!ack.checked||!v.ready||!column.value));submit.textContent=entry.state==='unknown'?'仅GET恢复原合同回执':'准备新完整报告合同（尚不执行）';open.hidden=!entry.run;fresh.disabled=v.deliveryPending||['sending','unknown'].includes(entry.state);status.textContent=entry.message||(v.deliveryPending?'正在核查所选实例；尚未选择本次材料。':'选择材料与列后，明确准备新合同；不会自动执行。');
+  material.disabled=locked;column.disabled=locked||!v.ready;ack.disabled=locked||!v.ready||!column.value;submit.disabled=v.deliveryPending||['sending','accepted','rejected'].includes(entry.state)||(entry.state!=='unknown'&&(!ack.checked||!v.ready||!column.value));submit.textContent=entry.state==='unknown'?'仅GET恢复原合同回执':'准备新完整报告合同（尚不执行）';open.hidden=v.deliveryPending||!entry.run;fresh.disabled=v.deliveryPending||['sending','unknown'].includes(entry.state);status.textContent=entry.message||(v.deliveryPending?'正在核查所选实例；尚未选择本次材料。':'选择材料与列后，明确准备新合同；不会自动执行。');
   selected.textContent=JSON.stringify({mode:v.instance?'INTERNAL_INSTANCE':'SAVED_WORKFLOW_ONLY',instance:v.instance?{id:v.instance.id,release_id:v.instance.release_id,revision:v.instance.revision,data_version:v.instance.data_version,release_fingerprint:v.instance.release_fingerprint}:null,frozen_request:entry.body||null,accepted_receipt:entry.receipt||null},null,2);
   history.replaceChildren();
-  for(const item of (v.instance?v.instance.runs:app.history)){
+  for(const item of (v.deliveryPending?[]:v.instance?v.instance.runs:app.history)){
    const instance=v.instance,selection=v.instanceGeneration;
    history.append(row(`${instance?'实例 '+instance.id+' · Release '+item.release_id+' · ':''}独立Run ${item.run_id} · ${item.status||'已保存'}`,async()=>{
     const current=()=>here()&&selection===v.instanceGeneration&&v.instance===instance;if(!current())return;
