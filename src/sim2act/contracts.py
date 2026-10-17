@@ -272,6 +272,14 @@ class OrdinaryCsvReport(Strict):
     model_requests: Literal[0]
 
 
+class OrdinaryHumanReview(Strict):
+    """Explicit prospective user rubric; no automated semantic claim or delegated role."""
+
+    version: Literal["owner.ordinary-goal.v1"]
+    declarant: Literal["current-project-and-run-owner"]
+    automatic_goal_acceptance: Literal["NOT_RUN"]
+
+
 class FrozenRunContract(Strict):
     run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
     # Existing project runtime or existing declarative app runtime; neither creates a grant.
@@ -286,6 +294,7 @@ class FrozenRunContract(Strict):
     natural_planning: NaturalPlanningPolicy | None = None
     application_generation: ApplicationGenerationPolicy | None = None
     ordinary_csv_report: OrdinaryCsvReport | None = None
+    human_review: OrdinaryHumanReview | None = None
 
 
 class Run(Strict):

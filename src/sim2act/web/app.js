@@ -324,6 +324,7 @@ function resumeOrdinaryOutcome() {
   renderOrdinaryOutcome(previous.result);
 }
 function clearRunDetail() {
+  if(typeof clearOrdinaryOwnerReview === "function")clearOrdinaryOwnerReview();
   ordinaryOutcomeView=null;
   if(typeof clearCsvReportContract === "function")clearCsvReportContract();
   if(typeof invalidateNaturalGoalAcknowledgements === "function")invalidateNaturalGoalAcknowledgements();
@@ -367,6 +368,10 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
       await showRun(id);
     },"重新读取任务");
     feedback.id="run-read-failure";$("result").append(feedback);
+    if(error.httpStatus===403 && typeof showOrdinaryOwnerMetadata === "function"){
+      const metadata=document.createElement("button");metadata.id="ordinary-owner-metadata-open";metadata.type="button";metadata.textContent="只读打开此 Run 人工声明元数据 / 停止入口";
+      metadata.onclick=safe(async()=>{if(identity===token && project===$("project-select").value && generation===runSelectionGeneration && activeRun===null)await showOrdinaryOwnerMetadata(id);});$("result").append(metadata);
+    }
     if(userSelection)throw error;
     return;
   }
@@ -396,6 +401,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   }
   if (!r.result && r.ordinary_csv?.receipts?.length)renderOrdinaryOutcome(r);
   if(typeof renderCsvReportContract === "function")renderCsvReportContract(r,id,current);
+  if(typeof renderOrdinaryOwnerReview === "function")renderOrdinaryOwnerReview(r);
   if (r.error) $("result").append(row(`需要处理：${r.error.message || r.error.code}`));
   $("raw-result").textContent = JSON.stringify({...r,unresolved_attempts:unresolvedAttempts}, null, 2);
   $("events").textContent = JSON.stringify(r.events, null, 2);
@@ -796,6 +802,7 @@ const goalRunCanonical=value=>JSON.stringify(value,(key,item)=>item&&typeof item
 let goalRunDisplayed=null;
 const goalRunKey=(card=activeGoalCard)=>card?JSON.stringify([token,$("project-select").value,card.id]):null;
 function renderGoalRun(){
+ if(typeof renderOrdinaryRubricStart === "function")renderOrdinaryRubricStart();
  const card=activeGoalCard,entry=goalRunRequests.get(goalRunKey());
  $("goal-card-run").disabled=!card||goalCardLoading||goalCardSaving||["sending","unknown","accepted-read-error"].includes(entry?.state);
  $("goal-card-run").textContent=card?`按已保存 v${card.version} 执行任务`:"按已保存版本执行任务";
@@ -817,7 +824,7 @@ async function readGoalRun(entry,current,selection){
  }catch(error){entry.state="accepted-read-error";entry.message="任务已接受；详情读取失败不能判断执行结果。只重新读取原 Run，不再提交。";}
  finally{if(current())renderGoalRun();}
 }
-async function executeGoalCard(recover=false){
+async function executeGoalCard(recover=false,humanReview=false){
  const card=activeGoalCard;if(!card||goalCardLoading||goalCardSaving)return;
  const key=goalRunKey(card),generation=goalSelectionGeneration,identity=token,project=card.project_id,selection=runUserSelectionGeneration;
  const current=()=>identity===token&&project===$("project-select").value&&generation===goalSelectionGeneration&&activeGoalCard?.id===card.id;
@@ -825,13 +832,15 @@ async function executeGoalCard(recover=false){
  if(entry?.state==="sending")return;
  if(!recover){
   if(["unknown","accepted-read-error"].includes(entry?.state))return;
-  entry={snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};goalRunRequests.set(key,entry);
+  if(humanReview && (typeof ordinaryRubricReady !== "function" || !ordinaryRubricReady()))return;
+  entry={path:humanReview?"reviewable-runs":"runs",snapshot:card.snapshot,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},state:"new",uncertain:false,runId:null};goalRunRequests.set(key,entry);
+  if(humanReview)$("ordinary-rubric-start-ack").checked=false;
  }
  if(!entry)return;
  if(entry.state==="accepted-read-error"){await readGoalRun(entry,current,selection);return;}
  entry.state="sending";entry.message=`正在确认已保存 v${entry.body.expected_version} 的执行回执。`;renderGoalRun();
  try{
-  const receipt=await api(`/api/projects/${project}/goal-cards/${card.id}/runs`,"POST",entry.body);
+  const receipt=await api(`/api/projects/${project}/goal-cards/${card.id}/${entry.path||"runs"}`,"POST",entry.body);
   if(!receipt||typeof receipt.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(receipt.run_id)||receipt.status!=="ACCEPTED"||receipt.goal_card_id!==card.id||receipt.goal_version!==entry.body.expected_version||receipt.goal_fingerprint!==entry.body.expected_fingerprint||receipt.goal_acceptance!=="NOT_RUN"||receipt.candidate_generated!==false)throw Error("Invalid goal execution receipt");
   entry.runId=receipt.run_id;entry.state="accepted-read-error";
  }catch(error){
@@ -935,7 +944,8 @@ function selectWorkspace(id,preserveFirstGuide=null) {
   workspaceSelectionGeneration++;
   if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
-  if(id === "projects"){resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();}
+  if(typeof resetOrdinaryRubricAcknowledgement === "function")resetOrdinaryRubricAcknowledgement();
+  if(id === "projects"){if(typeof resumeOrdinaryOwnerReview === "function")resumeOrdinaryOwnerReview();resumeOrdinaryOutcome();if(typeof resumeCsvReportContract === "function")resumeCsvReportContract();}
   document.querySelectorAll("#workspace-nav [data-tab]").forEach(button => {
     if (button.dataset.tab === id) button.setAttribute("aria-current", "true");
     else button.removeAttribute("aria-current");

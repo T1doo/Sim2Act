@@ -663,6 +663,17 @@ def create_app(store=None, settings=None):
                         "fingerprint": body.expected_fingerprint})
         return acceptance(db, user, rid)
 
+    @app.post("/api/projects/{pid}/goal-cards/{cid}/reviewable-runs", status_code=202)
+    def run_reviewable_goal(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
+        from .ordinary_owner_review import POLICY
+
+        rid = db.submit(user, pid, "", [], body.request_key, policy={
+            "limits": {**platform_limits.model_dump(), "max_repairs": 0},
+            "mode": s.mode, "request_model": s.model, "human_review": POLICY,
+        }, goal_source={"card_id": cid, "version": body.expected_version,
+                        "fingerprint": body.expected_fingerprint})
+        return {**acceptance(db, user, rid), "human_review": POLICY}
+
     @app.post("/api/projects/{pid}/goal-cards/{cid}/planned-runs", status_code=202)
     def plan_saved_goal(pid: str, cid: str, body: GoalRunInput, user=user_dependency):
         from .goal_planner import policy
@@ -922,6 +933,9 @@ def create_app(store=None, settings=None):
     from .owner_acceptance import mount as mount_owner_acceptance
 
     mount_owner_acceptance(app, db, platform_limits, identity)
+    from .ordinary_owner_review import mount as mount_ordinary_owner_review
+
+    mount_ordinary_owner_review(app, db, platform_limits, identity)
     from .app_owner_goals import mount as mount_app_owner_goals
 
     mount_app_owner_goals(app, db, platform_limits, identity)
@@ -986,6 +1000,10 @@ def create_app(store=None, settings=None):
     @app.get("/app.js")
     def js():
         return FileResponse(web / "app.js", media_type="text/javascript")
+
+    @app.get("/ordinary-owner.js")
+    def ordinary_owner_script():
+        return FileResponse(web / "ordinary-owner.js", media_type="text/javascript")
 
     @app.get("/ordinary-csv.js")
     def ordinary_csv_js():

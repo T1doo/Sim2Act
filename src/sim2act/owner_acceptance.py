@@ -594,35 +594,43 @@ def natural_scope(store, c, user, iid, rid):
     return pid
 
 
-def natural_ledger(c, user, iid, rid):
-    rows = [dict(r) for r in c.execute(select(*NATURAL_META)
-        .where(natural_owner_records.c.run_id == rid)
-        .order_by(natural_owner_records.c.sequence)).mappings()]
-    seals = {r["record_id"]: r for r in c.execute(select(natural_owner_seals)
-        .where(natural_owner_seals.c.run_id == rid)).mappings()}
+def run_ledger(c, user, rid, records, seals, scope_metadata):
+    """Trusted storage adapters only; callers must independently authorize scope first."""
+    columns = [x for x in records.c if x.name != "payload"]
+    rows = [dict(r) for r in c.execute(select(*columns)
+        .where(records.c.run_id == rid).order_by(records.c.sequence)).mappings()]
+    sealed = {r["record_id"]: r for r in c.execute(select(seals)
+        .where(seals.c.run_id == rid)).mappings()}
     previous = ""
-    if len(rows) != len(seals) or len(rows) > MAX_RECORDS:
-        raise DomainError("VERSION_CONFLICT", "Natural owner seal missing")
+    if len(rows) != len(sealed) or len(rows) > MAX_RECORDS:
+        raise DomainError("VERSION_CONFLICT", "Owner history/seal missing")
     for n, row in enumerate(rows, 1):
-        seal = seals.get(row["id"])
-        if (not seal or row["principal_id"] != user or row["instance_id"] != iid
-            or row["run_id"] != rid or row["sequence"] != n
-            or row["previous_fingerprint"] != previous
+        seal = sealed.get(row["id"])
+        if (not seal or row["principal_id"] != user or row["run_id"] != rid
+            or any(row[k] != v for k, v in scope_metadata.items())
+            or row["sequence"] != n or row["previous_fingerprint"] != previous
             or seal["metadata_fingerprint"] != fingerprint(row)
             or seal["payload_fingerprint"] != row["fingerprint"]):
-            raise DomainError("VERSION_CONFLICT", "Natural owner immutable metadata changed")
+            raise DomainError("VERSION_CONFLICT", "Owner immutable metadata changed")
         previous = row["fingerprint"]
     return rows
 
 
-def natural_payload(c, row):
-    value = c.execute(select(natural_owner_records.c.payload)
-        .where(natural_owner_records.c.id == row["id"])).scalar()
+def run_payload(c, row, records):
+    value = c.execute(select(records.c.payload).where(records.c.id == row["id"])).scalar()
     if (not isinstance(value, dict) or fingerprint(value) != row["fingerprint"]
         or value.get("metadata") != {k: v for k, v in row.items() if k != "fingerprint"}
         or fingerprint(value.get("request")) != row["request_fingerprint"]):
-        raise DomainError("VERSION_CONFLICT", "Natural owner immutable payload changed")
+        raise DomainError("VERSION_CONFLICT", "Owner immutable payload changed")
     return value
+
+
+def natural_ledger(c, user, iid, rid):
+    return run_ledger(c, user, rid, natural_owner_records, natural_owner_seals, {"instance_id": iid})
+
+
+def natural_payload(c, row):
+    return run_payload(c, row, natural_owner_records)
 
 
 def natural_authority(store, c, user, iid, rid):
@@ -702,20 +710,25 @@ def natural_context(store, c, user, iid, rid, limits):
     return value
 
 
-def natural_append(c, user, pid, iid, rid, rows, body, status, **details):
+def run_append(c, user, pid, rid, rows, body, status, *, records, seals, scope_metadata, **details):
     reserve = 2 if body["command"] == "PREPARE" else 1 if body["command"] == "DECIDE" else 0
     if len(rows) + 1 + reserve > MAX_RECORDS:
         raise DomainError("BUDGET_EXCEEDED")
     row = dict(id=new_id("nowner"), run_id=rid, principal_id=user, project_id=pid,
-        instance_id=iid, sequence=len(rows)+1, request_key=body["request_key"],
+        **scope_metadata, sequence=len(rows)+1, request_key=body["request_key"],
         request_fingerprint=fingerprint(body), kind=body["command"], status=status,
         previous_fingerprint=rows[-1]["fingerprint"] if rows else "", created_at=time.time())
     value = dict(metadata=copy.deepcopy(row), request=copy.deepcopy(body), **copy.deepcopy(details))
     row["fingerprint"] = fingerprint(value)
-    c.execute(insert(natural_owner_records).values(**row, payload=value))
-    c.execute(insert(natural_owner_seals).values(record_id=row["id"], run_id=rid,
+    c.execute(insert(records).values(**row, payload=value))
+    c.execute(insert(seals).values(record_id=row["id"], run_id=rid,
         metadata_fingerprint=fingerprint(row), payload_fingerprint=row["fingerprint"]))
     return row
+
+
+def natural_append(c, user, pid, iid, rid, rows, body, status, **details):
+    return run_append(c, user, pid, rid, rows, body, status, records=natural_owner_records,
+        seals=natural_owner_seals, scope_metadata={"instance_id": iid}, **details)
 
 
 def natural_read(store, user, iid, rid, limits, key=None):
@@ -786,17 +799,30 @@ def natural_final_gate(store, c, user, iid, rid, fresh, *, expires_at=None):
 
 
 def natural_submit(store, user, iid, rid, limits, body):
+    return scoped_run_submit(store, user, rid, body, dict(
+        namespace="natural-owner-submission-rejection.v1", scope_metadata={"instance_id": iid},
+        scope=lambda c: natural_scope(store, c, user, iid, rid),
+        ledger=lambda c: natural_ledger(c, user, iid, rid),
+        payload=natural_payload,
+        context=lambda c: natural_context(store, c, user, iid, rid, limits),
+        append=lambda c, pid, rows, body, status, **kw: natural_append(
+            c, user, pid, iid, rid, rows, body, status, **kw),
+        final_gate=lambda c, fresh, **kw: natural_final_gate(store, c, user, iid, rid, fresh, **kw),
+    ))
+
+
+def scoped_run_submit(store, user, rid, body, adapter):
     guard: dict = {}
     with app_jobs.submission_tx(store, guard) as c:
-        pid = natural_scope(store, c, user, iid, rid)
-        rows = natural_ledger(c, user, iid, rid)
+        pid = adapter["scope"](c)
+        rows = adapter["ledger"](c)
         old = next((r for r in rows if r["request_key"] == body["request_key"]), None)
         if old:
             if old["request_fingerprint"] != fingerprint(body):
                 raise DomainError("VERSION_CONFLICT", "Original declaration key differs")
             return old
-        guard["proof"] = dict(namespace="natural-owner-submission-rejection.v1",
-            principal_id=user, project_id=pid, instance_id=iid, run_id=rid,
+        guard["proof"] = dict(namespace=adapter["namespace"],
+            principal_id=user, project_id=pid, run_id=rid, **adapter.get("scope_metadata", {}),
             request_key=body["request_key"], request_fingerprint=fingerprint(body),
             acceptance="NOT_ACCEPTED", previous_request="ABSENT", phase="TRANSACTION_ROLLED_BACK")
         if body["expected_sequence"] != len(rows):
@@ -808,16 +834,16 @@ def natural_submit(store, user, iid, rid, limits, body):
                 or last["id"] != body["target_id"] or last["fingerprint"] != body["target_fingerprint"]
                 or not body["reason"].strip()):
                 raise DomainError("VERSION_CONFLICT")
-            return natural_append(c, user, pid, iid, rid, rows, body,
+            return adapter["append"](c, pid, rows, body,
                 "CANCELLED" if command == "CANCEL" else "REVOKED")
-        fresh = natural_context(store, c, user, iid, rid, limits)
-        values = {r["id"]: natural_payload(c, r) for r in rows}
+        fresh = adapter["context"](c)
+        values = {r["id"]: adapter["payload"](c, r) for r in rows}
         if command == "PREPARE":
             if fingerprint(fresh) != body["expected_contract_fingerprint"]:
                 raise DomainError("VERSION_CONFLICT", "Selected result preview changed")
-            row = natural_append(c, user, pid, iid, rid, rows, body, "PENDING",
+            row = adapter["append"](c, pid, rows, body, "PENDING",
                 contract=fresh, expires_at=time.time()+900)
-            natural_final_gate(store, c, user, iid, rid, fresh)
+            adapter["final_gate"](c, fresh)
             return row
         if (not last or last["kind"] != "PREPARE" or last["id"] != body["review_id"]
             or last["fingerprint"] != body["review_fingerprint"]):
@@ -829,8 +855,8 @@ def natural_submit(store, user, iid, rid, limits, body):
         if ([v["item_id"] for v in choices] != [v["id"] for v in fresh["items"]]
             or any(not v["reason"].strip() for v in choices)):
             raise DomainError("INVALID_INPUT", "Explicit ordered choices and reasons required")
-        row = natural_append(c, user, pid, iid, rid, rows, body,
+        row = adapter["append"](c, pid, rows, body,
             "ACCEPTED" if all(v["decision"] == "ACCEPT" for v in choices) else "REJECTED",
             contract=fresh, choices=choices, review_id=last["id"])
-        natural_final_gate(store, c, user, iid, rid, fresh, expires_at=p["expires_at"])
+        adapter["final_gate"](c, fresh, expires_at=p["expires_at"])
         return row

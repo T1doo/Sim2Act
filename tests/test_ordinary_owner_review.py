@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select, update
 from test_goal_card_runs import authority, card
 
-from sim2act.db import goal_cards, grants, run_contracts, runs
+from sim2act.db import goal_cards, grants, runs
 from sim2act.model import MockModel
 from sim2act.worker import Worker
 
@@ -95,8 +95,9 @@ def test_frozen_goal_same_run_explicit_ordered_declaration_and_history(env, tmp_
 
 def test_old_run_no_retroactive_rubric_and_wrong_identity_denied(env):
     source, _ = card(env)
-    old = start(env, source, route="runs").json()["run_id"]
+    old = start(env, source, key="old-unreviewable", route="runs").json()["run_id"]
     assert review(env, old).status_code == 409
+    assert Worker(env[0], env[1], MockModel()).once()
     rid = execute(env, source)
     env[2].headers["Authorization"] = "Bearer synthetic-test-B"
     assert review(env, rid).status_code == 403
@@ -134,14 +135,13 @@ def test_current_version_permissions_expiry_and_immutable_seal(env, change):
         elif change == "grant":
             c.execute(update(grants).where(grants.c.principal_id == env[3], grants.c.resource_id == env[6]).values(revoked=True))
         elif change == "expiry":
-            from sim2act import ordinary_owner_review
-            ordinary_owner_review.EXPIRY_TEST_UNUSED = None
+            pass
         else:
             from sim2act.db import ordinary_owner_seals
             c.execute(update(ordinary_owner_seals).where(ordinary_owner_seals.c.record_id == prepared["id"]).values(metadata_fingerprint="0"*64))
     if change == "expiry":
-        from unittest.mock import patch
         import time
+        from unittest.mock import patch
         with patch("sim2act.owner_acceptance.time.time", return_value=time.time()+901):
             assert review(env, rid, "post", intent).status_code == 409
         return
@@ -155,3 +155,65 @@ def test_current_version_permissions_expiry_and_immutable_seal(env, change):
         target_id=prepared["id"], target_fingerprint=prepared["fingerprint"], reason="Stop this exact preview"))
     assert stopped.status_code == 201, stopped.text
     assert review(env, rid).json()["owner_acceptance"] == "CANCELLED"
+
+
+@pytest.mark.parametrize("change", ["grant", "result"])
+def test_final_commit_independently_rechecks_and_rolls_back_entire_declaration(env, monkeypatch, change):
+    from sim2act import ordinary_owner_review as human
+    from sim2act.db import ordinary_owner_records
+
+    source, _ = card(env)
+    rid = execute(env, source)
+    prepare(env, rid)
+    intent = decision(env, rid)
+    original = human.append
+
+    def change_before_commit(c, user, pid, run_id, rows, body, status, **details):
+        row = original(c, user, pid, run_id, rows, body, status, **details)
+        if change == "grant":
+            c.execute(update(grants).where(grants.c.principal_id == user, grants.c.resource_id == env[6]).values(revoked=True))
+        else:
+            result = c.execute(select(runs.c.result).where(runs.c.id == rid)).scalar_one()
+            c.execute(update(runs).where(runs.c.id == rid).values(result={**result, "answer": "late changed"}))
+        return row
+
+    monkeypatch.setattr(human, "append", change_before_commit)
+    rejected = review(env, rid, "post", intent)
+    assert rejected.status_code in (403, 409)
+    from sim2act.db import fingerprint
+    proof = rejected.json()["error"]["submission_rejection"]
+    assert proof["namespace"] == "ordinary-owner-submission-rejection.v1"
+    assert proof["request_fingerprint"] == fingerprint(intent) and proof["acceptance"] == "NOT_ACCEPTED"
+    with env[0].tx() as c:
+        assert len(c.execute(select(ordinary_owner_records).where(ordinary_owner_records.c.run_id == rid)).all()) == 1
+    assert review(env, rid).json()["owner_acceptance"] == "PENDING"
+
+
+def test_two_explicit_decisions_cannot_both_commit(env):
+    from concurrent.futures import ThreadPoolExecutor
+
+    source, _ = card(env)
+    rid = execute(env, source)
+    prepare(env, rid)
+    intent = decision(env, rid)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda key: review(env, rid, "post", {**intent, "request_key": key}), ["decision-a", "decision-b"]))
+    assert sorted(r.status_code for r in results) == [201, 409]
+    assert review(env, rid).json()["sequence"] == 2
+
+
+def test_additive_initialization_keeps_legacy_run_and_ledger_untouched(env):
+    from sim2act.db import ordinary_owner_records, ordinary_owner_seals
+
+    source, _ = card(env)
+    old = start(env, source, key="before-upgrade", route="runs").json()["run_id"]
+    initial = env[2].get(f"/api/runs/{old}").json()
+    # Synthetic old-schema upgrade: only this fixture's known empty new tables removed.
+    ordinary_owner_seals.drop(env[0].engine)
+    ordinary_owner_records.drop(env[0].engine)
+    env[0].initialize()
+    assert env[2].get(f"/api/runs/{old}").json() == initial
+    assert review(env, old).status_code == 409
+    assert Worker(env[0], env[1], MockModel()).once()
+    rid = execute(env, source)
+    assert review(env, rid).status_code == 200

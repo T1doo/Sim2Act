@@ -463,6 +463,35 @@ natural_owner_seals = Table(
     UniqueConstraint("run_id", "record_id"),
 )
 
+# Ordinary declarations share the per-Run owner protocol, with their own explicit
+# scope adapter. Additive tables preserve all legacy instance metadata/seal bytes.
+ordinary_owner_records = Table(
+    "ordinary_owner_records", meta,
+    Column("id", String, primary_key=True),
+    Column("run_id", String, nullable=False),
+    Column("principal_id", String, nullable=False),
+    Column("project_id", String, nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("request_key", String, nullable=False),
+    Column("request_fingerprint", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("status", String, nullable=False),
+    Column("previous_fingerprint", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("fingerprint", String, nullable=False),
+    UniqueConstraint("run_id", "sequence"),
+    UniqueConstraint("run_id", "principal_id", "request_key"),
+)
+ordinary_owner_seals = Table(
+    "ordinary_owner_seals", meta,
+    Column("record_id", String, primary_key=True),
+    Column("run_id", String, nullable=False),
+    Column("metadata_fingerprint", String, nullable=False),
+    Column("payload_fingerprint", String, nullable=False),
+    UniqueConstraint("run_id", "record_id"),
+)
+
 internal_run_bindings = Table(
     "internal_run_bindings",
     meta,
@@ -882,6 +911,10 @@ class Store:
             refs = source.snapshot["content"]["resource_refs"]
             if len(set(refs)) != len(refs):
                 raise DomainError("INVALID_INPUT", "Duplicate input resource")
+        if policy.get("human_review") is not None:
+            from .ordinary_owner_review import require_prospective
+
+            require_prospective(source, policy)
         request = {"goal": goal, "resource_refs": refs, "policy": policy}
         if source is not None:
             request["goal_source"] = source.model_dump()
@@ -991,6 +1024,8 @@ class Store:
                if policy.get("natural_planning") is not None else {}),
             **({"application_generation": policy["application_generation"]}
                if policy.get("application_generation") is not None else {}),
+            **({"human_review": policy["human_review"]}
+               if policy.get("human_review") is not None else {}),
         })
         return rid
 
