@@ -1254,7 +1254,11 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             if natural.is_candidate(plan["definition"]) else pure(intent["tool"], intent["args"], b["source"]))
     validate_value(action["output_schema"], value)
     receipt = receipt_for(oid, step, action, plan, intent, value)
-    live = commit_guard(worker, c, run, b, 1)
+    from .pa_trial_dispatch import _journal_reads
+    # SAVE writes invalidate the entry read segment. Reprove current authority
+    # in a new read-only segment; no proof survives the artifact writes above.
+    with _journal_reads(worker, c):
+        live = commit_guard(worker, c, run, b, 1)
     if not saved:
         require(live["version"] == job["version"], "Local write Run version changed")
         if store.has_unknown(c, job["id"]):
