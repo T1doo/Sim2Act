@@ -8,6 +8,8 @@
 
 [从安装包开始的空白合成工程](docs/F2/BlankSyntheticWorkspaceQuickstart.md)：显式新目录、自己创建 CSV/Goal/应用、原 Worker 运行与保留数据后冷重开；仅公开测试身份和固定工具，真实模型与发布关闭。
 
+[保留原 Goal 修改 CSV 列绑定](docs/F2/InitialColumnRevision20261018.md)：在原实例明确修改已有列，经独立检查、版本确认及采纳后重新运行，并保留旧结果。
+
 [CSV 列绑定局部修改](docs/F2/ColumnBindingPatchQuickstart.md)：同一求和节点 amount → quantity 新草案、精确版本确认、实际只读检查和无关对象保持证明。离线工程候选未验收，旧应用不覆盖，正式发布关闭。
 
 [固定 CSV 三步 DAG](docs/F2/FixedCsvDagQuickstart.md)：在同一应用保存预览 → 求和 → 固定文字报告计划，复用既有 Worker 与持久步骤回执，支持精确确认和冷恢复。离线工程候选未验收。

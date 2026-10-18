@@ -4,12 +4,14 @@ Reuses the existing first-use/local-candidate loopback, test-only Store and
 ordinary Worker pattern. Never initializes a pre-existing directory/database.
 """
 
+import asyncio
 import hashlib
 import json
 import os
 import re
 import socket
 import threading
+import traceback
 from pathlib import Path
 
 import uvicorn
@@ -82,7 +84,10 @@ def checked_path(path):
 
 def settings_for(root):
     # Deliberately no Settings.from_env, dotenv, provider or credential discovery.
-    return Settings("sqlite:///" + str(root / DATABASE), root, mode="mock")
+    # The original CHECK/version API can hold this engineering database while
+    # the service heartbeat competes for its writer lock. Use Store.tx's same
+    # bounded 30-second ceiling on every SQLite connection in this entry only.
+    return Settings("sqlite:///" + str(root / DATABASE) + "?timeout=30", root, mode="mock")
 
 
 def open_workspace(path, *, new=False):
@@ -128,8 +133,20 @@ def open_workspace(path, *, new=False):
         raise
 
 
-def workspace_app(store, settings):
+def workspace_app(store, settings, gate=None):
     app = create_app(store, settings)
+
+    if gate is not None:
+        @app.middleware("http")
+        async def single_sqlite_writer(request, call_next):
+            # This launcher owns one SQLite API/Worker pair. Pending requests
+            # stay cancellable; a cancelled waiter never acquires a stray lock.
+            while not gate.acquire(blocking=False):
+                await asyncio.sleep(0.01)
+            try:
+                return await call_next(request)
+            finally:
+                gate.release()
 
     @app.get("/")
     def synthetic_page():
@@ -155,7 +172,8 @@ def serve(path, *, new=False, port=0):
         root, store, marker = open_workspace(path, new=new)
         settings = settings_for(root)
         worker = Worker(store, settings, NeverModel())
-        server = uvicorn.Server(uvicorn.Config(workspace_app(store, settings), host="127.0.0.1",
+        gate = threading.Lock()
+        server = uvicorn.Server(uvicorn.Config(workspace_app(store, settings, gate), host="127.0.0.1",
             log_level="error", access_log=False, timeout_graceful_shutdown=5))
         stopped = threading.Event()
         errors = []
@@ -165,15 +183,24 @@ def serve(path, *, new=False, port=0):
             announced = False
             try:
                 while not stopped.is_set():
-                    worker.once()
+                    if gate.acquire(blocking=False):
+                        try:
+                            worker.once()
+                        finally:
+                            gate.release()
                     if server.started and not announced:
                         print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", url=address,
                             data_dir=str(root), public_token=TOKEN, worker_id=worker.id,
                             principal_id=marker["principal_id"], mode="SYNTHETIC_TEST_ONLY")), flush=True)
                         announced = True
                     stopped.wait(1)  # Original worker.main service cadence.
-            except Exception:
+            except Exception as error:
                 errors.append("SYNTHETIC_WORKER_STOPPED")
+                code = getattr(getattr(error, "orig", None), "sqlite_errorcode", None)
+                print(json.dumps(dict(event="SYNTHETIC_WORKER_ERROR", worker_id=worker.id,
+                    error_type=type(error).__name__, sqlite_errorcode=code if type(code) is int else None,
+                    frames=[dict(module=Path(f.filename).name, function=f.name, line=f.lineno)
+                            for f in traceback.extract_tb(error.__traceback__)[:32]])), flush=True)
                 stopped.set()
                 server.should_exit = True
 

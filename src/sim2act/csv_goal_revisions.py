@@ -69,7 +69,7 @@ class Preview(Strict):
     expected_revision: int = Field(ge=1)
     expected_release_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
-    goal_version: int = Field(ge=2)
+    goal_version: int = Field(ge=1)
     goal_fingerprint: str = Field(pattern=graph.HASH)
     baseline_column: str = Field(min_length=1, max_length=200)
     column: str = Field(min_length=1, max_length=200)
@@ -256,15 +256,22 @@ def calculate(ctx,release,saved,body,limits):
     require(ctx["instance_revision"] == body.expected_revision
         and ctx["release_fingerprint"] == body.expected_release_fingerprint
         and ctx["graph_fingerprint"] == body.expected_graph_fingerprint
-        and ctx["goal"]["version"] == body.goal_version == ctx["original_goal_version"] + 1
+        and ctx["goal"]["version"] == body.goal_version
+        and body.goal_version in (ctx["original_goal_version"],ctx["original_goal_version"] + 1)
         and ctx["goal"]["fingerprint"] == body.goal_fingerprint)
+    goal_changed = body.goal_version != ctx["original_goal_version"]
+    if not goal_changed:
+        origin = release["snapshot"]["draft"]["candidate"]["generation"]
+        require(ctx["goal"]["card_id"] == origin["goal_card_id"]
+            and ctx["goal"]["fingerprint"] == origin["goal_fingerprint"]
+            and ctx["goal"]["snapshot"] == origin["goal_snapshot"], "The original Goal must remain exact")
     column_changed = body.column != body.baseline_column
     require(body.column in ctx["columns"] and body.baseline_column in ctx["columns"]
         and (column_changed or ctx["goal"]["snapshot"]["content"] != release["snapshot"]["draft"]["candidate"]["goal"]),
         "Explicitly change Goal content or the numeric column")
-    nodes = [n for n in saved["graph"]["nodes"] if n["kind"] == "GOAL"
+    nodes = [n for n in saved["graph"]["nodes"] if (goal_changed and n["kind"] == "GOAL")
         or (column_changed and n["key"] == "action:aggregate")]
-    require(len(nodes) == 1 + column_changed)
+    require(len(nodes) == goal_changed + column_changed)
     plan = graph.core.plan_change(saved["graph"],body.expected_graph_fingerprint,
         dict(project_id=ctx["project_id"],app_id=ctx["app_id"],request_key=body.request_key,
             changes=[dict(node_id=n["id"],expected_revision=n["revision"],expected_content_fingerprint=n["content_fingerprint"]) for n in nodes]),saved["context"])
