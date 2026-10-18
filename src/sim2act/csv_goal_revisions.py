@@ -258,10 +258,13 @@ def calculate(ctx,release,saved,body,limits):
         and ctx["graph_fingerprint"] == body.expected_graph_fingerprint
         and ctx["goal"]["version"] == body.goal_version == ctx["original_goal_version"] + 1
         and ctx["goal"]["fingerprint"] == body.goal_fingerprint)
+    column_changed = body.column != body.baseline_column
     require(body.column in ctx["columns"] and body.baseline_column in ctx["columns"]
-        and body.column != body.baseline_column, "Select two different numeric columns explicitly")
-    nodes = [n for n in saved["graph"]["nodes"] if n["kind"] == "GOAL" or n["key"] == "action:aggregate"]
-    require(len(nodes) == 2)
+        and (column_changed or ctx["goal"]["snapshot"]["content"] != release["snapshot"]["draft"]["candidate"]["goal"]),
+        "Explicitly change Goal content or the numeric column")
+    nodes = [n for n in saved["graph"]["nodes"] if n["kind"] == "GOAL"
+        or (column_changed and n["key"] == "action:aggregate")]
+    require(len(nodes) == 1 + column_changed)
     plan = graph.core.plan_change(saved["graph"],body.expected_graph_fingerprint,
         dict(project_id=ctx["project_id"],app_id=ctx["app_id"],request_key=body.request_key,
             changes=[dict(node_id=n["id"],expected_revision=n["revision"],expected_content_fingerprint=n["content_fingerprint"]) for n in nodes]),saved["context"])

@@ -276,7 +276,7 @@ async function readApplicationUse(v){
   if([...$("use-column").options].some(o=>o.value===(pending?.state==="unknown"?pending.body.input.column:previous)))$("use-column").value=pending?.state==="unknown"?pending.body.input.column:previous;
   $("use-info").textContent=`${app.name} · 未发布内部版本 · 固定材料 ${material} · 只读CSV求和；仅数值列可变，0模型请求，目标语义验收未执行。`;
   if(materialProvenance)$("use-info").textContent+=` 当前材料 SHA-256 ${materialHash}；原 Goal 来源 ${materialProvenance.original_goal_resources.join("、")}。`;
-  if(revision)$("use-info").textContent+=` 当前 Goal v${revision.goal.version}：${revision.goal.snapshot.content.goal}；固定新列 ${revision.input.column}。`;
+  if(revision)$("use-info").textContent+=` 当前 Goal v${revision.goal.version}：${revision.goal.snapshot.content.goal}；固定列 ${revision.input.column}。`;
   $("use-provenance").textContent=JSON.stringify({instance_id:v.id,release_id:instance.release_id,revision:instance.revision,release_fingerprint:instance.release_fingerprint,resource_id:material,...(materialProvenance?{resource_hash:materialHash,material_revision:materialProvenance}:{}),source:app.candidate.task_proof||app.candidate.extraction||null},null,2);
   $("use-form").hidden=false;$("use-refresh").hidden=false;
   $("use-output").replaceChildren();

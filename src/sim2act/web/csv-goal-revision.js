@@ -9,7 +9,7 @@ function renderCsvGoalRevision(v,release){
  if(v.csvGoalRevision?.signature===signature&&$("csv-goal-revision")?.isConnected){v.csvGoalRevision.controls();return;}
  clearCsvGoalRevision(v);
  const node=document.createElement("section");node.id="csv-goal-revision";
- const title=document.createElement("h3");title.textContent="修订此应用的 Goal 与列绑定";node.append(title);
+ const title=document.createElement("h3");title.textContent="修订此应用的 Goal 或列绑定";node.append(title);
  const owner=applicationUseKey(v);let entry=csvGoalRevisionIntents.get(owner);
  const currentRelease=release.snapshot.csv_goal_revision_source;
  const pendingAdoption=entry?.steps.adoptCommit&&["sending","unknown","accepted-read-error"].includes(entry.steps.adoptCommit.state);
@@ -23,7 +23,7 @@ function renderCsvGoalRevision(v,release){
     history:entry?(entry.state==="abandoned"?entry.history:[...(entry.history||[]),{key:entry.key,mode:entry.mode||"column",steps:entry.steps,release:entry.release?.id}]):[]};
    csvGoalRevisionIntents.set(owner,replacement);clearCsvGoalRevision(v);renderCsvGoalRevision(v,release);
   };
-  node.append(csvFullReportButton("基于当前版本再次修订列","csv-goal-next",()=>startCycle("column")),
+  node.append(csvFullReportButton("基于当前版本再次修订 Goal 或列","csv-goal-next",()=>startCycle("column")),
    csvFullReportButton("更换此实例的已授权 CSV 材料","csv-material-next",()=>startCycle("material")));
   $("use-info").after(node);return;
  }
@@ -41,7 +41,7 @@ function renderCsvGoalRevision(v,release){
  const material=document.createElement("select");material.id="csv-material-target";
  const materialInfo=document.createElement("p");materialInfo.id="csv-material-provenance";
  const ack=(id,label)=>{const input=document.createElement("input");input.type="checkbox";input.id=id;input.onchange=controls;return [input,csvFullReportLabel(label,input)];};
- const [checkAck,checkLabel]=ack("csv-goal-check-ack",materialMode?"已核对原 Goal 来源、当前与目标材料及哈希、保留列和影响范围，确认在独立实例实际重验":"已核对 Goal、旧列→新列和影响范围，确认在独立实例实际重验");
+ const [checkAck,checkLabel]=ack("csv-goal-check-ack",materialMode?"已核对原 Goal 来源、当前与目标材料及哈希、保留列和影响范围，确认在独立实例实际重验":"已核对新 Goal、保留或修改的列及影响范围；计算不会自动解释目标，确认独立重验");
  const [releaseAck,releaseLabel]=ack("csv-goal-release-ack","已核对本次实际重验，确认保存新内部 Release");
  const [adoptAck,adoptLabel]=ack("csv-goal-adopt-ack","已核对原实例、目标 Release 和保留结果，明确采用此版本");
  const button=(id,label,fn)=>csvFullReportButton(label,id,fn);
@@ -55,6 +55,7 @@ function renderCsvGoalRevision(v,release){
  }
  const unresolved=()=>Object.values(entry.steps).some(p=>["sending","unknown","accepted-read-error"].includes(p.state));
  const same=(a,b)=>goalRunCanonical(a)===goalRunCanonical(b);
+ const changedGoal=ctx=>!!ctx&&ctx.goal.version===(ctx.parent?.goal.version??ctx.original_goal_version)+1&&!same(ctx.goal.snapshot.content,ctx.parent?.goal.snapshot.content||v.app.candidate.goal);
  const unexpired=a=>Number.isFinite(a?.expires_at)&&a.expires_at*1000>Date.now();
  const requireReview=(ok)=>{if(!ok)throw Error("冻结修订与当前归属、版本或原请求不匹配，请重新核查");};
  async function readContext(){
@@ -144,7 +145,7 @@ function renderCsvGoalRevision(v,release){
   }
   const ctx=await readContext();if(!here())return;
   if(ctx.instance_id!==v.id||ctx.app_id!==v.appId||ctx.project_id!==v.project||ctx.release_fingerprint!==v.instance.release_fingerprint||ctx.instance_revision!==v.instance.revision)throw Error("修订基线与所选实例不匹配");
-  entry.ctx=ctx;c.reviewReady=true;entry.message=materialMode?`保留已采用 Goal v${ctx.goal.version} 与列 ${ctx.parent.column}；请明确选择另一份已授权 CSV，核对资源与哈希后提交。`:ctx.parent?`基于规格 v${ctx.parent.spec_revision}、原实例修订 ${ctx.instance_revision}；${ctx.goal_mode==="KEEP_ADOPTED_GOAL"?"保留已采用的 Goal，不创建新目标版本":"使用已明确保存的下一 Goal"} v${ctx.goal.version}。请选择新列，下一规格独立重验。`:`来源 Goal v${ctx.original_goal_version} → 当前 v${ctx.goal.version}。请明确选择旧列和新列，再提交修订草案。`;
+  entry.ctx=ctx;c.reviewReady=true;entry.message=materialMode?`保留已采用 Goal v${ctx.goal.version} 与列 ${ctx.parent.column}；请明确选择另一份已授权 CSV，核对资源与哈希后提交。`:ctx.parent?`基于规格 v${ctx.parent.spec_revision}、原实例修订 ${ctx.instance_revision}；${ctx.goal_mode==="KEEP_ADOPTED_GOAL"?"保留已采用的 Goal，不创建新目标版本":"使用已明确保存的下一 Goal"} v${ctx.goal.version}。新 Goal 可保留原列，也可明确修改列；下一规格独立重验。`:`来源 Goal v${ctx.original_goal_version} → 当前 v${ctx.goal.version}。两列相同表示保留该列、只修订 Goal；新版本将固定所选列。`;
   checkAck.checked=releaseAck.checked=adoptAck.checked=false;
   entry.selection={from:ctx.parent?.column||ctx.columns[0],to:materialMode?ctx.parent.column:ctx.columns.find(x=>x!==(ctx.parent?.column||ctx.columns[0]))||ctx.columns[0]};controls();
  }));
@@ -170,7 +171,7 @@ function renderCsvGoalRevision(v,release){
    const live=applicationUse;if(applicationUseCurrent(live)&&applicationUseKey(live)===owner&&live.csvGoalRevision&&live.csvGoalRevision!==c){entry.message="原视图已离开；显式恢复原请求，未自动提交下一步。";live.csvGoalRevision.controls();}
   }
  }
- const save=button("csv-goal-preview",materialMode?"提交同一实例的材料替换草案":"提交 Goal 与列的修订草案",()=>action(async()=>{
+ const save=button("csv-goal-preview",materialMode?"提交同一实例的材料替换草案":"提交 Goal 或列的修订草案",()=>action(async()=>{
   const ctx=entry.ctx;if(!ctx||(!entry.steps.preview&&!c.reviewReady))return;
   const chosen=selectedMaterial();
   if(materialMode&&!entry.steps.preview&&!chosen)return;
@@ -258,7 +259,7 @@ function renderCsvGoalRevision(v,release){
   const busy=c.busy||v.busy,locked=!!pending||!c.reviewReady;
   for(const b of [edit,read,save,check,outcome,prepare,commit,adoptPrepare,adopt])b.disabled=busy||locked;
   edit.disabled=busy||!!pending;read.disabled=busy||!!pending||!!entry.preview;
-  save.disabled||=!entry.ctx||!!entry.preview||(!entry.ctx.parent&&entry.ctx.goal.version!==entry.ctx.original_goal_version+1)||(materialMode?!selectedMaterial()||from.value!==entry.ctx?.parent?.column||to.value!==entry.ctx?.parent?.column:from.value===to.value);
+  save.disabled||=!entry.ctx||!!entry.preview||(!entry.ctx.parent&&entry.ctx.goal.version!==entry.ctx.original_goal_version+1)||(materialMode?!selectedMaterial()||from.value!==entry.ctx?.parent?.column||to.value!==entry.ctx?.parent?.column:from.value===to.value&&!changedGoal(entry.ctx));
   check.disabled=busy||!!pending||!(c.reviewReady||c.staleCheckReady)||!entry.preview||!!entry.check||!checkAck.checked;
   outcome.disabled||=!entry.check;prepare.disabled||=!entry.proof||!!entry.approval;
   commit.disabled||=!entry.approval||!!entry.release||!releaseAck.checked||!unexpired(entry.approval);
@@ -271,7 +272,7 @@ function renderCsvGoalRevision(v,release){
   review.hidden=!entry.ctx||!!pending||c.reviewReady;review.disabled=busy;
   reset.hidden=!canReset();reset.disabled=busy;
   back.hidden=!materialMode;back.disabled=busy||!canReturn();
-  status.textContent=entry.message||(pending?"原请求结果未知；仅恢复原键。":materialMode?"先读取当前有效版本和已授权 CSV，保留已采用 Goal 与列，明确选择另一份材料。每步独立确认。":currentRelease?"先读取当前有效版本的基线；可保留已采用 Goal，仅明确修改列。每步独立确认。":"先保存来源 Goal 的下一版本，再核查修订基线。每步独立确认。");
+  status.textContent=entry.message||(pending?"原请求结果未知；仅恢复原键。":materialMode?"先读取当前有效版本和已授权 CSV，保留已采用 Goal 与列，明确选择另一份材料。每步独立确认。":currentRelease?"先读取当前有效版本基线；可只修订下一 Goal 并保留列，或明确修改列。每步独立确认。":"先保存来源 Goal 的下一版本，再核查修订基线。每步独立确认。");
   drawReview();
  }
  c.controls=controls;from.onchange=to.onchange=()=>{entry.selection={from:from.value,to:to.value};checkAck.checked=releaseAck.checked=adoptAck.checked=false;controls();};

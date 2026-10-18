@@ -226,10 +226,13 @@ def calculate(store,c,user,ctx,release,saved,body,limits):
     same = goal == meta["goal"]
     require((same and ctx["goal_mode"] == "KEEP_ADOPTED_GOAL") or (
         not same and ctx["goal_mode"] == "EXPLICIT_NEXT_GOAL" and goal["version"] == meta["goal"]["version"]+1))
+    column_changed = body.column != body.baseline_column
     require(body.baseline_column == meta["column"] and body.column in ctx["columns"]
-        and body.column != body.baseline_column,"Select a new numeric column from the adopted binding")
-    nodes = [n for n in parent_graph["graph"]["nodes"] if n["key"] == "action:aggregate" or (not same and n["kind"] == "GOAL")]
-    require(len(nodes) == (1 if same else 2))
+        and (column_changed or goal["snapshot"]["content"] != meta["goal"]["snapshot"]["content"]),
+        "Explicitly change Goal content or the adopted numeric column")
+    nodes = [n for n in parent_graph["graph"]["nodes"] if (column_changed and n["key"] == "action:aggregate")
+        or (not same and n["kind"] == "GOAL")]
+    require(len(nodes) == int(column_changed) + int(not same))
     plan = graph.core.plan_change(parent_graph["graph"],parent_graph["graph"]["graph_fingerprint"],
         dict(project_id=ctx["project_id"],app_id=ctx["app_id"],request_key=body.request_key,
             changes=[dict(node_id=n["id"],expected_revision=n["revision"],expected_content_fingerprint=n["content_fingerprint"]) for n in nodes]),parent_graph["context"])
