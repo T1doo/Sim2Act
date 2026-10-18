@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="47.946" timestamp="2026-10-18T09:33:22.201064+00:00" hostname="888ae8c15de7"><testcase classname="tests.test_natural_graph_controls_ui" name="test_fresh_natural_app_derives_and_controls_edit_locks_from_page" time="47.683"><failure message="AssertionError: {&quot;status&quot;:&quot;FAIL&quot;,&quot;checks&quot;:23}&#10;  AssertionError [ERR_ASSERTION]: real natural preview stops at server LOCK_CONFLICT for the manually protected node&#10;      at check (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:33:39)&#10;      at run (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:295:3)&#10;      at async /workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:344:9&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', '/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs', '/workspace/natural-graph-controls-20261018/actual-tmp/test_fresh_natural_app_derives0'], returncode=1, stdout='{&quot;status&quot;:&quot;FAIL&quot;,&quot;checks&quot;:23}\n', stderr='AssertionError [ERR_ASSERTION]: real natural preview stops at server LOCK_CONFLICT for the manually protected node\n    at check (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:33:39)\n    at run (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:295:3)\n    at async /workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:344:9\n').returncode">env = (&lt;sim2act.db.Store object at 0x7f39d3435b80&gt;, Settings(database_url='sqlite:////workspace/natural-graph-controls-20261...e54d5cdc964510a1807504a672808e', 'user_1e280772d3404f9989d0478d69389d0b', 'proj_146de04fcad24483b480649f28142868', ...)
+tmp_path = PosixPath('/workspace/natural-graph-controls-20261018/actual-tmp/test_fresh_natural_app_derives0')
+
+    def test_fresh_natural_app_derives_and_controls_edit_locks_from_page(env, tmp_path):
+        root = Path.cwd()
+        production = {
+            str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (root / "src/sim2act").rglob("*")
+            if path.is_file() and path.suffix in {".py", ".js", ".html", ".css"}
+        }
+        data = setup(env)
+        store, settings, client, principal, project, *_ = data
+        assert store.sqlite and settings.mode == "mock"
+        _, aid, release, instance, generation_wire = ready(data, "parallel")
+        assert len(generation_wire) == 3
+        other = store.project(principal, "Other graph-controls project")
+        app = client.get("/api/apps/" + aid).json()
+        assert app["candidate"]["namespace"] == "pa-natural-spec-app.v1"
+        before = snapshot(store)
+        assert not before["delivery_graph_states"]
+        assert not before["delivery_graph_anchors"]
+        assert not before["delivery_graph_locks"]
+        assert not before["internal_app_runs"] and not before["internal_instance_data"]
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(json.dumps(dict(
+            base=f"http://127.0.0.1:{port}", project=project, other_project=other,
+            app=aid, instance=instance["id"], changed_node_key="action:qualifiers_pick")), encoding="utf-8")
+        (tmp_path / "generation-wire.json").write_text(json.dumps(generation_wire, indent=2), encoding="utf-8")
+        server = uvicorn.Server(uvicorn.Config(create_app(store, settings), host="127.0.0.1",
+            port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        result = None
+        try:
+            until = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; until
+                time.sleep(.01)
+            try:
+                result = subprocess.run(["node", str(Path(__file__).with_name("natural_graph_controls_ui.cjs")),
+                    str(tmp_path)], capture_output=True, text=True, timeout=360,
+                    env={**os.environ, "NODE_PATH": str(root / "scripts/engineering-ci/node_modules")})
+            except subprocess.TimeoutExpired as error:
+                for name, content in [("stdout", error.stdout), ("stderr", error.stderr)]:
+                    (tmp_path / ("driver." + name)).write_bytes(
+                        content.encode() if isinstance(content, str) else content or b"")
+                raise
+            (tmp_path / "driver.stdout").write_text(result.stdout, encoding="utf-8")
+            (tmp_path / "driver.stderr").write_text(result.stderr, encoding="utf-8")
+&gt;           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: {"status":"FAIL","checks":23}
+E             AssertionError [ERR_ASSERTION]: real natural preview stops at server LOCK_CONFLICT for the manually protected node
+E                 at check (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:33:39)
+E                 at run (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:295:3)
+E                 at async /workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:344:9
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', '/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs', '/workspace/natural-graph-controls-20261018/actual-tmp/test_fresh_natural_app_derives0'], returncode=1, stdout='{"status":"FAIL","checks":23}\n', stderr='AssertionError [ERR_ASSERTION]: real natural preview stops at server LOCK_CONFLICT for the manually protected node\n    at check (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:33:39)\n    at run (/workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:295:3)\n    at async /workspace/Sim2Act/tests/natural_graph_controls_ui.cjs:344:9\n').returncode
+
+tests/test_natural_graph_controls_ui.py:133: AssertionError</failure></testcase></testsuite></testsuites>

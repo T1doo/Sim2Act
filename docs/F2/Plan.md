@@ -1,6 +1,6 @@
 # F2 并行工程 Plan：权威当前状态
 
-2026-10-18 从4a5接续[自然应用交付图与编辑保护入口](NaturalGraphControls20261018.md)：修复自然详情提前返回造成的实际入口缺失，复用现有派生图/锁合同；以无预派生图的新自然应用做定向验收，不重复此前长链或扩大旧归档。当前实现/验证中，不预写PASS。
+2026-10-18 从4a5接续[自然应用交付图与编辑保护入口](NaturalGraphControls20261018.md)已实际接通：仅2前端文件，复用既有图/锁API。无图的自然P-A从目录显式derive→锁定→LOCK_CONFLICT→解锁/rederive→预览201；源码`d9e19b2829221909b49fd075b721d4e831d711a4`最终1唯一pytest/1PASS（44页内检查），原文本断言失败完整保留；两轮各693输入零漂移，共6Mock/页面模型与业务Worker0/真实0。未重跑已通过长链或扩旧归档，PB现场/Win/native/PG/真实语义/CI仍不补签。
 
 2026-10-18 从e730接续[P-B首次局部逻辑修改当前完整页面](PBFirstLogicCurrentPage20261018.md)已有限验收：冻结`459abcce146ed877ed8f893f3b06d10362cc7237`，1唯一pytest最终1PASS、另首轮环境UNKNOWN/第二轮外层超时124/第三轮Node看门狗BrokenPipeError退出1，92页内检查；统一目录→false→true依赖预览→旧Release隔离CHECK→单独批准/新Release→明确新实例/THIRD首成果及冷页双成果。逻辑revision2、两Release及三个独立结果version1分别核；原历史保留、7POST、最终11Mock/四次总42Mock/真实0。691输入/133生产0漂移，无生产改动、不下载/人工DECIDE/故障注入；[原件与边界](../evidence/pb-first-logic-current-page-20261018/README.md)。
 
