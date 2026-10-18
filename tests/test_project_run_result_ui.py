@@ -41,15 +41,23 @@ def test_project_history_opens_original_natural_result_and_review(env, tmp_path)
 
     client.event_hooks["response"].append(capture)
     handle = httpx.MockTransport.handle_request
+    async_handle = httpx.MockTransport.handle_async_request
 
-    def mocked(transport_self, request):
-        reply = handle(transport_self, request)
+    def mock_response(request, reply):
         mocks.append(dict(request_text=request.content.decode(), status=reply.status_code,
             response_text=reply.content.decode(), sha256=hashlib.sha256(reply.content).hexdigest()))
         return reply
 
+    def mocked(transport_self, request):
+        return mock_response(request, handle(transport_self, request))
+
+    async def async_mocked(transport_self, request):
+        return mock_response(request, await async_handle(transport_self, request))
+
     try:
-        with patch.object(httpx.MockTransport, "handle_request", mocked):
+        with patch.object(httpx.MockTransport, "handle_request", mocked), patch.object(
+            httpx.MockTransport, "handle_async_request", async_mocked
+        ):
             _, aid, release, instance, generation = ready(data, "single")
             rid = enqueue(data, release, instance, key="project-history-result")
             worker = Worker(store, settings, goal_planner_transport=transport(business))
