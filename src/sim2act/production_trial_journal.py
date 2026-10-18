@@ -149,20 +149,22 @@ def _receipt(state, cursor, revision, quota_revision, *, duplicate=False, change
                    duplicate=duplicate, changed=changed)
 
 
+def _history_anchor(c, user, scope, request):
+    # Scalar ownership precedes cursor reads; no ledger lock-order inversion.
+    anchors = c.execute(select(rows.c.kind, rows.c.request_fingerprint).where(
+        rows.c.principal_id == user, rows.c.app_id == scope.project_id,
+        rows.c.request_key == scope.trial_key,
+        rows.c.kind.in_([KIND, KIND + "_seal"]))).mappings().all()
+    _require(len(anchors) == 2 and {a["kind"] for a in anchors} == {KIND, KIND + "_seal"}
+             and all(a["request_fingerprint"] == fingerprint(request) for a in anchors),
+             "OUTCOME_UNKNOWN")
+
+
 def read(store, user, contract, key, account_id):
     """Owned metadata only; no seed, recovery action, automatic mark or send."""
     with store.tx() as c:
         _, scope, request, quota_request, entity = _context(store, c, user, contract, key, account_id)
-        # An empty/forged trial cannot inspect somebody else's shared account.
-        # Scalar ownership anchors precede any cursor read. Do not take ledger
-        # row locks here: the mutation lock order remains account -> ledger.
-        anchors = c.execute(select(rows.c.kind, rows.c.request_fingerprint).where(
-            rows.c.principal_id == user, rows.c.app_id == scope.project_id,
-            rows.c.request_key == scope.trial_key,
-            rows.c.kind.in_([KIND, KIND + "_seal"]))).mappings().all()
-        _require(len(anchors) == 2 and {a["kind"] for a in anchors} == {KIND, KIND + "_seal"}
-                 and all(a["request_fingerprint"] == fingerprint(request) for a in anchors),
-                 "OUTCOME_UNKNOWN")
+        _history_anchor(c, user, scope, request)
         _, cursor, quota_revision = _quota(c, quota_request, entity, create=False)
         _, state, revision = _ledger(c, scope, request, cursor, quota_revision)
         return _receipt(state, cursor, revision, quota_revision)
@@ -178,41 +180,47 @@ def _persist(c, scope, request, quota_request, entity, previous, quota_previous,
                                      cursor=transition.quota.model_dump(mode="json"))))
 
 
-def _apply(store, user, contract, key, identity, wire, source, expected_revision, operation, outcome=None):
+def _apply_in_transaction(store, c, user, contract, key, identity, wire, source, expected_revision, operation, outcome=None):
+    _require(c.in_transaction(), "PERMISSION_DENIED")
     _require(type(expected_revision) is int and expected_revision >= 0)
     item = policy._typed(identity, policy.ReservationIdentity)
     supplied = policy._typed(source, policy.SourceVerificationResult)
     received = None if outcome is None else policy._typed(outcome, policy.Outcome)
     _require(operation in ("reserve", "record_attempt", "settle"))
     _require((operation == "settle") == (received is not None))
+    original, scope, request, quota_request, entity = _context(
+        store, c, user, contract, key, item.account_id)
+    quota_previous, cursor, quota_revision = _quota(c, quota_request, entity, create=operation == "reserve")
+    previous, state, revision = _ledger(c, scope, request, cursor, quota_revision)
+    # Full original owner/scope/wire binding precedes every history shortcut.
+    policy._bound(store, c, user, original, key, state, cursor, item, wire)
+    slot = next((s for s in state.slots if s.identity.attempt_id == item.attempt_id), None)
+    if slot is not None:
+        _require(slot.identity == item)
+        duplicate = (operation == "reserve" or operation == "record_attempt" and slot.attempted
+                     or operation == "settle" and slot.settlement == received)
+        if duplicate:
+            return _receipt(state, cursor, revision, quota_revision, duplicate=True)
+    _require(revision == expected_revision)
+    _require(operation == "reserve" or previous is not None)
+    if operation == "reserve":
+        result = policy.reserve(store, c, user, original, key, state, cursor, item, wire, supplied)
+    elif operation == "record_attempt":
+        result = policy.record_attempt(store, c, user, original, key, state, cursor, item, wire, supplied)
+    else:
+        result = policy.settle(store, c, user, original, key, state, cursor, item, wire, supplied, received)
+    _persist(c, scope, request, quota_request, entity, previous, quota_previous,
+             result, revision, quota_revision)
+    if operation != "settle":
+        # Account locking/CAS work cannot renew a stale context or deadline.
+        policy._fresh(store, c, user, original, key, result.ledger, item, supplied)
+    return _receipt(result.ledger, result.quota, revision + 1, quota_revision + 1, changed=True)
+
+
+def _apply(store, user, contract, key, identity, wire, source, expected_revision, operation, outcome=None):
     with store.tx() as c:
-        original, scope, request, quota_request, entity = _context(
-            store, c, user, contract, key, item.account_id)
-        quota_previous, cursor, quota_revision = _quota(c, quota_request, entity, create=operation == "reserve")
-        previous, state, revision = _ledger(c, scope, request, cursor, quota_revision)
-        # Full original owner/scope/wire binding precedes every history shortcut.
-        policy._bound(store, c, user, original, key, state, cursor, item, wire)
-        slot = next((s for s in state.slots if s.identity.attempt_id == item.attempt_id), None)
-        if slot is not None:
-            _require(slot.identity == item)
-            duplicate = (operation == "reserve" or operation == "record_attempt" and slot.attempted
-                         or operation == "settle" and slot.settlement == received)
-            if duplicate:
-                return _receipt(state, cursor, revision, quota_revision, duplicate=True)
-        _require(revision == expected_revision)
-        _require(operation == "reserve" or previous is not None)
-        if operation == "reserve":
-            result = policy.reserve(store, c, user, original, key, state, cursor, item, wire, supplied)
-        elif operation == "record_attempt":
-            result = policy.record_attempt(store, c, user, original, key, state, cursor, item, wire, supplied)
-        else:
-            result = policy.settle(store, c, user, original, key, state, cursor, item, wire, supplied, received)
-        _persist(c, scope, request, quota_request, entity, previous, quota_previous,
-                 result, revision, quota_revision)
-        if operation != "settle":
-            # Account locking/CAS work cannot renew a stale context or deadline.
-            policy._fresh(store, c, user, original, key, result.ledger, item, supplied)
-        return _receipt(result.ledger, result.quota, revision + 1, quota_revision + 1, changed=True)
+        return _apply_in_transaction(store, c, user, contract, key, identity, wire, source,
+                                     expected_revision, operation, outcome)
 
 
 def reserve(store, user, contract, key, identity, wire, source, *, expected_revision):
