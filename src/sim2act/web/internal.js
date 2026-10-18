@@ -67,6 +67,8 @@ const naturalTaskRequests = new Map();
 let naturalTaskExtraction = null;
 const naturalTaskRecoveryPrefix="sim2act.pb-natural-extraction-recovery.v1:";
 const naturalTaskRecoveryMetadata=new WeakMap();
+const naturalTaskCloseConsent="CLOSE_ONLY_THIS_UNACCEPTED_PB_EXTRACTION_KEY";
+const naturalTaskTerminalNamespace="pb-natural-spec-extraction-terminal.v1";
 const naturalTaskRecoveryFields=["namespace","principal_id","project_id","source_app_id","source_instance_id","source_run_id","source_app_run_id","source_release_id","source_release_fingerprint","source_result_version","request_key","request_fingerprint","review_fingerprint","candidate_fingerprint","app_id","runtime_id","source_proof_fingerprint"].sort();
 function naturalTaskRecoveryScope(s){return {principal_id:s.instance.principal_id,project_id:s.view.project,source_app_id:s.view.app,source_instance_id:s.instance.id,source_run_id:s.rid};}
 function naturalTaskRecoveryKey(s){return naturalTaskRecoveryPrefix+JSON.stringify(Object.values(naturalTaskRecoveryScope(s)));}
@@ -111,10 +113,26 @@ function naturalTaskRecoverySave(s,pending,record){
 }
 function naturalTaskRecoveryForget(s,pending,lock){
   const metadata=naturalTaskRecoveryMetadata.get(pending),saved=naturalTaskRecoveryRead(s),key=naturalTaskRecoveryKey(s);
-  // No deletion until the current operation proved the original receipt and app.
+  // Forget only after the original accepted app or permanent closure is proved.
   if(!lock||lock.name!==key||lock.mode!=="exclusive"||!naturalTaskCurrent(s)||naturalTaskRequests.get(s.scope)!==pending||!metadata||metadata.key!==key||(saved&&saved.raw!==metadata.raw))throw Error("RECOVERY_RECORD_CONFLICT");
   if(saved){try{localStorage.removeItem(key);if(localStorage.getItem(key)!==null)throw Error();}catch{throw Error("RECOVERY_STORAGE_UNAVAILABLE");}}
   if(naturalTaskRequests.get(s.scope)===pending)naturalTaskRequests.delete(s.scope);
+}
+async function naturalTaskTerminalProof(s,pending,value,current){
+  const metadata=naturalTaskRecoveryMetadata.get(pending),record=metadata?.record;
+  const valid=()=>{
+    if(!current()||naturalTaskRequests.get(s.scope)!==pending)return false;
+    const saved=naturalTaskRecoveryRead(s);
+    if(!metadata||naturalTaskRecoveryMetadata.get(pending)!==metadata||metadata.key!==naturalTaskRecoveryKey(s)||(saved&&saved.raw!==metadata.raw))throw Error("RECOVERY_RECORD_CONFLICT");
+    naturalTaskRecoverySource(s,record);return true;
+  };
+  if(!valid())return false;
+  const fields="namespace status acceptance principal_id project_id source_run_id request_key identity request_fingerprint close_request_fingerprint new_model_requests project_writes metadata_writes formal_publication_enabled receipt_fingerprint".split(" ").sort();
+  if(!value||Object.keys(value).sort().join()!==fields.join()||value.namespace!==naturalTaskTerminalNamespace||value.status!=="CLOSED_NOT_ACCEPTED"||value.acceptance!=="NOT_ACCEPTED"||value.principal_id!==record.principal_id||value.project_id!==record.project_id||value.source_run_id!==record.source_run_id||value.request_key!==record.request_key||goalRunCanonical(value.identity)!==goalRunCanonical(record)||value.request_fingerprint!==record.request_fingerprint||value.new_model_requests!==0||value.project_writes!==0||value.metadata_writes!==2||value.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
+  const closeHash=await paHash({identity:record,consent:naturalTaskCloseConsent});if(!valid())return false;
+  const {receipt_fingerprint,...receipt}=value,receiptHash=await paHash(receipt);if(!valid())return false;
+  if(value.close_request_fingerprint!==closeHash||receipt_fingerprint!==receiptHash)throw Error("VERSION_CONFLICT");
+  return true;
 }
 window.addEventListener("storage",event=>{
   const s=naturalTaskExtraction;
@@ -737,6 +755,7 @@ function naturalTaskButtons(s){
   s.preview.disabled=s.busy||blocked||!!pending||!!s.saved||!s.source||!s.target.value;
   s.commit.disabled=s.busy||blocked||!!pending||!!s.saved||!s.source||!s.review||!s.ack.checked;
   s.recover.hidden=!pending;s.recover.disabled=s.busy||blocked||!pending||!s.source;s.open.disabled=s.busy||blocked||!!pending||!s.saved;
+  s.closeIntent.hidden=!pending;s.closeIntent.disabled=s.busy||blocked||!pending||!s.source;
   s.key.value=(pending&&naturalTaskRecoveryMetadata.get(pending)?.record.request_key)||s.review?.request.request_key||s.saved?.request_key||"";
   s.ack.disabled=blocked||!!pending;
   for(const input of s.inputs)input.disabled=blocked||!!pending;
@@ -771,6 +790,8 @@ async function openNaturalTaskExtraction(view,rid,parent){
   const keyLabel=element("label",null,"原提取请求键（只读，可选中复制） ");s.key=document.createElement("input");s.key.id="pb-spec-request-key";s.key.readOnly=true;keyLabel.append(s.key);
   element("p",null,"提交前只保存此浏览器的来源标识和原意图指纹，不保存凭据或材料正文。重载后重新打开这个成功成果，可明确按原 key 读取回执；未知时保持锁定，不重发或改用新 key。");
   s.recover=element("button","pb-spec-recover","仅按原 key GET 恢复提取回执");s.recover.type="button";
+  element("p",null,"原请求若始终未受理，可明确关闭这个原 key；服务端只在确认未受理后封存并拒绝迟到提交。已受理应用不能取消。关闭回执不会清除票据，仍须另点原 key GET 核对后，再自行重新审阅。权限拒绝或未知状态不能证明关闭。");
+  s.closeIntent=element("button","pb-spec-close-intent","确认仅关闭尚未受理的原 key，并拒绝迟到提交");s.closeIntent.type="button";
   s.open=element("button","pb-spec-open","打开已核对应用，另行确认内部版本");s.open.type="button";
   const close=element("button","pb-spec-close","关闭审阅（不取消已发送请求）");close.type="button";close.onclick=()=>{if(naturalTaskCurrent(s))clearNaturalTaskExtraction();};
   s.target.onchange=()=>naturalTaskEdited(s);s.name.oninput=()=>naturalTaskEdited(s);s.prior.onchange=()=>naturalTaskEdited(s);s.ack.onchange=()=>naturalTaskButtons(s);
@@ -824,6 +845,14 @@ async function openNaturalTaskExtraction(view,rid,parent){
     if(!metadata||metadata.key!==naturalTaskRecoveryKey(s)||(saved&&saved.raw!==metadata.raw))throw Error("RECOVERY_RECORD_CONFLICT");
     naturalTaskRecoverySource(s,record);
     const value=await api(path+"/extractions/by-key/"+encodeURIComponent(record.request_key));if(!current())return;
+    if(value.namespace===naturalTaskTerminalNamespace){
+      if(!await naturalTaskTerminalProof(s,pending,value,current))return;
+      naturalTaskRecoveryForget(s,pending,lock);delete pending.body;delete pending.review;
+      s.review=null;s.saved=null;s.ack.checked=false;
+      s.proof.textContent=JSON.stringify({closed_request_key:record.request_key,status:value.status,receipt_fingerprint:value.receipt_fingerprint},null,2);
+      s.status.textContent="已按原 key 核对永久未受理关闭凭据，清除了此原意图票据。迟到提交将被拒绝；如仍需提取，请自行重新审阅并另行确认。";
+      return;
+    }
     const returnedRequestHash=await paHash(value.request);if(!current())return;
     const {review_fingerprint,...review}=value.reviewed||{},reviewHash=await paHash(review);if(!current())return;
     const candidateHash=await paHash(value.reviewed?.candidate);if(!current())return;
@@ -844,7 +873,7 @@ async function openNaturalTaskExtraction(view,rid,parent){
     s.proof.textContent=JSON.stringify({recovered_request_key:record.request_key,source:value.reviewed.source_proof,edited_recipe:value.reviewed.edited_recipe,target_goal:value.reviewed.target_goal,review_fingerprint:record.review_fingerprint,candidate_fingerprint:record.candidate_fingerprint,semantic_status:"UNKNOWN",owner_acceptance:"PENDING"},null,2);
     s.status.textContent="已核对原意图指纹、独立 P-B 草案和原 key 回执；打开后另行核查内部版本。新材料结果尚未运行。";
   };
-  const action=async submit=>{
+  const action=async(submit,closeIntent=false)=>{
     if(!naturalTaskCurrent(s)||s.busy)return;
     const edit=s.edit,current=()=>naturalTaskCurrent(s)&&edit===s.edit;
     s.busy=true;naturalTaskButtons(s);
@@ -855,6 +884,16 @@ async function openNaturalTaskExtraction(view,rid,parent){
         let pending=naturalTaskRecoveryRefresh(s);naturalTaskButtons(s);
         if(s.recoveryError)throw Error(s.recoveryError);
         if(!current())return;
+        if(closeIntent){
+          if(!pending||!s.source)return;
+          const metadata=naturalTaskRecoveryMetadata.get(pending),saved=naturalTaskRecoveryRead(s);
+          if(!metadata||metadata.key!==naturalTaskRecoveryKey(s)||(saved&&saved.raw!==metadata.raw))throw Error("RECOVERY_RECORD_CONFLICT");
+          naturalTaskRecoverySource(s,metadata.record);
+          const value=await api(path+"/extractions/by-key/"+encodeURIComponent(metadata.record.request_key)+"/close","POST",{identity:structuredClone(metadata.record),consent:naturalTaskCloseConsent});if(!current())return;
+          if(!await naturalTaskTerminalProof(s,pending,value,current))return;
+          s.status.textContent="服务端已封存此未受理原 key，迟到提交将被拒绝；原票据仍保留。请另点原 key GET，核对永久关闭凭据后才能重新审阅。";
+          return;
+        }
         if(submit){
           if(pending||s.saved||!s.source||!s.review||!s.ack.checked)return;
           const reviewed=s.review,body={review:structuredClone(reviewed.request),expected_review_fingerprint:reviewed.review_fingerprint,consent:reviewed.consent,artifact_write_consent:reviewed.artifact_write_consent};
@@ -879,7 +918,7 @@ async function openNaturalTaskExtraction(view,rid,parent){
     }
     finally{s.busy=false;naturalTaskButtons(s);}
   };
-  s.commit.onclick=()=>action(true);s.recover.onclick=()=>action(false);
+  s.commit.onclick=()=>action(true);s.recover.onclick=()=>action(false);s.closeIntent.onclick=()=>action(false,true);
   s.open.onclick=async()=>{
     if(!naturalTaskCurrent(s)||s.busy||!s.saved)return;
     const saved=s.saved,identity=token,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;

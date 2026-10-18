@@ -443,6 +443,11 @@ def _extract(store, c, user, pid, rid, body, limits):
     require(c.in_transaction())
     store.lock_project(c, user, pid)
     require(body.review.source_run_id == rid)
+    from .pb_extraction_terminals import fenced
+
+    source_gate(store, c, user, pid, rid)
+    require(not fenced(c, rid, body.review.request_key),
+            "Original P-B extraction key is permanently closed or its closure evidence is incomplete")
     checked, material, _ = review(store, c, user, pid, body.review, limits)
     require(checked["review_fingerprint"] == body.expected_review_fingerprint)
     prior = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
@@ -476,6 +481,8 @@ def _extract(store, c, user, pid, rid, body, limits):
     return receipt(body, checked, frozen)
 
 def mount(app, store, limits, identity):
+    from . import pb_extraction_terminals as terminals
+
     user_dependency = Depends(identity)
 
     @app.get("/api/projects/{pid}/natural-spec-task-runs/{rid}/extraction-options")
@@ -502,12 +509,19 @@ def mount(app, store, limits, identity):
     def create(pid: str, rid: str, body: ExtractInput, user=user_dependency):
         return extract(store, user, pid, rid, body, limits)
 
+    @app.post("/api/projects/{pid}/natural-spec-task-runs/{rid}/extractions/by-key/{key}/close")
+    def close_unused(pid: str, rid: str, key: str, body: terminals.CloseInput, user=user_dependency):
+        return terminals.close(store, user, pid, rid, key, body, limits)
+
     @app.get("/api/projects/{pid}/natural-spec-task-runs/{rid}/extractions/by-key/{key}")
     def recover(pid: str, rid: str, key: str, user=user_dependency):
         from .apps import load_draft
 
         with store.tx() as c:
             source_gate(store, c, user, pid, rid)
+            terminal = terminals.read(store, c, user, pid, rid, key)
+            if terminal is not None:
+                return terminal
             aid = c.execute(select(task_extractions.c.app_id).where(task_extractions.c.task_id == rid,
                 task_extractions.c.principal_id == user, task_extractions.c.request_key == key)).scalar()
             if aid is None:

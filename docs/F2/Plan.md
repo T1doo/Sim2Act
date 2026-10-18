@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-18 父级有限通过3d1后，优先补[P-B未受理原key安全关闭](PBNaturalExtractionClose20261018.md)：同项目事务与既有双账本封存，仅原key明确关闭，迟到POST永久拒绝；已受理不可取消。页面close POST保留票据，另行原GET核完整凭据才清票据；原权限/来源/版本与每await选择隔离继续有效。冻结七个后端实际HTTP节点（含两独立连接close/POST双顺序）及两条实际页面路径，合成Mock，执行结果未预写；不扩旧恢复矩阵或旧取消窗口，Win/native/PG/真实/CI门保持。
+
 2026-10-18 父级有限通过1f725后，实施[P-B重载后的原提取意图只读恢复](PBNaturalExtractionColdRecovery20261018.md)：原POST前同scope WebLock保存并读回17字段无token/正文票据，冷页核来源后锁定原意图，只有显式原GET+独立原SHA+fresh应用成功才清票据。无可靠未受理/关闭证明则未知锁保留；不新造executor/Grant/模型或server journal。必要实际丢201→重载与账号/项目/Run/导航/撤权/篡改/两页边界资格独立冻结，旧取消窗口及真实模型/语义/Win/PG/CI门继续开放。
 
 上述生产7c6c79fa、执行冻结737e80d现有限通过5个唯一actual HTTP/JSDOM+1个原synthetic/staged导航回归，681输入0变；384检查/837 actualHTTP不是额外用例。原batch900秒为4PASS+末例NOT_COMPLETED，末例由同字节并行单例完整通过；两独立正常seed共Mock8/页面Worker0/真实模型0。初始共享种子观测器5setup ERROR、测试引用隔离修复及中断均留原件，非作者有限独审后正常dev推送；[证据与范围](../evidence/pb-cold-recovery-20261018/README.md)。未知票据无安全close合同则继续锁定，既有未执行门保持。
