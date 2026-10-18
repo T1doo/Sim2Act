@@ -196,7 +196,7 @@ async function selectOwnerRun(id,engineeringView=engineering){
 }
 $("owner-run").onchange=safe(()=>{
   const view=ownerView,id=$("owner-run").value;
-  if(view?.workflow&&id&&ownerCurrent(view)&&view.engineering.run?.id!==id)return showInternalRun(id,view.engineering,view.engineering.instance);
+  if((view?.workflow||view?.spec)&&id&&ownerCurrent(view)&&view.engineering.run?.id!==id)return showInternalRun(id,view.engineering,view.engineering.instance);
   return selectOwnerRun(id);
 });
 for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id).onclick=safe(async()=>{

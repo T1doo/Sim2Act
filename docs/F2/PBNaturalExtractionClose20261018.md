@@ -6,7 +6,9 @@
 
 原提取提交前已存17字段票据，但请求若尚未抵达服务端，原 GET 的 OUTCOME_UNKNOWN 会永久锁定编辑。本轮在同一成功来源面板新增明确按钮“确认仅关闭尚未受理的原 key，并拒绝迟到提交”。仅当前获权来源、合法原票据和同scope Web Lock允许调用。POST 成功仍保留票据和锁；用户必须另外点击原 GET，页面核对独立原17字段、完整CloseInput指纹和完整回执指纹，才清除此原票据、释放编辑。不会自动改key、重发、审阅或提交；新提取仍需用户重新审阅并确认。
 
-新端点为 `POST /api/projects/{pid}/natural-spec-task-runs/{rid}/extractions/by-key/{key}/close`，输入只有 `{identity: 原严格17字段, consent: CLOSE_ONLY_THIS_UNACCEPTED_PB_EXTRACTION_KEY}`。身份中的候选应用/runtime与hash描述原意图，不提供权限。关闭前后完整重核原成功来源及Release/Run/结果版本/来源证明，保留原当前权限。未受理目标后来失效不妨碍关闭，也不重读其Goal/材料。
+新端点为 `POST /api/projects/{pid}/natural-spec-task-runs/{rid}/extractions/by-key/{key}/close`，输入只有 `{identity: 原严格17字段, consent: CLOSE_ONLY_THIS_UNACCEPTED_PB_EXTRACTION_KEY}`。身份中的候选应用/runtime与hash描述原意图，不提供权限。在同一次CLOSE事务中，封存写入前后完整重核原成功来源及Release/Run/结果版本/来源证明，保留原当前权限。未受理目标后来失效不妨碍关闭，也不重读其Goal/材料。
+
+准确性限定：之后的terminal GET核当前source_gate、同scope双封存、absence及关闭回执，不调用 `_source()` 重算原完整来源指纹。页面比较的是独立原票据与本次打开已核对的 `s.source`，不是每GET重新取得完整来源证明。永久关闭是原key的历史封存事实，不提供新提取授权；当前访问门拒绝或封存不匹配仍保留票据。已close后、GET前某些Goal/结果漂移未必使该门拒绝，可能仍读到关闭metadata；此时序未实测，不承诺所有版本漂移均锁定或均允许。后续新提取仍须用户另行审阅，并经服务端完整来源/权限/版本检查。本限定仅收窄原过宽文案，不变更关闭行为或重跑关闭测试。
 
 复用既有项目事务/锁和 `delivery_graph_requests` 双记录，仅写 `pb_natural_spec_terminal` 与 `_seal` 两行；每个来源Run最多64个关闭key，无新表/执行器/Principal/Grant/模型调用。服务端15字段回执namespace为 `pb-natural-spec-extraction-terminal.v1`，状态 `CLOSED_NOT_ACCEPTED` / `NOT_ACCEPTED`，钉原17字段和完整CloseInput/hash，自身以去receipt_fingerprint的完整对象计算SHA。`request_fingerprint`是原完整ExtractInput指纹；账本及 `close_request_fingerprint` 是本次完整CloseInput指纹，两者不混用。`metadata_writes:2`说明首次双行封存，重复关闭和GET不追加行。
 

@@ -28,7 +28,7 @@
 
 [最终独审报告](originals/independent/final-independent-review.md)与[封存清单](originals/independent/sealed-manifest.json)覆盖独审38文件（自身除外），清单SHA256 `d2abaaab5e9d01c6030c21d5d431a462d20aa5b860389bc5cb44435dd38dd58c`，封存后未改写。根汇总首次把pytest current软链接重复计数，纯解析AssertionError的初版脚本及明确标识的工具stderr转录另存；排除软链接后汇总通过，未重跑产品。
 
-当前读屏障动态覆盖resource/run等正文；完整journal/marker正文在target gate后读取是源码顺序独审，不冒称动态journal-cell屏障。已受理sibling失去目标权限会保守阻止本来源其它key关闭；每Run最多64关闭key及有界残留扫描。来源权限/版本不再有效时仍锁定，不以旧票据恢复权限。不承诺检测所有独立锚同时协调删除的任意DB伪造。
+当前读屏障动态覆盖resource/run等正文；完整journal/marker正文在target gate后读取是源码顺序独审，不冒称动态journal-cell屏障。已受理sibling失去目标权限会保守阻止本来源其它key关闭；每Run最多64关闭key及有界残留扫描。当前访问门拒绝或封存核验不匹配时保留票据，不以旧票据恢复权限。terminal GET不逐次重算原完整来源指纹；页面比较独立票据与本次打开核对的来源值。已close后、GET前Goal/结果漂移的时序未实测，不能声称一切来源版本失效均使票据锁定。永久关闭metadata不是当前来源内容认证或新提取授权，后续提取仍须显式新审阅和完整服务端校验。不承诺检测所有独立锚同时协调删除的任意DB伪造。
 
 实际采用CJS SHA `5647ac9c97a1029d39a7572b2d2223315035b03df301b1dc29ac83c0a1257916`，后到ff50草稿未采用/未执行。Windows/native、PG、真实模型/语义/场景、远端CI、部署均未执行。本分支不触发现有仅dev/f1-foundation的push工作流。永久取消的旧安装digest窗口、旧exit139因果Unknown、旧满盘独审未落盘缺证保持，不声称补回。
 
