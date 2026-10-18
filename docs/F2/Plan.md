@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-18 从4a5接续[自然应用交付图与编辑保护入口](NaturalGraphControls20261018.md)：修复自然详情提前返回造成的实际入口缺失，复用现有派生图/锁合同；以无预派生图的新自然应用做定向验收，不重复此前长链或扩大旧归档。当前实现/验证中，不预写PASS。
+
 2026-10-18 从e730接续[P-B首次局部逻辑修改当前完整页面](PBFirstLogicCurrentPage20261018.md)已有限验收：冻结`459abcce146ed877ed8f893f3b06d10362cc7237`，1唯一pytest最终1PASS、另首轮环境UNKNOWN/第二轮外层超时124/第三轮Node看门狗BrokenPipeError退出1，92页内检查；统一目录→false→true依赖预览→旧Release隔离CHECK→单独批准/新Release→明确新实例/THIRD首成果及冷页双成果。逻辑revision2、两Release及三个独立结果version1分别核；原历史保留、7POST、最终11Mock/四次总42Mock/真实0。691输入/133生产0漂移，无生产改动、不下载/人工DECIDE/故障注入；[原件与边界](../evidence/pb-first-logic-current-page-20261018/README.md)。
 
 2026-10-18 从304b接续[P-A当前未见输入与错误材料](PACurrentUnseenInput20261018.md)已完成有限页面验收：执行`fddccd09a72d628cdb0ea382009c84545a29cb9f`，1唯一pytest/1PASS，86内部检查；统一目录→页面合成PREPARE/DECIDE→2049字节材料实际400且全库零污染→同实例未见THIRD生成v2→旧STALE/新PENDING及冷页两版本只读。5Mock/真实0，689执行输入/133生产0漂移；没有生产改动、不下载、不故障注入。原Windows/native/PG/真实语义/CI及旧缺证门保持；[原件](../evidence/pa-current-unseen-flow-20261018/README.md)。

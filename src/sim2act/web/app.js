@@ -633,7 +633,12 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     $("app-manifest").textContent=JSON.stringify({candidate:a.candidate,recipe:a.candidate.spec_recipe,fingerprint:a.fingerprint},null,2);
     $("app-preview-form").hidden=false;$("app-preview-submit").hidden=false;$("app-preview-submit").disabled=appPreviewRequests.has(id);$("app-input-hint").textContent=a.candidate.namespace==="pa-natural-spec-app.v1"?"新材料抽取需模型执行，默认关闭；预览保留原文和完整目标，不生成答案，不保存制品。":"预览不保存业务制品；实际内部实例运行保存一个 JSON 清单。";$("app-column-label").hidden=true;$("app-column").required=false;
     $("app-agent-term-label").hidden=true;$("app-agent-term").required=false;$("app-agent-term").disabled=true;refreshTextTerm($("app-agent-term"),true);$("csv-extraction-panel").hidden=true;
-    await openInternal(a,generation,selectionCurrent);return generation===appSelectionGeneration&&selectionCurrent();
+    await openInternal(a,generation,selectionCurrent);
+    if(generation!==appSelectionGeneration||pid!==$("project-select").value||identity!==token||!selectionCurrent())return false;
+    // Opening is complete. The graph now uses its app/identity/epoch guards,
+    // so a later first-use workspace handoff does not retain a temporary fence.
+    if(a.candidate.namespace==="pa-natural-spec-app.v1"&&typeof openDeliveryGraph==="function")openDeliveryGraph(a,generation);
+    return true;
   }
   if(a.input_guidance.mode === "CLOSED_TEXT_WORKFLOW")return openTextWorkflowApp(a,generation,selectionCurrent);
   if(typeof openDeliveryGraph === "function")openDeliveryGraph(a,generation,a.candidate.actions.length===1&&a.candidate.actions[0].executor.kind==="registered_tool"&&a.candidate.actions[0].executor.ref==="data.aggregate_csv"?selectionCurrent:null);
