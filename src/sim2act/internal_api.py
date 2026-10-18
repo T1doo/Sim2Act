@@ -330,9 +330,11 @@ def mount(app, store, limits, identity):
 
     @app.get("/api/internal/instances/{iid}")
     def inspect(iid: str, user=user_dependency):
-        value = lifecycle.inspect_instance(store, user, iid, limits)
+        release_metadata: dict[str, str] = {}
+        value = lifecycle.inspect_instance(store, user, iid, limits, _release_metadata=release_metadata)
+        if set(release_metadata) != {"id", "fingerprint"} or release_metadata["id"] != value["release_id"]:
+            raise DomainError("VERSION_CONFLICT")
         with store.tx() as c:
-            release = lifecycle.read_release(store, c, user, value["release_id"], limits)
             ids = (
                 c.execute(
                     select(internal_run_bindings.c.run_id)
@@ -351,7 +353,7 @@ def mount(app, store, limits, identity):
             )
         return envelope(
             **value,
-            release_fingerprint=release["fingerprint"],
+            release_fingerprint=release_metadata["fingerprint"],
             runs=[inspect_job(user, rid) for rid in ids],
         )
 

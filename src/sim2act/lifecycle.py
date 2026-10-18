@@ -795,7 +795,7 @@ def data_rows(c, iid, *, store=None, user=None, run_id=None):
     return rows
 
 
-def inspect_instance(store, user, iid, limits):
+def inspect_instance(store, user, iid, limits, *, _release_metadata=None):
     with store.tx() as c:
         i, release = instance(store, c, user, iid, limits)
         records = data_rows(c, iid, store=store, user=user)
@@ -803,6 +803,8 @@ def inspect_instance(store, user, iid, limits):
         from . import pa_spec_apps, text_workflows
         if full_report.is_snapshot(release["snapshot"]):
             full_report.verify_records(store, c, user, i, records)
+            if _release_metadata is not None:
+                _release_metadata.update(id=release["id"], fingerprint=release["fingerprint"])
             return {**dict(i), "namespace": full_report.VERSION, "data": [dict(x) for x in records]}
         if pa_spec_apps.is_candidate(release["snapshot"]["draft"]["candidate"]):
             pa_spec_apps.verify_instance_records(store, c, user, i, records, limits)
@@ -816,8 +818,13 @@ def inspect_instance(store, user, iid, limits):
             from .text_run_checks import verify_records
 
             verify_records(store, c, user, records, limits)
-        return {**dict(i), "namespace": NAMESPACE, "data": [dict(x) for x in records],
+        value = {**dict(i), "namespace": NAMESPACE, "data": [dict(x) for x in records],
             "switch_policy": switch_policy(store, c, user, i)}
+        # Informational metadata from this completed proof, never a reusable
+        # authorization capability or a cache of private Release content.
+        if _release_metadata is not None:
+            _release_metadata.update(id=release["id"], fingerprint=release["fingerprint"])
+        return value
 
 
 def run_instance(

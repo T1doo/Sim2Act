@@ -238,8 +238,16 @@ async function showInternalInstance(id,view=engineering) {
     if(view.literal)$("internal-run-status").textContent="输入本次检索词，后台重新读取并独立核查全部匹配行；关闭页面不会取消任务。";
     if(view.spec)$("internal-run-status").textContent=engineeringPending.has(id) ? "本次提交结果尚未确认。仅用原请求键读取回执；不会重发或开始重复运行。" : "运行已保存材料与目标，完成后可读取此版本清单或下载成果。自然规范模型默认关闭；出处核验不代表语义验收。";
     if(view.spec&&view.recoveryError)$("internal-run-status").textContent=`${view.recoveryError}：无法安全保存或读取原请求恢复信息，未提交运行。请检查浏览器存储能力后手动刷新。`;
-    await renderPBUse(view);if(!current())return;
-    if(typeof openNaturalLogic==="function")await openNaturalLogic(view);
+    // One fresh response for this exact selection, discarded after rendering.
+    // Both consumers keep their own scope/hash checks; no cross-refresh cache.
+    let selectedRelease=null;
+    if(view.draft.candidate.namespace==="pa-natural-spec-app.v1"){
+      selectedRelease=await api(`/api/internal/releases/${instance.release_id}`);
+      if(!current())return;
+      if(selectedRelease.id!==instance.release_id||selectedRelease.fingerprint!==instance.release_fingerprint)throw Error("VERSION_CONFLICT");
+    }
+    await renderPBUse(view,selectedRelease);if(!current())return;
+    if(typeof openNaturalLogic==="function")await openNaturalLogic(view,selectedRelease);
     if(!current())return;
     if(typeof openOwnerReview==="function")await openOwnerReview(view);
   } catch(error){if(current()){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
@@ -1086,13 +1094,13 @@ let pbUseView=null,pbUseRenderGeneration=0;
 const pbUsePending=new Map();
 function pbUseUnknown(iid){return (typeof naturalLogicUnknown==="function"&&naturalLogicUnknown(iid))||[...pbUsePending.values()].some(p=>p.instance_id===iid);}
 function clearPBUse(){pbUseRenderGeneration++;if(pbUseView){pbUseView.edit++;pbUseView.panel.remove();pbUseView=null;}}
-async function renderPBUse(view){
+async function renderPBUse(view,freshRelease=null){
   clearPBUse();if(!engineeringCurrent(view)||!view.instance)return;
   const baseCandidate=view.draft.candidate;let candidate=baseCandidate;const isPB=baseCandidate.spec_task?.kind==="pb_natural_spec_task.v1",isPA=baseCandidate.namespace==="pa-natural-spec-app.v1"&&!baseCandidate.spec_task&&(baseCandidate.goal_application||baseCandidate.spec_binding?.kind==="pa_model_spec_material_binding.v1");
   if(!isPB&&!isPA)return;
   const opening={instance:view.instance,selection:view.instanceGeneration,workspace:workspaceSelectionGeneration,connection:identityConnectionGeneration,render:pbUseRenderGeneration};
   const openingCurrent=()=>engineeringCurrent(view)&&view.instance===opening.instance&&view.instanceGeneration===opening.selection&&workspaceSelectionGeneration===opening.workspace&&identityConnectionGeneration===opening.connection&&pbUseRenderGeneration===opening.render;
-  const selected=await api(`/api/internal/releases/${opening.instance.release_id}`);if(!openingCurrent())return;
+  const selected=freshRelease||await api(`/api/internal/releases/${opening.instance.release_id}`);if(!openingCurrent())return;
   const selectedFP=await paHash(selected.snapshot);if(!openingCurrent())return;
   if(selectedFP!==selected.fingerprint)throw Error("VERSION_CONFLICT");
   const logicOrigin=selected.snapshot?.natural_logic_source;
@@ -1186,7 +1194,31 @@ async function naturalLogicBaseline(view,release,anchor=null){
  while(sealed.size<g.nodes.length){const ready=g.nodes.filter(n=>!sealed.has(n.id)&&g.edges.filter(e=>e.downstream===n.id).every(e=>sealed.has(e.upstream)));if(!ready.length)throw Error("VERSION_CONFLICT");for(const node of ready){const incoming=[];for(const edge of g.edges.filter(e=>e.downstream===node.id)){const upstream=sealed.get(edge.upstream),value={...edge,revision:upstream.revision,content_fingerprint:upstream.content_fingerprint};incoming.push({value,hash:await deliveryDigest(value)});}incoming.sort((x,y)=>x.hash<y.hash?-1:x.hash>y.hash?1:0);const {content_fingerprint,...body}=node;if(await deliveryDigest({...body,upstream_versions:incoming.map(x=>x.value)})!==content_fingerprint)throw Error("VERSION_CONFLICT");sealed.set(node.id,node);}}
  return baseline;
 }
-async function openNaturalLogic(view){clearNaturalLogic();if(!engineeringCurrent(view)||!view.instance||view.draft.candidate.namespace!=="pa-natural-spec-app.v1")return;const instance=view.instance;const release=await api(`/api/internal/releases/${instance.release_id}`);if(!engineeringCurrent(view)||view.instance!==instance)return;let baseline=null;if(release.snapshot.natural_logic_source){baseline=await naturalLogicBaseline(view,release);if(!engineeringCurrent(view)||view.instance!==instance)return;if(baseline.remaining_adjustments===0)return;}const steps=(baseline?.base_candidate||view.draft.candidate).spec_recipe.steps;if(steps.length!==6||steps[1].operator!=="model.spec.requirements"||steps[2].operator!=="model.spec.qualifiers")return;const s={view,instance,release,baseline,workspace:workspaceSelectionGeneration,connection:identityConnectionGeneration};naturalLogicView=s;$("natural-logic-panel").hidden=false;$("natural-logic-mode").value=String(!("prior_items" in steps[2].inputs));$("natural-logic-status").textContent="只调整第二模型的前序结果/反馈依赖；节点ID、原目标、验收标准、来源和限额保留。重验隔离实例，语义仍UNKNOWN。";const pending=naturalLogicPending.get(naturalLogicKey(view));if(pending)$("natural-logic-key").value=pending.key;naturalLogicButtons();}
+async function openNaturalLogic(view,freshRelease=null){
+ clearNaturalLogic();
+ if(!engineeringCurrent(view)||!view.instance||view.draft.candidate.namespace!=="pa-natural-spec-app.v1")return;
+ const instance=view.instance,selection=view.instanceGeneration,workspace=workspaceSelectionGeneration,connection=identityConnectionGeneration;
+ const current=()=>engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection&&workspaceSelectionGeneration===workspace&&identityConnectionGeneration===connection;
+ const release=freshRelease||await api(`/api/internal/releases/${instance.release_id}`);
+ if(!current())return;
+ const releaseHash=await paHash(release.snapshot);
+ if(!current())return;
+ if(release.id!==instance.release_id||release.fingerprint!==instance.release_fingerprint||releaseHash!==release.fingerprint)throw Error("VERSION_CONFLICT");
+ let baseline=null;
+ if(release.snapshot.natural_logic_source){
+  baseline=await naturalLogicBaseline(view,release);
+  if(!current())return;
+  if(baseline.remaining_adjustments===0)return;
+ }
+ const steps=(baseline?.base_candidate||view.draft.candidate).spec_recipe.steps;
+ if(steps.length!==6||steps[1].operator!=="model.spec.requirements"||steps[2].operator!=="model.spec.qualifiers"||!current())return;
+ const s={view,instance,release,baseline,workspace,connection,selection};naturalLogicView=s;
+ $("natural-logic-panel").hidden=false;$("natural-logic-mode").value=String(!("prior_items" in steps[2].inputs));
+ $("natural-logic-status").textContent="只调整第二模型的前序结果/反馈依赖；节点ID、原目标、验收标准、来源和限额保留。重验隔离实例，语义仍UNKNOWN。";
+ const pending=naturalLogicPending.get(naturalLogicKey(view));if(pending)$("natural-logic-key").value=pending.key;
+ naturalLogicButtons();
+}
+
 async function naturalLogicReadGraph(s){
  const c={app:s.view.draft,id:s.view.app,project:s.view.project};
  const graph=await api(`/api/projects/${s.view.project}/apps/${s.view.app}/delivery-graph`);
