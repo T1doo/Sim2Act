@@ -420,6 +420,7 @@ async function syntheticValidatorBoundaries() {
 }
 async function run() {
   await setup();
+  await click("trial-refresh");
   check(visible($("trial-panel")) && visible($("trial-budget-read")) && $("trial-budget-read").disabled &&
     !$("trial-budget-output").textContent && budgets().length === 0,
   "normal project connection exposes the manual budget entry without a full receipt, private data or automatic read");
