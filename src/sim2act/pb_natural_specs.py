@@ -431,7 +431,8 @@ def receipt(body, checked, frozen):
 
 @controlled
 def extract(store, user, pid, rid, body, limits):
-    with store.tx() as c:
+    # Match explicit key closure's bounded SQLite wait for the shared write group.
+    with store.tx(wait_seconds=30) as c:
         return _extract(store, c, user, pid, rid, body, limits)
 
 
