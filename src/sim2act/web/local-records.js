@@ -2,6 +2,7 @@
 // Explicit local-record lifecycle. Existing authenticated API/Worker own all writes.
 let localRecordsView=null,localRecordsEpoch=0;
 const localRecordsIntents=new Map();
+const localRecordsControlIntents=new Map();
 const localRecordsVersion="local-record-app.v1";
 const localRecordsSame=(a,b)=>goalRunCanonical(a)===goalRunCanonical(b);
 function clearLocalRecordsView(){
@@ -48,14 +49,17 @@ function localRecordsBuild(app,generation,selectionCurrent=()=>true){
  v.stateFields=localRecordsNode("fieldset");v.stateFields.hidden=true;v.stateFields.append(localRecordsNode("legend",null,"更新已有记录"));v.recordSelect=localRecordsSelect("local-records-record-select",[["请选择当前记录",""]]);v.state=localRecordsSelect("local-records-state",[["完成（仅 OPEN → DONE）","DONE"]]);v.reason=localRecordsInput("local-records-reason",{multiline:true,maxLength:500,required:true});v.stateFields.append(localRecordsLabel("记录及当前修订 ",v.recordSelect),localRecordsLabel("目标状态 ",v.state),localRecordsLabel("本次变更依据 ",v.reason));operations.append(v.createFields,v.stateFields);
  v.previewButton=localRecordsButton("预览本次精确变更","local-records-preview",()=>localRecordsPreview(v));operations.append(v.previewButton);v.previewText=localRecordsNode("div","local-records-preview-summary");operations.append(v.previewText);v.previewProof=localRecordsProof(operations,"local-records-preview-proof","本次合同、输入、权限与版本指纹");
  v.runAck=localRecordsInput("local-records-run-ack",{type:"checkbox"});v.confirm=localRecordsButton("单独确认并提交本次写入 Run","local-records-confirm",()=>localRecordsConfirm(v));operations.append(localRecordsLabel("我已核对具体记录、原修订、目标状态和正文；明确确认本次写入。",v.runAck),v.confirm);panel.append(operations);
- const result=localRecordsNode("section","local-records-result");result.hidden=!app;result.append(localRecordsNode("h3",null,"5. 手动读取同一 Run 和当前记录"));v.refresh=localRecordsButton("刷新当前实例、Run 与记录（只读）","local-records-refresh",()=>localRecordsRefresh(v));v.runSelect=localRecordsSelect("local-records-run-select",[["请明确选择已接受 Run",""]]);v.runRead=localRecordsButton("读取所选同一 Run（只读）","local-records-run-read",()=>localRecordsReadRun(v));v.runStatus=localRecordsNode("p","local-records-run-status");v.runStatus.setAttribute("role","status");result.append(v.refresh,localRecordsLabel("运行历史 ",v.runSelect),v.runRead,v.runStatus);v.runProof=localRecordsProof(result,"local-records-run-proof","原 Run、合同与真实工具回执");v.records=localRecordsNode("div","local-records-current");result.append(localRecordsNode("h3",null,"当前记录集合"),v.records);v.history=localRecordsNode("div","local-records-history");result.append(localRecordsNode("h3",null,"所选记录的不可变历史"),v.history);panel.append(result);
+ const result=localRecordsNode("section","local-records-result");result.hidden=!app;result.append(localRecordsNode("h3",null,"5. 手动读取同一 Run 和当前记录"));v.refresh=localRecordsButton("刷新当前实例、Run 与记录（只读）","local-records-refresh",()=>localRecordsRefresh(v));v.runSelect=localRecordsSelect("local-records-run-select",[["请明确选择已接受 Run",""]]);v.runRead=localRecordsButton("读取所选同一 Run（只读）","local-records-run-read",()=>localRecordsReadRun(v));v.runStatus=localRecordsNode("p","local-records-run-status");v.runStatus.setAttribute("role","status");result.append(v.refresh,localRecordsLabel("运行历史 ",v.runSelect),v.runRead,v.runStatus);v.runProof=localRecordsProof(result,"local-records-run-proof","原 Run、合同与真实工具回执");
+ v.control=null;v.controlCommands={};const control=localRecordsNode("section","local-records-controls");control.append(localRecordsNode("p",null,"仅控制已明确读取的同一 Run。暂停或取消在安全边界生效，不撤销此前已保存的记录。"));
+ for(const [command,label]of [["pause","暂停这次写入"],["resume","继续这次写入"],["cancel","取消这次写入"]]){const button=localRecordsButton(label,`local-records-${command}`,()=>localRecordsControl(v,command));v.controlCommands[command]=button;control.append(button);}
+ v.controlStatus=localRecordsNode("p","local-records-control-status");v.controlStatus.setAttribute("role","status");control.append(v.controlStatus);result.append(control);v.records=localRecordsNode("div","local-records-current");result.append(localRecordsNode("h3",null,"当前记录集合"),v.records);v.history=localRecordsNode("div","local-records-history");result.append(localRecordsNode("h3",null,"所选记录的不可变历史"),v.history);panel.append(result);
  const recovery=localRecordsNode("section","local-records-recovery");recovery.append(localRecordsNode("h3",null,"原请求恢复"),localRecordsNode("p",null,"未知结果不重发写入。保留或输入原请求 key，选择原阶段后仅 GET 核对；冷页需先重新打开同一应用、版本或实例。"));v.recoveryStage=localRecordsSelect("local-records-recovery-stage",[["保存应用","CREATE_APP"],["准备内部版本","PREPARE_RELEASE"],["保存内部版本","COMMIT_RELEASE"],["创建实例","CREATE_INSTANCE"],["本次变更预览","PREVIEW"],["提交写入 Run","RUN"]]);v.recoveryKey=localRecordsInput("local-records-recovery-key",{maxLength:100});v.recover=localRecordsButton("仅 GET 读取原 key 回执","local-records-recover",()=>localRecordsRecover(v));recovery.append(localRecordsLabel("原阶段 ",v.recoveryStage),localRecordsLabel("原 key ",v.recoveryKey),v.recover);v.recoveryProof=localRecordsProof(recovery,"local-records-recovery-proof","原请求与恢复回执");panel.append(recovery);
  for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.runAck,v.recoveryKey])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v))localRecordsButtons(v);});
  for(const input of [v.name,v.goal,v.recoveryKey,v.recoveryStage])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v)){v.edit++;localRecordsButtons(v);}});
  for(const input of [v.command,v.title,v.details,v.recordSelect,v.state,v.reason])for(const event of ["input","change"])input.addEventListener(event,()=>{v.createFields.hidden=v.command.value!=="CREATE";v.stateFields.hidden=v.command.value!=="SET_STATE";localRecordsEdited(v);});
  v.releaseSelect.onchange=()=>{v.selection++;v.releaseAck.checked=v.instanceAck.checked=false;localRecordsButtons(v);};
  v.instanceSelect.onchange=safe(()=>localRecordsSelectInstance(v,v.instanceSelect.value));
- v.runSelect.onchange=()=>{v.read++;v.run=null;v.runStatus.textContent="已改变 Run 选择，请明确读取该 Run。";v.runProof.textContent="";localRecordsButtons(v);};
+ v.runSelect.onchange=()=>{v.read++;localRecordsClearControl(v);v.run=null;v.runStatus.textContent="已改变 Run 选择，请明确读取该 Run。";v.runProof.textContent="";localRecordsButtons(v);};
  return v;
 }
 const localRecordsHash=value=>ownerHash(value);
@@ -78,6 +82,7 @@ function localRecordsButtons(v){
  v.confirm.disabled=busy||blocked||!v.preview||!v.previewCurrent?.()||!v.instance||v.preview.preview.data_version!==v.instance.data_version||v.preview.preview.instance_revision!==v.instance.revision||v.preview.preview.release_fingerprint!==v.instance.release_fingerprint||!!v.preview.run||!v.runAck.checked||v.preview.preview.expires_at*1000<=Date.now();
  v.deliveryRefresh.disabled=busy||!v.app;v.refresh.disabled=busy||!v.selectedIid;v.runRead.disabled=busy||!v.selectedIid||!v.runSelect.value;
  v.recover.disabled=busy||!v.recoveryKey.value.trim();
+ localRecordsControlButtons(v);
  for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.command,v.title,v.details,v.recordSelect,v.state,v.reason,v.runAck])input.disabled=busy||blocked;
 }
 function localRecordsRemember(v,intent){v.recoveryStage.value=intent.stage;v.recoveryKey.value=intent.key;v.recoveryProof.textContent=JSON.stringify({stage:intent.stage,request_key:intent.key,request_fingerprint:intent.requestFingerprint,state:intent.state},null,2);}
@@ -173,7 +178,47 @@ async function localRecordsCreateInstance(v){
  if(!current()||!saved)return;v.instanceAck.checked=false;v.recoveryProof.textContent=JSON.stringify(saved.reply,null,2);localRecordsStatus(v,`独立实例 ${saved.reply.instance.id} 已保存；请读取目录，再明确选择该实例。尚未写入业务记录。`);localRecordsButtons(v);
 }
 const localRecordsTerminal=status=>["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(status);
-function localRecordsClearInstance(v){v.instance=null;v.run=null;v.preview=null;v.previewCurrent=null;v.acceptedRun=null;v.historyRecord=null;v.operations.hidden=true;v.records.replaceChildren();v.history.replaceChildren();v.runProof.textContent="";v.runStatus.textContent="";v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""));v.previewText.replaceChildren();v.previewProof.textContent="";v.runAck.checked=false;v.recoveryProof.textContent="";v.recoveryKey.value="";}
+const localRecordsRunStates=["QUEUED","RUNNING","WAITING_INPUT","WAITING_APPROVAL","WAITING_RESOURCE","PAUSE_REQUESTED","PAUSED","CANCEL_REQUESTED","RECONCILING","SUCCEEDED","PARTIAL","FAILED","CANCELLED"];
+function localRecordsControlKey(v,rid){return JSON.stringify([v.identity,v.project,v.app.id,v.app.principal_id,v.selectedIid,rid]);}
+function localRecordsClearControl(v){v.control=null;if(v.controlStatus)v.controlStatus.textContent="";}
+function localRecordsControlButtons(v){
+ if(!v.controlCommands)return;
+ const r=v.control,current=r&&v.instance&&r.id===v.runSelect.value,pending=current&&localRecordsControlIntents.get(localRecordsControlKey(v,r.id)),blocked=v.busy||!current||!!pending;
+ v.controlCommands.pause.disabled=blocked||!["QUEUED","RUNNING"].includes(r?.status);
+ v.controlCommands.resume.disabled=blocked||r?.status!=="PAUSED";
+ v.controlCommands.cancel.disabled=blocked||localRecordsTerminal(r?.status)||r?.status==="CANCEL_REQUESTED";
+}
+function localRecordsReadControl(v,run){
+ if(!localRecordsRunStates.includes(run.status)||!localRecordsInteger(run.version)||run.version<1)localRecordsError();
+ const key=localRecordsControlKey(v,run.id),pending=localRecordsControlIntents.get(key);
+ if(pending&&run.version<pending.version)localRecordsError();
+ if(pending&&pending.state!=="SENDING"&&(run.version>pending.version||pending.state==="REJECTED"))localRecordsControlIntents.delete(key);
+ v.control={id:run.id,status:run.status,version:run.version};
+ v.controlStatus.textContent=localRecordsControlIntents.has(key)?`原控制结果尚未确认；同一 Run ${run.id} 当前读取为 ${run.status} / 版本 ${run.version}。控制保持锁定，仅可手动读取，不会重发。`:`已读取同一 Run ${run.id} · ${run.status} · 版本 ${run.version}。请明确选择控制操作。`;
+}
+async function localRecordsControl(v,command){
+ if(!localRecordsCurrent(v)||v.controlCommands[command]?.disabled||!v.control||v.busy)return;
+ const r={...v.control},iid=v.selectedIid,key=localRecordsControlKey(v,r.id);if(localRecordsControlIntents.has(key))return;
+ const currentScope=localRecordsFence(v,{edit:false}),current=()=>currentScope()&&v.selectedIid===iid&&v.runSelect.value===r.id;
+ const intent={state:"SENDING",version:r.version,command};localRecordsControlIntents.set(key,intent);localRecordsBusy(v,true);
+ v.run=null;v.runProof.textContent="";v.control=null;v.controlStatus.textContent=`正在请求 ${command}：同一 Run ${r.id}，版本 ${r.version}；结果尚未确认。`;
+ try{
+  const reply=await api(`/api/internal/record-instances/${iid}/runs/${r.id}/commands`,"POST",{command,version:r.version});
+  const expected=command==="pause"?(r.status==="RUNNING"?"PAUSE_REQUESTED":"PAUSED"):command==="resume"?"QUEUED":["RUNNING","PAUSE_REQUESTED"].includes(r.status)?"CANCEL_REQUESTED":"CANCELLED";
+  if(Object.keys(reply||{}).sort().join()!==["namespace","id","status","version","content_access","formal_publication_enabled"].sort().join()||reply.namespace!==localRecordsVersion||reply.id!==r.id||reply.version!==r.version+1||reply.status!==expected||reply.content_access!==false||reply.formal_publication_enabled!==false)localRecordsError();
+  if(localRecordsControlIntents.get(key)!==intent)return;
+  localRecordsControlIntents.delete(key);if(!current())return;
+  v.control={id:r.id,status:reply.status,version:reply.version};
+  if(v.acceptedRun?.run_id===r.id)v.acceptedRun={...v.acceptedRun,status:reply.status,version:reply.version};
+  v.runStatus.textContent=`控制回执：同一 Run ${r.id} · ${reply.status} · 版本 ${reply.version}。结果正文须另行手动读取。`;
+  v.controlStatus.textContent=reply.status.endsWith("_REQUESTED")?"停止意图已记录，仍须读取后台最终状态；不会撤销此前已保存的记录。":"控制回执已确认；未重发业务写入，也未撤销此前已保存的记录。";
+ }catch(error){
+  if(localRecordsControlIntents.get(key)!==intent)return;
+  intent.state=Number.isInteger(error.httpStatus)&&[400,401,403,404,409,422].includes(error.httpStatus)?"REJECTED":"UNKNOWN";
+  if(current()){v.runStatus.textContent="控制请求没有获知可核验的成功回执，不能判断最新状态。";v.controlStatus.textContent=`${intent.state==="REJECTED"?"控制被拒绝":"控制结果未确认"}：${error.detail||error.message}。请仅点击“读取所选同一 Run”核对；不会自动重发控制或写入。`;}
+ }finally{localRecordsBusy(v,false);}
+}
+function localRecordsClearInstance(v){localRecordsClearControl(v);v.instance=null;v.run=null;v.preview=null;v.previewCurrent=null;v.acceptedRun=null;v.historyRecord=null;v.operations.hidden=true;v.records.replaceChildren();v.history.replaceChildren();v.runProof.textContent="";v.runStatus.textContent="";v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""));v.previewText.replaceChildren();v.previewProof.textContent="";v.runAck.checked=false;v.recoveryProof.textContent="";v.recoveryKey.value="";}
 function localRecordsClearPrivate(v){
  const key=v.recoveryKey.value;v.read++;v.edit++;localRecordsClearInstance(v);v.recoveryKey.value=key;
  v.title.value=v.details.value=v.reason.value="";v.recordSelect.replaceChildren(new Option("请重新核验当前记录",""));
@@ -232,14 +277,14 @@ async function localRecordsRunValue(v,run,rid,current){
  }else if(run.output!==null||run.event!==null||run.result_version!==null)localRecordsError();
  return current();
 }
-function localRecordsRenderRun(v,run){v.run=run;v.runStatus.textContent=`同一 Run ${run.id} · ${run.status} · ${run.result_version!==null?"已保存集合版本 "+run.result_version:"尚无已核验业务事件"}${run.error?" · "+(run.error.code||"运行错误"):""}`;if(run.status==="SUCCEEDED")v.runStatus.textContent+=` · 记录 ${run.event.record_id} 修订 ${run.event.record_revision} → ${run.event.state} · 实际工具输出 JSON 制品 ${run.output.resource_id}，SHA-256 ${run.output.hash}`;v.runProof.textContent=JSON.stringify(run,null,2);if(v.acceptedRun?.run_id===run.id)v.acceptedRun={...v.acceptedRun,status:run.status,version:run.version};}
+function localRecordsRenderRun(v,run){v.run=run;v.runStatus.textContent=`同一 Run ${run.id} · ${run.status} · ${run.result_version!==null?"已保存集合版本 "+run.result_version:"尚无已核验业务事件"}${run.error?" · "+(run.error.code||"运行错误"):""}`;if(run.status==="SUCCEEDED")v.runStatus.textContent+=` · 记录 ${run.event.record_id} 修订 ${run.event.record_revision} → ${run.event.state} · 实际工具输出 JSON 制品 ${run.output.resource_id}，SHA-256 ${run.output.hash}`;v.runProof.textContent=JSON.stringify(run,null,2);localRecordsReadControl(v,run);if(v.acceptedRun?.run_id===run.id)v.acceptedRun={...v.acceptedRun,status:run.status,version:run.version};}
 async function localRecordsRefresh(v,allowBusy=false){
  if(!localRecordsCurrent(v)||!v.selectedIid||(v.busy&&!allowBusy))return;v.read++;const current=localRecordsFence(v,{edit:false}),iid=v.selectedIid,selected=v.runSelect.value;localRecordsBusy(v,true);v.runStatus.textContent="正在重新鉴权并读取同一实例；读取失败不表示后台任务失败。";
  try{
   const reply=await api(`/api/internal/record-instances/${iid}`);if(!current())return;if(!await localRecordsValidateProjection(v,reply,iid,current)||!current())return;
   v.instance=reply;v.preview=null;v.previewCurrent=null;v.runAck.checked=false;v.previewText.replaceChildren();v.previewProof.textContent="";localRecordsRenderProjection(v);
   if(selected){if(!reply.runs.some(r=>r.id===selected))localRecordsError();v.runSelect.value=selected;const run=await api(`/api/internal/record-instances/${iid}/runs/${selected}`);if(!current())return;if(!await localRecordsRunValue(v,run,selected,current)||!current())return;localRecordsRenderRun(v,run);}
-  else{v.run=null;v.runProof.textContent="";v.runStatus.textContent="当前集合已重新核验；请明确选择需要读取的同一 Run。";}
+  else{localRecordsClearControl(v);v.run=null;v.runProof.textContent="";v.runStatus.textContent="当前集合已重新核验；请明确选择需要读取的同一 Run。";}
   localRecordsStatus(v,`已核验当前实例与集合版本 ${reply.data_version}；没有提交新的写入。`);
  }catch(error){if(current()){localRecordsClearPrivate(v);v.runStatus.textContent=`读取未确认：${error.detail||error.message}。已清除当前正文；原请求 key 保留，不代表任务失败。`;}}
  finally{localRecordsBusy(v,false);}

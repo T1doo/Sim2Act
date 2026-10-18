@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 import pytest
+from local_record_control_assertions import assert_control_changes
 from sqlalchemy import select, update
 from test_local_record_apps import (
     DETAILS_A,
@@ -23,10 +24,12 @@ from test_local_record_apps import (
     TITLE_B,
     NoModel,
     assert_saved,
+    commit,
     create_body,
     current,
     execute,
     ok,
+    preview,
     ready,
     saved_rows,
     snapshot,
@@ -40,7 +43,8 @@ from sim2act.worker import Worker
 def source_inputs(root):
     paths = sorted(path for path in (root / "src/sim2act").rglob("*")
         if path.is_file() and path.suffix in {".py", ".js", ".css", ".html"})
-    paths.extend([Path(__file__).resolve(), Path(__file__).with_name("local_record_apps_ui.cjs").resolve()])
+    paths.extend([Path(__file__).resolve(), *(Path(__file__).with_name(name).resolve() for name in
+        ["local_record_apps_ui.cjs", "local_record_control_assertions.py"])])
     return {str(path.relative_to(root)) if path.is_relative_to(root) else str(path):
         dict(bytes=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest()) for path in paths}
 
@@ -91,7 +95,7 @@ def final_flow_readback(env, page, worker_log, before_identities):
         native_browser="NOT_RUN", real_semantic_acceptance="NOT_RUN")
 
 
-@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history"])
+@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls"])
 def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
     root = Path.cwd().resolve()
     raw_http, ipc, worker_log = [], [], []
@@ -138,8 +142,20 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                         grants.c.revoked.is_(False))).mappings().all()
                     assert len(matching) == 1, "Exactly one known owner-read grant for the synthetic seed artifact"
                     revocation_grant = dict(matching[0])
+        if scenario == "controls":
+            data = ready(env)
+            prepared = preview(env, data, create_body(current(env, data), "control-one-queued-write"))
+            accepted, _ = commit(env, data, prepared)
+            assert accepted["run"]["status"] == "QUEUED"
+            second = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
+                expected_release_fingerprint=data["release"]["fingerprint"], request_key="control-empty-instance")), 201)["instance"]
+            info.update(app=data["app"]["id"], instance=data["instance"]["id"], iid=data["instance"]["id"],
+                release=data["release"]["id"], seed_run=accepted["run"]["run_id"],
+                seed_request_key=prepared["request_key"], second_instance=second["id"])
         before_identity = snapshot(env[0], {"grants", "principals"})
         before_page = snapshot(env[0])
+        if scenario == "controls":
+            write_json(tmp_path / "database-before-page.json", before_page)
         write_json(tmp_path / "info.json", info)
         with (tmp_path / "node.stderr").open("w", encoding="utf-8") as errors:
             process = subprocess.Popen(["node", str(Path(__file__).with_name("local_record_apps_ui.cjs")),
@@ -230,6 +246,25 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             write_json(tmp_path / "actual-page-delivery.json", delivered)
             proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3,
                 page_creation_release_instance_covered=True)
+        elif scenario == "controls":
+            assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS"
+            assert worker_log == []
+            commands = [row for row in page["actions"] if row["method"] == "POST"]
+            assert [row["body"] for row in commands] == [dict(command=command, version=version)
+                for version, command in enumerate(["pause", "resume", "cancel"], 1)]
+            assert all(row["path"] == data["path"] + "/runs/" + info["seed_run"] + "/commands"
+                and row["status"] == 200 for row in commands)
+            probe = Worker(env[0], env[1], NoModel())
+            probe_started = time.time()
+            assert not probe.once(), "Cancelled Run cannot be claimed"
+            probe_ended = time.time()
+            after_page = snapshot(env[0])
+            write_json(tmp_path / "database-after-page.json", after_page)
+            control_proof = assert_control_changes(before_page, after_page, info["seed_run"],
+                probe_worker_id=probe.id, time_bounds=(probe_started, probe_ended))
+            write_json(tmp_path / "actual-control-proof.json", control_proof)
+            proof.update(page_worker_calls=0, fixture_worker_calls=0, worker_probes=1, worker_claims=0,
+                actual_no_model_runs=0, page_post_count=3, page_creation_release_instance_covered=False)
         elif scenario in {"revocation", "project-history"}:
             expected_classification = ("ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER"
                 if scenario == "project-history" else "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER")

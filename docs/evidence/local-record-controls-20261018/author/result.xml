@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="17.237" timestamp="2026-10-18T19:12:55.115711+00:00" hostname="888ae8c15de7"><testcase classname="tests.test_local_record_apps_ui" name="test_local_record_page_explicit_flow_and_fenced_navigation_actual_http[controls]" time="16.686"><failure message="AssertionError: heartbeats&#10;assert [] == [{'at': 17923...db1021c8c0d'}]&#10;  &#10;  Right contains one more item: {'at': 1792350792.0225775, 'id': 'worker_c9ba6f93ed1e4f3b9fc57db1021c8c0d'}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7fb518ce8ce0&gt;, Settings(database_url='sqlite:////workspace/local-record-controls-202610...34bb26f7634596a37a4e845dc80ac2', 'user_891e4f883da6466989faf6e8dd393475', 'proj_2b546669c50f480ea4dd0070771009ff', ...)
+tmp_path = PosixPath('/workspace/local-record-controls-20261018/pytest-temp/test_local_record_page_explici0')
+scenario = 'controls'
+
+    @pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls"])
+    def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
+        root = Path.cwd().resolve()
+        raw_http, ipc, worker_log = [], [], []
+        process = watchdog = None
+        stores = []
+        revocation_log, revocation_grant = [], None
+        proof = dict(scenario=scenario, status="NOT_COMPLETED", real_model_requests=0,
+            native_browser="NOT_RUN", pg="NOT_RUN", real_semantic_acceptance="NOT_RUN")
+    
+        def trace(response):
+            response.read()
+            request = response.request
+            body = request.content.decode("utf-8") if request.content else None
+            raw_http.append(dict(method=request.method, url=str(request.url),
+                request=json.loads(body) if body else None,
+                status=response.status_code, response=response.text,
+                content_type=response.headers.get("content-type")))
+    
+        before_sources = source_inputs(root)
+        env[2].event_hooks["response"].append(trace)
+        write_json(tmp_path / "source-before.json", before_sources)
+        try:
+            other = ok(env[2].post("/api/projects", json=dict(name="Other owned local record navigation project")), 201)["id"]
+            info = dict(scenario=scenario, project=env[5], other=other,
+                app_name="Actual page local records", goal="Collect independent work items and explicitly mark only A DONE",
+                title_a=TITLE_A, details_a=DETAILS_A, title_b=TITLE_B, details_b=DETAILS_B,
+                done_reason=DONE_REASON, output=str(tmp_path / "page-result.json"))
+            if scenario in {"navigation", "revocation", "project-history"}:
+                data = ready(env)
+                first = execute(env, data, create_body(current(env, data)))
+                info.update(app=data["app"]["id"], instance=data["instance"]["id"],
+                    iid=data["instance"]["id"], release=data["release"]["id"],
+                    seed_run=first["run"]["id"], seed_request_key=first["prepared"]["request_key"])
+                if scenario in {"navigation", "project-history"}:
+                    second = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
+                        expected_release_fingerprint=data["release"]["fingerprint"], request_key="page-navigation-empty-instance")), 201)["instance"]
+                    info["second_instance"] = second["id"]
+                if scenario in {"revocation", "project-history"}:
+                    info["seed_artifact"] = first["run"]["output"]["resource_id"]
+                    with env[0].tx() as connection:
+                        matching = connection.execute(select(grants).where(
+                            grants.c.principal_id == env[3], grants.c.project_id == env[5],
+                            grants.c.resource_id == info["seed_artifact"], grants.c.tool_ref == "resource.read",
+                            grants.c.revoked.is_(False))).mappings().all()
+                        assert len(matching) == 1, "Exactly one known owner-read grant for the synthetic seed artifact"
+                        revocation_grant = dict(matching[0])
+            if scenario == "controls":
+                data = ready(env)
+                prepared = preview(env, data, create_body(current(env, data), "control-one-queued-write"))
+                accepted, _ = commit(env, data, prepared)
+                assert accepted["run"]["status"] == "QUEUED"
+                second = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
+                    expected_release_fingerprint=data["release"]["fingerprint"], request_key="control-empty-instance")), 201)["instance"]
+                info.update(app=data["app"]["id"], instance=data["instance"]["id"], iid=data["instance"]["id"],
+                    release=data["release"]["id"], seed_run=accepted["run"]["run_id"],
+                    seed_request_key=prepared["request_key"], second_instance=second["id"])
+            before_identity = snapshot(env[0], {"grants", "principals"})
+            before_page = snapshot(env[0])
+            if scenario == "controls":
+                write_json(tmp_path / "database-before-page.json", before_page)
+            write_json(tmp_path / "info.json", info)
+            with (tmp_path / "node.stderr").open("w", encoding="utf-8") as errors:
+                process = subprocess.Popen(["node", str(Path(__file__).with_name("local_record_apps_ui.cjs")),
+                    str(tmp_path / "info.json")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=errors, text=True, env={**os.environ,
+                        "NODE_PATH": os.environ.get("NODE_PATH") or str(root / "scripts/engineering-ci/node_modules")})
+                watchdog = threading.Timer(600, process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request = json.loads(line)
+                    ipc.append(dict(direction="NODE_TO_PYTHON", value=request))
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        assert scenario == "flow-recovery", "Read-only page scenarios cannot invoke Worker"
+                        cold = Store(env[1].database_url, test_only=True)
+                        stores.append(cold)
+                        before = states(cold)
+                        assert Worker(cold, env[1], NoModel()).once()
+                        after = states(cold)
+                        changed = [rid for rid, row in after.items() if row["status"] in {"SUCCEEDED", "FAILED", "PARTIAL"}
+                            and before.get(rid, {}).get("status") not in {"SUCCEEDED", "FAILED", "PARTIAL"}]
+                        assert len(changed) == 1, changed
+                        rid = changed[0]
+                        assert request.get("run", request.get("run_id")) in (None, rid)
+                        worker_log.append(dict(run_id=rid, status=after[rid]["status"],
+                            implementation="NORMAL_WORKER_ONCE", cold_store=True, model="NoModel"))
+                        answer = dict(status=200, text=json.dumps(worker_log[-1]))
+                    elif request.get("command") == "revoke_seed_artifact_read":
+                        # Fixture-only authority mutation. The page cannot select a Grant,
+                        # principal, project or arbitrary resource through this bridge.
+                        assert scenario in {"revocation", "project-history"} and revocation_grant is not None and not revocation_log
+                        assert set(request) == {"id", "command", "run", "resource"}
+                        assert request["run"] == info["seed_run"] and request["resource"] == info["seed_artifact"]
+                        with env[0].tx() as connection:
+                            actual = dict(connection.execute(select(grants).where(
+                                grants.c.id == revocation_grant["id"], grants.c.principal_id == env[3],
+                                grants.c.project_id == env[5], grants.c.resource_id == info["seed_artifact"],
+                                grants.c.tool_ref == "resource.read")).mappings().one())
+                            assert actual == revocation_grant and not actual["revoked"]
+                            changed = connection.execute(update(grants).where(
+                                grants.c.id == actual["id"], grants.c.principal_id == env[3],
+                                grants.c.project_id == env[5], grants.c.resource_id == info["seed_artifact"],
+                                grants.c.tool_ref == "resource.read", grants.c.revoked.is_(False),
+                                grants.c.revision == actual["revision"]).values(
+                                    revoked=True, revision=actual["revision"] + 1)).rowcount
+                            assert changed == 1
+                            after_grant = dict(connection.execute(select(grants).where(
+                                grants.c.id == actual["id"])).mappings().one())
+                        revocation_log.append(dict(before=actual, after=after_grant,
+                            run_id=info["seed_run"], resource_id=info["seed_artifact"],
+                            classification="EXPLICIT_SYNTHETIC_FIXTURE_GRANT_REVOCATION"))
+                        answer = dict(status=200, text=json.dumps(dict(
+                            revoked=True, resource_id=info["seed_artifact"], run_id=info["seed_run"])))
+                    else:
+                        assert "command" not in request, request
+                        if scenario in {"revocation", "project-history"}:
+                            assert request["method"] == "GET", "Read-only page scenario must never POST"
+                        response = env[2].request(request["method"], request["path"],
+                            json=request.get("body"), headers=request.get("headers"))
+                        answer = dict(status=response.status_code, text=response.text,
+                            content_type=response.headers.get("content-type"))
+                    answer["id"] = request["id"]
+                    ipc.append(dict(direction="PYTHON_TO_NODE", value=answer))
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+                errors.flush()
+            proof["node_exit_code"] = code
+            assert code == 0, (tmp_path / "node.stderr").read_text(encoding="utf-8")
+            page = json.loads((tmp_path / "page-result.json").read_text(encoding="utf-8"))
+            assert page["status"] == "PASS" and page["checks"] and page["actions"], page
+            expected_assets = {"/", "/app.css", *re.findall(r'&lt;script[^&gt;]+src="([^"]+)"',
+                (root / "src/sim2act/web/index.html").read_text(encoding="utf-8"))}
+            assets = page["static_resource_loads"]
+            assert assets and {row["boot"] for row in assets} == set(range(1, page["boots"] + 1))
+            for boot in range(1, page["boots"] + 1):
+                assert {row["path"] for row in assets if row["boot"] == boot} == expected_assets
+            for asset in assets:
+                path = asset["path"].lstrip("/") or "index.html"
+                assert asset["status"] == 200
+                assert hashlib.sha256((root / "src/sim2act/web" / path).read_bytes()).hexdigest() == asset["sha256"]
+            if scenario == "flow-recovery":
+                assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW"
+                assert len(worker_log) == 3 and all(row["status"] == "SUCCEEDED" for row in worker_log)
+                delivered = final_flow_readback(env, page, worker_log, before_identity)
+                write_json(tmp_path / "actual-page-delivery.json", delivered)
+                proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3,
+                    page_creation_release_instance_covered=True)
+            elif scenario == "controls":
+                assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS"
+                assert worker_log == []
+                commands = [row for row in page["actions"] if row["method"] == "POST"]
+                assert [row["body"] for row in commands] == [dict(command=command, version=version)
+                    for version, command in enumerate(["pause", "resume", "cancel"], 1)]
+                assert all(row["path"] == data["path"] + "/runs/" + info["seed_run"] + "/commands"
+                    and row["status"] == 200 for row in commands)
+                assert not Worker(env[0], env[1], NoModel()).once(), "Cancelled Run cannot be claimed"
+                after_page = snapshot(env[0])
+                write_json(tmp_path / "database-after-page.json", after_page)
+                assert before_page.keys() == after_page.keys()
+                for table in before_page:
+                    if table not in {"runs", "internal_app_runs", "events"}:
+&gt;                       assert before_page[table] == after_page[table], table
+E                       AssertionError: heartbeats
+E                       assert [] == [{'at': 17923...db1021c8c0d'}]
+E                         
+E                         Right contains one more item: {'at': 1792350792.0225775, 'id': 'worker_c9ba6f93ed1e4f3b9fc57db1021c8c0d'}
+E                         Use -v to get more diff
+
+tests/test_local_record_apps_ui.py:261: AssertionError</failure></testcase></testsuite></testsuites>

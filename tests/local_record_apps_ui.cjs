@@ -33,7 +33,7 @@ async function boot(){
  const style=w.document.createElement('style');style.textContent=await load('/app.css');w.document.head.append(style);
  w.fetch=async(path,options={})=>{active++;const request={method:options.method||'GET',path,body:options.body?JSON.parse(options.body):undefined};actions.push(request);
   try{const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response_text=r.text;
-   if(hold&&request.method==='GET'&&path===hold.path&&--hold.remaining===0){hold=null;request.controlled_delivery='HELD_AFTER_ACTUAL_HTTP';await new Promise(resolve=>{releaseRead=resolve;});}
+   if(hold&&request.method===(hold.method||'GET')&&path===hold.path&&--hold.remaining===0){hold=null;request.controlled_delivery='HELD_AFTER_ACTUAL_HTTP';await new Promise(resolve=>{releaseRead=resolve;});}
    if(lose&&request.method==='POST'&&path===lose.path){lose=null;request.controlled_delivery='RECEIPT_LOST_AFTER_ACTUAL_HTTP';throw new TypeError('controlled accepted receipt loss after actual HTTP');}
    return new Response(r.text,{status:r.status,headers:{'Content-Type':r.content_type||'application/json'}});
   }finally{active--;}};
@@ -138,6 +138,34 @@ async function navigation(){
  check(!view()&&!$('local-records-panel').textContent,'same-account reconnect cannot restore old account-view contents');
  check(posts().length===0,'all actual HTTP navigation and recovery races create zero writes');
 }
+async function controls(){
+ await open();
+ const disabled=()=>['pause','resume','cancel'].every(command=>$('local-records-'+command).disabled);
+ check(disabled(),'control buttons remain disabled until the same Run is explicitly read');
+ await select('local-records-run-select',info.seed_run);await click('local-records-run-read');
+ check(view().run.id===info.seed_run&&view().run.status==='QUEUED'&&view().control.version===1,'existing typed GET verifies the original queued Run before control');
+ check(!$('local-records-pause').disabled&&$('local-records-resume').disabled&&!$('local-records-cancel').disabled,'only pause and cancel are available for the verified queued Run');
+ let n=posts().length;await click('local-records-pause',true);
+ check(posts().length===n+1&&view().control.id===info.seed_run&&view().control.status==='PAUSED'&&view().control.version===2,'double click sends one pause at the original version and receives the same Run PAUSED at version two');
+ check(!view().run&&!$('local-records-run-proof').textContent&&$('local-records-pause').disabled&&!$('local-records-resume').disabled,'metadata-only pause receipt never impersonates a full Run result and enables explicit resume');
+ const path=base()+'/runs/'+info.seed_run+'/commands';n=posts().length;hold={path,method:'POST',remaining:1};const opening=click('local-records-resume',true);
+ await wait(()=>!!releaseRead,'held actual resume receipt');await select('local-records-instance-select',info.second_instance);
+ const status=$('local-records-control-status').textContent,collection=$('local-records-current').textContent;
+ const release=releaseRead;releaseRead=null;release();await opening;
+ check(posts().length===n+1&&posts().at(-1).body.command==='resume'&&posts().at(-1).body.version===2,'held resume actually advances the original Run with one versioned POST');
+ check(view().instance.id===info.second_instance&&!view().control&&!view().run&&$('local-records-control-status').textContent===status&&$('local-records-current').textContent===collection&&disabled(),'late accepted control receipt cannot repaint or enable commands in the newer empty instance');
+ await select('local-records-instance-select',instance_id);await select('local-records-run-select',info.seed_run);await click('local-records-run-read');
+ check(view().run.status==='QUEUED'&&view().run.version===3&&view().control.id===info.seed_run,'explicit original-instance read finds the same resumed Run at version three');
+ n=actions.length;lose={path};await click('local-records-cancel',true);
+ check(actions.slice(n).length===1&&posts().length===3&&posts().at(-1).body.command==='cancel'&&posts().at(-1).body.version===3&&posts().at(-1).status===200,'cancel double click sends one actual accepted POST and lost delivery triggers no automatic request');
+ check(disabled()&&!view().run&&!view().control&&$('local-records-control-status').textContent.includes('未确认')&&w.eval('[...localRecordsControlIntents.values()].some(i=>i.state==="UNKNOWN")'),'lost control receipt keeps commands locked without inventing a final state');
+ n=posts().length;await click('local-records-run-read');
+ check(posts().length===n&&view().run.id===info.seed_run&&view().run.status==='CANCELLED'&&view().run.version===4&&view().run.output===null&&view().run.event===null,'explicit GET reads original cancelled Run at version four without replaying control or business writes');
+ check(disabled()&&w.eval('localRecordsControlIntents.size')===0&&view().instance.data_version===0&&!view().instance.records.length&&!view().instance.history.length,'fresh advanced version resolves uncertainty while terminal controls and empty collection remain truthful');
+ await boot();await open();await select('local-records-run-select',info.seed_run);await click('local-records-run-read');
+ check(posts().length===3&&view().run.status==='CANCELLED'&&view().run.version===4&&disabled(),'cold page retains the original terminal Run and never resubmits it');
+ check(actions.filter(row=>row.method==='POST').every(row=>row.path===path),'page mutations are confined to three explicit controls on the one original Run');
+}
 async function projectHistory(){
  const detail=()=>[...$('runs').querySelectorAll('button')].find(button=>button.closest('.row').textContent.includes(info.seed_run.slice(0,16)));
  const summary=async()=>{await nav('projects');await wait(()=>!!detail(),'project history Run');await click(detail());check($('result').textContent.includes(info.title_a)&&visible($('local-record-task-open-result')),'project history reads exact typed event and exposes dedicated application entry');check(!$('commands').children.length,'typed history never offers legacy ordinary commands');};
@@ -181,13 +209,13 @@ async function revocation(){
 }
 (async()=>{
  let status='FAIL',error;
- try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else await flow();status='PASS';}
+ try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else if(info.scenario==='controls')await controls();else await flow();status='PASS';}
  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
   fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,static_resource_loads,boots,app_id,release_id,instance_id,run_ids,request_keys,first_history,
-   classification:info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
+   classification:info.scenario==='controls'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS':info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');
  }
 })();
