@@ -5,7 +5,12 @@ import json
 import os
 import re
 import subprocess
+import threading
+import time
+import traceback
+from contextlib import contextmanager
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -20,162 +25,313 @@ from sim2act.db import Store
 from sim2act.worker import Worker
 
 
+class _PageObserver:
+    """Flush test-only evidence; the watchdog targets only this owned Popen Node."""
+
+    def __init__(self, folder, scenario):
+        self.folder = folder
+        self.scenario = scenario
+        self.started = time.monotonic()
+        self.lock = threading.Lock()
+        self.serial = 0
+        self.http_serial = 0
+        self.process = self.watchdog = None
+        self.watchdog_fired = False
+        self.latest = None
+        self.errors = []
+        self.progress = (folder / "progress.jsonl").open("w", encoding="utf-8")
+        self.driver = (folder / "driver.log").open("w", encoding="utf-8")
+        (folder / "http").mkdir()
+        self.sent = self.observed_list("model")
+        self.runtime_sent = self.observed_list("runtime")
+
+    def save(self, name, value):
+        with (self.folder / name).open("w", encoding="utf-8") as target:
+            json.dump(value, target, ensure_ascii=False, indent=2)
+            target.flush()
+
+    def event(self, kind, **details):
+        with self.lock:
+            self.serial += 1
+            value = dict(sequence=self.serial, kind=kind, scenario=self.scenario,
+                utc=datetime.now(UTC).isoformat(), elapsed_seconds=time.monotonic() - self.started,
+                **details)
+            self.progress.write(json.dumps(value, ensure_ascii=False) + "\n")
+            self.progress.flush()
+            self.latest = value
+
+    @contextmanager
+    def phase(self, kind, **details):
+        started = time.monotonic()
+        self.event(kind + "_start", **details)
+        try:
+            yield
+        except BaseException as error:
+            self.event(kind + "_error", duration_seconds=time.monotonic() - started,
+                error_type=type(error).__name__, error=str(error), **details)
+            raise
+        else:
+            self.event(kind + "_end", duration_seconds=time.monotonic() - started, **details)
+
+    def observed_list(self, name):
+        observer = self
+
+        class ObservedList(list):
+            def append(self, payload):
+                super().append(payload)
+                with (observer.folder / (name + "-wire.jsonl")).open("a", encoding="utf-8") as target:
+                    target.write(json.dumps(dict(index=len(self), request=payload), ensure_ascii=False) + "\n")
+                    target.flush()
+                observer.save(name + "-wire.json", self)
+                observer.event(name + "_request", request_index=len(self))
+
+        return ObservedList()
+
+    def own_node(self, process):
+        self.process = process
+        self.event("node_started", pid=process.pid, args=process.args,
+            watchdog_seconds=900, watchdog_scope="OWNED_POPEN_NODE_ONLY")
+        self.watchdog = threading.Timer(900, self.kill_owned_node, args=("WATCHDOG_900_SECONDS",))
+        self.watchdog.daemon = True
+        self.watchdog.start()
+
+    def kill_owned_node(self, reason):
+        if reason == "WATCHDOG_900_SECONDS":
+            self.watchdog_fired = True
+        process = self.process
+        if process is not None and process.poll() is None:
+            self.event("owned_node_kill_start", pid=process.pid, reason=reason)
+            try:
+                process.kill()
+            except ProcessLookupError:
+                self.event("owned_node_already_exited", pid=process.pid, reason=reason)
+            else:
+                self.event("owned_node_kill_signalled", pid=process.pid, reason=reason)
+
+    def http_response(self, request, reply):
+        self.http_serial += 1
+        name = f"http/{self.http_serial:06d}-response.body"
+        raw = reply.content
+        (self.folder / name).write_bytes(raw)
+        metadata = dict(rpc_id=request.get("id"), method=request["method"], path=request["path"],
+            request=request.get("body"), status=reply.status_code,
+            content_type=reply.headers.get("content-type"), response_file=name,
+            response_bytes=len(raw), response_sha256=hashlib.sha256(raw).hexdigest())
+        self.save(f"http/{self.http_serial:06d}-metadata.json", metadata)
+        self.event("http_response_saved", **metadata)
+
+    def stderr_text(self):
+        self.driver.flush()
+        return (self.folder / "driver.log").read_text(encoding="utf-8")
+
+    def __enter__(self):
+        self.event("test_start", subprocess_watchdog_seconds=900,
+            parent_worker_timeout="EXTERNAL_OWNED_900_SECONDS_REQUIRED")
+        return self
+
+    def __exit__(self, error_type, error, error_tb):
+        cleanup_error = None
+        try:
+            if error is not None:
+                self.errors.append("".join(traceback.format_exception(error_type, error, error_tb)))
+                self.event("test_error", error_type=error_type.__name__, error=str(error))
+            if self.watchdog is not None:
+                self.watchdog.cancel()
+                self.watchdog.join(timeout=5)
+            self.kill_owned_node("FINALIZE_OWNED_NODE")
+            if self.process is not None and self.process.poll() is None:
+                self.process.wait(timeout=10)
+        except BaseException as failure:
+            cleanup_error = failure
+            self.errors.append(traceback.format_exc())
+            raise
+        finally:
+            try:
+                self.save("model-wire.json", self.sent)
+                self.save("runtime-wire.json", self.runtime_sent)
+                self.save("errors.json", self.errors)
+                self.event("test_end", passed=error is None and cleanup_error is None, watchdog_fired=self.watchdog_fired,
+                    provider_requests=len(self.sent), runtime_requests=len(self.runtime_sent),
+                    node_pid=self.process.pid if self.process is not None else None,
+                    node_exit_code=self.process.poll() if self.process is not None else None)
+                self.save("progress-summary.json", dict(scenario=self.scenario,
+                    elapsed_seconds=time.monotonic() - self.started, latest=self.latest,
+                    provider_requests=len(self.sent), runtime_requests=len(self.runtime_sent),
+                    http_responses=self.http_serial, watchdog_fired=self.watchdog_fired,
+                    error_count=len(self.errors)))
+            finally:
+                self.driver.flush()
+                self.driver.close()
+                self.progress.close()
+        return False
+
+
 @pytest.mark.parametrize(
     "scenario",
     ["valid", "binding-lost", "binding-late", "sample-tampered", "sample-nodes-tampered",
      "run-lost", "run-late", "run-receipt-poison", "artifact-poison", "artifact-late"],
 )
 def test_natural_spec_page_actual_nodes_and_cold_material(env, tmp_path, scenario):
-    data = setup(env)
-    store, settings, client, _, pid, resource, card = data
-    target_resource, target_card = material(client, pid, COLD, "Cold operating notes")
-    info = tmp_path / "info.json"
-    info.write_text(
-        json.dumps(
-            dict(
-                project=pid,
-                card=card["id"],
-                target_card=target_card["id"],
-                target_resource=target_resource,
-                scenario=scenario,
-                output=str(tmp_path / "results.json"),
+    with _PageObserver(tmp_path, scenario) as observer:
+        data = setup(env)
+        store, settings, client, _, pid, resource, card = data
+        target_resource, target_card = material(client, pid, COLD, "Cold operating notes")
+        info = tmp_path / "info.json"
+        info.write_text(
+            json.dumps(
+                dict(
+                    project=pid,
+                    card=card["id"],
+                    target_card=target_card["id"],
+                    target_resource=target_resource,
+                    scenario=scenario,
+                    output=str(tmp_path / "results.json"),
+                )
             )
         )
-    )
-    sent = []
-    runtime_sent = []
+        sent = observer.sent
+        runtime_sent = observer.runtime_sent
 
-    def handler(request):
-        payload = json.loads(request.content)
-        sent.append(payload)
-        initial = json.loads(payload["messages"][1]["content"])
-        feedback = [json.loads(m["content"]) for m in payload["messages"] if m["role"] == "tool"]
-        if len(sent) == 1:
-            message = dict(
-                role="assistant",
-                content="",
-                tool_calls=[
-                    dict(
-                        id="model-read",
-                        type="function",
-                        function=dict(
-                            name="resource.read", arguments=json.dumps(dict(resource_id=resource))
-                        ),
-                    )
-                ],
-            )
-        else:
-            assert feedback[0]["data"]["content"] == SOURCE
-            value = dict(
-                recipe=recipe("sequential"),
-                sample_nodes=[
-                    dict(
-                        step_id=step["step_id"],
-                        items=[
-                            i
-                            for i in facts(SOURCE)
-                            if i["kind"] in natural.MODEL_KINDS[step["operator"]]
-                        ],
-                    )
-                    for step in recipe("sequential")["steps"]
-                    if step["operator"] in natural.MODEL_KINDS
-                ],
-                source_hash=feedback[0]["data"]["hash"],
-                goal=initial["saved_goal"]["snapshot"]["content"],
-            )
-            if len(sent) == 2:
+        def handler(request):
+            payload = json.loads(request.content)
+            sent.append(payload)
+            initial = json.loads(payload["messages"][1]["content"])
+            feedback = [json.loads(m["content"]) for m in payload["messages"] if m["role"] == "tool"]
+            if len(sent) == 1:
                 message = dict(
                     role="assistant",
                     content="",
                     tool_calls=[
                         dict(
-                            id="model-check",
+                            id="model-read",
                             type="function",
                             function=dict(
-                                name="spec.check_candidate",
-                                arguments=json.dumps(dict(candidate=value)),
+                                name="resource.read", arguments=json.dumps(dict(resource_id=resource))
                             ),
                         )
                     ],
                 )
             else:
-                assert feedback[-1]["data"]["status"] == "PASS"
-                message = dict(role="assistant", content=json.dumps(value))
-        return httpx.Response(
-            200, json=wire(message, "tool_calls" if "tool_calls" in message else "stop")
-        )
-
-    process = subprocess.Popen(
-        ["node", "tests/pa_natural_spec_ui.cjs", str(info)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
-    )
-    cold = cold_client = None
-    try:
-        for line in process.stdout:
-            request = json.loads(line)
-            if request.get("done"):
-                break
-            if request.get("command"):
-                if request["command"] == "provider-worker":
-                    assert Worker(
-                        store, settings, goal_planner_transport=httpx.MockTransport(handler)
-                    ).once()
-                else:
-                    assert request["command"] == "cold-worker"
-                    cold = Store(settings.database_url, test_only=True)
-                    cold_settings = replace(
-                        settings, goal_planner_provider="intern-s2", live_enabled=False, token=""
+                assert feedback[0]["data"]["content"] == SOURCE
+                value = dict(
+                    recipe=recipe("sequential"),
+                    sample_nodes=[
+                        dict(
+                            step_id=step["step_id"],
+                            items=[
+                                i
+                                for i in facts(SOURCE)
+                                if i["kind"] in natural.MODEL_KINDS[step["operator"]]
+                            ],
+                        )
+                        for step in recipe("sequential")["steps"]
+                        if step["operator"] in natural.MODEL_KINDS
+                    ],
+                    source_hash=feedback[0]["data"]["hash"],
+                    goal=initial["saved_goal"]["snapshot"]["content"],
+                )
+                if len(sent) == 2:
+                    message = dict(
+                        role="assistant",
+                        content="",
+                        tool_calls=[
+                            dict(
+                                id="model-check",
+                                type="function",
+                                function=dict(
+                                    name="spec.check_candidate",
+                                    arguments=json.dumps(dict(candidate=value)),
+                                ),
+                            )
+                        ],
                     )
-                    cold_client = TestClient(create_app(cold, cold_settings))
-                    cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
-                    assert Worker(
-                        cold, cold_settings, goal_planner_transport=transport(runtime_sent, COLD)
-                    ).once()
-                answer = dict(id=request["id"], status=200, text="{}")
-            else:
-                reply = (cold_client or client).request(
-                    request["method"],
-                    request["path"],
-                    json=request.get("body"),
-                    headers=request.get("headers"),
-                )
-                answer = dict(
-                    id=request["id"],
-                    status=reply.status_code,
-                    text=reply.text,
-                    content_type=reply.headers.get("content-type"),
-                )
-            process.stdin.write(json.dumps(answer) + "\n")
-            process.stdin.flush()
-        errors = process.stderr.read()
-        code = process.wait(timeout=20)
-        (tmp_path / "driver.log").write_text(errors)
-        (tmp_path / "model-wire.json").write_text(json.dumps(sent, ensure_ascii=False, indent=2))
-        assert code == 0, errors
-        proof = json.loads((tmp_path / "results.json").read_text())
-        assert proof["status"] == "PASS" and len(proof["checks"]) >= (
-            4 if scenario.startswith("sample-") else 22
+                else:
+                    assert feedback[-1]["data"]["status"] == "PASS"
+                    message = dict(role="assistant", content=json.dumps(value))
+            return httpx.Response(
+                200, json=wire(message, "tool_calls" if "tool_calls" in message else "stop")
+            )
+
+        process = subprocess.Popen(
+            ["node", "tests/pa_natural_spec_ui.cjs", str(info)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=observer.driver,
+            text=True,
+            env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
         )
-        web = Path(__file__).parents[1] / "src/sim2act/web"
-        assert set(proof["loaded_source_sha256"]) == {"index.html", "app.css", *re.findall(r'<script\b[^>]*\bsrc="/([^"]+)"', (web / "index.html").read_text())}
-        assert proof["loaded_source_sha256"] == {
-            name: hashlib.sha256((web / name).read_bytes()).hexdigest()
-            for name in proof["loaded_source_sha256"]
-        }
-        assert len(sent) == 3 and len(runtime_sent) == (0 if scenario.startswith("sample-") else 2)
-        (tmp_path / "runtime-wire.json").write_text(
-            json.dumps(runtime_sent, ensure_ascii=False, indent=2)
-        )
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait(timeout=10)
-        if cold_client:
-            cold_client.close()
-        if cold:
-            cold.engine.dispose()
-        client.close()
+        observer.own_node(process)
+        cold = cold_client = None
+        try:
+            for line in process.stdout:
+                observer.event("node_stdout", raw_line=line)
+                request = json.loads(line)
+                with observer.phase("rpc", request=request):
+                    if request.get("done"):
+                        observer.event("rpc_done", rpc_id=request.get("id"))
+                        break
+                    if request.get("command"):
+                        with observer.phase("worker", rpc_id=request["id"], command=request["command"]):
+                            if request["command"] == "provider-worker":
+                                assert Worker(
+                                    store, settings, goal_planner_transport=httpx.MockTransport(handler)
+                                ).once()
+                            else:
+                                assert request["command"] == "cold-worker"
+                                cold = Store(settings.database_url, test_only=True)
+                                cold_settings = replace(
+                                    settings, goal_planner_provider="intern-s2", live_enabled=False, token=""
+                                )
+                                cold_client = TestClient(create_app(cold, cold_settings))
+                                cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
+                                assert Worker(
+                                    cold, cold_settings, goal_planner_transport=transport(runtime_sent, COLD)
+                                ).once()
+                            answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        with observer.phase("http", rpc_id=request["id"], method=request["method"], path=request["path"]):
+                            reply = (cold_client or client).request(
+                                request["method"],
+                                request["path"],
+                                json=request.get("body"),
+                                headers=request.get("headers"),
+                            )
+                            observer.http_response(request, reply)
+                            answer = dict(
+                                id=request["id"],
+                                status=reply.status_code,
+                                text=reply.text,
+                                content_type=reply.headers.get("content-type"),
+                            )
+                    observer.event("rpc_reply", rpc_id=answer["id"], status=answer["status"],
+                        text_sha256=hashlib.sha256(answer["text"].encode()).hexdigest())
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+            code = process.wait(timeout=20)
+            observer.event("node_exited", pid=process.pid, exit_code=code)
+            errors = observer.stderr_text()
+            (tmp_path / "model-wire.json").write_text(json.dumps(sent, ensure_ascii=False, indent=2))
+            assert code == 0, errors
+            proof = json.loads((tmp_path / "results.json").read_text())
+            assert proof["status"] == "PASS" and len(proof["checks"]) >= (
+                4 if scenario.startswith("sample-") else 22
+            )
+            web = Path(__file__).parents[1] / "src/sim2act/web"
+            assert set(proof["loaded_source_sha256"]) == {"index.html", "app.css", *re.findall(r'<script\b[^>]*\bsrc="/([^"]+)"', (web / "index.html").read_text())}
+            assert proof["loaded_source_sha256"] == {
+                name: hashlib.sha256((web / name).read_bytes()).hexdigest()
+                for name in proof["loaded_source_sha256"]
+            }
+            assert len(sent) == 3 and len(runtime_sent) == (0 if scenario.startswith("sample-") else 2)
+            (tmp_path / "runtime-wire.json").write_text(
+                json.dumps(runtime_sent, ensure_ascii=False, indent=2)
+            )
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+            if cold_client:
+                cold_client.close()
+            if cold:
+                cold.engine.dispose()
+            client.close()
