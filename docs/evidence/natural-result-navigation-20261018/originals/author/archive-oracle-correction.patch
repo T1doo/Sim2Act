@@ -1,0 +1,43 @@
+diff --git a/tests/test_natural_result_navigation_ui.py b/tests/test_natural_result_navigation_ui.py
+index 9e77765b..2cbcc5b7 100644
+--- a/tests/test_natural_result_navigation_ui.py
++++ b/tests/test_natural_result_navigation_ui.py
+@@ -4,6 +4,7 @@ Fresh normal SOURCE generation, extraction, Release/instance and COLD v1 are
+ fixture setup. The actual page explicitly runs THIRD once. All models are Mock.
+ """
+ 
++import base64
+ import copy
+ import hashlib
+ import json
+@@ -202,7 +203,29 @@ def completed_delta(before, after, info, rid, key, worker):
+     assert len(heartbeat) == 1 and heartbeat[0]["id"] == worker["worker_id"]
+     assert len(appended(before, after, "run_contracts")) == 1
+     assert len(appended(before, after, "internal_run_bindings")) == 1
+-    assert len(appended(before, after, "delivery_graph_requests")) == 6
++    journal = appended(before, after, "delivery_graph_requests")
++    attempt_id = appended(before, after, "attempts")[0]["id"]
++    archive_kinds = {"natural_source_request_body.v1", "natural_source_response_body.v1"}
++    assert len(journal) == 10
++    assert {(row["app_id"], row["kind"], row["request_key"]) for row in journal} == {
++        (rid, spec.RUN_META, "accepted"), (rid, spec.RUN_META + "_seal", "accepted"),
++        (rid, use.META, "accepted"), (rid, use.META + "_seal", "accepted"),
++        (info["instance"], use.USE, key), (info["instance"], use.USE + "_seal", key),
++        *((rid, kind + suffix, attempt_id) for kind in archive_kinds for suffix in ["", "_seal"])}
++    assert all(row["fingerprint"] == fingerprint(row["snapshot"]) for row in journal)
++    for kind in archive_kinds:
++        original = one(journal, lambda row, kind=kind: row["kind"] == kind, "One original offline body archive")
++        sealed = one(journal, lambda row, kind=kind: row["kind"] == kind + "_seal", "One matching offline body seal")
++        assert original["snapshot"] == sealed["snapshot"]
++        body = original["snapshot"]["request"]
++        assert body == original["snapshot"]["response"]
++        assert body["run_id"] == rid and body["attempt_id"] == attempt_id
++        assert body["principal_id"] == info["principal"] and body["project_id"] == info["project"]
++        assert body["runtime_id"] == info["runtime"] and body["provenance"] == "OFFLINE_MOCKTRANSPORT"
++        assert body["received_complete"] and body["extent"] == "COMPLETE_BODY" and body["omission"] == "NONE"
++        raw = base64.b64decode(body["body_b64"], validate=True)
++        assert body["byte_count"] == len(raw) and body["sha256"] == sha_bytes(raw)
++        assert original["request_fingerprint"] == sealed["request_fingerprint"] == fingerprint(body)
+     assert all(row["run_id"] == rid for row in appended(before, after, "events"))
+     return dict(app_run=app_run[0], typed=typed[0], artifact=resource[0], derived_read_grants=permissions)
+ 

@@ -1,0 +1,1 @@
+纯外部文件保存observer错误：先前Python heredoc已写完minimal-owner-diff-and-originals-review.json，随后拼snapshot文件名时误对Path使用+str，工具可见stderr为`TypeError: unsupported operand type(s) for +: 'PosixPath' and 'str'`。这是工具可见文本记录，不冒称当时已重定向stderr文件或已保存完整首脚本。现仅修外部路径拼接，并比对当前owner-review SHA与已生成review一致后保存snapshot。无产品执行、仓库/旧sealed写入，前面38文件双份hash校验未被绕过。

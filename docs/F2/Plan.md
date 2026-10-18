@@ -1,6 +1,6 @@
 # F2 并行工程 Plan：权威当前状态
 
-2026-10-18 从0a043022接续[自然规范成果版本与同Run人工导航](NaturalResultRunNavigation20261018.md)：同一P-B实例第二次材料/Goal产生v2并保v1已有后端能力，本轮按当前页面连续使用、4个JSON/MD实际下载资格推进。实际新修复仅自然spec人工Run下拉→机器Run详情的反向接线，防合同B/详情A；保留v1 STALE门。预定1个实际HTTP/JSDOM+1个原synthetic导航回归，Mock/设备无依赖；不重跑关闭测试，仅收窄其闭后GET/fullsource过宽文案，原历史和未验边界保持。
+2026-10-18 [自然规范同Run导航与v1/v2冷页下载](NaturalResultRunNavigation20261018.md)已有限验收：生产仅owner下拉→原机器详情一行；结果v2、目录与下载为既有能力的当前页面资格，同一Release不变。执行 `ba6e1e06babdf591cbd439ee769b1c2a9cd0aa98` 完整HTTP/JSDOM 93检查/4下载通过，原synthetic 36项通过，共2唯一节点；687输入/133生产三轮各0漂移，最终6Mock、含失败总17Mock/真实0。初期3次测试失败和纯解析错误完整保留，非全程绿；[原件与边界](../evidence/natural-result-navigation-20261018/README.md)。关闭仅收窄GET旧文案未重跑，原取消/缺证及Win/native/PG/真实/CI门保持。
 
 P-B未受理原key关闭最终源码 `f7a48c062dfbcd3b9b515d893bb696eb65d69d9a`：七后端+两完整页面共9唯一节点当前通过，含两连接实际双向并发及独立terminal SHA迟到投递；三轮685输入各0漂移，共24Mock/6来源Worker、真实0。首轮后端5PASS/2FAIL、第二轮6PASS/1FAIL，页面每轮2PASS；原锁等待500与撤权断言错误全留证，最终普通POST/close对称有界30秒等待。非作者有限独审、原件和[交付范围](../evidence/pb-extraction-close-20261018/README.md)保留，未关闭Win/native/PG/真实/CI或旧取消门。
 

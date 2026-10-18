@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="179.446" timestamp="2026-10-18T06:58:23.763192+00:00" hostname="31571a76ef61"><testcase classname="tests.test_natural_result_navigation_ui" name="test_same_pb_instance_navigates_matching_owner_run_and_downloads_both_versions" time="178.821"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: fixture v1 normal PREPARE is pending and readable before second input&#10;      at check (/workspace/Sim2Act/tests/natural_result_navigation_ui.cjs:13:33)&#10;      at /workspace/Sim2Act/tests/natural_result_navigation_ui.cjs:43:431&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">tmp_path = PosixPath('/workspace/natural-result-navigation-evidence-20261018/actual-tmp/test_same_pb_instance_navigate0')
+
+    def test_same_pb_instance_navigates_matching_owner_run_and_downloads_both_versions(tmp_path):
+        root = Path.cwd().resolve()
+        settings = Settings("sqlite:///" + str(tmp_path / "fixture.db"), tmp_path, mode="mock", goal_planner_provider="intern-s2")
+        store = Store(settings.database_url, test_only=True)
+        clients, cold_stores, workers, wire_http, ipc, checkpoints = [], [], [], [], [], []
+        stage = dict(name="generation")
+        wires = {name: [] for name in ["generation", "source", "pb-v1", "pb-v2"]}
+        source_run = v1_run = v2_run = None
+        process = None
+        proof = dict(status="NOT_COMPLETED", real_model_requests=0, native_browser="NOT_RUN", windows="NOT_RUN",
+            pg="NOT_RUN", remote_ci="NOT_RUN", real_semantic_acceptance="NOT_RUN",
+            fixture_scope="SOURCE_GEN3_SOURCE_WORKER1_PB_V1_WORKER1_THEN_PAGE_PB_V2_WORKER1")
+        with _PageObserver(tmp_path, "NATURAL_RESULT_RUN_NAVIGATION_AND_FOUR_DOWNLOADS") as observer:
+            before_sources = sources(root)
+            observer.save("source-before.json", before_sources)
+            lock = threading.Lock()
+            try:
+                store.initialize()
+                user = store.user("natural navigation fixture A", "synthetic-test-A")
+                client = TestClient(create_app(store, settings))
+                clients.append(client)
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                trace_http(client, observer, lock)
+                project = ok(client.post("/api/projects", json=dict(name="Natural result Run navigation")), 201)["id"]
+                source_resource, source_goal = material(client, project, SOURCE)
+                data = store, settings, client, user, project, source_resource, source_goal
+                observer.save("seed-before-generation.json", snapshot(store))
+                import test_natural_spec_apps as original_fixture
+                original_transport = original_fixture.httpx.MockTransport
+    
+                def observed_transport(handler):
+                    name = handler.__qualname__
+                    assert name in {"generate.&lt;locals&gt;.handler", "transport.&lt;locals&gt;.handler"}, name
+                    def capture(request):
+                        payload = json.loads(request.content)
+                        target = "generation" if name == "generate.&lt;locals&gt;.handler" else stage["name"]
+                        assert target in wires
+                        wires[target].append(payload)
+                        (observer.sent if target == "generation" else observer.runtime_sent).append(payload)
+                        observer.save(target + "-wire.json", wires[target])
+                        return handler(request)
+                    return original_transport(capture)
+    
+                fixture_httpx = SimpleNamespace(MockTransport=observed_transport, Response=original_fixture.httpx.Response)
+                with patch.object(original_fixture, "httpx", fixture_httpx):
+                    with observer.phase("normal_source_generation_release_instance"):
+                        _, source_app, source_release, source_instance, generation_wire = ready(data, "single")
+                    assert generation_wire == wires["generation"] and len(generation_wire) == 3
+                    source_run = enqueue(data, source_release, source_instance, key="navigation-source")
+                    once(store, settings, source_run, SOURCE, "source", observer, stage, wires, workers)
+                    observer.save("source-success-before-pb.json", snapshot(store))
+                    cold_resource, cold_goal = material(client, project, COLD, "P-B v1 exact COLD Goal")
+                    source_path = f"/api/projects/{project}/natural-spec-task-runs/{source_run}"
+                    options = ok(client.get(source_path + "/extraction-options"))
+                    body = dict(source_run_id=source_run, expected_source_proof_fingerprint=options["source_proof_fingerprint"],
+                        expected_source_recipe_fingerprint=options["recipe_fingerprint"], card_id=cold_goal["id"],
+                        expected_goal_version=cold_goal["version"], expected_goal_fingerprint=cold_goal["fingerprint"],
+                        expected_source_hash=sha_bytes(COLD.encode()), recipe=copy.deepcopy(options["recipe"]),
+                        name="Natural P-B Run navigation", request_key="navigation-pb-extraction")
+                    reviewed = ok(client.post(source_path + "/extraction-reviews", json=body))
+                    extracted = ok(client.post(source_path + "/extractions", json=dict(review=body,
+                        expected_review_fingerprint=reviewed["review_fingerprint"], consent=pb.CONSENT,
+                        artifact_write_consent=natural.CONSENT)), 201)
+                    app = ok(client.get("/api/apps/" + extracted["id"]))
+                    release, instance = release_instance(data, app["id"])
+                    v1_run = enqueue(data, release, instance, key="navigation-pb-v1")
+                    observer.save("v1-before-worker.json", snapshot(store))
+                    once(store, settings, v1_run, COLD, "pb-v1", observer, stage, wires, workers)
+                    v1_artifact = ok(client.get(f"/api/internal/app-run-jobs/{v1_run}/spec-artifact"))
+                    assert v1_artifact["result_version"] == 1
+                    assert json.loads(v1_artifact["resource"]["content"])["source_content"] == COLD
+                    owner_path = f"/api/internal/instances/{instance['id']}/runs/{v1_run}/spec-owner-review"
+                    record, owner_request = owner_prepare(data, owner_path, key="navigation-fixture-v1-prepare")
+                    owner_state = ok(client.get(owner_path))
+                    assert owner_state["sequence"] == 1 and owner_state["latest"]["kind"] == "PREPARE"
+                    assert owner_state["owner_acceptance"] == "PENDING" and owner_state["content_access"]
+                    observer.save("v1-owner-fixture-prepare.json", dict(request=owner_request, record=record,
+                        contract_fingerprint=fingerprint(record["payload"]["contract"]), state=owner_state,
+                        classification="EXPLICIT_SYNTHETIC_FIXTURE_PREPARE_NO_DECIDE_NOT_HUMAN_SIGNOFF"))
+                    observer.save("v1-baseline-before-third-input.json", snapshot(store))
+                    third_resource, third_goal = material(client, project, THIRD, "P-B v2 explicit THIRD Goal")
+                    initial = snapshot(store)
+                    readonly = initial
+                    observer.save("v2-before-page.json", initial)
+                    assert len(observer.sent) == 3 and len(observer.runtime_sent) == 2
+                    info = dict(project=project, principal=user, app=app["id"], name=app["name"], app_name=app["name"],
+                        instance=instance["id"], release=release["id"], runtime=app["runtime_id"],
+                        v1_run=v1_run, v1_result_version=1, v1_goal=cold_goal["id"], v1_resource=cold_resource, v1_content=COLD,
+                        v2_goal=third_goal["id"], v2_resource=third_resource, v2_content=THIRD, v2_hash=sha_bytes(THIRD.encode()),
+                        v1_history=owner_state["history"], v1_owner_request=owner_request, v1_owner_record_id=record["id"],
+                        v1_contract_fingerprint=fingerprint(record["payload"]["contract"]),
+                        output=str(tmp_path / "page-result.json"), storage_path=str(tmp_path / "durable-storage.json"))
+                    observer.save("info.json", info)
+                    bridge = TestClient(create_app(store, settings))
+                    clients.append(bridge)
+                    trace_http(bridge, observer, lock)
+                    process = subprocess.Popen(["node", str(Path(__file__).with_name("natural_result_navigation_ui.cjs")),
+                        str(tmp_path / "info.json")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=observer.driver, text=True, env={**os.environ,
+                            "NODE_PATH": str(root / "scripts/engineering-ci/node_modules")})
+                    observer.own_node(process)
+                    checked_review = accepted_body = delivered = None
+                    with (tmp_path / "node.stdout").open("w", encoding="utf-8") as stdout:
+                        for line in process.stdout:
+                            stdout.write(line)
+                            stdout.flush()
+                            observer.event("node_stdout", raw_line=line)
+                            request = json.loads(line)
+                            ipc.append(dict(direction="NODE_TO_PYTHON", value=request))
+                            if request.get("done"):
+                                break
+                            command = request.get("command")
+                            with observer.phase("rpc", rpc_id=request["id"], command=command):
+                                if command == "worker":
+                                    assert not [row for row in workers if row["phase"] == "pb-v2"]
+                                    assert v2_run and request["run_id"] == v2_run and accepted_body and checked_review
+                                    before_worker = snapshot(store)
+                                    queued_delta(initial, before_worker, info, v2_run, accepted_body["review"]["request_key"])
+                                    observer.save("v2-before-worker.json", before_worker)
+                                    cold = Store(settings.database_url, test_only=True)
+                                    cold_stores.append(cold)
+                                    entry = once(cold, settings, v2_run, THIRD, "pb-v2", observer, stage, wires, workers)
+                                    completed = snapshot(cold)
+                                    for table in ["delivery_graph_requests", "internal_run_bindings", "run_contracts", "grants"]:
+                                        assert all(row in completed[table] for row in before_worker[table]), table
+                                    delivered = completed_delta(initial, completed, info, v2_run,
+                                        accepted_body["review"]["request_key"], entry)
+                                    readonly = completed
+                                    observer.save("v2-after-worker.json", completed)
+                                    observer.save("v2-delivery.json", delivered)
+                                    answer = dict(status=200, text=json.dumps(dict(run_id=v2_run, status="SUCCEEDED", result_version=2)))
+                                elif command == "checkpoint":
+                                    phase = request["phase"]
+                                    assert phase in {"seed-readonly", "v2-queued-before-worker", "v2-complete-after-manual-refresh",
+                                        "run-navigation-late-old-get-ignored", "cold-four-downloads-and-navigation-readonly", "final-readonly"}
+                                    current = snapshot(store)
+                                    if phase == "v2-queued-before-worker":
+                                        assert v2_run and not delivered and accepted_body
+                                        queued_delta(initial, current, info, v2_run, accepted_body["review"]["request_key"])
+                                        readonly = current
+                                    else:
+                                        assert current == readonly
+                                        if phase != "seed-readonly":
+                                            assert delivered is not None
+                                    checkpoints.append(dict(phase=phase, run_id=request.get("run_id"), all_expected_rows_verified=True))
+                                    answer = dict(status=200, text="{}")
+                                else:
+                                    assert command is None, "No other Worker/fixture mutation command is supported"
+                                    method, path, headers = request["method"], request["path"], request.get("headers", {})
+                                    if path.startswith("/api/"):
+                                        assert {key.lower(): value for key, value in headers.items()}.get("authorization") == "Bearer synthetic-test-A"
+                                    args, raw = dict(headers=headers), b""
+                                    if "body_text" in request:
+                                        raw = request["body_text"].encode("utf-8")
+                                        assert json.loads(raw) == request["body"]
+                                        args["content"] = raw
+                                    else:
+                                        assert method == "GET" and request.get("body") is None
+                                    assert method == "GET" or path in {
+                                        f"/api/internal/instances/{instance['id']}/pb-use-reviews",
+                                        f"/api/internal/instances/{instance['id']}/pb-use-runs"}
+                                    reply = bridge.request(method, path, **args)
+                                    assert reply.request.content == raw
+                                    try:
+                                        value = reply.json()
+                                    except ValueError:
+                                        value = None
+                                    wire_http.append(dict(rpc_id=request["id"], method=method, path=path, body=request.get("body"),
+                                        body_text=request.get("body_text"), body_bytes=len(raw), body_sha256=sha_bytes(raw),
+                                        status=reply.status_code, response=value, response_text=reply.text,
+                                        after_page_worker=delivered is not None,
+                                        response_bytes=len(reply.content), response_sha256=sha_bytes(reply.content), headers=dict(reply.request.headers)))
+                                    observer.save("page-http.json", wire_http)
+                                    if method == "POST" and path.endswith("/pb-use-reviews"):
+                                        assert checked_review is None and reply.status_code == 200
+                                        checked_review = value
+                                        assert value["request"] == request["body"]
+                                        assert value["request"]["resource_id"] == third_resource and value["request"]["card_id"] == third_goal["id"]
+                                        assert value["request"]["expected_source_hash"] == info["v2_hash"]
+                                        assert value["review_fingerprint"] == fingerprint({key: val for key, val in value.items() if key != "review_fingerprint"})
+                                        assert snapshot(store) == initial
+                                    if method == "POST" and path.endswith("/pb-use-runs"):
+                                        assert v2_run is None and reply.status_code == 202 and checked_review
+                                        accepted_body = request["body"]
+                                        assert accepted_body == dict(review=checked_review["request"],
+                                            expected_review_fingerprint=checked_review["review_fingerprint"], consent=use.CONSENT)
+                                        v2_run = value["run_id"]
+                                        assert v2_run != v1_run
+                                        readonly = snapshot(store)
+                                        queued_delta(initial, readonly, info, v2_run, accepted_body["review"]["request_key"])
+                                    answer = dict(status=reply.status_code, text=reply.text, content_type=reply.headers.get("content-type"))
+                                answer["id"] = request["id"]
+                                ipc.append(dict(direction="PYTHON_TO_NODE", value=answer))
+                                process.stdin.write(json.dumps(answer) + "\n")
+                                process.stdin.flush()
+                    process.stdin.close()
+                    code = process.wait(timeout=20)
+&gt;                   assert code == 0, observer.stderr_text()
+E                   AssertionError: AssertionError [ERR_ASSERTION]: fixture v1 normal PREPARE is pending and readable before second input
+E                         at check (/workspace/Sim2Act/tests/natural_result_navigation_ui.cjs:13:33)
+E                         at /workspace/Sim2Act/tests/natural_result_navigation_ui.cjs:43:431
+E                         at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                     
+E                   assert 1 == 0
+
+tests/test_natural_result_navigation_ui.py:407: AssertionError</failure></testcase></testsuite></testsuites>

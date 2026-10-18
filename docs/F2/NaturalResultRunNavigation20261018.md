@@ -21,3 +21,5 @@
 首轮冻结 `c068e165f7ac6bc38a5d474f26e7a99f8e0bac4c` 的两个节点均失败，原件保留。实际用例在v2提交前因fixture先PREPARE后保存THIRD而新增4条既有材料权限、使原人工合同grant_version失效，页面正确返回STALE；完成8项页面检查、5次Mock、页面Worker0，未完成v2或下载。只将THIRD/Goal正常保存提前到PREPARE之前，不改变业务时钟或断言。旧synthetic探针在32项后因缺精确Release响应及instance.release_fingerprint，触发现行版本门而清实例；只补匹配的合成metadata，原36项断言保持。首轮687输入/133生产前后0漂移；修正后重新冻结两测试，生产一行不变。
 
 第二轮 `8f76e09b11e21c728b0bc09a6d07bcacb4a82967` 的原synthetic 36项通过；实际P-B在正常v2 Worker已SUCCEEDED、typed v2/JSON/3 READ Grant/4操作及原行保全检查均通过后，被测试漏算既有OFFLINE Mock请求/响应正文双封存阻断（实际新增10条journal，误期望6）。该轮6Mock、3业务Worker各单claim，页面刷新/冷页下载未完成，不能写通过。只补测试精确10条scope/kind/key及原请求/响应base64/bytes/SHA/Attempt wire检查，原队列6条和全部业务断言保留；生产/CJS不变。现有闭合原件纯函数核新oracle通过后，再限一次fresh完整actual，不再重复已通过synthetic。纯artifact初版误用排序fingerprint核canonical response SHA的AssertionError已留工具输出转录；依既有ASCII保序compact合同纠正，非产品失败。
+
+最终实际源码 `ba6e1e06babdf591cbd439ee769b1c2a9cd0aa98`：完整HTTP/JSDOM 408.61秒通过，93检查/29交互/72API/54资产/4下载；原synthetic 36项另通过，共2唯一节点。三轮actual完整687输入/133生产各0漂移，最终6Mock/3业务Worker，含失败总17Mock/8业务Worker，真实0；5次执行2PASS/3FAIL原件均保留。独审为有限源码与原件复算，无另行产品复跑。[实际范围、失败与封存原件](../evidence/natural-result-navigation-20261018/README.md)。
