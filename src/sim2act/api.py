@@ -987,6 +987,8 @@ def create_app(store=None, settings=None):
     from .text_workflows import mount as mount_text_workflows
 
     mount_text_workflows(app, db, platform_limits, identity)
+    from .text_workflow_owner import mount as mount_text_workflow_owner
+    mount_text_workflow_owner(app, db, platform_limits, identity)
     from .pa_spec_apps import mount as mount_spec_apps
     mount_spec_apps(app, db, platform_limits, identity)
     from .natural_trial_api import mount as mount_natural_trials

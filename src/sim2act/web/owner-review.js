@@ -2,10 +2,11 @@
 // Human choices are explicit declarations, scoped to the immutable server preview.
 let ownerView=null, ownerGeneration=0, ownerEditGeneration=0;
 const ownerPending=new Map();
+const ownerPerRun=view=>view?.perRun??!!view?.spec;
 async function ownerHash(value){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(goalRunCanonical(value)))),b=>b.toString(16).padStart(2,"0")).join("");}
-function ownerKey(view){return JSON.stringify([view.token,view.project,view.iid,...(view.spec ? [view.connection,view.rid] : [])]);}
-function ownerEndpoint(view){return `/api/internal/instances/${view.iid}/${view.spec ? "runs/"+encodeURIComponent(view.rid)+"/spec-owner-review" : "owner-review"}`;}
-function ownerCurrent(view){return ownerView===view && (!view.spec || view.connection===identityConnectionGeneration) && engineeringCurrent(view.engineering) && view.engineering.instanceGeneration===view.instanceGeneration && view.engineering.instance?.id===view.iid;}
+function ownerKey(view){return JSON.stringify([view.token,view.project,view.iid,...(ownerPerRun(view) ? [view.connection,view.rid] : [])]);}
+function ownerEndpoint(view){return `/api/internal/instances/${view.iid}/${ownerPerRun(view) ? "runs/"+encodeURIComponent(view.rid)+(view.workflow?"/text-owner-review":"/spec-owner-review") : "owner-review"}`;}
+function ownerCurrent(view){return ownerView===view && (!ownerPerRun(view) || view.connection===identityConnectionGeneration) && engineeringCurrent(view.engineering) && view.engineering.instanceGeneration===view.instanceGeneration && view.engineering.instance?.id===view.iid;}
 function ownerFence(view){
   const generation=ownerGeneration,edit=ownerEditGeneration,workspace=workspaceSelectionGeneration;
   return ()=>ownerCurrent(view) && generation===ownerGeneration && edit===ownerEditGeneration && workspace===workspaceSelectionGeneration;
@@ -23,7 +24,7 @@ function ownerButtons(view){
   $("owner-submit").disabled=view.busy || !!pending || !$("owner-ack").checked || view.state?.owner_acceptance!=="PENDING" || !view.state?.record;
   $("owner-cancel").disabled=view.busy || !!pending || latest?.kind!=="PREPARE" || !$("owner-stop-reason").value.trim();
   $("owner-revoke").disabled=view.busy || !!pending || latest?.kind!=="DECIDE" || !$("owner-stop-reason").value.trim();
-  $("owner-refresh").disabled=view.busy || (view.spec && !view.rid);$("owner-recover").disabled=view.busy || (view.spec && !view.rid) || !$("owner-key").value.trim();
+  $("owner-refresh").disabled=view.busy || (ownerPerRun(view) && !view.rid);$("owner-recover").disabled=view.busy || (ownerPerRun(view) && !view.rid) || !$("owner-key").value.trim();
   correctionButtons(view);
 }
 function ownerEdited(){ownerEditGeneration++;if(ownerView)ownerButtons(ownerView);}
@@ -35,6 +36,8 @@ function ownerRender(view,state){
   const record=state.record,contract=record?.payload?.contract || state.current || state.prepare_current;
   $("owner-proof").textContent=(state.content_access || state.prepare_current) && contract ? JSON.stringify({record_id:record?.id,record_fingerprint:record?.fingerprint,expires_at:record?.payload?.expires_at,contract,choices:record?.payload?.choices},null,2) : "当前仅可读取本人停止控制元数据；历史回执不代表当前版本仍获签收。";
   $("owner-natural-evidence").replaceChildren();
+  $("owner-proof").closest("details").open=!view.workflow;
+  if(view.workflow && state.content_access && contract?.output)renderTextWorkflowReport($("owner-natural-evidence"),contract);
   if(view.spec && state.content_access && contract?.output?.checklist){
     renderSpecChecklist($("owner-natural-evidence"),contract.output.checklist);
     if(contract.human_correction){
@@ -62,7 +65,7 @@ function ownerScope(view,value){
   return value?.principal_id===view.principal && value.project_id===view.project && value.instance_id===view.iid;
 }
 function ownerContract(view,value){
-  return ownerScope(view,value) && value.app_id===view.app && value.version===(view.csv ? "owner.csv-sum.v1" : view.spec ? "owner.natural-spec.v1" : "owner.generated-text.v1") && (!view.spec || value.run_id===view.rid) && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
+  return ownerScope(view,value) && value.app_id===view.app && value.version===(view.csv ? "owner.csv-sum.v1" : view.workflow ? "owner.text-four-step.v1" : view.spec ? "owner.natural-spec.v1" : "owner.generated-text.v1") && (!ownerPerRun(view) || value.run_id===view.rid) && value.formal_publication_enabled===false && value.technical_semantic_status==="UNKNOWN";
 }
 async function ownerValidate(view,state,key,current){
   const invalid=()=>{throw Error("签收读取身份、序列或回执绑定不一致");};
@@ -70,7 +73,7 @@ async function ownerValidate(view,state,key,current){
   const ids=new Set(),keys=new Set(),hash=/^[a-f0-9]{64}$/;
   let previous="";
   for(const [index,row] of state.history.entries()){
-    if(!ownerScope(view,row) || (view.spec && row.run_id!==view.rid) || row.sequence!==index+1 || !row.id || ids.has(row.id) || !row.request_key || keys.has(row.request_key) || !hash.test(row.fingerprint) || !hash.test(row.request_fingerprint) || row.previous_fingerprint!==previous || !({PREPARE:["PENDING"],DECIDE:["ACCEPTED","REJECTED"],CANCEL:["CANCELLED"],REVOKE:["REVOKED"]}[row.kind]||[]).includes(row.status))invalid();
+    if(!ownerScope(view,row) || (ownerPerRun(view) && row.run_id!==view.rid) || row.sequence!==index+1 || !row.id || ids.has(row.id) || !row.request_key || keys.has(row.request_key) || !hash.test(row.fingerprint) || !hash.test(row.request_fingerprint) || row.previous_fingerprint!==previous || !({PREPARE:["PENDING"],DECIDE:["ACCEPTED","REJECTED"],CANCEL:["CANCELLED"],REVOKE:["REVOKED"]}[row.kind]||[]).includes(row.status))invalid();
     ids.add(row.id);keys.add(row.request_key);previous=row.fingerprint;
   }
   if(!ownerSame(state.latest,state.history.at(-1)||null))invalid();
@@ -94,10 +97,11 @@ async function ownerValidate(view,state,key,current){
       const requestHash=await ownerHash(payload.request);
       if(!current())return false;
       if(requestHash!==row.request_fingerprint)invalid();
-      if(view.spec){const payloadHash=await ownerHash(payload);if(!current())return false;
+      if(ownerPerRun(view)){const payloadHash=await ownerHash(payload);if(!current())return false;
         if(payloadHash!==row.fingerprint || (record===state.record && !ownerSame(payload.contract,state.current)))invalid();}
     }else if(record===state.record)invalid();
   }
+  if(view.workflow && state.content_access && !await textWorkflowOwnerContract(view,state.current,current))return false;
   return current();
 }
 async function ownerRead(view,key=null){
@@ -118,23 +122,22 @@ async function ownerRead(view,key=null){
 }
 async function openOwnerReview(engineeringView){
   clearOwnerReview();
-  if(engineeringView.workflow){$("owner-panel").hidden=false;$("owner-status").textContent="本应用人工签收 PENDING；四步技术核查不替代语义判断。本切片暂不提交此家族的人工声明。";return;}
   const instance=engineeringView.instance;if(!instance || !engineeringCurrent(engineeringView))return;
-  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,connection:identityConnectionGeneration,spec:!!engineeringView.spec,rid:null,state:null,busy:false,readGeneration:0};
+  const view={engineering:engineeringView,instanceGeneration:engineeringView.instanceGeneration,token,project:engineeringView.project,principal:instance.principal_id,app:engineeringView.app,iid:instance.id,connection:identityConnectionGeneration,spec:!!engineeringView.spec,workflow:!!engineeringView.workflow,perRun:!!(engineeringView.spec||engineeringView.workflow),rid:null,state:null,busy:false,readGeneration:0};
   ownerView=view;$("owner-panel").hidden=false;
   $("correction-key").value=correctionPending.get(ownerKey(view))?.key||"";
   $("owner-run").replaceChildren(new Option("手动选择已完成的新输入任务",""),...instance.runs.filter(run=>run.status==="SUCCEEDED").map(run=>new Option(`${run.id} · 结果 v${run.result_version}`,run.id)));
   const pending=ownerPending.get(ownerKey(view));if(pending)$("owner-key").value=pending.request_key;
   ownerButtons(view);
-  if(view.spec){$("owner-status").textContent="请选择具体成功结果，阅读原文、条件、例外和未决项后，明确接受或要求修正。新结果不继承历史声明。";return;}
+  if(ownerPerRun(view)){$("owner-status").textContent=view.workflow?"请选择具体成功 Run，阅读两次检索的完整引用与报告，再逐项人工判断。PARTIAL 不产生可验收报告，新结果不继承历史声明。":"请选择具体成功结果，阅读原文、条件、例外和未决项后，明确接受或要求修正。新结果不继承历史声明。";return;}
   const current=ownerFence(view),reading=ownerRead(view),readGeneration=view.readGeneration;
   try{await reading;}catch(error){if(current() && readGeneration===view.readGeneration)$("owner-status").textContent=`当前签收记录无法读取：${error.detail || error.message}`;}
   ownerButtons(view);
 }
 async function ownerAction(body){
   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy || ownerPending.has(ownerKey(view)))return;
-  if(!view.state || (view.spec && !view.rid))return;
-  if(view.spec && body.command==="DECIDE" && body.choices.some(x=>!["ACCEPT","REJECT"].includes(x.decision)||!x.reason.trim()))throw Error("请逐项明确判定并填写依据");
+  if(!view.state || (ownerPerRun(view) && !view.rid))return;
+  if(ownerPerRun(view) && body.command==="DECIDE" && body.choices.some(x=>!["ACCEPT","REJECT"].includes(x.decision)||!x.reason.trim()))throw Error("请逐项明确判定并填写依据");
   const request={...body,request_key:crypto.randomUUID(),expected_sequence:view.state.sequence},current=ownerFence(view),scopeKey=ownerKey(view),scope={principal:view.principal,project:view.project,iid:view.iid,rid:view.rid},endpoint=ownerEndpoint(view);
   view.readGeneration++; // A new write intent invalidates every earlier read before POST.
   ownerPending.set(scopeKey,request);$("owner-key").value=request.request_key;
@@ -148,20 +151,20 @@ async function ownerAction(body){
     const reading=ownerRead(view,request.request_key);readGeneration=view.readGeneration;
     await reading;
   }catch(error){
-    if(view.spec && readGeneration===null && error.httpStatus>=400 && error.httpStatus<500 && ["INVALID_INPUT","VERSION_CONFLICT","GRANT_REVOKED","PERMISSION_DENIED","RESOURCE_UNAVAILABLE","UNSUPPORTED_CAPABILITY"].includes(error.message)){
+    if(ownerPerRun(view) && readGeneration===null && error.httpStatus>=400 && error.httpStatus<500 && ["INVALID_INPUT","VERSION_CONFLICT","GRANT_REVOKED","PERMISSION_DENIED","RESOURCE_UNAVAILABLE","UNSUPPORTED_CAPABILITY"].includes(error.message)){
       const proof=error.submissionRejection;
       const hash=await ownerHash(request);
-      if(proof?.namespace==="natural-owner-submission-rejection.v1" && proof.principal_id===scope.principal && proof.project_id===scope.project && proof.instance_id===scope.iid && proof.run_id===scope.rid && proof.request_key===request.request_key && proof.request_fingerprint===hash && proof.acceptance==="NOT_ACCEPTED" && proof.previous_request==="ABSENT" && proof.phase==="TRANSACTION_ROLLED_BACK" && ownerPending.get(scopeKey)===request)ownerPending.delete(scopeKey);
+      if(proof?.namespace===(view.workflow?"text-workflow-owner-submission-rejection.v1":"natural-owner-submission-rejection.v1") && proof.principal_id===scope.principal && proof.project_id===scope.project && proof.instance_id===scope.iid && proof.run_id===scope.rid && proof.request_key===request.request_key && proof.request_fingerprint===hash && proof.acceptance==="NOT_ACCEPTED" && proof.previous_request==="ABSENT" && proof.phase==="TRANSACTION_ROLLED_BACK" && ownerPending.get(scopeKey)===request)ownerPending.delete(scopeKey);
     }
-    if(!view.spec && error.httpStatus>=400 && error.httpStatus<500 && ownerPending.get(ownerKey(view))===request)ownerPending.delete(ownerKey(view));
+    if(!ownerPerRun(view) && error.httpStatus>=400 && error.httpStatus<500 && ownerPending.get(ownerKey(view))===request)ownerPending.delete(ownerKey(view));
     if(current() && (readGeneration===null || readGeneration===view.readGeneration)){
       $("owner-status").textContent=`操作未确认：${error.detail || error.message}。请手动读取原 key；不会自动重发。`;
     }
-  }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);else if(ownerView?.spec && ownerCurrent(ownerView) && ownerKey(ownerView)===scopeKey)ownerButtons(ownerView);}
+  }finally{view.busy=false;if(ownerCurrent(view))ownerButtons(view);else if(ownerPerRun(ownerView) && ownerCurrent(ownerView) && ownerKey(ownerView)===scopeKey)ownerButtons(ownerView);}
 }
 $("owner-prepare").onclick=safe(async()=>{
   const view=ownerView;if(!(view?.state?.content_access||view?.state?.prepare_current))return;
-  if(view.spec){const fence=ownerFence(view),snapshot=view.state.current,rid=view.rid;
+  if(ownerPerRun(view)){const fence=ownerFence(view),snapshot=view.state.current,rid=view.rid;
     const hash=await ownerHash(snapshot);if(!fence()||view.rid!==rid||view.state.current!==snapshot)return;
     return ownerAction({command:"PREPARE",expected_contract_fingerprint:hash});}
   return ownerAction({command:"PREPARE",expected_revision:(view.state.current||view.state.prepare_current).instance_revision,expected_release_fingerprint:(view.state.current||view.state.prepare_current).release_fingerprint,run_ids:[$("owner-run").value]});
@@ -177,9 +180,9 @@ for(const [id,command] of [["owner-cancel","CANCEL"],["owner-revoke","REVOKE"]])
 });
 for(const id of ["owner-run","owner-ack","owner-stop-reason","owner-key"]){$(id).oninput=ownerEdited;$(id).onchange=ownerEdited;}
 async function selectOwnerRun(id,engineeringView=engineering){
-  const view=ownerView;if(!view?.spec || !ownerCurrent(view)||view.engineering!==engineeringView)return;
+  const view=ownerView;if(!ownerPerRun(view) || !ownerCurrent(view)||view.engineering!==engineeringView)return;
   if(id&&![...$("owner-run").options].some(option=>option.value===id))throw Error("运行不属于当前人工验收范围");
-  if(view.rid===id)return;
+  if(view.rid===id&&(!view.workflow||!id))return;
   ownerEdited();$("owner-run").value=id;
   clearCorrectionView();ownerGeneration++;view.readGeneration++;view.rid=id;view.state=null;
   $("owner-form").hidden=true;$("owner-criteria").replaceChildren();$("owner-proof").textContent="";
@@ -191,7 +194,11 @@ async function selectOwnerRun(id,engineeringView=engineering){
   const current=ownerFence(view),reading=ownerRead(view),generation=view.readGeneration;
   try{await reading;}catch(error){if(current()&&generation===view.readGeneration)$("owner-status").textContent=`读取未确认：${error.detail||error.message}`;}
 }
-$("owner-run").onchange=safe(()=>selectOwnerRun($("owner-run").value));
+$("owner-run").onchange=safe(()=>{
+  const view=ownerView,id=$("owner-run").value;
+  if(view?.workflow&&id&&ownerCurrent(view)&&view.engineering.run?.id!==id)return showInternalRun(id,view.engineering,view.engineering.instance);
+  return selectOwnerRun(id);
+});
 for(const [id,recover] of [["owner-refresh",false],["owner-recover",true]])$(id).onclick=safe(async()=>{
   const view=ownerView;if(!view || !ownerCurrent(view) || view.busy)return;
   const current=ownerFence(view);view.busy=true;ownerButtons(view);

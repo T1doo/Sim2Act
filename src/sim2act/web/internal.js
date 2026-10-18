@@ -253,7 +253,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
   $("internal-controls").replaceChildren();$("internal-run-detail").textContent="";view.run=null;
   const selectedCurrent=()=>engineeringCurrent(view) && selection===view.runGeneration && iSelection===view.instanceGeneration && view.instance?.id===instance.id && connection===identityConnectionGeneration;
   const current=()=>selectedCurrent() && workspace===workspaceSelectionGeneration;
-  if(view.spec&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
+  if((view.spec||view.workflow)&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
   if(!current())return;
   try {
     let run;
@@ -300,7 +300,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
       if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(id,view,view.instance);
       return;
     }
-    if(current()&&view.spec&&typeof selectOwnerRun==="function")await selectOwnerRun(run.status==="SUCCEEDED"&&run.content_access!==false?id:"",view);
+    if(current()&&(view.spec||view.workflow)&&typeof selectOwnerRun==="function")await selectOwnerRun(run.status==="SUCCEEDED"&&(view.workflow||run.content_access!==false)?id:"",view);
   } catch(error){if(current()){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");$("internal-run-status").textContent+=" · 无法读取当前详情";}}
 }
 async function submitInternal(view,retry=false) {
@@ -501,6 +501,7 @@ function invalidateInternalContent(view) {
 }
 function internalResult(record,view) {
   if(view.spec)return specResult(record,view);
+  if(view.workflow)return textWorkflowResult(record,view);
   if(!view.agent&&!view.literal)return row(`结果 v${record.version} · ${record.release_id} · ${JSON.stringify(record.data.result)}`);
   const value=record.data.result,node=document.createElement("article");node.className="agent-result";
   const title=document.createElement("p");title.textContent=`历史结果 v${record.version} · ${record.release_id} · ${view.literal ? "确定性文本工具" : "离线 Replay"} · 字面检查 PASS · 语义 ${value.semantic_status}`;
@@ -511,6 +512,62 @@ function internalResult(record,view) {
   node.append(title,scope,quotes);
   if(view.literal)literalResultDownload(node,record,view);
   return node;
+}
+function textWorkflowReportValue(value){
+  const keys=["resource_id","source_hash","term_a","term_b","citations_a","citations_b","text","semantic_status"];
+  const term=x=>typeof x==="string"&&x===x.trim()&&Array.from(x).length>0&&Array.from(x).length<=80&&!/[\r\n]/.test(x);
+  const citations=x=>Array.isArray(x)&&x.length<=8&&x.every(c=>c&&Object.keys(c).sort().join()===['end_line','quote','start_line'].join()&&Number.isSafeInteger(c.start_line)&&c.start_line>0&&Number.isSafeInteger(c.end_line)&&c.end_line>=c.start_line&&c.end_line<=32&&typeof c.quote==="string"&&Array.from(c.quote).length<=1536);
+  if(!value||Object.keys(value).sort().join()!==keys.sort().join()||typeof value.resource_id!=="string"||!value.resource_id||!/^[a-f0-9]{64}$/.test(value.source_hash)||!term(value.term_a)||!term(value.term_b)||!citations(value.citations_a)||!citations(value.citations_b)||value.semantic_status!=="UNKNOWN"||typeof value.text!=="string"||Array.from(value.text).length>6000)return null;
+  const chunks=[];
+  for(const side of ["a","b"]){chunks.push(`${side.toUpperCase()}: ${value['term_'+side]}`);for(const cite of value['citations_'+side])chunks.push(`L${cite.start_line}: ${cite.quote}`);if(!value['citations_'+side].length)chunks.push("No literal matches");}
+  return value.text===chunks.join("\n")?value:null;
+}
+async function textWorkflowOwnerContract(view,contract,current){
+  const invalid=()=>{throw Error("四步报告与所选 Run、材料或成果版本不一致");},instance=view.engineering.instance;
+  const run=view.engineering.run,record=instance.data.find(r=>r.run_id===run?.app_run_id&&r.version===run?.result_version);
+  if(!run||run.id!==view.rid||!record||run.status!=="SUCCEEDED"||contract.app_run_id!==run.app_run_id||contract.release_id!==run.release_id||contract.release_id!==instance.release_id||contract.release_fingerprint!==instance.release_fingerprint||contract.instance_revision!==instance.revision||contract.result_version!==run.result_version||contract.result_version!==instance.data_version||contract.data_version!==instance.data_version||contract.typed_fingerprint!==record.fingerprint||record.release_id!==run.release_id||record.instance_id!==instance.id||!textWorkflowReportValue(contract.output)||!ownerSame(contract.output,run.result)||!ownerSame(contract.output,record.data.result)||!ownerSame(contract.goal,contract.source_goal?.snapshot?.content)||!ownerSame(contract.input,{term_a:contract.output.term_a,term_b:contract.output.term_b,emit_report:true})||contract.material?.resource_id!==contract.output.resource_id||contract.material.hash!==contract.output.source_hash||typeof contract.material.content!=="string"||!["txt","md"].includes(contract.material.format)||new TextEncoder().encode(contract.material.content).length>1536||!Array.isArray(contract.actual_operations)||contract.actual_operations.length!==4||!Array.isArray(run.steps)||run.steps.length!==4)invalid();
+  const outputHash=await ownerHash(contract.output);if(!current())return false;
+  if(outputHash!==contract.output_fingerprint)invalid();
+  const typedHash=await ownerHash(record.data);if(!current())return false;
+  if(typedHash!==contract.typed_fingerprint)invalid();
+  const bytesHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(contract.material.content))),b=>b.toString(16).padStart(2,"0")).join("");if(!current())return false;
+  if(bytesHash!==contract.material.hash)invalid();
+  for(const [n,id] of ["read","lookup_a","lookup_b","report"].entries()){
+    const receipt=contract.actual_operations[n],step=run.steps[n];
+    if(receipt.step_id!==id||receipt.status!=="VERIFIED"||step.step_id!==id||step.status!=="VERIFIED")invalid();
+    const hash=await ownerHash(receipt);if(!current())return false;if(hash!==step.fingerprint)invalid();
+  }
+  if(!ownerSame(contract.actual_operations[0].data,contract.material)||!ownerSame(contract.actual_operations[3].data,contract.output))invalid();
+  for(const [n,side] of [[1,"a"],[2,"b"]]){
+    const lookup=contract.actual_operations[n].data;
+    if(lookup.resource_id!==contract.output.resource_id||lookup.source_hash!==contract.output.source_hash||lookup.term!==contract.output['term_'+side]||!ownerSame(lookup.citations,contract.output['citations_'+side])||lookup.semantic_status!=="UNKNOWN")invalid();
+  }
+  return current();
+}
+function renderTextWorkflowReport(parent,contract){
+  const value=textWorkflowReportValue(contract.output);if(!value)return;
+  const title=document.createElement("h4"),scope=document.createElement("p"),goal=document.createElement("p");
+  title.textContent=`四步文本报告 · Run ${contract.run_id} · 结果 v${contract.result_version}`;
+  scope.textContent=`材料 ${value.resource_id} · SHA-256 ${value.source_hash} · Release ${contract.release_id} · 语义 UNKNOWN；人工判断属于此 Run。`;
+  goal.textContent=`冻结目标：${contract.goal.goal}`;parent.append(title,goal,scope);
+  for(const side of ["a","b"]){
+    const section=document.createElement("section"),heading=document.createElement("h5"),list=document.createElement("ul");
+    heading.textContent=`检索 ${side.toUpperCase()}：${value['term_'+side]}`;section.append(heading,list);
+    for(const cite of value['citations_'+side]){const item=document.createElement("li"),line=document.createElement("p"),quote=document.createElement("blockquote");line.textContent=`第 ${cite.start_line}—${cite.end_line} 行`;quote.textContent=cite.quote;item.append(line,quote);list.append(item);}
+    if(!value['citations_'+side].length){const none=document.createElement("p");none.textContent="无字面命中；不代表语义不存在。";section.append(none);}
+    parent.append(section);
+  }
+  const reportTitle=document.createElement("h5"),text=document.createElement("pre");reportTitle.textContent="完整报告文本";text.textContent=value.text;parent.append(reportTitle,text);
+}
+function textWorkflowResult(record,view){
+  const instance=view.instance,selection=view.instanceGeneration,run=instance.runs.find(r=>r.app_run_id===record.run_id&&r.result_version===record.version&&r.release_id===record.release_id);
+  const node=document.createElement("article"),title=document.createElement("h3"),status=document.createElement("p"),open=document.createElement("button");
+  node.className="text-workflow-result";node.dataset.resultVersion=record.version;title.textContent=`四步文本成果 · 结果 v${record.version}`;
+  status.textContent="打开后重新核对当前权限和同一 Run 的完整报告；历史人工声明不代表当前接受。语义 UNKNOWN。";
+  open.type="button";open.textContent="打开此 Run 报告与人工验收";open.dataset.textWorkflowAction="review";
+  const current=()=>node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection;
+  open.onclick=()=>{if(current()&&!view.busy&&run)return showInternalRun(run.id,view,instance);};open.disabled=!run;
+  node.append(title,status,open);return node;
 }
 const literalResultDownloads=new Set();
 function literalResultValue(instanceId,run,record){

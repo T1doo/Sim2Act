@@ -25,6 +25,7 @@ from .db import (
     internal_instances,
     internal_owner_records,
     internal_owner_seals,
+    internal_releases,
     internal_run_bindings,
     local_effects,
     natural_owner_records,
@@ -598,6 +599,41 @@ def natural_scope(store, c, user, iid, rid):
     return pid
 
 
+def natural_review_scope(store, c, user, iid, rid):
+    """The natural declaration route owns only the natural-spec Run family.
+
+    Other trusted adapters reuse the per-Run journal; check family metadata
+    before its original-key shortcut or source-independent stopping commands.
+    """
+    from .natural_specs import VERSION
+    from .pa_spec_apps import RUN_META, RunScopeInput, pair
+
+    pid = natural_scope(store, c, user, iid, rid)
+    row = c.execute(select(
+        internal_releases.c.snapshot["draft"]["candidate"]["namespace"].as_string().label("namespace"),
+        internal_app_runs.c.id.label("aid"), internal_app_runs.c.release_id,
+        runs.c.runtime_id, runs.c.request_key, internal_instances.c.source_app_id)
+        .select_from(internal_app_runs)
+        .join(internal_run_bindings, internal_run_bindings.c.app_run_id == internal_app_runs.c.id)
+        .join(internal_releases, internal_releases.c.id == internal_app_runs.c.release_id)
+        .join(internal_instances, internal_instances.c.id == internal_app_runs.c.instance_id)
+        .join(runs, runs.c.id == internal_run_bindings.c.run_id)
+        .where(internal_run_bindings.c.run_id == rid, internal_app_runs.c.instance_id == iid,
+            internal_app_runs.c.principal_id == user, runs.c.principal_id == user,
+            runs.c.project_id == pid, internal_releases.c.principal_id == user,
+            internal_releases.c.project_id == pid)).mappings().first()
+    if row is None or row["namespace"] != VERSION:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "Natural-spec declaration route requires its exact Run family")
+    meta, seal = pair(c, user, rid, RUN_META, "accepted", RunScopeInput)
+    if not (fingerprint(meta.model_dump()) == fingerprint(seal)
+        and meta.principal_id == user and meta.project_id == pid and meta.run_id == rid
+        and meta.instance_id == iid and meta.app_run_id == row["aid"]
+        and meta.app_id == row["source_app_id"] and meta.release_id == row["release_id"]
+        and meta.runtime_id == row["runtime_id"] and row["request_key"] == "internal:" + row["aid"]):
+        raise DomainError("VERSION_CONFLICT", "Independent natural review family scope changed")
+    return pid
+
+
 def run_ledger(c, user, rid, records, seals, scope_metadata):
     """Trusted storage adapters only; callers must independently authorize scope first."""
     columns = [x for x in records.c if x.name != "payload"]
@@ -737,7 +773,7 @@ def natural_append(c, user, pid, iid, rid, rows, body, status, **details):
 
 def natural_read(store, user, iid, rid, limits, key=None):
     with store.tx() as c:
-        pid = natural_scope(store, c, user, iid, rid)
+        pid = natural_review_scope(store, c, user, iid, rid)
         rows = natural_ledger(c, user, iid, rid)
         app_id = c.execute(select(internal_instances.c.source_app_id)
             .where(internal_instances.c.id == iid)).scalar()
@@ -805,7 +841,7 @@ def natural_final_gate(store, c, user, iid, rid, fresh, *, expires_at=None):
 def natural_submit(store, user, iid, rid, limits, body):
     return scoped_run_submit(store, user, rid, body, dict(
         namespace="natural-owner-submission-rejection.v1", scope_metadata={"instance_id": iid},
-        scope=lambda c: natural_scope(store, c, user, iid, rid),
+        scope=lambda c: natural_review_scope(store, c, user, iid, rid),
         ledger=lambda c: natural_ledger(c, user, iid, rid),
         payload=natural_payload,
         context=lambda c: natural_context(store, c, user, iid, rid, limits),
