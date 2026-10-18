@@ -1,5 +1,5 @@
 'use strict';
-// Actual page/controllers with synthesized GET responses. No HTTP, Worker,
+// Actual page/controllers with synthesized responses and one explicit cancel POST. No HTTP, Worker,
 // model execution, real human judgement or native browser is exercised here.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {JSDOM}=require('jsdom'),durable=require('./durable_browser.cjs')();
@@ -7,22 +7,25 @@ const web=path.resolve(__dirname,'../src/sim2act/web');
 const p='proj_'+'1'.repeat(32),q='proj_'+'2'.repeat(32),a='app_'+'3'.repeat(32),i='instance_'+'4'.repeat(32),j='instance_'+'5'.repeat(32);
 const parent='run_'+'6'.repeat(32),child='run_'+'7'.repeat(32),release='irelease_'+'8'.repeat(32),f='a'.repeat(64),key='synthetic-correction-key';
 const app={id:a,name:'synthetic saved natural',project_id:p,fingerprint:f,runtime_id:'synthetic-runtime',candidate:{namespace:'pa-natural-spec-app.v1',goal_application:{},goal:{title:'synthetic'},spec_recipe:{steps:[]},manifest:{data_bindings:[]}},input_guidance:{mode:'MODEL_SPEC_CHECKLIST'}};
-let dom,w,$,calls,gate,receipt,childAvailable,childStatus;
-const result={classification:'ACTUAL_PAGE_CONTROLLERS_SYNTHESIZED_GET_ONLY',checks:[],cases:[],worker:'NOT_RUN',real_model:'NOT_RUN',native_browser:'NOT_RUN',real_human_semantics:'NOT_RUN'};
+let dom,w,$,calls,gate,receipt,childAvailable,childStatus,denied,controlState,controlBody,allowCancel;
+const result={classification:'ACTUAL_PAGE_CONTROLLERS_SYNTHESIZED_NAVIGATION_AND_CANCEL',checks:[],cases:[],worker:'NOT_RUN',real_model:'NOT_RUN',native_browser:'NOT_RUN',real_human_semantics:'NOT_RUN'};
 const check=(ok,label)=>{assert(ok,label);result.checks.push(label);};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function wait(test){for(let n=0;n<300;n++){if(test())return;await tick();}throw Error('synthetic GET gate not reached');}
 function instance(id){return {id,principal_id:'synthetic-A',source_app_id:a,project_id:p,runtime_id:'synthetic-runtime',release_id:release,release_fingerprint:f,revision:1,data_version:childAvailable&&childStatus==='SUCCEEDED'?2:1,runs:[{id:parent,status:'SUCCEEDED',result_version:1},...(childAvailable?[{id:child,status:childStatus,result_version:childStatus==='SUCCEEDED'?2:null}]:[])],data:[],formal_publication_enabled:false};}
 function ownerState(rid){const contract={principal_id:'synthetic-A',project_id:p,instance_id:i,app_id:a,run_id:rid,version:'owner.natural-spec.v1',formal_publication_enabled:false,technical_semantic_status:'UNKNOWN'};return {...contract,sequence:0,history:[],latest:null,record:null,recovered:null,content_access:true,current:contract,owner_acceptance:'PENDING'};}
 async function setup(){
- dom?.window.close();calls=[];gate=null;childAvailable=false;childStatus='SUCCEEDED';
+ dom?.window.close();calls=[];gate=null;childAvailable=false;childStatus='SUCCEEDED';denied=false;allowCancel=false;controlBody=null;controlState={namespace:'INTERNAL_ENGINEERING_ONLY',id:child,instance_id:i,status:'QUEUED',version:1,cancel_intent:false,content_access:false,formal_publication_enabled:false};
  dom=new JSDOM(fs.readFileSync(path.join(web,'index.html'),'utf8'),{url:'http://synthetic.invalid/',runScripts:'dangerously'});w=dom.window;$=id=>w.document.getElementById(id);
  w.setInterval=()=>1;durable.install(w);w.structuredClone=structuredClone;w.TextEncoder=TextEncoder;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});
  w.fetch=async(url,options={})=>{
-  const method=options.method||'GET';calls.push({url,method});assert.equal(method,'GET','navigation must never submit');
+  const method=options.method||'GET';calls.push({url,method});if(method!=='GET'){assert(allowCancel&&url===`/api/internal/instances/${i}/runs/${child}/commands`);assert.deepEqual(JSON.parse(options.body),{command:'cancel',version:1});controlState={...controlState,status:'CANCELLED',version:2,cancel_intent:true};}
   if(gate&&!gate.used&&url===gate.url){gate.used=true;await new Promise(resolve=>gate.resolve=resolve);}
+  if(denied&&url===`/api/internal/instances/${i}`)return {ok:false,status:403,json:async()=>({error:{code:'GRANT_REVOKED'}})};
   let value;
-  if(url===`/api/apps/${a}`)value=app;
+  if(url===`/api/internal/instances/${i}/runs/${child}/control-status`)value=controlBody||controlState;
+  else if(method==='POST')value={namespace:'INTERNAL_ENGINEERING_ONLY',formal_publication_enabled:false,status:'CANCELLED'};
+  else if(url===`/api/apps/${a}`)value=app;
   else if(url===`/api/internal/apps/${a}/instances`)value={items:[instance(i),instance(j)]};
   else if(url.endsWith('/releases'))value={items:[]};
   else if(url===`/api/internal/instances/${i}`)value=instance(i);
@@ -89,6 +92,19 @@ function navigate(kind){
  for(const bad of [{project_id:q},{run_id:parent},{run_id:'invalid'}]){
   await setup();Object.assign(receipt,bad);await assert.rejects(recover(),/新Run回执绑定不一致/);check($('correction-open-run').hidden,'incorrect receipt never exposes navigation');
  }
+ await setup();await recover();denied=true;allowCancel=true;await open();
+ check(!$('projects').hidden&&$('apps').hidden&&$('internal-run-detail').textContent===''&&w.eval('engineering')===null,'revoked content enters separate Projects stop panel with private application cleared');
+ check($('known-internal-stop-status').textContent.includes(child)&&!$('known-internal-stop-cancel').disabled,'owner metadata status enables exact known-child cancellation');
+ gate={url:`/api/internal/instances/${i}/runs/${child}/commands`,used:false};
+ const cancelling=$('known-internal-stop-cancel').onclick();await wait(()=>gate.used);await $('known-internal-stop-cancel').onclick();gate.resolve();await cancelling;
+ check(calls.filter(c=>c.method==='POST').length===1&&$('known-internal-stop-status').textContent.includes('CANCELLED'),'explicit double click cancels exactly once then only reads metadata');
+ await setup();await recover();denied=true;gate={url:`/api/internal/instances/${i}/runs/${child}/control-status`,used:false};
+ const stopping=open();await wait(()=>gate.used);navigate('identity');$('result').textContent='CURRENT CLEAN';gate.resolve();await stopping;
+ check($('result').textContent==='CURRENT CLEAN'&&calls.every(c=>c.method==='GET'),'late owner metadata cannot paint another connection or send commands');
+ await setup();await recover();denied=true;await open();w.selectWorkspace('apps');w.selectWorkspace('projects');await tick();
+ check($('known-internal-stop-read').disabled&&$('known-internal-stop-cancel').disabled&&$('known-internal-stop-status').textContent.includes('已失效'),'workspace return visibly invalidates old stop controls');
+ await setup();await recover();denied=true;controlBody={...controlState,instance_id:j};await open();
+ check($('known-internal-stop-cancel').disabled&&$('known-internal-stop-status').textContent.includes('绑定不一致'),'wrong metadata instance never enables cancellation');
  result.status='PASS';
 }catch(error){result.status='FAIL';result.error=error.stack;process.exitCode=1;}finally{
  result.assets=Object.fromEntries(['index.html','app.js','internal.js','use.js','owner-review.js'].map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(path.join(web,name))).digest('hex')]));

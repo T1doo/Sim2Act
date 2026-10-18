@@ -1,4 +1,4 @@
-"""Receipt navigation only; synthetic GET responses, no Worker or model calls."""
+"""Receipt navigation only; synthetic navigation/control responses, no Worker or model calls."""
 
 import json
 import os
@@ -17,4 +17,4 @@ def test_verified_correction_run_entry_and_navigation_isolation(tmp_path):
     assert completed.returncode == 0, completed.stdout + completed.stderr
     result = json.loads(proof.read_text())
     assert result["status"] == "PASS"
-    assert result["classification"] == "ACTUAL_PAGE_CONTROLLERS_SYNTHESIZED_GET_ONLY"
+    assert result["classification"] == "ACTUAL_PAGE_CONTROLLERS_SYNTHESIZED_NAVIGATION_AND_CANCEL"

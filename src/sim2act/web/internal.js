@@ -326,8 +326,48 @@ async function showInternalInstance(id,view=engineering) {
     if(typeof openNaturalLogic==="function")await openNaturalLogic(view,selectedRelease);
     if(!current())return;
     if(typeof openOwnerReview==="function")await openOwnerReview(view);
-  } catch(error){if(current()){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");}}
+  } catch(error){if(current()){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");return {permissionDenied:["PERMISSION_DENIED","GRANT_REVOKED"].includes(error.message),instanceId:id,failedSelection:selection,instanceGeneration:view.instanceGeneration,runGeneration:view.runGeneration};}}
   if(current())engineeringButtons(view);
+}
+async function showKnownInternalRunStop(scope){
+  // Entered only from a verified accepted receipt after its own instance read
+  // lost content access. Keep opaque IDs, never restore a cached instance.
+  const identity=token,connection=identityConnectionGeneration,project=$("project-select").value;
+  clearApp();selectWorkspace("projects");clearRunDetail();activeRun=null;
+  const workspace=workspaceSelectionGeneration,selection=++runUserSelectionGeneration;runSelectionGeneration++;
+  const panel=document.createElement("section"),title=document.createElement("p"),status=document.createElement("p"),read=document.createElement("button"),cancel=document.createElement("button");
+  panel.id="known-internal-stop";title.textContent=`已受理修正Run ${scope.rid} · 实例 ${scope.iid}；当前内容不可读，仅保留本人停止控制。`;
+  read.type=cancel.type="button";read.id="known-internal-stop-read";cancel.id="known-internal-stop-cancel";read.textContent="读取此Run的停止状态";cancel.textContent="取消此修正Run";cancel.disabled=true;
+  status.id="known-internal-stop-status";status.setAttribute("role","status");panel.append(title,status,read,cancel);$("result").append(panel);
+  const current=()=>panel.isConnected&&identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&workspace===workspaceSelectionGeneration&&selection===runUserSelectionGeneration&&activeRun===null;
+  const observer=new MutationObserver(()=>{
+    if(current())return;
+    if(panel.isConnected){read.disabled=cancel.disabled=true;status.textContent="当前任务选择或工作区已变化，此停止入口已失效；请从原回执重新打开。";}
+    observer.disconnect();
+  });
+  observer.observe($("projects"),{attributes:true,attributeFilter:["hidden"]});observer.observe($("result"),{childList:true});
+  const path=`/api/internal/instances/${encodeURIComponent(scope.iid)}/runs/${encodeURIComponent(scope.rid)}`;
+  const statuses=["QUEUED","RUNNING","WAITING_APPROVAL","WAITING_RESOURCE","RECONCILING","PAUSE_REQUESTED","PAUSED","CANCEL_REQUESTED","SUCCEEDED","PARTIAL","FAILED","CANCELLED"];
+  let busy=false,state=null;
+  const buttons=()=>{if(!current())return;read.disabled=busy;cancel.disabled=busy||!state||!["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED","RECONCILING"].includes(state.status)||state.cancel_intent;};
+  const readState=async()=>{
+    const value=await api(path+"/control-status");if(!current())return;
+    if(value.namespace!=="INTERNAL_ENGINEERING_ONLY"||value.id!==scope.rid||value.instance_id!==scope.iid||value.content_access!==false||value.formal_publication_enabled!==false||!Number.isSafeInteger(value.version)||value.version<1||typeof value.cancel_intent!=="boolean"||!statuses.includes(value.status)||Object.keys(value).some(k=>!["namespace","id","instance_id","status","version","cancel_intent","content_access","formal_publication_enabled"].includes(k)))throw Error("停止状态绑定不一致");
+    state=value;status.textContent=`原Run ${value.id} · ${value.status} · 取消意图 ${value.cancel_intent?"已保留":"无"}；不读取材料或成果。`;
+  };
+  read.onclick=safe(async()=>{if(!current()||busy)return;busy=true;state=null;buttons();try{await readState();}catch(error){if(current())status.textContent=`停止状态未确认：${error.message}；请明确重新读取，不会重发取消。`;}finally{busy=false;buttons();}});
+  cancel.onclick=safe(async()=>{
+    if(!current()||busy||cancel.disabled||!state)return;
+    const version=state.version;busy=true;state=null;buttons();
+    try{
+      const saved=await api(path+"/commands","POST",{command:"cancel",version});if(!current())return;
+      if(saved.namespace!=="INTERNAL_ENGINEERING_ONLY"||saved.formal_publication_enabled!==false||!statuses.includes(saved.status))throw Error("取消回执绑定不一致");
+      status.textContent=`已受理原Run ${scope.rid} 的取消：${saved.status}。`;
+      try{await readState();}catch(error){if(current())status.textContent+=` 当前停止状态回读未确认：${error.message}；仅明确读取，不会重发取消。`;}
+    }catch(error){if(current())status.textContent=`取消结果未确认：${error.message}；仅明确读取当前停止状态，不会自动重发。`;}
+    finally{busy=false;buttons();}
+  });
+  await read.onclick();
 }
 async function showInternalRun(id,view=engineering,instance=view?.instance) {
   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;

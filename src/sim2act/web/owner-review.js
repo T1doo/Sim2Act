@@ -362,8 +362,12 @@ $("correction-open-run").onclick=safe(async()=>{
   try{
     // Refresh the existing instance controller so its Run/owner selectors include
     // the accepted child. This deliberately clears the old owner/receipt view.
-    await showInternalInstance(v.iid,view);
-    if(!engineeringCurrent(view)||connection!==identityConnectionGeneration||workspace!==workspaceSelectionGeneration||view.instanceGeneration!==selection||view.runGeneration!==runSelection)return;
+    const refreshed=await showInternalInstance(v.iid,view);
+    if(!engineeringCurrent(view)||connection!==identityConnectionGeneration||workspace!==workspaceSelectionGeneration)return;
+    if(refreshed?.permissionDenied&&refreshed.instanceId===v.iid&&refreshed.failedSelection===selection&&refreshed.instanceGeneration===view.instanceGeneration&&refreshed.runGeneration===view.runGeneration&&view.instanceGeneration===selection+1&&view.runGeneration===runSelection+1){
+      await showKnownInternalRunStop({iid:v.iid,rid:target.rid});return;
+    }
+    if(view.instanceGeneration!==selection||view.runGeneration!==runSelection)return;
     const instance=view.instance;
     if(!instance||instance.id!==v.iid||instance.principal_id!==v.principal)return;
     if(instance.release_id!==target.release||instance.release_fingerprint!==target.releaseFingerprint||instance.revision!==target.revision)throw Error("修正所属版本已变化，请重新核对当前实例");

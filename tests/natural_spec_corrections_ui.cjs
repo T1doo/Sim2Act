@@ -36,6 +36,17 @@ async function boot(){await closePage();const boot=++boots;const load=async path
  }
  }
  const receipt=JSON.parse($("correction-proof").textContent);check(receipt.run_id&&receipt.run_id!==info.run&&receipt.parent_run_id===info.run,"one distinct new Run bound to rejected parent");
+ if(info.scenario==="revoked-cancel"){
+  assert.equal((await rpc({command:"revoke_known_material",rid:receipt.run_id})).status,200);
+  await click("correction-open-run");
+  check(visible($("known-internal-stop"))&&!visible($("internal-panel")),"revoked content opens independent known-Run stop metadata with private application cleared");
+  check($("known-internal-stop-status").textContent.includes(receipt.run_id)&&!$("known-internal-stop-cancel").disabled,"exact owner metadata enables cancellation after source revocation");
+  await click("known-internal-stop-cancel");
+  check($("known-internal-stop-status").textContent.includes("CANCELLED"),"explicit cancellation reaches terminal state through original control API");
+  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/commands")).length===1,"exactly one explicit cancel POST");
+  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/correction-runs")).length===1,"cancel path does not duplicate correction Run");
+  runViews.push({stage:"revoked-cancelled",run_id:receipt.run_id,control_status:$("known-internal-stop-status").textContent});status="PASS";
+ }else{
  if(info.recovery_key)check(receipt.run_id===info.expected_child&&requests.every(r=>r.method==="GET"),"cold continuation recovers exact accepted child by GET without resubmitting");
  check(visible($("correction-open-run")),"accepted correction exposes direct new Run entry");
  await click("correction-open-run");
@@ -68,8 +79,9 @@ async function boot(){await closePage();const boot=++boots;const load=async path
  await confirm("owner-ack");await click("owner-submit");
  check($("owner-status").textContent.includes("ACCEPTED")&&$("owner-status").textContent.includes("UNKNOWN"),"fresh explicit judgement keeps semantic UNKNOWN");
  check(requests.filter(r=>r.method==="POST"&&r.path.endsWith("/correction-runs")).length===(info.recovery_key?0:1),info.recovery_key?"continuation creates zero correction Runs":"exactly one explicit correction Run POST");status="PASS";
+ }
  }catch(e){error=e.stack||String(e);process.stderr.write(error+"\n");process.exitCode=1;}finally{
  try{await closePage();}catch(e){error=error||String(e);status="FAIL";process.exitCode=1;}
  fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,requests,run_views:runViews,final_view:finalView,static_resource_loads:assets,boots,
- classification:info.recovery_key?"ACTUAL_TESTCLIENT_HTTP_JSDOM_EXISTING_RUN_CONTINUATION_NO_NEW_WORKER":"ACTUAL_TESTCLIENT_HTTP_VISIBLE_JSDOM_ACTUAL_NEW_WORKER_SIMULATED_CHOICES",real_model:"NOT_RUN",native_browser:"NOT_RUN",real_human_semantic_acceptance:"NOT_RUN"},null,2));
+ classification:info.scenario==="revoked-cancel"?"ACTUAL_TESTCLIENT_HTTP_JSDOM_REVOKED_SOURCE_EXPLICIT_CANCEL_NO_CORRECTION_WORKER":info.recovery_key?"ACTUAL_TESTCLIENT_HTTP_JSDOM_EXISTING_RUN_CONTINUATION_NO_NEW_WORKER":"ACTUAL_TESTCLIENT_HTTP_VISIBLE_JSDOM_ACTUAL_NEW_WORKER_SIMULATED_CHOICES",real_model:"NOT_RUN",native_browser:"NOT_RUN",real_human_semantic_acceptance:"NOT_RUN"},null,2));
  process.stdout.write(JSON.stringify({done:true})+"\n");}})();
