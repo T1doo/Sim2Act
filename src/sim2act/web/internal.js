@@ -301,13 +301,15 @@ async function showInternalInstance(id,view=engineering) {
     const instance=await api(`/api/internal/instances/${id}`);
     if(!current())return;
     if(instance.source_app_id!==view.app || instance.project_id!==view.project)throw Error("实例来源与当前选择不符");
+    const resultManifests=(view.agent||view.literal)?await internalResultManifests(instance,view,current):null;
+    if(!current())return;
     view.instance=instance;if(view.spec)specRecoveryRefresh(view,instance);renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
     $("internal-column-label").hidden=view.agent||view.literal||view.workflow||view.spec;$("internal-column").required=!(view.agent||view.literal||view.workflow||view.spec);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;$("internal-term").disabled=!(view.agent||view.literal);refreshTextTerm($("internal-term"));
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
     if(typeof showTextWorkflowInputs === "function")showTextWorkflowInputs("internal",!!view.workflow);
     $("internal-run-form").hidden=false;
-    $("internal-data").replaceChildren(...instance.data.map(record=>internalResult(record,view)));
+    $("internal-data").replaceChildren(...instance.data.map(record=>internalResult(record,view,resultManifests?.get(record.release_id))));
     $("internal-runs").replaceChildren(...instance.runs.map(run=>row(`${run.status} · ${run.id} · 结果版本 ${run.result_version ?? "无"}`,()=>showInternalRun(run.id,view,instance),"读取后台任务")));
     $("internal-run-status").textContent=engineeringPending.has(id) ? "上次提交回执未确认，可用原请求键恢复；不会自动重发。" : (view.agent ? "加载对应离线响应并填写本次检索词；后台核查真实授权材料，不调用provider。关闭页面不会取消任务。" : "选择数值列，提交后台只读计算；关闭页面不会取消已接受任务。");
     if(view.workflow)$("internal-run-status").textContent="填写两次独立检索词，明确选择报告分支。报告未选时保留 PARTIAL 与三步回执；只用原请求 key 读取未知结果。";
@@ -624,17 +626,65 @@ function invalidateInternalContent(view) {
   $("internal-run-form").hidden=true;$("internal-switch").hidden=true;
   $("app-frozen-goal-text").textContent="";$("app-frozen-goal").hidden=true;$("app-manifest").textContent="";
 }
-function internalResult(record,view) {
+async function internalResultManifests(instance,view,current){
+  const manifests=new Map(),invalid=()=>{throw Error("成果视图与原 Release 或 Run 绑定不一致");};
+  for(const id of new Set(instance.data.map(record=>record.release_id))){
+    if(typeof id!=="string"||!/^irelease_[a-f0-9]{32}$/.test(id))invalid();
+    const release=await api(`/api/internal/releases/${encodeURIComponent(id)}`);if(!current())return null;
+    const snapshot=release.snapshot,draft=snapshot?.draft,manifest=draft?.candidate?.manifest;
+    if(release.namespace!=="INTERNAL_ENGINEERING_ONLY"||release.id!==id||release.principal_id!==instance.principal_id||release.project_id!==view.project||snapshot?.namespace!=="INTERNAL_ENGINEERING_ONLY"||draft?.id!==view.app||draft.project_id!==view.project||draft.runtime_id!==instance.runtime_id||manifest?.app_id!==view.app||!Array.isArray(manifest.views)||manifest.views.length>16||(id===instance.release_id&&release.fingerprint!==instance.release_fingerprint))invalid();
+    const releaseHash=await ownerHash(snapshot);if(!current())return null;
+    const candidateHash=await ownerHash(draft.candidate);if(!current())return null;
+    if(releaseHash!==release.fingerprint||candidateHash!==draft.fingerprint)invalid();
+    manifests.set(id,manifest);
+  }
+  for(const record of instance.data){
+    const matches=instance.runs.filter(run=>run.app_run_id===record.run_id);
+    if(record.instance_id!==instance.id||matches.length!==1)invalid();
+    const run=matches[0];
+    if(run.instance_id!==instance.id||run.release_id!==record.release_id||run.status!=="SUCCEEDED"||run.result_version!==record.version||!ownerSame(run.result,record.data?.result))invalid();
+    const typedHash=await ownerHash(record.data);if(!current())return null;
+    if(typedHash!==record.fingerprint)invalid();
+  }
+  return manifests;
+}
+function renderManifestViews(manifest,result){
+  const group=document.createElement("div");group.className="manifest-views";
+  const scalar=(value,type)=>type==="string"?typeof value==="string"&&value.length<=65536:type==="integer"?Number.isSafeInteger(value):type==="number"?typeof value==="number"&&Number.isFinite(value):type==="boolean"&&typeof value==="boolean";
+  for(const definition of manifest.views){
+    const section=document.createElement("section"),heading=document.createElement("h4"),message=document.createElement("p");
+    section.dataset.viewComponent=definition.component_ref;section.dataset.outputField=definition.output_field;
+    heading.textContent=definition.output_field;section.append(heading);group.append(section);
+    const schema=manifest.output_schema?.properties?.[definition.output_field],value=result[definition.output_field];
+    if(definition.component_ref==="text"&&schema?.type==="string"&&scalar(value,"string")){
+      message.className="manifest-text";message.textContent=value;section.append(message);continue;
+    }
+    if(definition.component_ref==="table"){
+      const item=schema?.items,columns=Object.keys(item?.properties||{}),types=columns.map(key=>item.properties[key]?.type);
+      if(schema?.type==="array"&&Number.isSafeInteger(schema.maxItems)&&schema.maxItems<=64&&schema.maxItems>=0&&item?.type==="object"&&item.additionalProperties===false&&columns.length>0&&columns.length<=16&&Array.isArray(item.required)&&item.required.length===columns.length&&columns.every(key=>item.required.includes(key))&&types.every(type=>["string","integer","number","boolean"].includes(type))&&Array.isArray(value)&&value.length<=schema.maxItems&&JSON.stringify(value).length<=262144&&value.every(entry=>entry&&typeof entry==="object"&&!Array.isArray(entry)&&Object.keys(entry).length===columns.length&&columns.every((key,index)=>Object.hasOwn(entry,key)&&scalar(entry[key],types[index])))){
+        const scroll=document.createElement("div"),table=document.createElement("table"),caption=document.createElement("caption"),head=document.createElement("thead"),body=document.createElement("tbody"),headers=document.createElement("tr");
+        scroll.className="manifest-table-scroll";caption.textContent=`${definition.output_field} · ${value.length} 条`;table.append(caption,head,body);head.append(headers);
+        for(const key of columns){const th=document.createElement("th");th.scope="col";th.textContent=key;headers.append(th);}
+        for(const entry of value){const tr=document.createElement("tr");for(const key of columns){const td=document.createElement("td");td.textContent=String(entry[key]);tr.append(td);}body.append(tr);}
+        scroll.append(table);section.append(scroll);
+        if(!value.length){message.textContent="暂无记录；无字面命中不代表语义不存在。";section.append(message);}continue;
+      }
+    }
+    message.textContent=definition.component_ref==="chart"?"chart 视图尚未支持：缺少轴、序列和单位合同。可查看原始结果。":"此字段形状暂不支持所选视图；可查看原始结果。";section.append(message);
+  }
+  if(!manifest.views.length)group.textContent="清单未声明视图；可查看原始结果。";
+  return group;
+}
+function internalResult(record,view,manifest) {
   if(view.spec)return specResult(record,view);
   if(view.workflow)return textWorkflowResult(record,view);
   if(!view.agent&&!view.literal)return row(`结果 v${record.version} · ${record.release_id} · ${JSON.stringify(record.data.result)}`);
   const value=record.data.result,node=document.createElement("article");node.className="agent-result";
   const title=document.createElement("p");title.textContent=`历史结果 v${record.version} · ${record.release_id} · ${view.literal ? "确定性文本工具" : "离线 Replay"} · 字面检查 PASS · 语义 ${value.semantic_status}`;
   const scope=document.createElement("p");scope.textContent=`检索词：${value.term} · 材料 ${value.resource_id} · revision ${value.revision} · hash ${value.source_hash}`;
-  const quotes=document.createElement("ul");
-  for(const cite of value.citations){const line=document.createElement("li"),label=document.createElement("span"),quote=document.createElement("blockquote");label.textContent=`第 ${cite.start_line}—${cite.end_line} 行`;quote.textContent=cite.quote;line.append(label,quote);quotes.append(line);}
-  if(!value.citations.length)quotes.textContent="无字面命中；不代表语义不存在。";
-  node.append(title,scope,quotes);
+  node.dataset.resultVersion=record.version;node.dataset.releaseId=record.release_id;
+  const raw=document.createElement("details"),label=document.createElement("summary"),json=document.createElement("pre");label.textContent="查看原始结果";json.textContent=JSON.stringify(value,null,2);raw.append(label,json);
+  node.append(title,scope,renderManifestViews(manifest,value),raw);
   if(view.literal)literalResultDownload(node,record,view);
   return node;
 }

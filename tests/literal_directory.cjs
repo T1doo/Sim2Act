@@ -54,7 +54,7 @@ async function use(){
   results.push(run);await readonly();
  }
  check(results[0]!==results[1],'new term produces a distinct Run');
- check($('internal-data').querySelectorAll('blockquote').length===4,'v1 and v2 retained with actual complete matching lines');
+ check($('internal-data').querySelectorAll('[data-output-field="citations"] tbody tr').length===4,'v1 and v2 retained with actual complete matching lines in declared tables');
  check(!$('internal-data').querySelector('em'),'literal HTML source displayed as text');
  const before=posts().length;await boot();await open();await readonly();
  check(posts().length===before,'cold page and reopened instance send no POST');
