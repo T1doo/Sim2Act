@@ -1,0 +1,121 @@
+{
+  "rpc_id": null,
+  "method": "POST",
+  "path": "/api/projects/proj_31bcb013f0bc46e6b8ab958ae4b9c05a/natural-spec-task-runs/run_45ca26991b2a4a23a99d5ed2afe9c529/extractions",
+  "request": {
+    "review": {
+      "source_run_id": "run_45ca26991b2a4a23a99d5ed2afe9c529",
+      "expected_source_proof_fingerprint": "32c13f2cfe4cb2e0db37dfcc9d7f2351cc18189c974f95b932d5115c10231b54",
+      "expected_source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+      "card_id": "goal_5ba11956e5c4411fb030349b61c3e248",
+      "expected_goal_version": 1,
+      "expected_goal_fingerprint": "b76d7c124790dda4d9de204584cab2c40859ed78fbc342d7390095aaa91ff661",
+      "expected_source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+      "recipe": {
+        "version": "natural-spec-recipe.v1",
+        "steps": [
+          {
+            "step_id": "read_pick",
+            "operator": "resource.read",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "close_intent_inference",
+            "operator": "model.spec.all",
+            "depends_on": [
+              "read_pick"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              }
+            }
+          },
+          {
+            "step_id": "check_pick",
+            "operator": "spec.verify_citations",
+            "depends_on": [
+              "read_pick",
+              "close_intent_inference"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              },
+              "items": {
+                "source": "step",
+                "ref": "close_intent_inference",
+                "field": "items"
+              }
+            }
+          },
+          {
+            "step_id": "save_pick",
+            "operator": "artifact.save_text",
+            "depends_on": [
+              "check_pick"
+            ],
+            "inputs": {
+              "text": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "text"
+              }
+            }
+          }
+        ]
+      },
+      "name": "Original close-safe P-B candidate",
+      "request_key": "6cf0aa94-c9f3-4411-aedd-01cb2fbb5e7c"
+    },
+    "expected_review_fingerprint": "47e33131eeceafc5422ead7f3302bb60e85f7fef898dc0f038b83c6d3d8a1d4b",
+    "consent": "EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET",
+    "artifact_write_consent": "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"
+  },
+  "status": 201,
+  "content_type": "application/json",
+  "response_file": "http/000050-response.body",
+  "response_bytes": 33542,
+  "response_sha256": "51b5ff2d26d62ce721486d3d1d1ac7530553e6a1e6b1a397a6a2706c316214d9"
+}

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="7" time="176.660" timestamp="2026-10-18T06:19:13.627435+00:00" hostname="31571a76ef61"><testcase classname="tests.test_pb_extraction_close" name="test_unaccepted_close_is_durable_and_rejects_late_original_or_changed_post" time="68.092" /><testcase classname="tests.test_pb_extraction_close" name="test_unaccepted_close_survives_invalidated_target_without_reading_it" time="4.979" /><testcase classname="tests.test_pb_extraction_close" name="test_already_accepted_extraction_cannot_be_closed_or_modified" time="29.560" /><testcase classname="tests.test_pb_extraction_close" name="test_real_two_connection_close_and_submit_serialize[close-first]" time="5.266" /><testcase classname="tests.test_pb_extraction_close" name="test_real_two_connection_close_and_submit_serialize[post-first]" time="9.118"><failure message="assert False&#10; +  where False = is_set()&#10; +    where is_set = &lt;threading.Event at 0x7f082e003b00: unset&gt;.is_set">pb_extraction_close_seed = {'commit': {'artifact_write_consent': 'ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT', 'consent..._app': 'app_319968014906826b64387569edffcfa8', 'source_app_run': 'iapprun_0fb2aa2169644fd49d712483b7ab58af', ...}, ...}
+tmp_path = PosixPath('/workspace/pb-extraction-close-evidence-20261018/backend-data/test_real_two_connection_close1')
+winner = 'submit'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f082c30ac00&gt;
+
+    @pytest.mark.parametrize("winner", ["close", "submit"], ids=["close-first", "post-first"])
+    def test_real_two_connection_close_and_submit_serialize(pb_extraction_close_seed, tmp_path, winner, monkeypatch):
+        with _PageObserver(tmp_path, "PB_CLOSE_RACE_" + winner.upper()) as observer:
+            with CloseCase(pb_extraction_close_seed, tmp_path / "case", observer) as case:
+                baseline = snapshot(case.store)
+                second_store, second_client = case.cold()
+                first_locked, release_first, second_begin, second_began = [threading.Event() for _ in range(4)]
+                log, log_lock = [], threading.Lock()
+                original_lock = case.store.lock_project
+    
+                def mark(kind, connection=None):
+                    row = dict(event=kind, thread_id=threading.get_ident())
+                    if connection is not None:
+                        row["dbapi_connection_id"] = id(connection.connection.driver_connection)
+                    with log_lock:
+                        log.append(row)
+                        observer.save("race-events.json", log)
+    
+                def hold_after_first_project_lock(connection, principal, project):
+                    value = original_lock(connection, principal, project)
+                    mark("FIRST_PROJECT_LOCK_ACQUIRED", connection)
+                    first_locked.set()
+                    assert release_first.wait(10), "Test-owned gate must always be released in finally"
+                    mark("FIRST_PROJECT_LOCK_RELEASED_BY_TEST", connection)
+                    return value
+    
+                def before_second_begin(connection, cursor, statement, parameters, context, many):
+                    if statement.strip().upper() == "BEGIN IMMEDIATE":
+                        mark("SECOND_BEGIN_IMMEDIATE_ATTEMPTED", connection)
+                        second_begin.set()
+    
+                def after_second_begin(connection, cursor, statement, parameters, context, many):
+                    if statement.strip().upper() == "BEGIN IMMEDIATE":
+                        mark("SECOND_BEGIN_IMMEDIATE_COMPLETED", connection)
+                        second_began.set()
+    
+                def request(actor, client):
+                    mark("REQUEST_STARTED_" + actor.upper())
+                    reply = case.close(client=client) if actor == "close" else case.submit(client=client)
+                    mark("REQUEST_RETURNED_" + actor.upper())
+                    return reply
+    
+                monkeypatch.setattr(case.store, "lock_project", hold_after_first_project_lock)
+                event.listen(second_store.engine, "before_cursor_execute", before_second_begin)
+                event.listen(second_store.engine, "after_cursor_execute", after_second_begin)
+                try:
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        first = pool.submit(request, winner, case.client)
+                        try:
+                            assert first_locked.wait(10)
+                            second = pool.submit(request, "submit" if winner == "close" else "close", second_client)
+                            assert second_begin.wait(10), "Second real connection must reach BEGIN while first lock is held"
+                            assert not second_began.is_set() and not first.done() and not second.done()
+                            mark("OVERLAP_PROVED_FIRST_LOCK_HELD_SECOND_BEGIN_INCOMPLETE")
+                        finally:
+                            release_first.set()
+                        a, b = first.result(timeout=30), second.result(timeout=30)
+                finally:
+                    release_first.set()
+                    monkeypatch.setattr(case.store, "lock_project", original_lock)
+                    event.remove(second_store.engine, "before_cursor_execute", before_second_begin)
+                    event.remove(second_store.engine, "after_cursor_execute", after_second_begin)
+                    observer.save("race-events.json", log)
+&gt;               assert second_began.is_set()
+E               assert False
+E                +  where False = is_set()
+E                +    where is_set = &lt;threading.Event at 0x7f082e003b00: unset&gt;.is_set
+
+tests/test_pb_extraction_close.py:487: AssertionError</failure></testcase><testcase classname="tests.test_pb_extraction_close" name="test_source_authority_tenant_and_exact_identity_gate_close" time="7.210"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;GRANT_REVOKED&quot;,&quot;message&quot;:&quot;GRANT_REVOKED&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 'GRANT_REVOKED' == 'PERMISSION_DENIED'&#10;  &#10;  - PERMISSION_DENIED&#10;  + GRANT_REVOKED">pb_extraction_close_seed = {'commit': {'artifact_write_consent': 'ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT', 'consent..._app': 'app_319968014906826b64387569edffcfa8', 'source_app_run': 'iapprun_0fb2aa2169644fd49d712483b7ab58af', ...}, ...}
+tmp_path = PosixPath('/workspace/pb-extraction-close-evidence-20261018/backend-data/test_source_authority_tenant_a0')
+
+    def test_source_authority_tenant_and_exact_identity_gate_close(pb_extraction_close_seed, tmp_path):
+        with _PageObserver(tmp_path, "PB_CLOSE_SCOPE_AND_AUTHORITY") as observer:
+            with CloseCase(pb_extraction_close_seed, tmp_path / "case", observer) as case:
+                other_project = ok(case.client.post("/api/projects", json=dict(name="Explicit wrong-project close scope probe")), 201)["id"]
+                baseline = snapshot(case.store)
+                _, foreign = case.cold("synthetic-test-B")
+                with PrivateReadBarrier(case.store, {case.info["source_run"]},
+                        {case.info["source_resource"], case.info["source_artifact"]}) as barrier:
+                    barrier.attach(case.extra_stores[-1])
+                    error(case.close(client=foreign), 403, "PERMISSION_DENIED")
+                    error(case.read(foreign), 403, "PERMISSION_DENIED")
+                    wrong_path = case.by_key().replace(case.info["project"], other_project)
+                    wrong = case.client.post(wrong_path + "/close", json=case.close_body())
+                    assert wrong.status_code in {403, 409}, wrong.text
+                    assert wrong.json()["error"]["code"] == ("PERMISSION_DENIED" if wrong.status_code == 403 else "VERSION_CONFLICT")
+                    assert not barrier.blocked
+                    observer.save("foreign-private-read-barrier.json", dict(blocked=barrier.blocked, statements=barrier.statements))
+                assert snapshot(case.store) == baseline
+                for field, value in [("source_instance_id", "iinstance_" + "0" * 32),
+                        ("source_proof_fingerprint", "0" * 64), ("source_result_version", case.identity["source_result_version"] + 1)]:
+                    identity = {**case.identity, field: value}
+                    error(case.close(identity), 409, "VERSION_CONFLICT")
+                    assert snapshot(case.store) == baseline
+                malformed = case.close_body()
+                malformed["identity"]["token"] = "MUST_NOT_BE_ACCEPTED_OR_PERSISTED"
+                assert case.client.post(case.by_key() + "/close", json=malformed).status_code == 422
+                assert snapshot(case.store) == baseline
+                revoked = case.revoke_read(case.info["source_resource"], case.seed["source_app"]["runtime_id"])
+                revoked_baseline = snapshot(case.store)
+                with PrivateReadBarrier(case.store, {case.info["source_run"]},
+                        {case.info["source_resource"], case.info["source_artifact"]}) as barrier:
+&gt;                   error(case.close(), 403, "PERMISSION_DENIED")
+
+tests/test_pb_extraction_close.py:536: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+reply = &lt;Response [403 Forbidden]&gt;, status = 403, code = 'PERMISSION_DENIED'
+
+    def error(reply, status, code):
+        assert reply.status_code == status, reply.text
+&gt;       assert reply.json()["error"]["code"] == code, reply.text
+E       AssertionError: {"error":{"code":"GRANT_REVOKED","message":"GRANT_REVOKED","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 'GRANT_REVOKED' == 'PERMISSION_DENIED'
+E         
+E         - PERMISSION_DENIED
+E         + GRANT_REVOKED
+
+tests/test_pb_extraction_close.py:77: AssertionError</failure></testcase><testcase classname="tests.test_pb_extraction_close" name="test_partial_acceptance_terminal_corruption_and_rollback_are_not_absence" time="51.967" /></testsuite></testsuites>

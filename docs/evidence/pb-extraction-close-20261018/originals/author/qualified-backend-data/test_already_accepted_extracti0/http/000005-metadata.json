@@ -1,0 +1,116 @@
+{
+  "rpc_id": null,
+  "method": "POST",
+  "path": "/api/projects/proj_61e7d3859352455baa27c94bd17f2ab5/natural-spec-task-runs/run_1b1256ddf0a24a7382595bfd50756a19/extraction-reviews",
+  "request": {
+    "source_run_id": "run_1b1256ddf0a24a7382595bfd50756a19",
+    "expected_source_proof_fingerprint": "dcfd5481f3446940d7a1f788884e181aaea568f4dab1b46a65c3db4bf9189bd2",
+    "expected_source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+    "card_id": "goal_b342423aa6c14718a54ade397622227f",
+    "expected_goal_version": 1,
+    "expected_goal_fingerprint": "6bc0d6d7a8d0c249027e291e2b2c1d87fd3c2df17a5ac15392a78fea26c7461a",
+    "expected_source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+    "recipe": {
+      "version": "natural-spec-recipe.v1",
+      "steps": [
+        {
+          "step_id": "read_pick",
+          "operator": "resource.read",
+          "depends_on": [],
+          "inputs": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            }
+          }
+        },
+        {
+          "step_id": "infer_pick",
+          "operator": "model.spec.all",
+          "depends_on": [
+            "read_pick"
+          ],
+          "inputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "resource_id"
+            },
+            "content": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "content"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "hash"
+            },
+            "format": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "format"
+            }
+          }
+        },
+        {
+          "step_id": "check_pick",
+          "operator": "spec.verify_citations",
+          "depends_on": [
+            "read_pick",
+            "infer_pick"
+          ],
+          "inputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "resource_id"
+            },
+            "content": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "content"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "hash"
+            },
+            "format": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "format"
+            },
+            "items": {
+              "source": "step",
+              "ref": "infer_pick",
+              "field": "items"
+            }
+          }
+        },
+        {
+          "step_id": "save_pick",
+          "operator": "artifact.save_text",
+          "depends_on": [
+            "check_pick"
+          ],
+          "inputs": {
+            "text": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "text"
+            }
+          }
+        }
+      ]
+    },
+    "name": "Explicit unaccepted P-B extraction",
+    "request_key": "22222222-2222-4222-8222-222222222222"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "response_file": "http/000005-response.body",
+  "response_bytes": 30148,
+  "response_sha256": "fce0180cfb9847e94200148de905fa8f12ff7a4d8e317d04b34964c10d929799"
+}

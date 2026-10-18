@@ -27,3 +27,5 @@
 首轮冻结 `f0652b42c8c90c3363c8a2dd70b29d45f04b259b` 的后端5PASS/2FAIL/176.66秒，两条实际页面2PASS/236.50秒。POST先行的真实重叠中，关闭连接的SQLite默认5秒锁等待先到期，未完成BEGIN；原提取正常受理，未伪造关闭。另一个失败是测试把真实403 GRANT_REVOKED硬写为PERMISSION_DENIED。原日志、JUnit、HTTP及重叠原件保留。仅新关闭端点复用 `store.tx(wait_seconds=30)` 等待既有受理事务，finally恢复连接原PRAGMA；不改Store、原extract、业务lease/clock/deadline或PG策略。撤权断言精确改为真实错误码。修后重新冻结并复跑同9个聚焦节点；不把首轮7个PASS/2个FAIL改签为全绿。当前PrivateReadBarrier仅实际屏障resource/run等正文；完整账本正文必须在目标gate后读取由源码顺序独审证明，未声称动态journal-cell屏障。
 
 第二轮 `ce407aaea9449cda7969d2457f1a60a11d4155d9` 后端6PASS/1FAIL/209.97秒，UI仍2PASS/246.09秒。close先行时普通POST保留默认5秒锁等待，在实际重叠中先500，close正常200且无重复受理。现将普通HTTP `extract` wrapper也改为相同有界30秒等待；共享 `_extract`、trial controller、Store、全部授权/版本/最终来源重验及PG策略不变。两轮输入各685项0漂移，原失败不覆盖。第三轮重新冻结同9个聚焦节点，预计六个独立正常来源seed合计24次Mock/6次来源Worker，以最终原件实际计数为准；不保证任意重负载永不超过30秒，超时仍不能清票据。
+
+最终源码 `f7a48c062dfbcd3b9b515d893bb696eb65d69d9a` 同9唯一节点已全部通过；每轮685输入0漂移。六fresh种子共24Mock/6来源Worker、页面Worker0、真实模型0；最终页面118检查/226实际HTTP。三轮原失败及非作者源码/原件复核、正常dev推送和范围见[交付证据](../evidence/pb-extraction-close-20261018/README.md)。Win/native/PG/真实/CI门仍未执行。

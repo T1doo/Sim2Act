@@ -1,0 +1,109 @@
+{
+  "recorded_utc": "2026-10-18T06:27:44.198237+00:00",
+  "classification": "READ_ONLY_COMPLETED_CE407_REVERSE_RACE_FAILURE_AND_PROPOSED_SYMMETRIC_FIX",
+  "source": "ce407aaea9449cda7969d2457f1a60a11d4155d9",
+  "actual_events": [
+    {
+      "event": "REQUEST_STARTED_CLOSE",
+      "thread_id": 139843269588672
+    },
+    {
+      "event": "FIRST_PROJECT_LOCK_ACQUIRED",
+      "thread_id": 139843234100928,
+      "dbapi_connection_id": 139843280548096
+    },
+    {
+      "event": "REQUEST_STARTED_SUBMIT",
+      "thread_id": 139843225708224
+    },
+    {
+      "event": "SECOND_BEGIN_IMMEDIATE_ATTEMPTED",
+      "thread_id": 139843208922816,
+      "dbapi_connection_id": 139843251180048
+    },
+    {
+      "event": "OVERLAP_PROVED_FIRST_LOCK_HELD_SECOND_BEGIN_INCOMPLETE",
+      "thread_id": 139843328124736
+    },
+    {
+      "event": "FIRST_PROJECT_LOCK_RELEASED_BY_TEST",
+      "thread_id": 139843234100928,
+      "dbapi_connection_id": 139843280548096
+    },
+    {
+      "event": "REQUEST_RETURNED_SUBMIT",
+      "thread_id": 139843225708224
+    },
+    {
+      "event": "REQUEST_RETURNED_CLOSE",
+      "thread_id": 139843269588672
+    }
+  ],
+  "actual_errors": [
+    "Traceback (most recent call last):\n  File \"/workspace/Sim2Act/tests/test_pb_extraction_close.py\", line 487, in test_real_two_connection_close_and_submit_serialize\n    assert second_began.is_set()\nAssertionError: assert False\n +  where False = is_set()\n +    where is_set = <threading.Event at 0x7f2fcb0da2d0: unset>.is_set\n"
+  ],
+  "actual_summary": {
+    "scenario": "PB_CLOSE_RACE_CLOSE",
+    "elapsed_seconds": 7.853544821000469,
+    "latest": {
+      "sequence": 5,
+      "kind": "test_end",
+      "scenario": "PB_CLOSE_RACE_CLOSE",
+      "utc": "2026-10-18T06:26:18.298856+00:00",
+      "elapsed_seconds": 7.853518087000339,
+      "passed": false,
+      "watchdog_fired": false,
+      "provider_requests": 0,
+      "runtime_requests": 0,
+      "node_pid": null,
+      "node_exit_code": null
+    },
+    "provider_requests": 0,
+    "runtime_requests": 0,
+    "http_responses": 2,
+    "watchdog_fired": false,
+    "error_count": 1
+  },
+  "actual_responses": [
+    {
+      "method": "POST",
+      "path": "/api/projects/proj_21156699fca0459691cb2f868005b771/natural-spec-task-runs/run_89718b68be00470e94f0f2722d106150/extractions",
+      "status": 500,
+      "response_sha256": "e41656eb2ba6c6293bf6dd928e5a88cdbc50535cab661c1969e0f598e497ed62",
+      "response_text": "Internal Server Error"
+    },
+    {
+      "method": "POST",
+      "path": "/api/projects/proj_21156699fca0459691cb2f868005b771/natural-spec-task-runs/run_89718b68be00470e94f0f2722d106150/extractions/by-key/11111111-1111-4111-8111-111111111111/close",
+      "status": 200,
+      "response_sha256": "00f5c5b8f8041336ceef8b8533033f574709366a8d4cfba28cf4bac1e3c20402",
+      "response_text": null
+    }
+  ],
+  "read_files": {
+    "/workspace/pb-extraction-close-evidence-20261018/final-backend-data/test_real_two_connection_close0/race-events.json": {
+      "bytes": 842,
+      "sha256": "b28fe19d74105c4840c45132b5cb39067533534f4811b5cebd69ed01a1b0edfb"
+    },
+    "/workspace/pb-extraction-close-evidence-20261018/final-backend-data/test_real_two_connection_close0/errors.json": {
+      "bytes": 339,
+      "sha256": "7deb9cb12a9e0995f9db8b0c97e495524005a410d554611b5c51a906610acb99"
+    },
+    "/workspace/pb-extraction-close-evidence-20261018/final-backend-data/test_real_two_connection_close0/progress-summary.json": {
+      "bytes": 544,
+      "sha256": "c8f17be1e969be41c98157a03da5902acb05a2c9834c032f81133a49582ef1b3"
+    },
+    "/workspace/pb-extraction-close-evidence-20261018/final-backend-data/test_real_two_connection_close0/http/000001-metadata.json": {
+      "bytes": 4001,
+      "sha256": "d0e6d5c46c07d8bdb4a9afe96a529bd8cc582f9281f51c63e67f4090c9309f4b"
+    },
+    "/workspace/pb-extraction-close-evidence-20261018/final-backend-data/test_real_two_connection_close0/http/000002-metadata.json": {
+      "bytes": 1790,
+      "sha256": "a0979d5c7c31a8f97c37e181178d5df6401a57de9b80376a8e32072b2ec39fae"
+    }
+  },
+  "proposed_change": "Only pb_natural_specs.extract ordinary wrapper store.tx(wait_seconds=30); shared _extract, trial dispatch, Store, permissions, clock, lease, deadlines and PG unchanged.",
+  "security_consistency_assessment": "No new permission/consistency risk found. SQLite wait happens before transaction acquisition; after acquisition _extract retains lock_project, exactrouteSource, current source_gate and anyterminal fence before review/oldkey/write. close-first waiter must reject closed key, POST-first close must reject existingaccepted. Goal/material/Grant drift during wait is checked freshly, not cached. Original timeout restoredfinally; PG unaffected.",
+  "availability_limit": "30s remains bounded and may still time out under heavier contention; no success guaranteed or permission to extend limits. A timeout is unknown until originalGET proof, never safeautomaticforget.",
+  "qualification": "Both secondround batches notyet declaredclosed here; no product execution/DB open/repo write by independent reviewer."
+}

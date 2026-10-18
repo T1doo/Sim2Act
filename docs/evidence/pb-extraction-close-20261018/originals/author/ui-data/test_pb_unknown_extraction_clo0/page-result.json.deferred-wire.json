@@ -1,0 +1,125 @@
+{
+  "classification": "CONTROLLED_CAPTURE_ORIGINAL_WIRE_BEFORE_API",
+  "server_received": false,
+  "method": "POST",
+  "path": "/api/projects/proj_2cb558f8b9c04cb1878c2cd47fc1fd26/natural-spec-task-runs/run_68962312b1594630a62f03e9f3766bf6/extractions",
+  "headers": {
+    "Authorization": "Bearer synthetic-test-A",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "review": {
+      "source_run_id": "run_68962312b1594630a62f03e9f3766bf6",
+      "expected_source_proof_fingerprint": "efd2bdec44d1731a5993878cdbeee14dd57c7f7dd744b77b26b1bab535949352",
+      "expected_source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+      "card_id": "goal_49f13544ee104391bf8d5781eaef880d",
+      "expected_goal_version": 1,
+      "expected_goal_fingerprint": "aa0746b2a01028243072d0e478ffae369d4329da40f8a94a06670e19b84959c8",
+      "expected_source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+      "recipe": {
+        "version": "natural-spec-recipe.v1",
+        "steps": [
+          {
+            "step_id": "read_pick",
+            "operator": "resource.read",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "close_intent_inference",
+            "operator": "model.spec.all",
+            "depends_on": [
+              "read_pick"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              }
+            }
+          },
+          {
+            "step_id": "check_pick",
+            "operator": "spec.verify_citations",
+            "depends_on": [
+              "read_pick",
+              "close_intent_inference"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              },
+              "items": {
+                "source": "step",
+                "ref": "close_intent_inference",
+                "field": "items"
+              }
+            }
+          },
+          {
+            "step_id": "save_pick",
+            "operator": "artifact.save_text",
+            "depends_on": [
+              "check_pick"
+            ],
+            "inputs": {
+              "text": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "text"
+              }
+            }
+          }
+        ]
+      },
+      "name": "Original close-safe P-B candidate",
+      "request_key": "77c66a92-05d7-4aa7-92e2-711caeddf517"
+    },
+    "expected_review_fingerprint": "b3442e9ef71f2d8529d6e7d56766941109a03a581c85965dc66f871986db9bd9",
+    "consent": "EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET",
+    "artifact_write_consent": "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"
+  },
+  "body_text": "{\"review\":{\"source_run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"expected_source_proof_fingerprint\":\"efd2bdec44d1731a5993878cdbeee14dd57c7f7dd744b77b26b1bab535949352\",\"expected_source_recipe_fingerprint\":\"f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171\",\"card_id\":\"goal_49f13544ee104391bf8d5781eaef880d\",\"expected_goal_version\":1,\"expected_goal_fingerprint\":\"aa0746b2a01028243072d0e478ffae369d4329da40f8a94a06670e19b84959c8\",\"expected_source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"recipe\":{\"version\":\"natural-spec-recipe.v1\",\"steps\":[{\"step_id\":\"read_pick\",\"operator\":\"resource.read\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"close_intent_inference\",\"operator\":\"model.spec.all\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"check_pick\",\"operator\":\"spec.verify_citations\",\"depends_on\":[\"read_pick\",\"close_intent_inference\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"close_intent_inference\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"operator\":\"artifact.save_text\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}]},\"name\":\"Original close-safe P-B candidate\",\"request_key\":\"77c66a92-05d7-4aa7-92e2-711caeddf517\"},\"expected_review_fingerprint\":\"b3442e9ef71f2d8529d6e7d56766941109a03a581c85965dc66f871986db9bd9\",\"consent\":\"EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET\",\"artifact_write_consent\":\"ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT\"}",
+  "body_text_utf8_hex": "7b22726576696577223a7b22736f757263655f72756e5f6964223a2272756e5f3638393632333132623135393436333061363266303365396633373636626636222c2265787065637465645f736f757263655f70726f6f665f66696e6765727072696e74223a2265666432626465633434643137333161353939333837386364626565653134646435376337663764643734346237376232366231626162353335393439333532222c2265787065637465645f736f757263655f7265636970655f66696e6765727072696e74223a2266326466626434633036613866373732616361666162343233376339653762636162373564333833636361666566366362633037363762333839623731313731222c22636172645f6964223a22676f616c5f3439663133353434656531303433393162663864353738316561656638383064222c2265787065637465645f676f616c5f76657273696f6e223a312c2265787065637465645f676f616c5f66696e6765727072696e74223a2261613037343662326130313032383234333037326430653437386666616533363964343332396461343066386139346130363637306531396238343935396338222c2265787065637465645f736f757263655f68617368223a2265353866336633306634383464623730316662333138393032396265313332386162313063633834386262616432626463653432643432663531623931333033222c22726563697065223a7b2276657273696f6e223a226e61747572616c2d737065632d7265636970652e7631222c227374657073223a5b7b22737465705f6964223a22726561645f7069636b222c226f70657261746f72223a227265736f757263652e72656164222c22646570656e64735f6f6e223a5b5d2c22696e70757473223a7b227265736f757263655f6964223a7b22736f75726365223a2264617461222c22726566223a22736f75726365222c226669656c64223a227265736f757263655f6964227d7d7d2c7b22737465705f6964223a22636c6f73655f696e74656e745f696e666572656e6365222c226f70657261746f72223a226d6f64656c2e737065632e616c6c222c22646570656e64735f6f6e223a5b22726561645f7069636b225d2c22696e70757473223a7b227265736f757263655f6964223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a227265736f757263655f6964227d2c22636f6e74656e74223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a22636f6e74656e74227d2c2268617368223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a2268617368227d2c22666f726d6174223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a22666f726d6174227d7d7d2c7b22737465705f6964223a22636865636b5f7069636b222c226f70657261746f72223a22737065632e7665726966795f6369746174696f6e73222c22646570656e64735f6f6e223a5b22726561645f7069636b222c22636c6f73655f696e74656e745f696e666572656e6365225d2c22696e70757473223a7b227265736f757263655f6964223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a227265736f757263655f6964227d2c22636f6e74656e74223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a22636f6e74656e74227d2c2268617368223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a2268617368227d2c22666f726d6174223a7b22736f75726365223a2273746570222c22726566223a22726561645f7069636b222c226669656c64223a22666f726d6174227d2c226974656d73223a7b22736f75726365223a2273746570222c22726566223a22636c6f73655f696e74656e745f696e666572656e6365222c226669656c64223a226974656d73227d7d7d2c7b22737465705f6964223a22736176655f7069636b222c226f70657261746f72223a2261727469666163742e736176655f74657874222c22646570656e64735f6f6e223a5b22636865636b5f7069636b225d2c22696e70757473223a7b2274657874223a7b22736f75726365223a2273746570222c22726566223a22636865636b5f7069636b222c226669656c64223a2274657874227d7d7d5d7d2c226e616d65223a224f726967696e616c20636c6f73652d7361666520502d422063616e646964617465222c22726571756573745f6b6579223a2237376336366139322d303564372d346161372d393265322d373131636165646466353137227d2c2265787065637465645f7265766965775f66696e6765727072696e74223a2262333434326539656637316632643835323964366537643536373636393431313039613033613538316338353936356463363666383731393836646239626439222c22636f6e73656e74223a22455854524143545f544849535f5355434345535346554c5f4e41545552414c5f535045435f52554e5f574954485f544849535f5245564945575f414e445f544152474554222c2261727469666163745f77726974655f636f6e73656e74223a22414c4c4f575f4f4e4c595f544849535f4150505f544f5f534156455f56414c4944415445445f434845434b4c4953545f4a534f4e5f494e5f544849535f50524f4a454354227d",
+  "body_text_sha256": "a359e052150a9663c3948226cf21b8d3a7c3d70503660d703d2dabe163f56faf",
+  "wire_sha256": "c76b1e603eedd5b0931f0632785a8e777377b49884ffc15bc3470b50d5c60779"
+}

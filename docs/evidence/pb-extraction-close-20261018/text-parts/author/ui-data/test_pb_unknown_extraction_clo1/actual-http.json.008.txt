@@ -1,0 +1,2726 @@
+:\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"resource_id\",\"hash\",\"checklist\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"action_bindings\":[{\"binding_id\":\"read_pick\",\"action_id\":\"action_952c07f84a22af05225bd136778a9fc1\",\"revision\":1},{\"binding_id\":\"infer_pick\",\"action_id\":\"action_6e59b8f441b3ffe41aeb23d8264d6cce\",\"revision\":1},{\"binding_id\":\"check_pick\",\"action_id\":\"action_91421c1094abf1ea50f7f31a8c382617\",\"revision\":1},{\"binding_id\":\"save_pick\",\"action_id\":\"action_5407c111d21a24a28e3fb8482a95d7ce\",\"revision\":1}],\"data_bindings\":[{\"binding_id\":\"source\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"runtime_identity_requirements\":{\"mode\":\"user_and_app_intersection\"},\"data_schema_version\":1,\"workflow\":[{\"step_id\":\"read_pick\",\"binding_id\":\"read_pick\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"infer_pick\",\"binding_id\":\"infer_pick\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"check_pick\",\"binding_id\":\"check_pick\",\"depends_on\":[\"read_pick\",\"infer_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"infer_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"binding_id\":\"save_pick\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}],\"outputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"resource_id\"},\"hash\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"hash\"},\"checklist\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"checklist\"},\"citation_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"citation_status\"},\"semantic_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_status\"},\"semantic_goal_acceptance\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_goal_acceptance\"}},\"views\":[{\"component_ref\":\"table\",\"output_field\":\"checklist\"}],\"validation_suite_ref\":\"natural.spec_citations.v1\",\"runtime_limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"},{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\"}],\"dependency_lock\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"resource.read\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.all.v1\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"natural.spec_citations.v1\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"receipt.readback.v1\",\"version\":\"1\"}]},\"actions\":[{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_952c07f84a22af05225bd136778a9fc1\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"resource.read\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_6e59b8f441b3ffe41aeb23d8264d6cce\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false}},\"required\":[\"items\",\"feedback\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"bounded_agent\",\"ref\":\"model.spec.all\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.all.v1\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_91421c1094abf1ea50f7f31a8c382617\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\",\"items\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"text\":{\"type\":\"string\",\"maxLength\":8000},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"checklist\",\"text\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_5407c111d21a24a28e3fb8482a95d7ce\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"maxLength\":8000}},\"required\":[\"text\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\",\"hash\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\"}],\"effect\":\"project_write\",\"preconditions\":[],\"postcheck_refs\":[\"receipt.readback.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"transactional\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]}],\"spec_recipe\":{\"version\":\"natural-spec-recipe.v1\",\"steps\":[{\"step_id\":\"read_pick\",\"operator\":\"resource.read\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"infer_pick\",\"operator\":\"model.spec.all\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"check_pick\",\"operator\":\"spec.verify_citations\",\"depends_on\":[\"read_pick\",\"infer_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"infer_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"operator\":\"artifact.save_text\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}]},\"source_hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\",\"goal\":{\"title\":\"Operating notes\",\"goal\":\"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\",\"known\":[],\"assumptions\":[],\"unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"constraints\":[\"Preserve the full source and uncertain relations\"],\"acceptance_checks\":[\"Human review of completeness and meaning\"],\"resource_refs\":[\"res_9a4488e6a06b4d6e91db5c2eee775165\"]},\"model_sample_check\":{\"check\":\"natural.spec_citations.v1\",\"sample_fingerprint\":\"bd9658539deaf3f9f34067009cd8a00df0e1a2544339a2ddbd207444ceadd90c\",\"citation_status\":\"PASS\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"source_retention\":\"EXACT\"},\"goal_application\":{\"run_id\":\"run_47a2e56f52644a6b9b6ce9167e87a294\",\"candidate_fingerprint\":\"519343c64b329c89c6f2d2a691cac528c03cf419fe209dcfca36dd34dc3363f4\"}},\"fingerprint\":\"cf4871381a078fe22da7dd1417e9f6cfb6b7f6e2161828564212eb5a775eb970\",\"created_at\":1792304366.4534507,\"state\":\"PREVIEW_ONLY\",\"publishable\":false,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},\"validation\":{\"state\":\"PREVIEW_ONLY\",\"execution_performed\":false,\"publishable\":false,\"topological_order\":[\"read_pick\",\"infer_pick\",\"check_pick\",\"save_pick\"]},\"history\":[],\"input_guidance\":{\"mode\":\"MODEL_SPEC_CHECKLIST\",\"citation_status\":\"PREVIEW_ONLY\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"}}",
+    "transport_phase": null
+  },
+  {
+    "rpc_id": 40,
+    "method": "GET",
+    "path": "/api/internal/apps/app_c91f9ce03d33af05bd615814b8a2f959/releases",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "namespace": "INTERNAL_ENGINEERING_ONLY",
+      "formal_publication_enabled": false,
+      "items": [
+        {
+          "id": "irelease_59ce1989193f4e73b47050187798b362",
+          "project_id": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26",
+          "principal_id": "user_202eb0a69ffa4c7fb255be8150704980",
+          "approval_id": "iapproval_2d90116cd4834a58a902aa7a823e099a",
+          "snapshot": {
+            "namespace": "INTERNAL_ENGINEERING_ONLY",
+            "draft": {
+              "id": "app_c91f9ce03d33af05bd615814b8a2f959",
+              "project_id": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26",
+              "runtime_id": "appruntime_921b7cdcfcd1488990331b8bfb8283e0",
+              "candidate": {
+                "namespace": "pa-natural-spec-app.v1",
+                "manifest": {
+                  "schema_version": "1.0-draft",
+                  "app_id": "app_c91f9ce03d33af05bd615814b8a2f959",
+                  "revision": 1,
+                  "origin": "goal",
+                  "goal_ref": "goal_333b7fda2f32436890ca1d55426ccb43",
+                  "source_run_ref": null,
+                  "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "output_schema": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "hash": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "checklist": {
+                        "type": "object",
+                        "properties": {
+                          "check_version": {
+                            "type": "string",
+                            "enum": [
+                              "natural.spec_citations.v1"
+                            ]
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "resource_id": {
+                                "type": "string",
+                                "maxLength": 2048
+                              },
+                              "hash": {
+                                "type": "string",
+                                "maxLength": 2048
+                              },
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "txt",
+                                  "md"
+                                ]
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "enum": [
+                                  1
+                                ]
+                              },
+                              "coordinate_space": {
+                                "type": "string",
+                                "enum": [
+                                  "unicode_scalar_index.v1"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "resource_id",
+                              "hash",
+                              "format",
+                              "revision",
+                              "coordinate_space"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "source_content": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "item_id": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "condition",
+                                    "exception",
+                                    "open_question",
+                                    "requirement",
+                                    "unclassified"
+                                  ]
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "maxLength": 240
+                                },
+                                "citations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "start": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 2048
+                                      },
+                                      "end": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 2048
+                                      },
+                                      "quote": {
+                                        "type": "string",
+                                        "maxLength": 2048
+                                      }
+                                    },
+                                    "required": [
+                                      "start",
+                                      "end",
+                                      "quote"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 2
+                                },
+                                "targets": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 40
+                                  },
+                                  "maxItems": 8
+                                },
+                                "relation_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "UNASSIGNED",
+                                    "MODEL_ASSERTED",
+                                    "NOT_APPLICABLE"
+                                  ]
+                                },
+                                "decision_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "OPEN",
+                                    "NOT_APPLICABLE"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "item_id",
+                                "kind",
+                                "summary",
+                                "citations",
+                                "targets",
+                                "relation_status",
+                                "decision_status"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 8
+                          },
+                          "feedback": {
+                            "type": "object",
+                            "properties": {
+                              "check": {
+                                "type": "string",
+                                "enum": [
+                                  "natural.spec_citations.v1"
+                                ]
+                              },
+                              "citation_status": {
+                                "type": "string",
+                                "enum": [
+                                  "PASS"
+                                ]
+                              },
+                              "coverage_status": {
+                                "type": "string",
+                                "enum": [
+                                  "FULL",
+                                  "PARTIAL"
+                                ]
+                              },
+                              "uncovered": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 32
+                              },
+                              "semantic_status": {
+                                "type": "string",
+                                "enum": [
+                                  "UNKNOWN"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "check",
+                              "citation_status",
+                              "coverage_status",
+                              "uncovered",
+                              "semantic_status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "human_unresolved": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            "maxItems": 16
+                          },
+                          "source_retention": {
+                            "type": "string",
+                            "enum": [
+                              "EXACT"
+                            ]
+                          },
+                          "semantic_goal_acceptance": {
+                            "type": "string",
+                            "enum": [
+                              "NOT_RUN"
+                            ]
+                          },
+                          "owner_acceptance": {
+                            "type": "string",
+                            "enum": [
+                              "PENDING"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "check_version",
+                          "source",
+                          "source_content",
+                          "items",
+                          "feedback",
+                          "human_unresolved",
+                          "source_retention",
+                          "semantic_goal_acceptance",
+                          "owner_acceptance"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "citation_status": {
+                        "type": "string",
+                        "enum": [
+                          "PASS"
+                        ]
+                      },
+                      "semantic_status": {
+                        "type": "string",
+                        "enum": [
+                          "UNKNOWN"
+                        ]
+                      },
+                      "semantic_goal_acceptance": {
+                        "type": "string",
+                        "enum": [
+                          "NOT_RUN"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "hash",
+                      "checklist",
+                      "citation_status",
+                      "semantic_status",
+                      "semantic_goal_acceptance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "action_bindings": [
+                    {
+                      "binding_id": "read_pick",
+                      "action_id": "action_952c07f84a22af05225bd136778a9fc1",
+                      "revision": 1
+                    },
+                    {
+                      "binding_id": "infer_pick",
+                      "action_id": "action_6e59b8f441b3ffe41aeb23d8264d6cce",
+                      "revision": 1
+                    },
+                    {
+                      "binding_id": "check_pick",
+                      "action_id": "action_91421c1094abf1ea50f7f31a8c382617",
+                      "revision": 1
+                    },
+                    {
+                      "binding_id": "save_pick",
+                      "action_id": "action_5407c111d21a24a28e3fb8482a95d7ce",
+                      "revision": 1
+                    }
+                  ],
+                  "data_bindings": [
+                    {
+                      "binding_id": "source",
+                      "resource_ref": "res_9a4488e6a06b4d6e91db5c2eee775165"
+                    }
+                  ],
+                  "runtime_identity_requirements": {
+                    "mode": "user_and_app_intersection"
+                  },
+                  "data_schema_version": 1,
+                  "workflow": [
+                    {
+                      "step_id": "read_pick",
+                      "binding_id": "read_pick",
+                      "depends_on": [],
+                      "inputs": {
+                        "resource_id": {
+                          "source": "data",
+                          "ref": "source",
+                          "field": "resource_id"
+                        }
+                      }
+                    },
+                    {
+                      "step_id": "infer_pick",
+                      "binding_id": "infer_pick",
+                      "depends_on": [
+                        "read_pick"
+                      ],
+                      "inputs": {
+                        "resource_id": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "resource_id"
+                        },
+                        "content": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "content"
+                        },
+                        "hash": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "hash"
+                        },
+                        "format": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "format"
+                        }
+                      }
+                    },
+                    {
+                      "step_id": "check_pick",
+                      "binding_id": "check_pick",
+                      "depends_on": [
+                        "read_pick",
+                        "infer_pick"
+                      ],
+                      "inputs": {
+                        "resource_id": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "resource_id"
+                        },
+                        "content": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "content"
+                        },
+                        "hash": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "hash"
+                        },
+                        "format": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "format"
+                        },
+                        "items": {
+                          "source": "step",
+                          "ref": "infer_pick",
+                          "field": "items"
+                        }
+                      }
+                    },
+                    {
+                      "step_id": "save_pick",
+                      "binding_id": "save_pick",
+                      "depends_on": [
+                        "check_pick"
+                      ],
+                      "inputs": {
+                        "text": {
+                          "source": "step",
+                          "ref": "check_pick",
+                          "field": "text"
+                        }
+                      }
+                    }
+                  ],
+                  "outputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "save_pick",
+                      "field": "resource_id"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "save_pick",
+                      "field": "hash"
+                    },
+                    "checklist": {
+                      "source": "step",
+                      "ref": "check_pick",
+                      "field": "checklist"
+                    },
+                    "citation_status": {
+                      "source": "step",
+                      "ref": "check_pick",
+                      "field": "citation_status"
+                    },
+                    "semantic_status": {
+                      "source": "step",
+                      "ref": "check_pick",
+                      "field": "semantic_status"
+                    },
+                    "semantic_goal_acceptance": {
+                      "source": "step",
+                      "ref": "check_pick",
+                      "field": "semantic_goal_acceptance"
+                    }
+                  },
+                  "views": [
+                    {
+                      "component_ref": "table",
+                      "output_field": "checklist"
+                    }
+                  ],
+                  "validation_suite_ref": "natural.spec_citations.v1",
+                  "runtime_limits": {
+                    "max_requests": 1,
+                    "max_tools": 3,
+                    "max_repairs": 0,
+                    "max_total_tokens": 64000,
+                    "max_output_tokens": 1024,
+                    "run_seconds": 300
+                  },
+                  "permission_requirements": [
+                    {
+                      "tool_ref": "resource.read",
+                      "resource_ref": "res_9a4488e6a06b4d6e91db5c2eee775165"
+                    },
+                    {
+                      "tool_ref": "artifact.save_text",
+                      "resource_ref": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26"
+                    }
+                  ],
+                  "dependency_lock": [
+                    {
+                      "kind": "resource",
+                      "ref": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                      "version": "1"
+                    },
+                    {
+                      "kind": "tool",
+                      "ref": "resource.read",
+                      "version": "1"
+                    },
+                    {
+                      "kind": "prompt",
+                      "ref": "model.spec.all.v1",
+                      "version": "1"
+                    },
+                    {
+                      "kind": "tool",
+                      "ref": "spec.verify_citations",
+                      "version": "1"
+                    },
+                    {
+                      "kind": "tool",
+                      "ref": "artifact.save_text",
+                      "version": "1"
+                    },
+                    {
+                      "kind": "check",
+                      "ref": "natural.spec_citations.v1",
+                      "version": "1"
+                    },
+                    {
+                      "kind": "check",
+                      "ref": "receipt.readback.v1",
+                      "version": "1"
+                    }
+                  ]
+                },
+                "actions": [
+                  {
+                    "schema_version": "1.0-draft",
+                    "action_id": "action_952c07f84a22af05225bd136778a9fc1",
+                    "revision": 1,
+                    "input_schema": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
+                      },
+                      "required": [
+                        "resource_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "output_schema": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "content": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "txt",
+                            "md"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "content",
+                        "hash",
+                        "format"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "executor": {
+                      "kind": "registered_tool",
+                      "ref": "resource.read",
+                      "version": "1"
+                    },
+                    "allowed_tool_refs": [],
+                    "dependencies": [
+                      {
+                        "kind": "resource",
+                        "ref": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                        "version": "1"
+                      }
+                    ],
+                    "permission_requirements": [
+                      {
+                        "tool_ref": "resource.read",
+                        "resource_ref": "res_9a4488e6a06b4d6e91db5c2eee775165"
+                      }
+                    ],
+                    "effect": "read",
+                    "preconditions": [],
+                    "postcheck_refs": [
+                      "natural.spec_citations.v1"
+                    ],
+                    "limits": {
+                      "max_requests": 1,
+                      "max_tools": 3,
+                      "max_repairs": 0,
+                      "max_total_tokens": 64000,
+                      "max_output_tokens": 1024,
+                      "run_seconds": 300
+                    },
+                    "idempotency": "read_only",
+                    "reconcile_ref": "operation.lookup.v1",
+                    "error_contract": [
+                      "INVALID_INPUT",
+                      "PERMISSION_DENIED",
+                      "GRANT_REVOKED",
+                      "VERIFICATION_FAILED",
+                      "OUTCOME_UNKNOWN"
+                    ]
+                  },
+                  {
+                    "schema_version": "1.0-draft",
+                    "action_id": "action_6e59b8f441b3ffe41aeb23d8264d6cce",
+                    "revision": 1,
+                    "input_schema": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "content": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "txt",
+                            "md"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "content",
+                        "hash",
+                        "format"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "output_schema": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "item_id": {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "condition",
+                                  "exception",
+                                  "open_question",
+                                  "requirement",
+                                  "unclassified"
+                                ]
+                              },
+                              "summary": {
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "citations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 2
+                              },
+                              "targets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "maxItems": 8
+                              }
+                            },
+                            "required": [
+                              "item_id",
+                              "kind",
+                              "summary",
+                              "citations",
+                              "targets"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 8
+                        },
+                        "feedback": {
+                          "type": "object",
+                          "properties": {
+                            "check": {
+                              "type": "string",
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ]
+                            },
+                            "citation_status": {
+                              "type": "string",
+                              "enum": [
+                                "PASS"
+                              ]
+                            },
+                            "coverage_status": {
+                              "type": "string",
+                              "enum": [
+                                "FULL",
+                                "PARTIAL"
+                              ]
+                            },
+                            "uncovered": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2048
+                                  },
+                                  "end": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2048
+                                  },
+                                  "quote": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 32
+                            },
+                            "semantic_status": {
+                              "type": "string",
+                              "enum": [
+                                "UNKNOWN"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check",
+                            "citation_status",
+                            "coverage_status",
+                            "uncovered",
+                            "semantic_status"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "feedback"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "executor": {
+                      "kind": "bounded_agent",
+                      "ref": "model.spec.all",
+                      "version": "1"
+                    },
+                    "allowed_tool_refs": [],
+                    "dependencies": [
+                      {
+                        "kind": "resource",
+                        "ref": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                        "version": "1"
+                      },
+                      {
+                        "kind": "prompt",
+                        "ref": "model.spec.all.v1",
+                        "version": "1"
+                      }
+                    ],
+                    "permission_requirements": [
+                      {
+                        "tool_ref": "resource.read",
+                        "resource_ref": "res_9a4488e6a06b4d6e91db5c2eee775165"
+                      }
+                    ],
+                    "effect": "read",
+                    "preconditions": [],
+                    "postcheck_refs": [
+                      "natural.spec_citations.v1"
+                    ],
+                    "limits": {
+                      "max_requests": 1,
+                      "max_tools": 3,
+                      "max_repairs": 0,
+                      "max_total_tokens": 64000,
+                      "max_output_tokens": 1024,
+                      "run_seconds": 300
+                    },
+                    "idempotency": "read_only",
+                    "reconcile_ref": "operation.lookup.v1",
+                    "error_contract": [
+                      "INVALID_INPUT",
+                      "PERMISSION_DENIED",
+                      "GRANT_REVOKED",
+                      "VERIFICATION_FAILED",
+                      "OUTCOME_UNKNOWN"
+                    ]
+                  },
+                  {
+                    "schema_version": "1.0-draft",
+                    "action_id": "action_91421c1094abf1ea50f7f31a8c382617",
+                    "revision": 1,
+                    "input_schema": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "content": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "txt",
+                            "md"
+                          ]
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "item_id": {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "condition",
+                                  "exception",
+                                  "open_question",
+                                  "requirement",
+                                  "unclassified"
+                                ]
+                              },
+                              "summary": {
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "citations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 2
+                              },
+                              "targets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "maxItems": 8
+                              }
+                            },
+                            "required": [
+                              "item_id",
+                              "kind",
+                              "summary",
+                              "citations",
+                              "targets"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 8
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "content",
+                        "hash",
+                        "format",
+                        "items"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "output_schema": {
+                      "type": "object",
+                      "properties": {
+                        "checklist": {
+                          "type": "object",
+                          "properties": {
+                            "check_version": {
+                              "type": "string",
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ]
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "resource_id": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                },
+                                "hash": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                },
+                                "format": {
+                                  "type": "string",
+                                  "enum": [
+                                    "txt",
+                                    "md"
+                                  ]
+                                },
+                                "revision": {
+                                  "type": "integer",
+                                  "enum": [
+                                    1
+                                  ]
+                                },
+                                "coordinate_space": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unicode_scalar_index.v1"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "resource_id",
+                                "hash",
+                                "format",
+                                "revision",
+                                "coordinate_space"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "source_content": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "item_id": {
+                                    "type": "string",
+                                    "maxLength": 40
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "condition",
+                                      "exception",
+                                      "open_question",
+                                      "requirement",
+                                      "unclassified"
+                                    ]
+                                  },
+                                  "summary": {
+                                    "type": "string",
+                                    "maxLength": 240
+                                  },
+                                  "citations": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "start": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 2048
+                                        },
+                                        "end": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 2048
+                                        },
+                                        "quote": {
+                                          "type": "string",
+                                          "maxLength": 2048
+                                        }
+                                      },
+                                      "required": [
+                                        "start",
+                                        "end",
+                                        "quote"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 2
+                                  },
+                                  "targets": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 40
+                                    },
+                                    "maxItems": 8
+                                  },
+                                  "relation_status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "UNASSIGNED",
+                                      "MODEL_ASSERTED",
+                                      "NOT_APPLICABLE"
+                                    ]
+                                  },
+                                  "decision_status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "OPEN",
+                                      "NOT_APPLICABLE"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item_id",
+                                  "kind",
+                                  "summary",
+                                  "citations",
+                                  "targets",
+                                  "relation_status",
+                                  "decision_status"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 8
+                            },
+                            "feedback": {
+                              "type": "object",
+                              "properties": {
+                                "check": {
+                                  "type": "string",
+                                  "enum": [
+                                    "natural.spec_citations.v1"
+                                  ]
+                                },
+                                "citation_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PASS"
+                                  ]
+                                },
+                                "coverage_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "FULL",
+                                    "PARTIAL"
+                                  ]
+                                },
+                                "uncovered": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "start": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 2048
+                                      },
+                                      "end": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 2048
+                                      },
+                                      "quote": {
+                                        "type": "string",
+                                        "maxLength": 2048
+                                      }
+                                    },
+                                    "required": [
+                                      "start",
+                                      "end",
+                                      "quote"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 32
+                                },
+                                "semantic_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "UNKNOWN"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "check",
+                                "citation_status",
+                                "coverage_status",
+                                "uncovered",
+                                "semantic_status"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "human_unresolved": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "maxItems": 16
+                            },
+                            "source_retention": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT"
+                              ]
+                            },
+                            "semantic_goal_acceptance": {
+                              "type": "string",
+                              "enum": [
+                                "NOT_RUN"
+                              ]
+                            },
+                            "owner_acceptance": {
+                              "type": "string",
+                              "enum": [
+                                "PENDING"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check_version",
+                            "source",
+                            "source_content",
+                            "items",
+                            "feedback",
+                            "human_unresolved",
+                            "source_retention",
+                            "semantic_goal_acceptance",
+                            "owner_acceptance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 8000
+                        },
+                        "citation_status": {
+                          "type": "string",
+                          "enum": [
+                            "PASS"
+                          ]
+                        },
+                        "semantic_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN"
+                          ]
+                        },
+                        "semantic_goal_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "NOT_RUN"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "checklist",
+                        "text",
+                        "citation_status",
+                        "semantic_status",
+                        "semantic_goal_acceptance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "executor": {
+                      "kind": "registered_tool",
+                      "ref": "spec.verify_citations",
+                      "version": "1"
+                    },
+                    "allowed_tool_refs": [],
+                    "dependencies": [
+                      {
+                        "kind": "resource",
+                        "ref": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                        "version": "1"
+                      }
+                    ],
+                    "permission_requirements": [
+                      {
+                        "tool_ref": "resource.read",
+                        "resource_ref": "res_9a4488e6a06b4d6e91db5c2eee775165"
+                      }
+                    ],
+                    "effect": "read",
+                    "preconditions": [],
+                    "postcheck_refs": [
+                      "natural.spec_citations.v1"
+                    ],
+                    "limits": {
+                      "max_requests": 1,
+                      "max_tools": 3,
+                      "max_repairs": 0,
+                      "max_total_tokens": 64000,
+                      "max_output_tokens": 1024,
+                      "run_seconds": 300
+                    },
+                    "idempotency": "read_only",
+                    "reconcile_ref": "operation.lookup.v1",
+                    "error_contract": [
+                      "INVALID_INPUT",
+                      "PERMISSION_DENIED",
+                      "GRANT_REVOKED",
+                      "VERIFICATION_FAILED",
+                      "OUTCOME_UNKNOWN"
+                    ]
+                  },
+                  {
+                    "schema_version": "1.0-draft",
+                    "action_id": "action_5407c111d21a24a28e3fb8482a95d7ce",
+                    "revision": 1,
+                    "input_schema": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "maxLength": 8000
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "output_schema": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "hash"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "executor": {
+                      "kind": "registered_tool",
+                      "ref": "artifact.save_text",
+                      "version": "1"
+                    },
+                    "allowed_tool_refs": [],
+                    "dependencies": [
+                      {
+                        "kind": "resource",
+                        "ref": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                        "version": "1"
+                      }
+                    ],
+                    "permission_requirements": [
+                      {
+                        "tool_ref": "artifact.save_text",
+                        "resource_ref": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26"
+                      }
+                    ],
+                    "effect": "project_write",
+                    "preconditions": [],
+                    "postcheck_refs": [
+                      "receipt.readback.v1"
+                    ],
+                    "limits": {
+                      "max_requests": 1,
+                      "max_tools": 3,
+                      "max_repairs": 0,
+                      "max_total_tokens": 64000,
+                      "max_output_tokens": 1024,
+                      "run_seconds": 300
+                    },
+                    "idempotency": "transactional",
+                    "reconcile_ref": "operation.lookup.v1",
+                    "error_contract": [
+                      "INVALID_INPUT",
+                      "PERMISSION_DENIED",
+                      "GRANT_REVOKED",
+                      "VERIFICATION_FAILED",
+                      "OUTCOME_UNKNOWN"
+                    ]
+                  }
+                ],
+                "spec_recipe": {
+                  "version": "natural-spec-recipe.v1",
+                  "steps": [
+                    {
+                      "step_id": "read_pick",
+                      "operator": "resource.read",
+                      "depends_on": [],
+                      "inputs": {
+                        "resource_id": {
+                          "source": "data",
+                          "ref": "source",
+                          "field": "resource_id"
+                        }
+                      }
+                    },
+                    {
+                      "step_id": "infer_pick",
+                      "operator": "model.spec.all",
+                      "depends_on": [
+                        "read_pick"
+                      ],
+                      "inputs": {
+                        "resource_id": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "resource_id"
+                        },
+                        "content": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "content"
+                        },
+                        "hash": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "hash"
+                        },
+                        "format": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "format"
+                        }
+                      }
+                    },
+                    {
+                      "step_id": "check_pick",
+                      "operator": "spec.verify_citations",
+                      "depends_on": [
+                        "read_pick",
+                        "infer_pick"
+                      ],
+                      "inputs": {
+                        "resource_id": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "resource_id"
+                        },
+                        "content": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "content"
+                        },
+                        "hash": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "hash"
+                        },
+                        "format": {
+                          "source": "step",
+                          "ref": "read_pick",
+                          "field": "format"
+                        },
+                        "items": {
+                          "source": "step",
+                          "ref": "infer_pick",
+                          "field": "items"
+                        }
+                      }
+                    },
+                    {
+                      "step_id": "save_pick",
+                      "operator": "artifact.save_text",
+                      "depends_on": [
+                        "check_pick"
+                      ],
+                      "inputs": {
+                        "text": {
+                          "source": "step",
+                          "ref": "check_pick",
+                          "field": "text"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "source_hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+                "goal": {
+                  "title": "Operating notes",
+                  "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+                  "known": [],
+                  "assumptions": [],
+                  "unresolved": [
+                    "Human question 0",
+                    "Human question 1",
+                    "Human question 2",
+                    "Human question 3",
+                    "Human question 4",
+                    "Human question 5",
+                    "Human question 6",
+                    "Human question 7",
+                    "Human question 8",
+                    "Human question 9",
+                    "Human question 10",
+                    "Human question 11",
+                    "Human question 12",
+                    "Human question 13",
+                    "Human question 14",
+                    "Human question 15"
+                  ],
+                  "constraints": [
+                    "Preserve the full source and uncertain relations"
+                  ],
+                  "acceptance_checks": [
+                    "Human review of completeness and meaning"
+                  ],
+                  "resource_refs": [
+                    "res_9a4488e6a06b4d6e91db5c2eee775165"
+                  ]
+                },
+                "model_sample_check": {
+                  "check": "natural.spec_citations.v1",
+                  "sample_fingerprint": "bd9658539deaf3f9f34067009cd8a00df0e1a2544339a2ddbd207444ceadd90c",
+                  "citation_status": "PASS",
+                  "semantic_goal_acceptance": "NOT_RUN",
+                  "source_retention": "EXACT"
+                },
+                "goal_application": {
+                  "run_id": "run_47a2e56f52644a6b9b6ce9167e87a294",
+                  "candidate_fingerprint": "519343c64b329c89c6f2d2a691cac528c03cf419fe209dcfca36dd34dc3363f4"
+                }
+              },
+              "fingerprint": "cf4871381a078fe22da7dd1417e9f6cfb6b7f6e2161828564212eb5a775eb970"
+            },
+            "dependency_lock": [
+              {
+                "kind": "resource",
+                "ref": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                "version": "1"
+              },
+              {
+                "kind": "tool",
+                "ref": "resource.read",
+                "version": "1"
+              },
+              {
+                "kind": "prompt",
+                "ref": "model.spec.all.v1",
+                "version": "1"
+              },
+              {
+                "kind": "tool",
+                "ref": "spec.verify_citations",
+                "version": "1"
+              },
+              {
+                "kind": "tool",
+                "ref": "artifact.save_text",
+                "version": "1"
+              },
+              {
+                "kind": "check",
+                "ref": "natural.spec_citations.v1",
+                "version": "1"
+              },
+              {
+                "kind": "check",
+                "ref": "receipt.readback.v1",
+                "version": "1"
+              }
+            ],
+            "data_schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "resource_id": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "hash": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "checklist": {
+                      "type": "object",
+                      "properties": {
+                        "check_version": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "resource_id": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "hash": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "txt",
+                                "md"
+                              ]
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "coordinate_space": {
+                              "type": "string",
+                              "enum": [
+                                "unicode_scalar_index.v1"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "resource_id",
+                            "hash",
+                            "format",
+                            "revision",
+                            "coordinate_space"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source_content": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "item_id": {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "condition",
+                                  "exception",
+                                  "open_question",
+                                  "requirement",
+                                  "unclassified"
+                                ]
+                              },
+                              "summary": {
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "citations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 2
+                              },
+                              "targets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "maxItems": 8
+                              },
+                              "relation_status": {
+                                "type": "string",
+                                "enum": [
+                                  "UNASSIGNED",
+                                  "MODEL_ASSERTED",
+                                  "NOT_APPLICABLE"
+                                ]
+                              },
+                              "decision_status": {
+                                "type": "string",
+                                "enum": [
+                                  "OPEN",
+                                  "NOT_APPLICABLE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "item_id",
+                              "kind",
+                              "summary",
+                              "citations",
+                              "targets",
+                              "relation_status",
+                              "decision_status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 8
+                        },
+                        "feedback": {
+                          "type": "object",
+                          "properties": {
+                            "check": {
+                              "type": "string",
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ]
+                            },
+                            "citation_status": {
+                              "type": "string",
+                              "enum": [
+                                "PASS"
+                              ]
+                            },
+                            "coverage_status": {
+                              "type": "string",
+                              "enum": [
+                                "FULL",
+                                "PARTIAL"
+                              ]
+                            },
+                            "uncovered": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2048
+                                  },
+                                  "end": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2048
+                                  },
+                                  "quote": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 32
+                            },
+                            "semantic_status": {
+                              "type": "string",
+                              "enum": [
+                                "UNKNOWN"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check",
+                            "citation_status",
+                            "coverage_status",
+                            "uncovered",
+                            "semantic_status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "human_unresolved": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          "maxItems": 16
+                        },
+                        "source_retention": {
+                          "type": "string",
+                          "enum": [
+                            "EXACT"
+                          ]
+                        },
+                        "semantic_goal_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "NOT_RUN"
+                          ]
+                        },
+                        "owner_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check_version",
+                        "source",
+                        "source_content",
+                        "items",
+                        "feedback",
+                        "human_unresolved",
+                        "source_retention",
+                        "semantic_goal_acceptance",
+                        "owner_acceptance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "citation_status": {
+                      "type": "string",
+                      "enum": [
+                        "PASS"
+                      ]
+                    },
+                    "semantic_status": {
+                      "type": "string",
+                      "enum": [
+                        "UNKNOWN"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "hash",
+                    "checklist",
+                    "citation_status",
+                    "semantic_status",
+                    "semantic_goal_acceptance"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": false
+            },
+            "data_schema_version": 1,
+            "check_evidence": {
+              "ref": "natural.recipe_compile.v1",
+              "status": "PASS",
+              "candidate_fingerprint": "cf4871381a078fe22da7dd1417e9f6cfb6b7f6e2161828564212eb5a775eb970",
+              "input_fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "output_fingerprint": "f8b7bbe74ec640c854cfd9300976d0627a9a78086aaf5b0a53fc8001925c33a8",
+              "plan_fingerprint": "d7859b6741b0bd4553a241114340d021c624a4d93590ab0a2d3c5feac31de37c",
+              "execution_mode": "MODEL_EXECUTION_REQUIRED_OFF_BY_DEFAULT",
+              "citation_status": "NOT_RUN",
+              "semantic_status": "UNKNOWN",
+              "semantic_goal_acceptance": "NOT_RUN"
+            },
+            "model_requests": 0,
+            "formal_publication_enabled": false
+          },
+          "fingerprint": "b5ff1561b713341c6324914e05577c53c10540558080d5125cea78bcbb61379d"
+        }
+      ]
+    },
+    "response_text": "{\"namespace\":\"INTERNAL_ENGINEERING_ONLY\",\"formal_publication_enabled\":false,\"items\":[{\"id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"project_id\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\",\"principal_id\":\"user_202eb0a69ffa4c7fb255be8150704980\",\"approval_id\":\"iapproval_2d90116cd4834a58a902aa7a823e099a\",\"snapshot\":{\"namespace\":\"INTERNAL_ENGINEERING_ONLY\",\"draft\":{\"id\":\"app_c91f9ce03d33af05bd615814b8a2f959\",\"project_id\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\",\"runtime_id\":\"appruntime_921b7cdcfcd1488990331b8bfb8283e0\",\"candidate\":{\"namespace\":\"pa-natural-spec-app.v1\",\"manifest\":{\"schema_version\":\"1.0-draft\",\"app_id\":\"app_c91f9ce03d33af05bd615814b8a2f959\",\"revision\":1,\"origin\":\"goal\",\"goal_ref\":\"goal_333b7fda2f32436890ca1d55426ccb43\",\"source_run_ref\":null,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"resource_id\",\"hash\",\"checklist\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"action_bindings\":[{\"binding_id\":\"read_pick\",\"action_id\":\"action_952c07f84a22af05225bd136778a9fc1\",\"revision\":1},{\"binding_id\":\"infer_pick\",\"action_id\":\"action_6e59b8f441b3ffe41aeb23d8264d6cce\",\"revision\":1},{\"binding_id\":\"check_pick\",\"action_id\":\"action_91421c1094abf1ea50f7f31a8c382617\",\"revision\":1},{\"binding_id\":\"save_pick\",\"action_id\":\"action_5407c111d21a24a28e3fb8482a95d7ce\",\"revision\":1}],\"data_bindings\":[{\"binding_id\":\"source\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"runtime_identity_requirements\":{\"mode\":\"user_and_app_intersection\"},\"data_schema_version\":1,\"workflow\":[{\"step_id\":\"read_pick\",\"binding_id\":\"read_pick\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"infer_pick\",\"binding_id\":\"infer_pick\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"check_pick\",\"binding_id\":\"check_pick\",\"depends_on\":[\"read_pick\",\"infer_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"infer_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"binding_id\":\"save_pick\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}],\"outputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"resource_id\"},\"hash\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"hash\"},\"checklist\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"checklist\"},\"citation_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"citation_status\"},\"semantic_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_status\"},\"semantic_goal_acceptance\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_goal_acceptance\"}},\"views\":[{\"component_ref\":\"table\",\"output_field\":\"checklist\"}],\"validation_suite_ref\":\"natural.spec_citations.v1\",\"runtime_limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"},{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\"}],\"dependency_lock\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"resource.read\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.all.v1\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"natural.spec_citations.v1\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"receipt.readback.v1\",\"version\":\"1\"}]},\"actions\":[{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_952c07f84a22af05225bd136778a9fc1\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"resource.read\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_6e59b8f441b3ffe41aeb23d8264d6cce\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false}},\"required\":[\"items\",\"feedback\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"bounded_agent\",\"ref\":\"model.spec.all\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.all.v1\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_91421c1094abf1ea50f7f31a8c382617\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\",\"items\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"text\":{\"type\":\"string\",\"maxLength\":8000},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"checklist\",\"text\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_5407c111d21a24a28e3fb8482a95d7ce\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"maxLength\":8000}},\"required\":[\"text\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\",\"hash\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\"}],\"effect\":\"project_write\",\"preconditions\":[],\"postcheck_refs\":[\"receipt.readback.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"transactional\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]}],\"spec_recipe\":{\"version\":\"natural-spec-recipe.v1\",\"steps\":[{\"step_id\":\"read_pick\",\"operator\":\"resource.read\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"infer_pick\",\"operator\":\"model.spec.all\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"check_pick\",\"operator\":\"spec.verify_citations\",\"depends_on\":[\"read_pick\",\"infer_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"infer_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"operator\":\"artifact.save_text\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}]},\"source_hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\",\"goal\":{\"title\":\"Operating notes\",\"goal\":\"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\",\"known\":[],\"assumptions\":[],\"unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"constraints\":[\"Preserve the full source and uncertain relations\"],\"acceptance_checks\":[\"Human review of completeness and meaning\"],\"resource_refs\":[\"res_9a4488e6a06b4d6e91db5c2eee775165\"]},\"model_sample_check\":{\"check\":\"natural.spec_citations.v1\",\"sample_fingerprint\":\"bd9658539deaf3f9f34067009cd8a00df0e1a2544339a2ddbd207444ceadd90c\",\"citation_status\":\"PASS\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"source_retention\":\"EXACT\"},\"goal_application\":{\"run_id\":\"run_47a2e56f52644a6b9b6ce9167e87a294\",\"candidate_fingerprint\":\"519343c64b329c89c6f2d2a691cac528c03cf419fe209dcfca36dd34dc3363f4\"}},\"fingerprint\":\"cf4871381a078fe22da7dd1417e9f6cfb6b7f6e2161828564212eb5a775eb970\"},\"dependency_lock\":[{\"kind\":\"resource\",\"ref\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"resource.read\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.all.v1\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"natural.spec_citations.v1\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"receipt.readback.v1\",\"version\":\"1\"}],\"data_schema\":{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"resource_id\",\"hash\",\"checklist\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false}},\"required\":[\"result\"],\"additionalProperties\":false},\"data_schema_version\":1,\"check_evidence\":{\"ref\":\"natural.recipe_compile.v1\",\"status\":\"PASS\",\"candidate_fingerprint\":\"cf4871381a078fe22da7dd1417e9f6cfb6b7f6e2161828564212eb5a775eb970\",\"input_fingerprint\":\"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\",\"output_fingerprint\":\"f8b7bbe74ec640c854cfd9300976d0627a9a78086aaf5b0a53fc8001925c33a8\",\"plan_fingerprint\":\"d7859b6741b0bd4553a241114340d021c624a4d93590ab0a2d3c5feac31de37c\",\"execution_mode\":\"MODEL_EXECUTION_REQUIRED_OFF_BY_DEFAULT\",\"citation_status\":\"NOT_RUN\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"},\"model_requests\":0,\"formal_publication_enabled\":false},\"fingerprint\":\"b5ff1561b713341c6324914e05577c53c10540558080d5125cea78bcbb61379d\"}]}",
+    "transport_phase": null
+  },
+  {
+    "rpc_id": 41,
+    "method": "GET",
+    "path": "/api/internal/apps/app_c91f9ce03d33af05bd615814b8a2f959/instances",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "namespace": "INTERNAL_ENGINEERING_ONLY",
+      "formal_publication_enabled": false,
+      "items": [
+        {
+          "id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+          "project_id": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26",
+          "principal_id": "user_202eb0a69ffa4c7fb255be8150704980",
+          "source_app_id": "app_c91f9ce03d33af05bd615814b8a2f959",
+          "runtime_id": "appruntime_921b7cdcfcd1488990331b8bfb8283e0",
+          "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+          "revision": 1,
+          "data_version": 1,
+          "history": [
+            {
+              "revision": 1,
+              "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+              "kind": "created"
+            }
+          ],
+          "namespace": "INTERNAL_ENGINEERING_ONLY",
+          "switch_policy": {
+            "namespace": "internal.logic-switch-policy.v1",
+            "instance_id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+            "revision": 1,
+            "roles": [],
+            "blocked_release_ids": []
+          },
+          "data": [
+            {
+              "instance_id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+              "version": 1,
+              "run_id": "iapprun_9b7260887fd34b5e95ba4fa895de10b5",
+              "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+              "schema_version": 1,
+              "data": {
+                "result": {
+                  "resource_id": "res_4779b58dd9f14aa78eafcccb8ad544c7",
+                  "hash": "9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2",
+                  "checklist": {
+                    "check_version": "natural.spec_citations.v1",
+                    "source": {
+                      "resource_id": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                      "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+                      "format": "txt",
+                      "revision": 1,
+                      "coordinate_space": "unicode_scalar_index.v1"
+                    },
+                    "source_content": "The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.",
+                    "items": [
+                      {
+                        "item_id": "fact_0",
+                        "kind": "requirement",
+                        "summary": "The desk lamp dims after five idle minutes when battery powered.",
+                        "citations": [
+                          {
+                            "start": 0,
+                            "end": 64,
+                            "quote": "The desk lamp dims after five idle minutes when battery powered."
+                          }
+                        ],
+                        "targets": [],
+                        "relation_status": "NOT_APPLICABLE",
+                        "decision_status": "NOT_APPLICABLE"
+                      },
+                      {
+                        "item_id": "qualifier",
+                        "kind": "condition",
+                        "summary": "when battery powered",
+                        "citations": [
+                          {
+                            "start": 43,
+                            "end": 63,
+                            "quote": "when battery powered"
+                          }
+                        ],
+                        "targets": [
+                          "fact_0"
+                        ],
+                        "relation_status": "MODEL_ASSERTED",
+                        "decision_status": "NOT_APPLICABLE"
+                      },
+                      {
+                        "item_id": "fact_1",
+                        "kind": "exception",
+                        "summary": "During a software update it stays bright.",
+                        "citations": [
+                          {
+                            "start": 65,
+                            "end": 106,
+                            "quote": "During a software update it stays bright."
+                          }
+                        ],
+                        "targets": [
+                          "fact_0"
+                        ],
+                        "relation_status": "MODEL_ASSERTED",
+                        "decision_status": "NOT_APPLICABLE"
+                      },
+                      {
+                        "item_id": "fact_2",
+                        "kind": "open_question",
+                        "summary": "The default brightness for visitors remains undecided.",
+                        "citations": [
+                          {
+                            "start": 107,
+                            "end": 161,
+                            "quote": "The default brightness for visitors remains undecided."
+                          }
+                        ],
+                        "targets": [],
+                        "relation_status": "NOT_APPLICABLE",
+                        "decision_status": "OPEN"
+                      }
+                    ],
+                    "feedback": {
+                      "check": "natural.spec_citations.v1",
+                      "citation_status": "PASS",
+                      "coverage_status": "FULL",
+                      "uncovered": [],
+                      "semantic_status": "UNKNOWN"
+                    },
+                    "human_unresolved": [
+                      "Human question 0",
+                      "Human question 1",
+                      "Human question 2",
+                      "Human question 3",
+                      "Human question 4",
+                      "Human question 5",
+                      "Human question 6",
+                      "Human question 7",
+                      "Human question 8",
+                      "Human question 9",
+                      "Human question 10",
+                      "Human question 11",
+                      "Human question 12",
+                      "Human question 13",
+                      "Human question 14",
+                      "Human question 15"
+                    ],
+                    "source_retention": "EXACT",
+                    "semantic_goal_acceptance": "NOT_RUN",
+                    "owner_acceptance": "PENDING"
+                  },
+                  "citation_status": "PASS",
+                  "semantic_status": "UNKNOWN",
+                  "semantic_goal_acceptance": "NOT_RUN"
+                }
+              },
+              "fingerprint": "e96a531b11e1d7d564c55d316723ea3319ec44159847f32191f95c0619b279df"
+            }
+          ]
+        }
+      ]
+    },
+    "response_text": "{\"namespace\":\"INTERNAL_ENGINEERING_ONLY\",\"formal_publication_enabled\":false,\"items\":[{\"id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"project_id\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\",\"principal_id\":\"user_202eb0a69ffa4c7fb255be8150704980\",\"source_app_id\":\"app_c91f9ce03d33af05bd615814b8a2f959\",\"runtime_id\":\"appruntime_921b7cdcfcd1488990331b8bfb8283e0\",\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"revision\":1,\"data_version\":1,\"history\":[{\"revision\":1,\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"kind\":\"created\"}],\"namespace\":\"INTERNAL_ENGINEERING_ONLY\",\"switch_policy\":{\"namespace\":\"internal.logic-switch-policy.v1\",\"instance_id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"revision\":1,\"roles\":[],\"blocked_release_ids\":[]},\"data\":[{\"instance_id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"version\":1,\"run_id\":\"iapprun_9b7260887fd34b5e95ba4fa895de10b5\",\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"schema_version\":1,\"data\":{\"result\":{\"resource_id\":\"res_4779b58dd9f14aa78eafcccb8ad544c7\",\"hash\":\"9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2\",\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The desk lamp dims after five idle minutes when battery powered.\",\"citations\":[{\"start\":0,\"end\":64,\"quote\":\"The desk lamp dims after five idle minutes when battery powered.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"when battery powered\",\"citations\":[{\"start\":43,\"end\":63,\"quote\":\"when battery powered\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"During a software update it stays bright.\",\"citations\":[{\"start\":65,\"end\":106,\"quote\":\"During a software update it stays bright.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The default brightness for visitors remains undecided.\",\"citations\":[{\"start\":107,\"end\":161,\"quote\":\"The default brightness for visitors remains undecided.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"}},\"fingerprint\":\"e96a531b11e1d7d564c55d316723ea3319ec44159847f32191f95c0619b279df\"}]}]}",
+    "transport_phase": null
+  },
+  {
+    "rpc_id": 42,
+    "method": "GET",
+    "path": "/api/internal/instances/iinstance_16536e4dfead1c8da5b3d91738217056",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "namespace": "INTERNAL_ENGINEERING_ONLY",
+      "formal_publication_enabled": false,
+      "id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+      "project_id": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26",
+      "principal_id": "user_202eb0a69ffa4c7fb255be8150704980",
+      "source_app_id": "app_c91f9ce03d33af05bd615814b8a2f959",
+      "runtime_id": "appruntime_921b7cdcfcd1488990331b8bfb8283e0",
+      "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+      "revision": 1,
+      "data_version": 1,
+      "history": [
+        {
+          "revision": 1,
+          "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+          "kind": "created"
+        }
+      ],
+      "data": [
+        {
+          "instance_id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+          "version": 1,
+          "run_id": "iapprun_9b7260887fd34b5e95ba4fa895de10b5",
+          "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+          "schema_version": 1,
+          "data": {
+            "result": {
+              "resource_id": "res_4779b58dd9f14aa78eafcccb8ad544c7",
+              "hash": "9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2",
+              "checklist": {
+                "check_version": "natural.spec_citations.v1",
+                "source": {
+                  "resource_id": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                  "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+                  "format": "txt",
+                  "revision": 1,
+                  "coordinate_space": "unicode_scalar_index.v1"
+                },
+                "source_content": "The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.",
+                "items": [
+                  {
+                    "item_id": "fact_0",
+                    "kind": "requirement",
+                    "summary": "The desk lamp dims after five idle minutes when battery powered.",
+                    "citations": [
+                      {
+                        "start": 0,
+                        "end": 64,
+                        "quote": "The desk lamp dims after five idle minutes when battery powered."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "qualifier",
+                    "kind": "condition",
+                    "summary": "when battery powered",
+                    "citations": [
+                      {
+                        "start": 43,
+                        "end": 63,
+                        "quote": "when battery powered"
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_1",
+                    "kind": "exception",
+                    "summary": "During a software update it stays bright.",
+                    "citations": [
+                      {
+                        "start": 65,
+                        "end": 106,
+                        "quote": "During a software update it stays bright."
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_2",
+                    "kind": "open_question",
+                    "summary": "The default brightness for visitors remains undecided.",
+                    "citations": [
+                      {
+                        "start": 107,
+                        "end": 161,
+                        "quote": "The default brightness for visitors remains undecided."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "OPEN"
+                  }
+                ],
+                "feedback": {
+                  "check": "natural.spec_citations.v1",
+                  "citation_status": "PASS",
+                  "coverage_status": "FULL",
+                  "uncovered": [],
+                  "semantic_status": "UNKNOWN"
+                },
+                "human_unresolved": [
+                  "Human question 0",
+                  "Human question 1",
+                  "Human question 2",
+                  "Human question 3",
+                  "Human question 4",
+                  "Human question 5",
+                  "Human question 6",
+                  "Human question 7",
+                  "Human question 8",
+                  "Human question 9",
+                  "Human question 10",
+                  "Human question 11",
+                  "Human question 12",
+                  "Human question 13",
+                  "Human question 14",
+                  "Human question 15"
+                ],
+                "source_retention": "EXACT",
+                "semantic_goal_acceptance": "NOT_RUN",
+                "owner_acceptance": "PENDING"
+              },
+              "citation_status": "PASS",
+              "semantic_status": "UNKNOWN",
+              "semantic_goal_acceptance": "NOT_RUN"
+            }
+          },
+          "fingerprint": "e96a531b11e1d7d564c55d316723ea3319ec44159847f32191f95c0619b279df"
+        }
+      ],
+      "switch_policy": {
+        "namespace": "internal.logic-switch-policy.v1",
+        "instance_id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+        "revision": 1,
+        "roles": [],
+        "blocked_release_ids": []
+      },
+      "release_fingerprint": "b5ff1561b713341c6324914e05577c53c10540558080d5125cea78bcbb61379d",
+      "runs": [
+        {
+          "id": "run_68962312b1594630a62f03e9f3766bf6",
+          "app_run_id": "iapprun_9b7260887fd34b5e95ba4fa895de10b5",
+          "instance_id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+          "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+          "status": "SUCCEEDED",
+          "version": 2,
+          "cancel_intent": false,
+          "result": {
+            "resource_id": "res_4779b58dd9f14aa78eafcccb8ad544c7",
+            "hash": "9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2",
+            "checklist": {
+              "check_version": "natural.spec_citations.v1",
+              "source": {
+                "resource_id": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+                "format": "txt",
+                "revision": 1,
+                "coordinate_space": "unicode_scalar_index.v1"
+              },
+              "source_content": "The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.",
+              "items": [
+                {
+                  "item_id": "fact_0",
+                  "kind": "requirement",
+                  "summary": "The desk lamp dims after five idle minutes when battery powered.",
+                  "citations": [
+                    {
+                      "start": 0,
+                      "end": 64,
+                      "quote": "The desk lamp dims after five idle minutes when battery powered."
+                    }
+                  ],
+                  "targets": [],
+                  "relation_status": "NOT_APPLICABLE",
+                  "decision_status": "NOT_APPLICABLE"
+                },
+                {
+                  "item_id": "qualifier",
+                  "kind": "condition",
+                  "summary": "when battery powered",
+                  "citations": [
+                    {
+                      "start": 43,
+                      "end": 63,
+                      "quote": "when battery powered"
+                    }
+                  ],
+                  "targets": [
+                    "fact_0"
+                  ],
+                  "relation_status": "MODEL_ASSERTED",
+                  "decision_status": "NOT_APPLICABLE"
+                },
+                {
+                  "item_id": "fact_1",
+                  "kind": "exception",
+                  "summary": "During a software update it stays bright.",
+                  "citations": [
+                    {
+                      "start": 65,
+                      "end": 106,
+                      "quote": "During a software update it stays bright."
+                    }
+                  ],
+                  "targets": [
+                    "fact_0"
+                  ],
+                  "relation_status": "MODEL_ASSERTED",
+                  "decision_status": "NOT_APPLICABLE"
+                },
+                {
+                  "item_id": "fact_2",
+                  "kind": "open_question",
+                  "summary": "The default brightness for visitors remains undecided.",
+                  "citations": [
+                    {
+                      "start": 107,
+                      "end": 161,
+                      "quote": "The default brightness for visitors remains undecided."
+                    }
+                  ],
+                  "targets": [],
+                  "relation_status": "NOT_APPLICABLE",
+                  "decision_status": "OPEN"
+                }
+              ],
+              "feedback": {
+                "check": "natural.spec_citations.v1",
+                "citation_status": "PASS",
+                "coverage_status": "FULL",
+                "uncovered": [],
+                "semantic_status": "UNKNOWN"
+              },
+              "human_unresolved": [
+                "Human question 0",
+                "Human question 1",
+                "Human question 2",
+                "Human question 3",
+                "Human question 4",
+                "Human question 5",
+                "Human question 6",
+                "Human question 7",
+                "Human question 8",
+                "Human question 9",
+                "Human question 10",
+                "Human question 11",
+                "Human question 12",
+                "Human question 13",
+                "Human question 14",
+                "Human question 15"
+              ],
+              "source_retention": "EXACT",
+              "semantic_goal_acceptance": "NOT_RUN",
+              "owner_acceptance": "PENDING"
+            },
+            "citation_status": "PASS",
+            "semantic_status": "UNKNOWN",
+            "semantic_goal_acceptance": "NOT_RUN"
+          },
+          "result_version": 1,
+          "error": null,
+          "known_effects": [
+            {
+              "instance_id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+              "version": 1,
+              "run_id": "iapprun_9b7260887fd34b5e95ba4fa895de10b5",
+              "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+              "schema_version": 1,
+              "data": {
+                "result": {
+                  "resource_id": "res_4779b58dd9f14aa78eafcccb8ad544c7",
+                  "hash": "9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2",
+                  "checklist": {
+                    "check_version": "natural.spec_citations.v1",
+                    "source": {
+                      "resource_id": "res_9a4488e6a06b4d6e91db5c2eee775165",
+                      "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+                      "format": "txt",
+                      "revision": 1,
+                      "coordinate_space": "unicode_scalar_index.v1"
+                    },
+                    "source_content": "The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.",
+                    "items": [
+                      {
+                        "item_id": "fact_0",
+                        "kind": "requirement",
+                        "summary": "The desk lamp dims after five idle minutes when battery powered.",
+                        "citations": [
+                          {
+                            "start": 0,
+                            "end": 64,
+                            "quote": "The desk lamp dims after five idle minutes when battery powered."
+                          }
+                        ],
+                        "targets": [],
+                        "relation_status": "NOT_APPLICABLE",
+                        "decision_status": "NOT_APPLICABLE"
+                      },
+                      {
+                        "item_id": "qualifier",
+                        "kind": "condition",
+                        "summary": "when battery powered",
+                        "citations": [
+                          {
+                            "start": 43,
+                            "end": 63,
+                            "quote": "when battery powered"
+                          }
+                        ],
+                        "targets": [
+                          "fact_0"
+                        ],
+                        "relation_status": "MODEL_ASSERTED",
+                        "decision_status": "NOT_APPLICABLE"
+                      },
+                      {
+                        "item_id": "fact_1",
+                        "kind": "exception",
+                        "summary": "During a software update it stays bright.",
+                        "citations": [
+                          {
+                            "start": 65,
+                            "end": 106,
+                            "quote": "During a software update it stays bright."
+                          }
+                        ],
+                        "targets": [
+                          "fact_0"
+                        ],
+                        "relation_status": "MODEL_ASSERTED",
+                        "decision_status": "NOT_APPLICABLE"
+                      },
+                      {
+                        "item_id": "fact_2",
+                        "kind": "open_question",
+                        "summary": "The default brightness for visitors remains undecided.",
+                        "citations": [
+                          {
+                            "start": 107,
+                            "end": 161,
+                            "quote": "The default brightness for visitors remains undecided."
+                          }
+                        ],
+                        "targets": [],
+                        "relation_status": "NOT_APPLICABLE",
+                        "decision_status": "OPEN"
+                      }
+                    ],
+                    "feedback": {
+                      "check": "natural.spec_citations.v1",
+                      "citation_status": "PASS",
+                      "coverage_status": "FULL",
+                      "uncovered": [],
+                      "semantic_status": "UNKNOWN"
+                    },
+                    "human_unresolved": [
+                      "Human question 0",
+                      "Human question 1",
+                      "Human question 2",
+                      "Human question 3",
+                      "Human question 4",
+                      "Human question 5",
+                      "Human question 6",
+                      "Human question 7",
+                      "Human question 8",
+                      "Human question 9",
+                      "Human question 10",
+                      "Human question 11",
+                      "Human question 12",
+                      "Human question 13",
+                      "Human question 14",
+                      "Human question 15"
+                    ],
+                    "source_retention": "EXACT",
+                    "semantic_goal_acceptance": "NOT_RUN",
+                    "owner_acceptance": "PENDING"
+                  },
+                  "citation_status": "PASS",
+                  "semantic_status": "UNKNOWN",
+                  "semantic_goal_acceptance": "NOT_RUN"
+                }
+              },
+              "fingerprint": "e96a531b11e1d7d564c55d316723ea3319ec44159847f32191f95c0619b279df"
+            }
+          ],
+          "events": [
+            {
+              "id": "event_4e9477f5dc0746ecb98549b4d3543c06",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304375.5882812,
+              "kind": "ACCEPTED",
+              "data": {
+                "namespace": "INTERNAL_APPRUN",
+                "app_run_id": "iapprun_9b7260887fd34b5e95ba4fa895de10b5",
+                "instance_id": "iinstance_16536e4dfead1c8da5b3d91738217056",
+                "release_id": "irelease_59ce1989193f4e73b47050187798b362",
+                "input_fingerprint": "f828b8778a46f28508793e166f28fc44a6a487f08352abaa1be0fbdc718a208c"
+              }
+            },
+            {
+              "id": "event_a2586fd36f9c4aeb964ca7b772d3c924",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304375.6715593,
+              "kind": "CLAIMED",
+              "data": {
+                "fence": 1
+              }
+            },
+            {
+              "id": "event_ea97f67b8693450db7b0356e70b45da3",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304379.0701547,
+              "kind": "SPEC_STEP_VERIFIED",
+              "data": {
+                "step_id": "read_pick",
+                "operation_id": "op_fd2e3862284e4546b2eca79032d3bc81",
+                "fence": 1
+              }
+            },
+            {
+              "id": "event_0d5e7b7f39e0425785f5752a4879f369",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304385.7257032,
+              "kind": "NS_RESERVED",
+              "data": {
+                "attempt_id": "attempt_5954c0ba603c4276974d5eca37a16626",
+                "parameters_fingerprint": "c884b07aa1366e009455f973f8fe56c641239b3d2ca6278b329019827358b975",
+                "reserved_tokens": 4035,
+                "request_model": "intern-s2",
+                "mode": "MOCK",
+                "created_at": 1792304385.7223222,
+                "operation_id": "op_9db4d1db325c4fbbad714b1b00a75896",
+                "step_id": "infer_pick",
+                "fence": 1,
+                "reservation_fingerprint": "06bc258ccfb37f445cb908d05bc0489b8a9baf5f2ccbcde691b7043b27a6e63a"
+              }
+            },
+            {
+              "id": "event_df5a916aa1494ac988f0eae27385a1cc",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304385.7305672,
+              "kind": "NS_WIRE_ARCHIVED",
+              "data": {
+                "attempt_id": "attempt_5954c0ba603c4276974d5eca37a16626",
+                "archive_fingerprint": "0a460b8f13d5dbc1ca993358b41affb01e189e52a2e48056bd9c5840faac86e1"
+              }
+            },
+            {
+              "id": "event_5becb2903a034d8781dbd9d52d994a05",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304385.7314508,
+              "kind": "MODEL_RESERVED",
+              "data": {
+                "attempt_id": "attempt_5954c0ba603c4276974d5eca37a16626",
+                "mode": "mock"
+              }
+            },
+            {
+              "id": "event_7c20fdeab4324d6e8af1c82f133c0fda",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304388.771908,
+              "kind": "NS_RECEIVED",
+              "data": {
+                "attempt_id": "attempt_5954c0ba603c4276974d5eca37a16626",
+                "response_fingerprint": "ce6895e77704413fe10a1954acb06d141a9b938b8750ae57c123e343d57c212e",
+                "reception_fingerprint": "cb61144e0e1e63d5f296c5249dff3844fe4b9d2f65c6746e6600809687fcd704"
+              }
+            },
+            {
+              "id": "event_fdeadc3d2b7f470eb8981ed482e7be1b",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304388.7808,
+              "kind": "NS_BODY_ARCHIVED",
+              "data": {
+                "attempt_id": "attempt_5954c0ba603c4276974d5eca37a16626",
+                "archive_fingerprint": "0c00e912264be71938e92ab41671fd94dd7c78b3ae46ea14fd9675bcaf61d39d"
+              }
+            },
+            {
+              "id": "event_db164897648e41ff886a5bf4f6850c47",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304392.046515,
+              "kind": "NS_SETTLED",
+              "data": {
+                "attempt_id": "attempt_5954c0ba603c4276974d5eca37a16626",
+                "attempt_fingerprint": "21b6ea6fb2cf2e072fe1d222017ff0d9a00a081ec2e22c65b9fa8b512e897a86",
+                "operation_id": "op_9db4d1db325c4fbbad714b1b00a75896"
+              }
+            },
+            {
+              "id": "event_9ab647df129c41618b4ae748d02e531e",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304392.0477803,
+              "kind": "SPEC_STEP_VERIFIED",
+              "data": {
+                "step_id": "infer_pick",
+                "operation_id": "op_9db4d1db325c4fbbad714b1b00a75896",
+                "fence": 1
+              }
+            },
+            {
+              "id": "event_ab97bf74a3bd40b3bff071a888246dae",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304398.4784615,
+              "kind": "SPEC_STEP_VERIFIED",
+              "data": {
+                "step_id": "check_pick",
+                "operation_id": "op_7d8c483399c648579f12ed989cb9634f",
+                "fence": 1
+              }
+            },
+            {
+              "id": "event_a57a69e56ac645b2a98a374153b6076d",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304402.178036,
+              "kind": "SPEC_STEP_VERIFIED",
+              "data": {
+                "step_id": "save_pick",
+                "operation_id": "op_b58d9c6b03d143458a93985332858d98",
+                "fence": 1
+              }
+            },
+            {
+              "id": "event_bfafc9c3606a40eeb738c1b862eb96a6",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304402.1852722,
+              "kind": "STATE",
+              "data": {
+                "status": "SUCCEEDED",
+                "error": null
+              }
+            },
+            {
+              "id": "event_b1e535ee5a064850b2ce9dab9fa7a294",
+              "run_id": "run_68962312b1594630a62f03e9f3766bf6",
+              "created_at": 1792304402.1856346,
+              "kind": "SPEC_COMMITTED",
+              "data": {
+                "result_version": 1,
+                "artifact_resource": "res_4779b58dd9f14aa78eafcccb8ad544c7"
+              }
+            }
+          ],
+          "namespace": "INTERNAL_APPRUN",
+          "steps": [
+            {
+              "step_id": "read_pick",
+              "status": "VERIFIED",
+              "fingerprint": "4d9c3291f837e4c34c1a00dada5d821d668db5fb87fcc83356fa28d8bb2fcda1"
+            },
+            {
+              "step_id": "infer_pick",
+              "status": "VERIFIED",
+              "fingerprint": "864f2340828dea1b97f0d53283bfc4ab234b8ae2a8bdb6a1d4d07fbeb9e76088"
+            },
+            {
+              "step_id": "check_pick",
+              "status": "VERIFIED",
+              "fingerprint": "6eedd07f88b937dd0472d8491c46c6fbfaef49703e027de992646a5ebbf4e9eb"
+            },
+            {
+              "step_id": "save_pick",
+              "status": "VERIFIED",
+              "fingerprint": "15881d2de17daab609a86c296e62753dcc56943052f4b40e878c7e9016405e30"
+            }
+          ],
+          "semantic_status": "UNKNOWN",
+          "owner_acceptance": "PENDING",
+          "formal_publication_enabled": false,
+          "citation_status": "PASS",
+          "semantic_goal_acceptance": "NOT_RUN",
+          "markdown_view": "# 技术规范待验清单\n出处核验 PASS；含义/遗漏/关系准确性 UNKNOWN，人工验收 NOT_RUN\n\n- requirement fact\\_0: The desk lamp dims after five idle minutes when battery powered.\n  关系 NOT_APPLICABLE；决定 NOT_APPLICABLE；目标 \n  原文[0:64]: The desk lamp dims after five idle minutes when battery powered.\n- condition qualifier: when battery powered\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\_0\n  原文[43:63]: when battery powered\n- exception fact\\_1: During a software update it stays bright.\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\_0\n  原文[65:106]: During a software update it stays bright.\n- open\\_question fact\\_2: The default brightness for visitors remains undecided.\n  关系 NOT_APPLICABLE；决定 OPEN；目标 \n  原文[107:161]: The default brightness for visitors remains undecided.\n\n## 原生人工未决项\nHuman question 0\nHuman question 1\nHuman question 2\nHuman question 3\nHuman question 4\nHuman question 5\nHuman question 6\nHuman question 7\nHuman question 8\nHuman question 9\nHuman question 10\nHuman question 11\nHuman question 12\nHuman question 13\nHuman question 14\nHuman question 15\n\n## 未覆盖原文\n\n## 完整来源（保留，未推断）\nThe desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.\n"
+        }
+      ]
+    },
+    "response_text": "{\"namespace\":\"INTERNAL_ENGINEERING_ONLY\",\"formal_publication_enabled\":false,\"id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"project_id\":\"proj_2cb558f8b9c04cb1878c2cd47fc1fd26\",\"principal_id\":\"user_202eb0a69ffa4c7fb255be8150704980\",\"source_app_id\":\"app_c91f9ce03d33af05bd615814b8a2f959\",\"runtime_id\":\"appruntime_921b7cdcfcd1488990331b8bfb8283e0\",\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"revision\":1,\"data_version\":1,\"history\":[{\"revision\":1,\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"kind\":\"created\"}],\"data\":[{\"instance_id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"version\":1,\"run_id\":\"iapprun_9b7260887fd34b5e95ba4fa895de10b5\",\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"schema_version\":1,\"data\":{\"result\":{\"resource_id\":\"res_4779b58dd9f14aa78eafcccb8ad544c7\",\"hash\":\"9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2\",\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The desk lamp dims after five idle minutes when battery powered.\",\"citations\":[{\"start\":0,\"end\":64,\"quote\":\"The desk lamp dims after five idle minutes when battery powered.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"when battery powered\",\"citations\":[{\"start\":43,\"end\":63,\"quote\":\"when battery powered\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"During a software update it stays bright.\",\"citations\":[{\"start\":65,\"end\":106,\"quote\":\"During a software update it stays bright.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The default brightness for visitors remains undecided.\",\"citations\":[{\"start\":107,\"end\":161,\"quote\":\"The default brightness for visitors remains undecided.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"}},\"fingerprint\":\"e96a531b11e1d7d564c55d316723ea3319ec44159847f32191f95c0619b279df\"}],\"switch_policy\":{\"namespace\":\"internal.logic-switch-policy.v1\",\"instance_id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"revision\":1,\"roles\":[],\"blocked_release_ids\":[]},\"release_fingerprint\":\"b5ff1561b713341c6324914e05577c53c10540558080d5125cea78bcbb61379d\",\"runs\":[{\"id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"app_run_id\":\"iapprun_9b7260887fd34b5e95ba4fa895de10b5\",\"instance_id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"status\":\"SUCCEEDED\",\"version\":2,\"cancel_intent\":false,\"result\":{\"resource_id\":\"res_4779b58dd9f14aa78eafcccb8ad544c7\",\"hash\":\"9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2\",\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The desk lamp dims after five idle minutes when battery powered.\",\"citations\":[{\"start\":0,\"end\":64,\"quote\":\"The desk lamp dims after five idle minutes when battery powered.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"when battery powered\",\"citations\":[{\"start\":43,\"end\":63,\"quote\":\"when battery powered\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"During a software update it stays bright.\",\"citations\":[{\"start\":65,\"end\":106,\"quote\":\"During a software update it stays bright.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The default brightness for visitors remains undecided.\",\"citations\":[{\"start\":107,\"end\":161,\"quote\":\"The default brightness for visitors remains undecided.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"},\"result_version\":1,\"error\":null,\"known_effects\":[{\"instance_id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"version\":1,\"run_id\":\"iapprun_9b7260887fd34b5e95ba4fa895de10b5\",\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"schema_version\":1,\"data\":{\"result\":{\"resource_id\":\"res_4779b58dd9f14aa78eafcccb8ad544c7\",\"hash\":\"9055cd711d52a20e677a889acd5c537a2f6f501fa8ad9fa3ed3c42937d94cee2\",\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_9a4488e6a06b4d6e91db5c2eee775165\",\"hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The desk lamp dims after five idle minutes when battery powered.\",\"citations\":[{\"start\":0,\"end\":64,\"quote\":\"The desk lamp dims after five idle minutes when battery powered.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"when battery powered\",\"citations\":[{\"start\":43,\"end\":63,\"quote\":\"when battery powered\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"During a software update it stays bright.\",\"citations\":[{\"start\":65,\"end\":106,\"quote\":\"During a software update it stays bright.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The default brightness for visitors remains undecided.\",\"citations\":[{\"start\":107,\"end\":161,\"quote\":\"The default brightness for visitors remains undecided.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"}},\"fingerprint\":\"e96a531b11e1d7d564c55d316723ea3319ec44159847f32191f95c0619b279df\"}],\"events\":[{\"id\":\"event_4e9477f5dc0746ecb98549b4d3543c06\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304375.5882812,\"kind\":\"ACCEPTED\",\"data\":{\"namespace\":\"INTERNAL_APPRUN\",\"app_run_id\":\"iapprun_9b7260887fd34b5e95ba4fa895de10b5\",\"instance_id\":\"iinstance_16536e4dfead1c8da5b3d91738217056\",\"release_id\":\"irelease_59ce1989193f4e73b47050187798b362\",\"input_fingerprint\":\"f828b8778a46f28508793e166f28fc44a6a487f08352abaa1be0fbdc718a208c\"}},{\"id\":\"event_a2586fd36f9c4aeb964ca7b772d3c924\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304375.6715593,\"kind\":\"CLAIMED\",\"data\":{\"fence\":1}},{\"id\":\"event_ea97f67b8693450db7b0356e70b45da3\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304379.0701547,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"read_pick\",\"operation_id\":\"op_fd2e3862284e4546b2eca79032d3bc81\",\"fence\":1}},{\"id\":\"event_0d5e7b7f39e0425785f5752a4879f369\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304385.7257032,\"kind\":\"NS_RESERVED\",\"data\":{\"attempt_id\":\"attempt_5954c0ba603c4276974d5eca37a16626\",\"parameters_fingerprint\":\"c884b07aa1366e009455f973f8fe56c641239b3d2ca6278b329019827358b975\",\"reserved_tokens\":4035,\"request_model\":\"intern-s2\",\"mode\":\"MOCK\",\"created_at\":1792304385.7223222,\"operation_id\":\"op_9db4d1db325c4fbbad714b1b00a75896\",\"step_id\":\"infer_pick\",\"fence\":1,\"reservation_fingerprint\":\"06bc258ccfb37f445cb908d05bc0489b8a9baf5f2ccbcde691b7043b27a6e63a\"}},{\"id\":\"event_df5a916aa1494ac988f0eae27385a1cc\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304385.7305672,\"kind\":\"NS_WIRE_ARCHIVED\",\"data\":{\"attempt_id\":\"attempt_5954c0ba603c4276974d5eca37a16626\",\"archive_fingerprint\":\"0a460b8f13d5dbc1ca993358b41affb01e189e52a2e48056bd9c5840faac86e1\"}},{\"id\":\"event_5becb2903a034d8781dbd9d52d994a05\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304385.7314508,\"kind\":\"MODEL_RESERVED\",\"data\":{\"attempt_id\":\"attempt_5954c0ba603c4276974d5eca37a16626\",\"mode\":\"mock\"}},{\"id\":\"event_7c20fdeab4324d6e8af1c82f133c0fda\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304388.771908,\"kind\":\"NS_RECEIVED\",\"data\":{\"attempt_id\":\"attempt_5954c0ba603c4276974d5eca37a16626\",\"response_fingerprint\":\"ce6895e77704413fe10a1954acb06d141a9b938b8750ae57c123e343d57c212e\",\"reception_fingerprint\":\"cb61144e0e1e63d5f296c5249dff3844fe4b9d2f65c6746e6600809687fcd704\"}},{\"id\":\"event_fdeadc3d2b7f470eb8981ed482e7be1b\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304388.7808,\"kind\":\"NS_BODY_ARCHIVED\",\"data\":{\"attempt_id\":\"attempt_5954c0ba603c4276974d5eca37a16626\",\"archive_fingerprint\":\"0c00e912264be71938e92ab41671fd94dd7c78b3ae46ea14fd9675bcaf61d39d\"}},{\"id\":\"event_db164897648e41ff886a5bf4f6850c47\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304392.046515,\"kind\":\"NS_SETTLED\",\"data\":{\"attempt_id\":\"attempt_5954c0ba603c4276974d5eca37a16626\",\"attempt_fingerprint\":\"21b6ea6fb2cf2e072fe1d222017ff0d9a00a081ec2e22c65b9fa8b512e897a86\",\"operation_id\":\"op_9db4d1db325c4fbbad714b1b00a75896\"}},{\"id\":\"event_9ab647df129c41618b4ae748d02e531e\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304392.0477803,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"infer_pick\",\"operation_id\":\"op_9db4d1db325c4fbbad714b1b00a75896\",\"fence\":1}},{\"id\":\"event_ab97bf74a3bd40b3bff071a888246dae\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304398.4784615,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"check_pick\",\"operation_id\":\"op_7d8c483399c648579f12ed989cb9634f\",\"fence\":1}},{\"id\":\"event_a57a69e56ac645b2a98a374153b6076d\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304402.178036,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"save_pick\",\"operation_id\":\"op_b58d9c6b03d143458a93985332858d98\",\"fence\":1}},{\"id\":\"event_bfafc9c3606a40eeb738c1b862eb96a6\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304402.1852722,\"kind\":\"STATE\",\"data\":{\"status\":\"SUCCEEDED\",\"error\":null}},{\"id\":\"event_b1e535ee5a064850b2ce9dab9fa7a294\",\"run_id\":\"run_68962312b1594630a62f03e9f3766bf6\",\"created_at\":1792304402.1856346,\"kind\":\"SPEC_COMMITTED\",\"data\":{\"result_version\":1,\"artifact_resource\":\"res_4779b58dd9f14aa78eafcccb8ad544c7\"}}],\"namespace\":\"INTERNAL_APPRUN\",\"steps\":[{\"step_id\":\"read_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"4d9c3291f837e4c34c1a00dada5d821d668db5fb87fcc83356fa28d8bb2fcda1\"},{\"step_id\":\"infer_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"864f2340828dea1b97f0d53283bfc4ab234b8ae2a8bdb6a1d4d07fbeb9e76088\"},{\"step_id\":\"check_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"6eedd07f88b937dd0472d8491c46c6fbfaef49703e027de992646a5ebbf4e9eb\"},{\"step_id\":\"save_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"15881d2de17daab609a86c296e62753dcc56943052f4b40e878c7e9016405e30\"}],\"semantic_status\":\"UNKNOWN\",\"owner_acceptance\":\"PENDING\",\"formal_publication_enabled\":false,\"citation_status\":\"PASS\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"markdown_view\":\"# 技术规范待验清单\\n出处核验 PASS；含义/遗漏/关系准确性 UNKNOWN，人工验收 NOT_RUN\\n\\n- requirement fact\\\\_0: The desk lamp dims after five idle minutes when battery powered.\\n  关系 NOT_APPLICABLE；决定 NOT_APPLICABLE；目标 \\n  原文[0:64]: The desk lamp dims after five idle minutes when battery powered.\\n- condition qualifier: when battery powered\\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\\\_0\\n  原文[43:63]: when battery powered\\n- exception fact\\\\_1: During a software update it stays bright.\\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\\\_0\\n  原文[65:106]: During a software update it stays bright.\\n- open\\\\_question fact\\\\_2: The default brightness for visitors remains undecided.\\n  关系 NOT_APPLICABLE；决定 OPEN；目标 \\n  原文[107:161]: The default brightness for visitors remains undecided.\\n\\n## 原生人工未决项\\nHuman question 0\\nHuman question 1\\nHuman question 2\\nHuman question 3\\nHuman question 4\\nHuman question 5\\nHuman question 6\\nHuman question 7\\nHuman question 8\\nHuman question 9\\nHuman question 10\\nHuman question 11\\nHuman question 12\\nHuman question 13\\nHuman question 14\\nHuman question 15\\n\\n## 未覆盖原文\\n\\n## 完整来源（保留，未推断）\\nThe desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.\\n\"}]}",
+    "transport_phase": null
+  },
+  {
+    "rpc_id": 43,
+    "method": "GET",
+    "path": "/api/internal/releases/irelease_59ce1989193f4e73b47050187798b362",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "namespace": "INTERNAL_ENGINEERING_ONLY",
+      "formal_publication_enabled": false,
+      "id": "irelease_59ce1989193f4e73b47050187798b362",
+      "project_id": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26",
+      "principal_id": "user_202eb0a69ffa4c7fb255be8150704980",
+      "approval_id": "iapproval_2d90116cd4834a58a902aa7a823e099a",
+      "snapshot": {
+        "namespace": "INTERNAL_ENGINEERING_ONLY",
+        "draft": {
+          "id": "app_c91f9ce03d33af05bd615814b8a2f959",
+          "project_id": "proj_2cb558f8b9c04cb1878c2cd47fc1fd26",
+          "runtime_id": "appruntime_921b7cdcfcd1488990331b8bfb8283e0",
+          "candidate": {
+            "namespace": "pa-natural-spec-app.v1",
+            "manifest": {
+              "schema_version": "1.0-draft",
+              "app_id": "app_c91f9ce03d33af05bd615814b8a2f959",
+              "revision": 1,
+              "origin": "goal",
+              "goal_ref": "goal_333b7fda2f32436890ca1d55426ccb43",
+              "source_run_ref": null,
+              "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              },
+              "output_schema": {
+                "type": "

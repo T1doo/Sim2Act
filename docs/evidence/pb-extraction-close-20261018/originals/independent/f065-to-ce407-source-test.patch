@@ -1,0 +1,30 @@
+diff --git a/src/sim2act/pb_extraction_terminals.py b/src/sim2act/pb_extraction_terminals.py
+index 690ddd7e..7b990d68 100644
+--- a/src/sim2act/pb_extraction_terminals.py
++++ b/src/sim2act/pb_extraction_terminals.py
+@@ -223,7 +223,9 @@ def read(store, c, user, pid, rid, key):
+ 
+ @controlled
+ def close(store, user, pid, rid, key, body, limits):
+-    with store.tx() as c:
++    # An already-running extraction must finish before absence can be decided.
++    # Bound SQLite's lock wait; this does not alter business leases or PG policy.
++    with store.tx(wait_seconds=30) as c:
+         store.lock_project(c, user, pid)
+         _source(store, c, user, pid, rid, key, body, limits)
+         previous = read(store, c, user, pid, rid, key)
+diff --git a/tests/test_pb_extraction_close.py b/tests/test_pb_extraction_close.py
+index b733ee3a..58ffe81f 100644
+--- a/tests/test_pb_extraction_close.py
++++ b/tests/test_pb_extraction_close.py
+@@ -533,8 +533,8 @@ def test_source_authority_tenant_and_exact_identity_gate_close(pb_extraction_clo
+             revoked_baseline = snapshot(case.store)
+             with PrivateReadBarrier(case.store, {case.info["source_run"]},
+                     {case.info["source_resource"], case.info["source_artifact"]}) as barrier:
+-                error(case.close(), 403, "PERMISSION_DENIED")
+-                error(case.read(), 403, "PERMISSION_DENIED")
++                error(case.close(), 403, "GRANT_REVOKED")
++                error(case.read(), 403, "GRANT_REVOKED")
+                 assert not barrier.blocked
+                 observer.save("revoked-private-read-barrier.json", dict(revocation=revoked,
+                     blocked=barrier.blocked, statements=barrier.statements))

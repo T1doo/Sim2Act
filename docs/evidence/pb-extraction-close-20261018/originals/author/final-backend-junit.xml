@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="209.969" timestamp="2026-10-18T06:24:23.438392+00:00" hostname="31571a76ef61"><testcase classname="tests.test_pb_extraction_close" name="test_unaccepted_close_is_durable_and_rejects_late_original_or_changed_post" time="71.959" /><testcase classname="tests.test_pb_extraction_close" name="test_unaccepted_close_survives_invalidated_target_without_reading_it" time="8.232" /><testcase classname="tests.test_pb_extraction_close" name="test_already_accepted_extraction_cannot_be_closed_or_modified" time="26.579" /><testcase classname="tests.test_pb_extraction_close" name="test_real_two_connection_close_and_submit_serialize[close-first]" time="7.856"><failure message="assert False&#10; +  where False = is_set()&#10; +    where is_set = &lt;threading.Event at 0x7f2fcb0da2d0: unset&gt;.is_set">pb_extraction_close_seed = {'commit': {'artifact_write_consent': 'ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT', 'consent..._app': 'app_c73f40b04c71dddd9110175d5f24814b', 'source_app_run': 'iapprun_a197d4cca10f48d0ba527d1445c4ab44', ...}, ...}
+tmp_path = PosixPath('/workspace/pb-extraction-close-evidence-20261018/final-backend-data/test_real_two_connection_close0')
+winner = 'close'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f2fcb4b6de0&gt;
+
+    @pytest.mark.parametrize("winner", ["close", "submit"], ids=["close-first", "post-first"])
+    def test_real_two_connection_close_and_submit_serialize(pb_extraction_close_seed, tmp_path, winner, monkeypatch):
+        with _PageObserver(tmp_path, "PB_CLOSE_RACE_" + winner.upper()) as observer:
+            with CloseCase(pb_extraction_close_seed, tmp_path / "case", observer) as case:
+                baseline = snapshot(case.store)
+                second_store, second_client = case.cold()
+                first_locked, release_first, second_begin, second_began = [threading.Event() for _ in range(4)]
+                log, log_lock = [], threading.Lock()
+                original_lock = case.store.lock_project
+    
+                def mark(kind, connection=None):
+                    row = dict(event=kind, thread_id=threading.get_ident())
+                    if connection is not None:
+                        row["dbapi_connection_id"] = id(connection.connection.driver_connection)
+                    with log_lock:
+                        log.append(row)
+                        observer.save("race-events.json", log)
+    
+                def hold_after_first_project_lock(connection, principal, project):
+                    value = original_lock(connection, principal, project)
+                    mark("FIRST_PROJECT_LOCK_ACQUIRED", connection)
+                    first_locked.set()
+                    assert release_first.wait(10), "Test-owned gate must always be released in finally"
+                    mark("FIRST_PROJECT_LOCK_RELEASED_BY_TEST", connection)
+                    return value
+    
+                def before_second_begin(connection, cursor, statement, parameters, context, many):
+                    if statement.strip().upper() == "BEGIN IMMEDIATE":
+                        mark("SECOND_BEGIN_IMMEDIATE_ATTEMPTED", connection)
+                        second_begin.set()
+    
+                def after_second_begin(connection, cursor, statement, parameters, context, many):
+                    if statement.strip().upper() == "BEGIN IMMEDIATE":
+                        mark("SECOND_BEGIN_IMMEDIATE_COMPLETED", connection)
+                        second_began.set()
+    
+                def request(actor, client):
+                    mark("REQUEST_STARTED_" + actor.upper())
+                    reply = case.close(client=client) if actor == "close" else case.submit(client=client)
+                    mark("REQUEST_RETURNED_" + actor.upper())
+                    return reply
+    
+                monkeypatch.setattr(case.store, "lock_project", hold_after_first_project_lock)
+                event.listen(second_store.engine, "before_cursor_execute", before_second_begin)
+                event.listen(second_store.engine, "after_cursor_execute", after_second_begin)
+                try:
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        first = pool.submit(request, winner, case.client)
+                        try:
+                            assert first_locked.wait(10)
+                            second = pool.submit(request, "submit" if winner == "close" else "close", second_client)
+                            assert second_begin.wait(10), "Second real connection must reach BEGIN while first lock is held"
+                            assert not second_began.is_set() and not first.done() and not second.done()
+                            mark("OVERLAP_PROVED_FIRST_LOCK_HELD_SECOND_BEGIN_INCOMPLETE")
+                        finally:
+                            release_first.set()
+                        a, b = first.result(timeout=30), second.result(timeout=30)
+                finally:
+                    release_first.set()
+                    monkeypatch.setattr(case.store, "lock_project", original_lock)
+                    event.remove(second_store.engine, "before_cursor_execute", before_second_begin)
+                    event.remove(second_store.engine, "after_cursor_execute", after_second_begin)
+                    observer.save("race-events.json", log)
+&gt;               assert second_began.is_set()
+E               assert False
+E                +  where False = is_set()
+E                +    where is_set = &lt;threading.Event at 0x7f2fcb0da2d0: unset&gt;.is_set
+
+tests/test_pb_extraction_close.py:487: AssertionError</failure></testcase><testcase classname="tests.test_pb_extraction_close" name="test_real_two_connection_close_and_submit_serialize[post-first]" time="24.807" /><testcase classname="tests.test_pb_extraction_close" name="test_source_authority_tenant_and_exact_identity_gate_close" time="15.044" /><testcase classname="tests.test_pb_extraction_close" name="test_partial_acceptance_terminal_corruption_and_rollback_are_not_absence" time="55.116" /></testsuite></testsuites>
