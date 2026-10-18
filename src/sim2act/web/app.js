@@ -7,6 +7,7 @@ let ordinaryRunMaterialsReady = false;
 let reconcileVersion = null, unresolvedAttempts = [];
 let runSelectionGeneration = 0;
 let foregroundRunRead = null;
+let internalTaskNavigation = null;
 let runUserSelectionGeneration = 0;
 let runHistoryGeneration = 0;
 let identityConnectionGeneration = 0;
@@ -335,6 +336,69 @@ function clearRunDetail() {
   $("reconcile-panel").hidden=true;
   $("reconcile-response").value="";$("reconcile-evidence").value="";$("reconcile-ack").checked=false;
 }
+async function openInternalTaskResult(receipt, button, selectedCurrent) {
+  if(!selectedCurrent() || internalTaskNavigation?.current())return;
+  const identity=token,connection=identityConnectionGeneration,project=$("project-select").value,userSelection=runUserSelectionGeneration;
+  let workspace=workspaceSelectionGeneration,appGeneration=appSelectionGeneration,view=null,instanceSelection=null,runSelection=null;
+  const scopeCurrent=()=>identity===token && connection===identityConnectionGeneration && project===$("project-select").value
+    && receipt.id===activeRun && userSelection===runUserSelectionGeneration && workspace===workspaceSelectionGeneration
+    && appGeneration===appSelectionGeneration && (!view || engineering===view);
+  const current=()=>scopeCurrent()
+    && (instanceSelection===null || view.instanceGeneration===instanceSelection)
+    && (runSelection===null || view.runGeneration===runSelection);
+  const navigation={current};internalTaskNavigation=navigation;button.disabled=true;
+  try {
+    const instance=await api(`/api/internal/instances/${encodeURIComponent(receipt.instance_id)}`);
+    if(!current())return;
+    const original=instance.runs?.find(run=>run.id===receipt.id);
+    if(instance.id!==receipt.instance_id || instance.project_id!==project || !instance.source_app_id
+      || original?.app_run_id!==receipt.app_run_id || original.release_id!==receipt.release_id)throw Error("运行绑定与原实例不符");
+    selectWorkspace("apps");workspace=workspaceSelectionGeneration;
+    const loaded=await showApp(instance.source_app_id,project,g=>{appGeneration=g;},scopeCurrent,app=>{
+      if(app.runtime_id!==instance.runtime_id)throw Error("运行绑定与原应用不符");
+    });
+    if(!loaded || !current())return;
+    view=engineering;
+    if(!view || !engineeringCurrent(view) || view.app!==instance.source_app_id)throw Error("无法打开原应用的内部运行视图");
+    const selectingInstance=showInternalInstance(instance.id,view);instanceSelection=view.instanceGeneration;
+    await selectingInstance;
+    if(!current())return;
+    if(view.instance?.id!==instance.id)throw Error($("internal-run-status").textContent || "无法读取原实例");
+    const selectingRun=showInternalRun(receipt.id,view,view.instance);runSelection=view.runGeneration;
+    await selectingRun;
+    if(!current())return;
+    if(view.run?.id!==receipt.id || view.run.app_run_id!==receipt.app_run_id || view.run.release_id!==receipt.release_id)
+      throw Error($("internal-run-status").textContent || "无法读取原运行");
+    $("internal-title").textContent=`项目任务历史 · 原应用运行的成果与${view.spec||view.workflow?"人工验收":"状态"}`;
+    $("internal-run-detail").scrollIntoView?.({block:"nearest"});
+  } catch(error){if(current())throw error;}
+  finally {
+    if(engineering?.selectionCurrent===scopeCurrent){
+      // A newer explicit instance/Run selection keeps its controller. Only the
+      // temporary cross-workspace opening fence is released here.
+      if(scopeCurrent())engineering.selectionCurrent=null;
+      else clearApp();
+    }
+    if(internalTaskNavigation===navigation)internalTaskNavigation=null;
+    if(button.isConnected)button.disabled=false;
+  }
+}
+function renderInternalTaskResult(r,current) {
+  $("result").append(row(`内部应用任务 · 结果版本 ${r.result_version ?? "无"} · 模型用量未在此摘要核定 · 正式发布关闭`));
+  const result=r.result;
+  if(result && typeof result.column==="string" && typeof result.sum==="string" && Number.isSafeInteger(result.count) && result.count>=0)
+    $("result").append(row(`${result.column} 合计 ${result.sum}，共 ${result.count} 条记录。`));
+  else if(result)$("result").append(row(result.checklist?"已保存规范清单；请打开原应用运行读取此版本内容及人工验收状态。":"已保存结构化成果；请打开原应用运行查看完整内容。"));
+  if([r.id,r.instance_id,r.app_run_id,r.release_id].every(value=>typeof value==="string" && value.length>0)){
+    const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+    const selected=()=>current() && connection===identityConnectionGeneration && workspace===workspaceSelectionGeneration;
+    const action=row(`原实例 ${r.instance_id} · 原 Run ${r.id}`);
+    const button=document.createElement("button");button.id="internal-task-open-result";button.type="button";
+    button.textContent=Array.isArray(r.steps)?"在应用中打开此运行的成果与人工验收":"在应用中打开此运行的成果与状态";
+    button.disabled=!!internalTaskNavigation?.current();button.onclick=safe(()=>openInternalTaskResult(r,button,selected));
+    action.append(button);$("result").append(action);
+  }
+}
 async function showRun(id, userSelection = true, selectionGuard = () => true, validateReceipt = null) {
   if(!selectionGuard())return;
   const project=$("project-select").value,identity=token;
@@ -386,10 +450,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   if (unresolvedAttempts.some(a => a.attempt_id === selectedAttempt)) $("reconcile-attempt").value = selectedAttempt;
   const labels = {QUEUED:"等待后台执行",RUNNING:"正在执行",PARTIAL:"部分完成",FAILED:"执行失败",WAITING_RESOURCE:"等待资源或授权",WAITING_APPROVAL:"等待确认计划",PAUSED:"已暂停",CANCELLED:"已取消"};
   $("result").replaceChildren(row(`${labels[r.status] || r.status}（${r.status}）`));
-  if(internal){
-    $("result").append(row(`内部工程只读任务 · 0 模型请求 · 结果版本 ${r.result_version ?? "无"} · 正式发布关闭`));
-    if(r.result)$("result").append(row(`${r.result.column} 合计 ${r.result.sum}，共 ${r.result.count} 条记录。`));
-  }
+  if(internal)renderInternalTaskResult(r,current);
   if(!internal)renderOrdinaryProgress(r,attempts);
   if (r.result && !internal) {
     $("result").append(row(typeof csvReportPassed === "function" && csvReportPassed(r)?"事前CSV完整报告合同 PASS；0模型请求，通用语义 NOT_RUN，人工 PENDING。":fixedGoalAcceptancePassed(r)?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
@@ -703,7 +764,7 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
     $("app-frozen-goal").hidden=false;$("app-frozen-goal-text").textContent=JSON.stringify({goal:a.candidate.goal,resource:manifest.data_bindings[0].resource_ref,revision:a.candidate.source_revision,hash:a.candidate.source_hash,permissions:manifest.permission_requirements,source:a.candidate.agent_provenance || null},null,2);
     $("app-input-hint").textContent="TXT/MD 字面检索，词长最多80字符；审批样例与运行都需对应的离线响应，界面不会生成答案。";
     $("app-history").textContent="新运行与结果版本见下方内部实例历史；不将旧结果作为当前结果。";
-    if(typeof openInternal === "function")await openInternal(a,generation);
+    if(typeof openInternal === "function")await openInternal(a,generation,selectionCurrent);
     return true;
   }
   const previous=$("app-column").value, guidance=a.input_guidance;
