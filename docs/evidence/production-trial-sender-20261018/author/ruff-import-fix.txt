@@ -1,0 +1,259 @@
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:169:38
+    |
+167 |     assert result.may_have_sent and result.adapter_entered and not result.business_accepted
+168 |     assert result.live_allowed is result.dispatch_authorized is result.real_source_verified is False
+169 |     saved = records(trial["data"][0]);assert len(saved) == 6
+    |                                      ^
+170 |     capture = next(r["snapshot"]["response"] for r in saved if r["kind"] == sender.CAPTURE)
+171 |     assert base64.b64decode(capture["body_b64"]) == trial["state"]["reply"]
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:195:29
+    |
+194 | def test_fixture_and_actual_wire_gates_refuse_before_reservation(trial):
+195 |     worker = trial["worker"];before = snapshot(trial["data"][0])
+    |                             ^
+196 |     original_settings, original_transport = worker.s, worker.goal_planner_transport
+197 |     try:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_sender.py:199:40
+    |
+197 |     try:
+198 |         worker.store.test_only = False
+199 |         with pytest.raises(DomainError):dispatch(trial)
+    |                                        ^
+200 |     finally:
+201 |         worker.store.test_only = True
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_sender.py:204:40
+    |
+202 |     for change in (dict(mode="live"), dict(live_enabled=True), dict(token="synthetic-rejected-value")):
+203 |         worker.s = replace(original_settings, **change)
+204 |         with pytest.raises(DomainError):dispatch(trial)
+    |                                        ^
+205 |     worker.s = original_settings
+206 |     worker.goal_planner_transport = object()
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_sender.py:207:36
+    |
+205 |     worker.s = original_settings
+206 |     worker.goal_planner_transport = object()
+207 |     with pytest.raises(DomainError):dispatch(trial)
+    |                                    ^
+208 |     worker.goal_planner_transport = original_transport
+209 |     class Trap:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_sender.py:212:36
+    |
+210 |         def __getattribute__(self, name):raise AssertionError("no foreign source callback")
+211 |         def __repr__(self):raise AssertionError("no foreign repr")
+212 |     with pytest.raises(DomainError):dispatch(trial, source=Trap())
+    |                                    ^
+213 |     envelope = json.loads(trial["wire"])
+214 |     for change in (dict(model="other"), dict(stream=True), dict(max_tokens=True), dict(max_tokens=1025)):
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_sender.py:215:40
+    |
+213 |     envelope = json.loads(trial["wire"])
+214 |     for change in (dict(model="other"), dict(stream=True), dict(max_tokens=True), dict(max_tokens=1025)):
+215 |         with pytest.raises(DomainError):dispatch(trial, wire=json.dumps(envelope | change).encode())
+    |                                        ^
+216 |     rejected = sender._derive(response(model="different-model"), True, True)
+217 |     assert rejected.outcome.outcome == "UNKNOWN" and rejected.outcome.total_tokens == 8
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_sender.py:238:36
+    |
+236 |         lambda r: (r.update(raw_sha256="e" * 64), r["outcome"].update(response_sha256="e" * 64)))
+237 |     damaged = snapshot(trial["data"][0])
+238 |     with pytest.raises(DomainError):dispatch(trial)
+    |                                    ^
+239 |     assert snapshot(trial["data"][0]) == damaged and trial["state"]["sent"] == []
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:243:40
+    |
+242 | def test_cancel_after_guard_may_send_once_and_retains_late_body(trial, monkeypatch, tmp_path):
+243 |     entered, release = Event(), Event();trace = []
+    |                                        ^
+244 |     original = InternModel.request_serialized_captured
+245 |     def observed(self, wire, guard):
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:247:36
+    |
+245 |     def observed(self, wire, guard):
+246 |         def recorded(request):
+247 |             answer = guard(request);trace.append("guard-transaction-finished");return answer
+    |                                    ^
+248 |         return original(self, wire, recorded)
+249 |     monkeypatch.setattr(InternModel, "request_serialized_captured", observed)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:247:79
+    |
+245 |     def observed(self, wire, guard):
+246 |         def recorded(request):
+247 |             answer = guard(request);trace.append("guard-transaction-finished");return answer
+    |                                                                               ^
+248 |         return original(self, wire, recorded)
+249 |     monkeypatch.setattr(InternModel, "request_serialized_captured", observed)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:251:59
+    |
+249 |     monkeypatch.setattr(InternModel, "request_serialized_captured", observed)
+250 |     def handler(request):
+251 |         trace.append("mock-handler-entered-may-have-sent");entered.set()
+    |                                                           ^
+252 |         assert release.wait(8)
+253 |         return httpx.Response(200, content=trial["state"]["reply"])
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:268:40
+    |
+266 |     assert len(trial["state"]["sent"]) == 1 and slot.settlement.total_tokens == 8
+267 |     assert not slot.accepted and result.journal.ledger.halted and result.capture_bytes > 0
+268 |     before = snapshot(trial["data"][0]);assert dispatch(trial).journal.duplicate
+    |                                        ^
+269 |     assert snapshot(trial["data"][0]) == before and len(trial["state"]["sent"]) == 1
+270 |     (tmp_path / "guard-to-transport-window.json").write_text(json.dumps(dict(
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:289:40
+    |
+287 |     assert slot.settlement.completion_tokens is slot.settlement.total_tokens is None
+288 |     assert not slot.accepted and len(trial["state"]["sent"]) == 1
+289 |     before = snapshot(trial["data"][0]);assert dispatch(trial).journal.duplicate
+    |                                        ^
+290 |     assert snapshot(trial["data"][0]) == before and len(trial["state"]["sent"]) == 1
+291 |     (tmp_path / "received-prefix-unknown.json").write_text(result.model_dump_json(indent=2))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:298:53
+    |
+296 |     original_adapter, original_cas = InternModel.request_serialized_captured, journal._cas_pair
+297 |     def observed(self, wire, guard):
+298 |         result = original_adapter(self, wire, guard);checkpoint.append(snapshot(trial["data"][0]));return result
+    |                                                     ^
+299 |     def conflict(c, owner, entity, kind, key, previous, current):
+300 |         if kind == journal.QUOTA and checkpoint:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:298:99
+    |
+296 |     original_adapter, original_cas = InternModel.request_serialized_captured, journal._cas_pair
+297 |     def observed(self, wire, guard):
+298 |         result = original_adapter(self, wire, guard);checkpoint.append(snapshot(trial["data"][0]));return result
+    |                                                                                                   ^
+299 |     def conflict(c, owner, entity, kind, key, previous, current):
+300 |         if kind == journal.QUOTA and checkpoint:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:301:47
+    |
+299 |     def conflict(c, owner, entity, kind, key, previous, current):
+300 |         if kind == journal.QUOTA and checkpoint:
+301 |             previous = copy.deepcopy(previous);previous["response"]["revision"] -= 1
+    |                                               ^
+302 |         return original_cas(c, owner, entity, kind, key, previous, current)
+303 |     monkeypatch.setattr(InternModel, "request_serialized_captured", observed)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_sender.py:305:46
+    |
+303 |     monkeypatch.setattr(InternModel, "request_serialized_captured", observed)
+304 |     monkeypatch.setattr(journal, "_cas_pair", conflict)
+305 |     with pytest.raises(DomainError) as failed:dispatch(trial)
+    |                                              ^
+306 |     assert failed.value.code == "VERSION_CONFLICT" and len(checkpoint) == 1
+307 |     assert snapshot(trial["data"][0]) == checkpoint[0]
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:320:66
+    |
+319 | def child_guard(transport, io, methods):
+320 |     def forbidden(*args, **kwargs):io.append("FORBIDDEN_REAL_IO");raise AssertionError("offline child")
+    |                                                                  ^
+321 |     httpx.HTTPTransport.handle_request = forbidden
+322 |     httpx.AsyncHTTPTransport.handle_async_request = forbidden
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:329:34
+    |
+327 |             assert type(self) is InternModel and self.transport is transport and type(transport) is httpx.MockTransport
+328 |             assert self.settings.mode == "mock" and self.settings.token == "synthetic-offline-planner"
+329 |             methods.append(_name);return _original(self, *args, **kwargs)
+    |                                  ^
+330 |         setattr(InternModel, name, guarded)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:334:29
+    |
+333 | def child_main():
+334 |     d = json.load(sys.stdin);io, methods, sent = [], [], []
+    |                             ^
+335 |     store = Store(d["url"], test_only=True)
+336 |     contract = gate.parse_contract(d["contract"])
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:355:31
+    |
+353 |         print(json.dumps(dict(event="recovered-history", result=result.model_dump(mode="json"),
+354 |                               methods=methods, sent=sent, io=io)), flush=True)
+355 |         store.engine.dispose();return
+    |                               ^
+356 |     job = store.claim(worker.id, 30);assert job["id"] == d["run_id"]
+357 |     with store.tx() as c:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:356:37
+    |
+354 |                               methods=methods, sent=sent, io=io)), flush=True)
+355 |         store.engine.dispose();return
+356 |     job = store.claim(worker.id, 30);assert job["id"] == d["run_id"]
+    |                                     ^
+357 |     with store.tx() as c:
+358 |         context = policy.check_run(store, c, contract.principal_id, contract, d["key"], "generate",
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_sender.py:392:34
+    |
+390 |     ("marker-before-adapter", 17, 0), ("received-before-archive", 23, 1)])
+391 | def test_crashed_sender_new_process_recovery_is_history_only(env, tmp_path, phase, exit_code, send_count):
+392 |     t = prepare(env, claim=False);before = snapshot(env[0])
+    |                                  ^
+393 |     payload = dict(url=str(env[0].engine.url), contract=t["contract"].model_dump(mode="json"),
+394 |         source=t["source"].model_dump(mode="json"), key=t["approval"].request_key,
+    |
+
+Found 25 errors (1 fixed, 24 remaining).

@@ -1,0 +1,13 @@
+# Sender 修后静审与新8节点预审
+
+**四项产品P2静态闭合；当前未发现剩余确定产品P1/P2。** 测试冻结前尚有一个负例需要隔离拒绝原因。此结论只读源码/Git，不执行产品/pytest/HTTP/SQL/DB/网络，不改仓库或旧sealed。
+
+已修：`_loaded`在私有capture之前核实际Run principal/project/runtime；`_history`要求capture存在则attempted且Outcome与journal相等，settled缺capture为OUTCOME_UNKNOWN；EMPTY以 `_derive(b'')`整体验；dispatch入口捕获original Store/Settings/transport/id/engine，same_binding在reserve/marker/guard复核，late_receive仅捕获Store且强制test_only SQLite。handler把Worker.store换成同DB非fixtureStore不会更换落账数据库。正常node以foreign engine SQL计数0+原Store六行检验这一点。
+
+8个静态预计节点范围正确：正常一次adapter+capture/history；配置及actual wire前置拒绝；marker到guard前cancel；guard后到handler窗口cancel；实际received-prefix partial/null；capture后journal CAS六行回滚；两实际os._exit窗口及新进程history恢复。fixture确实以新Worker.id实际claim，Worker.once不调用；子进程stdout flush后故意exit17/23，与pytest PASS分开保存。主/子进程允许确切InternModel+exact MockTransport的实际adapter路径，阻真实HTTPTransport/Settings.from_env，不能再称InternModel全部未调用。
+
+唯一测试oracle收敛：`test_cancel_between_committed_marker_and_guard_never_reaches_transport`中的EMPTY负例同时改capture raw_sha256及capture.outcome.response_sha256为e64，但journal原settlement还保持emptySHA。即使去掉EMPTY派生校验，也会因_history跨链Outcome不等拒绝。因此应在同节点将journal.KIND两份中原slot.settlement.response_sha256也改同e64并重算seals，保留其他UNKNOWN/null字段。跨链仍一致、型别/普通hash合法，只有空body不可能得到e64的派生不变量拒绝。正常node已有独立capture/journal分叉负例，不需新增节点或故障矩阵。
+
+正常handlerStore漂移、响应原bytes/raw与canonical分离、wrongmodel UNKNOWN仍保usage、guard前零handler、guard后允许一次且晚账拒收、pending/UNKNOWN不重发、六行回滚的断言均有明确代码。部分为执行后artifact字段，当前尚未实际运行，不预写PASS。Run标量门当前是静态修复，本报告不冒称额外故障或PG行锁资格；sender全路径仍只允许SQLite。
+
+本新review目录未seal，原WIP发现及关键片段完整保留。等待oracle隔离、最终冻结与闭合原件，不重跑原19/12节点。

@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-18 从94fa接续[未安装sender的原adapter、capture与结算](ProductionTrialSender20261018.md)：冻结`c6f946d4d5c90652dbc6ad9945499dc529cc8e4d`，复用原Worker/InternModel/MockTransport，marker→guard→实际bytes→capture/journal六镜像原子提交；原key含UNKNOWN一律只读、不重发。8唯一节点一次8PASS（JUnit41.715s/外46.022s），含两个取消窗口及四个真实进程（故意退出17/23+两次恢复0）；6合成adapter/5Mock handler/真实0。705输入/137生产前后零漂移，旧journal仅私有提取，702旧输入/135生产不变；旧19/12矩阵不重跑、不累加。guard后取消可能已发一次，迟到事实保留但拒接受，不声称DB与IO原子。仍未安装LIVE/source/sender，完整source/cold/UI、PG/native/CI/真实费用语义未验；[原件与有限独审](../evidence/production-trial-sender-20261018/README.md)。
+
 2026-10-18 从080ea接续[未安装的持久试验journal与账户cursor CAS](ProductionTrialJournal20261018.md)：冻结`12958af924fad425fa619adccd1841fb8f8228a8`仅新增控制器及测试，可信服务端加载、四镜像同事务revision CAS、同账户跨project/trial争抢及原历史只读。12唯一节点一次12PASS（JUnit47.523s/外50.645s），含六种两连接marker/控制顺序与两个真实新Python进程pending/UNKNOWN回读；703输入/136生产前后零漂移，旧701/135逐字不变。前轮19唯一/20执行资格不重跑、不累加；原read空trial共享cursor P2在静审后冻结前修正。仍未装API/Worker、未注册source/sender或发行LIVE；PG/native/CI/真实费用语义及完整source/cold/UI未跑，[原件与范围](../evidence/production-trial-journal-20261018/README.md)。
 
 2026-10-18 从4a5接续[自然应用交付图与编辑保护入口](NaturalGraphControls20261018.md)已实际接通：仅2前端文件，复用既有图/锁API。无图的自然P-A从目录显式derive→锁定→LOCK_CONFLICT→解锁/rederive→预览201；源码`d9e19b2829221909b49fd075b721d4e831d711a4`最终1唯一pytest/1PASS（44页内检查），原文本断言失败完整保留；两轮各693输入零漂移，共6Mock/页面模型与业务Worker0/真实0。未重跑已通过长链或扩旧归档，PB现场/Win/native/PG/真实语义/CI仍不补签。
