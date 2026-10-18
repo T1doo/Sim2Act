@@ -6,6 +6,7 @@ const specRecoveryPrefix="sim2act.spec-run-recovery.v1:";
 const specRecoveryMetadata=new WeakMap();
 function clearSpecRecoveryMemory(){
   for(const [id,pending] of engineeringPending)if(specRecoveryMetadata.has(pending))engineeringPending.delete(id);
+  for(const [scope,pending] of naturalTaskRequests)if(naturalTaskRecoveryMetadata.has(pending))naturalTaskRequests.delete(scope);
 }
 function specRecoveryScope(view,instance){
   return {principal_id:instance.principal_id,project_id:view.project,app_id:view.app,instance_id:instance.id};
@@ -64,6 +65,63 @@ const engineeringInstanceKeys = new Map();
 const registeredExtractionRequests = new Map();
 const naturalTaskRequests = new Map();
 let naturalTaskExtraction = null;
+const naturalTaskRecoveryPrefix="sim2act.pb-natural-extraction-recovery.v1:";
+const naturalTaskRecoveryMetadata=new WeakMap();
+const naturalTaskRecoveryFields=["namespace","principal_id","project_id","source_app_id","source_instance_id","source_run_id","source_app_run_id","source_release_id","source_release_fingerprint","source_result_version","request_key","request_fingerprint","review_fingerprint","candidate_fingerprint","app_id","runtime_id","source_proof_fingerprint"].sort();
+function naturalTaskRecoveryScope(s){return {principal_id:s.instance.principal_id,project_id:s.view.project,source_app_id:s.view.app,source_instance_id:s.instance.id,source_run_id:s.rid};}
+function naturalTaskRecoveryKey(s){return naturalTaskRecoveryPrefix+JSON.stringify(Object.values(naturalTaskRecoveryScope(s)));}
+function naturalTaskRecoveryCheck(record,s){
+  const ids={project_id:/^proj_[a-f0-9]{32}$/,source_app_id:/^app_[a-f0-9]{32}$/,source_instance_id:/^iinstance_[a-f0-9]{32}$/,source_run_id:/^run_[a-f0-9]{32}$/,source_app_run_id:/^iapprun_[a-f0-9]{32}$/,source_release_id:/^irelease_[a-f0-9]{32}$/,app_id:/^app_[a-f0-9]{32}$/,runtime_id:/^appruntime_[a-f0-9]{32}$/};
+  const hashes=["source_release_fingerprint","request_fingerprint","review_fingerprint","candidate_fingerprint","source_proof_fingerprint"];
+  if(!record||typeof record!=="object"||Array.isArray(record)||Object.keys(record).sort().join()!==naturalTaskRecoveryFields.join()||record.namespace!=="pb-natural-extraction-recovery.v1"||Object.entries(naturalTaskRecoveryScope(s)).some(([key,value])=>record[key]!==value)||Object.entries(ids).some(([key,re])=>typeof record[key]!=="string"||!re.test(record[key]))||hashes.some(key=>typeof record[key]!=="string"||!/^[a-f0-9]{64}$/.test(record[key]))||typeof record.request_key!=="string"||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(record.request_key)||!Number.isSafeInteger(record.source_result_version)||record.source_result_version<1||record.app_id===record.source_app_id||record.runtime_id===s.view.draft.runtime_id)throw Error("RECOVERY_RECORD_INVALID");
+  return record;
+}
+function naturalTaskRecoveryRead(s){
+  let raw;try{raw=localStorage.getItem(naturalTaskRecoveryKey(s));}catch{throw Error("RECOVERY_STORAGE_UNAVAILABLE");}
+  if(raw===null)return null;
+  if(typeof raw!=="string"||raw.length>8192)throw Error("RECOVERY_RECORD_INVALID");
+  let record;try{record=JSON.parse(raw);}catch{throw Error("RECOVERY_RECORD_INVALID");}
+  return {raw,record:naturalTaskRecoveryCheck(record,s)};
+}
+function naturalTaskRecoveryRefresh(s){
+  s.recoveryError=null;
+  try{
+    if(!navigator.locks?.request)throw Error("RECOVERY_LOCK_UNAVAILABLE");
+    const saved=naturalTaskRecoveryRead(s),pending=naturalTaskRequests.get(s.scope),metadata=pending&&naturalTaskRecoveryMetadata.get(pending);
+    if(!saved){if(pending&&metadata?.key!==naturalTaskRecoveryKey(s))throw Error("RECOVERY_RECORD_CONFLICT");return pending||null;}
+    if(metadata?.key===naturalTaskRecoveryKey(s)&&metadata.raw===saved.raw)return pending;
+    const restored={};
+    naturalTaskRecoveryMetadata.set(restored,{...saved,key:naturalTaskRecoveryKey(s)});
+    naturalTaskRequests.set(s.scope,restored);
+    s.edit++;s.review=null;s.saved=null;s.ack.checked=false;s.proof.textContent="";
+    s.status.textContent="已发现原提取意图；请明确按原 key GET 核对，不会重发或生成新 key。";
+    return restored;
+  }catch(error){s.recoveryError=error.message;return naturalTaskRequests.get(s.scope)||null;}
+}
+function naturalTaskRecoverySource(s,record){
+  const proof=s.source?.source_proof;
+  if(!proof||record.source_app_id!==proof.source_app_id||record.source_instance_id!==proof.instance_id||record.source_run_id!==proof.source_run_id||record.source_app_run_id!==proof.app_run_id||record.source_release_id!==proof.release_id||record.source_release_fingerprint!==proof.release_fingerprint||record.source_result_version!==proof.result_version||record.source_proof_fingerprint!==s.source.source_proof_fingerprint)throw Error("VERSION_CONFLICT");
+}
+function naturalTaskRecoverySave(s,pending,record){
+  if(naturalTaskRecoveryRead(s))throw Error("RECOVERY_RECORD_CONFLICT");
+  const key=naturalTaskRecoveryKey(s),raw=JSON.stringify(naturalTaskRecoveryCheck(record,s));
+  try{localStorage.setItem(key,raw);if(localStorage.getItem(key)!==raw)throw Error();}
+  catch{throw Error("RECOVERY_STORAGE_UNAVAILABLE");}
+  naturalTaskRecoveryMetadata.set(pending,{key,raw,record});naturalTaskRequests.set(s.scope,pending);
+}
+function naturalTaskRecoveryForget(s,pending,lock){
+  const metadata=naturalTaskRecoveryMetadata.get(pending),saved=naturalTaskRecoveryRead(s),key=naturalTaskRecoveryKey(s);
+  // No deletion until the current operation proved the original receipt and app.
+  if(!lock||lock.name!==key||lock.mode!=="exclusive"||!naturalTaskCurrent(s)||naturalTaskRequests.get(s.scope)!==pending||!metadata||metadata.key!==key||(saved&&saved.raw!==metadata.raw))throw Error("RECOVERY_RECORD_CONFLICT");
+  if(saved){try{localStorage.removeItem(key);if(localStorage.getItem(key)!==null)throw Error();}catch{throw Error("RECOVERY_STORAGE_UNAVAILABLE");}}
+  if(naturalTaskRequests.get(s.scope)===pending)naturalTaskRequests.delete(s.scope);
+}
+window.addEventListener("storage",event=>{
+  const s=naturalTaskExtraction;
+  if(!s||!s.source||!naturalTaskCurrent(s)||!(event.key===null||event.key===naturalTaskRecoveryKey(s)))return;
+  naturalTaskRecoveryRefresh(s);naturalTaskButtons(s);
+  s.status.textContent=s.recoveryError||"原意图记录已变化；只可明确读取原 key，不会自动提交。";
+});
 let registeredExtraction = null, registeredExtractionGeneration = 0;
 let registeredExtractionEditGeneration = 0;
 for(const id of ["registered-extraction-target","registered-extraction-name"]){
@@ -255,6 +313,7 @@ async function showInternalInstance(id,view=engineering) {
 }
 async function showInternalRun(id,view=engineering,instance=view?.instance) {
   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;
+  clearNaturalTaskExtraction();
   clearInternalRunReread(view);
   const previousStatus=view.run?.status;
   const selection=++view.runGeneration,iSelection=view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
@@ -669,15 +728,18 @@ function specResult(record,view){
 }
 
 function clearNaturalTaskExtraction(){const s=naturalTaskExtraction;if(s)s.panel.remove();naturalTaskExtraction=null;if(s&&naturalFirstGuide?.mode==="PB"&&naturalFirstGuide.extraction===s&&!naturalFirstGuide.opening&&naturalFirstGuide.stage!=="internal")clearNaturalFirstGuide();}
-function naturalTaskCurrent(s){return naturalTaskExtraction===s&&s.panel.isConnected&&engineeringCurrent(s.view)&&s.instance===s.view.instance&&s.selection===s.view.instanceGeneration&&s.connection===identityConnectionGeneration&&s.workspace===workspaceSelectionGeneration;}
+function naturalTaskCurrent(s){return naturalTaskExtraction===s&&s.panel.isConnected&&engineeringCurrent(s.view)&&s.instance===s.view.instance&&s.selection===s.view.instanceGeneration&&s.runSelection===s.view.runGeneration&&s.connection===identityConnectionGeneration&&s.workspace===workspaceSelectionGeneration;}
 function naturalTaskButtons(s){
   if(!naturalTaskCurrent(s))return;
   const pending=naturalTaskRequests.get(s.scope);
-  s.prepare.disabled=s.busy||!!pending||!s.source||!!s.saved;
-  s.preview.disabled=s.busy||!!pending||!!s.saved||!s.source||!s.target.value;
-  s.commit.disabled=s.busy||!!pending||!!s.saved||!s.review||!s.ack.checked;
-  s.recover.hidden=!pending;s.recover.disabled=s.busy||!pending;s.open.disabled=s.busy||!s.saved;
-  for(const input of s.inputs)input.disabled=!!pending;
+  const blocked=!!s.recoveryError;
+  s.prepare.disabled=s.busy||blocked||!!pending||!s.source||!!s.saved;
+  s.preview.disabled=s.busy||blocked||!!pending||!!s.saved||!s.source||!s.target.value;
+  s.commit.disabled=s.busy||blocked||!!pending||!!s.saved||!s.source||!s.review||!s.ack.checked;
+  s.recover.hidden=!pending;s.recover.disabled=s.busy||blocked||!pending||!s.source;s.open.disabled=s.busy||blocked||!!pending||!s.saved;
+  s.key.value=(pending&&naturalTaskRecoveryMetadata.get(pending)?.record.request_key)||s.review?.request.request_key||s.saved?.request_key||"";
+  s.ack.disabled=blocked||!!pending;
+  for(const input of s.inputs)input.disabled=blocked||!!pending;
   renderNaturalFirstGuide();
 }
 function naturalTaskEdited(s){if(!naturalTaskCurrent(s))return;s.edit++;s.review=null;s.saved=null;s.ack.checked=false;s.proof.textContent="逻辑或绑定已编辑，请重新审阅；不会沿用旧确认。";naturalTaskButtons(s);}
@@ -691,8 +753,8 @@ function naturalTaskRecipe(s){
 }
 async function openNaturalTaskExtraction(view,rid,parent){
   clearNaturalTaskExtraction();
-  const panel=document.createElement("section"),s={view,rid,panel,instance:view.instance,selection:view.instanceGeneration,connection:identityConnectionGeneration,workspace:workspaceSelectionGeneration,busy:true,source:null,review:null,saved:null,edit:0,rows:[],inputs:[]};
-  s.scope=goalRunCanonical({token,project:view.project,run:rid});naturalTaskExtraction=s;parent.append(panel);
+  const panel=document.createElement("section"),s={view,rid,panel,instance:view.instance,selection:view.instanceGeneration,runSelection:view.runGeneration,connection:identityConnectionGeneration,workspace:workspaceSelectionGeneration,busy:true,recoveryError:null,source:null,review:null,saved:null,edit:0,rows:[],inputs:[]};
+  s.scope=naturalTaskRecoveryKey(s);naturalTaskExtraction=s;parent.append(panel);
   const element=(tag,id,text)=>{const node=document.createElement(tag);if(id)node.id=id;if(text)node.textContent=text;panel.append(node);return node;};
   element("h4",null,"成功任务 → 可审阅的 P-B 应用候选");
   element("p",null,"从此运行实际步骤图开始。可编辑稳定节点名称、模型关注范围及是否读取前一节点反馈；所有输入端口由当前图重新绑定。只允许既有有限图与来源预算。新材料仍需模型执行，默认关闭；出处 PASS 不代表通用语义通过。");
@@ -706,6 +768,8 @@ async function openNaturalTaskExtraction(view,rid,parent){
   s.proof=element("pre","pb-spec-proof");
   const ackLabel=element("label",null," ");s.ack=document.createElement("input");s.ack.type="checkbox";s.ack.id="pb-spec-ack";ackLabel.prepend(s.ack);ackLabel.append(document.createTextNode("核对来源、编辑图、新目标与材料、原预算；只授权这个新应用读取此材料并保存本项目 JSON 清单。语义 UNKNOWN，人工 PENDING。"));
   s.commit=element("button","pb-spec-commit","确认此精确审阅并提取应用");s.commit.type="button";
+  const keyLabel=element("label",null,"原提取请求键（只读，可选中复制） ");s.key=document.createElement("input");s.key.id="pb-spec-request-key";s.key.readOnly=true;keyLabel.append(s.key);
+  element("p",null,"提交前只保存此浏览器的来源标识和原意图指纹，不保存凭据或材料正文。重载后重新打开这个成功成果，可明确按原 key 读取回执；未知时保持锁定，不重发或改用新 key。");
   s.recover=element("button","pb-spec-recover","仅按原 key GET 恢复提取回执");s.recover.type="button";
   s.open=element("button","pb-spec-open","打开已核对应用，另行确认内部版本");s.open.type="button";
   const close=element("button","pb-spec-close","关闭审阅（不取消已发送请求）");close.type="button";close.onclick=()=>{if(naturalTaskCurrent(s))clearNaturalTaskExtraction();};
@@ -719,6 +783,7 @@ async function openNaturalTaskExtraction(view,rid,parent){
     if(source.namespace!=="pb-natural-spec-extraction.v1"||source.project_id!==view.project||source.principal_id!==s.instance.principal_id||source.source_run_id!==rid||source.source_proof?.source_run_id!==rid||source.source_proof.principal_id!==source.principal_id||source.source_proof.project_id!==view.project||source.source_proof_fingerprint!==proofHash||source.recipe_fingerprint!==recipeHash||source.new_model_requests!==0||source.project_writes!==0||source.semantic_status!=="UNKNOWN"||source.owner_acceptance!=="PENDING"||source.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
     if(!expectedRun||expectedRun.status!=="SUCCEEDED"||source.source_proof.source_app_id!==view.app||source.source_proof.instance_id!==s.instance.id||source.source_proof.app_run_id!==expectedRun.app_run_id||source.source_proof.release_id!==expectedRun.release_id||source.source_proof.result_version!==expectedRun.result_version)throw Error("VERSION_CONFLICT");
     s.source=source;
+    naturalTaskRecoveryRefresh(s);
     for(const [index,step] of source.recipe.steps.entries()){
       const line=document.createElement("label");line.textContent=`步骤 ${index+1} · 稳定 ID `;
       const id=document.createElement("input");id.value=step.step_id;id.dataset.pbStep=String(index);id.maxLength=40;id.setAttribute("aria-label",`步骤 ${index+1} 稳定 ID`);id.oninput=()=>naturalTaskEdited(s);line.append(id);
@@ -729,18 +794,21 @@ async function openNaturalTaskExtraction(view,rid,parent){
     const models=source.recipe.steps.filter(step=>step.operator.startsWith("model."));priorLabel.hidden=models.length!==2;s.prior.checked=models.length===2&&!!models[1].inputs.prior_items;
     const goals=await api(`/api/projects/${view.project}/goal-cards`);if(!naturalTaskCurrent(s))return;
     s.target.add(new Option("请选择明确不同的已保存目标和材料",""));for(const goal of goals.items)if(goal.id!==view.draft.candidate.manifest.goal_ref)s.target.add(new Option(`${goal.title} · v${goal.version} · ${goal.id}`,goal.id));
-    s.status.textContent="已核对成功来源；默认图来自实际回执。编辑图和新材料尚未运行。";
+    s.status.textContent=s.recoveryError?`${s.recoveryError}：原意图记录无法安全核对，已禁止新提取；不会清除未知记录。`:naturalTaskRequests.has(s.scope)?"已发现这个成功来源的原提取意图；请明确按原 key GET 核对回执。不会自动读取、重发或生成新 key。":"已核对成功来源；默认图来自实际回执。编辑图和新材料尚未运行。";
     beginNaturalPBGuide(s);
-  }catch(error){if(naturalTaskCurrent(s)){s.source=null;s.status.textContent=`来源未通过：${error.detail||error.message}`;}}
+  }catch(error){if(naturalTaskCurrent(s)){s.source=null;s.status.textContent=`来源未通过：${error.detail||error.message}`;if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT","RESOURCE_UNAVAILABLE"].includes(error.message)){const pending=naturalTaskRequests.get(s.scope);if(pending&&naturalTaskRecoveryMetadata.has(pending)){delete pending.body;delete pending.review;}invalidateInternalContent(view);engineeringStatus(view,"当前成功来源核对未通过；原提取意图不会清除，请重新核查授权与来源。","error");}}}
   finally{s.busy=false;naturalTaskButtons(s);}
   s.preview.onclick=async()=>{
-    if(!naturalTaskCurrent(s)||s.busy||naturalTaskRequests.has(s.scope))return;
+    if(!naturalTaskCurrent(s)||s.busy)return;
+    naturalTaskRecoveryRefresh(s);naturalTaskButtons(s);
+    if(s.recoveryError||naturalTaskRequests.has(s.scope))return;
     const edit=s.edit;s.busy=true;s.review=null;s.ack.checked=false;naturalTaskButtons(s);
-    const current=()=>naturalTaskCurrent(s)&&edit===s.edit;
+    const current=()=>naturalTaskCurrent(s)&&edit===s.edit&&!s.recoveryError&&!naturalTaskRequests.has(s.scope);
     try{
       const goal=await api(`/api/goal-cards/${s.target.value}`);if(!current())return;
       const saved=goal.history?.[0];if(goal.project_id!==view.project||goal.id!==s.target.value||!saved||saved.version!==goal.version||saved.fingerprint!==goal.fingerprint||saved.snapshot?.resource_snapshots?.length!==1)throw Error("VERSION_CONFLICT");
       const goalHash=await paHash(saved.snapshot);if(!current())return;if(goalHash!==goal.fingerprint)throw Error("VERSION_CONFLICT");
+      naturalTaskRecoveryRefresh(s);if(!current())return;
       const request={source_run_id:rid,expected_source_proof_fingerprint:s.source.source_proof_fingerprint,expected_source_recipe_fingerprint:s.source.recipe_fingerprint,card_id:goal.id,expected_goal_version:goal.version,expected_goal_fingerprint:goal.fingerprint,expected_source_hash:saved.snapshot.resource_snapshots[0].hash,recipe:naturalTaskRecipe(s),name:s.name.value,request_key:crypto.randomUUID()};
       const result=await api(path+"/extraction-reviews","POST",request);if(!current())return;
       const {review_fingerprint,...review}=result,hash=await paHash(review);if(!current())return;
@@ -749,23 +817,66 @@ async function openNaturalTaskExtraction(view,rid,parent){
     }catch(error){if(current())s.status.textContent=`审阅未通过：${error.detail||error.message}`;}
     finally{s.busy=false;naturalTaskButtons(s);}
   };
-  const recover=async pending=>{
-    const current=()=>naturalTaskCurrent(s)&&naturalTaskRequests.get(s.scope)===pending;
-    const value=await api(path+"/extractions/by-key/"+encodeURIComponent(pending.body.review.request_key));if(!current())return;
-    const requestHash=await paHash(pending.body);if(!current())return;
+  const recover=async(pending,lock,operationCurrent)=>{
+    const current=()=>operationCurrent()&&!s.recoveryError&&naturalTaskRequests.get(s.scope)===pending;
+    const metadata=naturalTaskRecoveryMetadata.get(pending),record=metadata?.record;
+    const saved=naturalTaskRecoveryRead(s);
+    if(!metadata||metadata.key!==naturalTaskRecoveryKey(s)||(saved&&saved.raw!==metadata.raw))throw Error("RECOVERY_RECORD_CONFLICT");
+    naturalTaskRecoverySource(s,record);
+    const value=await api(path+"/extractions/by-key/"+encodeURIComponent(record.request_key));if(!current())return;
+    const returnedRequestHash=await paHash(value.request);if(!current())return;
     const {review_fingerprint,...review}=value.reviewed||{},reviewHash=await paHash(review);if(!current())return;
+    const candidateHash=await paHash(value.reviewed?.candidate);if(!current())return;
+    const sourceHash=await paHash(value.reviewed?.source_proof);if(!current())return;
+    if(returnedRequestHash!==record.request_fingerprint||value.request_fingerprint!==record.request_fingerprint||review_fingerprint!==record.review_fingerprint||reviewHash!==record.review_fingerprint||candidateHash!==record.candidate_fingerprint||value.candidate_fingerprint!==record.candidate_fingerprint||value.reviewed.candidate_fingerprint!==record.candidate_fingerprint||value.id!==record.app_id||value.app_id!==record.app_id||value.runtime_id!==record.runtime_id||value.reviewed.app_id!==record.app_id||value.reviewed.runtime_id!==record.runtime_id||value.request_key!==record.request_key||value.request?.review?.request_key!==record.request_key||value.request.expected_review_fingerprint!==record.review_fingerprint||value.request.consent!=="EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET"||value.request.artifact_write_consent!=="ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"||sourceHash!==record.source_proof_fingerprint||value.source_proof_fingerprint!==record.source_proof_fingerprint||value.reviewed.source_proof_fingerprint!==record.source_proof_fingerprint||value.reviewed.source_proof.app_run_id!==record.source_app_run_id||value.reviewed.source_proof.release_id!==record.source_release_id||value.reviewed.source_proof.release_fingerprint!==record.source_release_fingerprint||value.reviewed.source_proof.result_version!==record.source_result_version||goalRunCanonical(value.reviewed.request)!==goalRunCanonical(value.request.review))throw Error("VERSION_CONFLICT");
+    // Only the independently frozen local hashes permit cold RAM reconstruction.
+    if(!pending.body&&!pending.review){pending.body=structuredClone(value.request);pending.review=structuredClone(value.reviewed);}
+    const requestHash=await paHash(pending.body);if(!current())return;
     if(value.namespace!=="pb-natural-spec-extraction.v1"||value.kind!=="pb_natural_spec_task.v1"||value.principal_id!==s.instance.principal_id||value.project_id!==view.project||value.source_run_id!==rid||value.request_key!==pending.body.review.request_key||value.request_fingerprint!==requestHash||goalRunCanonical(value.request)!==goalRunCanonical(pending.body)||review_fingerprint!==pending.body.expected_review_fingerprint||reviewHash!==review_fingerprint||goalRunCanonical(value.reviewed)!==goalRunCanonical(pending.review)||value.id!==pending.review.app_id||value.app_id!==value.id||value.runtime_id!==pending.review.runtime_id||value.candidate_fingerprint!==pending.review.candidate_fingerprint||value.new_model_requests!==0||value.project_writes!==0||value.owner_acceptance!=="PENDING"||value.semantic_status!=="UNKNOWN"||value.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
     const app=await api(`/api/apps/${value.id}`);if(!current())return;
-    if(app.project_id!==view.project||app.runtime_id!==value.runtime_id||app.fingerprint!==value.candidate_fingerprint||goalRunCanonical(app.candidate)!==goalRunCanonical(pending.review.candidate)||app.name!==pending.body.review.name||app.candidate.spec_task?.kind!=="pb_natural_spec_task.v1")throw Error("VERSION_CONFLICT");
-    s.saved=value;naturalTaskRequests.delete(s.scope);s.status.textContent="已核对独立 P-B 草案和原 key 回执；打开后另行核查内部版本。新材料结果尚未运行。";
+    const appHash=await paHash(app.candidate);if(!current())return;
+    if(app.id!==record.app_id||app.project_id!==view.project||app.runtime_id!==value.runtime_id||app.fingerprint!==value.candidate_fingerprint||appHash!==record.candidate_fingerprint||goalRunCanonical(app.candidate)!==goalRunCanonical(pending.review.candidate)||app.name!==pending.body.review.name||app.candidate.spec_task?.kind!=="pb_natural_spec_task.v1"||app.candidate.spec_task.source_run_id!==rid||app.candidate.manifest.origin!=="task_run"||app.candidate.manifest.source_run_ref!==rid)throw Error("VERSION_CONFLICT");
+    naturalTaskRecoveryForget(s,pending,lock);
+    s.review=structuredClone(value.reviewed);s.saved=value;s.ack.checked=false;
+    s.target.value=pending.body.review.card_id;s.name.value=pending.body.review.name;
+    s.rows.forEach((row,index)=>{row.id.value=value.reviewed.edited_recipe.steps[index].step_id;row.operator.value=value.reviewed.edited_recipe.steps[index].operator;});
+    const models=value.reviewed.edited_recipe.steps.filter(step=>step.operator.startsWith("model."));s.prior.checked=models.length===2&&!!models[1].inputs.prior_items;
+    s.proof.textContent=JSON.stringify({recovered_request_key:record.request_key,source:value.reviewed.source_proof,edited_recipe:value.reviewed.edited_recipe,target_goal:value.reviewed.target_goal,review_fingerprint:record.review_fingerprint,candidate_fingerprint:record.candidate_fingerprint,semantic_status:"UNKNOWN",owner_acceptance:"PENDING"},null,2);
+    s.status.textContent="已核对原意图指纹、独立 P-B 草案和原 key 回执；打开后另行核查内部版本。新材料结果尚未运行。";
   };
   const action=async submit=>{
     if(!naturalTaskCurrent(s)||s.busy)return;
-    let pending=naturalTaskRequests.get(s.scope);
-    if(submit){if(pending||s.saved||!s.review||!s.ack.checked)return;pending={body:{review:structuredClone(s.review.request),expected_review_fingerprint:s.review.review_fingerprint,consent:s.review.consent,artifact_write_consent:s.review.artifact_write_consent},review:structuredClone(s.review)};naturalTaskRequests.set(s.scope,pending);}
-    if(!pending)return;s.busy=true;naturalTaskButtons(s);
-    try{if(submit){await api(path+"/extractions","POST",pending.body);if(!naturalTaskCurrent(s)||naturalTaskRequests.get(s.scope)!==pending)return;}await recover(pending);}
-    catch(error){if(naturalTaskCurrent(s))s.status.textContent=`回执未确认：${error.detail||error.message}。保留原意图，仅用原 key GET 恢复；不会重发。`;}
+    const edit=s.edit,current=()=>naturalTaskCurrent(s)&&edit===s.edit;
+    s.busy=true;naturalTaskButtons(s);
+    try{
+      if(!navigator.locks?.request)throw Error("RECOVERY_LOCK_UNAVAILABLE");
+      await navigator.locks.request(naturalTaskRecoveryKey(s),{mode:"exclusive",ifAvailable:true},async lock=>{
+        if(!current())return;if(!lock)throw Error("RECOVERY_REQUEST_BUSY");
+        let pending=naturalTaskRecoveryRefresh(s);naturalTaskButtons(s);
+        if(s.recoveryError)throw Error(s.recoveryError);
+        if(!current())return;
+        if(submit){
+          if(pending||s.saved||!s.source||!s.review||!s.ack.checked)return;
+          const reviewed=s.review,body={review:structuredClone(reviewed.request),expected_review_fingerprint:reviewed.review_fingerprint,consent:reviewed.consent,artifact_write_consent:reviewed.artifact_write_consent};
+          const {review_fingerprint,...reviewBody}=reviewed,reviewHash=await paHash(reviewBody);if(!current()||s.review!==reviewed)return;
+          const candidateHash=await paHash(reviewed.candidate);if(!current()||s.review!==reviewed)return;
+          const requestHash=await paHash(body);if(!current()||s.review!==reviewed)return;
+          if(reviewHash!==review_fingerprint||candidateHash!==reviewed.candidate_fingerprint||body.consent!=="EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET"||body.artifact_write_consent!=="ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT")throw Error("VERSION_CONFLICT");
+          const proof=reviewed.source_proof,record=naturalTaskRecoveryCheck({namespace:"pb-natural-extraction-recovery.v1",...naturalTaskRecoveryScope(s),source_app_run_id:proof.app_run_id,source_release_id:proof.release_id,source_release_fingerprint:proof.release_fingerprint,source_result_version:proof.result_version,request_key:body.review.request_key,request_fingerprint:requestHash,review_fingerprint,candidate_fingerprint:candidateHash,app_id:reviewed.app_id,runtime_id:reviewed.runtime_id,source_proof_fingerprint:reviewed.source_proof_fingerprint},s);
+          naturalTaskRecoverySource(s,record);
+          pending={body,review:structuredClone(reviewed)};
+          naturalTaskRecoverySave(s,pending,record);naturalTaskButtons(s);
+          await api(path+"/extractions","POST",pending.body);if(!current()||naturalTaskRequests.get(s.scope)!==pending)return;
+        }
+        if(pending)await recover(pending,lock,current);
+      });
+    }catch(error){
+      if(current()){
+        if(["RECOVERY_STORAGE_UNAVAILABLE","RECOVERY_RECORD_INVALID","RECOVERY_RECORD_CONFLICT","RECOVERY_LOCK_UNAVAILABLE"].includes(error.message))s.recoveryError=error.message;
+        s.status.textContent=`回执未确认：${error.detail||error.message}。保留原意图，仅用原 key GET 恢复；不会重发。`;
+        if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT","RESOURCE_UNAVAILABLE"].includes(error.message)){const pending=naturalTaskRequests.get(s.scope);if(pending&&naturalTaskRecoveryMetadata.has(pending)){delete pending.body;delete pending.review;}invalidateInternalContent(view);engineeringStatus(view,"当前提取内容核对未通过；原意图仍保留，请重新打开成功来源后只读核查。","error");}
+      }
+    }
     finally{s.busy=false;naturalTaskButtons(s);}
   };
   s.commit.onclick=()=>action(true);s.recover.onclick=()=>action(false);
