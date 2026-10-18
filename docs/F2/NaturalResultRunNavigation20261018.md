@@ -19,3 +19,5 @@
 源码/测试完整冻结后执行，实际结果另附，不预写PASS。Windows/native、PG、真实模型/语义/场景、远端CI、部署未因此验收；永久取消旧安装digest窗口、旧exit139因果Unknown与原满盘独审缺证保持。关闭回执准确性疑点仅收窄文档：完整来源指纹在CLOSE事务写入前后重核，后续terminal GET核当前访问门和历史封存，不承诺逐次fullsource重验或一切闭后版本漂移均锁定；该漂移时序未实测，不追加关闭测试。
 
 首轮冻结 `c068e165f7ac6bc38a5d474f26e7a99f8e0bac4c` 的两个节点均失败，原件保留。实际用例在v2提交前因fixture先PREPARE后保存THIRD而新增4条既有材料权限、使原人工合同grant_version失效，页面正确返回STALE；完成8项页面检查、5次Mock、页面Worker0，未完成v2或下载。只将THIRD/Goal正常保存提前到PREPARE之前，不改变业务时钟或断言。旧synthetic探针在32项后因缺精确Release响应及instance.release_fingerprint，触发现行版本门而清实例；只补匹配的合成metadata，原36项断言保持。首轮687输入/133生产前后0漂移；修正后重新冻结两测试，生产一行不变。
+
+第二轮 `8f76e09b11e21c728b0bc09a6d07bcacb4a82967` 的原synthetic 36项通过；实际P-B在正常v2 Worker已SUCCEEDED、typed v2/JSON/3 READ Grant/4操作及原行保全检查均通过后，被测试漏算既有OFFLINE Mock请求/响应正文双封存阻断（实际新增10条journal，误期望6）。该轮6Mock、3业务Worker各单claim，页面刷新/冷页下载未完成，不能写通过。只补测试精确10条scope/kind/key及原请求/响应base64/bytes/SHA/Attempt wire检查，原队列6条和全部业务断言保留；生产/CJS不变。现有闭合原件纯函数核新oracle通过后，再限一次fresh完整actual，不再重复已通过synthetic。纯artifact初版误用排序fingerprint核canonical response SHA的AssertionError已留工具输出转录；依既有ASCII保序compact合同纠正，非产品失败。
