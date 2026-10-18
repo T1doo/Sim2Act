@@ -1,0 +1,38 @@
+F
+=================================== FAILURES ===================================
+_____ test_direct_material_action_input_fix_respects_existing_manual_lock ______
+
+env = (<sim2act.db.Store object at 0x7fe4e3fb46e0>, Settings(database_url='sqlite:////workspace/first-material-direct-202610...7893cb47e9478fa55f0d7f83791a25', 'user_26f93c030ea84daeabbc2eb239ec615d', 'proj_399cb7fcefcf45449f5411a538d0ab1a', ...)
+tmp_path = PosixPath('/workspace/first-material-direct-20261018/lock-diagnostic/data/test_direct_material_action_in0')
+
+    def test_direct_material_action_input_fix_respects_existing_manual_lock(env, tmp_path):
+        data, aid, path, ctx, body, _sources = prepared(env)
+        with data[0].tx() as c:
+            saved = graph.current(data[0], c, data[3], data[5], aid, limits(data))
+        node = next(n for n in saved['graph']['nodes'] if n['key'] == 'action:aggregate')
+        graph.set_lock(data[0], data[3], data[5], aid, dict(request_key='lock-first-material-action',
+            expected_graph_fingerprint=ctx['graph_fingerprint'], locked=True,
+            change=dict(node_id=node['id'], expected_revision=node['revision'],
+                        expected_content_fingerprint=node['content_fingerprint'])), limits(data))
+        r = data[2].post(f'/api/projects/{data[5]}/apps/{aid}/delivery-graph/derive', json=dict(
+            request_key='locked-first-material-anchor', expected_candidate_fingerprint=saved['candidate_fingerprint']))
+        assert r.status_code == 201, r.text
+        ctx = data[2].get(path + '/context').json()['context']
+        before = snapshot(data[0])
+        response = data[2].post(path + '/previews', json={**body, 'expected_graph_fingerprint': ctx['graph_fingerprint']})
+>       assert response.status_code == 409 and response.json()['error']['code'] == 'LOCK_CONFLICT', response.text
+E       AssertionError: {"error":{"code":"LOCK_CONFLICT","message":"Affected manually locked object; no changes performed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions","submission_rejection":{"namespace":"csv-goal-revision.v1.rejection","instance_id":"iinstance_238a43dadd7a41138d8ab76359a1ebf3","principal_id":"user_b37893cb47e9478fa55f0d7f83791a25","stage":"previews","request_key":"direct-first-material","request_fingerprint":"91b2f6d6eedb7a65c75814849d95bd549698f5c74cfca52a423de807ac6403ce","acceptance":"NOT_ACCEPTED","previous_request":"ABSENT","phase":"TX_ROLLED_BACK"}}}
+E       assert (400 == 409)
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_initial_material_revision.py:96: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_initial_material_revision.py::test_direct_material_action_input_fix_respects_existing_manual_lock
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 6.24s

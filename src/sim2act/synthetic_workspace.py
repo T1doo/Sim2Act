@@ -133,7 +133,7 @@ def open_workspace(path, *, new=False):
         raise
 
 
-def workspace_app(store, settings, gate=None):
+def workspace_app(store, settings, gate=None, worker_turn=None):
     app = create_app(store, settings)
 
     if gate is not None:
@@ -141,7 +141,7 @@ def workspace_app(store, settings, gate=None):
         async def single_sqlite_writer(request, call_next):
             # This launcher owns one SQLite API/Worker pair. Pending requests
             # stay cancellable; a cancelled waiter never acquires a stray lock.
-            while not gate.acquire(blocking=False):
+            while (worker_turn is not None and worker_turn.is_set()) or not gate.acquire(blocking=False):
                 await asyncio.sleep(0.01)
             try:
                 return await call_next(request)
@@ -173,7 +173,8 @@ def serve(path, *, new=False, port=0):
         settings = settings_for(root)
         worker = Worker(store, settings, NeverModel())
         gate = threading.Lock()
-        server = uvicorn.Server(uvicorn.Config(workspace_app(store, settings, gate), host="127.0.0.1",
+        worker_turn = threading.Event()
+        server = uvicorn.Server(uvicorn.Config(workspace_app(store, settings, gate, worker_turn), host="127.0.0.1",
             log_level="error", access_log=False, timeout_graceful_shutdown=5))
         stopped = threading.Event()
         errors = []
@@ -183,11 +184,22 @@ def serve(path, *, new=False, port=0):
             announced = False
             try:
                 while not stopped.is_set():
-                    if gate.acquire(blocking=False):
-                        try:
-                            worker.once()
-                        finally:
-                            gate.release()
+                    # A continuous sequence of API reads must not starve the
+                    # original Worker. Once waiting, it gets the next turn;
+                    # lock waits remain bounded and observe owned shutdown.
+                    worker_turn.set()
+                    acquired = False
+                    while not stopped.is_set() and not acquired:
+                        acquired = gate.acquire(timeout=0.1)
+                    worker_turn.clear()
+                    if not acquired:
+                        break
+                    try:
+                        if stopped.is_set():
+                            break
+                        worker.once()
+                    finally:
+                        gate.release()
                     if server.started and not announced:
                         print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", url=address,
                             data_dir=str(root), public_token=TOKEN, worker_id=worker.id,
@@ -203,6 +215,8 @@ def serve(path, *, new=False, port=0):
                             for f in traceback.extract_tb(error.__traceback__)[:32]])), flush=True)
                 stopped.set()
                 server.should_exit = True
+            finally:
+                worker_turn.clear()
 
         thread = threading.Thread(target=work, daemon=True)
         thread.start()

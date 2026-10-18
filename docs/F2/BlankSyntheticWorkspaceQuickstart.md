@@ -17,7 +17,8 @@ sim2act synthetic-workspace --new --data-dir "你的绝对路径/合成工程"
 3. 在目标卡下选择已有 CSV 和 `MOCK固定能力`，显式保存候选；在候选预览选择 `amount` 运行，应显示合计 `30`。
 4. 准备内部版本，核对并勾选确认后保存；选择创建内部实例，显式提交持久 AppRun。原 Worker 后台执行；通过“刷新”读取同一 Run 的 `SUCCEEDED` 及结果版本。工具求和正确不代表自然目标已验收。
 5. 要修改已有列，在应用目录选择原实例，点击“读取已保存 Goal 与修订基线”。若原 Goal 仍适用，可保留 Goal v1，明确选择 `amount` → `quantity`，提交预览；同 Goal、同列不能提交。单独确认并执行 CHECK，读取 PASS 后分别确认保存新版本和采纳到该实例。勾选本次 CSV 求和范围选项后，再显式提交一次 Run，应得到 `15/v2`；旧 `30/v1` 仍在历史中，人工适用范围声明仍是 PENDING。需要改变目标本身时，先另行保存下一 Goal。[功能范围和实际证据](InitialColumnRevision20261018.md)。
-6. 在终端按 Ctrl+C，等待 `SYNTHETIC_WORKSPACE_STOPPED` 且 `clean:true`。数据目录保留。后续用以下命令打开原工程，在应用目录选择原应用和历史 Run：
+6. 若此 App 对另一份 CSV 已有读取和求和授权，可跳过步骤5，直接点“直接更换此实例的已授权 CSV 材料”。保留原 Goal，明确选择目标 CSV 和两份材料共有的数值列；经过独立 CHECK、保存新 Release、原实例采纳，再明确提交新 Run。例如保留 `amount`，B 两行是 `100`、`250` 时新结果应为 `350/v2`，旧 A 的 `30/v1` 保留在历史中。仅导入 B 不代表此 App 已获授权；本轮没有给既有 App 追加材料授权的页面。[首次直接换材料的范围与前置](FirstMaterialRevision20261018.md)。
+7. 在终端按 Ctrl+C，等待 `SYNTHETIC_WORKSPACE_STOPPED` 且 `clean:true`。数据目录保留。后续用以下命令打开原工程，在应用目录选择原应用和历史 Run：
 
 ```text
 sim2act synthetic-workspace --data-dir "同一个绝对路径/合成工程"
