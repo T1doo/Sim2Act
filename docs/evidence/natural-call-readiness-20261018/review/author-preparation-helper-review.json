@@ -1,0 +1,59 @@
+{
+  "scope": "READ_ONLY_HELPER_SOURCE_AND_CLOSED_OUTPUT_REVIEW_NOT_HELPER_REEXECUTION",
+  "first_helper": "AssertionError from ungrounded nonempty assumptions check, not asset schema error, product failure or pytest result; original script/stdout/stderr/explanation retained.",
+  "corrected_helper": "Removes only unsupported assumptions nonempty check with explanatory comments. Actual schema allows empty assumptions; no material/Goal/reference/source/test/gate/pin changed.",
+  "helper_diff": "--- first-helper\n+++ corrected-helper\n@@ -62,7 +62,9 @@\n     goal = GoalCardInput.model_validate(item['goal_card_draft'])\n     assert goal.resource_refs == ['__UNBOUND_ACTUAL_MATERIAL_' + item['case'] + '_RESOURCE_ID__']\n     assert item['material_file'] == 'material_' + item['case'].lower() + '.txt'\n-    assert all(getattr(goal, field) for field in ('known', 'assumptions', 'unresolved', 'constraints', 'acceptance_checks'))\n+    # The actual Goal schema permits [] assumptions. Do not invent assumptions\n+    # merely to satisfy an extra verifier rule absent from the product contract.\n+    assert all(getattr(goal, field) for field in ('known', 'unresolved', 'constraints', 'acceptance_checks'))\n for case in ('a', 'b'):\n     sheet = (root / ('score_sheet_' + case + '.md')).read_text()\n     assert all(marker in sheet for marker in ('NOT_SCORED', 'NOT_PRODUCED', 'OWNER_PENDING'))\n",
+  "actual_output": "FILE_AND_DRAFT_SCHEMA_CHECKS_PASSED_ONLY; two Goal draft schema objects; no submitted resources/Goals/output/score or execution authority.",
+  "guard_scope": "Author helper audit events socket.connect/sqlite3.connect/subprocess.Popen/os.system had zero recorded attempts. Reviewer read helper/result only; did not execute checker or import schema.",
+  "private_reference": "Root helper hashes bytes only; reviewer separately authorized to read reference for preparation consistency, no reference answer content exported to implementation/report.",
+  "bytes": [
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/verify-preparation-attempt-1.py",
+      "bytes": 4214,
+      "sha256": "d5455aa1030947275b952229ee009a990b242f07ac7a030f56180c6ed7dfbbe6"
+    },
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/preparation.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/preparation.stderr",
+      "bytes": 405,
+      "sha256": "dbd641b910e1dc48e4ae28fb446bc05c785264321ddd34e4fb5c1de2208c420d"
+    },
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/preparation-attempt-1-explanation.json",
+      "bytes": 596,
+      "sha256": "c4cfe1dd16b33ed66c91e8b95700b3da642e38cf2ce5458029b628bcd4011571"
+    },
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/verify-preparation.py",
+      "bytes": 4359,
+      "sha256": "0e83a8a5aed845dece12a5a136547c65d89ab11fa55e5907ab40ca204ba36b2d"
+    },
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/preparation-attempt-2.stdout",
+      "bytes": 1184,
+      "sha256": "bd6739f8f09e7fbb967cf249b1a462c23fc99027ba0508c3987b89596bd97c18"
+    },
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/preparation-attempt-2.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/workspace/natural-call-readiness-delivery-20261018/preparation-verification.json",
+      "bytes": 2756,
+      "sha256": "4cee670b2e9d8e2127e78e208b4614b626fcca4e0e17c665f2bb83fee62dcbcc"
+    }
+  ],
+  "not_claimed": [
+    "blind holdout",
+    "semantic score",
+    "owner acceptance",
+    "P-A/P-B execution",
+    "new product test PASS",
+    "production source/fee/LIVE readiness"
+  ]
+}
