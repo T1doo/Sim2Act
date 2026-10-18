@@ -382,7 +382,22 @@ def _stage_instance_after_bound(store, c, user, project, job, snapshot, release,
 def _stage_current(store, c, user, contract, stage, run_id):
     """Full existing lineage and accepted binding proofs; public hashes do not suffice."""
     from . import pa_spec_apps
+    from .pa_trial_dispatch import JOURNAL_VERSION
+    from .pb_natural_specs import _source_reads
 
+    if store.test_only and store.sqlite and type(contract) in (TrialContract, TrialContractV2):
+        versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
+            .select_from(runs).join(attempts, attempts.c.run_id == runs.c.id)
+            .where(runs.c.principal_id == user, runs.c.project_id == contract.project_id,
+                runs.c.runtime_id == contract.runtime_id,
+                runs.c.request_key == contract.stage_keys.generate)).scalars().all()
+        if versions == [JOURNAL_VERSION] * 3:
+            with _source_reads(store, c):
+                return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps)
+    return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps)
+
+
+def _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps):
     require(stage in ("source", "cold"))
     require(pa_spec_apps.job_scope_gate(store, c, user, run_id))
     job = c.execute(select(runs).where(runs.c.id == run_id)).mappings().first()

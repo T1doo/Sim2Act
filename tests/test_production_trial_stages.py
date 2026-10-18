@@ -31,7 +31,7 @@ from sim2act import production_trial_sender as sender
 from sim2act import production_trial_source as source
 from sim2act.api import create_app
 from sim2act.config import Settings
-from sim2act.db import Store, attempts, fingerprint, meta
+from sim2act.db import Store, attempts, fingerprint, meta, runs
 from sim2act.db import delivery_graph_requests as rows
 from sim2act.errors import DomainError
 from sim2act.worker import Worker
@@ -219,6 +219,28 @@ def test_fresh_actual_prefix_rejects_incomplete_mixed_or_changed_proof_without_w
     store = data[0]
     baseline = snapshot(store)
     observed = []
+    from sim2act.goal_applications import verified_candidate
+    from sim2act.pb_natural_specs import _source_reads
+    with store.tx() as c:
+        transaction = c.begin_nested()
+        job = c.execute(select(runs).where(runs.c.id == t["generation"])).mappings().one()
+        with _source_reads(store, c):
+            first = verified_candidate(store, c, job, gate._limits(b.contract))
+            token = c.info["pb_source_reads"]
+            assert any(k[0] == "journal-trial-complete-generation" for k in token.results)
+            second = verified_candidate(store, c, job, gate._limits(b.contract))
+            assert first == second and first is not second
+            aid = c.execute(select(attempts.c.id).where(attempts.c.run_id == job["id"])).scalars().first()
+            c.execute(update(attempts).where(attempts.c.id == aid).values(status="FAILED"))
+            before = {table.name: c.execute(select(table)).mappings().all() for table in meta.sorted_tables}
+            with pytest.raises(DomainError):
+                verified_candidate(store, c, job, gate._limits(b.contract))
+            after = {table.name: c.execute(select(table)).mappings().all() for table in meta.sorted_tables}
+            assert before == after
+        transaction.rollback()
+    assert snapshot(store) == baseline
+    observed.append(dict(case="same-read-segment-then-write-invalidates", refused=True,
+                         all_55_tables_unchanged_in_window=True))
     with store.tx() as c:
         original = c.execute(select(attempts).where(attempts.c.run_id == t["generation"]))
         original = dict(original.mappings().first())

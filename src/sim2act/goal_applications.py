@@ -568,6 +568,53 @@ def parse_candidate(store, c, run, message, limits):
 
 
 def verified_candidate(store, c, run, limits):
+    """Complete proof; new offline trials may reuse an identical read segment."""
+    from .pb_natural_specs import _source_reads_current
+    token = c.info.get("pb_source_reads")
+    if not _source_reads_current(store, c, token):
+        return _verified_candidate(store, c, run, limits)
+    # This is the existing private synchronous SourceReads scope. Only actual
+    # server-created journal trial Attempts opt in; legacy proofs stay unchanged.
+    source_scope_gate(store, c, run["id"])
+    from .pa_trial_dispatch import JOURNAL_VERSION
+    versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
+                         .where(attempts.c.run_id == run["id"])).scalars().all()
+    if versions != [JOURNAL_VERSION] * 3:
+        return _verified_candidate(store, c, run, limits)
+    key = ("journal-trial-complete-generation", run["principal_id"], run["project_id"],
+           run["id"], fingerprint(dict(run)),
+           None if limits is None else fingerprint(limits.model_dump()))
+
+    def same_arguments():
+        return (fingerprint(dict(run)) == key[4]
+            and (None if limits is None else fingerprint(limits.model_dump())) == key[5])
+    if key in token.inflight:
+        raise DomainError("VERSION_CONFLICT", "Incomplete generation proof cannot be reused")
+    if key in token.results:
+        value, authorities = token.results[key]
+        try:
+            store.recheck_proof_authorities(c, {"_call_authorities": authorities})
+        except BaseException:
+            token.results.clear()
+            raise
+        if _source_reads_current(store, c, token) and same_arguments():
+            return copy.deepcopy(value)
+        return _verified_candidate(store, c, run, limits)
+    token.inflight.add(key)
+    try:
+        with store.proof_authorities(c) as authorities:
+            value = _verified_candidate(store, c, run, limits)
+        if _source_reads_current(store, c, token) and same_arguments():
+            token.results[key] = (copy.deepcopy(value), tuple(sorted(authorities)))
+        return value
+    except BaseException:
+        token.results.clear()
+        raise
+    finally:
+        token.inflight.discard(key)
+
+
+def _verified_candidate(store, c, run, limits):
     contract, _ = source(store, c, run)
     _, rows = history(store, c, run)
     if len(rows) not in {2, 3}:
