@@ -1,0 +1,148 @@
+diff --git a/src/sim2act/pa_spec_apps.py b/src/sim2act/pa_spec_apps.py
+index e41500fc..5655041b 100644
+--- a/src/sim2act/pa_spec_apps.py
++++ b/src/sim2act/pa_spec_apps.py
+@@ -1254,7 +1254,11 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
+             if natural.is_candidate(plan["definition"]) else pure(intent["tool"], intent["args"], b["source"]))
+     validate_value(action["output_schema"], value)
+     receipt = receipt_for(oid, step, action, plan, intent, value)
+-    live = commit_guard(worker, c, run, b, 1)
++    from .pa_trial_dispatch import _journal_reads
++    # SAVE writes invalidate the entry read segment. Reprove current authority
++    # in a new read-only segment; no proof survives the artifact writes above.
++    with _journal_reads(worker, c):
++        live = commit_guard(worker, c, run, b, 1)
+     if not saved:
+         require(live["version"] == job["version"], "Local write Run version changed")
+         if store.has_unknown(c, job["id"]):
+diff --git a/tests/test_production_trial_stages.py b/tests/test_production_trial_stages.py
+index 18179bc1..c8e7befc 100644
+--- a/tests/test_production_trial_stages.py
++++ b/tests/test_production_trial_stages.py
+@@ -88,7 +88,7 @@ def approve_stage(data, binding, stage, rid):
+ 
+ 
+ @pytest.fixture(scope="module")
+-def actual_prefix(tmp_path_factory):
++def generated_prefix(tmp_path_factory):
+     out = tmp_path_factory.mktemp("actual-prefix")
+     url = "sqlite:///" + str(out / "fixture.db")
+     store = Store(url, test_only=True)
+@@ -119,45 +119,59 @@ def actual_prefix(tmp_path_factory):
+         with pytest.MonkeyPatch.context() as patch:
+             patch.setattr(apps, "Worker", factory)
+             generation, app, release, inst, generated = apps.ready(data, style="ordered")
+-        source_id = apps.enqueue(data, release, inst)
+-        reviewed, source_consent = approve_stage(data, binding, "source", source_id)
+-        source_sent = []
+-        assert factory(data[0], data[1], goal_planner_transport=apps.transport(source_sent)).once()
+-        source_result = apps.inspect(data, inst, source_id)
+-        assert source_result.status_code == 200, source_result.text
+-        assert source_result.json()["status"] == "SUCCEEDED", source_result.text
+-        target = binding.contract.bindings[1]
+-        current = data[2].get("/api/internal/instances/" + inst["id"]).json()
+-        review = dict(expected_revision=current["revision"],
+-            expected_release_fingerprint=release["fingerprint"],
+-            expected_app_fingerprint=reviewed["authority"]["candidate_fingerprint"],
+-            expected_recipe_fingerprint=reviewed["authority"]["recipe_fingerprint"],
+-            resource_id=target.resource_id, card_id=target.card_id,
+-            expected_goal_version=target.goal_version, expected_goal_fingerprint=target.goal_fingerprint,
+-            expected_source_hash=target.source_hash, request_key=binding.contract.stage_keys.cold)
+-        route = "/api/internal/instances/" + inst["id"]
+-        preview = data[2].post(route + "/pa-use-reviews", json=review)
+-        assert preview.status_code == 200, preview.text
+-        body = dict(review=review, expected_review_fingerprint=preview.json()["review_fingerprint"],
+-                    consent=use.PA_CONSENT)
+-        queued = data[2].post(route + "/pa-use-runs", json=body)
+-        assert queued.status_code == 202, queued.text
+-        cold = queued.json()["run_id"]
+-        _, cold_consent = approve_stage(data, binding, "cold", cold)
+-        cold_sent = []
+-        assert factory(data[0], data[1], goal_planner_transport=apps.transport(cold_sent, apps.COLD)).once()
+-        cold_result = apps.inspect(data, inst, cold)
+-        assert cold_result.status_code == 200, cold_result.text
+-        assert cold_result.json()["status"] == "SUCCEEDED", cold_result.text
+-        t = dict(data=data, binding=binding, generation=generation, source=source_id, cold=cold,
+-            app=app, release=release, instance=inst, generated=generated, source_sent=source_sent,
+-            cold_sent=cold_sent, source_result=source_result.json(), cold_result=cold_result.json(),
+-            source_consent=source_consent, cold_consent=cold_consent, workers=workers, out=out)
++        t = dict(data=data, binding=binding, generation=generation, app=app, release=release,
++            instance=inst, generated=generated, workers=workers, out=out, factory=factory)
+         yield t
+         data[2].close()
+     store.engine.dispose()
+ 
+ 
++@pytest.fixture(scope="module")
++def actual_prefix(generated_prefix):
++    # Full business qualification still uses this round's actual complete chain.
++    # Safety windows use only generated_prefix and can run if Cold SAVE fails.
++    prefix = generated_prefix
++    data, binding, factory = prefix["data"], prefix["binding"], prefix["factory"]
++    generation, app, release = prefix["generation"], prefix["app"], prefix["release"]
++    inst, generated = prefix["instance"], prefix["generated"]
++    workers, out = prefix["workers"], prefix["out"]
++    source_id = apps.enqueue(data, release, inst)
++    reviewed, source_consent = approve_stage(data, binding, "source", source_id)
++    source_sent = []
++    assert factory(data[0], data[1], goal_planner_transport=apps.transport(source_sent)).once()
++    source_result = apps.inspect(data, inst, source_id)
++    assert source_result.status_code == 200, source_result.text
++    assert source_result.json()["status"] == "SUCCEEDED", source_result.text
++    target = binding.contract.bindings[1]
++    current = data[2].get("/api/internal/instances/" + inst["id"]).json()
++    review = dict(expected_revision=current["revision"],
++        expected_release_fingerprint=release["fingerprint"],
++        expected_app_fingerprint=reviewed["authority"]["candidate_fingerprint"],
++        expected_recipe_fingerprint=reviewed["authority"]["recipe_fingerprint"],
++        resource_id=target.resource_id, card_id=target.card_id,
++        expected_goal_version=target.goal_version, expected_goal_fingerprint=target.goal_fingerprint,
++        expected_source_hash=target.source_hash, request_key=binding.contract.stage_keys.cold)
++    route = "/api/internal/instances/" + inst["id"]
++    preview = data[2].post(route + "/pa-use-reviews", json=review)
++    assert preview.status_code == 200, preview.text
++    body = dict(review=review, expected_review_fingerprint=preview.json()["review_fingerprint"],
++                consent=use.PA_CONSENT)
++    queued = data[2].post(route + "/pa-use-runs", json=body)
++    assert queued.status_code == 202, queued.text
++    cold = queued.json()["run_id"]
++    _, cold_consent = approve_stage(data, binding, "cold", cold)
++    cold_sent = []
++    assert factory(data[0], data[1], goal_planner_transport=apps.transport(cold_sent, apps.COLD)).once()
++    cold_result = apps.inspect(data, inst, cold)
++    assert cold_result.status_code == 200, cold_result.text
++    assert cold_result.json()["status"] == "SUCCEEDED", cold_result.text
++    t = dict(data=data, binding=binding, generation=generation, source=source_id, cold=cold,
++        app=app, release=release, instance=inst, generated=generated, source_sent=source_sent,
++        cold_sent=cold_sent, source_result=source_result.json(), cold_result=cold_result.json(),
++        source_consent=source_consent, cold_consent=cold_consent, workers=workers, out=out)
++    return t
++
++
+ def test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner(actual_prefix):
+     t = actual_prefix
+     data, binding = t["data"], t["binding"]
+@@ -213,8 +227,11 @@ def test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner(actu
+         real_provider_calls=0, live_installed=False, semantic_acceptance="NOT_RUN"))
+ 
+ 
+-def test_fresh_actual_prefix_rejects_incomplete_mixed_or_changed_proof_without_writes(actual_prefix):
+-    t = actual_prefix
++def test_fresh_actual_prefix_rejects_incomplete_mixed_or_changed_proof_without_writes(generated_prefix):
++    _generation_proof_rejections(generated_prefix)
++
++
++def _generation_proof_rejections(t):
+     data, b = t["data"], t["binding"]
+     store = data[0]
+     baseline = snapshot(store)
+@@ -327,7 +344,8 @@ def test_fresh_actual_prefix_rejects_incomplete_mixed_or_changed_proof_without_w
+         assert snapshot(store) == baseline
+         observed.append(dict(case=kind, refused=True, all_55_tables_unchanged_in_window=True))
+     write(t["out"] / "fresh-proof-rejections.json", dict(cases=observed,
+-        new_model_requests=0, source="THIS_ROUND_ACTUAL_PREFIX_ONLY", clones_or_old_db_used=False))
++        new_model_requests=0, source=t.get("proof_source", "THIS_ROUND_ACTUAL_PREFIX_ONLY"),
++        clones_or_old_db_used=t.get("clones_or_old_db_used", False)))
+ 
+ 
+ def test_known_accounting_cannot_accept_wrong_original_business_schema(env, tmp_path):

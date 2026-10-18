@@ -1,0 +1,7 @@
+fd96df814e8c0fb6db6651ce77eb484951240ecc 有限静审未发现本次新增的确定 P1/P2。当前Git clean；较f89f8f4431a63e22a9f067cd74e3bdd4051d84ea仅pa_spec_apps.py和本轮测试改变，138生产文件中只1改、137个Git blob保持。
+
+生产改动仅为原写后live=commit_guard(...,1)加入既有_journal_reads上下文及局部import。去除这两项后，整个生产模块AST与基线精确一致，证明原guards、artifact/operation/typed写序、CAS和末尾fresh保持。SAVE后的非SELECT写会移除旧token并推进epoch；新的guard只在原exact JournalTrialBinding、同pinned Store/连接/有效事务中打开原SourceReads。其原thread、driver、transaction和epoch检查/异常清理保持；legacy nullcontext。未新增跨写证明缓存、Permit或续租，也未扩大30秒lease/300秒Run。
+
+A/C/D测试函数AST保持；B原全部assert及九窗口主体AST保持。generated_prefix实际完成本轮gen3后yield，B仅依赖这一前缀；actual_prefix继续同fixture Source2+Cold2及原SUCCEEDED要求，未使用旧DB完成链。执行时仍须按父级计划明确B先于A，否则全模块默认顺序A失败可再次阻断B。B九个全表相等窗口仍只能由实际闭合证据签验，当前不预判。
+
+本独审仅纯文件/Git/AST，脚本static-file-audit.py成功；没有产品/pytest/应用导入/Worker/模型/DB/SQL/网络/私有留出材料访问，也未读取当前作者执行原件。旧封存目录完全未改。组件VERSION_CONFLICT/只读计数不构成完整Cold SAVE通过或性能保证；原已知Cold阻断是否解决待本次fresh完整结果。本目录保持未封存，等待作者全部执行关闭和封存后终审，不背书未来push。

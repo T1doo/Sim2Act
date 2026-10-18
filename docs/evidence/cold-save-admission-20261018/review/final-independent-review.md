@@ -1,0 +1,15 @@
+本片有限独审通过，范围为 **FRESH_MOCK_QUALIFIED**，不是整体F2、LIVE或性能保证。源码fd96df814e8c0fb6db6651ce77eb484951240ecc，基线f89f8f4431a63e22a9f067cd74e3bdd4051d84ea。
+
+已独立逐字核验作者封存清单c6aa7ede21e01a16de2b9852cbc71a23542fba322fa5f9c7fab54916fc4e614e：68份非DB原件、2,394,591 bytes全部匹配；5个外部合成DB仅stat，未打开或重算hash。当前两个源/测试文件与冻结副本、执行输入及此前静审字节一致。较基线仅1生产文件与1测试改变，137生产Git blob未变；去除新增局部import与原guard外_journal_reads后，整个生产模块AST与基线一致，原guards、写序、CAS、末尾fresh和30秒lease/300秒Run保持。
+
+唯一fresh命令17:30:51.046278至17:39:53.983473UTC，outer542.936816361秒、exit0；pytest原文540.32秒。原JUnit明确B→A→C→D四节点全PASS，不是旧两组拼接。652输入/138生产及runner/guard前后清单无漂移。B九窗口全部来自本轮实际gen3前缀，clones=false，包括scope缓存写后撤权和无写真实到期；原全部拒绝与55表相等断言仍在且实际通过。独审核保存记录与执行源码，不冒称独立重建55表行数据。
+
+A实际生成3+Source2+Cold2，共7个Core Attempt、7个计账槽，真实时钟间隔均≥60秒；7请求/7响应字节SHA重新核验，7份响应raw与独立ASCII保序compact canonical SHA各自正确且不同。Source与Cold都SUCCEEDED，同实例同Release成果分别version1和2，实际artifact内容/hash对应；各owner同Run且PENDING，旧Source内容按VERSION_CONFLICT失效，当前Cold内容可读。该成果与owner回读另证业务保存实际完成，不以计账accepted或被动计时替代成功。两负向C/D分别业务schema拒绝与第二Store替换拒绝，均handler1/no resend，D foreign engine SQL0、原Store保持。合计9次合成原InternModel+MockTransport入口，真实模型0、守卫attempts空；不是浏览器或真实网络验收。
+
+Cold两个SAVE guard的原始caller/连接/事务/线程吻合：写前1220耗2.287506秒/3681SQL，epoch195；写后1261耗2.779830秒/3713SQL，epoch201，两个guard内部均无epoch变化且原读段活跃，写后仍余23.162011秒lease。其事务到SQLAlchemy driver前commit事件11.315883秒/16370SQL，BEGIN IMMEDIATE记录0.000381509秒，事件时余18.678297秒lease。Source也有同事务对应记录。所有被动controller check无error。事件早于driver真正commit完成，不能称测得完整提交时长；一次成功不保证负载下性能，也没有复现旧31.750秒完整失败的全部caller或回滚临时条件。
+
+组件诊断单列：旧失败合成副本上的首脚本完成九窗口后，构造旧Journal Worker因软件指纹改变正确拒绝，exit1原件完整保留；它不是fresh pytest失败或有效旧合同。后续合法generic Worker未安装旧pa_trial，对旧SAVE入口及新读段内原guard均获Stale worker lease，且两个55表窗口不变；作者报告旧封存DB hash未改，独审未重算。暂时断连/unknown process id后先由闭合execution确认exit0、无在途命令再继续，未删除未知进程/锁或重复fresh启动。组件结果未用作完整业务资格替代。
+
+此前整链检查点仍保持NOT_QUALIFIED历史：14条JUnit记录5PASS/8ERROR/1fixtureFAIL、33次合成adapter，不因本次成功改写；新增4PASS/9次后历史合计18条=9PASS/8ERROR/1FAIL、42次合成adapter。诊断/组件脚本不计额外pytest PASS，旧19/12/8/9矩阵未重跑。所有旧作者和独审封存目录未修改，旧满盘报告未补回。
+
+独审仅纯文件/Git/AST，未运行产品、pytest、Worker、模型或应用导入，未访问DB/SQL、网络、私有留出材料。真实API调用、语义/真人验收、Windows/native、PG、远端CI、新PB/AT10及本片浏览器重验均未执行；真实API授权另项已有，余额、强制零新增费用事实及真实source/controller安装仍须另证。没有新增Grant/executor/LIVE许可或放宽原安全门。本片不追加测试或优化，也不背书后续commit/push。机器可读核验见final-verification.json。
