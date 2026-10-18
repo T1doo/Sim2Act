@@ -1,0 +1,7 @@
+def read(store, user, contract, key, account_id):
+    """Owned metadata only; no seed, recovery action, automatic mark or send."""
+    with store.tx() as c:
+        _, scope, request, quota_request, entity = _context(store, c, user, contract, key, account_id)
+        _, cursor, quota_revision = _quota(c, quota_request, entity, create=False)
+        _, state, revision = _ledger(c, scope, request, cursor, quota_revision)
+        return _receipt(state, cursor, revision, quota_revision)
