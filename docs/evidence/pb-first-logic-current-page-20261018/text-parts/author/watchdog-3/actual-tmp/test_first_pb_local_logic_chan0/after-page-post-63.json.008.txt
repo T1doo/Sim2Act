@@ -1,0 +1,4770 @@
+                           "item_id",
+                            "kind",
+                            "summary",
+                            "citations",
+                            "targets"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "items",
+                      "feedback"
+                    ],
+                    "type": "object"
+                  },
+                  "permission_requirements": [
+                    {
+                      "resource_ref": "res_11a54e604ef1410e844da89859d882bd",
+                      "tool_ref": "resource.read"
+                    }
+                  ],
+                  "postcheck_refs": [
+                    "natural.spec_citations.v1"
+                  ],
+                  "preconditions": [],
+                  "reconcile_ref": "operation.lookup.v1",
+                  "revision": 1,
+                  "schema_version": "1.0-draft"
+                },
+                "step": {
+                  "binding_id": "merge_pick",
+                  "depends_on": [
+                    "duties_pick",
+                    "qualifiers_pick"
+                  ],
+                  "inputs": {
+                    "first": {
+                      "field": "items",
+                      "ref": "duties_pick",
+                      "source": "step"
+                    },
+                    "second": {
+                      "field": "items",
+                      "ref": "qualifiers_pick",
+                      "source": "step"
+                    }
+                  },
+                  "step_id": "merge_pick"
+                }
+              },
+              "content_fingerprint": "f9f69b75bb776b0e008e09ec770f2e5b4c72d3b35282c10db2f9e446f9e54094"
+            },
+            {
+              "id": "action_acbcaddf6437cb308d414a3e615964d9",
+              "key": "action:qualifiers_pick",
+              "kind": "ACTION",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action": {
+                  "action_id": "action_acbcaddf6437cb308d414a3e615964d9",
+                  "allowed_tool_refs": [],
+                  "dependencies": [
+                    {
+                      "kind": "resource",
+                      "ref": "res_11a54e604ef1410e844da89859d882bd",
+                      "version": "1"
+                    },
+                    {
+                      "kind": "prompt",
+                      "ref": "model.spec.qualifiers.v1",
+                      "version": "1"
+                    }
+                  ],
+                  "effect": "read",
+                  "error_contract": [
+                    "INVALID_INPUT",
+                    "PERMISSION_DENIED",
+                    "GRANT_REVOKED",
+                    "VERIFICATION_FAILED",
+                    "OUTCOME_UNKNOWN"
+                  ],
+                  "executor": {
+                    "kind": "bounded_agent",
+                    "ref": "model.spec.qualifiers",
+                    "version": "1"
+                  },
+                  "idempotency": "read_only",
+                  "input_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "content": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "format": {
+                        "enum": [
+                          "txt",
+                          "md"
+                        ],
+                        "type": "string"
+                      },
+                      "hash": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "resource_id": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "content",
+                      "hash",
+                      "format"
+                    ],
+                    "type": "object"
+                  },
+                  "limits": {
+                    "max_output_tokens": 1024,
+                    "max_repairs": 0,
+                    "max_requests": 2,
+                    "max_tools": 4,
+                    "max_total_tokens": 64000,
+                    "run_seconds": 300
+                  },
+                  "output_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "feedback": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "check": {
+                            "enum": [
+                              "natural.spec_citations.v1"
+                            ],
+                            "type": "string"
+                          },
+                          "citation_status": {
+                            "enum": [
+                              "PASS"
+                            ],
+                            "type": "string"
+                          },
+                          "coverage_status": {
+                            "enum": [
+                              "FULL",
+                              "PARTIAL"
+                            ],
+                            "type": "string"
+                          },
+                          "semantic_status": {
+                            "enum": [
+                              "UNKNOWN"
+                            ],
+                            "type": "string"
+                          },
+                          "uncovered": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "end": {
+                                  "maximum": 2048,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "quote": {
+                                  "maxLength": 2048,
+                                  "type": "string"
+                                },
+                                "start": {
+                                  "maximum": 2048,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end",
+                                "quote"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "check",
+                          "citation_status",
+                          "coverage_status",
+                          "uncovered",
+                          "semantic_status"
+                        ],
+                        "type": "object"
+                      },
+                      "items": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "citations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "end": {
+                                    "maximum": 2048,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "quote": {
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "start": {
+                                    "maximum": 2048,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 2,
+                              "type": "array"
+                            },
+                            "item_id": {
+                              "maxLength": 40,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "enum": [
+                                "condition",
+                                "exception",
+                                "open_question",
+                                "requirement",
+                                "unclassified"
+                              ],
+                              "type": "string"
+                            },
+                            "summary": {
+                              "maxLength": 240,
+                              "type": "string"
+                            },
+                            "targets": {
+                              "items": {
+                                "maxLength": 40,
+                                "type": "string"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "item_id",
+                            "kind",
+                            "summary",
+                            "citations",
+                            "targets"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "items",
+                      "feedback"
+                    ],
+                    "type": "object"
+                  },
+                  "permission_requirements": [
+                    {
+                      "resource_ref": "res_11a54e604ef1410e844da89859d882bd",
+                      "tool_ref": "resource.read"
+                    }
+                  ],
+                  "postcheck_refs": [
+                    "natural.spec_citations.v1"
+                  ],
+                  "preconditions": [],
+                  "reconcile_ref": "operation.lookup.v1",
+                  "revision": 1,
+                  "schema_version": "1.0-draft"
+                },
+                "step": {
+                  "binding_id": "qualifiers_pick",
+                  "depends_on": [
+                    "read_pick"
+                  ],
+                  "inputs": {
+                    "content": {
+                      "field": "content",
+                      "ref": "read_pick",
+                      "source": "step"
+                    },
+                    "format": {
+                      "field": "format",
+                      "ref": "read_pick",
+                      "source": "step"
+                    },
+                    "hash": {
+                      "field": "hash",
+                      "ref": "read_pick",
+                      "source": "step"
+                    },
+                    "resource_id": {
+                      "field": "resource_id",
+                      "ref": "read_pick",
+                      "source": "step"
+                    }
+                  },
+                  "step_id": "qualifiers_pick"
+                }
+              },
+              "content_fingerprint": "08ff8430b0d11171604a30f91cd1134614585fd506ef1a052bb6504460bfbe72"
+            },
+            {
+              "id": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "key": "action:read_pick",
+              "kind": "ACTION",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action": {
+                  "action_id": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+                  "allowed_tool_refs": [],
+                  "dependencies": [
+                    {
+                      "kind": "resource",
+                      "ref": "res_11a54e604ef1410e844da89859d882bd",
+                      "version": "1"
+                    }
+                  ],
+                  "effect": "read",
+                  "error_contract": [
+                    "INVALID_INPUT",
+                    "PERMISSION_DENIED",
+                    "GRANT_REVOKED",
+                    "VERIFICATION_FAILED",
+                    "OUTCOME_UNKNOWN"
+                  ],
+                  "executor": {
+                    "kind": "registered_tool",
+                    "ref": "resource.read",
+                    "version": "1"
+                  },
+                  "idempotency": "read_only",
+                  "input_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "resource_id": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id"
+                    ],
+                    "type": "object"
+                  },
+                  "limits": {
+                    "max_output_tokens": 1024,
+                    "max_repairs": 0,
+                    "max_requests": 2,
+                    "max_tools": 4,
+                    "max_total_tokens": 64000,
+                    "run_seconds": 300
+                  },
+                  "output_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "content": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "format": {
+                        "enum": [
+                          "txt",
+                          "md"
+                        ],
+                        "type": "string"
+                      },
+                      "hash": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "resource_id": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "content",
+                      "hash",
+                      "format"
+                    ],
+                    "type": "object"
+                  },
+                  "permission_requirements": [
+                    {
+                      "resource_ref": "res_11a54e604ef1410e844da89859d882bd",
+                      "tool_ref": "resource.read"
+                    }
+                  ],
+                  "postcheck_refs": [
+                    "natural.spec_citations.v1"
+                  ],
+                  "preconditions": [],
+                  "reconcile_ref": "operation.lookup.v1",
+                  "revision": 1,
+                  "schema_version": "1.0-draft"
+                },
+                "step": {
+                  "binding_id": "read_pick",
+                  "depends_on": [],
+                  "inputs": {
+                    "resource_id": {
+                      "field": "resource_id",
+                      "ref": "source",
+                      "source": "data"
+                    }
+                  },
+                  "step_id": "read_pick"
+                }
+              },
+              "content_fingerprint": "62d95d4d460bf1d70b79b471c719cd59cac0af6bd20189e8752a232c1a4fb73c"
+            },
+            {
+              "id": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "key": "action:save_pick",
+              "kind": "ACTION",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action": {
+                  "action_id": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+                  "allowed_tool_refs": [],
+                  "dependencies": [
+                    {
+                      "kind": "resource",
+                      "ref": "res_11a54e604ef1410e844da89859d882bd",
+                      "version": "1"
+                    }
+                  ],
+                  "effect": "project_write",
+                  "error_contract": [
+                    "INVALID_INPUT",
+                    "PERMISSION_DENIED",
+                    "GRANT_REVOKED",
+                    "VERIFICATION_FAILED",
+                    "OUTCOME_UNKNOWN"
+                  ],
+                  "executor": {
+                    "kind": "registered_tool",
+                    "ref": "artifact.save_text",
+                    "version": "1"
+                  },
+                  "idempotency": "transactional",
+                  "input_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "text": {
+                        "maxLength": 8000,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "type": "object"
+                  },
+                  "limits": {
+                    "max_output_tokens": 1024,
+                    "max_repairs": 0,
+                    "max_requests": 2,
+                    "max_tools": 4,
+                    "max_total_tokens": 64000,
+                    "run_seconds": 300
+                  },
+                  "output_schema": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "hash": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      },
+                      "resource_id": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "hash"
+                    ],
+                    "type": "object"
+                  },
+                  "permission_requirements": [
+                    {
+                      "resource_ref": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+                      "tool_ref": "artifact.save_text"
+                    }
+                  ],
+                  "postcheck_refs": [
+                    "receipt.readback.v1"
+                  ],
+                  "preconditions": [],
+                  "reconcile_ref": "operation.lookup.v1",
+                  "revision": 1,
+                  "schema_version": "1.0-draft"
+                },
+                "step": {
+                  "binding_id": "save_pick",
+                  "depends_on": [
+                    "check_pick"
+                  ],
+                  "inputs": {
+                    "text": {
+                      "field": "text",
+                      "ref": "check_pick",
+                      "source": "step"
+                    }
+                  },
+                  "step_id": "save_pick"
+                }
+              },
+              "content_fingerprint": "635ed446136c98bac505d231b50e46c15b812f52aaf5222c7444372d16458064"
+            },
+            {
+              "id": "node_3652d2da1fa74661897ef554bed616c9",
+              "key": "artifact:checklist",
+              "kind": "ARTIFACT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "checklist",
+                  "ref": "check_pick",
+                  "source": "step"
+                },
+                "field": "checklist",
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "check_version": {
+                      "enum": [
+                        "natural.spec_citations.v1"
+                      ],
+                      "type": "string"
+                    },
+                    "feedback": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "check": {
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ],
+                          "type": "string"
+                        },
+                        "citation_status": {
+                          "enum": [
+                            "PASS"
+                          ],
+                          "type": "string"
+                        },
+                        "coverage_status": {
+                          "enum": [
+                            "FULL",
+                            "PARTIAL"
+                          ],
+                          "type": "string"
+                        },
+                        "semantic_status": {
+                          "enum": [
+                            "UNKNOWN"
+                          ],
+                          "type": "string"
+                        },
+                        "uncovered": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "end": {
+                                "maximum": 2048,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "quote": {
+                                "maxLength": 2048,
+                                "type": "string"
+                              },
+                              "start": {
+                                "maximum": 2048,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 32,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "check",
+                        "citation_status",
+                        "coverage_status",
+                        "uncovered",
+                        "semantic_status"
+                      ],
+                      "type": "object"
+                    },
+                    "human_unresolved": {
+                      "items": {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "citations": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "end": {
+                                  "maximum": 2048,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "quote": {
+                                  "maxLength": 2048,
+                                  "type": "string"
+                                },
+                                "start": {
+                                  "maximum": 2048,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end",
+                                "quote"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 2,
+                            "type": "array"
+                          },
+                          "decision_status": {
+                            "enum": [
+                              "OPEN",
+                              "NOT_APPLICABLE"
+                            ],
+                            "type": "string"
+                          },
+                          "item_id": {
+                            "maxLength": 40,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "condition",
+                              "exception",
+                              "open_question",
+                              "requirement",
+                              "unclassified"
+                            ],
+                            "type": "string"
+                          },
+                          "relation_status": {
+                            "enum": [
+                              "UNASSIGNED",
+                              "MODEL_ASSERTED",
+                              "NOT_APPLICABLE"
+                            ],
+                            "type": "string"
+                          },
+                          "summary": {
+                            "maxLength": 240,
+                            "type": "string"
+                          },
+                          "targets": {
+                            "items": {
+                              "maxLength": 40,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "kind",
+                          "summary",
+                          "citations",
+                          "targets",
+                          "relation_status",
+                          "decision_status"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 8,
+                      "type": "array"
+                    },
+                    "owner_acceptance": {
+                      "enum": [
+                        "PENDING"
+                      ],
+                      "type": "string"
+                    },
+                    "semantic_goal_acceptance": {
+                      "enum": [
+                        "NOT_RUN"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "coordinate_space": {
+                          "enum": [
+                            "unicode_scalar_index.v1"
+                          ],
+                          "type": "string"
+                        },
+                        "format": {
+                          "enum": [
+                            "txt",
+                            "md"
+                          ],
+                          "type": "string"
+                        },
+                        "hash": {
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        "resource_id": {
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "enum": [
+                            1
+                          ],
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "hash",
+                        "format",
+                        "revision",
+                        "coordinate_space"
+                      ],
+                      "type": "object"
+                    },
+                    "source_content": {
+                      "maxLength": 2048,
+                      "type": "string"
+                    },
+                    "source_retention": {
+                      "enum": [
+                        "EXACT"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "check_version",
+                    "source",
+                    "source_content",
+                    "items",
+                    "feedback",
+                    "human_unresolved",
+                    "source_retention",
+                    "semantic_goal_acceptance",
+                    "owner_acceptance"
+                  ],
+                  "type": "object"
+                }
+              },
+              "content_fingerprint": "4e5d10037bc57dc149ffd6dd685f15e1a55fd8494179b7ff0f3aad1f9310e06d"
+            },
+            {
+              "id": "node_5c4564f2c2db466dbb9fbf38d27cc720",
+              "key": "artifact:citation_status",
+              "kind": "ARTIFACT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "citation_status",
+                  "ref": "check_pick",
+                  "source": "step"
+                },
+                "field": "citation_status",
+                "schema": {
+                  "enum": [
+                    "PASS"
+                  ],
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "80061734ff20035062046aef3ca1f2edb6a4515e9c1d5d68bc16e5810f1df914"
+            },
+            {
+              "id": "node_4cf96084c82347cc8e4db5b15650fde7",
+              "key": "artifact:hash",
+              "kind": "ARTIFACT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "hash",
+                  "ref": "save_pick",
+                  "source": "step"
+                },
+                "field": "hash",
+                "schema": {
+                  "maxLength": 2048,
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "f5a5d1734173010d28039910c243f829602a498c15a2537039a3e8eab1c308cd"
+            },
+            {
+              "id": "node_07256a703c61496ea2da321a6cbea754",
+              "key": "artifact:resource_id",
+              "kind": "ARTIFACT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "resource_id",
+                  "ref": "save_pick",
+                  "source": "step"
+                },
+                "field": "resource_id",
+                "schema": {
+                  "maxLength": 2048,
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "6eb274c78c1b2ee771cd7cced3934e5b3aa26e6e25bf8c1a96b25feeffeadcd5"
+            },
+            {
+              "id": "node_eec530c855d94ffb979ca0289d852158",
+              "key": "artifact:semantic_goal_acceptance",
+              "kind": "ARTIFACT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "semantic_goal_acceptance",
+                  "ref": "check_pick",
+                  "source": "step"
+                },
+                "field": "semantic_goal_acceptance",
+                "schema": {
+                  "enum": [
+                    "NOT_RUN"
+                  ],
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "ff95c45adeb4fed17e9e849ddb66cdfcb85167dc334953c0afee33a11cd40887"
+            },
+            {
+              "id": "node_3c1ed46f8b8844028d938bc4723856d6",
+              "key": "artifact:semantic_status",
+              "kind": "ARTIFACT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "binding": {
+                  "field": "semantic_status",
+                  "ref": "check_pick",
+                  "source": "step"
+                },
+                "field": "semantic_status",
+                "schema": {
+                  "enum": [
+                    "UNKNOWN"
+                  ],
+                  "type": "string"
+                }
+              },
+              "content_fingerprint": "9bdbfef9d4632fd70be1687520e997885da20ceb9fef4bca891fccd85b08d1b1"
+            },
+            {
+              "id": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "key": "check:natural.spec_citations.v1",
+              "kind": "CHECK",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "check_ref": "natural.spec_citations.v1",
+                "source_version": {
+                  "content_fingerprint": "1e8bf7984a7178628cc3efc2c43295c39a992aa7a9c08f27beba63cffc68da38",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "48aa273f5638cf45053c417fccf55628aeb689fe54f797624196dfe09e0e6a83"
+            },
+            {
+              "id": "node_f94c409355434223ae07b6e9b4fcae39",
+              "key": "check:receipt.readback.v1",
+              "kind": "CHECK",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "check_ref": "receipt.readback.v1",
+                "source_version": {
+                  "content_fingerprint": "71e333d703c6f66ddd38069bf08ccfe75277ee7d4591ae9ec3722224f2225a6d",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "54aeb8cd460322092464f91ebea40fd9ca029a06857be8720a08f3b4bf5a8db8"
+            },
+            {
+              "id": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "key": "goal:goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "kind": "GOAL",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "goal_ref": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+                "source_version": {
+                  "content_fingerprint": "6961cb4193d6c4a75ec8fb1177f20f6112a3230a5ae7b4288b24798749792392",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "e32371dc9f882077c591571a7721d5fb6f20a0080bbce40f07b61cbc7a522231"
+            },
+            {
+              "id": "app_562c8ce29a6765eb2203150f0de26674",
+              "key": "manifest:app_562c8ce29a6765eb2203150f0de26674",
+              "kind": "MANIFEST",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "action_bindings": [
+                  {
+                    "action_id": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+                    "binding_id": "read_pick",
+                    "revision": 1
+                  },
+                  {
+                    "action_id": "action_13845ae8ff5db72f36929aa62cd61f02",
+                    "binding_id": "duties_pick",
+                    "revision": 1
+                  },
+                  {
+                    "action_id": "action_acbcaddf6437cb308d414a3e615964d9",
+                    "binding_id": "qualifiers_pick",
+                    "revision": 1
+                  },
+                  {
+                    "action_id": "action_caf48181a0dc0ce538469761713e7bdf",
+                    "binding_id": "merge_pick",
+                    "revision": 1
+                  },
+                  {
+                    "action_id": "action_22228069cc18a8b2834fb378c8181b98",
+                    "binding_id": "check_pick",
+                    "revision": 1
+                  },
+                  {
+                    "action_id": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+                    "binding_id": "save_pick",
+                    "revision": 1
+                  }
+                ],
+                "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+                "data_bindings": [
+                  {
+                    "binding_id": "source",
+                    "resource_ref": "res_11a54e604ef1410e844da89859d882bd"
+                  }
+                ],
+                "data_schema_version": 1,
+                "dependency_lock": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_11a54e604ef1410e844da89859d882bd",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "resource.read",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "prompt",
+                    "ref": "model.spec.requirements.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "prompt",
+                    "ref": "model.spec.qualifiers.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "spec.merge_evidence",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "spec.verify_citations",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "artifact.save_text",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "natural.spec_citations.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "receipt.readback.v1",
+                    "version": "1"
+                  }
+                ],
+                "goal_ref": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+                "input_schema": {
+                  "additionalProperties": false,
+                  "properties": {},
+                  "required": [],
+                  "type": "object"
+                },
+                "origin": "task_run",
+                "output_schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "checklist": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "check_version": {
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ],
+                          "type": "string"
+                        },
+                        "feedback": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "check": {
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ],
+                              "type": "string"
+                            },
+                            "citation_status": {
+                              "enum": [
+                                "PASS"
+                              ],
+                              "type": "string"
+                            },
+                            "coverage_status": {
+                              "enum": [
+                                "FULL",
+                                "PARTIAL"
+                              ],
+                              "type": "string"
+                            },
+                            "semantic_status": {
+                              "enum": [
+                                "UNKNOWN"
+                              ],
+                              "type": "string"
+                            },
+                            "uncovered": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "end": {
+                                    "maximum": 2048,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "quote": {
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "start": {
+                                    "maximum": 2048,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 32,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "check",
+                            "citation_status",
+                            "coverage_status",
+                            "uncovered",
+                            "semantic_status"
+                          ],
+                          "type": "object"
+                        },
+                        "human_unresolved": {
+                          "items": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "maxItems": 16,
+                          "type": "array"
+                        },
+                        "items": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "citations": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "end": {
+                                      "maximum": 2048,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "quote": {
+                                      "maxLength": 2048,
+                                      "type": "string"
+                                    },
+                                    "start": {
+                                      "maximum": 2048,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 2,
+                                "type": "array"
+                              },
+                              "decision_status": {
+                                "enum": [
+                                  "OPEN",
+                                  "NOT_APPLICABLE"
+                                ],
+                                "type": "string"
+                              },
+                              "item_id": {
+                                "maxLength": 40,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "condition",
+                                  "exception",
+                                  "open_question",
+                                  "requirement",
+                                  "unclassified"
+                                ],
+                                "type": "string"
+                              },
+                              "relation_status": {
+                                "enum": [
+                                  "UNASSIGNED",
+                                  "MODEL_ASSERTED",
+                                  "NOT_APPLICABLE"
+                                ],
+                                "type": "string"
+                              },
+                              "summary": {
+                                "maxLength": 240,
+                                "type": "string"
+                              },
+                              "targets": {
+                                "items": {
+                                  "maxLength": 40,
+                                  "type": "string"
+                                },
+                                "maxItems": 8,
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "item_id",
+                              "kind",
+                              "summary",
+                              "citations",
+                              "targets",
+                              "relation_status",
+                              "decision_status"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "type": "array"
+                        },
+                        "owner_acceptance": {
+                          "enum": [
+                            "PENDING"
+                          ],
+                          "type": "string"
+                        },
+                        "semantic_goal_acceptance": {
+                          "enum": [
+                            "NOT_RUN"
+                          ],
+                          "type": "string"
+                        },
+                        "source": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "coordinate_space": {
+                              "enum": [
+                                "unicode_scalar_index.v1"
+                              ],
+                              "type": "string"
+                            },
+                            "format": {
+                              "enum": [
+                                "txt",
+                                "md"
+                              ],
+                              "type": "string"
+                            },
+                            "hash": {
+                              "maxLength": 2048,
+                              "type": "string"
+                            },
+                            "resource_id": {
+                              "maxLength": 2048,
+                              "type": "string"
+                            },
+                            "revision": {
+                              "enum": [
+                                1
+                              ],
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "resource_id",
+                            "hash",
+                            "format",
+                            "revision",
+                            "coordinate_space"
+                          ],
+                          "type": "object"
+                        },
+                        "source_content": {
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        "source_retention": {
+                          "enum": [
+                            "EXACT"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "check_version",
+                        "source",
+                        "source_content",
+                        "items",
+                        "feedback",
+                        "human_unresolved",
+                        "source_retention",
+                        "semantic_goal_acceptance",
+                        "owner_acceptance"
+                      ],
+                      "type": "object"
+                    },
+                    "citation_status": {
+                      "enum": [
+                        "PASS"
+                      ],
+                      "type": "string"
+                    },
+                    "hash": {
+                      "maxLength": 2048,
+                      "type": "string"
+                    },
+                    "resource_id": {
+                      "maxLength": 2048,
+                      "type": "string"
+                    },
+                    "semantic_goal_acceptance": {
+                      "enum": [
+                        "NOT_RUN"
+                      ],
+                      "type": "string"
+                    },
+                    "semantic_status": {
+                      "enum": [
+                        "UNKNOWN"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "hash",
+                    "checklist",
+                    "citation_status",
+                    "semantic_status",
+                    "semantic_goal_acceptance"
+                  ],
+                  "type": "object"
+                },
+                "outputs": {
+                  "checklist": {
+                    "field": "checklist",
+                    "ref": "check_pick",
+                    "source": "step"
+                  },
+                  "citation_status": {
+                    "field": "citation_status",
+                    "ref": "check_pick",
+                    "source": "step"
+                  },
+                  "hash": {
+                    "field": "hash",
+                    "ref": "save_pick",
+                    "source": "step"
+                  },
+                  "resource_id": {
+                    "field": "resource_id",
+                    "ref": "save_pick",
+                    "source": "step"
+                  },
+                  "semantic_goal_acceptance": {
+                    "field": "semantic_goal_acceptance",
+                    "ref": "check_pick",
+                    "source": "step"
+                  },
+                  "semantic_status": {
+                    "field": "semantic_status",
+                    "ref": "check_pick",
+                    "source": "step"
+                  }
+                },
+                "permission_requirements": [
+                  {
+                    "resource_ref": "res_11a54e604ef1410e844da89859d882bd",
+                    "tool_ref": "resource.read"
+                  },
+                  {
+                    "resource_ref": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+                    "tool_ref": "artifact.save_text"
+                  }
+                ],
+                "revision": 1,
+                "runtime_identity_requirements": {
+                  "mode": "user_and_app_intersection"
+                },
+                "runtime_limits": {
+                  "max_output_tokens": 1024,
+                  "max_repairs": 0,
+                  "max_requests": 2,
+                  "max_tools": 4,
+                  "max_total_tokens": 64000,
+                  "run_seconds": 300
+                },
+                "schema_version": "1.0-draft",
+                "source_run_ref": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+                "validation_suite_ref": "natural.spec_citations.v1",
+                "views": [
+                  {
+                    "component_ref": "table",
+                    "output_field": "checklist"
+                  }
+                ],
+                "workflow": [
+                  {
+                    "binding_id": "read_pick",
+                    "depends_on": [],
+                    "inputs": {
+                      "resource_id": {
+                        "field": "resource_id",
+                        "ref": "source",
+                        "source": "data"
+                      }
+                    },
+                    "step_id": "read_pick"
+                  },
+                  {
+                    "binding_id": "duties_pick",
+                    "depends_on": [
+                      "read_pick"
+                    ],
+                    "inputs": {
+                      "content": {
+                        "field": "content",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "format": {
+                        "field": "format",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "hash": {
+                        "field": "hash",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "resource_id": {
+                        "field": "resource_id",
+                        "ref": "read_pick",
+                        "source": "step"
+                      }
+                    },
+                    "step_id": "duties_pick"
+                  },
+                  {
+                    "binding_id": "qualifiers_pick",
+                    "depends_on": [
+                      "read_pick"
+                    ],
+                    "inputs": {
+                      "content": {
+                        "field": "content",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "format": {
+                        "field": "format",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "hash": {
+                        "field": "hash",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "resource_id": {
+                        "field": "resource_id",
+                        "ref": "read_pick",
+                        "source": "step"
+                      }
+                    },
+                    "step_id": "qualifiers_pick"
+                  },
+                  {
+                    "binding_id": "merge_pick",
+                    "depends_on": [
+                      "duties_pick",
+                      "qualifiers_pick"
+                    ],
+                    "inputs": {
+                      "first": {
+                        "field": "items",
+                        "ref": "duties_pick",
+                        "source": "step"
+                      },
+                      "second": {
+                        "field": "items",
+                        "ref": "qualifiers_pick",
+                        "source": "step"
+                      }
+                    },
+                    "step_id": "merge_pick"
+                  },
+                  {
+                    "binding_id": "check_pick",
+                    "depends_on": [
+                      "read_pick",
+                      "merge_pick"
+                    ],
+                    "inputs": {
+                      "content": {
+                        "field": "content",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "format": {
+                        "field": "format",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "hash": {
+                        "field": "hash",
+                        "ref": "read_pick",
+                        "source": "step"
+                      },
+                      "items": {
+                        "field": "items",
+                        "ref": "merge_pick",
+                        "source": "step"
+                      },
+                      "resource_id": {
+                        "field": "resource_id",
+                        "ref": "read_pick",
+                        "source": "step"
+                      }
+                    },
+                    "step_id": "check_pick"
+                  },
+                  {
+                    "binding_id": "save_pick",
+                    "depends_on": [
+                      "check_pick"
+                    ],
+                    "inputs": {
+                      "text": {
+                        "field": "text",
+                        "ref": "check_pick",
+                        "source": "step"
+                      }
+                    },
+                    "step_id": "save_pick"
+                  }
+                ]
+              },
+              "content_fingerprint": "f52fad047c62e62a58dfc8a8699d97634d5a59d8c9c3bb4938ef87ce710bdde7"
+            },
+            {
+              "id": "node_0604906af3854f4aaa9143578389ffb2",
+              "key": "rule:check:natural.spec_citations.v1",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "check",
+                "ref": "natural.spec_citations.v1",
+                "source_version": {
+                  "content_fingerprint": "4d62e8649dc9b119a7e004ec69cb67ec613948837a4dc4f1dca4216b3d29e78e",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "e1ed707cfcd1e06e02252f230413b47307d85c116676e09747665b11a7f710e9"
+            },
+            {
+              "id": "node_9bfc049fd60144cd8bc6393dade66fcd",
+              "key": "rule:check:receipt.readback.v1",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "check",
+                "ref": "receipt.readback.v1",
+                "source_version": {
+                  "content_fingerprint": "af60f6a7fb225d8b064beee9381854b04b85ab0b9f7c6a9f8e66c782bf2c14e6",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "6c1016604d399206a460174e169a5281cc9e946f555df6c7ddacd8dd6cc4b54b"
+            },
+            {
+              "id": "node_0ef87e053abe43f49e708ec705bbee23",
+              "key": "rule:prompt:model.spec.qualifiers.v1",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "prompt",
+                "ref": "model.spec.qualifiers.v1",
+                "source_version": {
+                  "content_fingerprint": "30461a4e1cb2c96a5521853627e99bf94738d6cd60ed5fa27d2cc904ef87d4b2",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "cc4a8328d7f94ddb19b12245923d483750119d8358ad729d261b7724652291c5"
+            },
+            {
+              "id": "node_c23057c46af541c3b21ef95ebb0e3345",
+              "key": "rule:prompt:model.spec.requirements.v1",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "prompt",
+                "ref": "model.spec.requirements.v1",
+                "source_version": {
+                  "content_fingerprint": "70729d3ffbcb8f55a029dc02e2322f6e096989522dee721e3f48b36589232d15",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "d701a343ccfa2aa8bd72425eb498408f332f4394bb3353d1cef9c67ccda7a45e"
+            },
+            {
+              "id": "node_af3d1f661c334a7c9cfb75755dab2f52",
+              "key": "rule:tool:artifact.save_text",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "tool",
+                "ref": "artifact.save_text",
+                "source_version": {
+                  "content_fingerprint": "88e6ad29f38e8f8ca1973f582948ad786b1963de0a8536a7d75ca380d023a33a",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "eb6230ca381b98f5cda8729789d9ff91c58625aa2b37431ad2e3b096f10e8760"
+            },
+            {
+              "id": "node_fa2f65260adb44658f4a6846df70eb87",
+              "key": "rule:tool:resource.read",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "tool",
+                "ref": "resource.read",
+                "source_version": {
+                  "content_fingerprint": "bda7d24b377f10434422e3363a676119c6b898b845c944647ff841db2a2b78ec",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "84a93e578195e198f07618bce025ba05398195fca6a71610ae77e8454cf62e8e"
+            },
+            {
+              "id": "node_8d58c0eb9f3049b5b460fd1ccafcd770",
+              "key": "rule:tool:spec.merge_evidence",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "tool",
+                "ref": "spec.merge_evidence",
+                "source_version": {
+                  "content_fingerprint": "b61f1e90d196042d870aeed99699780235adb214747f748ae9294611bc96c232",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "7417a3e118c346b806b0632df04879e70bc26637a30b7451fcb66c2c16ed802e"
+            },
+            {
+              "id": "node_e22c289eaa4a497f8b4f1875b0d9fe63",
+              "key": "rule:tool:spec.verify_citations",
+              "kind": "REQUIREMENT",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "kind": "tool",
+                "ref": "spec.verify_citations",
+                "source_version": {
+                  "content_fingerprint": "745148807e36e7eb8dec01acd337c1f6379411c529453ab827e7a325d69d9ef4",
+                  "revision": 1
+                },
+                "version": "1"
+              },
+              "content_fingerprint": "012e0208b5eaf6866dbbacd57217c54eac0409cdafce2b2acfa75a7a95b1528a"
+            },
+            {
+              "id": "res_11a54e604ef1410e844da89859d882bd",
+              "key": "source:res_11a54e604ef1410e844da89859d882bd",
+              "kind": "SOURCE",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "resource_ref": "res_11a54e604ef1410e844da89859d882bd",
+                "source_version": {
+                  "content_fingerprint": "5b704f34d884f7156c479e92cb455eb398d8536805e55857b78433cc465a2c6d",
+                  "revision": 1
+                }
+              },
+              "content_fingerprint": "16fa7ab460b9db00550222b76565c36f15ee915bb7fe07dcbac62cee4f006249"
+            },
+            {
+              "id": "node_b9a68f66cb1240e49d93dd1dc0864963",
+              "key": "view:table:checklist",
+              "kind": "VIEW",
+              "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+              "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "revision": 1,
+              "locked": false,
+              "definition": {
+                "component_ref": "table",
+                "output_field": "checklist"
+              },
+              "content_fingerprint": "a63189a433902d017cd217e6cee4bcc2c2835efcc76765bec9e1c0aaaa560bd4"
+            }
+          ],
+          "edges": [
+            {
+              "upstream": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "downstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "downstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "downstream": "node_f94c409355434223ae07b6e9b4fcae39",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "downstream": "action_13845ae8ff5db72f36929aa62cd61f02",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "downstream": "node_3c1ed46f8b8844028d938bc4723856d6",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_11a54e604ef1410e844da89859d882bd",
+              "downstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_3652d2da1fa74661897ef554bed616c9",
+              "downstream": "node_b9a68f66cb1240e49d93dd1dc0864963",
+              "type": "PRESENTATION",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "downstream": "action_acbcaddf6437cb308d414a3e615964d9",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_9bfc049fd60144cd8bc6393dade66fcd",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_07256a703c61496ea2da321a6cbea754",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_8d58c0eb9f3049b5b460fd1ccafcd770",
+              "downstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_5c4564f2c2db466dbb9fbf38d27cc720",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "downstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_11a54e604ef1410e844da89859d882bd",
+              "downstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_3c1ed46f8b8844028d938bc4723856d6",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_acbcaddf6437cb308d414a3e615964d9",
+              "downstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_c23057c46af541c3b21ef95ebb0e3345",
+              "downstream": "action_13845ae8ff5db72f36929aa62cd61f02",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_e22c289eaa4a497f8b4f1875b0d9fe63",
+              "downstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "downstream": "action_13845ae8ff5db72f36929aa62cd61f02",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_e22c289eaa4a497f8b4f1875b0d9fe63",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_eec530c855d94ffb979ca0289d852158",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_4cf96084c82347cc8e4db5b15650fde7",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_0604906af3854f4aaa9143578389ffb2",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_fa2f65260adb44658f4a6846df70eb87",
+              "downstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_11a54e604ef1410e844da89859d882bd",
+              "downstream": "action_13845ae8ff5db72f36929aa62cd61f02",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_0604906af3854f4aaa9143578389ffb2",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_11a54e604ef1410e844da89859d882bd",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_07256a703c61496ea2da321a6cbea754",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_f94c409355434223ae07b6e9b4fcae39",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_11a54e604ef1410e844da89859d882bd",
+              "downstream": "action_acbcaddf6437cb308d414a3e615964d9",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_b9a68f66cb1240e49d93dd1dc0864963",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "downstream": "node_4cf96084c82347cc8e4db5b15650fde7",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_11a54e604ef1410e844da89859d882bd",
+              "downstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "downstream": "action_acbcaddf6437cb308d414a3e615964d9",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_8d58c0eb9f3049b5b460fd1ccafcd770",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_eec530c855d94ffb979ca0289d852158",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "res_11a54e604ef1410e844da89859d882bd",
+              "downstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_0ef87e053abe43f49e708ec705bbee23",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_9bfc049fd60144cd8bc6393dade66fcd",
+              "downstream": "node_f94c409355434223ae07b6e9b4fcae39",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "downstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_af3d1f661c334a7c9cfb75755dab2f52",
+              "downstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_fa2f65260adb44658f4a6846df70eb87",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_3c1ed46f8b8844028d938bc4723856d6",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "downstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_acbcaddf6437cb308d414a3e615964d9",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_b9a68f66cb1240e49d93dd1dc0864963",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_4cf96084c82347cc8e4db5b15650fde7",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "downstream": "node_eec530c855d94ffb979ca0289d852158",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_13845ae8ff5db72f36929aa62cd61f02",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_3652d2da1fa74661897ef554bed616c9",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_13845ae8ff5db72f36929aa62cd61f02",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_af3d1f661c334a7c9cfb75755dab2f52",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_0ef87e053abe43f49e708ec705bbee23",
+              "downstream": "action_acbcaddf6437cb308d414a3e615964d9",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "downstream": "node_5c4564f2c2db466dbb9fbf38d27cc720",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_13845ae8ff5db72f36929aa62cd61f02",
+              "downstream": "action_caf48181a0dc0ce538469761713e7bdf",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_5c4564f2c2db466dbb9fbf38d27cc720",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "downstream": "node_3652d2da1fa74661897ef554bed616c9",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_acbcaddf6437cb308d414a3e615964d9",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+              "downstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_c23057c46af541c3b21ef95ebb0e3345",
+              "downstream": "app_562c8ce29a6765eb2203150f0de26674",
+              "type": "PACKAGED_IN",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "downstream": "node_07256a703c61496ea2da321a6cbea754",
+              "type": "DATA",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "action_22228069cc18a8b2834fb378c8181b98",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+              "downstream": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+              "type": "RULE",
+              "provenance": "DECLARED"
+            },
+            {
+              "upstream": "node_3652d2da1fa74661897ef554bed616c9",
+              "downstream": "node_4ccbd3d42c584123b5b9a31ae1247065",
+              "type": "VERIFIED_BY",
+              "provenance": "DECLARED"
+            }
+          ],
+          "unknown_dependencies": [
+            {
+              "node_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "scope": "APP",
+              "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+            }
+          ],
+          "graph_fingerprint": "f062ecf837e1bf9fb8961a290747db0570944ea55386e65235006f29e9fbb2f5"
+        },
+        "context": {
+          "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+          "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+          "authorization_revision": 1,
+          "authorized": true,
+          "resource_ids": [
+            "res_11a54e604ef1410e844da89859d882bd"
+          ],
+          "node_revisions": {
+            "goal:goal_6d2fe1d7fe2948b9b63940b2e90bf0e7": 1,
+            "source:res_11a54e604ef1410e844da89859d882bd": 1,
+            "rule:tool:resource.read": 1,
+            "rule:prompt:model.spec.requirements.v1": 1,
+            "rule:prompt:model.spec.qualifiers.v1": 1,
+            "rule:tool:spec.merge_evidence": 1,
+            "rule:tool:spec.verify_citations": 1,
+            "rule:tool:artifact.save_text": 1,
+            "rule:check:natural.spec_citations.v1": 1,
+            "rule:check:receipt.readback.v1": 1,
+            "check:receipt.readback.v1": 1,
+            "check:natural.spec_citations.v1": 1,
+            "action:read_pick": 1,
+            "action:duties_pick": 1,
+            "action:qualifiers_pick": 1,
+            "action:merge_pick": 1,
+            "action:check_pick": 1,
+            "action:save_pick": 1,
+            "artifact:resource_id": 1,
+            "artifact:hash": 1,
+            "artifact:checklist": 1,
+            "artifact:citation_status": 1,
+            "artifact:semantic_status": 1,
+            "artifact:semantic_goal_acceptance": 1,
+            "view:table:checklist": 1,
+            "manifest:app_562c8ce29a6765eb2203150f0de26674": 1
+          },
+          "locked_nodes": [],
+          "source_versions": {
+            "check:natural.spec_citations.v1": {
+              "revision": 1,
+              "content_fingerprint": "1e8bf7984a7178628cc3efc2c43295c39a992aa7a9c08f27beba63cffc68da38"
+            },
+            "check:receipt.readback.v1": {
+              "revision": 1,
+              "content_fingerprint": "71e333d703c6f66ddd38069bf08ccfe75277ee7d4591ae9ec3722224f2225a6d"
+            },
+            "goal:goal_6d2fe1d7fe2948b9b63940b2e90bf0e7": {
+              "revision": 1,
+              "content_fingerprint": "6961cb4193d6c4a75ec8fb1177f20f6112a3230a5ae7b4288b24798749792392"
+            },
+            "rule:check:natural.spec_citations.v1": {
+              "revision": 1,
+              "content_fingerprint": "4d62e8649dc9b119a7e004ec69cb67ec613948837a4dc4f1dca4216b3d29e78e"
+            },
+            "rule:check:receipt.readback.v1": {
+              "revision": 1,
+              "content_fingerprint": "af60f6a7fb225d8b064beee9381854b04b85ab0b9f7c6a9f8e66c782bf2c14e6"
+            },
+            "rule:prompt:model.spec.qualifiers.v1": {
+              "revision": 1,
+              "content_fingerprint": "30461a4e1cb2c96a5521853627e99bf94738d6cd60ed5fa27d2cc904ef87d4b2"
+            },
+            "rule:prompt:model.spec.requirements.v1": {
+              "revision": 1,
+              "content_fingerprint": "70729d3ffbcb8f55a029dc02e2322f6e096989522dee721e3f48b36589232d15"
+            },
+            "rule:tool:artifact.save_text": {
+              "revision": 1,
+              "content_fingerprint": "88e6ad29f38e8f8ca1973f582948ad786b1963de0a8536a7d75ca380d023a33a"
+            },
+            "rule:tool:resource.read": {
+              "revision": 1,
+              "content_fingerprint": "bda7d24b377f10434422e3363a676119c6b898b845c944647ff841db2a2b78ec"
+            },
+            "rule:tool:spec.merge_evidence": {
+              "revision": 1,
+              "content_fingerprint": "b61f1e90d196042d870aeed99699780235adb214747f748ae9294611bc96c232"
+            },
+            "rule:tool:spec.verify_citations": {
+              "revision": 1,
+              "content_fingerprint": "745148807e36e7eb8dec01acd337c1f6379411c529453ab827e7a325d69d9ef4"
+            },
+            "source:res_11a54e604ef1410e844da89859d882bd": {
+              "revision": 1,
+              "content_fingerprint": "5b704f34d884f7156c479e92cb455eb398d8536805e55857b78433cc465a2c6d"
+            }
+          },
+          "dependency_edges": [],
+          "unknown_dependencies": [
+            {
+              "node_id": "app_562c8ce29a6765eb2203150f0de26674",
+              "scope": "APP",
+              "reason": "Finite declarations do not certify full semantic dependency completeness; owner acceptance pending"
+            }
+          ],
+          "graph_fingerprint": "f062ecf837e1bf9fb8961a290747db0570944ea55386e65235006f29e9fbb2f5"
+        }
+      },
+      "fingerprint": "22c23d57f3ac3932f2686d68208497a3a7deece6fd28fff9ca7b1582eb60f3e4"
+    }
+  ],
+  "events": [
+    {
+      "id": "event_70843e9c55774985b60f80071af9092c",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312204.2386255,
+      "kind": "ACCEPTED",
+      "data": {
+        "input_fingerprint": "806bac6b228ff3dac7436a04d824b2db50301c67388b6bb2d98f0e3972a3c38d",
+        "goal_source": {
+          "card_id": "goal_42f1eb07575948f1ae908833ddf59a85",
+          "version": 1,
+          "fingerprint": "beecf7fba6f260017d2126dfd4cd0079c896413c256ee41636af3c4e77c3effe"
+        },
+        "application_generation": {
+          "version": "goal-natural-spec-application.v1",
+          "provider": "intern-s2",
+          "app_id": "app_49a01e802e67ce6b249ac90fe074dab7",
+          "action_id": "action_fcff80264aed2530d6fcb9b2745ef2f6",
+          "request_limit": 3,
+          "repair_limit": 1,
+          "live_request_allowance": 0,
+          "response_archive_policy": "protected-json32768.v1",
+          "app_limits": {
+            "max_requests": 2,
+            "max_tools": 4,
+            "max_repairs": 0,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          }
+        }
+      }
+    },
+    {
+      "id": "event_208ac51df6b7433d8721a57be0a6f738",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312204.3350039,
+      "kind": "CLAIMED",
+      "data": {
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_5b66663424504994815e58da542622f9",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312205.2122357,
+      "kind": "GA_WIRE_RESERVED",
+      "data": {
+        "attempt_id": "attempt_508888b7f13f467bb2f192cbcccc0db8",
+        "index": 0,
+        "fence": 1,
+        "wire": {
+          "sha256": "0f9cf814a54a7b60ccf0cc1429de62c69780def2dc7f9b7c49c518fa5d709697",
+          "bytes": 6250,
+          "characters": 6250
+        }
+      }
+    },
+    {
+      "id": "event_ba1949b18e394e6dbc1d0951433d2c7a",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312205.2130651,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_508888b7f13f467bb2f192cbcccc0db8",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_07db78c36da44713b8a42a02b531e254",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312205.404701,
+      "kind": "GA_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_508888b7f13f467bb2f192cbcccc0db8",
+        "index": 0,
+        "response_fingerprint": "dd7ac8b357194925b8352f18943e84565083b3f3622c9e194fc86ef7819e79a0",
+        "usage_fingerprint": "c20d870a6b6f6e7c108165542332582f9c909b07c8474ea977338a51d2f7eb82",
+        "raw_fingerprint": "b71bb349c6e19ce31844a2a4f7846aabdfe10d068178743dc20270e1f2228374"
+      }
+    },
+    {
+      "id": "event_f5d178b28d29435c963ebc94b5c89dde",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312205.4655173,
+      "kind": "TOOL_VERIFIED",
+      "data": {
+        "operation_id": "op_e91923beb3c54e1dacaec8f3dfa815e5",
+        "tool_ref": "resource.read",
+        "source_ref": "res_7d161c44ba04417182569dee754b203a"
+      }
+    },
+    {
+      "id": "event_ecc3b4eb49c04370be9816331ab0ada9",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312206.542187,
+      "kind": "GA_WIRE_RESERVED",
+      "data": {
+        "attempt_id": "attempt_eab841edcef74cfe96bdd5e7c1fbbda3",
+        "index": 1,
+        "fence": 1,
+        "wire": {
+          "sha256": "d0cdb16ad4a932c2031938cd629c84c4c06850e913c548ff12b2315a201316fd",
+          "bytes": 10650,
+          "characters": 10650
+        }
+      }
+    },
+    {
+      "id": "event_82c84cecea0d415cb7746bda89b7756d",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312206.543977,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_eab841edcef74cfe96bdd5e7c1fbbda3",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_1544b3099e944b0189cd0ce1a8dd653d",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312206.7348769,
+      "kind": "GA_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_eab841edcef74cfe96bdd5e7c1fbbda3",
+        "index": 1,
+        "response_fingerprint": "a0a103db2a6e811e74999d07ae3d6dde79451447f5efa3cabb084c4d856793af",
+        "usage_fingerprint": "c20d870a6b6f6e7c108165542332582f9c909b07c8474ea977338a51d2f7eb82",
+        "raw_fingerprint": "0729ba74fb628ca5f98cadaa4593b4e8cb3ddae247bac21a9e6a5953cb454fa0"
+      }
+    },
+    {
+      "id": "event_36e5c203fe0c4ac2ab50a35644a79d6f",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312206.9640148,
+      "kind": "GA_SPEC_CHECKED",
+      "data": {
+        "operation_id": "op_5b83a777086e47e29c6685397facf30c",
+        "report_fingerprint": "f8737ad7c50f5920042b32cd5ae07050ca7d3e21870eed7d98eaa04167318422"
+      }
+    },
+    {
+      "id": "event_bee586b4eeb94e1e8481ec63210f22c3",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312208.7080228,
+      "kind": "GA_WIRE_RESERVED",
+      "data": {
+        "attempt_id": "attempt_2eb2bf32d08b4ce19e5204e3aa60c4cf",
+        "index": 2,
+        "fence": 1,
+        "wire": {
+          "sha256": "1709b7222831ee17af17e933d9250038737a417849558ffe3e140af738565510",
+          "bytes": 12386,
+          "characters": 12386
+        }
+      }
+    },
+    {
+      "id": "event_ce725d1db82141a198419459917db717",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312208.708556,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_2eb2bf32d08b4ce19e5204e3aa60c4cf",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_a758ba44f35a4ff48415d01a9019e123",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312208.8891222,
+      "kind": "GA_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_2eb2bf32d08b4ce19e5204e3aa60c4cf",
+        "index": 2,
+        "response_fingerprint": "1bdace339898740e4676f2dce8672bd4f54690834bc1d3f7b65dbfb2fce91b52",
+        "usage_fingerprint": "c20d870a6b6f6e7c108165542332582f9c909b07c8474ea977338a51d2f7eb82",
+        "raw_fingerprint": "a889f139931310513355b81d46999c765d77591803193ee20d1f62a1968845fb"
+      }
+    },
+    {
+      "id": "event_28532bfce1f34e6192316aa37a836731",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312209.2737389,
+      "kind": "GA_CANDIDATE_VALIDATED",
+      "data": {
+        "attempt_id": "attempt_2eb2bf32d08b4ce19e5204e3aa60c4cf",
+        "candidate_fingerprint": "c68ac7d6fc6e93b639778812dd440c5314c66fafc8904645551a78c705754d21"
+      }
+    },
+    {
+      "id": "event_a37b218e5ac14d029809211841d97e65",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312210.5321639,
+      "kind": "STATE",
+      "data": {
+        "status": "PARTIAL",
+        "error": null
+      }
+    },
+    {
+      "id": "event_581e9c1576dc43cab8a863682d43ad50",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "created_at": 1792312216.8175576,
+      "kind": "GA_APP_CONFIRMED",
+      "data": {
+        "app_id": "app_49a01e802e67ce6b249ac90fe074dab7",
+        "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+        "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+        "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+        "runtime_id": "appruntime_21264ddfaaec48d888d6c897fccff49e",
+        "candidate_fingerprint": "c68ac7d6fc6e93b639778812dd440c5314c66fafc8904645551a78c705754d21",
+        "confirmation": {
+          "expected_version": 2,
+          "candidate_fingerprint": "c68ac7d6fc6e93b639778812dd440c5314c66fafc8904645551a78c705754d21",
+          "request_key": "confirm-spec",
+          "name": "Model chosen checklist",
+          "artifact_write_consent": "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"
+        }
+      }
+    },
+    {
+      "id": "event_da775f64807f453e8305d8719ed20c79",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312228.3094773,
+      "kind": "ACCEPTED",
+      "data": {
+        "namespace": "INTERNAL_APPRUN",
+        "app_run_id": "iapprun_3ec8b17c22e441009214d76d17f11f6b",
+        "instance_id": "iinstance_6eea7e2b5f7350d3956b5aedcd6d86d0",
+        "release_id": "irelease_6b91741fe3ad4b4fb7b33bd17fb94325",
+        "input_fingerprint": "8e33af69e943dd49b0adfdd4acb5c572ed4d668f088b2f62543c7cf52d82acc9"
+      }
+    },
+    {
+      "id": "event_77170d4c7ec641ae9e71db97528682fb",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312228.4412625,
+      "kind": "CLAIMED",
+      "data": {
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_b757380989a441e8bc9f319db7d91aa1",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312234.1842089,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "read_pick",
+        "operation_id": "op_af122059a35148f19dad6ae29d64bf1c",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_42e433f597984174a3108fefdabd2690",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312243.4740074,
+      "kind": "NS_RESERVED",
+      "data": {
+        "attempt_id": "attempt_77f83069c27c44408833a92e4b386a65",
+        "parameters_fingerprint": "01ec94cdc31af8a1d57ed8bb0f62094f5ea3668d2b0711f3586ab06a6feee835",
+        "reserved_tokens": 3990,
+        "request_model": "intern-s2",
+        "mode": "MOCK",
+        "created_at": 1792312243.4684088,
+        "operation_id": "op_722649e9d08c4440ac8e318957ee71df",
+        "step_id": "duties_pick",
+        "fence": 1,
+        "reservation_fingerprint": "ef8e2024bd9209dede5d447420fc0e27e158ecb65ed0c0a89079c37cc20912d5"
+      }
+    },
+    {
+      "id": "event_9173d1e69f12429a9365c2a7ef06ea71",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312243.4828918,
+      "kind": "NS_WIRE_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_77f83069c27c44408833a92e4b386a65",
+        "archive_fingerprint": "b8c797c751223510e1c0bb93974ab93d123ead5b87af33b77a08f0f2306739ec"
+      }
+    },
+    {
+      "id": "event_62473309ef6744ad9dd01724ee3a4db5",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312243.4839098,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_77f83069c27c44408833a92e4b386a65",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_393947e7eda34b6e97e754cb92fcb357",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312247.49399,
+      "kind": "NS_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_77f83069c27c44408833a92e4b386a65",
+        "response_fingerprint": "7c9941c064852a5263ac3e92e3495a4048868d38a65fef04d6be40f918a2f3aa",
+        "reception_fingerprint": "2a8f9459355594ce96e58b5a5e3fdcc63cd4883fd7c2210cd466cfff84a00c4c"
+      }
+    },
+    {
+      "id": "event_e98f389f20ce444497d41f41f5f39c45",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312247.5040562,
+      "kind": "NS_BODY_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_77f83069c27c44408833a92e4b386a65",
+        "archive_fingerprint": "e052825558f43a1cb00d9ab57f8b0aed8638f6d927ee51583ee801df5d655f5c"
+      }
+    },
+    {
+      "id": "event_231aac16d70b48e9afeabef464c09b91",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312252.9531982,
+      "kind": "NS_SETTLED",
+      "data": {
+        "attempt_id": "attempt_77f83069c27c44408833a92e4b386a65",
+        "attempt_fingerprint": "376a7aad9af9e611594b1cd56ba6697bfca83b5292989b4061640c7badc27ee2",
+        "operation_id": "op_722649e9d08c4440ac8e318957ee71df"
+      }
+    },
+    {
+      "id": "event_033c0d04d5dc49abb0a059188244eeef",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312252.9555774,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "duties_pick",
+        "operation_id": "op_722649e9d08c4440ac8e318957ee71df",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_586fb0aed5fd4c99889ecf1da159d5b8",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312266.3862736,
+      "kind": "NS_RESERVED",
+      "data": {
+        "attempt_id": "attempt_a6d72f608b1141938d10ef5ae20b3ded",
+        "parameters_fingerprint": "beedbd20a640de828a876a673c8d1de68da3e9986b27180e73da66356def09d3",
+        "reserved_tokens": 4024,
+        "request_model": "intern-s2",
+        "mode": "MOCK",
+        "created_at": 1792312266.382317,
+        "operation_id": "op_d05b004eb18740998dbc4b3bdf2addd2",
+        "step_id": "qualifiers_pick",
+        "fence": 1,
+        "reservation_fingerprint": "7e7225af3497f72d7183a6ca3df6f72f3df973b3c8c9f6586532f584f133b555"
+      }
+    },
+    {
+      "id": "event_b478a5a966b640879ad8e8dda8391a66",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312266.3915405,
+      "kind": "NS_WIRE_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_a6d72f608b1141938d10ef5ae20b3ded",
+        "archive_fingerprint": "7d103962c1495adf3bb1ec788b3f7425743b627414b02072a6d3e23efffd3afb"
+      }
+    },
+    {
+      "id": "event_4517540aceeb450db30566b14f74d826",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312266.39225,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_a6d72f608b1141938d10ef5ae20b3ded",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_90a29622cdf6424fb570d21c15b8835a",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312270.372738,
+      "kind": "NS_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_a6d72f608b1141938d10ef5ae20b3ded",
+        "response_fingerprint": "8b04192614a1caaef18813646cf79fac1235c11660a6e4695e268c4c4369a68d",
+        "reception_fingerprint": "3d121dd3e7f0d88f0124bd1b15ae0837a1504ab3dfb05ed98903e2da5e946f26"
+      }
+    },
+    {
+      "id": "event_26b888057b0847e281a8ba3ad3e7f9c3",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312270.383098,
+      "kind": "NS_BODY_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_a6d72f608b1141938d10ef5ae20b3ded",
+        "archive_fingerprint": "8fbaf905c1bb0483cf2cfc4173d9a8b717840b50148db15dcfdad3698b43e3a8"
+      }
+    },
+    {
+      "id": "event_30a61158ea81428a91536188c2b9eb6a",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312274.9845386,
+      "kind": "NS_SETTLED",
+      "data": {
+        "attempt_id": "attempt_a6d72f608b1141938d10ef5ae20b3ded",
+        "attempt_fingerprint": "7e25b104783f1dc275fca828988818465b6ee91f2bfa22bc1cc359b6a17a9369",
+        "operation_id": "op_d05b004eb18740998dbc4b3bdf2addd2"
+      }
+    },
+    {
+      "id": "event_b6682924a25c4999836167add6544efb",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312274.9865735,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "qualifiers_pick",
+        "operation_id": "op_d05b004eb18740998dbc4b3bdf2addd2",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_b120cbe4c2d040409014bdc32de4d9be",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312287.687287,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "merge_pick",
+        "operation_id": "op_187768bed87c430ba7b6bda0d2eb761f",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_d4e086887e31412f8c8a38f3293de0f6",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312293.0036242,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "check_pick",
+        "operation_id": "op_3b9d5b2e118348c880aa2d5fa705cbfa",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_5e68d7d259224bbe947a71cbe4e79f47",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312299.89947,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "save_pick",
+        "operation_id": "op_c1ee2452182548958bfedbfb5d6f5908",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_52c9ca3fa5314d1fa45987fb838854b1",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312299.9088364,
+      "kind": "STATE",
+      "data": {
+        "status": "SUCCEEDED",
+        "error": null
+      }
+    },
+    {
+      "id": "event_57776c38c627452891dac3fed99fcffc",
+      "run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+      "created_at": 1792312299.9091492,
+      "kind": "SPEC_COMMITTED",
+      "data": {
+        "result_version": 1,
+        "artifact_resource": "res_be5be70db2a343bfb5e82db25a52d105"
+      }
+    },
+    {
+      "id": "event_46c2023d68f3490db67ad8f731d4238d",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312338.9446168,
+      "kind": "ACCEPTED",
+      "data": {
+        "namespace": "INTERNAL_APPRUN",
+        "app_run_id": "iapprun_f001f39be1a74958bec63895ef9a6228",
+        "instance_id": "iinstance_30ea18298a240187de99de93f10cc9fa",
+        "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+        "input_fingerprint": "2172f705a5d7dca644f33cfc13e59b2f6f3aec9566ae782917e635f41d43b63f"
+      }
+    },
+    {
+      "id": "event_b2ce0831f4ca4e1e9e75e9739315d755",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312339.3273368,
+      "kind": "CLAIMED",
+      "data": {
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_5f07a98e1b43458d8189824331a988e6",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312346.9092464,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "read_pick",
+        "operation_id": "op_486b419cac4d4a64a08c1e143451f8d6",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_9e315c72001f46cb8f55788b819562cb",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312362.0993292,
+      "kind": "NS_RESERVED",
+      "data": {
+        "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+        "parameters_fingerprint": "5effd510b80a6ac35f45462ca4c325a1b30dcf81b9538ed97cb62cef7ec6369b",
+        "reserved_tokens": 3993,
+        "request_model": "intern-s2",
+        "mode": "MOCK",
+        "created_at": 1792312362.094408,
+        "operation_id": "op_bdbf2713d96a4190b67cd153a5fd9c7f",
+        "step_id": "duties_pick",
+        "fence": 1,
+        "reservation_fingerprint": "5b52d8fb71f722b5c6a186f46d510edfd0f659a4aaf5e16f60d9aa2565f0e675"
+      }
+    },
+    {
+      "id": "event_130b082370584ce2aa2d9121098113ef",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312362.105376,
+      "kind": "NS_WIRE_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+        "archive_fingerprint": "53955232ddd5149157163c2ecde84814bc2cea8d08df49fb5a255daadd58543f"
+      }
+    },
+    {
+      "id": "event_eaaa3a7d67dd4242987bbf5435723495",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312362.1072285,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_e9118d9b401743aa8e81c037688194f2",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312368.8447874,
+      "kind": "NS_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+        "response_fingerprint": "f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a",
+        "reception_fingerprint": "effcdb2ad12a4e63110e3868c44c03fde19546ec010da00404234f2109ceac68"
+      }
+    },
+    {
+      "id": "event_188b4104836143d0ac880bc9601024ac",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312368.8551311,
+      "kind": "NS_BODY_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+        "archive_fingerprint": "db22b96acfc91a28a63b1516b78901f5a906d1ed19eff10f753ad86298de0c5c"
+      }
+    },
+    {
+      "id": "event_ea26b10f329d42258aff9b0fee888995",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312379.514646,
+      "kind": "NS_SETTLED",
+      "data": {
+        "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+        "attempt_fingerprint": "048595702f7a95ed900a80f8a595e3ac363206cdc51389ccb6dc94acd34ba646",
+        "operation_id": "op_bdbf2713d96a4190b67cd153a5fd9c7f"
+      }
+    },
+    {
+      "id": "event_7cfb8ab1ea19479f9eaccb73b121399e",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312379.5242634,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "duties_pick",
+        "operation_id": "op_bdbf2713d96a4190b67cd153a5fd9c7f",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_76817e47157d4018a7c5deb35064156d",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312396.2214923,
+      "kind": "NS_RESERVED",
+      "data": {
+        "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+        "parameters_fingerprint": "3dbb0f8271dc5e1842d22391e6b8c6e935fcd9d6b6a71dae80febcdf39687597",
+        "reserved_tokens": 4027,
+        "request_model": "intern-s2",
+        "mode": "MOCK",
+        "created_at": 1792312396.2164063,
+        "operation_id": "op_79797e65870a4ffab7531f90666b1a6e",
+        "step_id": "qualifiers_pick",
+        "fence": 1,
+        "reservation_fingerprint": "eaf5b18b2cb8ae379e4bcd4aa76decc65e522371a24ea3619c8a13c5fd7e76ad"
+      }
+    },
+    {
+      "id": "event_40451f36027942a1b0ff387a9961565f",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312396.2246122,
+      "kind": "NS_WIRE_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+        "archive_fingerprint": "1d3ac7a70dea025f240e83d79029e3ca42ea218de83ede254cbacfe0b12c6960"
+      }
+    },
+    {
+      "id": "event_be60134306b8427f822a5ddc024fe776",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312396.2253497,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_6b01b65bd98f4ed49c307e438bb097df",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312402.1095629,
+      "kind": "NS_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+        "response_fingerprint": "c3cedef04d36515b546fedae451137c2d4388d493058c4c790036ca44c9a3112",
+        "reception_fingerprint": "92283f42337760f889ceb2bbfe03656566bc7d81a8a1252be722459c86efb7cd"
+      }
+    },
+    {
+      "id": "event_5e2ac107785f43adba85ad865621bbd9",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312402.1198816,
+      "kind": "NS_BODY_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+        "archive_fingerprint": "a9ee9341d8fc03369e18889940f5842ffd907a6d81bf9064fd2ff450165bac60"
+      }
+    },
+    {
+      "id": "event_91081cc3660942e58ed6d0c2a9575571",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312407.010845,
+      "kind": "NS_SETTLED",
+      "data": {
+        "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+        "attempt_fingerprint": "2bc89a042c85ebbab88ed787618a536bd342a41ff2d9123a6c9722fadd5dd6a2",
+        "operation_id": "op_79797e65870a4ffab7531f90666b1a6e"
+      }
+    },
+    {
+      "id": "event_7983e12fad254ce2b1cb2af075541eea",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312407.0135448,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "qualifiers_pick",
+        "operation_id": "op_79797e65870a4ffab7531f90666b1a6e",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_9986d3eaec0b4339aab560e24f002773",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312419.1055214,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "merge_pick",
+        "operation_id": "op_b20314f7cb294fa285e5379decd8bb2f",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_980155311c174acb866898c04a1160ba",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312425.850987,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "check_pick",
+        "operation_id": "op_bdd5e3d631274ad5905c6ae39d8f751a",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_a6467f2539434c26b1fb2d722911e207",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312433.649186,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "save_pick",
+        "operation_id": "op_27af9535427144579832ad165858ca18",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_4cf93561fb8b47baab4015d2e87a9497",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312433.655492,
+      "kind": "STATE",
+      "data": {
+        "status": "SUCCEEDED",
+        "error": null
+      }
+    },
+    {
+      "id": "event_cd4cdfac48d64892b1fcfcd640444400",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "created_at": 1792312433.6568851,
+      "kind": "SPEC_COMMITTED",
+      "data": {
+        "result_version": 1,
+        "artifact_resource": "res_8af74c310c1740d98771f48cf59ba86f"
+      }
+    },
+    {
+      "id": "event_ebad7dfca6d74223a6a7414706ae2d0a",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312513.327897,
+      "kind": "ACCEPTED",
+      "data": {
+        "namespace": "INTERNAL_APPRUN",
+        "app_run_id": "iapprun_3877ba48655a4920a4470fe2868df4da",
+        "instance_id": "iinstance_3fd03c7760d57459047025ee01c22284",
+        "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+        "input_fingerprint": "839dc8e61c93984b40c58f4889d0bc9576987f253e57a3ebf5326600acb279a5"
+      }
+    },
+    {
+      "id": "event_01f96f1f2a0f40ebae62480941886fcf",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312517.1619673,
+      "kind": "CLAIMED",
+      "data": {
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_1e269660f4f749c2bebe876f747b0eeb",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312525.8162143,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "read_pick",
+        "operation_id": "op_42c22d3e8990414d80220e56db9937f0",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_4f1b4a747fb24b85a0d080139f324996",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312548.5723796,
+      "kind": "NS_RESERVED",
+      "data": {
+        "attempt_id": "attempt_e72202f0aefe4b33b26a0e323ecc2b28",
+        "parameters_fingerprint": "abb673d1b2ba08a95dabde02733217bebcc602e2fa8e8ae13e93ca0e6259f148",
+        "reserved_tokens": 3993,
+        "request_model": "intern-s2",
+        "mode": "MOCK",
+        "created_at": 1792312548.563987,
+        "operation_id": "op_d18a3bd860d1470facc81d06120be9b9",
+        "step_id": "duties_pick",
+        "fence": 1,
+        "reservation_fingerprint": "78e90ceda1b02af879593490e60ef861c585960e1037c3c146189bf76c6852d0"
+      }
+    },
+    {
+      "id": "event_268a1baac8c74aecb6145533e9a02de6",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312548.5823255,
+      "kind": "NS_WIRE_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_e72202f0aefe4b33b26a0e323ecc2b28",
+        "archive_fingerprint": "d006c3a23b95f060b31754471a53dd90ac9031b327b7dfff46e19a632d4c533e"
+      }
+    },
+    {
+      "id": "event_4b6c13e2945e4b45ac5f1756cbeebdbb",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312548.5832887,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_e72202f0aefe4b33b26a0e323ecc2b28",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_676bcd370e234c03b0a81506a0fdbf92",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312559.0461829,
+      "kind": "NS_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_e72202f0aefe4b33b26a0e323ecc2b28",
+        "response_fingerprint": "f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a",
+        "reception_fingerprint": "a41ad11241d043e5055014e2c16f654187c9deb9fbe5659184e81acba7a99cd7"
+      }
+    },
+    {
+      "id": "event_dfb771c5cddc45e1a9c4a53f409496b5",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312559.0576067,
+      "kind": "NS_BODY_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_e72202f0aefe4b33b26a0e323ecc2b28",
+        "archive_fingerprint": "827d60d553eb7dec48442844eb2f896da91d5f2c51fbbaf58b7767830274c690"
+      }
+    },
+    {
+      "id": "event_b885171349d44c05a8b9f99c4e0b44c3",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312573.5849504,
+      "kind": "NS_SETTLED",
+      "data": {
+        "attempt_id": "attempt_e72202f0aefe4b33b26a0e323ecc2b28",
+        "attempt_fingerprint": "a4d7707000869c329de41fb646d4d9a2d198b1a01ba834a07bdb92a22bf6c39e",
+        "operation_id": "op_d18a3bd860d1470facc81d06120be9b9"
+      }
+    },
+    {
+      "id": "event_11c25517e83742c58fa46f84148a0c81",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312573.5873477,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "duties_pick",
+        "operation_id": "op_d18a3bd860d1470facc81d06120be9b9",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_c5107c17feeb44d694c968cd44950aee",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312601.3544226,
+      "kind": "NS_RESERVED",
+      "data": {
+        "attempt_id": "attempt_5364af703ac64f9ea5ef8b673b644067",
+        "parameters_fingerprint": "f3bbca5b25876cf9b24f29fbfd2d00197aeaa0eb0c0440d475271fc245518575",
+        "reserved_tokens": 4607,
+        "request_model": "intern-s2",
+        "mode": "MOCK",
+        "created_at": 1792312601.3495858,
+        "operation_id": "op_e62bfe77eb1e4a9e9b1f7026457ffc34",
+        "step_id": "qualifiers_pick",
+        "fence": 1,
+        "reservation_fingerprint": "21bf5743627acb3213e5f771d8bef01c50bf3b97d528bcee2715e06522e91388"
+      }
+    },
+    {
+      "id": "event_000298187af54f568a77a5e05b8d3675",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312601.362102,
+      "kind": "NS_WIRE_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_5364af703ac64f9ea5ef8b673b644067",
+        "archive_fingerprint": "e9aaad2012da941dba6d95df698fa963e30a321884de48f3fb2ef67715da217b"
+      }
+    },
+    {
+      "id": "event_5c4eb69d24a34a9c84c6835b9de7f2da",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312601.3629851,
+      "kind": "MODEL_RESERVED",
+      "data": {
+        "attempt_id": "attempt_5364af703ac64f9ea5ef8b673b644067",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "event_350f0f03404049cb8bee8bcdfca7beca",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312610.592505,
+      "kind": "NS_RECEIVED",
+      "data": {
+        "attempt_id": "attempt_5364af703ac64f9ea5ef8b673b644067",
+        "response_fingerprint": "c3cedef04d36515b546fedae451137c2d4388d493058c4c790036ca44c9a3112",
+        "reception_fingerprint": "7e01b46b26d9c7da24e3114b6dd5b3ced7513bf6ec1cfe106b4fc8a9177a791f"
+      }
+    },
+    {
+      "id": "event_70b77c2d3b6949f2b7b90bf97be32bcc",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312610.607996,
+      "kind": "NS_BODY_ARCHIVED",
+      "data": {
+        "attempt_id": "attempt_5364af703ac64f9ea5ef8b673b644067",
+        "archive_fingerprint": "134c7e5d80a4cec82fea2def52070936d57bffc7db6a11532a9a57071a9f95fd"
+      }
+    },
+    {
+      "id": "event_892f28ccd7c64b03bfa691aeca537566",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312630.394534,
+      "kind": "NS_SETTLED",
+      "data": {
+        "attempt_id": "attempt_5364af703ac64f9ea5ef8b673b644067",
+        "attempt_fingerprint": "7114cb268a8530ced4e4162b93723afb50d466c4dc24cc75c49e8d65803cc190",
+        "operation_id": "op_e62bfe77eb1e4a9e9b1f7026457ffc34"
+      }
+    },
+    {
+      "id": "event_f06a5ed368944136a53b9c0882c14a05",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312630.3965275,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "qualifiers_pick",
+        "operation_id": "op_e62bfe77eb1e4a9e9b1f7026457ffc34",
+        "fence": 1
+      }
+    },
+    {
+      "id": "event_f94f202750bd4e9b99a5a60b513b8cda",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312641.0870824,
+      "kind": "WORKER_LOST",
+      "data": {
+        "fence": 2
+      }
+    },
+    {
+      "id": "event_e11fe7ba886641f0a77718c3c10f823f",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312641.0897388,
+      "kind": "RECONCILED",
+      "data": {
+        "status": "QUEUED",
+        "receipts_preserved": true
+      }
+    },
+    {
+      "id": "event_07dfb1651b624edfbfb445582dfe5ac8",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312641.2999015,
+      "kind": "CLAIMED",
+      "data": {
+        "fence": 3
+      }
+    },
+    {
+      "id": "event_36daf00850c246fcabdbda4b70d0fbe3",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312650.0367033,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "merge_pick",
+        "operation_id": "op_40f743bb66b44e5b87a6cfdaee630b0e",
+        "fence": 3
+      }
+    },
+    {
+      "id": "event_b6d9dee6221f451a9ac2682511f8ff16",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312661.0158608,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "check_pick",
+        "operation_id": "op_4b1ef1f1363644aea6c3d660625f6d9b",
+        "fence": 3
+      }
+    },
+    {
+      "id": "event_74c767d51a0f4ccd89067a32f1e69de9",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312671.9379594,
+      "kind": "SPEC_STEP_VERIFIED",
+      "data": {
+        "step_id": "save_pick",
+        "operation_id": "op_6ecacbdfba364c6e88ff73007e46f819",
+        "fence": 3
+      }
+    },
+    {
+      "id": "event_3058e838fc1d4b1f87ccbfbb4192bb43",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312671.9431264,
+      "kind": "STATE",
+      "data": {
+        "status": "SUCCEEDED",
+        "error": null
+      }
+    },
+    {
+      "id": "event_4961386702e14fcf96133e26a2946a6c",
+      "run_id": "run_9baf2d307fcc4b6a85e3ff695416c8e6",
+      "created_at": 1792312671.9435003,
+      "kind": "SPEC_COMMITTED",
+      "data": {
+        "result_version": 1,
+        "artifact_resource": "res_a237e68c0390468fb4806a4963b9b68b"
+      }
+    }
+  ],
+  "goal_application_candidates": [
+    {
+      "app_id": "app_49a01e802e67ce6b249ac90fe074dab7",
+      "run_id": "run_911f1870ef18444b8273acd0146cbb34",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "candidate_fingerprint": "c68ac7d6fc6e93b639778812dd440c5314c66fafc8904645551a78c705754d21",
+      "confirmation": {
+        "expected_version": 2,
+        "candidate_fingerprint": "c68ac7d6fc6e93b639778812dd440c5314c66fafc8904645551a78c705754d21",
+        "request_key": "confirm-spec",
+        "name": "Model chosen checklist",
+        "artifact_write_consent": "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"
+      }
+    }
+  ],
+  "goal_candidate_requests": [],
+  "goal_card_versions": [
+    {
+      "card_id": "goal_42f1eb07575948f1ae908833ddf59a85",
+      "version": 1,
+      "snapshot": {
+        "schema_version": "F2-goal-card.v1",
+        "content": {
+          "title": "Operating notes",
+          "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+          "known": [],
+          "assumptions": [],
+          "unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "constraints": [
+            "Preserve the full source and uncertain relations"
+          ],
+          "acceptance_checks": [
+            "Human review of completeness and meaning"
+          ],
+          "resource_refs": [
+            "res_7d161c44ba04417182569dee754b203a"
+          ]
+        },
+        "resource_snapshots": [
+          {
+            "resource_id": "res_7d161c44ba04417182569dee754b203a",
+            "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+            "format": "txt"
+          }
+        ]
+      },
+      "fingerprint": "beecf7fba6f260017d2126dfd4cd0079c896413c256ee41636af3c4e77c3effe",
+      "created_at": 1792312204.1258955
+    },
+    {
+      "card_id": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+      "version": 1,
+      "snapshot": {
+        "schema_version": "F2-goal-card.v1",
+        "content": {
+          "title": "P-B original independent COLD Goal",
+          "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+          "known": [],
+          "assumptions": [],
+          "unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "constraints": [
+            "Preserve the full source and uncertain relations"
+          ],
+          "acceptance_checks": [
+            "Human review of completeness and meaning"
+          ],
+          "resource_refs": [
+            "res_11a54e604ef1410e844da89859d882bd"
+          ]
+        },
+        "resource_snapshots": [
+          {
+            "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+            "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "format": "txt"
+          }
+        ]
+      },
+      "fingerprint": "9b4cd471639e4f3075b31596d639f6125d3fbf9710f2fdd96f2d9e79335e356e",
+      "created_at": 1792312304.9973865
+    },
+    {
+      "card_id": "goal_f0dc80deb6244bec91efc36d015eb6dc",
+      "version": 1,
+      "snapshot": {
+        "schema_version": "F2-goal-card.v1",
+        "content": {
+          "title": "P-B new local logic explicit THIRD Goal",
+          "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+          "known": [],
+          "assumptions": [],
+          "unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "constraints": [
+            "Preserve the full source and uncertain relations"
+          ],
+          "acceptance_checks": [
+            "Human review of completeness and meaning"
+          ],
+          "resource_refs": [
+            "res_49b1b71685604f7886a5ae3f4b06ee91"
+          ]
+        },
+        "resource_snapshots": [
+          {
+            "resource_id": "res_49b1b71685604f7886a5ae3f4b06ee91",
+            "hash": "014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709",
+            "format": "txt"
+          }
+        ]
+      },
+      "fingerprint": "63befc5dfdc88269f40aef553fd9b28bf7d76ac23a680a6d45d67d6a83467bbc",
+      "created_at": 1792312443.1196947
+    }
+  ],
+  "goal_cards": [
+    {
+      "id": "goal_42f1eb07575948f1ae908833ddf59a85",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "title": "Operating notes",
+      "version": 1,
+      "fingerprint": "beecf7fba6f260017d2126dfd4cd0079c896413c256ee41636af3c4e77c3effe",
+      "created_at": 1792312204.1258955
+    },
+    {
+      "id": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "title": "P-B original independent COLD Goal",
+      "version": 1,
+      "fingerprint": "9b4cd471639e4f3075b31596d639f6125d3fbf9710f2fdd96f2d9e79335e356e",
+      "created_at": 1792312304.9973865
+    },
+    {
+      "id": "goal_f0dc80deb6244bec91efc36d015eb6dc",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "title": "P-B new local logic explicit THIRD Goal",
+      "version": 1,
+      "fingerprint": "63befc5dfdc88269f40aef553fd9b28bf7d76ac23a680a6d45d67d6a83467bbc",
+      "created_at": 1792312443.1196947
+    }
+  ],
+  "grants": [
+    {
+      "id": "grant_f97254876c8f41baab90fe9d41d2a3a4",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "tool_ref": "artifact.save_text",
+      "expires_at": 1792398604.0540907,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_3c1904eb11a6485cb81518af4acaa1e1",
+      "principal_id": "runtime_6bded5b44e7d4d91b7734021c2633804",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "tool_ref": "artifact.save_text",
+      "expires_at": 1792398604.0551596,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_cd48245dd8e94d51850c774596f9e608",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_7d161c44ba04417182569dee754b203a",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398604.0721204,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_8d11c2f06aa74c02953edcafc60cfe2b",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_7d161c44ba04417182569dee754b203a",
+      "tool_ref": "data.aggregate_csv",
+      "expires_at": 1792398604.072676,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_b27857e3f95248418f6eceb951ce8075",
+      "principal_id": "runtime_6bded5b44e7d4d91b7734021c2633804",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_7d161c44ba04417182569dee754b203a",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398604.0731628,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_2bda3cc5c81644d5bd68d9591dfd79f3",
+      "principal_id": "runtime_6bded5b44e7d4d91b7734021c2633804",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_7d161c44ba04417182569dee754b203a",
+      "tool_ref": "data.aggregate_csv",
+      "expires_at": 1792398604.0733547,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_a6511c92187242959ea38a349b01463e",
+      "principal_id": "appruntime_21264ddfaaec48d888d6c897fccff49e",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_7d161c44ba04417182569dee754b203a",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398616.81315,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_c9fafc11dced40efa45d66efe10b0ff1",
+      "principal_id": "appruntime_21264ddfaaec48d888d6c897fccff49e",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "tool_ref": "artifact.save_text",
+      "expires_at": 1792398616.8166547,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_3380f61937b243eca99df1237a412f0f",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_be5be70db2a343bfb5e82db25a52d105",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398699.5839064,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_2f4cb4d9df99408f82c9bc71ab797bf5",
+      "principal_id": "appruntime_21264ddfaaec48d888d6c897fccff49e",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_be5be70db2a343bfb5e82db25a52d105",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398699.5850558,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_fe67187f9bf244baac07e4c6e7723b46",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398704.9722884,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_56f8f8001761474e8a7e812321075523",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+      "tool_ref": "data.aggregate_csv",
+      "expires_at": 1792398704.9726558,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_aba25bb714b945a58075415ee54baaa0",
+      "principal_id": "runtime_6bded5b44e7d4d91b7734021c2633804",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398704.9728289,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_490cb1b66c78402a8cbc1e67e3c1b076",
+      "principal_id": "runtime_6bded5b44e7d4d91b7734021c2633804",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+      "tool_ref": "data.aggregate_csv",
+      "expires_at": 1792398704.9730096,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_41a33de3e5854c269caedbe356c07ed0",
+      "principal_id": "appruntime_6edd8de0f47848d5de0601b1fac06981",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398711.3511722,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_04c7ec6c98a44cc1a308e519884bd955",
+      "principal_id": "appruntime_6edd8de0f47848d5de0601b1fac06981",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "tool_ref": "artifact.save_text",
+      "expires_at": 1792398711.3517945,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_6f27bf81521e4cbf89b22d6659984aa6",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_8af74c310c1740d98771f48cf59ba86f",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398832.857178,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_93011e20f61745dfa9fbb436e7e169c4",
+      "principal_id": "appruntime_6edd8de0f47848d5de0601b1fac06981",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_8af74c310c1740d98771f48cf59ba86f",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398832.857461,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_4ca6e08ff7ee44f296ef619f98c17dbe",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_49b1b71685604f7886a5ae3f4b06ee91",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398843.0980914,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_24113084f2f240e3a415082a40dd843e",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_49b1b71685604f7886a5ae3f4b06ee91",
+      "tool_ref": "data.aggregate_csv",
+      "expires_at": 1792398843.0991066,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_d952b2b99c4b4f5895e43a42e5abd64c",
+      "principal_id": "runtime_6bded5b44e7d4d91b7734021c2633804",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_49b1b71685604f7886a5ae3f4b06ee91",
+      "tool_ref": "resource.read",
+      "expires_at": 1792398843.1003876,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_265fda56b6074664a549f9fb3351b388",
+      "principal_id": "runtime_6bded5b44e7d4d91b7734021c2633804",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_49b1b71685604f7886a5ae3f4b06ee91",
+      "tool_ref": "data.aggregate_csv",
+      "expires_at": 1792398843.1014276,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_61caf09e417e4c2093ee584e68f88b72",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_a237e68c0390468fb4806a4963b9b68b",
+      "tool_ref": "resource.read",
+      "expires_at": 1792399069.7686276,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_ad31f99b3e0a403fa1e724e0ac0fdd90",
+      "principal_id": "appruntime_6edd8de0f47848d5de0601b1fac06981",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "resource_id": "res_a237e68c0390468fb4806a4963b9b68b",
+      "tool_ref": "resource.read",
+      "expires_at": 1792399069.7693307,
+      "revision": 1,
+      "revoked": false
+    }
+  ],
+  "heartbeats": [
+    {
+      "id": "worker_5181932b8ea14fe1ab7027b39051d0e9",
+      "at": 1792312204.2502434
+    },
+    {
+      "id": "worker_a41f6e458c764b44b2ebc99a793144cc",
+      "at": 1792312293.3391352
+    },
+    {
+      "id": "worker_8a94d789f0c04bccaa62490cef8ef790",
+      "at": 1792312426.6323464
+    },
+    {
+      "id": "worker_49b588a7f9a04bc5bb9cb631f4cc04a7",
+      "at": 1792312663.3088691
+    }
+  ],
+  "internal_app_runs": [
+    {
+      "id": "iapprun_f001f39be1a74958bec63895ef9a6228",
+      "instance_id": "iinstance_30ea18298a240187de99de93f10cc9fa",
+      "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "request_key": "first-logic-original-cold",
+      "fingerprint": "2172f705a5d7dca644f33cfc13e59b2f6f3aec9566ae782917e635f41d43b63f",
+      "input": {},
+      "status": "SUCCEEDED",
+      "output": {
+        "resource_id": "res_8af74c310c1740d98771f48cf59ba86f",
+        "hash": "5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43",
+        "checklist": {
+          "check_version": "natural.spec_citations.v1",
+          "source": {
+            "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+            "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "format": "txt",
+            "revision": 1,
+            "coordinate_space": "unicode_scalar_index.v1"
+          },
+          "source_content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+          "items": [
+            {
+              "item_id": "fact_0",
+              "kind": "requirement",
+              "summary": "The garden sensor samples each hour while solar power is available.",
+              "citations": [
+                {
+                  "start": 0,
+                  "end": 67,
+                  "quote": "The garden sensor samples each hour while solar power is available."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "qualifier",
+              "kind": "condition",
+              "summary": "while solar power is available",
+              "citations": [
+                {
+                  "start": 36,
+                  "end": 66,
+                  "quote": "while solar power is available"
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_1",
+              "kind": "exception",
+              "summary": "On a rainy day it waits until noon.",
+              "citations": [
+                {
+                  "start": 68,
+                  "end": 103,
+                  "quote": "On a rainy day it waits until noon."
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_2",
+              "kind": "open_question",
+              "summary": "The winter interval has yet to be agreed.",
+              "citations": [
+                {
+                  "start": 104,
+                  "end": 145,
+                  "quote": "The winter interval has yet to be agreed."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "OPEN"
+            }
+          ],
+          "feedback": {
+            "check": "natural.spec_citations.v1",
+            "citation_status": "PASS",
+            "coverage_status": "FULL",
+            "uncovered": [],
+            "semantic_status": "UNKNOWN"
+          },
+          "human_unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "source_retention": "EXACT",
+          "semantic_goal_acceptance": "NOT_RUN",
+          "owner_acceptance": "PENDING"
+        },
+        "citation_status": "PASS",
+        "semantic_status": "UNKNOWN",
+        "semantic_goal_acceptance": "NOT_RUN"
+      },
+      "error": null,
+      "result_version": 1
+    },
+    {
+      "id": "iapprun_3877ba48655a4920a4470fe2868df4da",
+      "instance_id": "iinstance_3fd03c7760d57459047025ee01c22284",
+      "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "request_key": "27556f1f-dc06-4724-9c46-2e260d2f1dd8",
+      "fingerprint": "839dc8e61c93984b40c58f4889d0bc9576987f253e57a3ebf5326600acb279a5",
+      "input": {},
+      "status": "SUCCEEDED",
+      "output": {
+        "resource_id": "res_a237e68c0390468fb4806a4963b9b68b",
+        "hash": "5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43",
+        "checklist": {
+          "check_version": "natural.spec_citations.v1",
+          "source": {
+            "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+            "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "format": "txt",
+            "revision": 1,
+            "coordinate_space": "unicode_scalar_index.v1"
+          },
+          "source_content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+          "items": [
+            {
+              "item_id": "fact_0",
+              "kind": "requirement",
+              "summary": "The garden sensor samples each hour while solar power is available.",
+              "citations": [
+                {
+                  "start": 0,
+                  "end": 67,
+                  "quote": "The garden sensor samples each hour while solar power is available."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "qualifier",
+              "kind": "condition",
+              "summary": "while solar power is available",
+              "citations": [
+                {
+                  "start": 36,
+                  "end": 66,
+                  "quote": "while solar power is available"
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_1",
+              "kind": "exception",
+              "summary": "On a rainy day it waits until noon.",
+              "citations": [
+                {
+                  "start": 68,
+                  "end": 103,
+                  "quote": "On a rainy day it waits until noon."
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_2",
+              "kind": "open_question",
+              "summary": "The winter interval has yet to be agreed.",
+              "citations": [
+                {
+                  "start": 104,
+                  "end": 145,
+                  "quote": "The winter interval has yet to be agreed."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "OPEN"
+            }
+          ],
+          "feedback": {
+            "check": "natural.spec_citations.v1",
+            "citation_status": "PASS",
+            "coverage_status": "FULL",
+            "uncovered": [],
+            "semantic_status": "UNKNOWN"
+          },
+          "human_unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "source_retention": "EXACT",
+          "semantic_goal_acceptance": "NOT_RUN",
+          "owner_acceptance": "PENDING"
+        },
+        "citation_status": "PASS",
+        "semantic_status": "UNKNOWN",
+        "semantic_goal_acceptance": "NOT_RUN"
+      },
+      "error": null,
+      "result_version": 1
+    },
+    {
+      "id": "iapprun_3ec8b17c22e441009214d76d17f11f6b",
+      "instance_id": "iinstance_6eea7e2b5f7350d3956b5aedcd6d86d0",
+      "release_id": "irelease_6b91741fe3ad4b4fb7b33bd17fb94325",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "request_key": "first-logic-source",
+      "fingerprint": "8e33af69e943dd49b0adfdd4acb5c572ed4d668f088b2f62543c7cf52d82acc9",
+      "input": {},
+      "status": "SUCCEEDED",
+      "output": {
+        "resource_id": "res_be5be70db2a343bfb5e82db25a52d105",
+        "hash": "7e628037944baca33e00e6901ac7991920c9f5d0623b13adad8ec40fbb15fd57",
+        "checklist": {
+          "check_version": "natural.spec_citations.v1",
+          "source": {
+            "resource_id": "res_7d161c44ba04417182569dee754b203a",
+            "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+            "format": "txt",
+            "revision": 1,
+            "coordinate_space": "unicode_scalar_index.v1"
+          },
+          "source_content": "The desk lamp dims after five idle minutes when battery powered. During a software update it stays bright. The default brightness for visitors remains undecided.",
+          "items": [
+            {
+              "item_id": "fact_0",
+              "kind": "requirement",
+              "summary": "The desk lamp dims after five idle minutes when battery powered.",
+              "citations": [
+                {
+                  "start": 0,
+                  "end": 64,
+                  "quote": "The desk lamp dims after five idle minutes when battery powered."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "qualifier",
+              "kind": "condition",
+              "summary": "when battery powered",
+              "citations": [
+                {
+                  "start": 43,
+                  "end": 63,
+                  "quote": "when battery powered"
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_1",
+              "kind": "exception",
+              "summary": "During a software update it stays bright.",
+              "citations": [
+                {
+                  "start": 65,
+                  "end": 106,
+                  "quote": "During a software update it stays bright."
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_2",
+              "kind": "open_question",
+              "summary": "The default brightness for visitors remains undecided.",
+              "citations": [
+                {
+                  "start": 107,
+                  "end": 161,
+                  "quote": "The default brightness for visitors remains undecided."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "OPEN"
+            }
+          ],
+          "feedback": {
+            "check": "natural.spec_citations.v1",
+            "citation_status": "PASS",
+            "coverage_status": "FULL",
+            "uncovered": [],
+            "semantic_status": "UNKNOWN"
+          },
+          "human_unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "source_retention": "EXACT",
+          "semantic_goal_acceptance": "NOT_RUN",
+          "owner_acceptance": "PENDING"
+        },
+        "citation_status": "PASS",
+        "semantic_status": "UNKNOWN",
+        "semantic_goal_acceptance": "NOT_RUN"
+      },
+      "error": null,
+      "result_version": 1
+    }
+  ],
+  "internal_approvals": [
+    {
+      "id": "iapproval_b635583c7f6949b58637cfd87a0789ce",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "kind": "release",
+      "payload": {
+        "snapshot": {
+          "namespace": "INTERNAL_ENGINEERING_ONLY",
+          "draft": {
+            "id": "app_562c8ce29a6765eb2203150f0de26674",
+            "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+            "runtime_id": "appruntime_6edd8de0f47848d5de0601b1fac06981",
+            "candidate": {
+              "namespace": "pa-natural-spec-app.v1",
+              "manifest": {
+                "schema_version": "1.0-draft",
+                "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+                "revision": 1,
+                "origin": "task_run",
+                "goal_ref": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+                "source_run_ref": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "output_schema": {
+                  "type": "object",
+                  "properties": {
+                    "resource_id": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "hash": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "checklist": {
+                      "type": "object",
+                      "properties": {
+                        "check_version": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "resource_id": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "hash": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "txt",
+                                "md"
+                              ]
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "coordinate_space": {
+                              "type": "string",
+                              "enum": [
+                                "unicode_scalar_index.v1"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "resource_id",
+                            "hash",
+                            "format",
+                            "revision",
+                            "coordinate_space"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source_content": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "item_id": {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "condition",
+                                  "exception",
+                                  "open_question",
+                                  "requirement",
+                                  "unclassified"
+                                ]
+                              },
+                              "summary": {
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "citations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 2
+                              },
+                              "targets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "maxItems": 8
+                              },
+                              "relation_status": {
+                                "type": "string",
+                                "enum": [
+                                  "UNASSIGNED",
+                                  "MODEL_ASSERTED",
+                                  "NOT_APPLICABLE"
+                                ]
+                              },
+                              "decision_status": {
+                                "type": "string",
+                                "enum": [
+                                  "OPEN",
+                                  "NOT_APPLICABLE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "item_id",
+                              "kind",
+                              "summary",
+                              "citations",
+                              "targets",
+                              "relation_status",
+                              "decision_status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 8
+                        },
+                        "feedback": {
+                          "type": "object",
+                          "properties": {
+                            "check": {
+                              "type": "string",
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ]
+                            },
+                            "citation_status": {
+                              "type": "string",
+                              "enum": [
+                                "PASS"
+                              ]
+                            },
+                            "coverage_status": {
+                              "type": "string",
+                              "enum": [
+                                "FULL",
+                                "PARTIAL"
+                              ]
+                            },
+                            "uncovered": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2048
+                                  },
+                                  "end": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2048
+                                  },
+                                  "quote": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 32
+                            },
+                            "semantic_status": {
+                              "type": "string",
+                              "enum": [
+                                "UNKNOWN"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check",
+                            "citation_status",
+                            "coverage_status",
+                            "uncovered",
+                            "semantic_status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "human_unresolved": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          "maxItems": 16
+                        },
+                        "source_retention": {
+                          "type": "string",
+                          "enum": [
+                            "EXACT"
+                          ]
+                        },
+                        "semantic_goal_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "NOT_RUN"
+                          ]
+                        },
+                        "owner_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check_version",
+                        "source",
+                        "source_content",
+                        "items",
+                        "feedback",
+                        "human_unresolved",
+                        "source_retention",
+                        "semantic_goal_acceptance",
+                        "owner_acceptance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "citation_status": {
+                      "type": "string",
+                      "enum": [
+                        "PASS"
+                      ]
+                    },
+                    "semantic_status": {
+                      "type": "string",
+                      "enum": [
+                        "UNKNOWN"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "hash",
+                    "checklist",
+                    "citation_status",
+                    "semantic_status",
+                    "semantic_goal_acceptance"
+                  ],
+                  "additionalProperties": false
+                },
+                "action_bindings": [
+                  {
+                    "binding_id": "read_pick",
+                    "action_id": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "duties_pick",
+                    "action_id": "action_13845ae8ff5db72f36929aa62cd61f02",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "qualifiers_pick",
+                    "action_id": "action_acbcaddf6437cb308d414a3e615964d9",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "merge_pick",
+                    "action_id": "action_caf48181a0dc0ce538469761713e7bdf",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "check_pick",
+                    "action_id": "action_22228069cc18a8b2834fb378c8181b98",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "save_pick",
+                    "action_id": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+                    "revision": 1
+                  }
+                ],
+                "data_bindings": [
+                  {
+                    "binding_id": "source",
+                    "resource_ref": "res_11a54e604ef1410e844da89859d882bd"
+                  }
+                ],
+                "runtime_identity_requirements": {
+                  "mode": "user_and_app_intersection"
+                },
+                "data_schema_version": 1,
+                "workflow": [
+                  {
+                    "step_id": "read_pick",
+                    "binding_id": "read_pick",
+                    "depends_on": [],
+                    "inputs": {
+                      "resource_id": {
+                        "source": "data",
+                        "ref": "source",
+                        "field": "resource_id"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "duties_pick",
+                    "binding_id": "duties_pick",
+                    "depends_on": [
+                      "read_pick"
+                    ],
+                    "inputs": {
+                      "resource_id": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "resource_id"
+                      },
+                      "content": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "content"
+                      },
+                      "hash": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "hash"
+                      },
+                      "format": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "format"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "qualifiers_pick",
+                    "binding_id": "qualifiers_pick",
+                    "depends_on": [
+                      "read_pick"
+                    ],
+                    "inputs": {
+                      "resource_id": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "resource_id"
+                      },
+                      "content": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "content"
+                      },
+                      "hash": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "hash"
+                      },
+                      "format": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "format"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "merge_pick",
+                    "binding_id": "merge_pick",
+                    "depends_on": [
+                      "duties_pick",
+                      "qualifiers_pick"
+                    ],
+                    "inputs": {
+                      "first": {
+                        "source": "step",
+                        "ref": "duties_pick",
+                        "field": "items"
+                      },
+                      "second": {
+                        "source": "step",
+                        "ref": "qualifiers_pick",
+                        "field": "items"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "check_pick",
+                    "binding_id": "check_pick",
+                    "depends_on": [
+                      "read_pick",
+                      "merge_pick"
+                    ],
+                    "inputs": {
+                      "resource_id": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "resource_id"
+                      },
+                      "content": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "content"
+                      },
+                      "hash": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "hash"
+                      },
+                      "format": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "format"
+                      },
+                      "items": {
+                        "source": "step",
+                        "ref": "merge_pick",
+                        "field": "items"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "save_pick",
+                    "binding_id": "save_pick",
+                    "depends_on": [
+                      "check_pick"
+                    ],
+                    "inputs": {
+                      "text": {
+                        "source": "step",
+                        "ref": "check_pick",
+                        "field": "text"
+                      }
+                    }
+                  }
+                ],
+                "outputs": {
+                  "resource_id": {
+                    "source": "step",
+                    "ref": "save_pick",
+                    "field": "resource_id"
+                  },
+                  "hash": {
+                    "source": "step",
+                    "ref": "save_pick",
+                    "field": "hash"
+                  },
+                  "checklist": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "checklist"
+                  },
+                  "citation_status": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "citation_status"
+                  },
+                  "semantic_status": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "semantic_status"
+                  },
+                  "semantic_goal_acceptance": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "semantic_goal_acceptance"
+                  }
+                },
+                "views": [
+                  {
+                    "component_ref": "table",
+                    "output_field": "checklist"
+                  }
+                ],
+                "validation_suite_ref": "natural.spec_citations.v1",
+                "runtime_limits": {
+                  "max_requests": 2,
+                  "max_tools": 4,
+                  "max_repairs": 0,
+                  "max_total_tokens": 64000,
+                  "max_output_tokens": 1024,
+                  "run_seconds": 300
+                },
+                "permission_requirements": [
+                  {
+                    "tool_ref": "resource.read",
+                    "resource_ref": "res_11a54e604ef1410e844da89859d882bd"
+                  },
+                  {
+                    "tool_ref": "artifact.save_text",
+                    "resource_ref": "proj_abf59b893dfa4c75bc3b59e1fa48a48f"
+                  }
+                ],
+                "dependency_lock": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_11a54e604ef1410e844da89859d882bd",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "resource.read",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "prompt",
+                    "ref": "model.spec.requirements.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "prompt",
+                    "ref": "model.spec.qualifiers.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "spec.merge_evidence",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "spec.verify_citations",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "artifact.save_text",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "natural.spec_citations.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "receipt.readback.v1",
+                    "version": "1"
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "schema_version": "1.0-draft",
+                  "action_id": "action_382c08bc7c7ebb93d7f57e5f290580cb",
+                  "revision": 1,
+                  "input_schema": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      }
+                    },
+                    "required": [
+                      "resource_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "output_schema": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "content": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "hash": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "txt",
+                          "md"
+                        ]
+            

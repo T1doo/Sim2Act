@@ -1,0 +1,2691 @@
+                        "targets"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 8
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "check": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "citation_status": {
+                          "type": "string",
+                          "enum": [
+                            "PASS"
+                          ]
+                        },
+                        "coverage_status": {
+                          "type": "string",
+                          "enum": [
+                            "FULL",
+                            "PARTIAL"
+                          ]
+                        },
+                        "uncovered": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 32
+                        },
+                        "semantic_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check",
+                        "citation_status",
+                        "coverage_status",
+                        "uncovered",
+                        "semantic_status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "feedback"
+                  ],
+                  "additionalProperties": false
+                },
+                "executor": {
+                  "kind": "registered_tool",
+                  "ref": "spec.merge_evidence",
+                  "version": "1"
+                },
+                "allowed_tool_refs": [],
+                "dependencies": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_11a54e604ef1410e844da89859d882bd",
+                    "version": "1"
+                  }
+                ],
+                "permission_requirements": [
+                  {
+                    "tool_ref": "resource.read",
+                    "resource_ref": "res_11a54e604ef1410e844da89859d882bd"
+                  }
+                ],
+                "effect": "read",
+                "preconditions": [],
+                "postcheck_refs": [
+                  "natural.spec_citations.v1"
+                ],
+                "limits": {
+                  "max_requests": 2,
+                  "max_tools": 4,
+                  "max_repairs": 0,
+                  "max_total_tokens": 64000,
+                  "max_output_tokens": 1024,
+                  "run_seconds": 300
+                },
+                "idempotency": "read_only",
+                "reconcile_ref": "operation.lookup.v1",
+                "error_contract": [
+                  "INVALID_INPUT",
+                  "PERMISSION_DENIED",
+                  "GRANT_REVOKED",
+                  "VERIFICATION_FAILED",
+                  "OUTCOME_UNKNOWN"
+                ]
+              },
+              {
+                "schema_version": "1.0-draft",
+                "action_id": "action_22228069cc18a8b2834fb378c8181b98",
+                "revision": 1,
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "resource_id": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "content": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "hash": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "txt",
+                        "md"
+                      ]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item_id": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "condition",
+                              "exception",
+                              "open_question",
+                              "requirement",
+                              "unclassified"
+                            ]
+                          },
+                          "summary": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "citations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2048
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 2048
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end",
+                                "quote"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 2
+                          },
+                          "targets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "maxItems": 8
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "kind",
+                          "summary",
+                          "citations",
+                          "targets"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 8
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "content",
+                    "hash",
+                    "format",
+                    "items"
+                  ],
+                  "additionalProperties": false
+                },
+                "output_schema": {
+                  "type": "object",
+                  "properties": {
+                    "checklist": {
+                      "type": "object",
+                      "properties": {
+                        "check_version": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "resource_id": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "hash": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "txt",
+                                "md"
+                              ]
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "coordinate_space": {
+                              "type": "string",
+                              "enum": [
+                                "unicode_scalar_index.v1"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "resource_id",
+                            "hash",
+                            "format",
+                            "revision",
+                            "coordinate_space"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source_content": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "item_id": {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "condition",
+                                  "exception",
+                                  "open_question",
+                                  "requirement",
+                                  "unclassified"
+                                ]
+                              },
+                              "summary": {
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "citations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 2
+                              },
+                              "targets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "maxItems": 8
+                              },
+                              "relation_status": {
+                                "type": "string",
+                                "enum": [
+                                  "UNASSIGNED",
+                                  "MODEL_ASSERTED",
+                                  "NOT_APPLICABLE"
+                                ]
+                              },
+                              "decision_status": {
+                                "type": "string",
+                                "enum": [
+                                  "OPEN",
+                                  "NOT_APPLICABLE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "item_id",
+                              "kind",
+                              "summary",
+                              "citations",
+                              "targets",
+                              "relation_status",
+                              "decision_status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 8
+                        },
+                        "feedback": {
+                          "type": "object",
+                          "properties": {
+                            "check": {
+                              "type": "string",
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ]
+                            },
+                            "citation_status": {
+                              "type": "string",
+                              "enum": [
+                                "PASS"
+                              ]
+                            },
+                            "coverage_status": {
+                              "type": "string",
+                              "enum": [
+                                "FULL",
+                                "PARTIAL"
+                              ]
+                            },
+                            "uncovered": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2048
+                                  },
+                                  "end": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2048
+                                  },
+                                  "quote": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 32
+                            },
+                            "semantic_status": {
+                              "type": "string",
+                              "enum": [
+                                "UNKNOWN"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check",
+                            "citation_status",
+                            "coverage_status",
+                            "uncovered",
+                            "semantic_status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "human_unresolved": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          "maxItems": 16
+                        },
+                        "source_retention": {
+                          "type": "string",
+                          "enum": [
+                            "EXACT"
+                          ]
+                        },
+                        "semantic_goal_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "NOT_RUN"
+                          ]
+                        },
+                        "owner_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check_version",
+                        "source",
+                        "source_content",
+                        "items",
+                        "feedback",
+                        "human_unresolved",
+                        "source_retention",
+                        "semantic_goal_acceptance",
+                        "owner_acceptance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 8000
+                    },
+                    "citation_status": {
+                      "type": "string",
+                      "enum": [
+                        "PASS"
+                      ]
+                    },
+                    "semantic_status": {
+                      "type": "string",
+                      "enum": [
+                        "UNKNOWN"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "checklist",
+                    "text",
+                    "citation_status",
+                    "semantic_status",
+                    "semantic_goal_acceptance"
+                  ],
+                  "additionalProperties": false
+                },
+                "executor": {
+                  "kind": "registered_tool",
+                  "ref": "spec.verify_citations",
+                  "version": "1"
+                },
+                "allowed_tool_refs": [],
+                "dependencies": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_11a54e604ef1410e844da89859d882bd",
+                    "version": "1"
+                  }
+                ],
+                "permission_requirements": [
+                  {
+                    "tool_ref": "resource.read",
+                    "resource_ref": "res_11a54e604ef1410e844da89859d882bd"
+                  }
+                ],
+                "effect": "read",
+                "preconditions": [],
+                "postcheck_refs": [
+                  "natural.spec_citations.v1"
+                ],
+                "limits": {
+                  "max_requests": 2,
+                  "max_tools": 4,
+                  "max_repairs": 0,
+                  "max_total_tokens": 64000,
+                  "max_output_tokens": 1024,
+                  "run_seconds": 300
+                },
+                "idempotency": "read_only",
+                "reconcile_ref": "operation.lookup.v1",
+                "error_contract": [
+                  "INVALID_INPUT",
+                  "PERMISSION_DENIED",
+                  "GRANT_REVOKED",
+                  "VERIFICATION_FAILED",
+                  "OUTCOME_UNKNOWN"
+                ]
+              },
+              {
+                "schema_version": "1.0-draft",
+                "action_id": "action_593dc4587f5fc8a6f211cdcb22a7098e",
+                "revision": 1,
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 8000
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "output_schema": {
+                  "type": "object",
+                  "properties": {
+                    "resource_id": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "hash": {
+                      "type": "string",
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "hash"
+                  ],
+                  "additionalProperties": false
+                },
+                "executor": {
+                  "kind": "registered_tool",
+                  "ref": "artifact.save_text",
+                  "version": "1"
+                },
+                "allowed_tool_refs": [],
+                "dependencies": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_11a54e604ef1410e844da89859d882bd",
+                    "version": "1"
+                  }
+                ],
+                "permission_requirements": [
+                  {
+                    "tool_ref": "artifact.save_text",
+                    "resource_ref": "proj_abf59b893dfa4c75bc3b59e1fa48a48f"
+                  }
+                ],
+                "effect": "project_write",
+                "preconditions": [],
+                "postcheck_refs": [
+                  "receipt.readback.v1"
+                ],
+                "limits": {
+                  "max_requests": 2,
+                  "max_tools": 4,
+                  "max_repairs": 0,
+                  "max_total_tokens": 64000,
+                  "max_output_tokens": 1024,
+                  "run_seconds": 300
+                },
+                "idempotency": "transactional",
+                "reconcile_ref": "operation.lookup.v1",
+                "error_contract": [
+                  "INVALID_INPUT",
+                  "PERMISSION_DENIED",
+                  "GRANT_REVOKED",
+                  "VERIFICATION_FAILED",
+                  "OUTCOME_UNKNOWN"
+                ]
+              }
+            ],
+            "spec_recipe": {
+              "version": "natural-spec-recipe.v1",
+              "steps": [
+                {
+                  "step_id": "read_pick",
+                  "operator": "resource.read",
+                  "depends_on": [],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "data",
+                      "ref": "source",
+                      "field": "resource_id"
+                    }
+                  }
+                },
+                {
+                  "step_id": "duties_pick",
+                  "operator": "model.spec.requirements",
+                  "depends_on": [
+                    "read_pick"
+                  ],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "resource_id"
+                    },
+                    "content": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "content"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "hash"
+                    },
+                    "format": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "format"
+                    }
+                  }
+                },
+                {
+                  "step_id": "qualifiers_pick",
+                  "operator": "model.spec.qualifiers",
+                  "depends_on": [
+                    "read_pick"
+                  ],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "resource_id"
+                    },
+                    "content": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "content"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "hash"
+                    },
+                    "format": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "format"
+                    }
+                  }
+                },
+                {
+                  "step_id": "merge_pick",
+                  "operator": "spec.merge_evidence",
+                  "depends_on": [
+                    "duties_pick",
+                    "qualifiers_pick"
+                  ],
+                  "inputs": {
+                    "first": {
+                      "source": "step",
+                      "ref": "duties_pick",
+                      "field": "items"
+                    },
+                    "second": {
+                      "source": "step",
+                      "ref": "qualifiers_pick",
+                      "field": "items"
+                    }
+                  }
+                },
+                {
+                  "step_id": "check_pick",
+                  "operator": "spec.verify_citations",
+                  "depends_on": [
+                    "read_pick",
+                    "merge_pick"
+                  ],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "resource_id"
+                    },
+                    "content": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "content"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "hash"
+                    },
+                    "format": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "format"
+                    },
+                    "items": {
+                      "source": "step",
+                      "ref": "merge_pick",
+                      "field": "items"
+                    }
+                  }
+                },
+                {
+                  "step_id": "save_pick",
+                  "operator": "artifact.save_text",
+                  "depends_on": [
+                    "check_pick"
+                  ],
+                  "inputs": {
+                    "text": {
+                      "source": "step",
+                      "ref": "check_pick",
+                      "field": "text"
+                    }
+                  }
+                }
+              ]
+            },
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "goal": {
+              "title": "P-B original independent COLD Goal",
+              "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+              "known": [],
+              "assumptions": [],
+              "unresolved": [
+                "Human question 0",
+                "Human question 1",
+                "Human question 2",
+                "Human question 3",
+                "Human question 4",
+                "Human question 5",
+                "Human question 6",
+                "Human question 7",
+                "Human question 8",
+                "Human question 9",
+                "Human question 10",
+                "Human question 11",
+                "Human question 12",
+                "Human question 13",
+                "Human question 14",
+                "Human question 15"
+              ],
+              "constraints": [
+                "Preserve the full source and uncertain relations"
+              ],
+              "acceptance_checks": [
+                "Human review of completeness and meaning"
+              ],
+              "resource_refs": [
+                "res_11a54e604ef1410e844da89859d882bd"
+              ]
+            },
+            "model_sample_check": {
+              "check": "natural.spec_citations.v1",
+              "sample_fingerprint": "45b908babfbb5c685a4ccfdbddff437476e2c96d4d0df92650230dade7b4778e",
+              "citation_status": "PASS",
+              "semantic_goal_acceptance": "NOT_RUN",
+              "source_retention": "EXACT"
+            },
+            "spec_task": {
+              "kind": "pb_natural_spec_task.v1",
+              "source_run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+              "source_proof_fingerprint": "34fe7add98ced29ce0aae34550414eee006b69b78660b132e65e6c6e088b827a",
+              "source_recipe_fingerprint": "7dc1c8ec419a6048bd90a81726cf4c3a7f4679849d06a951dab2c54921f86e47",
+              "edited_recipe_fingerprint": "7dc1c8ec419a6048bd90a81726cf4c3a7f4679849d06a951dab2c54921f86e47",
+              "target_goal_fingerprint": "9b4cd471639e4f3075b31596d639f6125d3fbf9710f2fdd96f2d9e79335e356e"
+            }
+          },
+          "fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2"
+        },
+        "dependency_lock": [
+          {
+            "kind": "resource",
+            "ref": "res_11a54e604ef1410e844da89859d882bd",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "resource.read",
+            "version": "1"
+          },
+          {
+            "kind": "prompt",
+            "ref": "model.spec.requirements.v1",
+            "version": "1"
+          },
+          {
+            "kind": "prompt",
+            "ref": "model.spec.qualifiers.v1",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "spec.merge_evidence",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "spec.verify_citations",
+            "version": "1"
+          },
+          {
+            "kind": "tool",
+            "ref": "artifact.save_text",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "natural.spec_citations.v1",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "data_schema": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "checklist": {
+                  "type": "object",
+                  "properties": {
+                    "check_version": {
+                      "type": "string",
+                      "enum": [
+                        "natural.spec_citations.v1"
+                      ]
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "txt",
+                            "md"
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "coordinate_space": {
+                          "type": "string",
+                          "enum": [
+                            "unicode_scalar_index.v1"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "hash",
+                        "format",
+                        "revision",
+                        "coordinate_space"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "source_content": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item_id": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "condition",
+                              "exception",
+                              "open_question",
+                              "requirement",
+                              "unclassified"
+                            ]
+                          },
+                          "summary": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "citations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2048
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 2048
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end",
+                                "quote"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 2
+                          },
+                          "targets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "maxItems": 8
+                          },
+                          "relation_status": {
+                            "type": "string",
+                            "enum": [
+                              "UNASSIGNED",
+                              "MODEL_ASSERTED",
+                              "NOT_APPLICABLE"
+                            ]
+                          },
+                          "decision_status": {
+                            "type": "string",
+                            "enum": [
+                              "OPEN",
+                              "NOT_APPLICABLE"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "kind",
+                          "summary",
+                          "citations",
+                          "targets",
+                          "relation_status",
+                          "decision_status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 8
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "check": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "citation_status": {
+                          "type": "string",
+                          "enum": [
+                            "PASS"
+                          ]
+                        },
+                        "coverage_status": {
+                          "type": "string",
+                          "enum": [
+                            "FULL",
+                            "PARTIAL"
+                          ]
+                        },
+                        "uncovered": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 32
+                        },
+                        "semantic_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check",
+                        "citation_status",
+                        "coverage_status",
+                        "uncovered",
+                        "semantic_status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "human_unresolved": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "maxItems": 16
+                    },
+                    "source_retention": {
+                      "type": "string",
+                      "enum": [
+                        "EXACT"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    },
+                    "owner_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "check_version",
+                    "source",
+                    "source_content",
+                    "items",
+                    "feedback",
+                    "human_unresolved",
+                    "source_retention",
+                    "semantic_goal_acceptance",
+                    "owner_acceptance"
+                  ],
+                  "additionalProperties": false
+                },
+                "citation_status": {
+                  "type": "string",
+                  "enum": [
+                    "PASS"
+                  ]
+                },
+                "semantic_status": {
+                  "type": "string",
+                  "enum": [
+                    "UNKNOWN"
+                  ]
+                },
+                "semantic_goal_acceptance": {
+                  "type": "string",
+                  "enum": [
+                    "NOT_RUN"
+                  ]
+                }
+              },
+              "required": [
+                "resource_id",
+                "hash",
+                "checklist",
+                "citation_status",
+                "semantic_status",
+                "semantic_goal_acceptance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        "data_schema_version": 1,
+        "check_evidence": {
+          "ref": "natural.recipe_compile.v1",
+          "status": "PASS",
+          "candidate_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+          "input_fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "output_fingerprint": "4246be77d66ccaff62f1c6b03b5e9d2e06d579cc5fe3ecc38c90d89f6c361aed",
+          "plan_fingerprint": "597d2c7a9925a1f4150c61cfd11e291265841ccb508a9a20d50867465fe77e29",
+          "execution_mode": "MODEL_EXECUTION_REQUIRED_OFF_BY_DEFAULT",
+          "citation_status": "NOT_RUN",
+          "semantic_status": "UNKNOWN",
+          "semantic_goal_acceptance": "NOT_RUN"
+        },
+        "model_requests": 0,
+        "formal_publication_enabled": false
+      },
+      "fingerprint": "8f9a3e90e47d530cfda7c04ecf60332ece6ef0fe4930b8a8926d049688bae9cb"
+    },
+    "response_text": "{\"namespace\":\"INTERNAL_ENGINEERING_ONLY\",\"formal_publication_enabled\":false,\"id\":\"irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3\",\"project_id\":\"proj_abf59b893dfa4c75bc3b59e1fa48a48f\",\"principal_id\":\"user_7266476a724a42408a448e76bffedbe4\",\"approval_id\":\"iapproval_2e4baf1c65a74499bbf6a7e7967d6d2a\",\"snapshot\":{\"namespace\":\"INTERNAL_ENGINEERING_ONLY\",\"draft\":{\"id\":\"app_562c8ce29a6765eb2203150f0de26674\",\"project_id\":\"proj_abf59b893dfa4c75bc3b59e1fa48a48f\",\"runtime_id\":\"appruntime_6edd8de0f47848d5de0601b1fac06981\",\"candidate\":{\"namespace\":\"pa-natural-spec-app.v1\",\"manifest\":{\"schema_version\":\"1.0-draft\",\"app_id\":\"app_562c8ce29a6765eb2203150f0de26674\",\"revision\":1,\"origin\":\"task_run\",\"goal_ref\":\"goal_6d2fe1d7fe2948b9b63940b2e90bf0e7\",\"source_run_ref\":\"run_a37ea2d8746d42fb92d96b262e9a4d77\",\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"resource_id\",\"hash\",\"checklist\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"action_bindings\":[{\"binding_id\":\"read_pick\",\"action_id\":\"action_382c08bc7c7ebb93d7f57e5f290580cb\",\"revision\":1},{\"binding_id\":\"duties_pick\",\"action_id\":\"action_13845ae8ff5db72f36929aa62cd61f02\",\"revision\":1},{\"binding_id\":\"qualifiers_pick\",\"action_id\":\"action_acbcaddf6437cb308d414a3e615964d9\",\"revision\":1},{\"binding_id\":\"merge_pick\",\"action_id\":\"action_caf48181a0dc0ce538469761713e7bdf\",\"revision\":1},{\"binding_id\":\"check_pick\",\"action_id\":\"action_22228069cc18a8b2834fb378c8181b98\",\"revision\":1},{\"binding_id\":\"save_pick\",\"action_id\":\"action_593dc4587f5fc8a6f211cdcb22a7098e\",\"revision\":1}],\"data_bindings\":[{\"binding_id\":\"source\",\"resource_ref\":\"res_11a54e604ef1410e844da89859d882bd\"}],\"runtime_identity_requirements\":{\"mode\":\"user_and_app_intersection\"},\"data_schema_version\":1,\"workflow\":[{\"step_id\":\"read_pick\",\"binding_id\":\"read_pick\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"duties_pick\",\"binding_id\":\"duties_pick\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"qualifiers_pick\",\"binding_id\":\"qualifiers_pick\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"merge_pick\",\"binding_id\":\"merge_pick\",\"depends_on\":[\"duties_pick\",\"qualifiers_pick\"],\"inputs\":{\"first\":{\"source\":\"step\",\"ref\":\"duties_pick\",\"field\":\"items\"},\"second\":{\"source\":\"step\",\"ref\":\"qualifiers_pick\",\"field\":\"items\"}}},{\"step_id\":\"check_pick\",\"binding_id\":\"check_pick\",\"depends_on\":[\"read_pick\",\"merge_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"merge_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"binding_id\":\"save_pick\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}],\"outputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"resource_id\"},\"hash\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"hash\"},\"checklist\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"checklist\"},\"citation_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"citation_status\"},\"semantic_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_status\"},\"semantic_goal_acceptance\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_goal_acceptance\"}},\"views\":[{\"component_ref\":\"table\",\"output_field\":\"checklist\"}],\"validation_suite_ref\":\"natural.spec_citations.v1\",\"runtime_limits\":{\"max_requests\":2,\"max_tools\":4,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_11a54e604ef1410e844da89859d882bd\"},{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_abf59b893dfa4c75bc3b59e1fa48a48f\"}],\"dependency_lock\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"resource.read\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.requirements.v1\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.qualifiers.v1\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.merge_evidence\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"natural.spec_citations.v1\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"receipt.readback.v1\",\"version\":\"1\"}]},\"actions\":[{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_382c08bc7c7ebb93d7f57e5f290580cb\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"resource.read\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_11a54e604ef1410e844da89859d882bd\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":2,\"max_tools\":4,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_13845ae8ff5db72f36929aa62cd61f02\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false}},\"required\":[\"items\",\"feedback\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"bounded_agent\",\"ref\":\"model.spec.requirements\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.requirements.v1\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_11a54e604ef1410e844da89859d882bd\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":2,\"max_tools\":4,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_acbcaddf6437cb308d414a3e615964d9\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false}},\"required\":[\"items\",\"feedback\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"bounded_agent\",\"ref\":\"model.spec.qualifiers\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.qualifiers.v1\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_11a54e604ef1410e844da89859d882bd\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":2,\"max_tools\":4,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_caf48181a0dc0ce538469761713e7bdf\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"first\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8},\"second\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8}},\"required\":[\"first\",\"second\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false}},\"required\":[\"items\",\"feedback\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"spec.merge_evidence\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_11a54e604ef1410e844da89859d882bd\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":2,\"max_tools\":4,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_22228069cc18a8b2834fb378c8181b98\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\",\"items\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"text\":{\"type\":\"string\",\"maxLength\":8000},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"checklist\",\"text\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_11a54e604ef1410e844da89859d882bd\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":2,\"max_tools\":4,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_593dc4587f5fc8a6f211cdcb22a7098e\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"maxLength\":8000}},\"required\":[\"text\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\",\"hash\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_abf59b893dfa4c75bc3b59e1fa48a48f\"}],\"effect\":\"project_write\",\"preconditions\":[],\"postcheck_refs\":[\"receipt.readback.v1\"],\"limits\":{\"max_requests\":2,\"max_tools\":4,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"transactional\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]}],\"spec_recipe\":{\"version\":\"natural-spec-recipe.v1\",\"steps\":[{\"step_id\":\"read_pick\",\"operator\":\"resource.read\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"duties_pick\",\"operator\":\"model.spec.requirements\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"qualifiers_pick\",\"operator\":\"model.spec.qualifiers\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"merge_pick\",\"operator\":\"spec.merge_evidence\",\"depends_on\":[\"duties_pick\",\"qualifiers_pick\"],\"inputs\":{\"first\":{\"source\":\"step\",\"ref\":\"duties_pick\",\"field\":\"items\"},\"second\":{\"source\":\"step\",\"ref\":\"qualifiers_pick\",\"field\":\"items\"}}},{\"step_id\":\"check_pick\",\"operator\":\"spec.verify_citations\",\"depends_on\":[\"read_pick\",\"merge_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"merge_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"operator\":\"artifact.save_text\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}]},\"source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"goal\":{\"title\":\"P-B original independent COLD Goal\",\"goal\":\"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\",\"known\":[],\"assumptions\":[],\"unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"constraints\":[\"Preserve the full source and uncertain relations\"],\"acceptance_checks\":[\"Human review of completeness and meaning\"],\"resource_refs\":[\"res_11a54e604ef1410e844da89859d882bd\"]},\"model_sample_check\":{\"check\":\"natural.spec_citations.v1\",\"sample_fingerprint\":\"45b908babfbb5c685a4ccfdbddff437476e2c96d4d0df92650230dade7b4778e\",\"citation_status\":\"PASS\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"source_retention\":\"EXACT\"},\"spec_task\":{\"kind\":\"pb_natural_spec_task.v1\",\"source_run_id\":\"run_a37ea2d8746d42fb92d96b262e9a4d77\",\"source_proof_fingerprint\":\"34fe7add98ced29ce0aae34550414eee006b69b78660b132e65e6c6e088b827a\",\"source_recipe_fingerprint\":\"7dc1c8ec419a6048bd90a81726cf4c3a7f4679849d06a951dab2c54921f86e47\",\"edited_recipe_fingerprint\":\"7dc1c8ec419a6048bd90a81726cf4c3a7f4679849d06a951dab2c54921f86e47\",\"target_goal_fingerprint\":\"9b4cd471639e4f3075b31596d639f6125d3fbf9710f2fdd96f2d9e79335e356e\"}},\"fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\"},\"dependency_lock\":[{\"kind\":\"resource\",\"ref\":\"res_11a54e604ef1410e844da89859d882bd\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"resource.read\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.requirements.v1\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.qualifiers.v1\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.merge_evidence\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"natural.spec_citations.v1\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"receipt.readback.v1\",\"version\":\"1\"}],\"data_schema\":{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"resource_id\",\"hash\",\"checklist\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false}},\"required\":[\"result\"],\"additionalProperties\":false},\"data_schema_version\":1,\"check_evidence\":{\"ref\":\"natural.recipe_compile.v1\",\"status\":\"PASS\",\"candidate_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"input_fingerprint\":\"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\",\"output_fingerprint\":\"4246be77d66ccaff62f1c6b03b5e9d2e06d579cc5fe3ecc38c90d89f6c361aed\",\"plan_fingerprint\":\"597d2c7a9925a1f4150c61cfd11e291265841ccb508a9a20d50867465fe77e29\",\"execution_mode\":\"MODEL_EXECUTION_REQUIRED_OFF_BY_DEFAULT\",\"citation_status\":\"NOT_RUN\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"},\"model_requests\":0,\"formal_publication_enabled\":false},\"fingerprint\":\"8f9a3e90e47d530cfda7c04ecf60332ece6ef0fe4930b8a8926d049688bae9cb\"}",
+    "response_bytes": 32356,
+    "response_sha256": "1cadb1a3ab8cdf6eb9c1f05d99e38d51657d6326139ade6a13bdb387c190718e",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "after_check_worker": false,
+    "after_use_worker": false,
+    "cold_readonly": false
+  },
+  {
+    "rpc_id": 44,
+    "method": "GET",
+    "path": "/api/projects/proj_abf59b893dfa4c75bc3b59e1fa48a48f/resources",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": [
+      {
+        "id": "res_7d161c44ba04417182569dee754b203a",
+        "name": "neutral.txt",
+        "format": "txt",
+        "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018"
+      },
+      {
+        "id": "res_11a54e604ef1410e844da89859d882bd",
+        "name": "neutral.txt",
+        "format": "txt",
+        "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303"
+      },
+      {
+        "id": "res_49b1b71685604f7886a5ae3f4b06ee91",
+        "name": "neutral.txt",
+        "format": "txt",
+        "hash": "014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709"
+      }
+    ],
+    "response_text": "[{\"id\":\"res_7d161c44ba04417182569dee754b203a\",\"name\":\"neutral.txt\",\"format\":\"txt\",\"hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\"},{\"id\":\"res_11a54e604ef1410e844da89859d882bd\",\"name\":\"neutral.txt\",\"format\":\"txt\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\"},{\"id\":\"res_49b1b71685604f7886a5ae3f4b06ee91\",\"name\":\"neutral.txt\",\"format\":\"txt\",\"hash\":\"014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709\"}]",
+    "response_bytes": 469,
+    "response_sha256": "dff7c94c169c36bc9361c1e8ccbada7efde9a29624e1aeed7973bdc2fc56b901",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "after_check_worker": false,
+    "after_use_worker": false,
+    "cold_readonly": false
+  },
+  {
+    "rpc_id": 45,
+    "method": "GET",
+    "path": "/api/projects/proj_abf59b893dfa4c75bc3b59e1fa48a48f/goal-cards",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "items": [
+        {
+          "id": "goal_f0dc80deb6244bec91efc36d015eb6dc",
+          "title": "P-B new local logic explicit THIRD Goal",
+          "version": 1
+        },
+        {
+          "id": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+          "title": "P-B original independent COLD Goal",
+          "version": 1
+        },
+        {
+          "id": "goal_42f1eb07575948f1ae908833ddf59a85",
+          "title": "Operating notes",
+          "version": 1
+        }
+      ],
+      "state": "DRAFT"
+    },
+    "response_text": "{\"items\":[{\"id\":\"goal_f0dc80deb6244bec91efc36d015eb6dc\",\"title\":\"P-B new local logic explicit THIRD Goal\",\"version\":1},{\"id\":\"goal_6d2fe1d7fe2948b9b63940b2e90bf0e7\",\"title\":\"P-B original independent COLD Goal\",\"version\":1},{\"id\":\"goal_42f1eb07575948f1ae908833ddf59a85\",\"title\":\"Operating notes\",\"version\":1}],\"state\":\"DRAFT\"}",
+    "response_bytes": 325,
+    "response_sha256": "82d1437c017d2bfd6e568c121813ca7966e5b71fe8f0dc410ff46d3c78783017",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "after_check_worker": false,
+    "after_use_worker": false,
+    "cold_readonly": false
+  },
+  {
+    "rpc_id": 46,
+    "method": "GET",
+    "path": "/api/internal/instances/iinstance_30ea18298a240187de99de93f10cc9fa/runs/run_c0ff84e01e7148f08724747c7815e56d",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "namespace": "INTERNAL_APPRUN",
+      "formal_publication_enabled": false,
+      "id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "app_run_id": "iapprun_f001f39be1a74958bec63895ef9a6228",
+      "instance_id": "iinstance_30ea18298a240187de99de93f10cc9fa",
+      "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+      "status": "SUCCEEDED",
+      "version": 2,
+      "cancel_intent": false,
+      "result": {
+        "resource_id": "res_8af74c310c1740d98771f48cf59ba86f",
+        "hash": "5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43",
+        "checklist": {
+          "check_version": "natural.spec_citations.v1",
+          "source": {
+            "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+            "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "format": "txt",
+            "revision": 1,
+            "coordinate_space": "unicode_scalar_index.v1"
+          },
+          "source_content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+          "items": [
+            {
+              "item_id": "fact_0",
+              "kind": "requirement",
+              "summary": "The garden sensor samples each hour while solar power is available.",
+              "citations": [
+                {
+                  "start": 0,
+                  "end": 67,
+                  "quote": "The garden sensor samples each hour while solar power is available."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "qualifier",
+              "kind": "condition",
+              "summary": "while solar power is available",
+              "citations": [
+                {
+                  "start": 36,
+                  "end": 66,
+                  "quote": "while solar power is available"
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_1",
+              "kind": "exception",
+              "summary": "On a rainy day it waits until noon.",
+              "citations": [
+                {
+                  "start": 68,
+                  "end": 103,
+                  "quote": "On a rainy day it waits until noon."
+                }
+              ],
+              "targets": [
+                "fact_0"
+              ],
+              "relation_status": "MODEL_ASSERTED",
+              "decision_status": "NOT_APPLICABLE"
+            },
+            {
+              "item_id": "fact_2",
+              "kind": "open_question",
+              "summary": "The winter interval has yet to be agreed.",
+              "citations": [
+                {
+                  "start": 104,
+                  "end": 145,
+                  "quote": "The winter interval has yet to be agreed."
+                }
+              ],
+              "targets": [],
+              "relation_status": "NOT_APPLICABLE",
+              "decision_status": "OPEN"
+            }
+          ],
+          "feedback": {
+            "check": "natural.spec_citations.v1",
+            "citation_status": "PASS",
+            "coverage_status": "FULL",
+            "uncovered": [],
+            "semantic_status": "UNKNOWN"
+          },
+          "human_unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "source_retention": "EXACT",
+          "semantic_goal_acceptance": "NOT_RUN",
+          "owner_acceptance": "PENDING"
+        },
+        "citation_status": "PASS",
+        "semantic_status": "UNKNOWN",
+        "semantic_goal_acceptance": "NOT_RUN"
+      },
+      "result_version": 1,
+      "error": null,
+      "known_effects": [
+        {
+          "instance_id": "iinstance_30ea18298a240187de99de93f10cc9fa",
+          "version": 1,
+          "run_id": "iapprun_f001f39be1a74958bec63895ef9a6228",
+          "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+          "schema_version": 1,
+          "data": {
+            "result": {
+              "resource_id": "res_8af74c310c1740d98771f48cf59ba86f",
+              "hash": "5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43",
+              "checklist": {
+                "check_version": "natural.spec_citations.v1",
+                "source": {
+                  "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+                  "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+                  "format": "txt",
+                  "revision": 1,
+                  "coordinate_space": "unicode_scalar_index.v1"
+                },
+                "source_content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+                "items": [
+                  {
+                    "item_id": "fact_0",
+                    "kind": "requirement",
+                    "summary": "The garden sensor samples each hour while solar power is available.",
+                    "citations": [
+                      {
+                        "start": 0,
+                        "end": 67,
+                        "quote": "The garden sensor samples each hour while solar power is available."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "qualifier",
+                    "kind": "condition",
+                    "summary": "while solar power is available",
+                    "citations": [
+                      {
+                        "start": 36,
+                        "end": 66,
+                        "quote": "while solar power is available"
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_1",
+                    "kind": "exception",
+                    "summary": "On a rainy day it waits until noon.",
+                    "citations": [
+                      {
+                        "start": 68,
+                        "end": 103,
+                        "quote": "On a rainy day it waits until noon."
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_2",
+                    "kind": "open_question",
+                    "summary": "The winter interval has yet to be agreed.",
+                    "citations": [
+                      {
+                        "start": 104,
+                        "end": 145,
+                        "quote": "The winter interval has yet to be agreed."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "OPEN"
+                  }
+                ],
+                "feedback": {
+                  "check": "natural.spec_citations.v1",
+                  "citation_status": "PASS",
+                  "coverage_status": "FULL",
+                  "uncovered": [],
+                  "semantic_status": "UNKNOWN"
+                },
+                "human_unresolved": [
+                  "Human question 0",
+                  "Human question 1",
+                  "Human question 2",
+                  "Human question 3",
+                  "Human question 4",
+                  "Human question 5",
+                  "Human question 6",
+                  "Human question 7",
+                  "Human question 8",
+                  "Human question 9",
+                  "Human question 10",
+                  "Human question 11",
+                  "Human question 12",
+                  "Human question 13",
+                  "Human question 14",
+                  "Human question 15"
+                ],
+                "source_retention": "EXACT",
+                "semantic_goal_acceptance": "NOT_RUN",
+                "owner_acceptance": "PENDING"
+              },
+              "citation_status": "PASS",
+              "semantic_status": "UNKNOWN",
+              "semantic_goal_acceptance": "NOT_RUN"
+            }
+          },
+          "fingerprint": "3c71520552b9996281c865c6e2b14217c402982c89aae672c25f242002e89215"
+        }
+      ],
+      "events": [
+        {
+          "id": "event_46c2023d68f3490db67ad8f731d4238d",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312338.9446168,
+          "kind": "ACCEPTED",
+          "data": {
+            "namespace": "INTERNAL_APPRUN",
+            "app_run_id": "iapprun_f001f39be1a74958bec63895ef9a6228",
+            "instance_id": "iinstance_30ea18298a240187de99de93f10cc9fa",
+            "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+            "input_fingerprint": "2172f705a5d7dca644f33cfc13e59b2f6f3aec9566ae782917e635f41d43b63f"
+          }
+        },
+        {
+          "id": "event_b2ce0831f4ca4e1e9e75e9739315d755",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312339.3273368,
+          "kind": "CLAIMED",
+          "data": {
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_5f07a98e1b43458d8189824331a988e6",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312346.9092464,
+          "kind": "SPEC_STEP_VERIFIED",
+          "data": {
+            "step_id": "read_pick",
+            "operation_id": "op_486b419cac4d4a64a08c1e143451f8d6",
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_9e315c72001f46cb8f55788b819562cb",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312362.0993292,
+          "kind": "NS_RESERVED",
+          "data": {
+            "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+            "parameters_fingerprint": "5effd510b80a6ac35f45462ca4c325a1b30dcf81b9538ed97cb62cef7ec6369b",
+            "reserved_tokens": 3993,
+            "request_model": "intern-s2",
+            "mode": "MOCK",
+            "created_at": 1792312362.094408,
+            "operation_id": "op_bdbf2713d96a4190b67cd153a5fd9c7f",
+            "step_id": "duties_pick",
+            "fence": 1,
+            "reservation_fingerprint": "5b52d8fb71f722b5c6a186f46d510edfd0f659a4aaf5e16f60d9aa2565f0e675"
+          }
+        },
+        {
+          "id": "event_130b082370584ce2aa2d9121098113ef",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312362.105376,
+          "kind": "NS_WIRE_ARCHIVED",
+          "data": {
+            "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+            "archive_fingerprint": "53955232ddd5149157163c2ecde84814bc2cea8d08df49fb5a255daadd58543f"
+          }
+        },
+        {
+          "id": "event_eaaa3a7d67dd4242987bbf5435723495",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312362.1072285,
+          "kind": "MODEL_RESERVED",
+          "data": {
+            "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+            "mode": "mock"
+          }
+        },
+        {
+          "id": "event_e9118d9b401743aa8e81c037688194f2",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312368.8447874,
+          "kind": "NS_RECEIVED",
+          "data": {
+            "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+            "response_fingerprint": "f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a",
+            "reception_fingerprint": "effcdb2ad12a4e63110e3868c44c03fde19546ec010da00404234f2109ceac68"
+          }
+        },
+        {
+          "id": "event_188b4104836143d0ac880bc9601024ac",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312368.8551311,
+          "kind": "NS_BODY_ARCHIVED",
+          "data": {
+            "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+            "archive_fingerprint": "db22b96acfc91a28a63b1516b78901f5a906d1ed19eff10f753ad86298de0c5c"
+          }
+        },
+        {
+          "id": "event_ea26b10f329d42258aff9b0fee888995",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312379.514646,
+          "kind": "NS_SETTLED",
+          "data": {
+            "attempt_id": "attempt_895389edc42d451ea7aa2ac376f322b7",
+            "attempt_fingerprint": "048595702f7a95ed900a80f8a595e3ac363206cdc51389ccb6dc94acd34ba646",
+            "operation_id": "op_bdbf2713d96a4190b67cd153a5fd9c7f"
+          }
+        },
+        {
+          "id": "event_7cfb8ab1ea19479f9eaccb73b121399e",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312379.5242634,
+          "kind": "SPEC_STEP_VERIFIED",
+          "data": {
+            "step_id": "duties_pick",
+            "operation_id": "op_bdbf2713d96a4190b67cd153a5fd9c7f",
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_76817e47157d4018a7c5deb35064156d",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312396.2214923,
+          "kind": "NS_RESERVED",
+          "data": {
+            "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+            "parameters_fingerprint": "3dbb0f8271dc5e1842d22391e6b8c6e935fcd9d6b6a71dae80febcdf39687597",
+            "reserved_tokens": 4027,
+            "request_model": "intern-s2",
+            "mode": "MOCK",
+            "created_at": 1792312396.2164063,
+            "operation_id": "op_79797e65870a4ffab7531f90666b1a6e",
+            "step_id": "qualifiers_pick",
+            "fence": 1,
+            "reservation_fingerprint": "eaf5b18b2cb8ae379e4bcd4aa76decc65e522371a24ea3619c8a13c5fd7e76ad"
+          }
+        },
+        {
+          "id": "event_40451f36027942a1b0ff387a9961565f",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312396.2246122,
+          "kind": "NS_WIRE_ARCHIVED",
+          "data": {
+            "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+            "archive_fingerprint": "1d3ac7a70dea025f240e83d79029e3ca42ea218de83ede254cbacfe0b12c6960"
+          }
+        },
+        {
+          "id": "event_be60134306b8427f822a5ddc024fe776",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312396.2253497,
+          "kind": "MODEL_RESERVED",
+          "data": {
+            "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+            "mode": "mock"
+          }
+        },
+        {
+          "id": "event_6b01b65bd98f4ed49c307e438bb097df",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312402.1095629,
+          "kind": "NS_RECEIVED",
+          "data": {
+            "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+            "response_fingerprint": "c3cedef04d36515b546fedae451137c2d4388d493058c4c790036ca44c9a3112",
+            "reception_fingerprint": "92283f42337760f889ceb2bbfe03656566bc7d81a8a1252be722459c86efb7cd"
+          }
+        },
+        {
+          "id": "event_5e2ac107785f43adba85ad865621bbd9",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312402.1198816,
+          "kind": "NS_BODY_ARCHIVED",
+          "data": {
+            "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+            "archive_fingerprint": "a9ee9341d8fc03369e18889940f5842ffd907a6d81bf9064fd2ff450165bac60"
+          }
+        },
+        {
+          "id": "event_91081cc3660942e58ed6d0c2a9575571",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312407.010845,
+          "kind": "NS_SETTLED",
+          "data": {
+            "attempt_id": "attempt_b52a0c08f952478f9973eddda8eb6526",
+            "attempt_fingerprint": "2bc89a042c85ebbab88ed787618a536bd342a41ff2d9123a6c9722fadd5dd6a2",
+            "operation_id": "op_79797e65870a4ffab7531f90666b1a6e"
+          }
+        },
+        {
+          "id": "event_7983e12fad254ce2b1cb2af075541eea",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312407.0135448,
+          "kind": "SPEC_STEP_VERIFIED",
+          "data": {
+            "step_id": "qualifiers_pick",
+            "operation_id": "op_79797e65870a4ffab7531f90666b1a6e",
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_9986d3eaec0b4339aab560e24f002773",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312419.1055214,
+          "kind": "SPEC_STEP_VERIFIED",
+          "data": {
+            "step_id": "merge_pick",
+            "operation_id": "op_b20314f7cb294fa285e5379decd8bb2f",
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_980155311c174acb866898c04a1160ba",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312425.850987,
+          "kind": "SPEC_STEP_VERIFIED",
+          "data": {
+            "step_id": "check_pick",
+            "operation_id": "op_bdd5e3d631274ad5905c6ae39d8f751a",
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_a6467f2539434c26b1fb2d722911e207",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312433.649186,
+          "kind": "SPEC_STEP_VERIFIED",
+          "data": {
+            "step_id": "save_pick",
+            "operation_id": "op_27af9535427144579832ad165858ca18",
+            "fence": 1
+          }
+        },
+        {
+          "id": "event_4cf93561fb8b47baab4015d2e87a9497",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312433.655492,
+          "kind": "STATE",
+          "data": {
+            "status": "SUCCEEDED",
+            "error": null
+          }
+        },
+        {
+          "id": "event_cd4cdfac48d64892b1fcfcd640444400",
+          "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+          "created_at": 1792312433.6568851,
+          "kind": "SPEC_COMMITTED",
+          "data": {
+            "result_version": 1,
+            "artifact_resource": "res_8af74c310c1740d98771f48cf59ba86f"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "step_id": "read_pick",
+          "status": "VERIFIED",
+          "fingerprint": "5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69"
+        },
+        {
+          "step_id": "duties_pick",
+          "status": "VERIFIED",
+          "fingerprint": "9277433f2336b99e15da3edb5a879c566bc1bb1fa2f0bc55ee31c6739968cbfd"
+        },
+        {
+          "step_id": "qualifiers_pick",
+          "status": "VERIFIED",
+          "fingerprint": "b221a8a83d762d6e2e07e0f6eaecd7434c577056de979b5181f4628ee8610303"
+        },
+        {
+          "step_id": "merge_pick",
+          "status": "VERIFIED",
+          "fingerprint": "777403176b56fe12d0dac778b7944729718989891c4d44d44544f5fd069b9204"
+        },
+        {
+          "step_id": "check_pick",
+          "status": "VERIFIED",
+          "fingerprint": "e5ded4582ca8a2af9fe4396c8415f98babaf04462f558efccc195414f35efa9c"
+        },
+        {
+          "step_id": "save_pick",
+          "status": "VERIFIED",
+          "fingerprint": "f7523d0df6c33bdea1ff9744bfaca48fc22b8636b48f11459ac99e2e35295524"
+        }
+      ],
+      "semantic_status": "UNKNOWN",
+      "owner_acceptance": "PENDING",
+      "citation_status": "PASS",
+      "semantic_goal_acceptance": "NOT_RUN",
+      "markdown_view": "# 技术规范待验清单\n出处核验 PASS；含义/遗漏/关系准确性 UNKNOWN，人工验收 NOT_RUN\n\n- requirement fact\\_0: The garden sensor samples each hour while solar power is available.\n  关系 NOT_APPLICABLE；决定 NOT_APPLICABLE；目标 \n  原文[0:67]: The garden sensor samples each hour while solar power is available.\n- condition qualifier: while solar power is available\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\_0\n  原文[36:66]: while solar power is available\n- exception fact\\_1: On a rainy day it waits until noon.\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\_0\n  原文[68:103]: On a rainy day it waits until noon.\n- open\\_question fact\\_2: The winter interval has yet to be agreed.\n  关系 NOT_APPLICABLE；决定 OPEN；目标 \n  原文[104:145]: The winter interval has yet to be agreed.\n\n## 原生人工未决项\nHuman question 0\nHuman question 1\nHuman question 2\nHuman question 3\nHuman question 4\nHuman question 5\nHuman question 6\nHuman question 7\nHuman question 8\nHuman question 9\nHuman question 10\nHuman question 11\nHuman question 12\nHuman question 13\nHuman question 14\nHuman question 15\n\n## 未覆盖原文\n\n## 完整来源（保留，未推断）\nThe garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\n"
+    },
+    "response_text": "{\"namespace\":\"INTERNAL_APPRUN\",\"formal_publication_enabled\":false,\"id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"app_run_id\":\"iapprun_f001f39be1a74958bec63895ef9a6228\",\"instance_id\":\"iinstance_30ea18298a240187de99de93f10cc9fa\",\"release_id\":\"irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3\",\"status\":\"SUCCEEDED\",\"version\":2,\"cancel_intent\":false,\"result\":{\"resource_id\":\"res_8af74c310c1740d98771f48cf59ba86f\",\"hash\":\"5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43\",\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The garden sensor samples each hour while solar power is available.\",\"citations\":[{\"start\":0,\"end\":67,\"quote\":\"The garden sensor samples each hour while solar power is available.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"while solar power is available\",\"citations\":[{\"start\":36,\"end\":66,\"quote\":\"while solar power is available\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"On a rainy day it waits until noon.\",\"citations\":[{\"start\":68,\"end\":103,\"quote\":\"On a rainy day it waits until noon.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The winter interval has yet to be agreed.\",\"citations\":[{\"start\":104,\"end\":145,\"quote\":\"The winter interval has yet to be agreed.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"},\"result_version\":1,\"error\":null,\"known_effects\":[{\"instance_id\":\"iinstance_30ea18298a240187de99de93f10cc9fa\",\"version\":1,\"run_id\":\"iapprun_f001f39be1a74958bec63895ef9a6228\",\"release_id\":\"irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3\",\"schema_version\":1,\"data\":{\"result\":{\"resource_id\":\"res_8af74c310c1740d98771f48cf59ba86f\",\"hash\":\"5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43\",\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The garden sensor samples each hour while solar power is available.\",\"citations\":[{\"start\":0,\"end\":67,\"quote\":\"The garden sensor samples each hour while solar power is available.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"while solar power is available\",\"citations\":[{\"start\":36,\"end\":66,\"quote\":\"while solar power is available\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"On a rainy day it waits until noon.\",\"citations\":[{\"start\":68,\"end\":103,\"quote\":\"On a rainy day it waits until noon.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The winter interval has yet to be agreed.\",\"citations\":[{\"start\":104,\"end\":145,\"quote\":\"The winter interval has yet to be agreed.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"}},\"fingerprint\":\"3c71520552b9996281c865c6e2b14217c402982c89aae672c25f242002e89215\"}],\"events\":[{\"id\":\"event_46c2023d68f3490db67ad8f731d4238d\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312338.9446168,\"kind\":\"ACCEPTED\",\"data\":{\"namespace\":\"INTERNAL_APPRUN\",\"app_run_id\":\"iapprun_f001f39be1a74958bec63895ef9a6228\",\"instance_id\":\"iinstance_30ea18298a240187de99de93f10cc9fa\",\"release_id\":\"irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3\",\"input_fingerprint\":\"2172f705a5d7dca644f33cfc13e59b2f6f3aec9566ae782917e635f41d43b63f\"}},{\"id\":\"event_b2ce0831f4ca4e1e9e75e9739315d755\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312339.3273368,\"kind\":\"CLAIMED\",\"data\":{\"fence\":1}},{\"id\":\"event_5f07a98e1b43458d8189824331a988e6\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312346.9092464,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"read_pick\",\"operation_id\":\"op_486b419cac4d4a64a08c1e143451f8d6\",\"fence\":1}},{\"id\":\"event_9e315c72001f46cb8f55788b819562cb\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312362.0993292,\"kind\":\"NS_RESERVED\",\"data\":{\"attempt_id\":\"attempt_895389edc42d451ea7aa2ac376f322b7\",\"parameters_fingerprint\":\"5effd510b80a6ac35f45462ca4c325a1b30dcf81b9538ed97cb62cef7ec6369b\",\"reserved_tokens\":3993,\"request_model\":\"intern-s2\",\"mode\":\"MOCK\",\"created_at\":1792312362.094408,\"operation_id\":\"op_bdbf2713d96a4190b67cd153a5fd9c7f\",\"step_id\":\"duties_pick\",\"fence\":1,\"reservation_fingerprint\":\"5b52d8fb71f722b5c6a186f46d510edfd0f659a4aaf5e16f60d9aa2565f0e675\"}},{\"id\":\"event_130b082370584ce2aa2d9121098113ef\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312362.105376,\"kind\":\"NS_WIRE_ARCHIVED\",\"data\":{\"attempt_id\":\"attempt_895389edc42d451ea7aa2ac376f322b7\",\"archive_fingerprint\":\"53955232ddd5149157163c2ecde84814bc2cea8d08df49fb5a255daadd58543f\"}},{\"id\":\"event_eaaa3a7d67dd4242987bbf5435723495\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312362.1072285,\"kind\":\"MODEL_RESERVED\",\"data\":{\"attempt_id\":\"attempt_895389edc42d451ea7aa2ac376f322b7\",\"mode\":\"mock\"}},{\"id\":\"event_e9118d9b401743aa8e81c037688194f2\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312368.8447874,\"kind\":\"NS_RECEIVED\",\"data\":{\"attempt_id\":\"attempt_895389edc42d451ea7aa2ac376f322b7\",\"response_fingerprint\":\"f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a\",\"reception_fingerprint\":\"effcdb2ad12a4e63110e3868c44c03fde19546ec010da00404234f2109ceac68\"}},{\"id\":\"event_188b4104836143d0ac880bc9601024ac\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312368.8551311,\"kind\":\"NS_BODY_ARCHIVED\",\"data\":{\"attempt_id\":\"attempt_895389edc42d451ea7aa2ac376f322b7\",\"archive_fingerprint\":\"db22b96acfc91a28a63b1516b78901f5a906d1ed19eff10f753ad86298de0c5c\"}},{\"id\":\"event_ea26b10f329d42258aff9b0fee888995\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312379.514646,\"kind\":\"NS_SETTLED\",\"data\":{\"attempt_id\":\"attempt_895389edc42d451ea7aa2ac376f322b7\",\"attempt_fingerprint\":\"048595702f7a95ed900a80f8a595e3ac363206cdc51389ccb6dc94acd34ba646\",\"operation_id\":\"op_bdbf2713d96a4190b67cd153a5fd9c7f\"}},{\"id\":\"event_7cfb8ab1ea19479f9eaccb73b121399e\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312379.5242634,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"duties_pick\",\"operation_id\":\"op_bdbf2713d96a4190b67cd153a5fd9c7f\",\"fence\":1}},{\"id\":\"event_76817e47157d4018a7c5deb35064156d\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312396.2214923,\"kind\":\"NS_RESERVED\",\"data\":{\"attempt_id\":\"attempt_b52a0c08f952478f9973eddda8eb6526\",\"parameters_fingerprint\":\"3dbb0f8271dc5e1842d22391e6b8c6e935fcd9d6b6a71dae80febcdf39687597\",\"reserved_tokens\":4027,\"request_model\":\"intern-s2\",\"mode\":\"MOCK\",\"created_at\":1792312396.2164063,\"operation_id\":\"op_79797e65870a4ffab7531f90666b1a6e\",\"step_id\":\"qualifiers_pick\",\"fence\":1,\"reservation_fingerprint\":\"eaf5b18b2cb8ae379e4bcd4aa76decc65e522371a24ea3619c8a13c5fd7e76ad\"}},{\"id\":\"event_40451f36027942a1b0ff387a9961565f\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312396.2246122,\"kind\":\"NS_WIRE_ARCHIVED\",\"data\":{\"attempt_id\":\"attempt_b52a0c08f952478f9973eddda8eb6526\",\"archive_fingerprint\":\"1d3ac7a70dea025f240e83d79029e3ca42ea218de83ede254cbacfe0b12c6960\"}},{\"id\":\"event_be60134306b8427f822a5ddc024fe776\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312396.2253497,\"kind\":\"MODEL_RESERVED\",\"data\":{\"attempt_id\":\"attempt_b52a0c08f952478f9973eddda8eb6526\",\"mode\":\"mock\"}},{\"id\":\"event_6b01b65bd98f4ed49c307e438bb097df\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312402.1095629,\"kind\":\"NS_RECEIVED\",\"data\":{\"attempt_id\":\"attempt_b52a0c08f952478f9973eddda8eb6526\",\"response_fingerprint\":\"c3cedef04d36515b546fedae451137c2d4388d493058c4c790036ca44c9a3112\",\"reception_fingerprint\":\"92283f42337760f889ceb2bbfe03656566bc7d81a8a1252be722459c86efb7cd\"}},{\"id\":\"event_5e2ac107785f43adba85ad865621bbd9\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312402.1198816,\"kind\":\"NS_BODY_ARCHIVED\",\"data\":{\"attempt_id\":\"attempt_b52a0c08f952478f9973eddda8eb6526\",\"archive_fingerprint\":\"a9ee9341d8fc03369e18889940f5842ffd907a6d81bf9064fd2ff450165bac60\"}},{\"id\":\"event_91081cc3660942e58ed6d0c2a9575571\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312407.010845,\"kind\":\"NS_SETTLED\",\"data\":{\"attempt_id\":\"attempt_b52a0c08f952478f9973eddda8eb6526\",\"attempt_fingerprint\":\"2bc89a042c85ebbab88ed787618a536bd342a41ff2d9123a6c9722fadd5dd6a2\",\"operation_id\":\"op_79797e65870a4ffab7531f90666b1a6e\"}},{\"id\":\"event_7983e12fad254ce2b1cb2af075541eea\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312407.0135448,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"qualifiers_pick\",\"operation_id\":\"op_79797e65870a4ffab7531f90666b1a6e\",\"fence\":1}},{\"id\":\"event_9986d3eaec0b4339aab560e24f002773\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312419.1055214,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"merge_pick\",\"operation_id\":\"op_b20314f7cb294fa285e5379decd8bb2f\",\"fence\":1}},{\"id\":\"event_980155311c174acb866898c04a1160ba\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312425.850987,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"check_pick\",\"operation_id\":\"op_bdd5e3d631274ad5905c6ae39d8f751a\",\"fence\":1}},{\"id\":\"event_a6467f2539434c26b1fb2d722911e207\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312433.649186,\"kind\":\"SPEC_STEP_VERIFIED\",\"data\":{\"step_id\":\"save_pick\",\"operation_id\":\"op_27af9535427144579832ad165858ca18\",\"fence\":1}},{\"id\":\"event_4cf93561fb8b47baab4015d2e87a9497\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312433.655492,\"kind\":\"STATE\",\"data\":{\"status\":\"SUCCEEDED\",\"error\":null}},{\"id\":\"event_cd4cdfac48d64892b1fcfcd640444400\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"created_at\":1792312433.6568851,\"kind\":\"SPEC_COMMITTED\",\"data\":{\"result_version\":1,\"artifact_resource\":\"res_8af74c310c1740d98771f48cf59ba86f\"}}],\"steps\":[{\"step_id\":\"read_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69\"},{\"step_id\":\"duties_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"9277433f2336b99e15da3edb5a879c566bc1bb1fa2f0bc55ee31c6739968cbfd\"},{\"step_id\":\"qualifiers_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"b221a8a83d762d6e2e07e0f6eaecd7434c577056de979b5181f4628ee8610303\"},{\"step_id\":\"merge_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"777403176b56fe12d0dac778b7944729718989891c4d44d44544f5fd069b9204\"},{\"step_id\":\"check_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"e5ded4582ca8a2af9fe4396c8415f98babaf04462f558efccc195414f35efa9c\"},{\"step_id\":\"save_pick\",\"status\":\"VERIFIED\",\"fingerprint\":\"f7523d0df6c33bdea1ff9744bfaca48fc22b8636b48f11459ac99e2e35295524\"}],\"semantic_status\":\"UNKNOWN\",\"owner_acceptance\":\"PENDING\",\"citation_status\":\"PASS\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"markdown_view\":\"# 技术规范待验清单\\n出处核验 PASS；含义/遗漏/关系准确性 UNKNOWN，人工验收 NOT_RUN\\n\\n- requirement fact\\\\_0: The garden sensor samples each hour while solar power is available.\\n  关系 NOT_APPLICABLE；决定 NOT_APPLICABLE；目标 \\n  原文[0:67]: The garden sensor samples each hour while solar power is available.\\n- condition qualifier: while solar power is available\\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\\\_0\\n  原文[36:66]: while solar power is available\\n- exception fact\\\\_1: On a rainy day it waits until noon.\\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\\\_0\\n  原文[68:103]: On a rainy day it waits until noon.\\n- open\\\\_question fact\\\\_2: The winter interval has yet to be agreed.\\n  关系 NOT_APPLICABLE；决定 OPEN；目标 \\n  原文[104:145]: The winter interval has yet to be agreed.\\n\\n## 原生人工未决项\\nHuman question 0\\nHuman question 1\\nHuman question 2\\nHuman question 3\\nHuman question 4\\nHuman question 5\\nHuman question 6\\nHuman question 7\\nHuman question 8\\nHuman question 9\\nHuman question 10\\nHuman question 11\\nHuman question 12\\nHuman question 13\\nHuman question 14\\nHuman question 15\\n\\n## 未覆盖原文\\n\\n## 完整来源（保留，未推断）\\nThe garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\\n\"}",
+    "response_bytes": 14580,
+    "response_sha256": "0a332c0e9aa8338449f7f19079f94607c18420e6d0e171add60fb0a94ed2fb89",
+    "headers": {
+      "host": "testserver",
+      "accept": "*/*",
+      "accept-encoding": "gzip, deflate",
+      "connection": "keep-alive",
+      "user-agent": "testclient",
+      "authorization": "Bearer synthetic-test-A",
+      "content-type": "application/json"
+    },
+    "after_check_worker": false,
+    "after_use_worker": false,
+    "cold_readonly": false
+  },
+  {
+    "rpc_id": 47,
+    "method": "GET",
+    "path": "/api/internal/instances/iinstance_30ea18298a240187de99de93f10cc9fa/runs/run_c0ff84e01e7148f08724747c7815e56d/spec-owner-review",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "version": "owner.natural-spec.v1",
+      "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+      "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+      "instance_id": "iinstance_30ea18298a240187de99de93f10cc9fa",
+      "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+      "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+      "sequence": 0,
+      "history": [],
+      "latest": null,
+      "owner_acceptance": "PENDING",
+      "content_access": true,
+      "technical_semantic_status": "UNKNOWN",
+      "formal_publication_enabled": false,
+      "current": {
+        "version": "owner.natural-spec.v1",
+        "principal_id": "user_7266476a724a42408a448e76bffedbe4",
+        "project_id": "proj_abf59b893dfa4c75bc3b59e1fa48a48f",
+        "instance_id": "iinstance_30ea18298a240187de99de93f10cc9fa",
+        "app_id": "app_562c8ce29a6765eb2203150f0de26674",
+        "run_id": "run_c0ff84e01e7148f08724747c7815e56d",
+        "app_run_id": "iapprun_f001f39be1a74958bec63895ef9a6228",
+        "instance_revision": 1,
+        "release_id": "irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3",
+        "release_fingerprint": "8f9a3e90e47d530cfda7c04ecf60332ece6ef0fe4930b8a8926d049688bae9cb",
+        "effective_plan_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+        "source_goal": {
+          "card_id": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+          "version": 1,
+          "fingerprint": "9b4cd471639e4f3075b31596d639f6125d3fbf9710f2fdd96f2d9e79335e356e",
+          "snapshot": {
+            "schema_version": "F2-goal-card.v1",
+            "content": {
+              "title": "P-B original independent COLD Goal",
+              "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+              "known": [],
+              "assumptions": [],
+              "unresolved": [
+                "Human question 0",
+                "Human question 1",
+                "Human question 2",
+                "Human question 3",
+                "Human question 4",
+                "Human question 5",
+                "Human question 6",
+                "Human question 7",
+                "Human question 8",
+                "Human question 9",
+                "Human question 10",
+                "Human question 11",
+                "Human question 12",
+                "Human question 13",
+                "Human question 14",
+                "Human question 15"
+              ],
+              "constraints": [
+                "Preserve the full source and uncertain relations"
+              ],
+              "acceptance_checks": [
+                "Human review of completeness and meaning"
+              ],
+              "resource_refs": [
+                "res_11a54e604ef1410e844da89859d882bd"
+              ]
+            },
+            "resource_snapshots": [
+              {
+                "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+                "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+                "format": "txt"
+              }
+            ]
+          }
+        },
+        "goal": {
+          "title": "P-B original independent COLD Goal",
+          "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+          "known": [],
+          "assumptions": [],
+          "unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "constraints": [
+            "Preserve the full source and uncertain relations"
+          ],
+          "acceptance_checks": [
+            "Human review of completeness and meaning"
+          ],
+          "resource_refs": [
+            "res_11a54e604ef1410e844da89859d882bd"
+          ]
+        },
+        "items": [
+          {
+            "id": "goal",
+            "text": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist"
+          },
+          {
+            "id": "unresolved.1",
+            "text": "Human question 0"
+          },
+          {
+            "id": "unresolved.2",
+            "text": "Human question 1"
+          },
+          {
+            "id": "unresolved.3",
+            "text": "Human question 2"
+          },
+          {
+            "id": "unresolved.4",
+            "text": "Human question 3"
+          },
+          {
+            "id": "unresolved.5",
+            "text": "Human question 4"
+          },
+          {
+            "id": "unresolved.6",
+            "text": "Human question 5"
+          },
+          {
+            "id": "unresolved.7",
+            "text": "Human question 6"
+          },
+          {
+            "id": "unresolved.8",
+            "text": "Human question 7"
+          },
+          {
+            "id": "unresolved.9",
+            "text": "Human question 8"
+          },
+          {
+            "id": "unresolved.10",
+            "text": "Human question 9"
+          },
+          {
+            "id": "unresolved.11",
+            "text": "Human question 10"
+          },
+          {
+            "id": "unresolved.12",
+            "text": "Human question 11"
+          },
+          {
+            "id": "unresolved.13",
+            "text": "Human question 12"
+          },
+          {
+            "id": "unresolved.14",
+            "text": "Human question 13"
+          },
+          {
+            "id": "unresolved.15",
+            "text": "Human question 14"
+          },
+          {
+            "id": "unresolved.16",
+            "text": "Human question 15"
+          },
+          {
+            "id": "constraints.1",
+            "text": "Preserve the full source and uncertain relations"
+          },
+          {
+            "id": "acceptance_checks.1",
+            "text": "Human review of completeness and meaning"
+          },
+          {
+            "id": "source-and-result",
+            "text": "核对原文、成果的条件、例外、关系与未决项；引用 PASS 不证明语义正确"
+          }
+        ],
+        "material": {
+          "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+          "content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+          "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+          "format": "txt"
+        },
+        "result_version": 1,
+        "typed_fingerprint": "3c71520552b9996281c865c6e2b14217c402982c89aae672c25f242002e89215",
+        "output_fingerprint": "5887a90feed9968d2e7a83dad211ebe763ab1184a832620883155943852aea69",
+        "output": {
+          "resource_id": "res_8af74c310c1740d98771f48cf59ba86f",
+          "hash": "5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43",
+          "checklist": {
+            "check_version": "natural.spec_citations.v1",
+            "source": {
+              "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+              "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+              "format": "txt",
+              "revision": 1,
+              "coordinate_space": "unicode_scalar_index.v1"
+            },
+            "source_content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+            "items": [
+              {
+                "item_id": "fact_0",
+                "kind": "requirement",
+                "summary": "The garden sensor samples each hour while solar power is available.",
+                "citations": [
+                  {
+                    "start": 0,
+                    "end": 67,
+                    "quote": "The garden sensor samples each hour while solar power is available."
+                  }
+                ],
+                "targets": [],
+                "relation_status": "NOT_APPLICABLE",
+                "decision_status": "NOT_APPLICABLE"
+              },
+              {
+                "item_id": "qualifier",
+                "kind": "condition",
+                "summary": "while solar power is available",
+                "citations": [
+                  {
+                    "start": 36,
+                    "end": 66,
+                    "quote": "while solar power is available"
+                  }
+                ],
+                "targets": [
+                  "fact_0"
+                ],
+                "relation_status": "MODEL_ASSERTED",
+                "decision_status": "NOT_APPLICABLE"
+              },
+              {
+                "item_id": "fact_1",
+                "kind": "exception",
+                "summary": "On a rainy day it waits until noon.",
+                "citations": [
+                  {
+                    "start": 68,
+                    "end": 103,
+                    "quote": "On a rainy day it waits until noon."
+                  }
+                ],
+                "targets": [
+                  "fact_0"
+                ],
+                "relation_status": "MODEL_ASSERTED",
+                "decision_status": "NOT_APPLICABLE"
+              },
+              {
+                "item_id": "fact_2",
+                "kind": "open_question",
+                "summary": "The winter interval has yet to be agreed.",
+                "citations": [
+                  {
+                    "start": 104,
+                    "end": 145,
+                    "quote": "The winter interval has yet to be agreed."
+                  }
+                ],
+                "targets": [],
+                "relation_status": "NOT_APPLICABLE",
+                "decision_status": "OPEN"
+              }
+            ],
+            "feedback": {
+              "check": "natural.spec_citations.v1",
+              "citation_status": "PASS",
+              "coverage_status": "FULL",
+              "uncovered": [],
+              "semantic_status": "UNKNOWN"
+            },
+            "human_unresolved": [
+              "Human question 0",
+              "Human question 1",
+              "Human question 2",
+              "Human question 3",
+              "Human question 4",
+              "Human question 5",
+              "Human question 6",
+              "Human question 7",
+              "Human question 8",
+              "Human question 9",
+              "Human question 10",
+              "Human question 11",
+              "Human question 12",
+              "Human question 13",
+              "Human question 14",
+              "Human question 15"
+            ],
+            "source_retention": "EXACT",
+            "semantic_goal_acceptance": "NOT_RUN",
+            "owner_acceptance": "PENDING"
+          },
+          "citation_status": "PASS",
+          "semantic_status": "UNKNOWN",
+          "semantic_goal_acceptance": "NOT_RUN"
+        },
+        "actual_operations": [
+          {
+            "operation_id": "op_486b419cac4d4a64a08c1e143451f8d6",
+            "step_id": "read_pick",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+              "content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+              "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+              "format": "txt"
+            },
+            "plan_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "action_revision": 1,
+            "input_fingerprint": "3c775f9a44149fcbf6bf8bec2b0bc3c54ab8db07b21162d9bc930ce3ad8568b6",
+            "output_fingerprint": "ea85d87156f899df199f1b073730201a99dbc67d38afa9c809a414798411498d",
+            "predecessor_receipts": [],
+            "input_sources": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            },
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "natural.spec_citations.v1",
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "operation_id": "op_bdbf2713d96a4190b67cd153a5fd9c7f",
+            "step_id": "duties_pick",
+            "status": "VERIFIED",
+            "data": {
+              "items": [
+                {
+                  "item_id": "fact_0",
+                  "kind": "requirement",
+                  "summary": "The garden sensor samples each hour while solar power is available.",
+                  "citations": [
+                    {
+                      "start": 0,
+                      "end": 67,
+                      "quote": "The garden sensor samples each hour while solar power is available."
+                    }
+                  ],
+                  "targets": []
+                }
+              ],
+              "feedback": {
+                "check": "natural.spec_citations.v1",
+                "citation_status": "PASS",
+                "coverage_status": "PARTIAL",
+                "uncovered": [
+                  {
+                    "start": 67,
+                    "end": 145,
+                    "quote": " On a rainy day it waits until noon. The winter interval has yet to be agreed."
+                  }
+                ],
+                "semantic_status": "UNKNOWN"
+              }
+            },
+            "plan_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "action_revision": 1,
+            "input_fingerprint": "ea85d87156f899df199f1b073730201a99dbc67d38afa9c809a414798411498d",
+            "output_fingerprint": "16be3ad893206087d747fc1b1eeb001c42b53b043f84d4a45c9fd6b06320eb19",
+            "predecessor_receipts": [
+              "5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69"
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              }
+            },
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "natural.spec_citations.v1",
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "operation_id": "op_79797e65870a4ffab7531f90666b1a6e",
+            "step_id": "qualifiers_pick",
+            "status": "VERIFIED",
+            "data": {
+              "items": [
+                {
+                  "item_id": "qualifier",
+                  "kind": "condition",
+                  "summary": "while solar power is available",
+                  "citations": [
+                    {
+                      "start": 36,
+                      "end": 66,
+                      "quote": "while solar power is available"
+                    }
+                  ],
+                  "targets": [
+                    "fact_0"
+                  ]
+                },
+                {
+                  "item_id": "fact_1",
+                  "kind": "exception",
+                  "summary": "On a rainy day it waits until noon.",
+                  "citations": [
+                    {
+                      "start": 68,
+                      "end": 103,
+                      "quote": "On a rainy day it waits until noon."
+                    }
+                  ],
+                  "targets": [
+                    "fact_0"
+                  ]
+                },
+                {
+                  "item_id": "fact_2",
+                  "kind": "open_question",
+                  "summary": "The winter interval has yet to be agreed.",
+                  "citations": [
+                    {
+                      "start": 104,
+                      "end": 145,
+                      "quote": "The winter interval has yet to be agreed."
+                    }
+                  ],
+                  "targets": []
+                }
+              ],
+              "feedback": {
+                "check": "natural.spec_citations.v1",
+                "citation_status": "PASS",
+                "coverage_status": "PARTIAL",
+                "uncovered": [
+                  {
+                    "start": 0,
+                    "end": 36,
+                    "quote": "The garden sensor samples each hour "
+                  },
+                  {
+                    "start": 66,
+                    "end": 68,
+                    "quote": ". "
+                  }
+                ],
+                "semantic_status": "UNKNOWN"
+              }
+            },
+            "plan_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "action_revision": 1,
+            "input_fingerprint": "ea85d87156f899df199f1b073730201a99dbc67d38afa9c809a414798411498d",
+            "output_fingerprint": "7db31647fc1b129a3d9f48ce6cc1ead697423b268ff888a928161ca8a26f078b",
+            "predecessor_receipts": [
+              "5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69"
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              }
+            },
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "natural.spec_citations.v1",
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "operation_id": "op_b20314f7cb294fa285e5379decd8bb2f",
+            "step_id": "merge_pick",
+            "status": "VERIFIED",
+            "data": {
+              "items": [
+                {
+                  "item_id": "fact_0",
+                  "kind": "requirement",
+                  "summary": "The garden sensor samples each hour while solar power is available.",
+                  "citations": [
+                    {
+                      "start": 0,
+                      "end": 67,
+                      "quote": "The garden sensor samples each hour while solar power is available."
+                    }
+                  ],
+                  "targets": []
+                },
+                {
+                  "item_id": "qualifier",
+                  "kind": "condition",
+                  "summary": "while solar power is available",
+                  "citations": [
+                    {
+                      "start": 36,
+                      "end": 66,
+                      "quote": "while solar power is available"
+                    }
+                  ],
+                  "targets": [
+                    "fact_0"
+                  ]
+                },
+                {
+                  "item_id": "fact_1",
+                  "kind": "exception",
+                  "summary": "On a rainy day it waits until noon.",
+                  "citations": [
+                    {
+                      "start": 68,
+                      "end": 103,
+                      "quote": "On a rainy day it waits until noon."
+                    }
+                  ],
+                  "targets": [
+                    "fact_0"
+                  ]
+                },
+                {
+                  "item_id": "fact_2",
+                  "kind": "open_question",
+                  "summary": "The winter interval has yet to be agreed.",
+                  "citations": [
+                    {
+                      "start": 104,
+                      "end": 145,
+                      "quote": "The winter interval has yet to be agreed."
+                    }
+                  ],
+                  "targets": []
+                }
+              ],
+              "feedback": {
+                "check": "natural.spec_citations.v1",
+                "citation_status": "PASS",
+                "coverage_status": "FULL",
+                "uncovered": [],
+                "semantic_status": "UNKNOWN"
+              }
+            },
+            "plan_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "action_revision": 1,
+            "input_fingerprint": "7464282c51b9783ed5315742e400d862cefbb48216f2077af3ba43f9259f158a",
+            "output_fingerprint": "d79ffd08b4406dc42575ed96116c1d57de87f3435bb52c512e071d8b1d45825e",
+            "predecessor_receipts": [
+              "9277433f2336b99e15da3edb5a879c566bc1bb1fa2f0bc55ee31c6739968cbfd",
+              "b221a8a83d762d6e2e07e0f6eaecd7434c577056de979b5181f4628ee8610303"
+            ],
+            "input_sources": {
+              "first": {
+                "source": "step",
+                "ref": "duties_pick",
+                "field": "items"
+              },
+              "second": {
+                "source": "step",
+                "ref": "qualifiers_pick",
+                "field": "items"
+              }
+            },
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "natural.spec_citations.v1",
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "operation_id": "op_bdd5e3d631274ad5905c6ae39d8f751a",
+            "step_id": "check_pick",
+            "status": "VERIFIED",
+            "data": {
+              "checklist": {
+                "check_version": "natural.spec_citations.v1",
+                "source": {
+                  "resource_id": "res_11a54e604ef1410e844da89859d882bd",
+                  "hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+                  "format": "txt",
+                  "revision": 1,
+                  "coordinate_space": "unicode_scalar_index.v1"
+                },
+                "source_content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+                "items": [
+                  {
+                    "item_id": "fact_0",
+                    "kind": "requirement",
+                    "summary": "The garden sensor samples each hour while solar power is available.",
+                    "citations": [
+                      {
+                        "start": 0,
+                        "end": 67,
+                        "quote": "The garden sensor samples each hour while solar power is available."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "qualifier",
+                    "kind": "condition",
+                    "summary": "while solar power is available",
+                    "citations": [
+                      {
+                        "start": 36,
+                        "end": 66,
+                        "quote": "while solar power is available"
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_1",
+                    "kind": "exception",
+                    "summary": "On a rainy day it waits until noon.",
+                    "citations": [
+                      {
+                        "start": 68,
+                        "end": 103,
+                        "quote": "On a rainy day it waits until noon."
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_2",
+                    "kind": "open_question",
+                    "summary": "The winter interval has yet to be agreed.",
+                    "citations": [
+                      {
+                        "start": 104,
+                        "end": 145,
+                        "quote": "The winter interval has yet to be agreed."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "OPEN"
+                  }
+                ],
+                "feedback": {
+                  "check": "natural.spec_citations.v1",
+                  "citation_status": "PASS",
+                  "coverage_status": "FULL",
+                  "uncovered": [],
+                  "semantic_status": "UNKNOWN"
+                },
+                "human_unresolved": [
+                  "Human question 0",
+                  "Human question 1",
+                  "Human question 2",
+                  "Human question 3",
+                  "Human question 4",
+                  "Human question 5",
+                  "Human question 6",
+                  "Human question 7",
+                  "Human question 8",
+                  "Human question 9",
+                  "Human question 10",
+                  "Human question 11",
+                  "Human question 12",
+                  "Human question 13",
+                  "Human question 14",
+                  "Human question 15"
+                ],
+                "source_retention": "EXACT",
+                "semantic_goal_acceptance": "NOT_RUN",
+                "owner_acceptance": "PENDING"
+              },
+              "text": "{\"check_version\":\"natural.spec_citations.v1\",\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"semantic_status\":\"UNKNOWN\",\"uncovered\":[]},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"items\":[{\"citations\":[{\"end\":67,\"quote\":\"The garden sensor samples each hour while solar power is available.\",\"start\":0}],\"decision_status\":\"NOT_APPLICABLE\",\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"relation_status\":\"NOT_APPLICABLE\",\"summary\":\"The garden sensor samples each hour while solar power is available.\",\"targets\":[]},{\"citations\":[{\"end\":66,\"quote\":\"while solar power is available\",\"start\":36}],\"decision_status\":\"NOT_APPLICABLE\",\"item_id\":\"qualifier\",\"kind\":\"condition\",\"relation_status\":\"MODEL_ASSERTED\",\"summary\":\"while solar power is available\",\"targets\":[\"fact_0\"]},{\"citations\":[{\"end\":103,\"quote\":\"On a rainy day it waits until noon.\",\"start\":68}],\"decision_status\":\"NOT_APPLICABLE\",\"item_id\":\"fact_1\",\"kind\":\"exception\",\"relation_status\":\"MODEL_ASSERTED\",\"summary\":\"On a rainy day it waits until noon.\",\"targets\":[\"fact_0\"]},{\"citations\":[{\"end\":145,\"quote\":\"The winter interval has yet to be agreed.\",\"start\":104}],\"decision_status\":\"OPEN\",\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"relation_status\":\"NOT_APPLICABLE\",\"summary\":\"The winter interval has yet to be agreed.\",\"targets\":[]}],\"owner_acceptance\":\"PENDING\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"source\":{\"coordinate_space\":\"unicode_scalar_index.v1\",\"format\":\"txt\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"revision\":1},\"source_content\":\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\",\"source_retention\":\"EXACT\"}",
+              "citation_status": "PASS",
+              "semantic_status": "UNKNOWN",
+              "semantic_goal_acceptance": "NOT_RUN"
+            },
+            "plan_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "action_revision": 1,
+            "input_fingerprint": "532d2309336a82cf77b1047985451c1757992b177244947940e381fec9930d74",
+            "output_fingerprint": "dfd4b14c7e176c69830360ab02d0951a964e0933cbd54f85818d4398ac1f5260",
+            "predecessor_receipts": [
+              "5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69",
+              "777403176b56fe12d0dac778b7944729718989891c4d44d44544f5fd069b9204"
+            ],
+            "input_sources": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              },
+              "items": {
+                "source": "step",
+                "ref": "merge_pick",
+                "field": "items"
+              }
+            },
+            "artifact_refs": [],
+            "check_results": [
+              {
+                "check": "natural.spec_citations.v1",
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "operation_id": "op_27af9535427144579832ad165858ca18",
+            "step_id": "save_pick",
+            "status": "VERIFIED",
+            "data": {
+              "resource_id": "res_8af74c310c1740d98771f48cf59ba86f",
+              "hash": "5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43"
+            },
+            "plan_fingerprint": "664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2",
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "action_revision": 1,
+            "input_fingerprint": "003ef89a925ad97dc767c28a4ff3b81af6a0997ce0af1f949af3a32a999d1b9f",
+            "output_fingerprint": "33ec3fa549e0d948f0676cbe4440fc4e276ddf5ed3d39cbe6d93dd70cf21c180",
+            "predecessor_receipts": [
+              "e5ded4582ca8a2af9fe4396c8415f98babaf04462f558efccc195414f35efa9c"
+            ],
+            "input_sources": {
+              "text": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "text"
+              }
+            },
+            "artifact_refs": [
+              "res_8af74c310c1740d98771f48cf59ba86f"
+            ],
+            "check_results": [
+              {
+                "check": "receipt.readback.v1",
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "grant_version": "39a2e1c7f031b5eaf397c5fe761f4a39741c2778bf3061be3e39e97a58b4d79a",
+        "technical_semantic_status": "UNKNOWN",
+        "formal_publication_enabled": false
+      }
+    },
+    "response_text": "{\"version\":\"owner.natural-spec.v1\",\"principal_id\":\"user_7266476a724a42408a448e76bffedbe4\",\"project_id\":\"proj_abf59b893dfa4c75bc3b59e1fa48a48f\",\"instance_id\":\"iinstance_30ea18298a240187de99de93f10cc9fa\",\"app_id\":\"app_562c8ce29a6765eb2203150f0de26674\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"sequence\":0,\"history\":[],\"latest\":null,\"owner_acceptance\":\"PENDING\",\"content_access\":true,\"technical_semantic_status\":\"UNKNOWN\",\"formal_publication_enabled\":false,\"current\":{\"version\":\"owner.natural-spec.v1\",\"principal_id\":\"user_7266476a724a42408a448e76bffedbe4\",\"project_id\":\"proj_abf59b893dfa4c75bc3b59e1fa48a48f\",\"instance_id\":\"iinstance_30ea18298a240187de99de93f10cc9fa\",\"app_id\":\"app_562c8ce29a6765eb2203150f0de26674\",\"run_id\":\"run_c0ff84e01e7148f08724747c7815e56d\",\"app_run_id\":\"iapprun_f001f39be1a74958bec63895ef9a6228\",\"instance_revision\":1,\"release_id\":\"irelease_dc4805fac87e4ea4a8a1a6d83d0d4fe3\",\"release_fingerprint\":\"8f9a3e90e47d530cfda7c04ecf60332ece6ef0fe4930b8a8926d049688bae9cb\",\"effective_plan_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"source_goal\":{\"card_id\":\"goal_6d2fe1d7fe2948b9b63940b2e90bf0e7\",\"version\":1,\"fingerprint\":\"9b4cd471639e4f3075b31596d639f6125d3fbf9710f2fdd96f2d9e79335e356e\",\"snapshot\":{\"schema_version\":\"F2-goal-card.v1\",\"content\":{\"title\":\"P-B original independent COLD Goal\",\"goal\":\"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\",\"known\":[],\"assumptions\":[],\"unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"constraints\":[\"Preserve the full source and uncertain relations\"],\"acceptance_checks\":[\"Human review of completeness and meaning\"],\"resource_refs\":[\"res_11a54e604ef1410e844da89859d882bd\"]},\"resource_snapshots\":[{\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"format\":\"txt\"}]}},\"goal\":{\"title\":\"P-B original independent COLD Goal\",\"goal\":\"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\",\"known\":[],\"assumptions\":[],\"unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"constraints\":[\"Preserve the full source and uncertain relations\"],\"acceptance_checks\":[\"Human review of completeness and meaning\"],\"resource_refs\":[\"res_11a54e604ef1410e844da89859d882bd\"]},\"items\":[{\"id\":\"goal\",\"text\":\"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\"},{\"id\":\"unresolved.1\",\"text\":\"Human question 0\"},{\"id\":\"unresolved.2\",\"text\":\"Human question 1\"},{\"id\":\"unresolved.3\",\"text\":\"Human question 2\"},{\"id\":\"unresolved.4\",\"text\":\"Human question 3\"},{\"id\":\"unresolved.5\",\"text\":\"Human question 4\"},{\"id\":\"unresolved.6\",\"text\":\"Human question 5\"},{\"id\":\"unresolved.7\",\"text\":\"Human question 6\"},{\"id\":\"unresolved.8\",\"text\":\"Human question 7\"},{\"id\":\"unresolved.9\",\"text\":\"Human question 8\"},{\"id\":\"unresolved.10\",\"text\":\"Human question 9\"},{\"id\":\"unresolved.11\",\"text\":\"Human question 10\"},{\"id\":\"unresolved.12\",\"text\":\"Human question 11\"},{\"id\":\"unresolved.13\",\"text\":\"Human question 12\"},{\"id\":\"unresolved.14\",\"text\":\"Human question 13\"},{\"id\":\"unresolved.15\",\"text\":\"Human question 14\"},{\"id\":\"unresolved.16\",\"text\":\"Human question 15\"},{\"id\":\"constraints.1\",\"text\":\"Preserve the full source and uncertain relations\"},{\"id\":\"acceptance_checks.1\",\"text\":\"Human review of completeness and meaning\"},{\"id\":\"source-and-result\",\"text\":\"核对原文、成果的条件、例外、关系与未决项；引用 PASS 不证明语义正确\"}],\"material\":{\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"content\":\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"format\":\"txt\"},\"result_version\":1,\"typed_fingerprint\":\"3c71520552b9996281c865c6e2b14217c402982c89aae672c25f242002e89215\",\"output_fingerprint\":\"5887a90feed9968d2e7a83dad211ebe763ab1184a832620883155943852aea69\",\"output\":{\"resource_id\":\"res_8af74c310c1740d98771f48cf59ba86f\",\"hash\":\"5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43\",\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The garden sensor samples each hour while solar power is available.\",\"citations\":[{\"start\":0,\"end\":67,\"quote\":\"The garden sensor samples each hour while solar power is available.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"while solar power is available\",\"citations\":[{\"start\":36,\"end\":66,\"quote\":\"while solar power is available\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"On a rainy day it waits until noon.\",\"citations\":[{\"start\":68,\"end\":103,\"quote\":\"On a rainy day it waits until noon.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The winter interval has yet to be agreed.\",\"citations\":[{\"start\":104,\"end\":145,\"quote\":\"The winter interval has yet to be agreed.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"},\"actual_operations\":[{\"operation_id\":\"op_486b419cac4d4a64a08c1e143451f8d6\",\"step_id\":\"read_pick\",\"status\":\"VERIFIED\",\"data\":{\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"content\":\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"format\":\"txt\"},\"plan_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"action_revision\":1,\"input_fingerprint\":\"3c775f9a44149fcbf6bf8bec2b0bc3c54ab8db07b21162d9bc930ce3ad8568b6\",\"output_fingerprint\":\"ea85d87156f899df199f1b073730201a99dbc67d38afa9c809a414798411498d\",\"predecessor_receipts\":[],\"input_sources\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}},\"artifact_refs\":[],\"check_results\":[{\"check\":\"natural.spec_citations.v1\",\"status\":\"PASS\"}]},{\"operation_id\":\"op_bdbf2713d96a4190b67cd153a5fd9c7f\",\"step_id\":\"duties_pick\",\"status\":\"VERIFIED\",\"data\":{\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The garden sensor samples each hour while solar power is available.\",\"citations\":[{\"start\":0,\"end\":67,\"quote\":\"The garden sensor samples each hour while solar power is available.\"}],\"targets\":[]}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"PARTIAL\",\"uncovered\":[{\"start\":67,\"end\":145,\"quote\":\" On a rainy day it waits until noon. The winter interval has yet to be agreed.\"}],\"semantic_status\":\"UNKNOWN\"}},\"plan_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"action_revision\":1,\"input_fingerprint\":\"ea85d87156f899df199f1b073730201a99dbc67d38afa9c809a414798411498d\",\"output_fingerprint\":\"16be3ad893206087d747fc1b1eeb001c42b53b043f84d4a45c9fd6b06320eb19\",\"predecessor_receipts\":[\"5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69\"],\"input_sources\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}},\"artifact_refs\":[],\"check_results\":[{\"check\":\"natural.spec_citations.v1\",\"status\":\"PASS\"}]},{\"operation_id\":\"op_79797e65870a4ffab7531f90666b1a6e\",\"step_id\":\"qualifiers_pick\",\"status\":\"VERIFIED\",\"data\":{\"items\":[{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"while solar power is available\",\"citations\":[{\"start\":36,\"end\":66,\"quote\":\"while solar power is available\"}],\"targets\":[\"fact_0\"]},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"On a rainy day it waits until noon.\",\"citations\":[{\"start\":68,\"end\":103,\"quote\":\"On a rainy day it waits until noon.\"}],\"targets\":[\"fact_0\"]},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The winter interval has yet to be agreed.\",\"citations\":[{\"start\":104,\"end\":145,\"quote\":\"The winter interval has yet to be agreed.\"}],\"targets\":[]}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"PARTIAL\",\"uncovered\":[{\"start\":0,\"end\":36,\"quote\":\"The garden sensor samples each hour \"},{\"start\":66,\"end\":68,\"quote\":\". \"}],\"semantic_status\":\"UNKNOWN\"}},\"plan_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"action_revision\":1,\"input_fingerprint\":\"ea85d87156f899df199f1b073730201a99dbc67d38afa9c809a414798411498d\",\"output_fingerprint\":\"7db31647fc1b129a3d9f48ce6cc1ead697423b268ff888a928161ca8a26f078b\",\"predecessor_receipts\":[\"5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69\"],\"input_sources\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}},\"artifact_refs\":[],\"check_results\":[{\"check\":\"natural.spec_citations.v1\",\"status\":\"PASS\"}]},{\"operation_id\":\"op_b20314f7cb294fa285e5379decd8bb2f\",\"step_id\":\"merge_pick\",\"status\":\"VERIFIED\",\"data\":{\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The garden sensor samples each hour while solar power is available.\",\"citations\":[{\"start\":0,\"end\":67,\"quote\":\"The garden sensor samples each hour while solar power is available.\"}],\"targets\":[]},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"while solar power is available\",\"citations\":[{\"start\":36,\"end\":66,\"quote\":\"while solar power is available\"}],\"targets\":[\"fact_0\"]},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"On a rainy day it waits until noon.\",\"citations\":[{\"start\":68,\"end\":103,\"quote\":\"On a rainy day it waits until noon.\"}],\"targets\":[\"fact_0\"]},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The winter interval has yet to be agreed.\",\"citations\":[{\"start\":104,\"end\":145,\"quote\":\"The winter interval has yet to be agreed.\"}],\"targets\":[]}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"}},\"plan_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"action_revision\":1,\"input_fingerprint\":\"7464282c51b9783ed5315742e400d862cefbb48216f2077af3ba43f9259f158a\",\"output_fingerprint\":\"d79ffd08b4406dc42575ed96116c1d57de87f3435bb52c512e071d8b1d45825e\",\"predecessor_receipts\":[\"9277433f2336b99e15da3edb5a879c566bc1bb1fa2f0bc55ee31c6739968cbfd\",\"b221a8a83d762d6e2e07e0f6eaecd7434c577056de979b5181f4628ee8610303\"],\"input_sources\":{\"first\":{\"source\":\"step\",\"ref\":\"duties_pick\",\"field\":\"items\"},\"second\":{\"source\":\"step\",\"ref\":\"qualifiers_pick\",\"field\":\"items\"}},\"artifact_refs\":[],\"check_results\":[{\"check\":\"natural.spec_citations.v1\",\"status\":\"PASS\"}]},{\"operation_id\":\"op_bdd5e3d631274ad5905c6ae39d8f751a\",\"step_id\":\"check_pick\",\"status\":\"VERIFIED\",\"data\":{\"checklist\":{\"check_version\":\"natural.spec_citations.v1\",\"source\":{\"resource_id\":\"res_11a54e604ef1410e844da89859d882bd\",\"hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"format\":\"txt\",\"revision\":1,\"coordinate_space\":\"unicode_scalar_index.v1\"},\"source_content\":\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\",\"items\":[{\"item_id\":\"fact_0\",\"kind\":\"requirement\",\"summary\":\"The garden sensor samples each hour while solar power is available.\",\"citations\":[{\"start\":0,\"end\":67,\"quote\":\"The garden sensor samples each hour while solar power is available.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"qualifier\",\"kind\":\"condition\",\"summary\":\"while solar power is available\",\"citations\":[{\"start\":36,\"end\":66,\"quote\":\"while solar power is available\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_1\",\"kind\":\"exception\",\"summary\":\"On a rainy day it waits until noon.\",\"citations\":[{\"start\":68,\"end\":103,\"quote\":\"On a rainy day it waits until noon.\"}],\"targets\":[\"fact_0\"],\"relation_status\":\"MODEL_ASSERTED\",\"decision_status\":\"NOT_APPLICABLE\"},{\"item_id\":\"fact_2\",\"kind\":\"open_question\",\"summary\":\"The winter interval has yet to be agreed.\",\"citations\":[{\"start\":104,\"end\":145,\"quote\":\"The winter interval has yet to be agreed.\"}],\"targets\":[],\"relation_status\":\"NOT_APPLICABLE\",\"decision_status\":\"OPEN\"}],\"feedback\":{\"check\":\"natural.spec_citations.v1\",\"citation_status\":\"PASS\",\"coverage_status\":\"FULL\",\"uncovered\":[],\"semantic_status\":\"UNKNOWN\"},\"human_unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"source_retention\":\"EXACT\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"owner_acceptance\":\"PENDING\"},\"text\":\"{\\\"check_version\\\":\\\"natural.spec_citations.v1\\\",\\\"feedback\\\":{\\\"check\\\":\\\"natural.spec_citations.v1\\\",\\\"citation_status\\\":\\\"PASS\\\",\\\"coverage_status\\\":\\\"FULL\\\",\\\"semantic_status\\\":\\\"UNKNOWN\\\",\\\"uncovered\\\":[]},\\\"human_unresolved\\\":[\\\"Human question 0\\\",\\\"Human question 1\\\",\\\"Human question 2\\\",\\\"Human question 3\\\",\\\"Human question 4\\\",\\\"Human question 5\\\",\\\"Human question 6\\\",\\\"Human question 7\\\",\\\"Human question 8\\\",\\\"Human question 9\\\",\\\"Human question 10\\\",\\\"Human question 11\\\",\\\"Human question 12\\\",\\\"Human question 13\\\",\\\"Human question 14\\\",\\\"Human question 15\\\"],\\\"items\\\":[{\\\"citations\\\":[{\\\"end\\\":67,\\\"quote\\\":\\\"The garden sensor samples each hour while solar power is available.\\\",\\\"start\\\":0}],\\\"decision_status\\\":\\\"NOT_APPLICABLE\\\",\\\"item_id\\\":\\\"fact_0\\\",\\\"kind\\\":\\\"requirement\\\",\\\"relation_status\\\":\\\"NOT_APPLICABLE\\\",\\\"summary\\\":\\\"The garden sensor samples each hour while solar power is available.\\\",\\\"targets\\\":[]},{\\\"citations\\\":[{\\\"end\\\":66,\\\"quote\\\":\\\"while solar power is available\\\",\\\"start\\\":36}],\\\"decision_status\\\":\\\"NOT_APPLICABLE\\\",\\\"item_id\\\":\\\"qualifier\\\",\\\"kind\\\":\\\"condition\\\",\\\"relation_status\\\":\\\"MODEL_ASSERTED\\\",\\\"summary\\\":\\\"while solar power is available\\\",\\\"targets\\\":[\\\"fact_0\\\"]},{\\\"citations\\\":[{\\\"end\\\":103,\\\"quote\\\":\\\"On a rainy day it waits until noon.\\\",\\\"start\\\":68}],\\\"decision_status\\\":\\\"NOT_APPLICABLE\\\",\\\"item_id\\\":\\\"fact_1\\\",\\\"kind\\\":\\\"exception\\\",\\\"relation_status\\\":\\\"MODEL_ASSERTED\\\",\\\"summary\\\":\\\"On a rainy day it waits until noon.\\\",\\\"targets\\\":[\\\"fact_0\\\"]},{\\\"citations\\\":[{\\\"end\\\":145,\\\"quote\\\":\\\"The winter interval has yet to be agreed.\\\",\\\"start\\\":104}],\\\"decision_status\\\":\\\"OPEN\\\",\\\"item_id\\\":\\\"fact_2\\\",\\\"kind\\\":\\\"open_question\\\",\\\"relation_status\\\":\\\"NOT_APPLICABLE\\\",\\\"summary\\\":\\\"The winter interval has yet to be agreed.\\\",\\\"targets\\\":[]}],\\\"owner_acceptance\\\":\\\"PENDING\\\",\\\"semantic_goal_acceptance\\\":\\\"NOT_RUN\\\",\\\"source\\\":{\\\"coordinate_space\\\":\\\"unicode_scalar_index.v1\\\",\\\"format\\\":\\\"txt\\\",\\\"hash\\\":\\\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\\\",\\\"resource_id\\\":\\\"res_11a54e604ef1410e844da89859d882bd\\\",\\\"revision\\\":1},\\\"source_content\\\":\\\"The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.\\\",\\\"source_retention\\\":\\\"EXACT\\\"}\",\"citation_status\":\"PASS\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"},\"plan_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"action_revision\":1,\"input_fingerprint\":\"532d2309336a82cf77b1047985451c1757992b177244947940e381fec9930d74\",\"output_fingerprint\":\"dfd4b14c7e176c69830360ab02d0951a964e0933cbd54f85818d4398ac1f5260\",\"predecessor_receipts\":[\"5041a0574bd0a094b909363c52fcfb8f0cb0f74bf694c83d95e8623ae3615c69\",\"777403176b56fe12d0dac778b7944729718989891c4d44d44544f5fd069b9204\"],\"input_sources\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"merge_pick\",\"field\":\"items\"}},\"artifact_refs\":[],\"check_results\":[{\"check\":\"natural.spec_citations.v1\",\"status\":\"PASS\"}]},{\"operation_id\":\"op_27af9535427144579832ad165858ca18\",\"step_id\":\"save_pick\",\"status\":\"VERIFIED\",\"data\":{\"resource_id\":\"res_8af74c310c1740d98771f48cf59ba86f\",\"hash\":\"5d8ea8df894858928af5a71f33f68186bf252ba9250eaa8ed09615706355ff43\"},\"plan_fingerprint\":\"664fc71f546ff9d06c83f4352be296540f11bbdfd12324c3a6b8233fb99ef1b2\",\"source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"action_revision\":1,\"input_fingerprint\":\"003ef89a925ad97dc767c28a4ff3b81af6a0997ce0af1f949af3a32a999d1b9f\",\"output_fingerprint\":\"33ec3fa549e0d948f0676cbe4440fc4e276ddf5ed3d39cbe6d93dd70cf21c180\",\"predecessor_receipts\":[\"e5ded4582ca8a2af9fe4396c8415f98babaf04462f558efccc195414f35efa9c\"],\"input_sources\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}},\"artifact_refs\":[\"res_8af74c310c1740d98771f48cf59ba86f\"],\"check_results\":[{\"check\":\"receipt.readback.v1\",\"status\":\"PASS\"}]}],\"grant_version\":\"39a2e1c7f031b5eaf397c5fe761f4a39741c2778bf3061be3e39e97a58b4d79a\",\"technical_semantic_status\":\"UNKNOWN\",\"formal_publication_enabled\":false}}",
+    "response_bytes": 19584,
+    "response_sha256": "94a4205262d99600a325332bf22f948b81b45bdca3b9087a8ed2d3e7c787e1f1",

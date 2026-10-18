@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1149.352" timestamp="2026-10-18T08:30:02.258364+00:00" hostname="888ae8c15de7"><testcase classname="tests.test_pb_first_logic_current_page_ui" name="test_first_pb_local_logic_change_checks_then_versions_and_uses_third_on_current_page" time="1148.997"><failure message="BrokenPipeError: [Errno 32] Broken pipe">tmp_path = PosixPath('/workspace/pb-first-logic-current-page-evidence-20261018/actual-tmp/test_first_pb_local_logic_chan0')
+
+    def test_first_pb_local_logic_change_checks_then_versions_and_uses_third_on_current_page(tmp_path):
+        root = Path.cwd().resolve()
+        settings = Settings("sqlite:///" + str(tmp_path / "fixture.db"), tmp_path, mode="mock", goal_planner_provider="intern-s2")
+        store = Store(settings.database_url, test_only=True)
+        clients, cold_stores, workers, wire_http, ipc, checkpoints = [], [], [], [], [], []
+        stage = dict(name="generation")
+        wires = {name: [] for name in ["generation", "source-original", "pb-original", "logic-check", "logic-use"]}
+        source_run = old_run = None
+        process = None
+        info, state = {}, {}
+        proof = dict(status="NOT_COMPLETED", real_model_requests=0, native_browser="NOT_RUN", windows="NOT_RUN",
+            pg="NOT_RUN", remote_ci="NOT_RUN", real_semantic_acceptance="NOT_RUN", owner_human_acceptance="NOT_RUN",
+            fixture_scope="FRESH_PARALLEL_GEN3_SOURCE2_PB_COLD2_THEN_PAGE_CHECK2_AND_THIRD2",
+            product_clock_lease_deadline_budget_mutations=0)
+        with _PageObserver(tmp_path, "PB_FIRST_LOGIC_CURRENT_PAGE") as observer:
+            before_sources = sources(root)
+            observer.save("source-before.json", before_sources)
+            lock = threading.Lock()
+            try:
+                store.initialize()
+                principal = store.user("P-B first logic fixture A", "synthetic-test-A")
+                client = TestClient(create_app(store, settings))
+                clients.append(client)
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                trace_http(client, observer, lock)
+                project = ok(client.post("/api/projects", json=dict(name="P-B first local logic current page")), 201)["id"]
+                source_resource, source_goal = material(client, project, SOURCE)
+                data = store, settings, client, principal, project, source_resource, source_goal
+                observer.save("seed-before-generation.json", snapshot(store))
+                import test_natural_spec_apps as original_fixture
+                original_transport = original_fixture.httpx.MockTransport
+    
+                def observed_transport(handler):
+                    name = handler.__qualname__
+                    assert name in {"generate.&lt;locals&gt;.handler", "transport.&lt;locals&gt;.handler"}, name
+    
+                    def capture(request):
+                        payload = json.loads(request.content)
+                        target = "generation" if name == "generate.&lt;locals&gt;.handler" else stage["name"]
+                        assert target in wires
+                        wires[target].append(payload)
+                        (observer.sent if target == "generation" else observer.runtime_sent).append(payload)
+                        observer.save(target + "-wire.json", wires[target])
+                        return handler(request)
+                    return original_transport(capture)
+    
+                fixture_httpx = SimpleNamespace(MockTransport=observed_transport, Response=original_fixture.httpx.Response)
+                with patch.object(original_fixture, "httpx", fixture_httpx):
+                    with observer.phase("normal_parallel_generation_release_instance"):
+                        _, source_app, source_release, source_instance, generation_wire = ready(data, "parallel")
+                    assert generation_wire == wires["generation"] and len(generation_wire) == 3
+                    source_run = enqueue(data, source_release, source_instance, key="first-logic-source")
+                    normal_worker(store, settings, source_run, SOURCE, "source-original", observer, stage, wires, workers)
+                    observer.save("source-success-before-pb.json", snapshot(store))
+                    cold_resource, cold_goal = material(client, project, COLD, "P-B original independent COLD Goal")
+                    source_path = f"/api/projects/{project}/natural-spec-task-runs/{source_run}"
+                    options = ok(client.get(source_path + "/extraction-options"))
+                    extraction_request = dict(source_run_id=source_run,
+                        expected_source_proof_fingerprint=options["source_proof_fingerprint"],
+                        expected_source_recipe_fingerprint=options["recipe_fingerprint"], card_id=cold_goal["id"],
+                        expected_goal_version=cold_goal["version"], expected_goal_fingerprint=cold_goal["fingerprint"],
+                        expected_source_hash=sha_bytes(COLD.encode()), recipe=copy.deepcopy(options["recipe"]),
+                        name="P-B first local logic", request_key="first-logic-original-pb")
+                    assert "prior_items" not in extraction_request["recipe"]["steps"][2]["inputs"]
+                    before_review = snapshot(store)
+                    reviewed = ok(client.post(source_path + "/extraction-reviews", json=extraction_request))
+                    assert snapshot(store) == before_review and reviewed["edited_recipe"] == options["recipe"]
+                    extracted = ok(client.post(source_path + "/extractions", json=dict(review=extraction_request,
+                        expected_review_fingerprint=reviewed["review_fingerprint"], consent=pb.CONSENT,
+                        artifact_write_consent=natural.CONSENT)), 201)
+                    app = ok(client.get("/api/apps/" + extracted["id"]))
+                    old_release, old_instance = release_instance(data, app["id"])
+                    old_run = enqueue(data, old_release, old_instance, key="first-logic-original-cold")
+                    observer.save("pb-original-before-worker.json", snapshot(store))
+                    normal_worker(store, settings, old_run, COLD, "pb-original", observer, stage, wires, workers)
+                    old_artifact = ok(client.get(f"/api/internal/app-run-jobs/{old_run}/spec-artifact"))
+                    assert old_artifact["result_version"] == 1
+                    assert json.loads(old_artifact["resource"]["content"])["source_content"] == COLD
+                    third_resource, third_goal = material(client, project, THIRD, "P-B new local logic explicit THIRD Goal")
+                    # All fixture material/Goal Grants precede the graph and page approval chain.
+                    graph = ok(client.post(f"/api/projects/{project}/apps/{app['id']}/delivery-graph/derive", json=dict(
+                        request_key="first-logic-fixture-baseline", expected_candidate_fingerprint=app["fingerprint"])), 201)
+                    initial = snapshot(store)
+                    original_typed = one(initial["internal_instance_data"], lambda row:
+                        row["instance_id"] == old_instance["id"] and row["version"] == 1, "Original P-B typed v1")
+                    assert original_typed["release_id"] == old_release["id"]
+                    assert [len(wires[name]) for name in ["generation", "source-original", "pb-original"]] == [3, 2, 2]
+                    for phase in ["source-original", "pb-original"]:
+                        inputs = json.loads(wires[phase][1]["messages"][1]["content"])["current_inputs"]
+                        assert "prior_items" not in inputs and "prior_feedback" not in inputs
+                    info = dict(project=project, principal=principal, app=app["id"], name=app["name"], app_name=app["name"],
+                        runtime=app["runtime_id"], old_release=old_release["id"], old_instance=old_instance["id"],
+                        old_run=old_run, old_result_version=1, old_content=COLD, old_resource=cold_resource, old_goal=cold_goal["id"],
+                        target_goal=third_goal["id"], target_resource=third_resource, target_content=THIRD,
+                        target_hash=sha_bytes(THIRD.encode()), original_candidate=app["candidate"],
+                        original_release_value=old_release, original_typed=original_typed, graph=graph,
+                        source_run=source_run, source_app=source_app, source_release=source_release["id"],
+                        source_instance=source_instance["id"], output=str(tmp_path / "page-result.json"),
+                        storage_path=str(tmp_path / "durable-storage.json"))
+                    observer.save("info.json", info)
+                    observer.save("page-seed-baseline.json", initial)
+                    state["readonly"] = initial
+                    base = f"/api/internal/instances/{old_instance['id']}/logic-patches"
+                    bridge = TestClient(create_app(store, settings))
+                    clients.append(bridge)
+                    trace_http(bridge, observer, lock)
+                    process = subprocess.Popen(["node", str(Path(__file__).with_name("pb_first_logic_current_page_ui.cjs")),
+                        str(tmp_path / "info.json")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=observer.driver, text=True, env={**os.environ,
+                            "NODE_PATH": str(root / "scripts/engineering-ci/node_modules")})
+                    observer.own_node(process)
+                    phases = ["seed-readonly", "logic-preview-and-check-queued", "check-pass-before-version",
+                        "new-release-and-instance-created", "use-queued-before-worker",
+                        "use-complete-after-manual-refresh", "cold-old-new-readonly"]
+    
+                    def originals_preserved(current):
+                        for table, rows in initial.items():
+                            assert all(row in current[table] for row in rows), "Original fixture row changed: " + table
+    
+                    with (tmp_path / "node.stdout").open("w", encoding="utf-8") as stdout:
+                        for line in process.stdout:
+                            stdout.write(line)
+                            stdout.flush()
+                            observer.event("node_stdout", raw_line=line)
+                            request = json.loads(line)
+                            ipc.append(dict(direction="NODE_TO_PYTHON", value=request))
+                            if request.get("done"):
+                                break
+                            command = request.get("command")
+                            with observer.phase("rpc", rpc_id=request["id"], command=command):
+                                if command == "worker":
+                                    kind = request["kind"]
+                                    assert kind in {"check", "use"} and kind + "_worker" not in state
+                                    accepted = state[kind + "_accepted"]
+                                    assert request["run_id"] == accepted["run_id"]
+                                    queued = snapshot(store)
+                                    assert queued == state["readonly"]
+                                    queue_delta(state[kind + "_before"], queued, info, accepted, state[kind + "_body"],
+                                        kind=kind, origin_key=state["logic_key"] if kind == "check" else state["use_key"])
+                                    cold = Store(settings.database_url, test_only=True)
+                                    cold_stores.append(cold)
+                                    content = COLD if kind == "check" else THIRD
+                                    phase = "logic-" + kind
+                                    entry = normal_worker(cold, settings, accepted["run_id"], content,
+                                        phase, observer, stage, wires, workers)
+                                    completed = snapshot(cold)
+                                    delivered = result_delta(state[kind + "_before"], completed, info, accepted, entry,
+                                        wires[phase], kind=kind, content=content,
+                                        source_resource=cold_resource if kind == "check" else third_resource,
+                                        queue_expected=state[kind + "_queue_expected"])
+                                    state[kind + "_worker"] = entry
+                                    state[kind + "_delivered"] = delivered
+                                    state["readonly"] = completed
+                                    originals_preserved(completed)
+                                    observer.save(kind + "-after-worker.json", completed)
+                                    observer.save(kind + "-delivery.json", delivered)
+                                    answer = dict(status=200, text=json.dumps(dict(run_id=accepted["run_id"], status="SUCCEEDED",
+                                        instance_id=delivered["instance_id"], release_id=delivered["release_id"], result_version=1)))
+                                elif command == "checkpoint":
+                                    phase = request["phase"]
+                                    assert phase == phases[len(checkpoints)], (phase, checkpoints)
+                                    current = snapshot(store)
+                                    assert current == state["readonly"]
+                                    originals_preserved(current)
+                                    if phase == "seed-readonly":
+                                        assert current == initial
+                                    elif phase == "logic-preview-and-check-queued":
+                                        assert state.get("preview") and state.get("check_accepted") and not state.get("check_worker")
+                                    elif phase == "check-pass-before-version":
+                                        assert state.get("checked") and not state.get("approval")
+                                        assert current["internal_releases"] == initial["internal_releases"]
+                                    elif phase == "new-release-and-instance-created":
+                                        assert state.get("new_release") and state.get("new_instance") and not state.get("use_accepted")
+                                    elif phase == "use-queued-before-worker":
+                                        assert state.get("use_accepted") and not state.get("use_worker")
+                                    else:
+                                        assert state.get("use_delivered")
+                                    checkpoint = dict(request=request, phase=phase, all_expected_rows_verified=True,
+                                        full_table_fingerprint=fingerprint(current))
+                                    checkpoints.append(checkpoint)
+                                    if phase == "use-complete-after-manual-refresh":
+                                        state["cold_readonly"] = True
+                                    observer.save("checkpoint-" + phase + "-rows.json", current)
+                                    answer = dict(status=200, text="{}")
+                                else:
+                                    assert command is None, "Only two ordinary business Worker commands are supported"
+                                    method, path, headers = request["method"], request["path"], request.get("headers", {})
+                                    if state.get("cold_readonly"):
+                                        assert method == "GET"
+                                    if path.startswith("/api/"):
+                                        assert {key.lower(): value for key, value in headers.items()}.get("authorization") == "Bearer synthetic-test-A"
+                                    args, raw = dict(headers=headers), b""
+                                    if "body_text" in request:
+                                        raw = request["body_text"].encode("utf-8")
+                                        assert json.loads(raw) == request["body"]
+                                        args["content"] = raw
+                                    else:
+                                        assert method == "GET" and request.get("body") is None
+                                    allowed = {base + suffix for suffix in ["/previews", "/checks", "/version-approvals"]}
+                                    if state.get("approval"):
+                                        allowed.add(f"/api/internal/approvals/{state['approval']['id']}/commit")
+                                    if state.get("new_release"):
+                                        allowed.add(f"/api/internal/releases/{info['new_release']}/instances")
+                                    if state.get("new_instance"):
+                                        allowed.update({f"/api/internal/instances/{info['new_instance']}/pb-use-reviews",
+                                            f"/api/internal/instances/{info['new_instance']}/pb-use-runs"})
+                                    assert method == "GET" or (method == "POST" and path in allowed), (method, path)
+                                    before = snapshot(store) if method == "POST" or path.startswith(base + "/checks/") else None
+                                    reply = bridge.request(method, path, **args)
+                                    assert reply.request.content == raw
+                                    try:
+                                        value = reply.json()
+                                    except ValueError:
+                                        value = None
+                                    wire_http.append(dict(rpc_id=request["id"], method=method, path=path, body=request.get("body"),
+                                        body_text=request.get("body_text"), body_bytes=len(raw), body_sha256=sha_bytes(raw),
+                                        status=reply.status_code, response=value, response_text=reply.text,
+                                        response_bytes=len(reply.content), response_sha256=sha_bytes(reply.content), headers=dict(reply.request.headers),
+                                        after_check_worker=bool(state.get("check_worker")), after_use_worker=bool(state.get("use_worker")),
+                                        cold_readonly=bool(state.get("cold_readonly"))))
+                                    observer.save("page-http.json", wire_http)
+                                    body = request.get("body")
+                                    if method == "POST":
+                                        after = snapshot(store)
+                                        assert before == state["readonly"]
+                                        if path == base + "/previews":
+                                            assert not state.get("preview") and reply.status_code == 201
+                                            assert body == dict(request_key=body["request_key"], expected_revision=old_instance["revision"],
+                                                expected_release_fingerprint=old_release["fingerprint"],
+                                                expected_graph_fingerprint=graph["graph_fingerprint"], consume_prior_feedback=True)
+                                            validate_preview(value, body, app["candidate"], info)
+                                            only_tables(before, after, {"delivery_graph_requests"})
+                                            journal_pairs(before, after, {(old_instance["id"], logic.PREVIEW, body["request_key"])})
+                                            state.update(preview=value, logic_key=body["request_key"])
+                                        elif path == base + "/checks":
+                                            assert not state.get("check_accepted") and reply.status_code == 202
+                                            assert body == dict(request_key=state["logic_key"],
+                                                expected_preview_fingerprint=state["preview"]["preview_fingerprint"], consent=logic.CHECK_CONSENT)
+                                            state.update(check_before=before, check_accepted=value, check_body=body)
+                                            iid, _, expected = queue_delta(before, after, info, value, body,
+                                                kind="check", origin_key=state["logic_key"])
+                                            info["check_instance"] = iid
+                                            state["check_queue_expected"] = sorted(expected)
+                                        elif path == base + "/version-approvals":
+                                            assert not state.get("approval") and state.get("checked") and reply.status_code == 201
+                                            assert body == dict(request_key=state["logic_key"],
+                                                expected_check_fingerprint=state["checked"]["check_fingerprint"], consent=logic.VERSION_CONSENT)
+                                            only_tables(before, after, {"internal_approvals", "delivery_graph_requests"})
+                                            approval_rows = added(before, after, "internal_approvals")
+                                            assert len(approval_rows) == 1 and approval_rows[0]["id"] == value["id"] and not approval_rows[0]["consumed"]
+                                            assert value["snapshot_fingerprint"] == fingerprint(value["snapshot"])
+                                            assert value["snapshot"]["draft"] == old_release["snapshot"]["draft"]
+                                            origin = value["snapshot"]["natural_logic_source"]
+                                            assert origin == dict(namespace=logic.VERSION, instance_id=old_instance["id"],
+                                                preview_key=state["logic_key"], preview_fingerprint=state["preview"]["preview_fingerprint"],
+                                                check_fingerprint=state["checked"]["check_fingerprint"], execution_digest=origin["execution_digest"])
+                                            assert len(origin["execution_digest"]) == 64
+                                            journal_pairs(before, after, {(old_instance["id"], logic.APPROVAL, state["logic_key"])})
+                                            state["approval"] = value
+                                        elif path.endswith("/commit"):
+                                            assert not state.get("new_release") and reply.status_code == 200
+                                            assert body == dict(fingerprint=state["approval"]["fingerprint"])
+                                            only_tables(before, after, {"internal_releases", "internal_approvals"})
+                                            releases = added(before, after, "internal_releases")
+                                            assert len(releases) == 1 and releases[0]["id"] == value["id"]
+                                            assert value["snapshot"] == state["approval"]["snapshot"] and value["fingerprint"] == fingerprint(value["snapshot"])
+                                            expected_approvals = [{**row, "consumed": True} if row["id"] == state["approval"]["id"] else row
+                                                for row in before["internal_approvals"]]
+                                            assert sorted(after["internal_approvals"], key=lambda row: row["id"]) == sorted(expected_approvals, key=lambda row: row["id"])
+                                            state["new_release"] = value
+                                            info["new_release"] = value["id"]
+                                            assert value["id"] != old_release["id"]
+                                        elif path.endswith("/instances"):
+                                            assert not state.get("new_instance") and reply.status_code == 201
+                                            assert body["expected_release_fingerprint"] == state["new_release"]["fingerprint"]
+                                            only_tables(before, after, {"internal_instances"})
+                                            instances = added(before, after, "internal_instances")
+                                            assert len(instances) == 1 and instances[0]["id"] == value["id"]
+                                            assert value["release_id"] == info["new_release"] and value["data_version"] == 0 and value["revision"] == 1
+                                            assert value["id"] not in {old_instance["id"], info["check_instance"]}
+                                            state["new_instance"] = value
+                                            info["new_instance"] = value["id"]
+                                        elif path.endswith("/pb-use-reviews"):
+                                            assert not state.get("use_review") and reply.status_code == 200 and after == before
+                                            assert value["request"] == body and body["resource_id"] == third_resource and body["card_id"] == third_goal["id"]
+                                            assert body["expected_source_hash"] == info["target_hash"]
+                                            assert body["expected_release_fingerprint"] == state["new_release"]["fingerprint"]
+                                            assert body["expected_app_fingerprint"] == app["fingerprint"]
+                                            assert body["expected_recipe_fingerprint"] == fingerprint(state["preview"]["effective_candidate"]["spec_recipe"])
+                                            assert value["review_fingerprint"] == fingerprint({key: item for key, item in value.items() if key != "review_fingerprint"})
+                                            assert value["effective_candidate"]["spec_recipe"] == state["preview"]["effective_candidate"]["spec_recipe"]
+                                            assert value["saved_logic_source"]["origin"] == state["new_release"]["snapshot"]["natural_logic_source"]
+                                            state["use_review"] = value
+                                        elif path.endswith("/pb-use-runs"):
+                                            assert not state.get("use_accepted") and reply.status_code == 202
+                                            assert body == dict(review=state["use_review"]["request"],
+                                                expected_review_fingerprint=state["use_review"]["review_fingerprint"], consent=use.CONSENT)
+                                            state.update(use_before=before, use_accepted=value, use_body=body, use_key=body["review"]["request_key"])
+                                            _, _, expected = queue_delta(before, after, info, value, body, kind="use", origin_key=state["use_key"])
+                                            state["use_queue_expected"] = sorted(expected)
+                                        else:
+                                            raise AssertionError("Unexpected page mutation " + path)
+                                        state["readonly"] = after
+                                        observer.save("after-page-post-" + str(request["id"]) + ".json", after)
+                                        originals_preserved(after)
+                                    elif path.startswith(base + "/checks/"):
+                                        after = snapshot(store)
+                                        if reply.status_code == 200 and value.get("status") == "PASS":
+                                            assert state.get("check_delivered")
+                                            assert value["run_id"] == state["check_accepted"]["run_id"]
+                                            assert value["check_instance_id"] == info["check_instance"]
+                                            assert value["check_fingerprint"] == fingerprint({key: item for key, item in value.items() if key != "check_fingerprint"})
+                                            assert value["semantic_status"] == "UNKNOWN" and value["owner_acceptance"] == "PENDING"
+                                            if state.get("checked"):
+                                                assert value == state["checked"] and after == before
+                                            else:
+                                                only_tables(before, after, {"delivery_graph_requests"})
+                                                journal_pairs(before, after, {(old_instance["id"], logic.CHECKED, state["logic_key"])})
+                                                state["checked"] = value
+                                            state["readonly"] = after
+                                        else:
+                                            assert after == before
+                                    answer = dict(status=reply.status_code, text=reply.text, content_type=reply.headers.get("content-type"))
+                                answer["id"] = request["id"]
+                                ipc.append(dict(direction="PYTHON_TO_NODE", value=answer))
+&gt;                               process.stdin.write(json.dumps(answer) + "\n")
+E                               BrokenPipeError: [Errno 32] Broken pipe
+
+tests/test_pb_first_logic_current_page_ui.py:600: BrokenPipeError</failure></testcase></testsuite></testsuites>

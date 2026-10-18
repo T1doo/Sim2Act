@@ -1,0 +1,170 @@
+{
+  "rpc_id": null,
+  "method": "POST",
+  "path": "/api/projects/proj_4b79a7fd209d49239c5cb1bb6dc3e5fe/natural-spec-task-runs/run_ec3cc7a3dc244a038e06633fa9572c12/extractions",
+  "request": {
+    "review": {
+      "source_run_id": "run_ec3cc7a3dc244a038e06633fa9572c12",
+      "expected_source_proof_fingerprint": "0d76cd4b0e94c2d727ce2e3852e4c89fc75d2d0f600261dd7e9b5253ff492d3c",
+      "expected_source_recipe_fingerprint": "7dc1c8ec419a6048bd90a81726cf4c3a7f4679849d06a951dab2c54921f86e47",
+      "card_id": "goal_3025c9499dba4de9aec2193e07717e9e",
+      "expected_goal_version": 1,
+      "expected_goal_fingerprint": "c1c7a491032e6beeb46fe342c4d05f6d844d8080633815402bea52418490de67",
+      "expected_source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+      "recipe": {
+        "version": "natural-spec-recipe.v1",
+        "steps": [
+          {
+            "step_id": "read_pick",
+            "operator": "resource.read",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "duties_pick",
+            "operator": "model.spec.requirements",
+            "depends_on": [
+              "read_pick"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              }
+            }
+          },
+          {
+            "step_id": "qualifiers_pick",
+            "operator": "model.spec.qualifiers",
+            "depends_on": [
+              "read_pick"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              }
+            }
+          },
+          {
+            "step_id": "merge_pick",
+            "operator": "spec.merge_evidence",
+            "depends_on": [
+              "duties_pick",
+              "qualifiers_pick"
+            ],
+            "inputs": {
+              "first": {
+                "source": "step",
+                "ref": "duties_pick",
+                "field": "items"
+              },
+              "second": {
+                "source": "step",
+                "ref": "qualifiers_pick",
+                "field": "items"
+              }
+            }
+          },
+          {
+            "step_id": "check_pick",
+            "operator": "spec.verify_citations",
+            "depends_on": [
+              "read_pick",
+              "merge_pick"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              },
+              "items": {
+                "source": "step",
+                "ref": "merge_pick",
+                "field": "items"
+              }
+            }
+          },
+          {
+            "step_id": "save_pick",
+            "operator": "artifact.save_text",
+            "depends_on": [
+              "check_pick"
+            ],
+            "inputs": {
+              "text": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "text"
+              }
+            }
+          }
+        ]
+      },
+      "name": "P-B first local logic",
+      "request_key": "first-logic-original-pb"
+    },
+    "expected_review_fingerprint": "8ce81ca19d2fc38f9c1f39db61dc4a9de7ebad50d7499a0a90f4510b7121a189",
+    "consent": "EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET",
+    "artifact_write_consent": "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"
+  },
+  "status": 201,
+  "content_type": "application/json",
+  "response_file": "http/000020-response.body",
+  "response_bytes": 44518,
+  "response_sha256": "f57ede5a1d902e3a8cf6209a0d8d9de2ed9fe0a7692c8bd67072e9a4a43c0025"
+}

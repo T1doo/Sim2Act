@@ -1,0 +1,165 @@
+{
+  "rpc_id": null,
+  "method": "POST",
+  "path": "/api/projects/proj_abf59b893dfa4c75bc3b59e1fa48a48f/natural-spec-task-runs/run_a37ea2d8746d42fb92d96b262e9a4d77/extraction-reviews",
+  "request": {
+    "source_run_id": "run_a37ea2d8746d42fb92d96b262e9a4d77",
+    "expected_source_proof_fingerprint": "34fe7add98ced29ce0aae34550414eee006b69b78660b132e65e6c6e088b827a",
+    "expected_source_recipe_fingerprint": "7dc1c8ec419a6048bd90a81726cf4c3a7f4679849d06a951dab2c54921f86e47",
+    "card_id": "goal_6d2fe1d7fe2948b9b63940b2e90bf0e7",
+    "expected_goal_version": 1,
+    "expected_goal_fingerprint": "9b4cd471639e4f3075b31596d639f6125d3fbf9710f2fdd96f2d9e79335e356e",
+    "expected_source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+    "recipe": {
+      "version": "natural-spec-recipe.v1",
+      "steps": [
+        {
+          "step_id": "read_pick",
+          "operator": "resource.read",
+          "depends_on": [],
+          "inputs": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            }
+          }
+        },
+        {
+          "step_id": "duties_pick",
+          "operator": "model.spec.requirements",
+          "depends_on": [
+            "read_pick"
+          ],
+          "inputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "resource_id"
+            },
+            "content": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "content"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "hash"
+            },
+            "format": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "format"
+            }
+          }
+        },
+        {
+          "step_id": "qualifiers_pick",
+          "operator": "model.spec.qualifiers",
+          "depends_on": [
+            "read_pick"
+          ],
+          "inputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "resource_id"
+            },
+            "content": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "content"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "hash"
+            },
+            "format": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "format"
+            }
+          }
+        },
+        {
+          "step_id": "merge_pick",
+          "operator": "spec.merge_evidence",
+          "depends_on": [
+            "duties_pick",
+            "qualifiers_pick"
+          ],
+          "inputs": {
+            "first": {
+              "source": "step",
+              "ref": "duties_pick",
+              "field": "items"
+            },
+            "second": {
+              "source": "step",
+              "ref": "qualifiers_pick",
+              "field": "items"
+            }
+          }
+        },
+        {
+          "step_id": "check_pick",
+          "operator": "spec.verify_citations",
+          "depends_on": [
+            "read_pick",
+            "merge_pick"
+          ],
+          "inputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "resource_id"
+            },
+            "content": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "content"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "hash"
+            },
+            "format": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "format"
+            },
+            "items": {
+              "source": "step",
+              "ref": "merge_pick",
+              "field": "items"
+            }
+          }
+        },
+        {
+          "step_id": "save_pick",
+          "operator": "artifact.save_text",
+          "depends_on": [
+            "check_pick"
+          ],
+          "inputs": {
+            "text": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "text"
+            }
+          }
+        }
+      ]
+    },
+    "name": "P-B first local logic",
+    "request_key": "first-logic-original-pb"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "response_file": "http/000019-response.body",
+  "response_bytes": 40799,
+  "response_sha256": "2264dc4c073ca825974409235ad4d4427897e23c1cad2b691d06e881421cec65"
+}
