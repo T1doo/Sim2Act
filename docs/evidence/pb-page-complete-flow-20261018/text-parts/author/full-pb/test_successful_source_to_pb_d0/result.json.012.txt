@@ -1,0 +1,4431 @@
+: {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "format"
+                  }
+                }
+              },
+              {
+                "step_id": "check_pick",
+                "binding_id": "check_pick",
+                "depends_on": [
+                  "read_pick",
+                  "user_edited_inference"
+                ],
+                "inputs": {
+                  "resource_id": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "resource_id"
+                  },
+                  "content": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "content"
+                  },
+                  "hash": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "hash"
+                  },
+                  "format": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "format"
+                  },
+                  "items": {
+                    "source": "step",
+                    "ref": "user_edited_inference",
+                    "field": "items"
+                  }
+                }
+              },
+              {
+                "step_id": "save_pick",
+                "binding_id": "save_pick",
+                "depends_on": [
+                  "check_pick"
+                ],
+                "inputs": {
+                  "text": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "text"
+                  }
+                }
+              }
+            ],
+            "outputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "save_pick",
+                "field": "resource_id"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "save_pick",
+                "field": "hash"
+              },
+              "checklist": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "checklist"
+              },
+              "citation_status": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "citation_status"
+              },
+              "semantic_status": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "semantic_status"
+              },
+              "semantic_goal_acceptance": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "semantic_goal_acceptance"
+              }
+            },
+            "views": [
+              {
+                "component_ref": "table",
+                "output_field": "checklist"
+              }
+            ],
+            "validation_suite_ref": "natural.spec_citations.v1",
+            "runtime_limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+              },
+              {
+                "tool_ref": "artifact.save_text",
+                "resource_ref": "proj_12625ad7846943b4a7376d0dcdfb35b3"
+              }
+            ],
+            "dependency_lock": [
+              {
+                "kind": "resource",
+                "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                "version": "1"
+              },
+              {
+                "kind": "tool",
+                "ref": "resource.read",
+                "version": "1"
+              },
+              {
+                "kind": "prompt",
+                "ref": "model.spec.all.v1",
+                "version": "1"
+              },
+              {
+                "kind": "tool",
+                "ref": "spec.verify_citations",
+                "version": "1"
+              },
+              {
+                "kind": "tool",
+                "ref": "artifact.save_text",
+                "version": "1"
+              },
+              {
+                "kind": "check",
+                "ref": "natural.spec_citations.v1",
+                "version": "1"
+              },
+              {
+                "kind": "check",
+                "ref": "receipt.readback.v1",
+                "version": "1"
+              }
+            ]
+          },
+          "actions": [
+            {
+              "schema_version": "1.0-draft",
+              "action_id": "action_943c4dd4c9895c659f40e913a523eed1",
+              "revision": 1,
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "resource_id": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "resource_id"
+                ],
+                "additionalProperties": false
+              },
+              "output_schema": {
+                "type": "object",
+                "properties": {
+                  "resource_id": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "content": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "hash": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "txt",
+                      "md"
+                    ]
+                  }
+                },
+                "required": [
+                  "resource_id",
+                  "content",
+                  "hash",
+                  "format"
+                ],
+                "additionalProperties": false
+              },
+              "executor": {
+                "kind": "registered_tool",
+                "ref": "resource.read",
+                "version": "1"
+              },
+              "allowed_tool_refs": [],
+              "dependencies": [
+                {
+                  "kind": "resource",
+                  "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                  "version": "1"
+                }
+              ],
+              "permission_requirements": [
+                {
+                  "tool_ref": "resource.read",
+                  "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                }
+              ],
+              "effect": "read",
+              "preconditions": [],
+              "postcheck_refs": [
+                "natural.spec_citations.v1"
+              ],
+              "limits": {
+                "max_requests": 1,
+                "max_tools": 3,
+                "max_repairs": 0,
+                "max_total_tokens": 64000,
+                "max_output_tokens": 1024,
+                "run_seconds": 300
+              },
+              "idempotency": "read_only",
+              "reconcile_ref": "operation.lookup.v1",
+              "error_contract": [
+                "INVALID_INPUT",
+                "PERMISSION_DENIED",
+                "GRANT_REVOKED",
+                "VERIFICATION_FAILED",
+                "OUTCOME_UNKNOWN"
+              ]
+            },
+            {
+              "schema_version": "1.0-draft",
+              "action_id": "action_b5db1b75713fc852d3e7f24ecbaa8c20",
+              "revision": 1,
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "resource_id": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "content": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "hash": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "txt",
+                      "md"
+                    ]
+                  }
+                },
+                "required": [
+                  "resource_id",
+                  "content",
+                  "hash",
+                  "format"
+                ],
+                "additionalProperties": false
+              },
+              "output_schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "condition",
+                            "exception",
+                            "open_question",
+                            "requirement",
+                            "unclassified"
+                          ]
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 240
+                        },
+                        "citations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 2
+                        },
+                        "targets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "maxItems": 8
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "kind",
+                        "summary",
+                        "citations",
+                        "targets"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  },
+                  "feedback": {
+                    "type": "object",
+                    "properties": {
+                      "check": {
+                        "type": "string",
+                        "enum": [
+                          "natural.spec_citations.v1"
+                        ]
+                      },
+                      "citation_status": {
+                        "type": "string",
+                        "enum": [
+                          "PASS"
+                        ]
+                      },
+                      "coverage_status": {
+                        "type": "string",
+                        "enum": [
+                          "FULL",
+                          "PARTIAL"
+                        ]
+                      },
+                      "uncovered": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2048
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "quote": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32
+                      },
+                      "semantic_status": {
+                        "type": "string",
+                        "enum": [
+                          "UNKNOWN"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "check",
+                      "citation_status",
+                      "coverage_status",
+                      "uncovered",
+                      "semantic_status"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "items",
+                  "feedback"
+                ],
+                "additionalProperties": false
+              },
+              "executor": {
+                "kind": "bounded_agent",
+                "ref": "model.spec.all",
+                "version": "1"
+              },
+              "allowed_tool_refs": [],
+              "dependencies": [
+                {
+                  "kind": "resource",
+                  "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                  "version": "1"
+                },
+                {
+                  "kind": "prompt",
+                  "ref": "model.spec.all.v1",
+                  "version": "1"
+                }
+              ],
+              "permission_requirements": [
+                {
+                  "tool_ref": "resource.read",
+                  "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                }
+              ],
+              "effect": "read",
+              "preconditions": [],
+              "postcheck_refs": [
+                "natural.spec_citations.v1"
+              ],
+              "limits": {
+                "max_requests": 1,
+                "max_tools": 3,
+                "max_repairs": 0,
+                "max_total_tokens": 64000,
+                "max_output_tokens": 1024,
+                "run_seconds": 300
+              },
+              "idempotency": "read_only",
+              "reconcile_ref": "operation.lookup.v1",
+              "error_contract": [
+                "INVALID_INPUT",
+                "PERMISSION_DENIED",
+                "GRANT_REVOKED",
+                "VERIFICATION_FAILED",
+                "OUTCOME_UNKNOWN"
+              ]
+            },
+            {
+              "schema_version": "1.0-draft",
+              "action_id": "action_9cd1b1e662446a53efc9d1fe77218f9c",
+              "revision": 1,
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "resource_id": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "content": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "hash": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "txt",
+                      "md"
+                    ]
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "condition",
+                            "exception",
+                            "open_question",
+                            "requirement",
+                            "unclassified"
+                          ]
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 240
+                        },
+                        "citations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 2
+                        },
+                        "targets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "maxItems": 8
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "kind",
+                        "summary",
+                        "citations",
+                        "targets"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "resource_id",
+                  "content",
+                  "hash",
+                  "format",
+                  "items"
+                ],
+                "additionalProperties": false
+              },
+              "output_schema": {
+                "type": "object",
+                "properties": {
+                  "checklist": {
+                    "type": "object",
+                    "properties": {
+                      "check_version": {
+                        "type": "string",
+                        "enum": [
+                          "natural.spec_citations.v1"
+                        ]
+                      },
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "resource_id": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "hash": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "txt",
+                              "md"
+                            ]
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          "coordinate_space": {
+                            "type": "string",
+                            "enum": [
+                              "unicode_scalar_index.v1"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "resource_id",
+                          "hash",
+                          "format",
+                          "revision",
+                          "coordinate_space"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "source_content": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "item_id": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "exception",
+                                "open_question",
+                                "requirement",
+                                "unclassified"
+                              ]
+                            },
+                            "summary": {
+                              "type": "string",
+                              "maxLength": 240
+                            },
+                            "citations": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2048
+                                  },
+                                  "end": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2048
+                                  },
+                                  "quote": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 2
+                            },
+                            "targets": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              "maxItems": 8
+                            },
+                            "relation_status": {
+                              "type": "string",
+                              "enum": [
+                                "UNASSIGNED",
+                                "MODEL_ASSERTED",
+                                "NOT_APPLICABLE"
+                              ]
+                            },
+                            "decision_status": {
+                              "type": "string",
+                              "enum": [
+                                "OPEN",
+                                "NOT_APPLICABLE"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "item_id",
+                            "kind",
+                            "summary",
+                            "citations",
+                            "targets",
+                            "relation_status",
+                            "decision_status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 8
+                      },
+                      "feedback": {
+                        "type": "object",
+                        "properties": {
+                          "check": {
+                            "type": "string",
+                            "enum": [
+                              "natural.spec_citations.v1"
+                            ]
+                          },
+                          "citation_status": {
+                            "type": "string",
+                            "enum": [
+                              "PASS"
+                            ]
+                          },
+                          "coverage_status": {
+                            "type": "string",
+                            "enum": [
+                              "FULL",
+                              "PARTIAL"
+                            ]
+                          },
+                          "uncovered": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2048
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 2048
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end",
+                                "quote"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 32
+                          },
+                          "semantic_status": {
+                            "type": "string",
+                            "enum": [
+                              "UNKNOWN"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "check",
+                          "citation_status",
+                          "coverage_status",
+                          "uncovered",
+                          "semantic_status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "human_unresolved": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "maxItems": 16
+                      },
+                      "source_retention": {
+                        "type": "string",
+                        "enum": [
+                          "EXACT"
+                        ]
+                      },
+                      "semantic_goal_acceptance": {
+                        "type": "string",
+                        "enum": [
+                          "NOT_RUN"
+                        ]
+                      },
+                      "owner_acceptance": {
+                        "type": "string",
+                        "enum": [
+                          "PENDING"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "check_version",
+                      "source",
+                      "source_content",
+                      "items",
+                      "feedback",
+                      "human_unresolved",
+                      "source_retention",
+                      "semantic_goal_acceptance",
+                      "owner_acceptance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 8000
+                  },
+                  "citation_status": {
+                    "type": "string",
+                    "enum": [
+                      "PASS"
+                    ]
+                  },
+                  "semantic_status": {
+                    "type": "string",
+                    "enum": [
+                      "UNKNOWN"
+                    ]
+                  },
+                  "semantic_goal_acceptance": {
+                    "type": "string",
+                    "enum": [
+                      "NOT_RUN"
+                    ]
+                  }
+                },
+                "required": [
+                  "checklist",
+                  "text",
+                  "citation_status",
+                  "semantic_status",
+                  "semantic_goal_acceptance"
+                ],
+                "additionalProperties": false
+              },
+              "executor": {
+                "kind": "registered_tool",
+                "ref": "spec.verify_citations",
+                "version": "1"
+              },
+              "allowed_tool_refs": [],
+              "dependencies": [
+                {
+                  "kind": "resource",
+                  "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                  "version": "1"
+                }
+              ],
+              "permission_requirements": [
+                {
+                  "tool_ref": "resource.read",
+                  "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                }
+              ],
+              "effect": "read",
+              "preconditions": [],
+              "postcheck_refs": [
+                "natural.spec_citations.v1"
+              ],
+              "limits": {
+                "max_requests": 1,
+                "max_tools": 3,
+                "max_repairs": 0,
+                "max_total_tokens": 64000,
+                "max_output_tokens": 1024,
+                "run_seconds": 300
+              },
+              "idempotency": "read_only",
+              "reconcile_ref": "operation.lookup.v1",
+              "error_contract": [
+                "INVALID_INPUT",
+                "PERMISSION_DENIED",
+                "GRANT_REVOKED",
+                "VERIFICATION_FAILED",
+                "OUTCOME_UNKNOWN"
+              ]
+            },
+            {
+              "schema_version": "1.0-draft",
+              "action_id": "action_f3ec1757562e594c4fe80c9b59ae70ae",
+              "revision": 1,
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "maxLength": 8000
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              "output_schema": {
+                "type": "object",
+                "properties": {
+                  "resource_id": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "hash": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "resource_id",
+                  "hash"
+                ],
+                "additionalProperties": false
+              },
+              "executor": {
+                "kind": "registered_tool",
+                "ref": "artifact.save_text",
+                "version": "1"
+              },
+              "allowed_tool_refs": [],
+              "dependencies": [
+                {
+                  "kind": "resource",
+                  "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                  "version": "1"
+                }
+              ],
+              "permission_requirements": [
+                {
+                  "tool_ref": "artifact.save_text",
+                  "resource_ref": "proj_12625ad7846943b4a7376d0dcdfb35b3"
+                }
+              ],
+              "effect": "project_write",
+              "preconditions": [],
+              "postcheck_refs": [
+                "receipt.readback.v1"
+              ],
+              "limits": {
+                "max_requests": 1,
+                "max_tools": 3,
+                "max_repairs": 0,
+                "max_total_tokens": 64000,
+                "max_output_tokens": 1024,
+                "run_seconds": 300
+              },
+              "idempotency": "transactional",
+              "reconcile_ref": "operation.lookup.v1",
+              "error_contract": [
+                "INVALID_INPUT",
+                "PERMISSION_DENIED",
+                "GRANT_REVOKED",
+                "VERIFICATION_FAILED",
+                "OUTCOME_UNKNOWN"
+              ]
+            }
+          ],
+          "spec_recipe": {
+            "version": "natural-spec-recipe.v1",
+            "steps": [
+              {
+                "step_id": "read_pick",
+                "operator": "resource.read",
+                "depends_on": [],
+                "inputs": {
+                  "resource_id": {
+                    "source": "data",
+                    "ref": "source",
+                    "field": "resource_id"
+                  }
+                }
+              },
+              {
+                "step_id": "user_edited_inference",
+                "operator": "model.spec.all",
+                "depends_on": [
+                  "read_pick"
+                ],
+                "inputs": {
+                  "resource_id": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "resource_id"
+                  },
+                  "content": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "content"
+                  },
+                  "hash": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "hash"
+                  },
+                  "format": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "format"
+                  }
+                }
+              },
+              {
+                "step_id": "check_pick",
+                "operator": "spec.verify_citations",
+                "depends_on": [
+                  "read_pick",
+                  "user_edited_inference"
+                ],
+                "inputs": {
+                  "resource_id": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "resource_id"
+                  },
+                  "content": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "content"
+                  },
+                  "hash": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "hash"
+                  },
+                  "format": {
+                    "source": "step",
+                    "ref": "read_pick",
+                    "field": "format"
+                  },
+                  "items": {
+                    "source": "step",
+                    "ref": "user_edited_inference",
+                    "field": "items"
+                  }
+                }
+              },
+              {
+                "step_id": "save_pick",
+                "operator": "artifact.save_text",
+                "depends_on": [
+                  "check_pick"
+                ],
+                "inputs": {
+                  "text": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "text"
+                  }
+                }
+              }
+            ]
+          },
+          "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+          "goal": {
+            "title": "pb-extraction-target Goal",
+            "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+            "known": [],
+            "assumptions": [],
+            "unresolved": [
+              "Human question 0",
+              "Human question 1",
+              "Human question 2",
+              "Human question 3",
+              "Human question 4",
+              "Human question 5",
+              "Human question 6",
+              "Human question 7",
+              "Human question 8",
+              "Human question 9",
+              "Human question 10",
+              "Human question 11",
+              "Human question 12",
+              "Human question 13",
+              "Human question 14",
+              "Human question 15"
+            ],
+            "constraints": [
+              "Preserve the full source and uncertain relations"
+            ],
+            "acceptance_checks": [
+              "Human review of completeness and meaning"
+            ],
+            "resource_refs": [
+              "res_7f1749382e2f4fcd9a2b99cc034d8597"
+            ]
+          },
+          "model_sample_check": {
+            "check": "natural.spec_citations.v1",
+            "sample_fingerprint": "4a0636ef71f7e7d90e6f700d2d1410bb02f2e054fb79dc4cc4075b13384a63f0",
+            "citation_status": "PASS",
+            "semantic_goal_acceptance": "NOT_RUN",
+            "source_retention": "EXACT"
+          },
+          "spec_task": {
+            "kind": "pb_natural_spec_task.v1",
+            "source_run_id": "run_3fdf4b5af9f84efab7c99f59d9d80914",
+            "source_proof_fingerprint": "29de775c107d5f1b6f4e709ac328b0dfe11008b36b100098b1e5a81a940ebece",
+            "source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+            "edited_recipe_fingerprint": "d32124cdb9bf971b73c5b61b3726287c38f88b8595852c85d195b9a81670022f",
+            "target_goal_fingerprint": "145a541b905578da2c1fe22a32a5f1f3a24742f9356935bab6d6d05a0966b208"
+          }
+        },
+        "fingerprint": "4d964cd0e9b6f7a39766a876d46cbd7e34d47ae63b9d54cd140d7dab9d9d4b31",
+        "created_at": 1792299283.6842275,
+        "state": "PREVIEW_ONLY",
+        "publishable": false,
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "validation": {
+          "state": "PREVIEW_ONLY",
+          "execution_performed": false,
+          "publishable": false,
+          "topological_order": [
+            "read_pick",
+            "user_edited_inference",
+            "check_pick",
+            "save_pick"
+          ]
+        },
+        "history": [],
+        "input_guidance": {
+          "mode": "MODEL_SPEC_CHECKLIST",
+          "citation_status": "PREVIEW_ONLY",
+          "semantic_status": "UNKNOWN",
+          "semantic_goal_acceptance": "NOT_RUN"
+        }
+      }
+    },
+    {
+      "boot": 2,
+      "method": "GET",
+      "path": "/api/internal/apps/app_a17c0620d53b6a263e169371007456c7/releases",
+      "headers": {
+        "Authorization": "Bearer synthetic-test-A",
+        "Content-Type": "application/json"
+      },
+      "status": 200,
+      "response": {
+        "namespace": "INTERNAL_ENGINEERING_ONLY",
+        "formal_publication_enabled": false,
+        "items": [
+          {
+            "id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+            "project_id": "proj_12625ad7846943b4a7376d0dcdfb35b3",
+            "principal_id": "user_44ff356ff1a44564a3f3ab74c3179899",
+            "approval_id": "iapproval_491d36864eff451ebf0492aa00e13fd4",
+            "snapshot": {
+              "namespace": "INTERNAL_ENGINEERING_ONLY",
+              "draft": {
+                "id": "app_a17c0620d53b6a263e169371007456c7",
+                "project_id": "proj_12625ad7846943b4a7376d0dcdfb35b3",
+                "runtime_id": "appruntime_e72572e0c30f47a8f4585bcdf5a7f55f",
+                "candidate": {
+                  "namespace": "pa-natural-spec-app.v1",
+                  "manifest": {
+                    "schema_version": "1.0-draft",
+                    "app_id": "app_a17c0620d53b6a263e169371007456c7",
+                    "revision": 1,
+                    "origin": "task_run",
+                    "goal_ref": "goal_95e0f76bc1a94689afc7565d10fd8923",
+                    "source_run_ref": "run_3fdf4b5af9f84efab7c99f59d9d80914",
+                    "input_schema": {
+                      "type": "object",
+                      "properties": {},
+                      "required": [],
+                      "additionalProperties": false
+                    },
+                    "output_schema": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "checklist": {
+                          "type": "object",
+                          "properties": {
+                            "check_version": {
+                              "type": "string",
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ]
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "resource_id": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                },
+                                "hash": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                },
+                                "format": {
+                                  "type": "string",
+                                  "enum": [
+                                    "txt",
+                                    "md"
+                                  ]
+                                },
+                                "revision": {
+                                  "type": "integer",
+                                  "enum": [
+                                    1
+                                  ]
+                                },
+                                "coordinate_space": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unicode_scalar_index.v1"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "resource_id",
+                                "hash",
+                                "format",
+                                "revision",
+                                "coordinate_space"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "source_content": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "item_id": {
+                                    "type": "string",
+                                    "maxLength": 40
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "condition",
+                                      "exception",
+                                      "open_question",
+                                      "requirement",
+                                      "unclassified"
+                                    ]
+                                  },
+                                  "summary": {
+                                    "type": "string",
+                                    "maxLength": 240
+                                  },
+                                  "citations": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "start": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 2048
+                                        },
+                                        "end": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 2048
+                                        },
+                                        "quote": {
+                                          "type": "string",
+                                          "maxLength": 2048
+                                        }
+                                      },
+                                      "required": [
+                                        "start",
+                                        "end",
+                                        "quote"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 2
+                                  },
+                                  "targets": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 40
+                                    },
+                                    "maxItems": 8
+                                  },
+                                  "relation_status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "UNASSIGNED",
+                                      "MODEL_ASSERTED",
+                                      "NOT_APPLICABLE"
+                                    ]
+                                  },
+                                  "decision_status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "OPEN",
+                                      "NOT_APPLICABLE"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item_id",
+                                  "kind",
+                                  "summary",
+                                  "citations",
+                                  "targets",
+                                  "relation_status",
+                                  "decision_status"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 8
+                            },
+                            "feedback": {
+                              "type": "object",
+                              "properties": {
+                                "check": {
+                                  "type": "string",
+                                  "enum": [
+                                    "natural.spec_citations.v1"
+                                  ]
+                                },
+                                "citation_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PASS"
+                                  ]
+                                },
+                                "coverage_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "FULL",
+                                    "PARTIAL"
+                                  ]
+                                },
+                                "uncovered": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "start": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 2048
+                                      },
+                                      "end": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 2048
+                                      },
+                                      "quote": {
+                                        "type": "string",
+                                        "maxLength": 2048
+                                      }
+                                    },
+                                    "required": [
+                                      "start",
+                                      "end",
+                                      "quote"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 32
+                                },
+                                "semantic_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "UNKNOWN"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "check",
+                                "citation_status",
+                                "coverage_status",
+                                "uncovered",
+                                "semantic_status"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "human_unresolved": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "maxItems": 16
+                            },
+                            "source_retention": {
+                              "type": "string",
+                              "enum": [
+                                "EXACT"
+                              ]
+                            },
+                            "semantic_goal_acceptance": {
+                              "type": "string",
+                              "enum": [
+                                "NOT_RUN"
+                              ]
+                            },
+                            "owner_acceptance": {
+                              "type": "string",
+                              "enum": [
+                                "PENDING"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check_version",
+                            "source",
+                            "source_content",
+                            "items",
+                            "feedback",
+                            "human_unresolved",
+                            "source_retention",
+                            "semantic_goal_acceptance",
+                            "owner_acceptance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "citation_status": {
+                          "type": "string",
+                          "enum": [
+                            "PASS"
+                          ]
+                        },
+                        "semantic_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN"
+                          ]
+                        },
+                        "semantic_goal_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "NOT_RUN"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "hash",
+                        "checklist",
+                        "citation_status",
+                        "semantic_status",
+                        "semantic_goal_acceptance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "action_bindings": [
+                      {
+                        "binding_id": "read_pick",
+                        "action_id": "action_943c4dd4c9895c659f40e913a523eed1",
+                        "revision": 1
+                      },
+                      {
+                        "binding_id": "user_edited_inference",
+                        "action_id": "action_b5db1b75713fc852d3e7f24ecbaa8c20",
+                        "revision": 1
+                      },
+                      {
+                        "binding_id": "check_pick",
+                        "action_id": "action_9cd1b1e662446a53efc9d1fe77218f9c",
+                        "revision": 1
+                      },
+                      {
+                        "binding_id": "save_pick",
+                        "action_id": "action_f3ec1757562e594c4fe80c9b59ae70ae",
+                        "revision": 1
+                      }
+                    ],
+                    "data_bindings": [
+                      {
+                        "binding_id": "source",
+                        "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                      }
+                    ],
+                    "runtime_identity_requirements": {
+                      "mode": "user_and_app_intersection"
+                    },
+                    "data_schema_version": 1,
+                    "workflow": [
+                      {
+                        "step_id": "read_pick",
+                        "binding_id": "read_pick",
+                        "depends_on": [],
+                        "inputs": {
+                          "resource_id": {
+                            "source": "data",
+                            "ref": "source",
+                            "field": "resource_id"
+                          }
+                        }
+                      },
+                      {
+                        "step_id": "user_edited_inference",
+                        "binding_id": "user_edited_inference",
+                        "depends_on": [
+                          "read_pick"
+                        ],
+                        "inputs": {
+                          "resource_id": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "resource_id"
+                          },
+                          "content": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "content"
+                          },
+                          "hash": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "hash"
+                          },
+                          "format": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "format"
+                          }
+                        }
+                      },
+                      {
+                        "step_id": "check_pick",
+                        "binding_id": "check_pick",
+                        "depends_on": [
+                          "read_pick",
+                          "user_edited_inference"
+                        ],
+                        "inputs": {
+                          "resource_id": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "resource_id"
+                          },
+                          "content": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "content"
+                          },
+                          "hash": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "hash"
+                          },
+                          "format": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "format"
+                          },
+                          "items": {
+                            "source": "step",
+                            "ref": "user_edited_inference",
+                            "field": "items"
+                          }
+                        }
+                      },
+                      {
+                        "step_id": "save_pick",
+                        "binding_id": "save_pick",
+                        "depends_on": [
+                          "check_pick"
+                        ],
+                        "inputs": {
+                          "text": {
+                            "source": "step",
+                            "ref": "check_pick",
+                            "field": "text"
+                          }
+                        }
+                      }
+                    ],
+                    "outputs": {
+                      "resource_id": {
+                        "source": "step",
+                        "ref": "save_pick",
+                        "field": "resource_id"
+                      },
+                      "hash": {
+                        "source": "step",
+                        "ref": "save_pick",
+                        "field": "hash"
+                      },
+                      "checklist": {
+                        "source": "step",
+                        "ref": "check_pick",
+                        "field": "checklist"
+                      },
+                      "citation_status": {
+                        "source": "step",
+                        "ref": "check_pick",
+                        "field": "citation_status"
+                      },
+                      "semantic_status": {
+                        "source": "step",
+                        "ref": "check_pick",
+                        "field": "semantic_status"
+                      },
+                      "semantic_goal_acceptance": {
+                        "source": "step",
+                        "ref": "check_pick",
+                        "field": "semantic_goal_acceptance"
+                      }
+                    },
+                    "views": [
+                      {
+                        "component_ref": "table",
+                        "output_field": "checklist"
+                      }
+                    ],
+                    "validation_suite_ref": "natural.spec_citations.v1",
+                    "runtime_limits": {
+                      "max_requests": 1,
+                      "max_tools": 3,
+                      "max_repairs": 0,
+                      "max_total_tokens": 64000,
+                      "max_output_tokens": 1024,
+                      "run_seconds": 300
+                    },
+                    "permission_requirements": [
+                      {
+                        "tool_ref": "resource.read",
+                        "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                      },
+                      {
+                        "tool_ref": "artifact.save_text",
+                        "resource_ref": "proj_12625ad7846943b4a7376d0dcdfb35b3"
+                      }
+                    ],
+                    "dependency_lock": [
+                      {
+                        "kind": "resource",
+                        "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                        "version": "1"
+                      },
+                      {
+                        "kind": "tool",
+                        "ref": "resource.read",
+                        "version": "1"
+                      },
+                      {
+                        "kind": "prompt",
+                        "ref": "model.spec.all.v1",
+                        "version": "1"
+                      },
+                      {
+                        "kind": "tool",
+                        "ref": "spec.verify_citations",
+                        "version": "1"
+                      },
+                      {
+                        "kind": "tool",
+                        "ref": "artifact.save_text",
+                        "version": "1"
+                      },
+                      {
+                        "kind": "check",
+                        "ref": "natural.spec_citations.v1",
+                        "version": "1"
+                      },
+                      {
+                        "kind": "check",
+                        "ref": "receipt.readback.v1",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "actions": [
+                    {
+                      "schema_version": "1.0-draft",
+                      "action_id": "action_943c4dd4c9895c659f40e913a523eed1",
+                      "revision": 1,
+                      "input_schema": {
+                        "type": "object",
+                        "properties": {
+                          "resource_id": {
+                            "type": "string",
+                            "maxLength": 2048
+                          }
+                        },
+                        "required": [
+                          "resource_id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "output_schema": {
+                        "type": "object",
+                        "properties": {
+                          "resource_id": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "content": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "hash": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "txt",
+                              "md"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "resource_id",
+                          "content",
+                          "hash",
+                          "format"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "executor": {
+                        "kind": "registered_tool",
+                        "ref": "resource.read",
+                        "version": "1"
+                      },
+                      "allowed_tool_refs": [],
+                      "dependencies": [
+                        {
+                          "kind": "resource",
+                          "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                          "version": "1"
+                        }
+                      ],
+                      "permission_requirements": [
+                        {
+                          "tool_ref": "resource.read",
+                          "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                        }
+                      ],
+                      "effect": "read",
+                      "preconditions": [],
+                      "postcheck_refs": [
+                        "natural.spec_citations.v1"
+                      ],
+                      "limits": {
+                        "max_requests": 1,
+                        "max_tools": 3,
+                        "max_repairs": 0,
+                        "max_total_tokens": 64000,
+                        "max_output_tokens": 1024,
+                        "run_seconds": 300
+                      },
+                      "idempotency": "read_only",
+                      "reconcile_ref": "operation.lookup.v1",
+                      "error_contract": [
+                        "INVALID_INPUT",
+                        "PERMISSION_DENIED",
+                        "GRANT_REVOKED",
+                        "VERIFICATION_FAILED",
+                        "OUTCOME_UNKNOWN"
+                      ]
+                    },
+                    {
+                      "schema_version": "1.0-draft",
+                      "action_id": "action_b5db1b75713fc852d3e7f24ecbaa8c20",
+                      "revision": 1,
+                      "input_schema": {
+                        "type": "object",
+                        "properties": {
+                          "resource_id": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "content": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "hash": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "txt",
+                              "md"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "resource_id",
+                          "content",
+                          "hash",
+                          "format"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "output_schema": {
+                        "type": "object",
+                        "properties": {
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "item_id": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "condition",
+                                    "exception",
+                                    "open_question",
+                                    "requirement",
+                                    "unclassified"
+                                  ]
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "maxLength": 240
+                                },
+                                "citations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "start": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 2048
+                                      },
+                                      "end": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 2048
+                                      },
+                                      "quote": {
+                                        "type": "string",
+                                        "maxLength": 2048
+                                      }
+                                    },
+                                    "required": [
+                                      "start",
+                                      "end",
+                                      "quote"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 2
+                                },
+                                "targets": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 40
+                                  },
+                                  "maxItems": 8
+                                }
+                              },
+                              "required": [
+                                "item_id",
+                                "kind",
+                                "summary",
+                                "citations",
+                                "targets"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 8
+                          },
+                          "feedback": {
+                            "type": "object",
+                            "properties": {
+                              "check": {
+                                "type": "string",
+                                "enum": [
+                                  "natural.spec_citations.v1"
+                                ]
+                              },
+                              "citation_status": {
+                                "type": "string",
+                                "enum": [
+                                  "PASS"
+                                ]
+                              },
+                              "coverage_status": {
+                                "type": "string",
+                                "enum": [
+                                  "FULL",
+                                  "PARTIAL"
+                                ]
+                              },
+                              "uncovered": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 32
+                              },
+                              "semantic_status": {
+                                "type": "string",
+                                "enum": [
+                                  "UNKNOWN"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "check",
+                              "citation_status",
+                              "coverage_status",
+                              "uncovered",
+                              "semantic_status"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "items",
+                          "feedback"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "executor": {
+                        "kind": "bounded_agent",
+                        "ref": "model.spec.all",
+                        "version": "1"
+                      },
+                      "allowed_tool_refs": [],
+                      "dependencies": [
+                        {
+                          "kind": "resource",
+                          "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                          "version": "1"
+                        },
+                        {
+                          "kind": "prompt",
+                          "ref": "model.spec.all.v1",
+                          "version": "1"
+                        }
+                      ],
+                      "permission_requirements": [
+                        {
+                          "tool_ref": "resource.read",
+                          "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                        }
+                      ],
+                      "effect": "read",
+                      "preconditions": [],
+                      "postcheck_refs": [
+                        "natural.spec_citations.v1"
+                      ],
+                      "limits": {
+                        "max_requests": 1,
+                        "max_tools": 3,
+                        "max_repairs": 0,
+                        "max_total_tokens": 64000,
+                        "max_output_tokens": 1024,
+                        "run_seconds": 300
+                      },
+                      "idempotency": "read_only",
+                      "reconcile_ref": "operation.lookup.v1",
+                      "error_contract": [
+                        "INVALID_INPUT",
+                        "PERMISSION_DENIED",
+                        "GRANT_REVOKED",
+                        "VERIFICATION_FAILED",
+                        "OUTCOME_UNKNOWN"
+                      ]
+                    },
+                    {
+                      "schema_version": "1.0-draft",
+                      "action_id": "action_9cd1b1e662446a53efc9d1fe77218f9c",
+                      "revision": 1,
+                      "input_schema": {
+                        "type": "object",
+                        "properties": {
+                          "resource_id": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "content": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "hash": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "txt",
+                              "md"
+                            ]
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "item_id": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "condition",
+                                    "exception",
+                                    "open_question",
+                                    "requirement",
+                                    "unclassified"
+                                  ]
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "maxLength": 240
+                                },
+                                "citations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "start": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 2048
+                                      },
+                                      "end": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 2048
+                                      },
+                                      "quote": {
+                                        "type": "string",
+                                        "maxLength": 2048
+                                      }
+                                    },
+                                    "required": [
+                                      "start",
+                                      "end",
+                                      "quote"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 2
+                                },
+                                "targets": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 40
+                                  },
+                                  "maxItems": 8
+                                }
+                              },
+                              "required": [
+                                "item_id",
+                                "kind",
+                                "summary",
+                                "citations",
+                                "targets"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 8
+                          }
+                        },
+                        "required": [
+                          "resource_id",
+                          "content",
+                          "hash",
+                          "format",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "output_schema": {
+                        "type": "object",
+                        "properties": {
+                          "checklist": {
+                            "type": "object",
+                            "properties": {
+                              "check_version": {
+                                "type": "string",
+                                "enum": [
+                                  "natural.spec_citations.v1"
+                                ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "resource_id": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  },
+                                  "hash": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  },
+                                  "format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "txt",
+                                      "md"
+                                    ]
+                                  },
+                                  "revision": {
+                                    "type": "integer",
+                                    "enum": [
+                                      1
+                                    ]
+                                  },
+                                  "coordinate_space": {
+                                    "type": "string",
+                                    "enum": [
+                                      "unicode_scalar_index.v1"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "resource_id",
+                                  "hash",
+                                  "format",
+                                  "revision",
+                                  "coordinate_space"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "source_content": {
+                                "type": "string",
+                                "maxLength": 2048
+                              },
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "item_id": {
+                                      "type": "string",
+                                      "maxLength": 40
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "condition",
+                                        "exception",
+                                        "open_question",
+                                        "requirement",
+                                        "unclassified"
+                                      ]
+                                    },
+                                    "summary": {
+                                      "type": "string",
+                                      "maxLength": 240
+                                    },
+                                    "citations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "start": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 2048
+                                          },
+                                          "end": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 2048
+                                          },
+                                          "quote": {
+                                            "type": "string",
+                                            "maxLength": 2048
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end",
+                                          "quote"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "maxItems": 2
+                                    },
+                                    "targets": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "maxLength": 40
+                                      },
+                                      "maxItems": 8
+                                    },
+                                    "relation_status": {
+                                      "type": "string",
+                                      "enum": [
+                                        "UNASSIGNED",
+                                        "MODEL_ASSERTED",
+                                        "NOT_APPLICABLE"
+                                      ]
+                                    },
+                                    "decision_status": {
+                                      "type": "string",
+                                      "enum": [
+                                        "OPEN",
+                                        "NOT_APPLICABLE"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "item_id",
+                                    "kind",
+                                    "summary",
+                                    "citations",
+                                    "targets",
+                                    "relation_status",
+                                    "decision_status"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 8
+                              },
+                              "feedback": {
+                                "type": "object",
+                                "properties": {
+                                  "check": {
+                                    "type": "string",
+                                    "enum": [
+                                      "natural.spec_citations.v1"
+                                    ]
+                                  },
+                                  "citation_status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "PASS"
+                                    ]
+                                  },
+                                  "coverage_status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "FULL",
+                                      "PARTIAL"
+                                    ]
+                                  },
+                                  "uncovered": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "start": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 2048
+                                        },
+                                        "end": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 2048
+                                        },
+                                        "quote": {
+                                          "type": "string",
+                                          "maxLength": 2048
+                                        }
+                                      },
+                                      "required": [
+                                        "start",
+                                        "end",
+                                        "quote"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 32
+                                  },
+                                  "semantic_status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "UNKNOWN"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "check",
+                                  "citation_status",
+                                  "coverage_status",
+                                  "uncovered",
+                                  "semantic_status"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "human_unresolved": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 4000
+                                },
+                                "maxItems": 16
+                              },
+                              "source_retention": {
+                                "type": "string",
+                                "enum": [
+                                  "EXACT"
+                                ]
+                              },
+                              "semantic_goal_acceptance": {
+                                "type": "string",
+                                "enum": [
+                                  "NOT_RUN"
+                                ]
+                              },
+                              "owner_acceptance": {
+                                "type": "string",
+                                "enum": [
+                                  "PENDING"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "check_version",
+                              "source",
+                              "source_content",
+                              "items",
+                              "feedback",
+                              "human_unresolved",
+                              "source_retention",
+                              "semantic_goal_acceptance",
+                              "owner_acceptance"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "text": {
+                            "type": "string",
+                            "maxLength": 8000
+                          },
+                          "citation_status": {
+                            "type": "string",
+                            "enum": [
+                              "PASS"
+                            ]
+                          },
+                          "semantic_status": {
+                            "type": "string",
+                            "enum": [
+                              "UNKNOWN"
+                            ]
+                          },
+                          "semantic_goal_acceptance": {
+                            "type": "string",
+                            "enum": [
+                              "NOT_RUN"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "checklist",
+                          "text",
+                          "citation_status",
+                          "semantic_status",
+                          "semantic_goal_acceptance"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "executor": {
+                        "kind": "registered_tool",
+                        "ref": "spec.verify_citations",
+                        "version": "1"
+                      },
+                      "allowed_tool_refs": [],
+                      "dependencies": [
+                        {
+                          "kind": "resource",
+                          "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                          "version": "1"
+                        }
+                      ],
+                      "permission_requirements": [
+                        {
+                          "tool_ref": "resource.read",
+                          "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                        }
+                      ],
+                      "effect": "read",
+                      "preconditions": [],
+                      "postcheck_refs": [
+                        "natural.spec_citations.v1"
+                      ],
+                      "limits": {
+                        "max_requests": 1,
+                        "max_tools": 3,
+                        "max_repairs": 0,
+                        "max_total_tokens": 64000,
+                        "max_output_tokens": 1024,
+                        "run_seconds": 300
+                      },
+                      "idempotency": "read_only",
+                      "reconcile_ref": "operation.lookup.v1",
+                      "error_contract": [
+                        "INVALID_INPUT",
+                        "PERMISSION_DENIED",
+                        "GRANT_REVOKED",
+                        "VERIFICATION_FAILED",
+                        "OUTCOME_UNKNOWN"
+                      ]
+                    },
+                    {
+                      "schema_version": "1.0-draft",
+                      "action_id": "action_f3ec1757562e594c4fe80c9b59ae70ae",
+                      "revision": 1,
+                      "input_schema": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "maxLength": 8000
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "output_schema": {
+                        "type": "object",
+                        "properties": {
+                          "resource_id": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "hash": {
+                            "type": "string",
+                            "maxLength": 2048
+                          }
+                        },
+                        "required": [
+                          "resource_id",
+                          "hash"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "executor": {
+                        "kind": "registered_tool",
+                        "ref": "artifact.save_text",
+                        "version": "1"
+                      },
+                      "allowed_tool_refs": [],
+                      "dependencies": [
+                        {
+                          "kind": "resource",
+                          "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                          "version": "1"
+                        }
+                      ],
+                      "permission_requirements": [
+                        {
+                          "tool_ref": "artifact.save_text",
+                          "resource_ref": "proj_12625ad7846943b4a7376d0dcdfb35b3"
+                        }
+                      ],
+                      "effect": "project_write",
+                      "preconditions": [],
+                      "postcheck_refs": [
+                        "receipt.readback.v1"
+                      ],
+                      "limits": {
+                        "max_requests": 1,
+                        "max_tools": 3,
+                        "max_repairs": 0,
+                        "max_total_tokens": 64000,
+                        "max_output_tokens": 1024,
+                        "run_seconds": 300
+                      },
+                      "idempotency": "transactional",
+                      "reconcile_ref": "operation.lookup.v1",
+                      "error_contract": [
+                        "INVALID_INPUT",
+                        "PERMISSION_DENIED",
+                        "GRANT_REVOKED",
+                        "VERIFICATION_FAILED",
+                        "OUTCOME_UNKNOWN"
+                      ]
+                    }
+                  ],
+                  "spec_recipe": {
+                    "version": "natural-spec-recipe.v1",
+                    "steps": [
+                      {
+                        "step_id": "read_pick",
+                        "operator": "resource.read",
+                        "depends_on": [],
+                        "inputs": {
+                          "resource_id": {
+                            "source": "data",
+                            "ref": "source",
+                            "field": "resource_id"
+                          }
+                        }
+                      },
+                      {
+                        "step_id": "user_edited_inference",
+                        "operator": "model.spec.all",
+                        "depends_on": [
+                          "read_pick"
+                        ],
+                        "inputs": {
+                          "resource_id": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "resource_id"
+                          },
+                          "content": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "content"
+                          },
+                          "hash": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "hash"
+                          },
+                          "format": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "format"
+                          }
+                        }
+                      },
+                      {
+                        "step_id": "check_pick",
+                        "operator": "spec.verify_citations",
+                        "depends_on": [
+                          "read_pick",
+                          "user_edited_inference"
+                        ],
+                        "inputs": {
+                          "resource_id": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "resource_id"
+                          },
+                          "content": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "content"
+                          },
+                          "hash": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "hash"
+                          },
+                          "format": {
+                            "source": "step",
+                            "ref": "read_pick",
+                            "field": "format"
+                          },
+                          "items": {
+                            "source": "step",
+                            "ref": "user_edited_inference",
+                            "field": "items"
+                          }
+                        }
+                      },
+                      {
+                        "step_id": "save_pick",
+                        "operator": "artifact.save_text",
+                        "depends_on": [
+                          "check_pick"
+                        ],
+                        "inputs": {
+                          "text": {
+                            "source": "step",
+                            "ref": "check_pick",
+                            "field": "text"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+                  "goal": {
+                    "title": "pb-extraction-target Goal",
+                    "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+                    "known": [],
+                    "assumptions": [],
+                    "unresolved": [
+                      "Human question 0",
+                      "Human question 1",
+                      "Human question 2",
+                      "Human question 3",
+                      "Human question 4",
+                      "Human question 5",
+                      "Human question 6",
+                      "Human question 7",
+                      "Human question 8",
+                      "Human question 9",
+                      "Human question 10",
+                      "Human question 11",
+                      "Human question 12",
+                      "Human question 13",
+                      "Human question 14",
+                      "Human question 15"
+                    ],
+                    "constraints": [
+                      "Preserve the full source and uncertain relations"
+                    ],
+                    "acceptance_checks": [
+                      "Human review of completeness and meaning"
+                    ],
+                    "resource_refs": [
+                      "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                    ]
+                  },
+                  "model_sample_check": {
+                    "check": "natural.spec_citations.v1",
+                    "sample_fingerprint": "4a0636ef71f7e7d90e6f700d2d1410bb02f2e054fb79dc4cc4075b13384a63f0",
+                    "citation_status": "PASS",
+                    "semantic_goal_acceptance": "NOT_RUN",
+                    "source_retention": "EXACT"
+                  },
+                  "spec_task": {
+                    "kind": "pb_natural_spec_task.v1",
+                    "source_run_id": "run_3fdf4b5af9f84efab7c99f59d9d80914",
+                    "source_proof_fingerprint": "29de775c107d5f1b6f4e709ac328b0dfe11008b36b100098b1e5a81a940ebece",
+                    "source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+                    "edited_recipe_fingerprint": "d32124cdb9bf971b73c5b61b3726287c38f88b8595852c85d195b9a81670022f",
+                    "target_goal_fingerprint": "145a541b905578da2c1fe22a32a5f1f3a24742f9356935bab6d6d05a0966b208"
+                  }
+                },
+                "fingerprint": "4d964cd0e9b6f7a39766a876d46cbd7e34d47ae63b9d54cd140d7dab9d9d4b31"
+              },
+              "dependency_lock": [
+                {
+                  "kind": "resource",
+                  "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                  "version": "1"
+                },
+                {
+                  "kind": "tool",
+                  "ref": "resource.read",
+                  "version": "1"
+                },
+                {
+                  "kind": "prompt",
+                  "ref": "model.spec.all.v1",
+                  "version": "1"
+                },
+                {
+                  "kind": "tool",
+                  "ref": "spec.verify_citations",
+                  "version": "1"
+                },
+                {
+                  "kind": "tool",
+                  "ref": "artifact.save_text",
+                  "version": "1"
+                },
+                {
+                  "kind": "check",
+                  "ref": "natural.spec_citations.v1",
+                  "version": "1"
+                },
+                {
+                  "kind": "check",
+                  "ref": "receipt.readback.v1",
+                  "version": "1"
+                }
+              ],
+              "data_schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "hash": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "checklist": {
+                        "type": "object",
+                        "properties": {
+                          "check_version": {
+                            "type": "string",
+                            "enum": [
+                              "natural.spec_citations.v1"
+                            ]
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "resource_id": {
+                                "type": "string",
+                                "maxLength": 2048
+                              },
+                              "hash": {
+                                "type": "string",
+                                "maxLength": 2048
+                              },
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "txt",
+                                  "md"
+                                ]
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "enum": [
+                                  1
+                                ]
+                              },
+                              "coordinate_space": {
+                                "type": "string",
+                                "enum": [
+                                  "unicode_scalar_index.v1"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "resource_id",
+                              "hash",
+                              "format",
+                              "revision",
+                              "coordinate_space"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "source_content": {
+                            "type": "string",
+                            "maxLength": 2048
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "item_id": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "condition",
+                                    "exception",
+                                    "open_question",
+                                    "requirement",
+                                    "unclassified"
+                                  ]
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "maxLength": 240
+                                },
+                                "citations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "start": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 2048
+                                      },
+                                      "end": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 2048
+                                      },
+                                      "quote": {
+                                        "type": "string",
+                                        "maxLength": 2048
+                                      }
+                                    },
+                                    "required": [
+                                      "start",
+                                      "end",
+                                      "quote"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 2
+                                },
+                                "targets": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 40
+                                  },
+                                  "maxItems": 8
+                                },
+                                "relation_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "UNASSIGNED",
+                                    "MODEL_ASSERTED",
+                                    "NOT_APPLICABLE"
+                                  ]
+                                },
+                                "decision_status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "OPEN",
+                                    "NOT_APPLICABLE"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "item_id",
+                                "kind",
+                                "summary",
+                                "citations",
+                                "targets",
+                                "relation_status",
+                                "decision_status"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 8
+                          },
+                          "feedback": {
+                            "type": "object",
+                            "properties": {
+                              "check": {
+                                "type": "string",
+                                "enum": [
+                                  "natural.spec_citations.v1"
+                                ]
+                              },
+                              "citation_status": {
+                                "type": "string",
+                                "enum": [
+                                  "PASS"
+                                ]
+                              },
+                              "coverage_status": {
+                                "type": "string",
+                                "enum": [
+                                  "FULL",
+                                  "PARTIAL"
+                                ]
+                              },
+                              "uncovered": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 32
+                              },
+                              "semantic_status": {
+                                "type": "string",
+                                "enum": [
+                                  "UNKNOWN"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "check",
+                              "citation_status",
+                              "coverage_status",
+                              "uncovered",
+                              "semantic_status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "human_unresolved": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            "maxItems": 16
+                          },
+                          "source_retention": {
+                            "type": "string",
+                            "enum": [
+                              "EXACT"
+                            ]
+                          },
+                          "semantic_goal_acceptance": {
+                            "type": "string",
+                            "enum": [
+                              "NOT_RUN"
+                            ]
+                          },
+                          "owner_acceptance": {
+                            "type": "string",
+                            "enum": [
+                              "PENDING"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "check_version",
+                          "source",
+                          "source_content",
+                          "items",
+                          "feedback",
+                          "human_unresolved",
+                          "source_retention",
+                          "semantic_goal_acceptance",
+                          "owner_acceptance"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "citation_status": {
+                        "type": "string",
+                        "enum": [
+                          "PASS"
+                        ]
+                      },
+                      "semantic_status": {
+                        "type": "string",
+                        "enum": [
+                          "UNKNOWN"
+                        ]
+                      },
+                      "semantic_goal_acceptance": {
+                        "type": "string",
+                        "enum": [
+                          "NOT_RUN"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "hash",
+                      "checklist",
+                      "citation_status",
+                      "semantic_status",
+                      "semantic_goal_acceptance"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "result"
+                ],
+                "additionalProperties": false
+              },
+              "data_schema_version": 1,
+              "check_evidence": {
+                "ref": "natural.recipe_compile.v1",
+                "status": "PASS",
+                "candidate_fingerprint": "4d964cd0e9b6f7a39766a876d46cbd7e34d47ae63b9d54cd140d7dab9d9d4b31",
+                "input_fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "output_fingerprint": "aec922fc69b3b0f1b4c59398c6ae4a085bc949b6d00c55cea7cbc61f02cc8061",
+                "plan_fingerprint": "4f8ba67dc2dd53012ff25beb362f5f8eb9985cac469a948be32b194a41dfabf0",
+                "execution_mode": "MODEL_EXECUTION_REQUIRED_OFF_BY_DEFAULT",
+                "citation_status": "NOT_RUN",
+                "semantic_status": "UNKNOWN",
+                "semantic_goal_acceptance": "NOT_RUN"
+              },
+              "model_requests": 0,
+              "formal_publication_enabled": false
+            },
+            "fingerprint": "0cfb8d91cab35db8ed471a323b40e64dcf01645493c08876602c3b61353103b9"
+          }
+        ]
+      }
+    },
+    {
+      "boot": 2,
+      "method": "GET",
+      "path": "/api/internal/apps/app_a17c0620d53b6a263e169371007456c7/instances",
+      "headers": {
+        "Authorization": "Bearer synthetic-test-A",
+        "Content-Type": "application/json"
+      },
+      "status": 200,
+      "response": {
+        "namespace": "INTERNAL_ENGINEERING_ONLY",
+        "formal_publication_enabled": false,
+        "items": [
+          {
+            "id": "iinstance_976c94aea61e31a2738c82627419b97a",
+            "project_id": "proj_12625ad7846943b4a7376d0dcdfb35b3",
+            "principal_id": "user_44ff356ff1a44564a3f3ab74c3179899",
+            "source_app_id": "app_a17c0620d53b6a263e169371007456c7",
+            "runtime_id": "appruntime_e72572e0c30f47a8f4585bcdf5a7f55f",
+            "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+            "revision": 1,
+            "data_version": 1,
+            "history": [
+              {
+                "revision": 1,
+                "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+                "kind": "created"
+              }
+            ],
+            "namespace": "INTERNAL_ENGINEERING_ONLY",
+            "switch_policy": {
+              "namespace": "internal.logic-switch-policy.v1",
+              "instance_id": "iinstance_976c94aea61e31a2738c82627419b97a",
+              "revision": 1,
+              "roles": [],
+              "blocked_release_ids": []
+            },
+            "data": [
+              {
+                "instance_id": "iinstance_976c94aea61e31a2738c82627419b97a",
+                "version": 1,
+                "run_id": "iapprun_f63c0b6d7cf648958c74261e4ce524d1",
+                "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+                "schema_version": 1,
+                "data": {
+                  "result": {
+                    "resource_id": "res_869d5baea0864344bb6026bca02c01d0",
+                    "hash": "0219bbf3f77d39a76c889156074107142e4ea6d93d5c6e6b17fafd4ec91c836f",
+                    "checklist": {
+                      "check_version": "natural.spec_citations.v1",
+                      "source": {
+                        "resource_id": "res_970783f975084db5aa7fdd13fad317e0",
+                        "hash": "014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709",
+                        "format": "txt",
+                        "revision": 1,
+                        "coordinate_space": "unicode_scalar_index.v1"
+                      },
+                      "source_content": "The field beacon transmits twice per day while solar power is available. During a storm it keeps a cached signal. The beacon night policy has yet to be agreed.",
+                      "items": [
+                        {
+                          "item_id": "fact_0",
+                          "kind": "requirement",
+                          "summary": "The field beacon transmits twice per day while solar power is available.",
+                          "citations": [
+                            {
+                              "start": 0,
+                              "end": 72,
+                              "quote": "The field beacon transmits twice per day while solar power is available."
+                            }
+                          ],
+                          "targets": [],
+                          "relation_status": "NOT_APPLICABLE",
+                          "decision_status": "NOT_APPLICABLE"
+                        },
+                        {
+                          "item_id": "qualifier",
+                          "kind": "condition",
+                          "summary": "while solar power is available",
+                          "citations": [
+                            {
+                              "start": 41,
+                              "end": 71,
+                              "quote": "while solar power is available"
+                            }
+                          ],
+                          "targets": [
+                            "fact_0"
+                          ],
+                          "relation_status": "MODEL_ASSERTED",
+                          "decision_status": "NOT_APPLICABLE"
+                        },
+                        {
+                          "item_id": "fact_1",
+                          "kind": "exception",
+                          "summary": "During a storm it keeps a cached signal.",
+                          "citations": [
+                            {
+                              "start": 73,
+                              "end": 113,
+                              "quote": "During a storm it keeps a cached signal."
+                            }
+                          ],
+                          "targets": [
+                            "fact_0"
+                          ],
+                          "relation_status": "MODEL_ASSERTED",
+                          "decision_status": "NOT_APPLICABLE"
+                        },
+                        {
+                          "item_id": "fact_2",
+                          "kind": "open_question",
+                          "summary": "The beacon night policy has yet to be agreed.",
+                          "citations": [
+                            {
+                              "start": 114,
+                              "end": 159,
+                              "quote": "The beacon night policy has yet to be agreed."
+                            }
+                          ],
+                          "targets": [],
+                          "relation_status": "NOT_APPLICABLE",
+                          "decision_status": "OPEN"
+                        }
+                      ],
+                      "feedback": {
+                        "check": "natural.spec_citations.v1",
+                        "citation_status": "PASS",
+                        "coverage_status": "FULL",
+                        "uncovered": [],
+                        "semantic_status": "UNKNOWN"
+                      },
+                      "human_unresolved": [
+                        "Human question 0",
+                        "Human question 1",
+                        "Human question 2",
+                        "Human question 3",
+                        "Human question 4",
+                        "Human question 5",
+                        "Human question 6",
+                        "Human question 7",
+                        "Human question 8",
+                        "Human question 9",
+                        "Human question 10",
+                        "Human question 11",
+                        "Human question 12",
+                        "Human question 13",
+                        "Human question 14",
+                        "Human question 15"
+                      ],
+                      "source_retention": "EXACT",
+                      "semantic_goal_acceptance": "NOT_RUN",
+                      "owner_acceptance": "PENDING"
+                    },
+                    "citation_status": "PASS",
+                    "semantic_status": "UNKNOWN",
+                    "semantic_goal_acceptance": "NOT_RUN"
+                  }
+                },
+                "fingerprint": "84dee07be8121d1431cba049f9f53add5023f12a3f041b72d6720db3477191bf"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "boot": 2,
+      "method": "GET",
+      "path": "/api/internal/instances/iinstance_976c94aea61e31a2738c82627419b97a",
+      "headers": {
+        "Authorization": "Bearer synthetic-test-A",
+        "Content-Type": "application/json"
+      },
+      "status": 200,
+      "response": {
+        "namespace": "INTERNAL_ENGINEERING_ONLY",
+        "formal_publication_enabled": false,
+        "id": "iinstance_976c94aea61e31a2738c82627419b97a",
+        "project_id": "proj_12625ad7846943b4a7376d0dcdfb35b3",
+        "principal_id": "user_44ff356ff1a44564a3f3ab74c3179899",
+        "source_app_id": "app_a17c0620d53b6a263e169371007456c7",
+        "runtime_id": "appruntime_e72572e0c30f47a8f4585bcdf5a7f55f",
+        "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+        "revision": 1,
+        "data_version": 1,
+        "history": [
+          {
+            "revision": 1,
+            "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+            "kind": "created"
+          }
+        ],
+        "data": [
+          {
+            "instance_id": "iinstance_976c94aea61e31a2738c82627419b97a",
+            "version": 1,
+            "run_id": "iapprun_f63c0b6d7cf648958c74261e4ce524d1",
+            "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+            "schema_version": 1,
+            "data": {
+              "result": {
+                "resource_id": "res_869d5baea0864344bb6026bca02c01d0",
+                "hash": "0219bbf3f77d39a76c889156074107142e4ea6d93d5c6e6b17fafd4ec91c836f",
+                "checklist": {
+                  "check_version": "natural.spec_citations.v1",
+                  "source": {
+                    "resource_id": "res_970783f975084db5aa7fdd13fad317e0",
+                    "hash": "014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709",
+                    "format": "txt",
+                    "revision": 1,
+                    "coordinate_space": "unicode_scalar_index.v1"
+                  },
+                  "source_content": "The field beacon transmits twice per day while solar power is available. During a storm it keeps a cached signal. The beacon night policy has yet to be agreed.",
+                  "items": [
+                    {
+                      "item_id": "fact_0",
+                      "kind": "requirement",
+                      "summary": "The field beacon transmits twice per day while solar power is available.",
+                      "citations": [
+                        {
+                          "start": 0,
+                          "end": 72,
+                          "quote": "The field beacon transmits twice per day while solar power is available."
+                        }
+                      ],
+                      "targets": [],
+                      "relation_status": "NOT_APPLICABLE",
+                      "decision_status": "NOT_APPLICABLE"
+                    },
+                    {
+                      "item_id": "qualifier",
+                      "kind": "condition",
+                      "summary": "while solar power is available",
+                      "citations": [
+                        {
+                          "start": 41,
+                          "end": 71,
+                          "quote": "while solar power is available"
+                        }
+                      ],
+                      "targets": [
+                        "fact_0"
+                      ],
+                      "relation_status": "MODEL_ASSERTED",
+                      "decision_status": "NOT_APPLICABLE"
+                    },
+                    {
+                      "item_id": "fact_1",
+                      "kind": "exception",
+                      "summary": "During a storm it keeps a cached signal.",
+                      "citations": [
+                        {
+                          "start": 73,
+                          "end": 113,
+                          "quote": "During a storm it keeps a cached signal."
+                        }
+                      ],
+                      "targets": [
+                        "fact_0"
+                      ],
+                      "relation_status": "MODEL_ASSERTED",
+                      "decision_status": "NOT_APPLICABLE"
+                    },
+                    {
+                      "item_id": "fact_2",
+                      "kind": "open_question",
+                      "summary": "The beacon night policy has yet to be agreed.",
+                      "citations": [
+                        {
+                          "start": 114,
+                          "end": 159,
+                          "quote": "The beacon night policy has yet to be agreed."
+                        }
+                      ],
+                      "targets": [],
+                      "relation_status": "NOT_APPLICABLE",
+                      "decision_status": "OPEN"
+                    }
+                  ],
+                  "feedback": {
+                    "check": "natural.spec_citations.v1",
+                    "citation_status": "PASS",
+                    "coverage_status": "FULL",
+                    "uncovered": [],
+                    "semantic_status": "UNKNOWN"
+                  },
+                  "human_unresolved": [
+                    "Human question 0",
+                    "Human question 1",
+                    "Human question 2",
+                    "Human question 3",
+                    "Human question 4",
+                    "Human question 5",
+                    "Human question 6",
+                    "Human question 7",
+                    "Human question 8",
+                    "Human question 9",
+                    "Human question 10",
+                    "Human question 11",
+                    "Human question 12",
+                    "Human question 13",
+                    "Human question 14",
+                    "Human question 15"
+                  ],
+                  "source_retention": "EXACT",
+                  "semantic_goal_acceptance": "NOT_RUN",
+                  "owner_acceptance": "PENDING"
+                },
+                "citation_status": "PASS",
+                "semantic_status": "UNKNOWN",
+                "semantic_goal_acceptance": "NOT_RUN"
+              }
+            },
+            "fingerprint": "84dee07be8121d1431cba049f9f53add5023f12a3f041b72d6720db3477191bf"
+          }
+        ],
+        "switch_policy": {
+          "namespace": "internal.logic-switch-policy.v1",
+          "instance_id": "iinstance_976c94aea61e31a2738c82627419b97a",
+          "revision": 1,
+          "roles": [],
+          "blocked_release_ids": []
+        },
+        "release_fingerprint": "0cfb8d91cab35db8ed471a323b40e64dcf01645493c08876602c3b61353103b9",
+        "runs": [
+          {
+            "id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+            "app_run_id": "iapprun_f63c0b6d7cf648958c74261e4ce524d1",
+            "instance_id": "iinstance_976c94aea61e31a2738c82627419b97a",
+            "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+            "status": "SUCCEEDED",
+            "version": 2,
+            "cancel_intent": false,
+            "result": {
+              "resource_id": "res_869d5baea0864344bb6026bca02c01d0",
+              "hash": "0219bbf3f77d39a76c889156074107142e4ea6d93d5c6e6b17fafd4ec91c836f",
+              "checklist": {
+                "check_version": "natural.spec_citations.v1",
+                "source": {
+                  "resource_id": "res_970783f975084db5aa7fdd13fad317e0",
+                  "hash": "014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709",
+                  "format": "txt",
+                  "revision": 1,
+                  "coordinate_space": "unicode_scalar_index.v1"
+                },
+                "source_content": "The field beacon transmits twice per day while solar power is available. During a storm it keeps a cached signal. The beacon night policy has yet to be agreed.",
+                "items": [
+                  {
+                    "item_id": "fact_0",
+                    "kind": "requirement",
+                    "summary": "The field beacon transmits twice per day while solar power is available.",
+                    "citations": [
+                      {
+                        "start": 0,
+                        "end": 72,
+                        "quote": "The field beacon transmits twice per day while solar power is available."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "qualifier",
+                    "kind": "condition",
+                    "summary": "while solar power is available",
+                    "citations": [
+                      {
+                        "start": 41,
+                        "end": 71,
+                        "quote": "while solar power is available"
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_1",
+                    "kind": "exception",
+                    "summary": "During a storm it keeps a cached signal.",
+                    "citations": [
+                      {
+                        "start": 73,
+                        "end": 113,
+                        "quote": "During a storm it keeps a cached signal."
+                      }
+                    ],
+                    "targets": [
+                      "fact_0"
+                    ],
+                    "relation_status": "MODEL_ASSERTED",
+                    "decision_status": "NOT_APPLICABLE"
+                  },
+                  {
+                    "item_id": "fact_2",
+                    "kind": "open_question",
+                    "summary": "The beacon night policy has yet to be agreed.",
+                    "citations": [
+                      {
+                        "start": 114,
+                        "end": 159,
+                        "quote": "The beacon night policy has yet to be agreed."
+                      }
+                    ],
+                    "targets": [],
+                    "relation_status": "NOT_APPLICABLE",
+                    "decision_status": "OPEN"
+                  }
+                ],
+                "feedback": {
+                  "check": "natural.spec_citations.v1",
+                  "citation_status": "PASS",
+                  "coverage_status": "FULL",
+                  "uncovered": [],
+                  "semantic_status": "UNKNOWN"
+                },
+                "human_unresolved": [
+                  "Human question 0",
+                  "Human question 1",
+                  "Human question 2",
+                  "Human question 3",
+                  "Human question 4",
+                  "Human question 5",
+                  "Human question 6",
+                  "Human question 7",
+                  "Human question 8",
+                  "Human question 9",
+                  "Human question 10",
+                  "Human question 11",
+                  "Human question 12",
+                  "Human question 13",
+                  "Human question 14",
+                  "Human question 15"
+                ],
+                "source_retention": "EXACT",
+                "semantic_goal_acceptance": "NOT_RUN",
+                "owner_acceptance": "PENDING"
+              },
+              "citation_status": "PASS",
+              "semantic_status": "UNKNOWN",
+              "semantic_goal_acceptance": "NOT_RUN"
+            },
+            "result_version": 1,
+            "error": null,
+            "known_effects": [
+              {
+                "instance_id": "iinstance_976c94aea61e31a2738c82627419b97a",
+                "version": 1,
+                "run_id": "iapprun_f63c0b6d7cf648958c74261e4ce524d1",
+                "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+                "schema_version": 1,
+                "data": {
+                  "result": {
+                    "resource_id": "res_869d5baea0864344bb6026bca02c01d0",
+                    "hash": "0219bbf3f77d39a76c889156074107142e4ea6d93d5c6e6b17fafd4ec91c836f",
+                    "checklist": {
+                      "check_version": "natural.spec_citations.v1",
+                      "source": {
+                        "resource_id": "res_970783f975084db5aa7fdd13fad317e0",
+                        "hash": "014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709",
+                        "format": "txt",
+                        "revision": 1,
+                        "coordinate_space": "unicode_scalar_index.v1"
+                      },
+                      "source_content": "The field beacon transmits twice per day while solar power is available. During a storm it keeps a cached signal. The beacon night policy has yet to be agreed.",
+                      "items": [
+                        {
+                          "item_id": "fact_0",
+                          "kind": "requirement",
+                          "summary": "The field beacon transmits twice per day while solar power is available.",
+                          "citations": [
+                            {
+                              "start": 0,
+                              "end": 72,
+                              "quote": "The field beacon transmits twice per day while solar power is available."
+                            }
+                          ],
+                          "targets": [],
+                          "relation_status": "NOT_APPLICABLE",
+                          "decision_status": "NOT_APPLICABLE"
+                        },
+                        {
+                          "item_id": "qualifier",
+                          "kind": "condition",
+                          "summary": "while solar power is available",
+                          "citations": [
+                            {
+                              "start": 41,
+                              "end": 71,
+                              "quote": "while solar power is available"
+                            }
+                          ],
+                          "targets": [
+                            "fact_0"
+                          ],
+                          "relation_status": "MODEL_ASSERTED",
+                          "decision_status": "NOT_APPLICABLE"
+                        },
+                        {
+                          "item_id": "fact_1",
+                          "kind": "exception",
+                          "summary": "During a storm it keeps a cached signal.",
+                          "citations": [
+                            {
+                              "start": 73,
+                              "end": 113,
+                              "quote": "During a storm it keeps a cached signal."
+                            }
+                          ],
+                          "targets": [
+                            "fact_0"
+                          ],
+                          "relation_status": "MODEL_ASSERTED",
+                          "decision_status": "NOT_APPLICABLE"
+                        },
+                        {
+                          "item_id": "fact_2",
+                          "kind": "open_question",
+                          "summary": "The beacon night policy has yet to be agreed.",
+                          "citations": [
+                            {
+                              "start": 114,
+                              "end": 159,
+                              "quote": "The beacon night policy has yet to be agreed."
+                            }
+                          ],
+                          "targets": [],
+                          "relation_status": "NOT_APPLICABLE",
+                          "decision_status": "OPEN"
+                        }
+                      ],
+                      "feedback": {
+                        "check": "natural.spec_citations.v1",
+                        "citation_status": "PASS",
+                        "coverage_status": "FULL",
+                        "uncovered": [],
+                        "semantic_status": "UNKNOWN"
+                      },
+                      "human_unresolved": [
+                        "Human question 0",
+                        "Human question 1",
+                        "Human question 2",
+                        "Human question 3",
+                        "Human question 4",
+                        "Human question 5",
+                        "Human question 6",
+                        "Human question 7",
+                        "Human question 8",
+                        "Human question 9",
+                        "Human question 10",
+                        "Human question 11",
+                        "Human question 12",
+                        "Human question 13",
+                        "Human question 14",
+                        "Human question 15"
+                      ],
+                      "source_retention": "EXACT",
+                      "semantic_goal_acceptance": "NOT_RUN",
+                      "owner_acceptance": "PENDING"
+                    },
+                    "citation_status": "PASS",
+                    "semantic_status": "UNKNOWN",
+                    "semantic_goal_acceptance": "NOT_RUN"
+                  }
+                },
+                "fingerprint": "84dee07be8121d1431cba049f9f53add5023f12a3f041b72d6720db3477191bf"
+              }
+            ],
+            "events": [
+              {
+                "id": "event_ce2f0f2a57c14ebe920e55e62f71d722",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299348.730133,
+                "kind": "ACCEPTED",
+                "data": {
+                  "namespace": "INTERNAL_APPRUN",
+                  "app_run_id": "iapprun_f63c0b6d7cf648958c74261e4ce524d1",
+                  "instance_id": "iinstance_976c94aea61e31a2738c82627419b97a",
+                  "release_id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+                  "input_fingerprint": "419fcac86c0cb92077bbd7ac60472a5da1712e3546ef07f8edc3f403344e0f72"
+                }
+              },
+              {
+                "id": "event_7fb58c25c4274d4ba2678bd1b0a779a8",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299373.8281386,
+                "kind": "CLAIMED",
+                "data": {
+                  "fence": 1
+                }
+              },
+              {
+                "id": "event_fa1e682225294caead6ec9af849141ad",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299378.3753605,
+                "kind": "SPEC_STEP_VERIFIED",
+                "data": {
+                  "step_id": "read_pick",
+                  "operation_id": "op_298be0b6740846d0b5e9b3d66a165e3a",
+                  "fence": 1
+                }
+              },
+              {
+                "id": "event_30e94dea097942df90a2ddd923034937",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299388.9138732,
+                "kind": "NS_RESERVED",
+                "data": {
+                  "attempt_id": "attempt_e4c3d7e6277a4ad59f8d83faef938f5b",
+                  "parameters_fingerprint": "b7f23b498fdfa1a1df9a2ee68faabdda55a70ab846a779ec92070012d1385a54",
+                  "reserved_tokens": 4044,
+                  "request_model": "intern-s2",
+                  "mode": "MOCK",
+                  "created_at": 1792299388.9095445,
+                  "operation_id": "op_b0307e8c2515442fbd609d3d2cb014cb",
+                  "step_id": "user_edited_inference",
+                  "fence": 1,
+                  "reservation_fingerprint": "17fa444e01993d2ed710b63adb0eab5a7575b98bed3fd5b34a9d35ae5d124608"
+                }
+              },
+              {
+                "id": "event_9e149ffbf0754a1baaa54776f410bc22",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299388.9213924,
+                "kind": "NS_WIRE_ARCHIVED",
+                "data": {
+                  "attempt_id": "attempt_e4c3d7e6277a4ad59f8d83faef938f5b",
+                  "archive_fingerprint": "70e9e954faa4121edfc1f714cff539100a528e87321ecc16a8544a9943add7f6"
+                }
+              },
+              {
+                "id": "event_e0bc97932bab4d939d78ae7994a9f326",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299388.9224997,
+                "kind": "MODEL_RESERVED",
+                "data": {
+                  "attempt_id": "attempt_e4c3d7e6277a4ad59f8d83faef938f5b",
+                  "mode": "mock"
+                }
+              },
+              {
+                "id": "event_f1974f0f49734ed2bdc4f18ef744324d",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299393.5013263,
+                "kind": "NS_RECEIVED",
+                "data": {
+                  "attempt_id": "attempt_e4c3d7e6277a4ad59f8d83faef938f5b",
+                  "response_fingerprint": "6e3950342f4824b3190a932453305707d0453e9a001a599b08f4aca7854b378f",
+                  "reception_fingerprint": "03e38ec8cc281dbc4a83e25d045a24e00dc5cdfd2925c42c63db6f2b4f4c5eac"
+                }
+              },
+              {
+                "id": "event_853fdf752f704dc8b8667ff8a222bb09",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299393.5110087,
+                "kind": "NS_BODY_ARCHIVED",
+                "data": {
+                  "attempt_id": "attempt_e4c3d7e6277a4ad59f8d83faef938f5b",
+                  "archive_fingerprint": "43c1edbe7ac6cfcafde639838919a47fd659204e1a6e550e75e8060efbc5f080"
+                }
+              },
+              {
+                "id": "event_4e60f02030d04cbbbe83035b37abe9c4",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299400.0901594,
+                "kind": "NS_SETTLED",
+                "data": {
+                  "attempt_id": "attempt_e4c3d7e6277a4ad59f8d83faef938f5b",
+                  "attempt_fingerprint": "a882553f11d16a763f2712eb39caf2454bde6912bfb351580dd2fac43aa1e902",
+                  "operation_id": "op_b0307e8c2515442fbd609d3d2cb014cb"
+                }
+              },
+              {
+                "id": "event_1adb958f139d4b94a3e005e2a4deaad7",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299400.092019,
+                "kind": "SPEC_STEP_VERIFIED",
+                "data": {
+                  "step_id": "user_edited_inference",
+                  "operation_id": "op_b0307e8c2515442fbd609d3d2cb014cb",
+                  "fence": 1
+                }
+              },
+              {
+                "id": "event_9a9f089c6ed948a59b91cda6bab1cf22",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299412.906097,
+                "kind": "SPEC_STEP_VERIFIED",
+                "data": {
+                  "step_id": "check_pick",
+                  "operation_id": "op_72a08e84b9354830aabf1e99138be8c9",
+                  "fence": 1
+                }
+              },
+              {
+                "id": "event_06d844f87c61453da51b2455c28a04dd",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299419.1064336,
+                "kind": "SPEC_STEP_VERIFIED",
+                "data": {
+                  "step_id": "save_pick",
+                  "operation_id": "op_233ea4eafba044dbbd187c08f52ee29f",
+                  "fence": 1
+                }
+              },
+              {
+                "id": "event_ddb76b15b2654d9390345ef64abfd45f",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299419.1131525,
+                "kind": "STATE",
+                "data": {
+                  "status": "SUCCEEDED",
+                  "error": null
+                }
+              },
+              {
+                "id": "event_2e68cc21766c4244964d470a92dd4956",
+                "run_id": "run_e00a977c00c34acb8bb8f1e0616928d3",
+                "created_at": 1792299419.1135316,
+                "kind": "SPEC_COMMITTED",
+                "data": {
+                  "result_version": 1,
+                  "artifact_resource": "res_869d5baea0864344bb6026bca02c01d0"
+                }
+              }
+            ],
+            "namespace": "INTERNAL_APPRUN",
+            "steps": [
+              {
+                "step_id": "read_pick",
+                "status": "VERIFIED",
+                "fingerprint": "cb1c8c479856ddce403873b56f89834b61d2790ed28b21a1db46458b47a62a69"
+              },
+              {
+                "step_id": "user_edited_inference",
+                "status": "VERIFIED",
+                "fingerprint": "5e94d0dac0d2be359e775f9e0d6118c0254b72155dcc6bc43be4f9209016b300"
+              },
+              {
+                "step_id": "check_pick",
+                "status": "VERIFIED",
+                "fingerprint": "2c597ecd1598bcd01d79d43f17a1e99f8e93649c7762baf08523c3b05965c3fd"
+              },
+              {
+                "step_id": "save_pick",
+                "status": "VERIFIED",
+                "fingerprint": "acd7474e8fac71fc0fc4f3f77e1278beeda4512c39140af5696eacc1c9e7a7ec"
+              }
+            ],
+            "semantic_status": "UNKNOWN",
+            "owner_acceptance": "PENDING",
+            "formal_publication_enabled": false,
+            "citation_status": "PASS",
+            "semantic_goal_acceptance": "NOT_RUN",
+            "markdown_view": "# 技术规范待验清单\n出处核验 PASS；含义/遗漏/关系准确性 UNKNOWN，人工验收 NOT_RUN\n\n- requirement fact\\_0: The field beacon transmits twice per day while solar power is available.\n  关系 NOT_APPLICABLE；决定 NOT_APPLICABLE；目标 \n  原文[0:72]: The field beacon transmits twice per day while solar power is available.\n- condition qualifier: while solar power is available\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\_0\n  原文[41:71]: while solar power is available\n- exception fact\\_1: During a storm it keeps a cached signal.\n  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 fact\\_0\n  原文[73:113]: During a storm it keeps a cached signal.\n- open\\_question fact\\_2: The beacon night policy has yet to be agreed.\n  关系 NOT_APPLICABLE；决定 OPEN；目标 \n  原文[114:159]: The beacon night policy has yet to be agreed.\n\n## 原生人工未决项\nHuman question 0\nHuman question 1\nHuman question 2\nHuman question 3\nHuman question 4\nHuman question 5\nHuman question 6\nHuman question 7\nHuman question 8\nHuman question 9\nHuman question 10\nHuman question 11\nHuman question 12\nHuman question 13\nHuman question 14\nHuman question 15\n\n## 未覆盖原文\n\n## 完整来源（保留，未推断）\nThe field beacon transmits twice per day while solar power is available. During a storm it keeps a cached signal. The beacon night policy has yet to be agreed.\n"
+          }
+        ]
+      }
+    },
+    {
+      "boot": 2,
+      "method": "GET",
+      "path": "/api/internal/releases/irelease_e8e5f9bfcab14307b83ee3e936090094",
+      "headers": {
+        "Authorization": "Bearer synthetic-test-A",
+        "Content-Type": "application/json"
+      },
+      "status": 200,
+      "response": {
+        "namespace": "INTERNAL_ENGINEERING_ONLY",
+        "formal_publication_enabled": false,
+        "id": "irelease_e8e5f9bfcab14307b83ee3e936090094",
+        "project_id": "proj_12625ad7846943b4a7376d0dcdfb35b3",
+        "principal_id": "user_44ff356ff1a44564a3f3ab74c3179899",
+        "approval_id": "iapproval_491d36864eff451ebf0492aa00e13fd4",
+        "snapshot": {
+          "namespace": "INTERNAL_ENGINEERING_ONLY",
+          "draft": {
+            "id": "app_a17c0620d53b6a263e169371007456c7",
+            "project_id": "proj_12625ad7846943b4a7376d0dcdfb35b3",
+            "runtime_id": "appruntime_e72572e0c30f47a8f4585bcdf5a7f55f",
+            "candidate": {
+              "namespace": "pa-natural-spec-app.v1",
+              "manifest": {
+                "schema_version": "1.0-draft",
+                "app_id": "app_a17c0620d53b6a263e169371007456c7",
+                "revision": 1,
+                "origin": "task_run",
+                "goal_ref": "goal_95e0f76bc1a94689afc7565d10fd8923",
+                "source_run_ref": "run_3fdf4b5af9f84efab7c99f59d9d80914",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "output_schema": {
+                  "type": "object",
+                  "properties": {
+                    "resource_id": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "hash": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "checklist": {
+                      "type": "object",
+                      "properties": {
+                        "check_version": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "resource_id": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "hash": {
+                              "type": "string",
+                              "maxLength": 2048
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "txt",
+                                "md"
+                              ]
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "coordinate_space": {
+                              "type": "string",
+                              "enum": [
+                                "unicode_scalar_index.v1"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "resource_id",
+                            "hash",
+                            "format",
+                            "revision",
+                            "coordinate_space"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source_content": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "item_id": {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "condition",
+                                  "exception",
+                                  "open_question",
+                                  "requirement",
+                                  "unclassified"
+                                ]
+                              },
+                              "summary": {
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "citations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "start": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 2048
+                                    },
+                                    "end": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 2048
+                                    },
+                                    "quote": {
+                                      "type": "string",
+                                      "maxLength": 2048
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "end",
+                                    "quote"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 2
+                              },
+                              "targets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 40
+                                },
+                                "maxItems": 8
+                              },
+                              "relation_status": {
+                                "type": "string",
+                                "enum": [
+                                  "UNASSIGNED",
+                                  "MODEL_ASSERTED",
+                                  "NOT_APPLICABLE"
+                                ]
+                              },
+                              "decision_status": {
+                                "type": "string",
+                                "enum": [
+                                  "OPEN",
+                                  "NOT_APPLICABLE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "item_id",
+                              "kind",
+                              "summary",
+                              "citations",
+                              "targets",
+                              "relation_status",
+                              "decision_status"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 8
+                        },
+                        "feedback": {
+                          "type": "object",
+                          "properties": {
+                            "check": {
+                              "type": "string",
+                              "enum": [
+                                "natural.spec_citations.v1"
+                              ]
+                            },
+                            "citation_status": {
+                              "type": "string",
+                              "enum": [
+                                "PASS"
+                              ]
+                            },
+                            "coverage_status": {
+                              "type": "string",
+                              "enum": [
+                                "FULL",
+                                "PARTIAL"
+                              ]
+                            },
+                            "uncovered": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2048
+                                  },
+                                  "end": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2048
+                                  },
+                                  "quote": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 32
+                            },
+                            "semantic_status": {
+                              "type": "string",
+                              "enum": [
+                                "UNKNOWN"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check",
+                            "citation_status",
+                            "coverage_status",
+                            "uncovered",
+                            "semantic_status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "human_unresolved": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          "maxItems": 16
+                        },
+                        "source_retention": {
+                          "type": "string",
+                          "enum": [
+                            "EXACT"
+                          ]
+                        },
+                        "semantic_goal_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "NOT_RUN"
+                          ]
+                        },
+                        "owner_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check_version",
+                        "source",
+                        "source_content",
+                        "items",
+                        "feedback",
+                        "human_unresolved",
+                        "source_retention",
+                        "semantic_goal_acceptance",
+                        "owner_acceptance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "citation_status": {
+                      "type": "string",
+                      "enum": [
+                        "PASS"
+                      ]
+                    },
+                    "semantic_status": {
+                      "type": "string",
+                      "enum": [
+                        "UNKNOWN"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "hash",
+                    "checklist",
+                    "citation_status",
+                    "semantic_status",
+                    "semantic_goal_acceptance"
+                  ],
+                  "additionalProperties": false
+                },
+                "action_bindings": [
+                  {
+                    "binding_id": "read_pick",
+                    "action_id": "action_943c4dd4c9895c659f40e913a523eed1",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "user_edited_inference",
+                    "action_id": "action_b5db1b75713fc852d3e7f24ecbaa8c20",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "check_pick",
+                    "action_id": "action_9cd1b1e662446a53efc9d1fe77218f9c",
+                    "revision": 1
+                  },
+                  {
+                    "binding_id": "save_pick",
+                    "action_id": "action_f3ec1757562e594c4fe80c9b59ae70ae",
+                    "revision": 1
+                  }
+                ],
+                "data_bindings": [
+                  {
+                    "binding_id": "source",
+                    "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                  }
+                ],
+                "runtime_identity_requirements": {
+                  "mode": "user_and_app_intersection"
+                },
+                "data_schema_version": 1,
+                "workflow": [
+                  {
+                    "step_id": "read_pick",
+                    "binding_id": "read_pick",
+                    "depends_on": [],
+                    "inputs": {
+                      "resource_id": {
+                        "source": "data",
+                        "ref": "source",
+                        "field": "resource_id"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "user_edited_inference",
+                    "binding_id": "user_edited_inference",
+                    "depends_on": [
+                      "read_pick"
+                    ],
+                    "inputs": {
+                      "resource_id": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "resource_id"
+                      },
+                      "content": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "content"
+                      },
+                      "hash": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "hash"
+                      },
+                      "format": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "format"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "check_pick",
+                    "binding_id": "check_pick",
+                    "depends_on": [
+                      "read_pick",
+                      "user_edited_inference"
+                    ],
+                    "inputs": {
+                      "resource_id": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "resource_id"
+                      },
+                      "content": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "content"
+                      },
+                      "hash": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "hash"
+                      },
+                      "format": {
+                        "source": "step",
+                        "ref": "read_pick",
+                        "field": "format"
+                      },
+                      "items": {
+                        "source": "step",
+                        "ref": "user_edited_inference",
+                        "field": "items"
+                      }
+                    }
+                  },
+                  {
+                    "step_id": "save_pick",
+                    "binding_id": "save_pick",
+                    "depends_on": [
+                      "check_pick"
+                    ],
+                    "inputs": {
+                      "text": {
+                        "source": "step",
+                        "ref": "check_pick",
+                        "field": "text"
+                      }
+                    }
+                  }
+                ],
+                "outputs": {
+                  "resource_id": {
+                    "source": "step",
+                    "ref": "save_pick",
+                    "field": "resource_id"
+                  },
+                  "hash": {
+                    "source": "step",
+                    "ref": "save_pick",
+                    "field": "hash"
+                  },
+                  "checklist": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "checklist"
+                  },
+                  "citation_status": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "citation_status"
+                  },
+                  "semantic_status": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "semantic_status"
+                  },
+                  "semantic_goal_acceptance": {
+                    "source": "step",
+                    "ref": "check_pick",
+                    "field": "semantic_goal_acceptance"
+                  }
+                },
+                "views": [
+                  {
+                    "component_ref": "table",
+                    "output_field": "checklist"
+                  }
+                ],
+                "validation_suite_ref": "natural.spec_citations.v1",
+                "runtime_limits": {
+                  "max_requests": 1,
+                  "max_tools": 3,
+                  "max_repairs": 0,
+                  "max_total_tokens": 64000,
+                  "max_output_tokens": 1024,
+                  "run_seconds": 300
+                },
+                "permission_requirements": [
+                  {
+                    "tool_ref": "resource.read",
+                    "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                  },
+                  {
+                    "tool_ref": "artifact.save_text",
+                    "resource_ref": "proj_12625ad7846943b4a7376d0dcdfb35b3"
+                  }
+                ],
+                "dependency_lock": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "resource.read",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "prompt",
+                    "ref": "model.spec.all.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "spec.verify_citations",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "tool",
+                    "ref": "artifact.save_text",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "natural.spec_citations.v1",
+                    "version": "1"
+                  },
+                  {
+                    "kind": "check",
+                    "ref": "receipt.readback.v1",
+                    "version": "1"
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "schema_version": "1.0-draft",
+                  "action_id": "action_943c4dd4c9895c659f40e913a523eed1",
+                  "revision": 1,
+                  "input_schema": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      }
+                    },
+                    "required": [
+                      "resource_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "output_schema": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "content": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "hash": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "txt",
+                          "md"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "content",
+                      "hash",
+                      "format"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "executor": {
+                    "kind": "registered_tool",
+                    "ref": "resource.read",
+                    "version": "1"
+                  },
+                  "allowed_tool_refs": [],
+                  "dependencies": [
+                    {
+                      "kind": "resource",
+                      "ref": "res_7f1749382e2f4fcd9a2b99cc034d8597",
+                      "version": "1"
+                    }
+                  ],
+                  "permission_requirements": [
+                    {
+                      "tool_ref": "resource.read",
+                      "resource_ref": "res_7f1749382e2f4fcd9a2b99cc034d8597"
+                    }
+                  ],
+                  "effect": "read",
+                  "preconditions": [],
+                  "postcheck_refs": [
+                    "natural.spec_citations.v1"
+                  ],
+                  "limits": {
+                    "max_requests": 1,
+                    "max_tools": 3,
+                    "max_repairs": 0,
+                    "max_total_tokens": 64000,
+           

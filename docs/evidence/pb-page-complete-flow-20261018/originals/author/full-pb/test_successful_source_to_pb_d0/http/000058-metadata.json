@@ -1,0 +1,121 @@
+{
+  "rpc_id": 60,
+  "method": "POST",
+  "path": "/api/projects/proj_12625ad7846943b4a7376d0dcdfb35b3/natural-spec-task-runs/run_3fdf4b5af9f84efab7c99f59d9d80914/extractions",
+  "request": {
+    "review": {
+      "source_run_id": "run_3fdf4b5af9f84efab7c99f59d9d80914",
+      "expected_source_proof_fingerprint": "29de775c107d5f1b6f4e709ac328b0dfe11008b36b100098b1e5a81a940ebece",
+      "expected_source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+      "card_id": "goal_95e0f76bc1a94689afc7565d10fd8923",
+      "expected_goal_version": 1,
+      "expected_goal_fingerprint": "145a541b905578da2c1fe22a32a5f1f3a24742f9356935bab6d6d05a0966b208",
+      "expected_source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+      "recipe": {
+        "version": "natural-spec-recipe.v1",
+        "steps": [
+          {
+            "step_id": "read_pick",
+            "operator": "resource.read",
+            "depends_on": [],
+            "inputs": {
+              "resource_id": {
+                "source": "data",
+                "ref": "source",
+                "field": "resource_id"
+              }
+            }
+          },
+          {
+            "step_id": "user_edited_inference",
+            "operator": "model.spec.all",
+            "depends_on": [
+              "read_pick"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              }
+            }
+          },
+          {
+            "step_id": "check_pick",
+            "operator": "spec.verify_citations",
+            "depends_on": [
+              "read_pick",
+              "user_edited_inference"
+            ],
+            "inputs": {
+              "resource_id": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "resource_id"
+              },
+              "content": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "content"
+              },
+              "hash": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "hash"
+              },
+              "format": {
+                "source": "step",
+                "ref": "read_pick",
+                "field": "format"
+              },
+              "items": {
+                "source": "step",
+                "ref": "user_edited_inference",
+                "field": "items"
+              }
+            }
+          },
+          {
+            "step_id": "save_pick",
+            "operator": "artifact.save_text",
+            "depends_on": [
+              "check_pick"
+            ],
+            "inputs": {
+              "text": {
+                "source": "step",
+                "ref": "check_pick",
+                "field": "text"
+              }
+            }
+          }
+        ]
+      },
+      "name": "Continuous P-B checklist",
+      "request_key": "bb555efd-11b9-4baf-a046-780f8c2848cd"
+    },
+    "expected_review_fingerprint": "02845cc59dd933244b54270293c91f5096ffe1a974bf6dbbb137a1207c7ff0d0",
+    "consent": "EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET",
+    "artifact_write_consent": "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"
+  },
+  "status": 201,
+  "content_type": "application/json",
+  "response_file": "http/000058-response.body",
+  "response_bytes": 33505,
+  "response_sha256": "24dabbfabfd525af822bbb9349d9e018a9d3aed1cf770495bec4346bef471430"
+}
