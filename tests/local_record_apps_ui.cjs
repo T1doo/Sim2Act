@@ -3,6 +3,7 @@
 // Synthetic inputs/NoModel Worker only. Controlled response delivery is explicit.
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
 const info=JSON.parse(fs.readFileSync(process.argv[2])),pending=new Map(),actions=[],static_resource_loads=[],checks=[],run_ids=[],request_keys=[];
+const downloads=[];
 let serial=0,dom,w,$,boots=0,active=0,hold=null,releaseRead=null,lose=null,app_id=info.app||null,instance_id=info.instance||info.iid||null,release_id=info.release||null,first_history=null,record_a=null,record_b=null;
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),resolve=pending.get(r.id);assert(resolve);pending.delete(r.id);resolve(r);});
 const rpc=body=>new Promise(resolve=>{const id=++serial;pending.set(id,resolve);process.stdout.write(JSON.stringify({id,...body})+'\n');});
@@ -30,6 +31,13 @@ async function boot(){
  const load=async path=>{const r=await rpc({method:'GET',path});assert.equal(r.status,200);static_resource_loads.push({boot:boots,status:r.status,path,sha256:crypto.createHash('sha256').update(r.text).digest('hex')});return r.text;};
  dom=new JSDOM(await load('/'),{url:'http://testserver/',runScripts:'dangerously',pretendToBeVisual:true});w=dom.window;$=id=>w.document.getElementById(id);
  w.TextEncoder=TextEncoder;w.structuredClone=structuredClone;Object.defineProperty(w,'crypto',{value:crypto.webcrypto});w.setInterval=()=>0;
+ if(info.scenario==='collection-export'){
+  const blobs=new Map();w.Blob=Blob;
+  w.URL.createObjectURL=blob=>{const url='blob:synthetic-test-'+crypto.randomUUID();blobs.set(url,{blob,url,revoked:false});return url;};
+  w.URL.revokeObjectURL=url=>{const value=blobs.get(url);assert(value);value.revoked=true;blobs.delete(url);};
+  const originalClick=w.HTMLAnchorElement.prototype.click;
+  w.HTMLAnchorElement.prototype.click=function(){const value=blobs.get(this.href);if(this.download&&value){value.filename=this.download;downloads.push(value);}else originalClick.call(this);};
+ }
  const style=w.document.createElement('style');style.textContent=await load('/app.css');w.document.head.append(style);
  w.fetch=async(path,options={})=>{active++;const request={method:options.method||'GET',path,body:options.body?JSON.parse(options.body):undefined};actions.push(request);
   try{const r=await rpc({...request,headers:options.headers});request.status=r.status;request.response_text=r.text;
@@ -138,6 +146,29 @@ async function navigation(){
  check(!view()&&!$('local-records-panel').textContent,'same-account reconnect cannot restore old account-view contents');
  check(posts().length===0,'all actual HTTP navigation and recovery races create zero writes');
 }
+async function collectionExport(){
+ await open();check(downloads.length===0&&view().instance.data_version===3,'opening a real collection never downloads or treats its queued write as saved');
+ await select('local-records-run-select',info.seed_run);await click('local-records-run-read');
+ check(view().run.result_version===1&&view().instance.data_version===3,'selected historical Run remains version one beside the current collection at version three');
+ let n=actions.length;await click('local-records-export',true);
+ check(downloads.length===1&&actions.slice(n).length===1&&actions.at(-1).path===base()&&actions.at(-1).method==='GET','double click downloads one file after one fresh current-instance authorization read');
+ const value=JSON.parse(await downloads[0].blob.text()),a=value.records.find(r=>r.title===info.title_a),b=value.records.find(r=>r.title===info.title_b);
+ check(value.namespace==='local-record-collection-snapshot.v1'&&value.snapshot_kind==='OBSERVED_COMMITTED_COLLECTION'&&value.app_id===app_id&&value.instance_id===instance_id&&value.project_id===info.project&&value.release_id===release_id&&value.data_version===3,'actual JSON Blob binds original app instance project Release and current collection version');
+ check(a.state==='DONE'&&a.record_revision===2&&a.details===info.details_a&&b.state==='OPEN'&&b.record_revision===1&&b.details===info.details_b&&a.record_id!==b.record_id,'portable snapshot contains independently current A DONE and unchanged B OPEN');
+ check(value.records.length===2&&value.history.length===3&&value.history[0].run_id===info.seed_run&&value.history.at(-1).event.reason===info.done_reason,'snapshot preserves immutable event provenance rather than exporting only the selected old Run');
+ check(!('runs' in value)&&!('request_key' in value)&&!('runtime_id' in value)&&!(await downloads[0].blob.text()).includes(info.pending_title),'file excludes queued writes controller state keys runtime identity and other non-whitelisted fields');
+ check(downloads[0].revoked&&downloads[0].filename===`local-records-${instance_id}-v3.json`&&view().run.result_version===1,'download filename identifies the snapshot version object URL is released and selected Run is unchanged');
+ await boot();await open();await click('local-records-export');
+ check(downloads.length===2&&(await downloads[1].blob.text())===(await downloads[0].blob.text()),'cold page exports the same persisted collection with deterministic UTF-8 bytes');
+ n=downloads.length;await held(base(),()=>click('local-records-export'),async()=>{await select('local-records-instance-select',info.second_instance);},'collection download versus newer instance');
+ check(downloads.length===n&&view().instance.id===info.second_instance&&!$('local-records-export-status').textContent,'late verified collection cannot download or repaint after a different instance is selected');
+ await select('local-records-instance-select',instance_id);
+ const revoked=await rpc({command:'revoke_seed_artifact_read',run:info.seed_run,resource:info.seed_artifact});assert.equal(revoked.status,200,revoked.text);
+ n=actions.length;await click('local-records-export');
+ check(actions.slice(n).length===1&&actions.at(-1).status===403&&downloads.length===2,'export rechecks actual current permission and a real denial creates no file or automatic request');
+ check(!view().instance&&!$('local-records-current').textContent&&!$('local-records-history').textContent&&$('local-records-export').disabled&&$('local-records-export-status').textContent.includes('没有生成下载文件'),'denied export clears protected cached collection and disables stale download claims');
+ check(posts().length===0,'the complete collection export page performs zero POST and invokes zero Worker');
+}
 async function controls(){
  await open();
  const disabled=()=>['pause','resume','cancel'].every(command=>$('local-records-'+command).disabled);
@@ -209,13 +240,14 @@ async function revocation(){
 }
 (async()=>{
  let status='FAIL',error;
- try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else if(info.scenario==='controls')await controls();else await flow();status='PASS';}
+ try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else if(info.scenario==='controls')await controls();else if(info.scenario==='collection-export')await collectionExport();else await flow();status='PASS';}
  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
-  fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,static_resource_loads,boots,app_id,release_id,instance_id,run_ids,request_keys,first_history,
-   classification:info.scenario==='controls'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS':info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
+  const files=await Promise.all(downloads.map(async file=>{const bytes=Buffer.from(await file.blob.arrayBuffer());return {filename:file.filename,type:file.blob.type,bytes:bytes.length,base64:bytes.toString('base64'),sha256:crypto.createHash('sha256').update(bytes).digest('hex'),revoked:file.revoked};}));
+  fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,static_resource_loads,boots,app_id,release_id,instance_id,run_ids,request_keys,first_history,downloads:files,
+   classification:info.scenario==='collection-export'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CURRENT_COLLECTION_EXPORT':info.scenario==='controls'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS':info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');
  }
 })();

@@ -52,7 +52,9 @@ function localRecordsBuild(app,generation,selectionCurrent=()=>true){
  const result=localRecordsNode("section","local-records-result");result.hidden=!app;result.append(localRecordsNode("h3",null,"5. 手动读取同一 Run 和当前记录"));v.refresh=localRecordsButton("刷新当前实例、Run 与记录（只读）","local-records-refresh",()=>localRecordsRefresh(v));v.runSelect=localRecordsSelect("local-records-run-select",[["请明确选择已接受 Run",""]]);v.runRead=localRecordsButton("读取所选同一 Run（只读）","local-records-run-read",()=>localRecordsReadRun(v));v.runStatus=localRecordsNode("p","local-records-run-status");v.runStatus.setAttribute("role","status");result.append(v.refresh,localRecordsLabel("运行历史 ",v.runSelect),v.runRead,v.runStatus);v.runProof=localRecordsProof(result,"local-records-run-proof","原 Run、合同与真实工具回执");
  v.control=null;v.controlCommands={};const control=localRecordsNode("section","local-records-controls");control.append(localRecordsNode("p",null,"仅控制已明确读取的同一 Run。暂停或取消在安全边界生效，不撤销此前已保存的记录。"));
  for(const [command,label]of [["pause","暂停这次写入"],["resume","继续这次写入"],["cancel","取消这次写入"]]){const button=localRecordsButton(label,`local-records-${command}`,()=>localRecordsControl(v,command));v.controlCommands[command]=button;control.append(button);}
- v.controlStatus=localRecordsNode("p","local-records-control-status");v.controlStatus.setAttribute("role","status");control.append(v.controlStatus);result.append(control);v.records=localRecordsNode("div","local-records-current");result.append(localRecordsNode("h3",null,"当前记录集合"),v.records);v.history=localRecordsNode("div","local-records-history");result.append(localRecordsNode("h3",null,"所选记录的不可变历史"),v.history);panel.append(result);
+ v.controlStatus=localRecordsNode("p","local-records-control-status");v.controlStatus.setAttribute("role","status");control.append(v.controlStatus);result.append(control);v.records=localRecordsNode("div","local-records-current");
+ v.exportCollection=localRecordsButton("下载当前集合 JSON 快照","local-records-export",()=>localRecordsExportCollection(v));v.exportStatus=localRecordsNode("p","local-records-export-status");v.exportStatus.setAttribute("role","status");
+ result.append(localRecordsNode("h3",null,"当前记录集合"),localRecordsNode("p",null,"下载前重新核对当前权限与已保存集合；JSON 保留记录 ID、修订和事件来源，仅代表该集合版本的观察快照。"),v.exportCollection,v.exportStatus,v.records);v.history=localRecordsNode("div","local-records-history");result.append(localRecordsNode("h3",null,"所选记录的不可变历史"),v.history);panel.append(result);
  const recovery=localRecordsNode("section","local-records-recovery");recovery.append(localRecordsNode("h3",null,"原请求恢复"),localRecordsNode("p",null,"未知结果不重发写入。保留或输入原请求 key，选择原阶段后仅 GET 核对；冷页需先重新打开同一应用、版本或实例。"));v.recoveryStage=localRecordsSelect("local-records-recovery-stage",[["保存应用","CREATE_APP"],["准备内部版本","PREPARE_RELEASE"],["保存内部版本","COMMIT_RELEASE"],["创建实例","CREATE_INSTANCE"],["本次变更预览","PREVIEW"],["提交写入 Run","RUN"]]);v.recoveryKey=localRecordsInput("local-records-recovery-key",{maxLength:100});v.recover=localRecordsButton("仅 GET 读取原 key 回执","local-records-recover",()=>localRecordsRecover(v));recovery.append(localRecordsLabel("原阶段 ",v.recoveryStage),localRecordsLabel("原 key ",v.recoveryKey),v.recover);v.recoveryProof=localRecordsProof(recovery,"local-records-recovery-proof","原请求与恢复回执");panel.append(recovery);
  for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.runAck,v.recoveryKey])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v))localRecordsButtons(v);});
  for(const input of [v.name,v.goal,v.recoveryKey,v.recoveryStage])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v)){v.edit++;localRecordsButtons(v);}});
@@ -81,6 +83,7 @@ function localRecordsButtons(v){
  v.previewButton.disabled=busy||blocked||!v.instance||(v.acceptedRun&&!localRecordsTerminal(v.acceptedRun.status))||(v.command.value==="CREATE"?!v.title.value.trim():!v.recordSelect.value||!v.reason.value.trim());
  v.confirm.disabled=busy||blocked||!v.preview||!v.previewCurrent?.()||!v.instance||v.preview.preview.data_version!==v.instance.data_version||v.preview.preview.instance_revision!==v.instance.revision||v.preview.preview.release_fingerprint!==v.instance.release_fingerprint||!!v.preview.run||!v.runAck.checked||v.preview.preview.expires_at*1000<=Date.now();
  v.deliveryRefresh.disabled=busy||!v.app;v.refresh.disabled=busy||!v.selectedIid;v.runRead.disabled=busy||!v.selectedIid||!v.runSelect.value;
+ v.exportCollection.disabled=busy||!v.instance;
  v.recover.disabled=busy||!v.recoveryKey.value.trim();
  localRecordsControlButtons(v);
  for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.command,v.title,v.details,v.recordSelect,v.state,v.reason,v.runAck])input.disabled=busy||blocked;
@@ -178,6 +181,23 @@ async function localRecordsCreateInstance(v){
  if(!current()||!saved)return;v.instanceAck.checked=false;v.recoveryProof.textContent=JSON.stringify(saved.reply,null,2);localRecordsStatus(v,`独立实例 ${saved.reply.instance.id} 已保存；请读取目录，再明确选择该实例。尚未写入业务记录。`);localRecordsButtons(v);
 }
 const localRecordsTerminal=status=>["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(status);
+async function localRecordsExportCollection(v){
+ if(!localRecordsCurrent(v)||v.busy||!v.instance)return;
+ const iid=v.selectedIid;v.read++;const current=localRecordsFence(v,{edit:false});localRecordsBusy(v,true);
+ v.exportStatus.textContent="正在重新核对当前集合与读取权限；尚未下载。";
+ try{
+  const reply=await api(`/api/internal/record-instances/${iid}`);if(!current())return;
+  if(!await localRecordsValidateProjection(v,reply,iid,current)||!current())return;
+  const snapshot={namespace:"local-record-collection-snapshot.v1",snapshot_kind:"OBSERVED_COMMITTED_COLLECTION",principal_id:reply.principal_id,project_id:reply.project_id,app_id:reply.source_app_id,instance_id:reply.id,release_id:reply.release_id,release_fingerprint:reply.release_fingerprint,instance_revision:reply.revision,data_version:reply.data_version,
+   records:[...reply.records].sort((a,b)=>a.record_id.localeCompare(b.record_id)).map(r=>({record_id:r.record_id,record_revision:r.record_revision,title:r.title,details:r.details,state:r.state,last_event_fingerprint:r.last_event_fingerprint})),
+   history:reply.history.map(r=>({version:r.version,run_id:r.run_id,app_run_id:r.app_run_id,event_fingerprint:r.event_fingerprint,artifact:{resource_id:r.artifact.resource_id,hash:r.artifact.hash},event:r.event}))};
+  if(!current())return;
+  const url=URL.createObjectURL(new Blob([JSON.stringify(snapshot,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
+  try{if(!current())return;const link=document.createElement("a");link.href=url;link.download=`local-records-${iid}-v${reply.data_version}.json`;v.panel.append(link);try{link.click();}finally{link.remove();}}finally{URL.revokeObjectURL(url);}
+  if(current())v.exportStatus.textContent=`已下载集合 v${reply.data_version} 的观察快照：${reply.records.length} 条记录、${reply.history.length} 条已保存事件。未提交写入不包含在文件内。`;
+ }catch(error){if(current()){localRecordsClearPrivate(v);localRecordsStatus(v,"集合读取未通过，已清除当前正文；请重新核验实例。");v.exportStatus.textContent=`集合下载未通过：${error.detail||error.message}。没有生成下载文件；请重新读取实例。`;}}
+ finally{localRecordsBusy(v,false);}
+}
 const localRecordsRunStates=["QUEUED","RUNNING","WAITING_INPUT","WAITING_APPROVAL","WAITING_RESOURCE","PAUSE_REQUESTED","PAUSED","CANCEL_REQUESTED","RECONCILING","SUCCEEDED","PARTIAL","FAILED","CANCELLED"];
 function localRecordsControlKey(v,rid){return JSON.stringify([v.identity,v.project,v.app.id,v.app.principal_id,v.selectedIid,rid]);}
 function localRecordsClearControl(v){v.control=null;if(v.controlStatus)v.controlStatus.textContent="";}
@@ -218,7 +238,7 @@ async function localRecordsControl(v,command){
   if(current()){v.runStatus.textContent="控制请求没有获知可核验的成功回执，不能判断最新状态。";v.controlStatus.textContent=`${intent.state==="REJECTED"?"控制被拒绝":"控制结果未确认"}：${error.detail||error.message}。请仅点击“读取所选同一 Run”核对；不会自动重发控制或写入。`;}
  }finally{localRecordsBusy(v,false);}
 }
-function localRecordsClearInstance(v){localRecordsClearControl(v);v.instance=null;v.run=null;v.preview=null;v.previewCurrent=null;v.acceptedRun=null;v.historyRecord=null;v.operations.hidden=true;v.records.replaceChildren();v.history.replaceChildren();v.runProof.textContent="";v.runStatus.textContent="";v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""));v.previewText.replaceChildren();v.previewProof.textContent="";v.runAck.checked=false;v.recoveryProof.textContent="";v.recoveryKey.value="";}
+function localRecordsClearInstance(v){localRecordsClearControl(v);if(v.exportStatus)v.exportStatus.textContent="";v.instance=null;v.run=null;v.preview=null;v.previewCurrent=null;v.acceptedRun=null;v.historyRecord=null;v.operations.hidden=true;v.records.replaceChildren();v.history.replaceChildren();v.runProof.textContent="";v.runStatus.textContent="";v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""));v.previewText.replaceChildren();v.previewProof.textContent="";v.runAck.checked=false;v.recoveryProof.textContent="";v.recoveryKey.value="";}
 function localRecordsClearPrivate(v){
  const key=v.recoveryKey.value;v.read++;v.edit++;localRecordsClearInstance(v);v.recoveryKey.value=key;
  v.title.value=v.details.value=v.reason.value="";v.recordSelect.replaceChildren(new Option("请重新核验当前记录",""));

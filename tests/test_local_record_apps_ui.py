@@ -27,6 +27,7 @@ from test_local_record_apps import (
     commit,
     create_body,
     current,
+    done_body,
     execute,
     ok,
     preview,
@@ -95,13 +96,14 @@ def final_flow_readback(env, page, worker_log, before_identities):
         native_browser="NOT_RUN", real_semantic_acceptance="NOT_RUN")
 
 
-@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls"])
+@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls", "collection-export"])
 def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
     root = Path.cwd().resolve()
     raw_http, ipc, worker_log = [], [], []
     process = watchdog = None
     stores = []
     revocation_log, revocation_grant = [], None
+    fixture_workers = []
     proof = dict(scenario=scenario, status="NOT_COMPLETED", real_model_requests=0,
         native_browser="NOT_RUN", pg="NOT_RUN", real_semantic_acceptance="NOT_RUN")
 
@@ -152,9 +154,50 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             info.update(app=data["app"]["id"], instance=data["instance"]["id"], iid=data["instance"]["id"],
                 release=data["release"]["id"], seed_run=accepted["run"]["run_id"],
                 seed_request_key=prepared["request_key"], second_instance=second["id"])
+        if scenario == "collection-export":
+            write_json(tmp_path / "database-before-fixture.json", snapshot(env[0]))
+            data = ready(env)
+
+            def fixture_write(body, version):
+                prepared = preview(env, data, body)
+                accepted, _ = commit(env, data, prepared)
+                rid = accepted["run"]["run_id"]
+                worker = Worker(env[0], env[1], NoModel())
+                record = dict(worker_id=worker.id, run_id=rid, started_at=time.time(), claimed=None)
+                fixture_workers.append(record)
+                record["claimed"] = worker.once()
+                record["ended_at"] = time.time()
+                assert record["claimed"] is True
+                value = dict(prepared=prepared, run=ok(env[2].get(data["path"] + "/runs/" + rid)))
+                assert_saved(env, data, value, version)
+                return value
+
+            first = fixture_write(create_body(current(env, data)), 1)
+            fixture_write(create_body(current(env, data), "export-create-b", TITLE_B, DETAILS_B), 2)
+            state = current(env, data)
+            a = next(record for record in state["records"] if record["title"] == TITLE_A)
+            fixture_write(done_body(state, a, "export-complete-a"), 3)
+            pending_title = "Synthetic pending write is not a committed record"
+            pending = preview(env, data, create_body(current(env, data), "export-pending-only", pending_title))
+            accepted, _ = commit(env, data, pending)
+            assert accepted["run"]["status"] == "QUEUED"
+            second = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
+                expected_release_fingerprint=data["release"]["fingerprint"], request_key="export-empty-instance")), 201)["instance"]
+            info.update(app=data["app"]["id"], instance=data["instance"]["id"], iid=data["instance"]["id"],
+                release=data["release"]["id"], seed_run=first["run"]["id"],
+                seed_artifact=first["run"]["output"]["resource_id"], second_instance=second["id"],
+                pending_title=pending_title, pending_run=accepted["run"]["run_id"])
+            export_source = current(env, data)
+            write_json(tmp_path / "export-source.json", export_source)
+            with env[0].tx() as connection:
+                matching = connection.execute(select(grants).where(grants.c.principal_id == env[3],
+                    grants.c.project_id == env[5], grants.c.resource_id == info["seed_artifact"],
+                    grants.c.tool_ref == "resource.read", grants.c.revoked.is_(False))).mappings().all()
+                assert len(matching) == 1
+                revocation_grant = dict(matching[0])
         before_identity = snapshot(env[0], {"grants", "principals"})
         before_page = snapshot(env[0])
-        if scenario == "controls":
+        if scenario in {"controls", "collection-export"}:
             write_json(tmp_path / "database-before-page.json", before_page)
         write_json(tmp_path / "info.json", info)
         with (tmp_path / "node.stderr").open("w", encoding="utf-8") as errors:
@@ -187,7 +230,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                 elif request.get("command") == "revoke_seed_artifact_read":
                     # Fixture-only authority mutation. The page cannot select a Grant,
                     # principal, project or arbitrary resource through this bridge.
-                    assert scenario in {"revocation", "project-history"} and revocation_grant is not None and not revocation_log
+                    assert scenario in {"revocation", "project-history", "collection-export"} and revocation_grant is not None and not revocation_log
                     assert set(request) == {"id", "command", "run", "resource"}
                     assert request["run"] == info["seed_run"] and request["resource"] == info["seed_artifact"]
                     with env[0].tx() as connection:
@@ -212,7 +255,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                         revoked=True, resource_id=info["seed_artifact"], run_id=info["seed_run"])))
                 else:
                     assert "command" not in request, request
-                    if scenario in {"revocation", "project-history"}:
+                    if scenario in {"revocation", "project-history", "collection-export"}:
                         assert request["method"] == "GET", "Read-only page scenario must never POST"
                     response = env[2].request(request["method"], request["path"],
                         json=request.get("body"), headers=request.get("headers"))
@@ -265,13 +308,16 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             write_json(tmp_path / "actual-control-proof.json", control_proof)
             proof.update(page_worker_calls=0, fixture_worker_calls=0, worker_probes=1, worker_claims=0,
                 actual_no_model_runs=0, page_post_count=3, page_creation_release_instance_covered=False)
-        elif scenario in {"revocation", "project-history"}:
-            expected_classification = ("ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER"
-                if scenario == "project-history" else "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER")
+        elif scenario in {"revocation", "project-history", "collection-export"}:
+            expected_classification = {"project-history": "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER",
+                "revocation": "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER",
+                "collection-export": "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CURRENT_COLLECTION_EXPORT"}[scenario]
             assert page["classification"] == expected_classification
             assert worker_log == [] and len(revocation_log) == 1
             assert all(row["method"] == "GET" for row in page["actions"])
             after_page = snapshot(env[0])
+            if scenario == "collection-export":
+                write_json(tmp_path / "database-after-page.json", after_page)
             assert before_page.keys() == after_page.keys()
             for table in before_page:
                 if table != "grants":
@@ -293,6 +339,34 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             proof.update(page_worker_calls=0, fixture_worker_calls=1, actual_no_model_runs=1,
                 fixture_grant_mutations=1, page_post_count=0, original_run_rows_unchanged=True,
                 page_creation_release_instance_covered=False)
+            if scenario == "collection-export":
+                import base64
+
+                downloads = page["downloads"]
+                assert len(downloads) == 2 and downloads[0]["base64"] == downloads[1]["base64"]
+                assert len(fixture_workers) == 3 and all(row["claimed"] is True for row in fixture_workers)
+                assert {row["worker_id"] for row in fixture_workers} == {row["id"] for row in before_page["heartbeats"]}
+                assert all(row["started_at"] <= next(h["at"] for h in before_page["heartbeats"]
+                    if h["id"] == row["worker_id"]) <= row["ended_at"] for row in fixture_workers)
+                expected = dict(namespace="local-record-collection-snapshot.v1", snapshot_kind="OBSERVED_COMMITTED_COLLECTION",
+                    principal_id=env[3], project_id=env[5], app_id=info["app"], instance_id=info["instance"],
+                    release_id=info["release"], release_fingerprint=export_source["release_fingerprint"],
+                    instance_revision=export_source["revision"], data_version=3,
+                    records=sorted(export_source["records"], key=lambda row: row["record_id"]), history=export_source["history"])
+                for download in downloads:
+                    raw = base64.b64decode(download["base64"], validate=True)
+                    assert download["filename"] == f"local-records-{info['instance']}-v3.json"
+                    assert download["type"] == "application/json;charset=utf-8" and download["bytes"] == len(raw)
+                    assert download["sha256"] == hashlib.sha256(raw).hexdigest() and download["revoked"] is True
+                    value = json.loads(raw.decode("utf-8"))
+                    assert value == expected and set(value) == set(expected)
+                    assert raw == (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+                    assert info["pending_title"] not in raw.decode("utf-8")
+                write_json(tmp_path / "actual-collection-export-proof.json", dict(snapshot=expected,
+                    downloads=downloads, fixture_workers=fixture_workers, page_worker_claims=0,
+                    pending_run_unchanged=info["pending_run"], real_model_requests=0))
+                proof.update(fixture_worker_calls=3, actual_no_model_runs=3, page_downloads=2,
+                    fixture_worker_ids_captured=True, page_worker_claims=0)
         else:
             assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER"
             assert worker_log == [] and snapshot(env[0]) == before_page
@@ -318,6 +392,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
         write_json(tmp_path / "http-trace.json", raw_http)
         write_json(tmp_path / "ipc.json", ipc)
         write_json(tmp_path / "worker-log.json", worker_log)
+        write_json(tmp_path / "fixture-worker-log.json", fixture_workers)
         write_json(tmp_path / "fixture-revocation-log.json", revocation_log)
         write_json(tmp_path / "run-summary.json", proof)
         destination = os.environ.get("SIM2ACT_LOCAL_RECORD_UI_EVIDENCE_DIR")
