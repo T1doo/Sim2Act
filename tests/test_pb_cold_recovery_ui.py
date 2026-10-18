@@ -13,6 +13,7 @@ import shutil
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -113,8 +114,12 @@ def pb_cold_seed(tmp_path_factory):
                     return handler(request)
                 return original_transport(request_callback)
 
+            fixture_httpx = SimpleNamespace(MockTransport=observed_transport,
+                Response=original_fixture.httpx.Response)
             with observer.phase("normal_generation_and_explicit_release_instance"):
-                with patch.object(original_fixture.httpx, "MockTransport", observed_transport):
+                # Replace only this fixture module's reference. The real httpx
+                # class and Worker's isinstance transport guard stay untouched.
+                with patch.object(original_fixture, "httpx", fixture_httpx):
                     generation_run, app, release, instance, returned_wire = ready(data, "single")
             assert returned_wire == observer.sent and len(observer.sent) == 3
             source_run = enqueue(data, release, instance, key="pb-cold-source-once")
