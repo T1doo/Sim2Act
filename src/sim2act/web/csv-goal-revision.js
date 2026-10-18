@@ -1,7 +1,12 @@
 "use strict";
 // Explicit same-instance revision, original durable CHECK/Release/CAS controllers.
 const csvGoalRevisionIntents=new Map();
-function clearCsvGoalRevision(v=null){if(v)v.csvGoalRevision=null;$("csv-goal-revision")?.remove();}
+function clearCsvGoalRevision(v=null){if(v){v.csvGoalRevision=null;v.startCsvMaterialCycle=null;}$("csv-goal-revision")?.remove();}
+function csvMaterialAccessIdle(v){
+ const entry=csvGoalRevisionIntents.get(applicationUseKey(v)),pending=applicationUseRequests.get(applicationUseKey(v));
+ return !v.busy&&!v.csvGoalRevision?.busy&&!["sending","unknown","accepted-read-error"].includes(pending?.state)
+  &&(!entry||entry.state==="adopted"||entry.state==="abandoned"||!Object.entries(entry.steps).some(([kind,p])=>kind!=="baseline"&&["sending","unknown","accepted-read-error","accepted"].includes(p.state)));
+}
 function resumeCsvGoalRevision(){const v=applicationUse;if(applicationUseCurrent(v)&&v.instance&&v.app?.candidate?.generation)safe(()=>readApplicationUse(v))();}
 function renderCsvGoalRevision(v,release){
  const generation=v.app?.candidate?.generation;if(!generation)return;
@@ -16,15 +21,17 @@ function renderCsvGoalRevision(v,release){
  const unresolvedEntry=entry&&Object.values(entry.steps).some(p=>["sending","unknown","accepted-read-error"].includes(p.state));
  const continuing=entry?.cycleRelease===release.id&&!["adopted","abandoned"].includes(entry?.state);
  const startCycle=(mode)=>{
-   if(!applicationUseCurrent(v)||!node.isConnected||v.busy||signature!==JSON.stringify([v.id,v.instance?.release_id,v.instance?.revision,v.instance?.data_version])||Object.values(entry?.steps||{}).some(p=>["sending","unknown","accepted-read-error"].includes(p.state)))return;
+   if(!applicationUseCurrent(v)||!node.isConnected||v.busy||csvMaterialAccessLocked(v)||signature!==JSON.stringify([v.id,v.instance?.release_id,v.instance?.revision,v.instance?.data_version])||Object.values(entry?.steps||{}).some(p=>["sending","unknown","accepted-read-error"].includes(p.state)))return;
    const replacement={key:crypto.randomUUID(),baselineKey:crypto.randomUUID(),steps:{},state:"new",mode,cycleRelease:release.id,
     history:entry?(entry.state==="abandoned"?entry.history:[...(entry.history||[]),{key:entry.key,mode:entry.mode||"column",steps:entry.steps,release:entry.release?.id}]):[]};
    csvGoalRevisionIntents.set(owner,replacement);clearCsvGoalRevision(v);renderCsvGoalRevision(v,release);
  };
+ v.startCsvMaterialCycle=()=>{if(csvMaterialAccessIdle(v))startCycle("material");};
  if(currentRelease&&!pendingAdoption&&!continuing&&!unresolvedEntry){
   node.append(row(`已采用 Goal v${currentRelease.goal.version}：${currentRelease.goal.snapshot.content.goal}。当前列 ${currentRelease.input.column}；每次新运行的人工声明独立，初始 PENDING。`));
-  node.append(csvFullReportButton("基于当前版本再次修订 Goal 或列","csv-goal-next",()=>startCycle("column")),
-   csvFullReportButton("更换此实例的已授权 CSV 材料","csv-material-next",()=>startCycle("material")));
+  const choices=[csvFullReportButton("基于当前版本再次修订 Goal 或列","csv-goal-next",()=>startCycle("column")),
+   csvFullReportButton("更换此实例的已授权 CSV 材料","csv-material-next",()=>startCycle("material"))];node.append(...choices);
+  v.csvGoalRevision={signature,busy:false,controls:()=>{for(const choice of choices)choice.disabled=v.busy||csvMaterialAccessLocked(v);}};v.csvGoalRevision.controls();
   $("use-info").after(node);return;
  }
  if(!entry){entry={key:crypto.randomUUID(),baselineKey:crypto.randomUUID(),steps:{},state:"new",cycleRelease:release.id};csvGoalRevisionIntents.set(owner,entry);}
@@ -121,7 +128,7 @@ function renderCsvGoalRevision(v,release){
   }
   if(!here())return;c.currentContext=ctx;c.reviewReady=true;drawReview();entry.message="已回读原修订并核对当前归属；请阅读完整冻结内容后重新勾选，下一步尚未提交。";
  }
- async function action(fn){if(!here()||c.busy||v.busy)return;c.busy=true;controls();applicationUseButtons(v);try{await fn();if(here()&&entry.ctx&&!c.reviewReady&&!c.staleCheckReady&&!unresolved())await restoreReview();}catch(error){if(here()&&!deny(error)){entry.message=`核查未完成：${error.message}。原键保留，未知请求只读恢复。`;controls();}}finally{c.busy=false;if(here()){controls();applicationUseButtons(v);}}}
+ async function action(fn){if(!here()||c.busy||v.busy||csvMaterialAccessLocked(v))return;c.busy=true;controls();applicationUseButtons(v);try{await fn();if(here()&&entry.ctx&&!c.reviewReady&&!c.staleCheckReady&&!unresolved())await restoreReview();}catch(error){if(here()&&!deny(error)){entry.message=`核查未完成：${error.message}。原键保留，未知请求只读恢复。`;controls();}}finally{c.busy=false;if(here()){controls();applicationUseButtons(v);}}}
  const edit=button("csv-goal-edit","可选：编辑 Goal 并明确保存下一版本",()=>action(async()=>{const pid=v.project;clearApp();selectWorkspace("projects");await showGoalCard(generation.goal_card_id,pid);}));
  const read=button("csv-goal-baseline",materialMode?"读取当前实例与已授权 CSV 材料":"读取已保存 Goal 与修订基线",()=>action(async()=>{
   const graphPath=`/api/projects/${v.project}/apps/${v.appId}/delivery-graph`;
@@ -131,7 +138,7 @@ function renderCsvGoalRevision(v,release){
    let derive=!currentRelease||!!entry.steps.baseline;
    if(currentRelease&&!entry.steps.baseline){
     try{await api(graphPath);if(!here())return;}
-    catch(error){if(!here())return;if(error.httpStatus!==409||error.message!=="VERSION_CONFLICT"||error.detail!=="Current graph baseline changed; explicitly derive a new anchor")throw error;derive=true;}
+    catch(error){if(!here())return;const stale=error.httpStatus===409&&error.message==="VERSION_CONFLICT"&&error.detail==="Current graph baseline changed; explicitly derive a new anchor",authority=error.httpStatus===403&&error.message==="PERMISSION_DENIED"&&error.detail==="Authorization state changed; explicitly derive a new anchor";if(!stale&&!authority)throw error;derive=true;}
    }
    if(derive){
     const body=entry.steps.baseline?.body||{request_key:entry.baselineKey,expected_candidate_fingerprint:v.app.fingerprint};
@@ -264,7 +271,7 @@ function renderCsvGoalRevision(v,release){
  function controls(){
   if(!here())return;
   const pending=Object.entries(entry.steps).find(([,p])=>["sending","unknown","accepted-read-error"].includes(p.state));
-  const busy=c.busy||v.busy,locked=!!pending||!c.reviewReady;
+  const busy=c.busy||v.busy||csvMaterialAccessLocked(v),locked=!!pending||!c.reviewReady;
   for(const b of [edit,read,save,check,outcome,prepare,commit,adoptPrepare,adopt])b.disabled=busy||locked;
   edit.disabled=busy||!!pending;read.disabled=busy||!!pending||!!entry.preview;
   save.disabled||=!entry.ctx||!!entry.preview||(!entry.ctx.parent&&![entry.ctx.original_goal_version,entry.ctx.original_goal_version+1].includes(entry.ctx.goal.version))||(materialMode?!selectedMaterial()||from.value!==to.value||(entry.ctx?.initial_material?!selectedMaterial()?.columns?.includes(from.value):from.value!==entry.ctx?.parent?.column):from.value===to.value&&!changedGoal(entry.ctx));
@@ -291,4 +298,130 @@ function renderCsvGoalRevision(v,release){
   csvFullReportLabel("原绑定列",from),csvFullReportLabel(materialMode?"保留绑定列":"新定义列",to),...(materialMode?[csvFullReportLabel("目标 CSV 材料（须明确选择）",material),materialInfo,back]:[]),save,checkLabel,check,outcome,prepare,releaseLabel,commit,adoptPrepare,adoptLabel,adopt,recover,review,reset,status,proof);
  $("use-info").after(node);controls();
  if(entry.ctx&&!unresolved())return action(restoreReview);
+}
+
+// Same App business scope as creation. No token or intent is put in storage.
+const csvMaterialAccessIntents=new Map();let csvMaterialAccessView=null;
+const csvMaterialAccessKey=v=>JSON.stringify([v.identity,v.project,v.appId]);
+const csvAccessPending=p=>!!p&&["sending","unknown","accepted-read-error"].includes(p.state);
+function csvMaterialAccessLocked(v){return !!v?.csvMaterialAccess?.busy||csvAccessPending(csvMaterialAccessIntents.get(csvMaterialAccessKey(v))?.current);}
+function clearCsvMaterialAccess(v=null){
+ const c=csvMaterialAccessView;if(v&&c?.v!==v)return;
+ if(c){c.v.csvMaterialAccess=null;c.node.remove();}csvMaterialAccessView=null;
+}
+function renderCsvMaterialAccess(v){
+ if(!applicationUseCurrent(v)||(!v.authOnly&&!v.app?.candidate?.generation))return;
+ clearCsvMaterialAccess();
+ const node=document.createElement("section");node.id="csv-material-access";
+ const title=document.createElement("h3");title.textContent="此App的CSV材料授权";
+ const status=document.createElement("p");status.id="csv-access-status";status.setAttribute("role","status");
+ const scope=document.createElement("p");scope.id="csv-access-scope";
+ const proof=document.createElement("pre");proof.id="csv-access-proof";
+ const target=document.createElement("select");target.id="csv-access-target";
+ const key=document.createElement("input");key.id="csv-access-key";key.readOnly=true;
+ const lookup=document.createElement("input");lookup.id="csv-access-lookup-key";lookup.maxLength=100;
+ const lookupKind=document.createElement("select");lookupKind.id="csv-access-lookup-kind";lookupKind.replaceChildren(new Option("授权原键","authorizations"),new Option("撤回原键","revocations"));
+ const ack=document.createElement("input"),stopAck=document.createElement("input");ack.type=stopAck.type="checkbox";ack.id="csv-access-ack";stopAck.id="csv-access-stop-ack";
+ const owner=csvMaterialAccessKey(v),entry=csvMaterialAccessIntents.get(owner)||{current:null,history:[]};csvMaterialAccessIntents.set(owner,entry);
+ const c={v,node,busy:false,items:[],context:null,principal:v.principal||null,live:null,connection:identityConnectionGeneration,workspace:workspaceSelectionGeneration};
+ v.csvMaterialAccess=c;csvMaterialAccessView=c;
+ const here=()=>applicationUseCurrent(v)&&v.csvMaterialAccess===c&&node.isConnected&&c.connection===identityConnectionGeneration&&c.workspace===workspaceSelectionGeneration&&!$("apps").hidden;
+ const path=`/api/apps/${v.appId}/csv-material-access`,same=(a,b)=>goalRunCanonical(a)===goalRunCanonical(b),hash=x=>/^[a-f0-9]{64}$/.test(x||"");
+ const selected=()=>c.items.find(x=>x.resource_id===target.value);
+ const button=(id,label,fn)=>csvFullReportButton(label,id,fn);
+ function checkScope(value){
+  if(value.namespace!=="csv-app-material-access.v1"||value.app_id!==v.appId||value.project_id!==v.project||!/^appruntime_[a-f0-9]{32}$/.test(value.runtime_id||"")||!/^user_[a-f0-9]{32}$/.test(value.principal_id||"")||c.principal&&value.principal_id!==c.principal||value.scope!=="THIS_APP_ALL_INSTANCES"||!same(value.tools,["resource.read","data.aggregate_csv"]))throw Error("授权范围与当前选择不匹配");
+  c.principal=value.principal_id;
+ }
+ async function accept(value,p,lookupOnly=false){
+  const f=value.receipt,r=f?.record;
+  if(!f||f.namespace!=="csv-app-material-access.v1"||f.kind!==`csv-app-material-access.v1.${p.kind==="authorizations"?"authorize":"revoke"}`||r?.app_id!==v.appId||r.project_id!==v.project||r.request_key!==p.key||!/^user_[a-f0-9]{32}$/.test(r.principal_id||"")||c.principal&&r.principal_id!==c.principal||!/^appruntime_[a-f0-9]{32}$/.test(r.runtime_id||"")||!/^res_[a-f0-9]{32}$/.test(r.resource_id||"")||!hash(r.request_fingerprint)||p.body&&(r.resource_id!==p.body.resource_id||r.request_fingerprint!==await ownerHash(p.body))||f.fingerprint!==await ownerHash(Object.fromEntries(Object.entries(f).filter(([k])=>k!=="fingerprint")))||f.scope!=="THIS_APP_ALL_INSTANCES"||f.new_system_permissions!==false||f.new_credentials!==false||f.model_requests!==0||!same(f.tools,["resource.read","data.aggregate_csv"])||!Array.isArray(f.grants)||!Array.isArray(value.app_grants)||!hash(value.app_grants_fingerprint)||await ownerHash(value.app_grants)!==value.app_grants_fingerprint||value.content_access!==false||value.scope!=="THIS_APP_ALL_INSTANCES"||typeof value.upstream_available!=="boolean"||!["ACTIVE","REVOKED","EXPIRED","MISSING"].includes(value.receipt_status)||!["ACTIVE","PARTIAL","INACTIVE"].includes(value.app_material_status))throw Error("原授权控制回执未核实");
+  if(p.kind==="authorizations"&&(f.grants.length!==2||f.ttl_seconds!==86400||!same(f.grants.map(g=>g.tool_ref).sort(),["data.aggregate_csv","resource.read"])||f.grants.some(g=>g.revision!==1||g.revoked!==false||g.expires_at!==f.created_at+86400)))throw Error("原授权期限或权限集合不匹配");
+  for(const g of [...f.grants,...value.app_grants])if(!/^grant_[a-f0-9]{32}$/.test(g.id||"")||g.principal_id!==r.runtime_id||g.project_id!==v.project||g.resource_id!==r.resource_id||!f.tools.includes(g.tool_ref)||!Number.isInteger(g.revision)||g.revision<1||!Number.isFinite(g.expires_at)||typeof g.revoked!=="boolean")throw Error("Grant身份或版本不匹配");
+  if(p.receipt&&!same(p.receipt,f))throw Error("原受理控制记录发生变化");
+  if(!here()||(!lookupOnly&&entry.current!==p))return;
+  if(lookupOnly){if(csvAccessPending(entry.current))return;if(entry.current)entry.history.push(entry.current);entry.current=p;}
+  c.principal=r.principal_id;p.receipt=f;p.state="accepted";c.live=value;
+  status.textContent=`原键已受理；当前本组 ${value.receipt_status}，此App材料权限 ${value.app_material_status}${value.upstream_available?"":"；上层材料或原来源当前不可用"}。只读恢复不创建或延长授权。`;
+  proof.textContent=JSON.stringify(value,null,2);
+ }
+ async function readReceipt(p){const value=await api(path+`/${p.kind}/${encodeURIComponent(p.key)}`);if(here())await accept(value,p);}
+ async function rejected(value,p){
+  if(!value||!p.body||value.namespace!=="csv-app-material-access.v1.rejection"||value.app_id!==v.appId||value.project_id!==v.project||value.principal_id!==p.scope?.principal||value.runtime_id!==p.scope?.runtime||value.kind!==`csv-app-material-access.v1.${p.kind==="authorizations"?"authorize":"revoke"}`||value.request_key!==p.key||value.request_fingerprint!==await ownerHash(p.body)||value.acceptance!=="NOT_ACCEPTED"||value.previous_request!=="ABSENT"||value.phase!=="TX_ROLLED_BACK")return false;
+  if(!here()||entry.current!==p)return false;
+  p.state="rejected";c.live=null;c.context=null;c.items=[];target.replaceChildren();ack.checked=stopAck.checked=false;
+  status.textContent="原键已证明未受理且事务已回滚。请明确重新读取范围、选择材料并确认；不会自动重发。";proof.textContent=JSON.stringify(value,null,2);return true;
+ }
+ async function action(fn){
+  if(!here()||c.busy||v.busy)return;c.busy=true;controls();applicationUseButtons(v);v.csvGoalRevision?.controls();
+  try{await fn();}catch(error){if(here()){
+   if(error.httpStatus===403||error.invalidateCsvPrivate){clearApplicationUseData(v);const live=v.csvMaterialAccess?.node.querySelector("#csv-access-status");if(live)live.textContent="当前权限或版本失效；私有结果与修订正文已清除。保留原键，仅核查控制元数据或撤回。";}
+   else{c.context=null;c.items=[];c.live=null;target.replaceChildren();scope.textContent="";proof.textContent="";status.textContent=`核查未完成：${error.message}。原键保留；结果不明时只读恢复，不重发授权。`;}
+  }}
+  finally{c.busy=false;if(here()){controls();applicationUseButtons(v);v.csvGoalRevision?.controls();}}
+ }
+ async function load(metadata){
+  c.context=null;c.items=[];c.live=null;ack.checked=stopAck.checked=false;scope.textContent="";proof.textContent="";target.replaceChildren();
+  const value=await api(path+(metadata?"/state":""));if(!here())return;checkScope(value);
+  if(!Array.isArray(value.items)||value.items.some(i=>!/^res_[a-f0-9]{32}$/.test(i.resource_id||"")||!Array.isArray(i.app_grants)||!hash(i.app_grants_fingerprint)||!["ACTIVE","PARTIAL","INACTIVE"].includes(i.status)))throw Error("授权材料状态不完整");
+  for(const i of value.items){
+   if(await ownerHash(i.app_grants)!==i.app_grants_fingerprint)throw Error("Grant版本未核对");
+   for(const g of i.app_grants)if(g.principal_id!==value.runtime_id||g.project_id!==v.project||g.resource_id!==i.resource_id||!value.tools.includes(g.tool_ref))throw Error("Grant不属于选定App和材料");
+  }
+  if(!here())return;
+  if(!metadata&&(!hash(value.candidate_fingerprint)||!hash(value.grant_version)||value.ttl_seconds!==86400||value.new_system_permissions!==false||value.new_credentials!==false||value.model_requests!==0||value.items.some(i=>!hash(i.source_hash))))throw Error("授权业务范围不完整");
+  c.context=metadata?null:value;c.items=value.items;c.runtime=value.runtime_id;
+  target.replaceChildren(new Option("请明确选择一份材料",""),...value.items.map(i=>new Option(`${i.name||i.resource_id} · ${i.resource_id} · ${i.status}`,i.resource_id)));
+  status.textContent=metadata?"仅显示当前App的Grant控制元数据；没有读取材料或Goal正文，可明确撤回选定范围。":"材料仍仅属于当前项目；尚未授权给此App。请选择一份CSV，核对完整范围并单独确认。";
+ }
+ const read=button("csv-access-read","读取可追加的已有CSV（不授权）",()=>action(()=>load(false)));
+ const state=button("csv-access-state","读取当前App授权状态（仅元数据）",()=>action(()=>load(true)));
+ async function submit(kind){
+  const item=selected(),stop=kind==="revocations";
+  if(!item||csvAccessPending(entry.current)||!csvMaterialAccessIdle(v)||!(stop?stopAck.checked:ack.checked)||!stop&&!c.context)return;
+  const body=stop?{request_key:crypto.randomUUID(),resource_id:item.resource_id,expected_app_grants_fingerprint:item.app_grants_fingerprint,consent:"REVOKE_THIS_APP_READ_SUM_THIS_CSV"}:{request_key:crypto.randomUUID(),resource_id:item.resource_id,expected_source_hash:item.source_hash,expected_candidate_fingerprint:c.context.candidate_fingerprint,expected_grant_version:c.context.grant_version,expected_app_grants_fingerprint:item.app_grants_fingerprint,consent:"AUTHORIZE_ONLY_THIS_APP_ALL_INSTANCES_READ_SUM_THIS_CSV_FOR_24H"};
+  if(entry.current)entry.history.push(entry.current);
+  const p={key:body.request_key,kind,body,scope:{principal:c.principal,runtime:c.runtime},state:"sending"};entry.current=p;c.live=null;c.context=null;ack.checked=stopAck.checked=false;key.value=p.key;controls();
+  try{
+   await api(path+`/${kind}`,"POST",body);
+   if(p.state!=="accepted")p.state="accepted-read-error";
+   if(!here())return;
+   await readReceipt(p);
+   if(!here())return;
+   if(stop){clearApplicationUseData(v);$("use-info").textContent="所选App材料权限已撤回。原结果保留在历史账本；当前无权读取的结果不再展示，不会自动重新授权。";}
+   else{c.items=[];target.replaceChildren();scope.textContent="授权已受理，尚未更换版本或运行。明确开始新的材料修订后，还须读取新基线、选择材料并完成原CHECK、版本与采纳。";}
+  }catch(error){if(p.state!=="accepted"){p.rejection=error.submissionRejection||null;if(!await rejected(p.rejection,p))p.state="unknown";}if([403,409].includes(error.httpStatus))error.invalidateCsvPrivate=true;throw error;}
+  finally{if(p.state==="sending")p.state="unknown";}
+ }
+ const grant=button("csv-access-authorize","确认：仅给此App追加所选CSV的读取与求和",()=>action(()=>submit("authorizations")));
+ const stop=button("csv-access-revoke","确认撤回此App对所选CSV的两项权限",()=>action(()=>submit("revocations")));
+ const recover=button("csv-access-recover","只读恢复原授权或撤回回执",()=>action(async()=>{const p=entry.current;if(p&&!await rejected(p.rejection,p))await readReceipt(p);}));
+ const find=button("csv-access-lookup","按粘贴的原键只读查询（不提交授权）",()=>action(async()=>{
+  if(!/^[A-Za-z0-9_-]{1,100}$/.test(lookup.value.trim())||csvAccessPending(entry.current))return;
+  const p={key:lookup.value.trim(),kind:lookupKind.value,body:null,state:"unknown"};
+  const value=await api(path+`/${p.kind}/${encodeURIComponent(p.key)}`);if(here())await accept(value,p,true);
+ }));
+ const next=button("csv-access-next","开始新的材料修订（仍需独立CHECK）",()=>action(async()=>{
+  const p=entry.current;if(!p||p.kind!=="authorizations")return;await readReceipt(p);if(!here())return;
+  if(c.live?.receipt_status!=="ACTIVE"||c.live.app_material_status!=="ACTIVE"||!c.live.upstream_available)throw Error("当前授权不可用于新工作");
+  if(!csvMaterialAccessIdle(v)||typeof v.startCsvMaterialCycle!=="function")return;
+  c.busy=false;v.startCsvMaterialCycle();
+ }));
+ function controls(){
+  if(!here())return;const p=entry.current,pending=csvAccessPending(p),item=selected(),idle=csvMaterialAccessIdle(v),busy=c.busy||v.busy;
+  read.disabled=state.disabled=busy;target.disabled=busy||pending;ack.disabled=busy||pending||!idle||!c.context||!item||item.status!=="INACTIVE";
+  stopAck.disabled=busy||pending||!idle||!item?.app_grants.some(g=>!g.revoked);
+  grant.disabled=ack.disabled||!ack.checked;stop.disabled=stopAck.disabled||!stopAck.checked;
+  lookup.disabled=lookupKind.disabled=busy||pending;find.disabled=busy||pending||!/^[A-Za-z0-9_-]{1,100}$/.test(lookup.value.trim());
+  recover.disabled=busy||!p;next.disabled=busy||pending||!idle||!v.id||typeof v.startCsvMaterialCycle!=="function"||p?.kind!=="authorizations"||c.live?.receipt_status!=="ACTIVE"||c.live?.app_material_status!=="ACTIVE"||!c.live?.upstream_available;
+  key.value=p?.key||"";
+  if(item)scope.textContent=`项目 ${v.project}；App ${v.appId}；运行身份 ${c.runtime}；仅材料 ${item.resource_id}${c.context?`，SHA-256 ${item.source_hash}`:"（仅控制元数据）"}。READ + SUM，仅此App的全部实例共用，仍受各Release声明限制。最长24小时，上层权限更早失效即不可用。授权变更令原检查/审批基线失效；不会运行、换版本或自动采纳。${item.app_grants.length?" 当前Grant："+item.app_grants.map(g=>`${g.id} v${g.revision} ${g.tool_ref} ${g.revoked?"已撤回":new Date(g.expires_at*1000).toISOString()}`).join("；"):" 此App尚无这份材料的两项权限。"}`;
+ }
+ target.onchange=()=>{ack.checked=stopAck.checked=false;c.live=null;controls();};ack.onchange=stopAck.onchange=controls;lookup.oninput=controls;
+ node.append(title,row("这是应用内材料业务授权，不新增外部连接、凭据或系统权限。旧结果仅作历史，人工签收保持独立PENDING。"),read,state,csvFullReportLabel("所选材料范围",target),scope,
+  csvFullReportLabel("我已核对App运行身份、材料/hash、两项权限、全部实例作用范围与最长24小时，明确追加授权",ack),grant,
+  csvFullReportLabel("我已核对当前Grant及版本，明确撤回所选App/材料的READ与SUM；不影响其他材料或主体",stopAck),stop,
+  csvFullReportLabel("原请求键（只读恢复沿用）",key),recover,csvFullReportLabel("重开页面后粘贴原请求键",lookup),lookupKind,find,next,status,proof);
+ $("use-info").after(node);status.textContent=entry.current?"保留原请求键；先只读核对当前授权状态，旧回执不代表权限仍有效。":"先读取并明确选择已有材料；打开页面不会授权。";
+ c.controls=controls;controls();
 }

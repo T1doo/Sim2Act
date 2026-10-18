@@ -1,0 +1,1169 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/projects/proj_b58f89158f9b4ad9b4ddcc9bcefbeb42/resources",
+    "body": {
+      "name": "two.csv",
+      "format": "csv",
+      "content": "amount,quantity\n10,2\n20,3\n"
+    },
+    "status": 201,
+    "response": {
+      "id": "res_b12e2b26ffcd43269d8c90194cb64e63"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/proj_b58f89158f9b4ad9b4ddcc9bcefbeb42/goal-cards",
+    "body": {
+      "title": "固定能力演示",
+      "goal": "汇总授权CSV；这不是任意目标生成",
+      "known": [
+        "金额单位元"
+      ],
+      "assumptions": [
+        "人工确认列含义"
+      ],
+      "unresolved": [
+        "目标语义未验收"
+      ],
+      "constraints": [
+        "不外发",
+        "保留所有原始条件"
+      ],
+      "acceptance_checks": [
+        "列合计与授权材料一致"
+      ],
+      "resource_refs": [
+        "res_b12e2b26ffcd43269d8c90194cb64e63"
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": "goal_95b60b534429461bacd65a30cee4f10b",
+      "version": 1,
+      "fingerprint": "b2ae3b2f73d6af62f31a541b637e11e6426db6aebbd95760e9050f0fadd3d951",
+      "state": "DRAFT",
+      "executable": false
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/goal-cards/goal_95b60b534429461bacd65a30cee4f10b/candidates",
+    "body": {
+      "expected_version": 1,
+      "resource_id": "res_b12e2b26ffcd43269d8c90194cb64e63",
+      "capability": "csv.sum",
+      "request_key": "same-intent"
+    },
+    "status": 201,
+    "response": {
+      "id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+      "candidate_fingerprint": "57d049754de89fa03f8e21223b3b7cc4bb2b4342db5e5a16591488e67aa1ae16",
+      "state": "PREVIEW_ONLY",
+      "publishable": false,
+      "generator": "MOCK_DETERMINISTIC_CSV_SUM.v1",
+      "model_requests": 0,
+      "goal_card_id": "goal_95b60b534429461bacd65a30cee4f10b",
+      "goal_version": 1,
+      "goal_acceptance": "NOT_RUN"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256",
+    "body": null,
+    "status": 200,
+    "response": {
+      "id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+      "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+      "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+      "name": "固定能力演示",
+      "candidate": {
+        "manifest": {
+          "schema_version": "1.0-draft",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "revision": 1,
+          "origin": "goal",
+          "goal_ref": "goal_95b60b534429461bacd65a30cee4f10b",
+          "source_run_ref": null,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "column": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "column"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "sum": {
+                "type": "string"
+              },
+              "source_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "column",
+              "count",
+              "sum",
+              "source_hash"
+            ],
+            "additionalProperties": false
+          },
+          "outputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "resource_id"
+            },
+            "column": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "column"
+            },
+            "count": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "count"
+            },
+            "sum": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "sum"
+            },
+            "source_hash": {
+              "source": "step",
+              "ref": "aggregate",
+              "field": "source_hash"
+            }
+          },
+          "views": [
+            {
+              "component_ref": "text",
+              "output_field": "sum"
+            }
+          ],
+          "workflow": [
+            {
+              "step_id": "aggregate",
+              "binding_id": "csv_sum",
+              "depends_on": [],
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                },
+                "column": {
+                  "source": "input",
+                  "field": "column"
+                }
+              }
+            }
+          ],
+          "action_bindings": [
+            {
+              "binding_id": "csv_sum",
+              "action_id": "action_357dd8fedd824f3d8feab6af556694c2",
+              "revision": 1
+            }
+          ],
+          "data_bindings": [
+            {
+              "binding_id": "source",
+              "resource_ref": "res_b12e2b26ffcd43269d8c90194cb64e63"
+            }
+          ],
+          "runtime_identity_requirements": {
+            "mode": "user_and_app_intersection"
+          },
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_b12e2b26ffcd43269d8c90194cb64e63"
+            },
+            {
+              "tool_ref": "data.aggregate_csv",
+              "resource_ref": "res_b12e2b26ffcd43269d8c90194cb64e63"
+            }
+          ],
+          "dependency_lock": [
+            {
+              "kind": "resource",
+              "ref": "res_b12e2b26ffcd43269d8c90194cb64e63",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "data.aggregate_csv",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "version": "1"
+            }
+          ],
+          "validation_suite_ref": "receipt.readback.v1",
+          "runtime_limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 1,
+            "max_output_tokens": 1,
+            "run_seconds": 1
+          },
+          "data_schema_version": 1
+        },
+        "actions": [
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_357dd8fedd824f3d8feab6af556694c2",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "column": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "column"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "column": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "sum": {
+                  "type": "string"
+                },
+                "source_hash": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "column",
+                "count",
+                "sum",
+                "source_hash"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "data.aggregate_csv",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_b12e2b26ffcd43269d8c90194cb64e63",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_b12e2b26ffcd43269d8c90194cb64e63"
+              },
+              {
+                "tool_ref": "data.aggregate_csv",
+                "resource_ref": "res_b12e2b26ffcd43269d8c90194cb64e63"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "receipt.readback.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 1,
+              "max_repairs": 0,
+              "max_total_tokens": 1,
+              "max_output_tokens": 1,
+              "run_seconds": 1
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED"
+            ]
+          }
+        ],
+        "source_hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+        "goal": {
+          "title": "固定能力演示",
+          "goal": "汇总授权CSV；这不是任意目标生成",
+          "known": [
+            "金额单位元"
+          ],
+          "assumptions": [
+            "人工确认列含义"
+          ],
+          "unresolved": [
+            "目标语义未验收"
+          ],
+          "constraints": [
+            "不外发",
+            "保留所有原始条件"
+          ],
+          "acceptance_checks": [
+            "列合计与授权材料一致"
+          ],
+          "resource_refs": [
+            "res_b12e2b26ffcd43269d8c90194cb64e63"
+          ]
+        },
+        "generation": {
+          "kind": "goal_card",
+          "goal_card_id": "goal_95b60b534429461bacd65a30cee4f10b",
+          "goal_version": 1,
+          "goal_fingerprint": "b2ae3b2f73d6af62f31a541b637e11e6426db6aebbd95760e9050f0fadd3d951",
+          "goal_snapshot": {
+            "schema_version": "F2-goal-card.v1",
+            "content": {
+              "title": "固定能力演示",
+              "goal": "汇总授权CSV；这不是任意目标生成",
+              "known": [
+                "金额单位元"
+              ],
+              "assumptions": [
+                "人工确认列含义"
+              ],
+              "unresolved": [
+                "目标语义未验收"
+              ],
+              "constraints": [
+                "不外发",
+                "保留所有原始条件"
+              ],
+              "acceptance_checks": [
+                "列合计与授权材料一致"
+              ],
+              "resource_refs": [
+                "res_b12e2b26ffcd43269d8c90194cb64e63"
+              ]
+            },
+            "resource_snapshots": [
+              {
+                "resource_id": "res_b12e2b26ffcd43269d8c90194cb64e63",
+                "hash": "631fd75e593c66a6543bc2dbd99ed847425ca9889c0d2aac9513d444dca9d96f",
+                "format": "csv"
+              }
+            ]
+          },
+          "generator": "MOCK_DETERMINISTIC_CSV_SUM.v1",
+          "model_requests": 0,
+          "goal_acceptance": "NOT_RUN",
+          "capability": "csv.sum"
+        }
+      },
+      "fingerprint": "57d049754de89fa03f8e21223b3b7cc4bb2b4342db5e5a16591488e67aa1ae16",
+      "created_at": 1792364392.8370554,
+      "state": "PREVIEW_ONLY",
+      "publishable": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "column"
+        ],
+        "additionalProperties": false
+      },
+      "validation": {
+        "state": "PREFLIGHTED_DRAFT",
+        "execution_performed": false,
+        "publishable": false,
+        "topological_order": [
+          "aggregate"
+        ]
+      },
+      "history": [],
+      "input_guidance": {
+        "row_count": 2,
+        "columns": [
+          {
+            "name": "amount",
+            "numeric": true,
+            "reason": null
+          },
+          {
+            "name": "quantity",
+            "numeric": true,
+            "reason": null
+          }
+        ],
+        "error": null
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/proj_b58f89158f9b4ad9b4ddcc9bcefbeb42/resources",
+    "body": {
+      "name": "new-B.csv",
+      "format": "csv",
+      "content": "amount,quantity\n100,7\n250,8\n"
+    },
+    "status": 201,
+    "response": {
+      "id": "res_40d4c43a31d74086b6fd13e99a69b62a"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access",
+    "body": null,
+    "status": 200,
+    "response": {
+      "namespace": "csv-app-material-access.v1",
+      "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+      "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+      "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+      "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+      "candidate_fingerprint": "57d049754de89fa03f8e21223b3b7cc4bb2b4342db5e5a16591488e67aa1ae16",
+      "grant_version": "d0300a465ad9f7b335afc45c190247c694b2253e38b4abb9debe601f1558ba34",
+      "items": [
+        {
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "name": "new-B.csv",
+          "source_hash": "80e9f85b5aa9268e316e69b99592346da43d5ddf4b920b819335d5404960e7d5",
+          "app_grants": [],
+          "app_grants_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "status": "INACTIVE"
+        },
+        {
+          "resource_id": "res_51f191b0a3fb4a989ca0c50c2436eb16",
+          "name": "data.csv",
+          "source_hash": "4c278144e67c9f22352bcd4cc6e9a5e19b25569dc459a62d12e96f3c2b8d5645",
+          "app_grants": [],
+          "app_grants_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "status": "INACTIVE"
+        }
+      ],
+      "tools": [
+        "resource.read",
+        "data.aggregate_csv"
+      ],
+      "ttl_seconds": 86400,
+      "scope": "THIS_APP_ALL_INSTANCES",
+      "new_system_permissions": false,
+      "new_credentials": false,
+      "model_requests": 0
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/authorizations",
+    "body": {
+      "request_key": "user-explicit-B",
+      "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+      "expected_source_hash": "80e9f85b5aa9268e316e69b99592346da43d5ddf4b920b819335d5404960e7d5",
+      "expected_candidate_fingerprint": "57d049754de89fa03f8e21223b3b7cc4bb2b4342db5e5a16591488e67aa1ae16",
+      "expected_grant_version": "d0300a465ad9f7b335afc45c190247c694b2253e38b4abb9debe601f1558ba34",
+      "expected_app_grants_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "consent": "AUTHORIZE_ONLY_THIS_APP_ALL_INSTANCES_READ_SUM_THIS_CSV_FOR_24H"
+    },
+    "status": 201,
+    "response": {
+      "receipt": {
+        "namespace": "csv-app-material-access.v1",
+        "kind": "csv-app-material-access.v1.authorize",
+        "record": {
+          "request_key": "user-explicit-B",
+          "request_fingerprint": "cd7dff8aaa63c52e937fe09b0a12bc8109fe13c45f9e2572a65072ad855628e0",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a"
+        },
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv"
+        ],
+        "grants": [
+          {
+            "id": "grant_da6394879bd24209906f5e615e044d02",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "resource.read",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          },
+          {
+            "id": "grant_c3050b2209f94468b577d32dca46dc99",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "data.aggregate_csv",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          }
+        ],
+        "created_at": 1792364393.268431,
+        "ttl_seconds": 86400,
+        "scope": "THIS_APP_ALL_INSTANCES",
+        "model_requests": 0,
+        "new_system_permissions": false,
+        "new_credentials": false,
+        "fingerprint": "f4986f2ad4b33e3c8f39537a012a26e575b098360f402324de62438246f54a97"
+      },
+      "receipt_status": "ACTIVE",
+      "app_grants": [
+        {
+          "id": "grant_c3050b2209f94468b577d32dca46dc99",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792450793.268431,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_da6394879bd24209906f5e615e044d02",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "resource.read",
+          "expires_at": 1792450793.268431,
+          "revision": 1,
+          "revoked": false
+        }
+      ],
+      "app_grants_fingerprint": "eea6d533c8eaa2db4c22a1631f93ec5eecf2f44d638d0ffced11a8b0709b3698",
+      "app_material_status": "ACTIVE",
+      "upstream_available": true,
+      "content_access": false,
+      "scope": "THIS_APP_ALL_INSTANCES"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/grants/grant_bd6af6aa855048809e748c3f51d0c43f/revoke",
+    "body": {
+      "command": "revoke",
+      "version": 1
+    },
+    "status": 200,
+    "response": {
+      "status": "REVOKED"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/state",
+    "body": null,
+    "status": 200,
+    "response": {
+      "namespace": "csv-app-material-access.v1",
+      "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+      "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+      "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+      "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+      "items": [
+        {
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "app_grants": [
+            {
+              "id": "grant_c3050b2209f94468b577d32dca46dc99",
+              "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+              "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+              "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+              "tool_ref": "data.aggregate_csv",
+              "expires_at": 1792450793.268431,
+              "revision": 1,
+              "revoked": false
+            },
+            {
+              "id": "grant_da6394879bd24209906f5e615e044d02",
+              "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+              "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+              "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+              "tool_ref": "resource.read",
+              "expires_at": 1792450793.268431,
+              "revision": 1,
+              "revoked": false
+            }
+          ],
+          "app_grants_fingerprint": "eea6d533c8eaa2db4c22a1631f93ec5eecf2f44d638d0ffced11a8b0709b3698",
+          "status": "ACTIVE"
+        },
+        {
+          "resource_id": "res_b12e2b26ffcd43269d8c90194cb64e63",
+          "app_grants": [
+            {
+              "id": "grant_1351db9213274023bf5bdf47ab885337",
+              "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+              "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+              "resource_id": "res_b12e2b26ffcd43269d8c90194cb64e63",
+              "tool_ref": "resource.read",
+              "expires_at": 1792450792.8362818,
+              "revision": 1,
+              "revoked": false
+            },
+            {
+              "id": "grant_8c9aa94b661c48fd86b33da77b72421a",
+              "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+              "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+              "resource_id": "res_b12e2b26ffcd43269d8c90194cb64e63",
+              "tool_ref": "data.aggregate_csv",
+              "expires_at": 1792450792.8362818,
+              "revision": 1,
+              "revoked": false
+            }
+          ],
+          "app_grants_fingerprint": "7ae8661206b0aff2796f98a612f5155713dc52d6644e064e3f84d4ed9c3fca6e",
+          "status": "ACTIVE"
+        }
+      ],
+      "tools": [
+        "resource.read",
+        "data.aggregate_csv"
+      ],
+      "scope": "THIS_APP_ALL_INSTANCES",
+      "content_access": false
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/authorizations/user-explicit-B",
+    "body": null,
+    "status": 200,
+    "response": {
+      "receipt": {
+        "namespace": "csv-app-material-access.v1",
+        "kind": "csv-app-material-access.v1.authorize",
+        "record": {
+          "request_key": "user-explicit-B",
+          "request_fingerprint": "cd7dff8aaa63c52e937fe09b0a12bc8109fe13c45f9e2572a65072ad855628e0",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a"
+        },
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv"
+        ],
+        "grants": [
+          {
+            "id": "grant_da6394879bd24209906f5e615e044d02",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "resource.read",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          },
+          {
+            "id": "grant_c3050b2209f94468b577d32dca46dc99",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "data.aggregate_csv",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          }
+        ],
+        "created_at": 1792364393.268431,
+        "ttl_seconds": 86400,
+        "scope": "THIS_APP_ALL_INSTANCES",
+        "model_requests": 0,
+        "new_system_permissions": false,
+        "new_credentials": false,
+        "fingerprint": "f4986f2ad4b33e3c8f39537a012a26e575b098360f402324de62438246f54a97"
+      },
+      "receipt_status": "ACTIVE",
+      "app_grants": [
+        {
+          "id": "grant_c3050b2209f94468b577d32dca46dc99",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792450793.268431,
+          "revision": 1,
+          "revoked": false
+        },
+        {
+          "id": "grant_da6394879bd24209906f5e615e044d02",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "resource.read",
+          "expires_at": 1792450793.268431,
+          "revision": 1,
+          "revoked": false
+        }
+      ],
+      "app_grants_fingerprint": "eea6d533c8eaa2db4c22a1631f93ec5eecf2f44d638d0ffced11a8b0709b3698",
+      "app_material_status": "ACTIVE",
+      "upstream_available": false,
+      "content_access": false,
+      "scope": "THIS_APP_ALL_INSTANCES"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/revocations",
+    "body": {
+      "request_key": "explicit-withdraw",
+      "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+      "expected_app_grants_fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+      "consent": "REVOKE_THIS_APP_READ_SUM_THIS_CSV"
+    },
+    "status": 409,
+    "response": {
+      "error": {
+        "code": "VERSION_CONFLICT",
+        "message": "Exact App material Grant versions changed",
+        "safe_retry": false,
+        "effect_known": true,
+        "user_action": "Check status, configuration and permissions",
+        "submission_rejection": {
+          "namespace": "csv-app-material-access.v1.rejection",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "kind": "csv-app-material-access.v1.revoke",
+          "request_key": "explicit-withdraw",
+          "request_fingerprint": "e708918dc72d97747fbf59e0a8e9ac581a6ceeff1f9d2e963ebaccdd30ec8a3f",
+          "acceptance": "NOT_ACCEPTED",
+          "previous_request": "ABSENT",
+          "phase": "TX_ROLLED_BACK"
+        }
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/revocations",
+    "body": {
+      "request_key": "explicit-withdraw",
+      "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+      "expected_app_grants_fingerprint": "eea6d533c8eaa2db4c22a1631f93ec5eecf2f44d638d0ffced11a8b0709b3698",
+      "consent": "REVOKE_THIS_APP_READ_SUM_THIS_CSV"
+    },
+    "status": 201,
+    "response": {
+      "receipt": {
+        "namespace": "csv-app-material-access.v1",
+        "kind": "csv-app-material-access.v1.revoke",
+        "record": {
+          "request_key": "explicit-withdraw",
+          "request_fingerprint": "b3e5ff04ce242d9717441c75718f836cd3787e6d41c363c467c3ac7dbda6c587",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a"
+        },
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv"
+        ],
+        "grants": [
+          {
+            "id": "grant_c3050b2209f94468b577d32dca46dc99",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "data.aggregate_csv",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          },
+          {
+            "id": "grant_da6394879bd24209906f5e615e044d02",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "resource.read",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          }
+        ],
+        "created_at": 1792364393.4448938,
+        "ttl_seconds": 0,
+        "scope": "THIS_APP_ALL_INSTANCES",
+        "model_requests": 0,
+        "new_system_permissions": false,
+        "new_credentials": false,
+        "fingerprint": "28b2a7ca456e6124891755da670f62dc22f15c99baebdd2b30e503318afc1752"
+      },
+      "receipt_status": "REVOKED",
+      "app_grants": [
+        {
+          "id": "grant_c3050b2209f94468b577d32dca46dc99",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        },
+        {
+          "id": "grant_da6394879bd24209906f5e615e044d02",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "resource.read",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        }
+      ],
+      "app_grants_fingerprint": "57be97f11e4d0ffbc1da40755df6a05dfd58a124b91ad30b94fcf790d1043020",
+      "app_material_status": "INACTIVE",
+      "upstream_available": false,
+      "content_access": false,
+      "scope": "THIS_APP_ALL_INSTANCES"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/authorizations",
+    "body": {
+      "request_key": "user-explicit-B",
+      "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+      "expected_source_hash": "80e9f85b5aa9268e316e69b99592346da43d5ddf4b920b819335d5404960e7d5",
+      "expected_candidate_fingerprint": "57d049754de89fa03f8e21223b3b7cc4bb2b4342db5e5a16591488e67aa1ae16",
+      "expected_grant_version": "d0300a465ad9f7b335afc45c190247c694b2253e38b4abb9debe601f1558ba34",
+      "expected_app_grants_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "consent": "AUTHORIZE_ONLY_THIS_APP_ALL_INSTANCES_READ_SUM_THIS_CSV_FOR_24H"
+    },
+    "status": 201,
+    "response": {
+      "receipt": {
+        "namespace": "csv-app-material-access.v1",
+        "kind": "csv-app-material-access.v1.authorize",
+        "record": {
+          "request_key": "user-explicit-B",
+          "request_fingerprint": "cd7dff8aaa63c52e937fe09b0a12bc8109fe13c45f9e2572a65072ad855628e0",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a"
+        },
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv"
+        ],
+        "grants": [
+          {
+            "id": "grant_da6394879bd24209906f5e615e044d02",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "resource.read",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          },
+          {
+            "id": "grant_c3050b2209f94468b577d32dca46dc99",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "data.aggregate_csv",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          }
+        ],
+        "created_at": 1792364393.268431,
+        "ttl_seconds": 86400,
+        "scope": "THIS_APP_ALL_INSTANCES",
+        "model_requests": 0,
+        "new_system_permissions": false,
+        "new_credentials": false,
+        "fingerprint": "f4986f2ad4b33e3c8f39537a012a26e575b098360f402324de62438246f54a97"
+      },
+      "receipt_status": "REVOKED",
+      "app_grants": [
+        {
+          "id": "grant_c3050b2209f94468b577d32dca46dc99",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        },
+        {
+          "id": "grant_da6394879bd24209906f5e615e044d02",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "resource.read",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        }
+      ],
+      "app_grants_fingerprint": "57be97f11e4d0ffbc1da40755df6a05dfd58a124b91ad30b94fcf790d1043020",
+      "app_material_status": "INACTIVE",
+      "upstream_available": false,
+      "content_access": false,
+      "scope": "THIS_APP_ALL_INSTANCES"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/revocations",
+    "body": {
+      "request_key": "explicit-withdraw",
+      "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+      "expected_app_grants_fingerprint": "eea6d533c8eaa2db4c22a1631f93ec5eecf2f44d638d0ffced11a8b0709b3698",
+      "consent": "REVOKE_THIS_APP_READ_SUM_THIS_CSV"
+    },
+    "status": 201,
+    "response": {
+      "receipt": {
+        "namespace": "csv-app-material-access.v1",
+        "kind": "csv-app-material-access.v1.revoke",
+        "record": {
+          "request_key": "explicit-withdraw",
+          "request_fingerprint": "b3e5ff04ce242d9717441c75718f836cd3787e6d41c363c467c3ac7dbda6c587",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a"
+        },
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv"
+        ],
+        "grants": [
+          {
+            "id": "grant_c3050b2209f94468b577d32dca46dc99",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "data.aggregate_csv",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          },
+          {
+            "id": "grant_da6394879bd24209906f5e615e044d02",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "resource.read",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          }
+        ],
+        "created_at": 1792364393.4448938,
+        "ttl_seconds": 0,
+        "scope": "THIS_APP_ALL_INSTANCES",
+        "model_requests": 0,
+        "new_system_permissions": false,
+        "new_credentials": false,
+        "fingerprint": "28b2a7ca456e6124891755da670f62dc22f15c99baebdd2b30e503318afc1752"
+      },
+      "receipt_status": "REVOKED",
+      "app_grants": [
+        {
+          "id": "grant_c3050b2209f94468b577d32dca46dc99",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        },
+        {
+          "id": "grant_da6394879bd24209906f5e615e044d02",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "resource.read",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        }
+      ],
+      "app_grants_fingerprint": "57be97f11e4d0ffbc1da40755df6a05dfd58a124b91ad30b94fcf790d1043020",
+      "app_material_status": "INACTIVE",
+      "upstream_available": false,
+      "content_access": false,
+      "scope": "THIS_APP_ALL_INSTANCES"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/authorizations/user-explicit-B",
+    "body": null,
+    "status": 200,
+    "response": {
+      "receipt": {
+        "namespace": "csv-app-material-access.v1",
+        "kind": "csv-app-material-access.v1.authorize",
+        "record": {
+          "request_key": "user-explicit-B",
+          "request_fingerprint": "cd7dff8aaa63c52e937fe09b0a12bc8109fe13c45f9e2572a65072ad855628e0",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a"
+        },
+        "tools": [
+          "resource.read",
+          "data.aggregate_csv"
+        ],
+        "grants": [
+          {
+            "id": "grant_da6394879bd24209906f5e615e044d02",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "resource.read",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          },
+          {
+            "id": "grant_c3050b2209f94468b577d32dca46dc99",
+            "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+            "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+            "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+            "tool_ref": "data.aggregate_csv",
+            "expires_at": 1792450793.268431,
+            "revision": 1,
+            "revoked": false
+          }
+        ],
+        "created_at": 1792364393.268431,
+        "ttl_seconds": 86400,
+        "scope": "THIS_APP_ALL_INSTANCES",
+        "model_requests": 0,
+        "new_system_permissions": false,
+        "new_credentials": false,
+        "fingerprint": "f4986f2ad4b33e3c8f39537a012a26e575b098360f402324de62438246f54a97"
+      },
+      "receipt_status": "REVOKED",
+      "app_grants": [
+        {
+          "id": "grant_c3050b2209f94468b577d32dca46dc99",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "data.aggregate_csv",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        },
+        {
+          "id": "grant_da6394879bd24209906f5e615e044d02",
+          "principal_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+          "tool_ref": "resource.read",
+          "expires_at": 1792450793.268431,
+          "revision": 2,
+          "revoked": true
+        }
+      ],
+      "app_grants_fingerprint": "57be97f11e4d0ffbc1da40755df6a05dfd58a124b91ad30b94fcf790d1043020",
+      "app_material_status": "INACTIVE",
+      "upstream_available": false,
+      "content_access": false,
+      "scope": "THIS_APP_ALL_INSTANCES"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/apps/app_2f40512c4042405bbef8e8b2dd9b4256/csv-material-access/authorizations",
+    "body": {
+      "request_key": "late-stale-new-key",
+      "resource_id": "res_40d4c43a31d74086b6fd13e99a69b62a",
+      "expected_source_hash": "80e9f85b5aa9268e316e69b99592346da43d5ddf4b920b819335d5404960e7d5",
+      "expected_candidate_fingerprint": "57d049754de89fa03f8e21223b3b7cc4bb2b4342db5e5a16591488e67aa1ae16",
+      "expected_grant_version": "d0300a465ad9f7b335afc45c190247c694b2253e38b4abb9debe601f1558ba34",
+      "expected_app_grants_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "consent": "AUTHORIZE_ONLY_THIS_APP_ALL_INSTANCES_READ_SUM_THIS_CSV_FOR_24H"
+    },
+    "status": 409,
+    "response": {
+      "error": {
+        "code": "VERSION_CONFLICT",
+        "message": "Independent text logic binding changed",
+        "safe_retry": false,
+        "effect_known": true,
+        "user_action": "Check status, configuration and permissions",
+        "submission_rejection": {
+          "namespace": "csv-app-material-access.v1.rejection",
+          "app_id": "app_2f40512c4042405bbef8e8b2dd9b4256",
+          "project_id": "proj_b58f89158f9b4ad9b4ddcc9bcefbeb42",
+          "principal_id": "user_7099a14c5d9540d485d5c853f1fcda50",
+          "runtime_id": "appruntime_6c70d7dbe6e04aedb78665f5ce639587",
+          "kind": "csv-app-material-access.v1.authorize",
+          "request_key": "late-stale-new-key",
+          "request_fingerprint": "1dc700fdaadacdbdf0e197a3cde61b9cf4c69563fb333b68d0eb9800010586fb",
+          "acceptance": "NOT_ACCEPTED",
+          "previous_request": "ABSENT",
+          "phase": "TX_ROLLED_BACK"
+        }
+      }
+    }
+  }
+]

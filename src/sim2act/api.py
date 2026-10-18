@@ -7,9 +7,9 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import Field
-from sqlalchemy import select, update
+from sqlalchemy import select
 
-from .apps import create_csv_draft, inspect_draft, preview
+from .apps import create_csv_draft, inspect_draft, preview, revoke_grant
 from .conditional_apps import NAMESPACE as CONDITIONAL_APP_NAMESPACE
 from .conditional_apps import mount as mount_conditional_apps
 from .conditional_checks import mount as mount_conditional_checks
@@ -24,6 +24,7 @@ from .contracts import (
     validate_action_input,
 )
 from .csv_dag import mount as mount_csv_dag
+from .csv_material_access import mount as mount_csv_material_access
 from .db import (
     Store,
     app_drafts,
@@ -502,21 +503,7 @@ def create_app(store=None, settings=None):
     @app.post("/api/grants/{gid}/revoke")
     def revoke(gid: str, body: CommandInput, user=user_dependency):
         with db.tx() as c:
-            g = (
-                c.execute(select(grants).where(grants.c.id == gid).with_for_update())
-                .mappings()
-                .first()
-            )
-            if not g:
-                raise DomainError("PERMISSION_DENIED")
-            db.own_project(c, user, g["project_id"])
-            if g["revision"] != body.version or body.command != "revoke":
-                raise DomainError("VERSION_CONFLICT")
-            c.execute(
-                update(grants)
-                .where(grants.c.id == gid)
-                .values(revoked=True, revision=g["revision"] + 1)
-            )
+            revoke_grant(db,c,user,gid,body.command,body.version)
         return {"status": "REVOKED"}
 
     @app.get("/api/projects/{pid}/goal-cards")
@@ -1038,6 +1025,7 @@ def create_app(store=None, settings=None):
 
     mount_project_column_versions(app, db, identity, platform_limits, s)
     mount_csv_dag(app, db, s, identity, platform_limits)
+    mount_csv_material_access(app,db,platform_limits,identity)
 
     web = Path(__file__).parent / "web"
 

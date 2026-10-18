@@ -4,7 +4,7 @@ import copy
 import json
 import time
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 from .contracts import Limits, validate_action, validate_action_input, validate_value
 from .db import (
@@ -147,6 +147,28 @@ def create_csv_draft(store, user, pid, name, rid, goal, platform_limits):
         return persist_csv_candidate(c, project, name, rid, candidate, platform_limits)
 
 
+def grant_csv_material(c, pid, runtime, rid):
+    """Existing App-only, fixed READ/SUM business scope; callers verify consent."""
+    expiry = time.time() + 86400
+    rows = [dict(id=new_id("grant"),principal_id=runtime,project_id=pid,resource_id=rid,
+        tool_ref=tool,expires_at=expiry,revision=1,revoked=False)
+        for tool in ("resource.read","data.aggregate_csv")]
+    for row in rows:
+        c.execute(insert(grants).values(**row))
+    return rows
+
+
+def revoke_grant(store,c,user,gid,command,version):
+    """Original single-Grant command, also usable in an atomic scoped batch."""
+    g = c.execute(select(grants).where(grants.c.id == gid).with_for_update()).mappings().first()
+    if not g:
+        raise DomainError("PERMISSION_DENIED")
+    store.own_project(c,user,g["project_id"])
+    if g["revision"] != version or command != "revoke":
+        raise DomainError("VERSION_CONFLICT")
+    c.execute(update(grants).where(grants.c.id == gid).values(revoked=True,revision=g["revision"]+1))
+
+
 def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
     # All production callers acquire this project before card/app/grant locks.
     from .db import projects
@@ -161,19 +183,7 @@ def persist_csv_candidate(c, project, name, rid, candidate, platform_limits):
     runtime = new_id("appruntime")
     c.execute(insert(principals).values(id=runtime, name="read-only app preview"))
     # User explicitly selects this one resource in the create-and-authorize UI/API command.
-    for tool in ("resource.read", "data.aggregate_csv"):
-        c.execute(
-            insert(grants).values(
-                id=new_id("grant"),
-                principal_id=runtime,
-                project_id=project["id"],
-                resource_id=rid,
-                tool_ref=tool,
-                expires_at=time.time() + 86400,
-                revision=1,
-                revoked=False,
-            )
-        )
+    grant_csv_material(c,project["id"],runtime,rid)
     c.execute(
         insert(app_drafts).values(
             id=aid,

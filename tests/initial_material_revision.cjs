@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const {JSDOM} = require('jsdom');
 const [base, output, mode, previous] = process.argv.slice(2);
 const proof = {status: 'RUNNING', mode, browser: 'NOT_RUN', visual: 'NOT_RUN', checks: [], requests: [], assets: []};
-let dom, w, $, phase = 'boot', pending = 0;
+let dom, w, $, phase = 'boot', pending = 0, holdPath = null, held = null;
 const save = () => fs.writeFileSync(output, JSON.stringify({...proof, phase}, null, 2) + '\n');
 const check = (value, label) => {assert(value, label); proof.checks.push(label); save();};
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -20,14 +20,19 @@ async function request(url, options = {}, label = 'product') {
   const target = new URL(url, base); assert.equal(target.origin, base);
   const record = {label, method: options.method || 'GET', path: target.pathname,
     ...(options.body ? {request_body: JSON.parse(options.body)} : {})};
-  proof.requests.push(record); pending++;
+  proof.requests.push(record); pending++; let counted = true;
   try {
     const response = await fetch(target, options), bytes = Buffer.from(await response.arrayBuffer());
     record.status = response.status; record.sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
     if (target.pathname.startsWith('/api/')) record.response = JSON.parse(bytes.toString('utf8'));
     save();
+    if(record.method==='GET'&&target.pathname===holdPath){
+      holdPath=null;pending--;counted=false;record.delivery_delayed=true;
+      await new Promise(resolve=>{held={record,release:resolve};save();});
+      record.delivery_released=true;save();
+    }
     return new Response(bytes, {status: response.status, headers: response.headers});
-  } finally {pending--;}
+  } finally {if(counted)pending--;}
 }
 async function action(id, event = 'click') {
   const el = typeof id === 'string' ? $(id) : id;
@@ -92,19 +97,44 @@ const posts=tail=>proof.requests.filter(r=>r.method==='POST'&&r.path.endsWith(ta
 (async()=>{
  try {
   const prior=JSON.parse(fs.readFileSync(previous,'utf8'));
-  if(mode==='new')for(const key of ['project_id','resource_id','B_id','A_hash','B_hash','app_id','instance_id','old_release_id','goal'])proof[key]=prior[key];
+  if(['new','authorize'].includes(mode))for(const key of ['project_id','resource_id','B_id','C_id','A_hash','B_hash','app_id','instance_id','old_release_id','goal'])proof[key]=prior[key];
   await boot();
-  if(mode==='new') {
+  if(['new','authorize'].includes(mode)) {
    phase='original';await openInstance(proof.instance_id);
    check(w.eval('applicationUse.instance.revision')===1&&w.eval('applicationUse.instance.data_version')===0,'real initial Release1 has no previous revision, adoption or result');
    choose('use-column','amount');await action('use-form','submit');assert.equal(posts('/runs').at(-1).status,202);proof.old_run_id=w.eval('applicationUse.selected');
    proof.old_result=await terminal(`/api/internal/instances/${proof.instance_id}/runs/${proof.old_run_id}`);
    check(proof.old_result.status==='SUCCEEDED'&&proof.old_result.result.sum==='30'&&proof.old_result.result.resource_id===proof.resource_id&&proof.old_result.result.source_hash===proof.A_hash&&proof.old_result.result_version===1,'original Worker computes old material A30/v1');
    await action('use-refresh');await stage('before-edit');
-   phase='direct-material';check(visible($('csv-material-first'))&&!$('csv-material-first').disabled,'first saved instance exposes direct material entry');
-   await action('csv-material-first');await action('csv-material-back');
-   check(visible($('csv-material-first'))&&w.eval('applicationUse.id')===proof.instance_id,'unsubmitted first-material choice returns to same original instance');
-   await action('csv-material-first');await action('csv-goal-baseline');
+   if(mode==='authorize'){
+    phase='explicit-app-authority';
+    $('csv-access-lookup-key').value='nonexistent-read-only-key';$('csv-access-lookup-key').dispatchEvent(new w.Event('input'));
+    await action('csv-access-lookup');check(w.eval('csvMaterialAccessIntents.get(csvMaterialAccessKey(applicationUse)).current')===null&&!$('use-form').hidden&&!$('csv-access-lookup-key').disabled,'failed read-only key query preserves no-write state and remains correctable');
+    await action('csv-access-read');choose('csv-access-target',proof.B_id);consent('csv-access-ack');
+    const rows=await readRun(`/api/projects/${proof.project_id}/grants`),change=rows.find(r=>r.resource_id===proof.C_id&&r.tool_ref==='resource.read'&&/^user_/.test(r.principal_id));assert(change);proof.baseline_change_gid=change.id;
+    const changed=await request(`/api/grants/${change.id}/revoke`,{method:'POST',headers:{Authorization:'Bearer public-synthetic-blank-workspace','Content-Type':'application/json'},body:JSON.stringify({command:'revoke',version:change.revision})},'existing-unrelated-Grant-version-change');assert.equal(changed.status,200);
+    await stage('before-rejected');await action('csv-access-authorize');await stage('after-rejected');
+    const rejected=posts('/csv-material-access/authorizations');check(rejected.length===1&&rejected[0].status===409&&rejected[0].response.error.submission_rejection.acceptance==='NOT_ACCEPTED'&&w.eval('csvMaterialAccessIntents.get(csvMaterialAccessKey(applicationUse)).current.state')==='rejected','stale authority baseline has exact rolled-back NOT_ACCEPTED proof, never ambiguous write');
+    check($('use-output').textContent===''&&!$('csv-access-read').disabled&&$('csv-access-authorize').disabled,'proved rejection clears private stale data and requires fresh scope selection and consent');proof.authorization_rejection=rejected[0].response;
+    await openInstance(proof.instance_id);
+    await action('csv-goal-baseline');proof.pre_authorization_baseline_key=w.eval('csvGoalRevisionIntents.get(applicationUseKey(applicationUse)).baselineKey');
+    await action('csv-access-read');check($('csv-access-target').value===''&&$('csv-access-authorize').disabled,'authority list does not select or grant a material');
+    choose('csv-access-target',proof.B_id);check($('csv-access-scope').textContent.includes(proof.B_hash)&&$('csv-access-scope').textContent.includes('全部实例')&&$('csv-access-scope').textContent.includes('24小时'),'exact B hash App runtime READ SUM all-instances and24h scope is visible');
+    check($('csv-access-authorize').disabled,'App business authorization requires separate positive consent');consent('csv-access-ack');await stage('before-authorize');
+    const sending=action('csv-access-authorize');$('csv-access-authorize').click();await sending;
+    const auth=posts('/csv-material-access/authorizations');check(auth.length===2&&auth[0].status===409&&auth[1].status===201,'after explicit rejected request, fresh consent double click sends exactly one successful authorization POST');
+    proof.authorization=auth[1].response;proof.authorization_key=auth[1].request_body.request_key;
+    check(proof.authorization.app_material_status==='ACTIVE'&&proof.authorization.receipt.grants.length===2&&proof.authorization.receipt.record.resource_id===proof.B_id,'server grants only selected B to exact existing App runtime');await stage('after-authorize');
+    check(posts('/csv-material-revisions/previews').length===0&&posts('/adoption-approvals').length===0,'authorization alone creates no material proposal Release adoption or Run');
+    await action('csv-access-next');proof.post_authorization_baseline_key=w.eval('csvGoalRevisionIntents.get(applicationUseKey(applicationUse)).baselineKey');
+    check(proof.post_authorization_baseline_key!==proof.pre_authorization_baseline_key&&w.eval('csvGoalRevisionIntents.get(applicationUseKey(applicationUse)).history.some(x=>Object.keys(x.steps).includes("baseline"))'),'explicit new material cycle retains old accepted baseline key and uses a fresh key');
+   }else{
+    phase='direct-material';check(visible($('csv-material-first'))&&!$('csv-material-first').disabled,'first saved instance exposes direct material entry');
+    await action('csv-material-first');await action('csv-material-back');
+    check(visible($('csv-material-first'))&&w.eval('applicationUse.id')===proof.instance_id,'unsubmitted first-material choice returns to same original instance');
+    await action('csv-material-first');
+   }
+   await action('csv-goal-baseline');
    check($('csv-goal-revision-status').textContent.includes('首版直接更换材料')&&$('csv-goal-revision-status').textContent.includes('Goal v1'),'UI distinguishes direct first material replacement and unchanged original Goal1');
    check($('csv-goal-preview').disabled,'material preview needs explicit target selection');
    const options=[...$('csv-material-target').options].filter(o=>o.value);check(options.length===1&&options[0].value===proof.B_id,'catalog offers exact already App-authorized B and excludes A');
@@ -128,6 +158,32 @@ const posts=tail=>proof.requests.filter(r=>r.method==='POST'&&r.path.endsWith(ta
    check(proof.new_result.status==='SUCCEEDED'&&proof.new_result.result.sum==='350'&&proof.new_result.result_version===2&&proof.new_result.result.resource_id===proof.B_id&&proof.new_result.result.source_hash===proof.B_hash&&proof.new_result.release_id===proof.new_release_id,'new explicit Run actually reads B amount350/v2, not A or alternate column');
    await action('use-refresh');await action('csv-owner-read');check($('csv-owner-status').textContent.includes('PENDING'),'same new Run has independent PENDING human entry');
    check(!proof.requests.some(r=>r.method==='PUT')&&posts('/csv-goal-revisions/previews').length===0,'no Goal edit or preliminary column revision was used');await stage('after-new-run');
+  }else if(mode==='withdraw'){
+   phase='cold-metadata-withdraw';
+   await openInstance(prior.instance_id);
+   const resultRow=[...$('use-history').children].find(el=>el.textContent.includes(prior.new_run_id.slice(0,18))&&el.querySelector('button'));assert(resultRow);await action(resultRow.querySelector('button'));
+   check($('use-output').textContent.includes('合计 350')&&$('use-column').options.length>0,'actual B result and private column view visible before source authority loss');
+   const rows=await readRun(`/api/projects/${prior.project_id}/grants`),gid=rows.find(r=>r.principal_id===prior.authorization.receipt.record.principal_id&&r.resource_id===prior.resource_id&&r.tool_ref==='resource.read');assert(gid);
+   proof.upstream_revoked_gid=gid.id;
+   const removed=await request(`/api/grants/${gid.id}/revoke`,{method:'POST',headers:{Authorization:'Bearer public-synthetic-blank-workspace','Content-Type':'application/json'},body:JSON.stringify({command:'revoke',version:gid.revision})},'existing-owner-Grant-withdrawal');assert.equal(removed.status,200);
+   await action('csv-access-read');check($('use-output').textContent===''&&$('use-column').options.length===0&&!$('csv-goal-revision')&&$('use-form').hidden&&visible($('csv-access-state')),'403 clears private results columns and frozen Goal review while metadata withdrawal remains reachable');
+   w.document.querySelector('[data-tab="apps"]').click();
+   const open=async()=>{const row=[...$('use-list').children].find(el=>el.dataset.appId===prior.app_id&&el.dataset.useFamily==='CSV_MATERIAL_ACCESS');assert(row,'App-level material authority entry survives unreadable current result');await action(row.querySelector('button'));};
+   await open();
+   $('csv-access-lookup-key').value=prior.authorization_key;$('csv-access-lookup-key').dispatchEvent(new w.Event('input'));await action('csv-access-lookup');
+   check($('csv-access-proof').textContent.includes('"receipt_status": "ACTIVE"'),'cold original authorization key is metadata-only and currently active');
+   holdPath=`/api/apps/${prior.app_id}/csv-material-access/authorizations/${prior.authorization_key}`;
+   const delayed=action('csv-access-recover');await wait(()=>held,'actual ACTIVE metadata response held before UI delivery');
+   await open();await action('csv-access-state');choose('csv-access-target',prior.B_id);consent('csv-access-stop-ack');await stage('before-withdraw');
+   const sending=action('csv-access-revoke');$('csv-access-revoke').click();await sending;
+   const revokes=posts('/csv-material-access/revocations');check(revokes.length===1&&revokes[0].status===201,'explicit atomic withdrawal double click sends one POST');
+   proof.withdrawal=revokes[0].response;check(proof.withdrawal.receipt_status==='REVOKED'&&proof.withdrawal.app_material_status==='INACTIVE','exact App material pair is withdrawn');
+   held.release();await delayed;
+   check(w.eval('applicationUse.authOnly')&&$('use-output').textContent===''&&$('csv-access-next').disabled&&!$('csv-access-proof').textContent.includes('"receipt_status": "ACTIVE"'),'late former ACTIVE response cannot install in new App view or restore next-step access');
+   await action('csv-access-recover');check($('csv-access-proof').textContent.includes('"receipt_status": "REVOKED"'),'current original withdrawal receipt remains revoked');
+   const fresh=await readRun(`/api/apps/${prior.app_id}/csv-material-access/authorizations/${prior.authorization_key}`);check(fresh.receipt_status==='REVOKED'&&fresh.app_material_status==='INACTIVE','original authorization key now reads withdrawn current state');
+   const denied=await request(`/api/internal/instances/${prior.instance_id}/runs/${prior.new_run_id}`,{headers:{Authorization:'Bearer public-synthetic-blank-workspace'}},'withdrawn-private-result');check(denied.status===403,'new B result remains inaccessible after withdrawal');
+   check(posts('/csv-material-access/authorizations').length===0&&posts('/runs').length===0,'withdrawal and delayed callback never grant or compute');await stage('after-withdraw');
   }else{
    assert.equal(mode,'cold');await openInstance(prior.instance_id);check($('project-select').value===prior.project_id&&w.eval('applicationUse.instance.release_id')===prior.new_release_id,'cold original project and iid retain new material Release');
    for(const[id,sum,release,resource,hash]of [[prior.old_run_id,'30',prior.old_release_id,prior.resource_id,prior.A_hash],[prior.new_run_id,'350',prior.new_release_id,prior.B_id,prior.B_hash]]){

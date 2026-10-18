@@ -14,6 +14,7 @@ const naturalUseFamily=a=>{
 const applicationUseCurrent=v=>!!v && applicationUse===v && v.identity===token && v.project===$("project-select").value && v.generation===applicationUseGeneration;
 const applicationUseKey=v=>JSON.stringify([v.identity,v.project,v.id]);
 function clearApplicationUse(clearList=false){
+ if(typeof clearCsvMaterialAccess==="function")clearCsvMaterialAccess(applicationUse);
  if(typeof clearCsvGoalRevision==="function")clearCsvGoalRevision(applicationUse);
  if(typeof clearCsvFullReport === "function")clearCsvFullReport();
  applicationUseGeneration++;applicationUse=null;
@@ -66,6 +67,10 @@ async function refreshApplicationUse(apps){
   if(summary.csv_instance_candidate===false){
    if(applicationUse?.appId===summary.id&&applicationUseCurrent(applicationUse))clearApplicationUseData(applicationUse);
    continue;
+  }
+  if(summary.use_family==="CSV"){
+   const access=row(`${summary.name} · App材料授权 · 明确选择同项目已有CSV，只授此App读取与求和，最长24小时；所有实例共用其运行身份。`,()=>{if(selectable())openApplicationMaterialAccess(summary.id);},"管理此App的CSV材料授权");
+   access.dataset.useFamily="CSV_MATERIAL_ACCESS";access.dataset.appId=summary.id;rows.push(access);
   }
   let app,reply,dagInstances,dagReleases;
   try{app=await api(`/api/apps/${summary.id}`);if(!current())return;if(!csvUseApp(app))continue;
@@ -152,7 +157,7 @@ async function openSavedInternalUse(appId,id,family,selectionCurrent=()=>true){
 function applicationUseButtons(v){
  if(!applicationUseCurrent(v))return;
  const pending=applicationUseRequests.get(applicationUseKey(v));
- const pendingLocked=pending&&["sending","unknown","accepted-read-error"].includes(pending.state),locked=!!v.csvGoalRevision?.busy||pendingLocked;
+ const pendingLocked=pending&&["sending","unknown","accepted-read-error"].includes(pending.state),locked=!!v.csvGoalRevision?.busy||pendingLocked||(typeof csvMaterialAccessLocked==="function"&&csvMaterialAccessLocked(v));
  if(pendingLocked&&[...$("use-column").options].some(o=>o.value===pending.body.input.column))$("use-column").value=pending.body.input.column;
  $("use-submit").disabled=v.busy||locked||!$("use-column").value;
  $("use-column").disabled=v.busy||locked;
@@ -173,7 +178,15 @@ async function openApplicationUse(appId,id){
   await readApplicationUse(v);
  }catch(error){if(applicationUseCurrent(v)){clearApplicationUseData(v);throw error;}}
 }
+function openApplicationMaterialAccess(appId){
+ clearApp();clearApplicationUse();
+ const v={id:null,appId,identity:token,project:$("project-select").value,generation:applicationUseGeneration,
+  readGeneration:0,busy:false,instance:null,selected:null,historical:false,authOnly:true};applicationUse=v;
+ $("use-info").textContent="仅管理此App的材料权限；不读取Run内容，不执行、换版本或采纳。";
+ renderCsvMaterialAccess(v);
+}
 function clearApplicationUseData(v){
+ if(typeof clearCsvMaterialAccess==="function")clearCsvMaterialAccess(v);
  if(typeof clearCsvGoalRevision==="function")clearCsvGoalRevision(v);
  v.instance=null;
  $("use-csv-review-start")?.remove();
@@ -182,6 +195,7 @@ function clearApplicationUseData(v){
  $("use-info").textContent="当前版本或结果无法读取，请核对授权、来源和版本。读取失败不表示任务执行失败。";
  applicationUseButtons(v);
  if(v.selected&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,null,null,true);
+ if(typeof renderCsvMaterialAccess==="function"&&(v.authOnly||v.app?.candidate?.generation))renderCsvMaterialAccess(v);
 }
 // Projection of authorized immutable evidence only. It cannot confirm or publish an app.
 function renderApplicationAcceptance(v,release,run){
@@ -301,12 +315,13 @@ async function readApplicationUse(v){
   if(typeof renderCsvReviewStart==="function")renderCsvReviewStart(v,release);
   if(run&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,run,runRelease);
   if(typeof renderCsvGoalRevision==="function")await renderCsvGoalRevision(v,release);
+  if(typeof renderCsvMaterialAccess==="function")renderCsvMaterialAccess(v);
   if(!current())return;
   applicationUseButtons(v);
  }catch(error){if(!current())return;clearApplicationUseData(v);throw error;}
 }
 async function submitApplicationUse(v,recover=false){
- if(!applicationUseCurrent(v)||v.busy||v.csvGoalRevision?.busy)return;
+ if(!applicationUseCurrent(v)||v.busy||v.csvGoalRevision?.busy||csvMaterialAccessLocked(v))return;
  const key=applicationUseKey(v);let pending=applicationUseRequests.get(key);
  if(!recover){
   if(!v.instance||pending&&["sending","unknown","accepted-read-error"].includes(pending.state))return;
