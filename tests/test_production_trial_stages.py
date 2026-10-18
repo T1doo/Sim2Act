@@ -31,7 +31,7 @@ from sim2act import production_trial_sender as sender
 from sim2act import production_trial_source as source
 from sim2act.api import create_app
 from sim2act.config import Settings
-from sim2act.db import Store, attempts, fingerprint, meta, runs
+from sim2act.db import Store, attempts, fingerprint, grants, meta, runs
 from sim2act.db import delivery_graph_requests as rows
 from sim2act.errors import DomainError
 from sim2act.worker import Worker
@@ -244,6 +244,58 @@ def test_fresh_actual_prefix_rejects_incomplete_mixed_or_changed_proof_without_w
     with store.tx() as c:
         original = c.execute(select(attempts).where(attempts.c.run_id == t["generation"]))
         original = dict(original.mappings().first())
+    from sim2act import goal_applications as ga
+    for expired in (False, True):
+        full, reauthorized = [], []
+        original_scope, original_recheck = ga._source_scope_gate, store.recheck_proof_authorities
+
+        def observed_scope(*args, _full=full, _original=original_scope, **kwargs):
+            _full.append(args[2])
+            return _original(*args, **kwargs)
+
+        def observed_recheck(connection, proof, _observed=reauthorized, _original=original_recheck):
+            _observed.append(proof["_call_authorities"])
+            return _original(connection, proof)
+
+        with pytest.MonkeyPatch.context() as patch, store.tx() as c:
+            patch.setattr(ga, "_source_scope_gate", observed_scope)
+            patch.setattr(store, "recheck_proof_authorities", observed_recheck)
+            transaction = c.begin_nested()
+            condition = (grants.c.principal_id == b.contract.runtime_id,
+                grants.c.project_id == b.contract.project_id,
+                grants.c.resource_id == b.contract.bindings[0].resource_id,
+                grants.c.tool_ref == "resource.read")
+            if expired:
+                expires = time.time() + 2
+                assert c.execute(update(grants).where(*condition)
+                                 .values(expires_at=expires)).rowcount > 0
+            with _source_reads(store, c):
+                assert ga.source_scope_gate(store, c, t["generation"]) is True
+                assert ga.source_scope_gate(store, c, t["generation"]) is True
+                assert full == [t["generation"]] and reauthorized
+                assert any(check[-1] == "resource.read" for check in reauthorized[-1])
+                epoch = c.info.get("source_proof_write_epoch", 0)
+                if expired:
+                    time.sleep(max(0, expires - time.time()) + 0.02)
+                else:
+                    assert c.execute(update(grants).where(*condition).values(revoked=True)).rowcount > 0
+                before = {table.name: c.execute(select(table)).mappings().all()
+                          for table in meta.sorted_tables}
+                with pytest.raises(DomainError, match="GRANT_REVOKED"):
+                    ga.source_scope_gate(store, c, t["generation"])
+                after = {table.name: c.execute(select(table)).mappings().all()
+                         for table in meta.sorted_tables}
+                assert before == after
+                if expired:
+                    assert epoch == c.info.get("source_proof_write_epoch", 0)
+                    assert full == [t["generation"]]
+                else:
+                    assert full == [t["generation"]] * 2
+            transaction.rollback()
+        assert snapshot(store) == baseline
+        observed.append(dict(case="scope-cache-real-expiry" if expired else "scope-cache-write-revoke",
+            refused=True, full_scope_entries=len(full), hit_authority_rechecks=len(reauthorized),
+            all_55_tables_unchanged_in_window=True, real_clock=True))
     for kind in ("only-accounting", "mixed-backend", "canonical", "raw", "aid", "scope"):
         with store.tx() as c:
             transaction = c.begin_nested()

@@ -113,6 +113,94 @@ def policy(provider, user, pid, body, activation=None, app_limits=None):
 
 
 def source_scope_gate(store, c, rid):
+    """Reuse only a complete new-trial scope proof in the existing read segment."""
+    from .pb_natural_specs import _source_reads_current
+    token = c.info.get("pb_source_reads")
+    if not _source_reads_current(store, c, token):
+        return _source_scope_gate(store, c, rid)
+    key = ("journal-trial-complete-generation-scope", rid)
+    if key in token.inflight:
+        raise DomainError("VERSION_CONFLICT", "Incomplete scope proof cannot be reused")
+    if key in token.results:
+        anchor, authorities = token.results[key]
+        try:
+            owner = c.execute(select(runs.c.principal_id, runs.c.project_id,
+                runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
+            if owner is None or dict(owner) != anchor["owner"]:
+                raise DomainError("VERSION_CONFLICT", "Generation scope owner changed")
+            store.own_project(c, owner["principal_id"], owner["project_id"])
+            store.recheck_proof_authorities(c, {"_call_authorities": authorities})
+            current = _journal_scope_anchor(store, c, rid, expected=anchor["owner"])
+            if current != anchor:
+                raise DomainError("VERSION_CONFLICT", "Generation scope anchors changed")
+            if (not _source_reads_current(store, c, token)
+                    or _journal_scope_anchor(store, c, rid, expected=anchor["owner"]) != anchor
+                    or not _source_reads_current(store, c, token)):
+                raise DomainError("VERSION_CONFLICT", "Generation scope read segment changed")
+            return True
+        except BaseException:
+            token.results.clear()
+            raise
+    token.inflight.add(key)
+    try:
+        with store.proof_authorities(c) as authorities:
+            result = _source_scope_gate(store, c, rid)
+        if result is True and _source_reads_current(store, c, token):
+            anchor = _journal_scope_anchor(store, c, rid)
+            if anchor is not None:
+                owner = anchor["owner"]
+                required = {(owner["principal_id"], owner["runtime_id"], owner["project_id"],
+                    anchor["refs"][0], "resource.read"),
+                    (owner["principal_id"], owner["runtime_id"], owner["project_id"],
+                     owner["project_id"], "artifact.save_text")}
+                if required <= authorities and _source_reads_current(store, c, token):
+                    token.results[key] = (anchor, tuple(sorted(authorities)))
+        return result
+    except BaseException:
+        token.results.clear()
+        raise
+    finally:
+        token.inflight.discard(key)
+
+
+def _journal_scope_anchor(store, c, rid, *, expected=None):
+    """Owned scalar anchors, only after a completed scope proof or its exact hit."""
+    from .pa_trial_dispatch import JOURNAL_VERSION
+    owner = c.execute(select(runs.c.principal_id, runs.c.project_id,
+        runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
+    if owner is None or expected is not None and dict(owner) != expected:
+        return None
+    store.own_project(c, owner["principal_id"], owner["project_id"])
+    refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+    hints = c.execute(select(run_contracts.c.fingerprint,
+        run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
+        run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),
+        run_contracts.c.snapshot["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
+        run_contracts.c.snapshot["runtime_id"].as_string().label("runtime"),
+        run_contracts.c.snapshot["goal"]["owner_id"].as_string().label("owner"),
+        run_contracts.c.snapshot["goal"]["project_id"].as_string().label("project"),
+        run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
+        run_contracts.c.snapshot["resources"][0]["resource_id"].as_string().label("resource"),
+        run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"]["resource_refs"].label("goal_refs"))
+        .where(run_contracts.c.run_id == rid)).mappings().first()
+    accepted = c.execute(select(events.c.id,
+        events.c.data["application_generation"]["version"].as_string().label("kind"),
+        events.c.data["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
+        events.c.data["application_generation"]["app_id"].as_string().label("app_id"))
+        .where(events.c.run_id == rid, events.c.kind == "ACCEPTED")
+        .order_by(events.c.id)).mappings().all()
+    versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
+        .where(attempts.c.run_id == rid)).scalars().all()
+    if (hints is None or hints["kind"] != "goal-natural-spec-application.v1"
+            or hints["aid"] is not None or len(accepted) != 1
+            or accepted[0]["kind"] != hints["kind"] or accepted[0]["aid"] is not None
+            or versions != [JOURNAL_VERSION] * 3):
+        return None
+    return dict(owner=dict(owner), refs=refs, hints=dict(hints),
+                accepted=[dict(row) for row in accepted], versions=versions)
+
+
+def _source_scope_gate(store, c, rid):
     """Only identifier projections before authorization; never fetch protected bodies."""
     from .local_record_apps import job_scope_gate as record_scope_gate
     if record_scope_gate(store, c, rid):
